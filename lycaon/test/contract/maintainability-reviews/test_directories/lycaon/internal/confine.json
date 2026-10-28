@@ -4,16 +4,19 @@
   "kind": "test_suite",
   "workstream": "linux-future-path-floors",
   "disposition": "retain",
-  "reason": "Retain the 61-member platform confinement test suite: shared admission and write-floor contracts remain beside real kernel, filesystem, socket and helper-boundary controls. The file-mask, shared-memory, and floors suites apply the real boundary to older-kernel masks, 64 MiB private shared-memory capacity, and protected names absent at launch, parent renames, approved grants and absent read-denied paths through the shared probe process and live-boundary fixtures; moving these suites solely to reduce membership would expose internal security setup or separate the real boundary from its existing fixture. No production authority owner or public test API is added.",
-  "reviewed_commit": "f992b0ae28c8d2b787226a8410f21c13991d7004",
-  "ceiling": 61,
+  "reason": "Retain the measured 68-file confinement test directory. Shared admission, filesystem policy and applied platform boundaries stay beside their existing probe process and grant fixtures. Metadata and standard-stream contracts are separate live suites under the same real command launch; they cover outside-root EROFS, exact allow-backs, original mount flags, unchanged source metadata, byte delivery and descendant cleanup. The shared Linux probe remains bounded while new concerns have their own suites. Repackaging these tests would expose internal setup without creating a new authority boundary. The four existing floor contracts were inspected and rerun before renewing their previously stale boundary pin.",
+  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
+  "ceiling": 68,
   "boundaries": {
     "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
-    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "807c1fa96d2f7d07c2135cf273f1bbddf086399c664485b3b58bfd66722f7712",
+    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
     "lycaon/internal/confine/boundary_linux_shm_live_test.go": "f9f20c77850bbfa86c205ce0b938711edbec0462776a74861da22a316f3f1924",
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
-    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81"
+    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5e4d71ec221fb2994442d7cd2fc6a50ced2c771d94a8c4d3b3a55f981a1a84d5",
+    "lycaon/internal/confine/boundary_linux_metadata_mount_live_test.go": "ff440718bdd4a2a1bef01996de66b21e16e74764f561f5a926d0cee79c96119c",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "1cffcf7c2956d907bc86a56a76183a053305c427774f414e38686a9e693224fd"
   },
-  "reviewed_shape": "a91ea04a0c2047e476dccd75e10535481578e04f112a17ce1d76422c62ba6fde"
+  "reviewed_shape": "4da1520f8e834e85527a9a6a3ccf4187f153bac61a141435ebd8605e71f300bc"
 }

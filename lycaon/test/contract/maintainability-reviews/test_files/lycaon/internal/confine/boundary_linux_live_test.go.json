@@ -1,0 +1,15 @@
+{
+  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
+  "disposition": "retain",
+  "category": "test_files",
+  "artifact": "lycaon/internal/confine/boundary_linux_live_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-metadata-and-stream-authority",
+  "reason": "Retain this existing shared Linux probe and applied-boundary suite at a ceiling of 804 measured lines, reduced from 810 by replacing the shell error wording assertion with a typed syscall result. It holds the common helper launch, capability admission and paired process/network/filesystem controls. New metadata and stream behaviors have their own focused suites rather than growing this probe. This bounded retention preserves the shipped helper contracts while avoiding a speculative reorganization in a security fix; the complete selected Linux contracts support it.",
+  "ceiling": 804,
+  "boundaries": {
+    "lycaon/internal/confine/boundary_linux_live_test.go": "6711918efb3f1baca1b44e97c46c7248118deea19e8c9b073c0aef3c6e5ab8dc",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5e4d71ec221fb2994442d7cd2fc6a50ced2c771d94a8c4d3b3a55f981a1a84d5",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "1cffcf7c2956d907bc86a56a76183a053305c427774f414e38686a9e693224fd"
+  }
+}

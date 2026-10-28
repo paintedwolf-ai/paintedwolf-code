@@ -1,0 +1,16 @@
+{
+  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
+  "disposition": "retain",
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "module",
+  "workstream": "linux-metadata-and-stream-authority",
+  "reason": "Retain the unchanged 59 production files that own confinement policy, rendering and platform composition. This change adds adjacent kernel and stream contracts, not another production authority or cross-package dependency. DefaultConfinement and its ordered filesystem facts remain the policy source; the Linux helper renders those facts into mounts and Landlock, while the common launch guarantees byte-only regular standard streams. The typed floor and applied command contracts support retaining this bounded module.",
+  "ceiling": 59,
+  "reviewed_shape": "a9fc6679cbc75644044d6eb59588fee92240a32f520ef8ee14799aac64bab13a",
+  "boundaries": {
+    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5e4d71ec221fb2994442d7cd2fc6a50ced2c771d94a8c4d3b3a55f981a1a84d5",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "1cffcf7c2956d907bc86a56a76183a053305c427774f414e38686a9e693224fd"
+  }
+}
