@@ -31,7 +31,7 @@ func TestStandardStreamsRetainObjectsAndJoinCopies(t *testing.T) {
 	renamed := original + "-retained"
 	testutil.FailErr(t, "rename source fixture", os.Rename(original, renamed))
 	testutil.FailErr(t, "plant pathname replacement", os.WriteFile(original, []byte("decoy"), 0o600))
-	streams, err := newStandardStreams([3]*os.File{source, nil, nil})
+	streams, err := newStandardStreams([3]*os.File{source, nil, nil}, sameOpenFile)
 	testutil.FailErr(t, "prepare byte input", err)
 	t.Cleanup(func() { _ = streams.finish() })
 	raw, err := io.ReadAll(streams.files[0])
@@ -61,7 +61,7 @@ func TestStandardStreamsRetainObjectsAndJoinCopies(t *testing.T) {
 func TestStandardStreamsBoundReadAheadAndCancelEarlyInput(t *testing.T) {
 	source := streamFile(t, "")
 	testutil.FailErr(t, "size sparse input fixture", source.Truncate(64<<20))
-	streams, err := newStandardStreams([3]*os.File{source, nil, nil})
+	streams, err := newStandardStreams([3]*os.File{source, nil, nil}, sameOpenFile)
 	testutil.FailErr(t, "prepare large byte input", err)
 	t.Cleanup(func() { _ = streams.finish() })
 	capacity, err := unix.FcntlInt(streams.files[0].Fd(), unix.F_GETPIPE_SZ, 0)
@@ -85,7 +85,7 @@ func TestStandardStreamsPreserveSharedAndSeparateOutputOffsets(t *testing.T) {
 		testutil.FailErr(t, "duplicate output description", err)
 		duplicate := os.NewFile(uintptr(fd), "shared-output")
 		defer duplicate.Close()
-		streams, err := newStandardStreams([3]*os.File{nil, output, duplicate})
+		streams, err := newStandardStreams([3]*os.File{nil, output, duplicate}, sameOpenFile)
 		testutil.FailErr(t, "prepare shared output", err)
 		t.Cleanup(func() { _ = streams.finish() })
 		if streams.files[1] != streams.files[2] {
@@ -112,7 +112,7 @@ func TestStandardStreamsPreserveSharedAndSeparateOutputOffsets(t *testing.T) {
 		defer second.Close()
 		_, err = second.Seek(4, io.SeekStart)
 		testutil.FailErr(t, "position independent output", err)
-		streams, err := newStandardStreams([3]*os.File{nil, output, second})
+		streams, err := newStandardStreams([3]*os.File{nil, output, second}, sameOpenFile)
 		testutil.FailErr(t, "prepare independent output", err)
 		t.Cleanup(func() { _ = streams.finish() })
 		if streams.files[1] == streams.files[2] {
@@ -145,7 +145,7 @@ func TestStandardStreamsPassPipeSocketDeviceAndClosedDescriptors(t *testing.T) {
 	testutil.FailErr(t, "open passthrough device", err)
 	defer device.Close()
 	for _, file := range []*os.File{read, socket, device} {
-		streams, err := newStandardStreams([3]*os.File{file, nil, nil})
+		streams, err := newStandardStreams([3]*os.File{file, nil, nil}, sameOpenFile)
 		testutil.FailErr(t, "prepare passthrough descriptors", err)
 		if len(streams.bridges) != 0 || streams.files[0] != file {
 			t.Fatal("nonregular stream changed")
@@ -163,7 +163,7 @@ func TestStandardStreamsReportInitializationAndCopyFailures(t *testing.T) {
 		readOnly, err := os.Open(source.Name())
 		testutil.FailErr(t, "open read-only output fixture", err)
 		defer readOnly.Close()
-		_, err = newStandardStreams([3]*os.File{nil, readOnly, nil})
+		_, err = newStandardStreams([3]*os.File{nil, readOnly, nil}, sameOpenFile)
 		var failure *StreamError
 		if !errors.As(err, &failure) || failure.Stream != 1 || failure.Operation != "access" || !errors.Is(err, unix.EBADF) {
 			t.Fatalf("wrong initialization failure: %v", err)
@@ -176,7 +176,7 @@ func TestStandardStreamsReportInitializationAndCopyFailures(t *testing.T) {
 		defer output.Close()
 		_, err = unix.FcntlInt(output.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_WRITE)
 		testutil.FailErr(t, "seal output fixture", err)
-		streams, err := newStandardStreams([3]*os.File{nil, output, nil})
+		streams, err := newStandardStreams([3]*os.File{nil, output, nil}, sameOpenFile)
 		testutil.FailErr(t, "prepare sealed byte output", err)
 		_, err = streams.files[1].Write([]byte("cannot arrive"))
 		testutil.FailErr(t, "submit output bytes", err)
@@ -202,3 +202,19 @@ func TestCopyStreamKeepsPartialReadsAndReportsShortWrites(t *testing.T) {
 type zeroStreamWriter struct{}
 
 func (zeroStreamWriter) Write([]byte) (int, error) { return 0, nil }
+
+func TestStandardStreamsRefuseAmbiguousOutputsWithoutKernelComparison(t *testing.T) {
+	output := streamFile(t, "original")
+	_, err := newStandardStreams([3]*os.File{nil, output, output}, func(*os.File, *os.File) (bool, error) { return false, unix.ENOSYS })
+	var failure *StreamError
+	if !errors.As(err, &failure) || failure.Stream != 2 || failure.Operation != "compare shared output" || !errors.Is(err, unix.ENOSYS) {
+		t.Fatalf("ambiguous output failure=%v", err)
+	}
+	second := streamFile(t, "")
+	streams, err := newStandardStreams([3]*os.File{nil, output, second}, func(*os.File, *os.File) (bool, error) {
+		t.Fatal("distinct files need no kernel comparison")
+		return false, nil
+	})
+	testutil.FailErr(t, "prepare ordinary distinct output files", err)
+	testutil.FailErr(t, "settle distinct outputs", streams.finish())
+}

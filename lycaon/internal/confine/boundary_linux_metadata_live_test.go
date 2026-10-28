@@ -182,13 +182,34 @@ func TestLinuxInheritedInputMetadata(t *testing.T) {
 	requireLinuxSandbox(t)
 	outside := filepath.Join(outsideTemporaryWriteRoots(t), "input")
 	seedMetadataFile(t, outside)
-	input, err := os.Open(outside)
-	testutil.FailErr(t, "open read-only input stream", err)
+	// Prime ordinary read atime before testing explicit descriptor mutations.
+	_, err := os.ReadFile(outside)
+	testutil.FailErr(t, "read input control", err)
+	var before unix.Stat_t
+	testutil.FailErr(t, "inspect input before", unix.Stat(outside, &before))
+	fd, err := unix.Open(outside, unix.O_RDONLY|unix.O_NOATIME|unix.O_CLOEXEC, 0)
+	testutil.FailErr(t, "open owned no-atime read-only input stream", err)
+	input := os.NewFile(uintptr(fd), "owned-byte-input")
 	defer func() { _ = input.Close() }()
-	got := runMetadata(t, denyConfinement(t.TempDir()), []string{"fchmod-stdin input"}, input)
-	st, err := os.Stat(outside)
-	testutil.FailErr(t, "inspect inherited input", err)
-	if got["fchmod-stdin input"] != "EROFS" || st.Mode().Perm() != 0o644 {
-		t.Fatalf("inherited O_RDONLY input metadata: result=%s mode=%#o, want EROFS and unchanged0644", got["fchmod-stdin input"], st.Mode().Perm())
+	script := []string{"stdin-pipe input", "fchmod-stdin input", "fchown-stdin input", "futimes-stdin input", "fsetxattr-stdin input", "read-stdin original"}
+	got := runMetadata(t, denyConfinement(t.TempDir()), script, input)
+	if got[script[0]] != "ok" || got[script[5]] != "ok" {
+		t.Fatalf("regular input was not delivered as bytes through EOF: %v", got)
+	}
+	for _, line := range script {
+		if _, ok := got[line]; !ok {
+			t.Fatalf("descriptor operation did not complete: %s", line)
+		}
+	}
+	var after unix.Stat_t
+	testutil.FailErr(t, "inspect input after", unix.Stat(outside, &after))
+	if before.Mode != after.Mode || before.Uid != after.Uid || before.Gid != after.Gid || before.Mtim != after.Mtim || before.Ctim != after.Ctim || before.Atim != after.Atim {
+		t.Fatalf("byte input changed source metadata: before=%+v after=%+v", before, after)
+	}
+	buf := make([]byte, 16)
+	n, err := unix.Getxattr(outside, "user.pw-metadata", buf)
+	testutil.FailErr(t, "read source input xattr", err)
+	if string(buf[:n]) != "before" {
+		t.Fatal("descriptor operation changed source input xattr")
 	}
 }

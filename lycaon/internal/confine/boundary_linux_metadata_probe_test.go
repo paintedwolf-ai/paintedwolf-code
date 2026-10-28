@@ -5,6 +5,7 @@ package confine_test
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -38,6 +39,30 @@ func metadataOperation(op, path string) error {
 	switch op {
 	case "fchmod-stdin":
 		return unix.Fchmod(0, 0o640)
+	case "fchown-stdin":
+		return unix.Fchown(0, -1, os.Getgid())
+	case "futimes-stdin":
+		return unix.Futimes(0, []unix.Timeval{{Sec: 123456789}, {Sec: 123456789}})
+	case "fsetxattr-stdin":
+		return unix.Fsetxattr(0, "user.pw-metadata", []byte("changed"), 0)
+	case "read-stdin":
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		if string(data) != path {
+			return fmt.Errorf("input bytes differ")
+		}
+		return nil
+	case "stdin-pipe":
+		var st unix.Stat_t
+		if err := unix.Fstat(0, &st); err != nil {
+			return err
+		}
+		if st.Mode&unix.S_IFMT != unix.S_IFIFO {
+			return fmt.Errorf("input is not a pipe")
+		}
+		return nil
 	case "restricted-mount":
 		var st unix.Statfs_t
 		if err := unix.Statfs(path, &st); err != nil {

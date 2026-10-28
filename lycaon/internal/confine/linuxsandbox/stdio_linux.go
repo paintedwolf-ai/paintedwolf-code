@@ -43,7 +43,7 @@ type standardStreams struct {
 // handoverStandardStreams owns regular-file copies until the helper has reaped
 // its target and descendants. Other standard descriptor kinds retain their ABI.
 func handoverStandardStreams(cmd *exec.Cmd) (func() error, error) {
-	streams, err := newStandardStreams([3]*os.File{os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")})
+	streams, err := newStandardStreams([3]*os.File{os.Stdin, os.Stdout, os.Stderr}, sameOpenFile)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func handoverStandardStreams(cmd *exec.Cmd) (func() error, error) {
 	return streams.finish, nil
 }
 
-func newStandardStreams(files [3]*os.File) (_ *standardStreams, resultErr error) {
+func newStandardStreams(files [3]*os.File, query func(*os.File, *os.File) (bool, error)) (_ *standardStreams, resultErr error) {
 	streams := &standardStreams{files: files}
 	defer func() {
 		if resultErr != nil {
@@ -80,7 +80,7 @@ func newStandardStreams(files [3]*os.File) (_ *standardStreams, resultErr error)
 	}
 	sharedOutput := false
 	if stats[1].Mode&unix.S_IFMT == unix.S_IFREG && stats[2].Mode&unix.S_IFMT == unix.S_IFREG && stats[1].Dev == stats[2].Dev && stats[1].Ino == stats[2].Ino {
-		same, err := sameOpenFile(files[1], files[2])
+		same, err := query(files[1], files[2])
 		if err != nil {
 			return nil, &StreamError{2, "compare shared output", err}
 		}
