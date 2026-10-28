@@ -81,11 +81,15 @@ func (m *Service) ObserveSessionPosture(ctx context.Context, sessionID string, c
 	if !hadPrev || m.anchors == nil {
 		return
 	}
+	probe, hasProbe := m.anchors.(latestAnchorProbe)
+	if hasProbe && !probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
+		m.pendingPostureBaselines.Delete(sessionID)
+		m.pendingExternalBaselines.Delete(sessionID)
+	}
 	before := prevAny.(gate.Posture)
 	if before == current {
 		return
 	}
-	probe, hasProbe := m.anchors.(latestAnchorProbe)
 	baseline := before
 	if hasProbe && probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
 		if saved, ok := m.pendingPostureBaselines.Load(sessionID); ok {
@@ -96,12 +100,85 @@ func (m *Service) ObserveSessionPosture(ctx context.Context, sessionID string, c
 	}
 	if !prompts.PostureChangedKickNeeded(baseline, current) {
 		m.pendingPostureBaselines.Delete(sessionID)
+		externalChanged := false
+		if savedExt, ok := m.pendingExternalBaselines.Load(sessionID); ok {
+			if curExt, ok := m.lastSessionExternalHidden.Load(sessionID); ok {
+				externalChanged = savedExt.(bool) != curExt.(bool)
+			}
+		}
+		if !externalChanged {
+			if drop, ok := m.anchors.(droppableAnchors); ok {
+				drop.Drop(sessionID, anchor.ProjectPostureChanged)
+			}
+			return
+		}
+		data := prompts.PostureChangedKickData(current)
+		curExt, _ := m.lastSessionExternalHidden.Load(sessionID)
+		data["command_external_changed"] = true
+		data["command_external_hidden"] = curExt.(bool)
+		m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
+		return
+	}
+	data := prompts.PostureChangedKickData(current)
+	if savedExt, ok := m.pendingExternalBaselines.Load(sessionID); ok {
+		if curExt, ok := m.lastSessionExternalHidden.Load(sessionID); ok && savedExt.(bool) != curExt.(bool) {
+			data["command_external_changed"] = true
+			data["command_external_hidden"] = curExt.(bool)
+		}
+	}
+	m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
+}
+
+// ObserveSessionCommandExternal records whether the explicit external selector
+// is hidden for sessionID and queues or updates the session's
+// project.posture.changed notice when external selector visibility flips
+// between turns. Repeated toggles before the next turn coalesce against the
+// pre-change baseline, and reverting to the baseline visibility drops the
+// pending notice when outside-folder write review is also unchanged.
+func (m *Service) ObserveSessionCommandExternal(ctx context.Context, sessionID string, currentPosture gate.Posture, currentHidden bool) {
+	sessionID = strings.TrimSpace(sessionID)
+	if m == nil || sessionID == "" {
+		return
+	}
+	prevAny, hadPrev := m.lastSessionExternalHidden.Swap(sessionID, currentHidden)
+	if !hadPrev || m.anchors == nil {
+		return
+	}
+	probe, hasProbe := m.anchors.(latestAnchorProbe)
+	if hasProbe && !probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
+		m.pendingPostureBaselines.Delete(sessionID)
+		m.pendingExternalBaselines.Delete(sessionID)
+	}
+	beforeHidden := prevAny.(bool)
+	if beforeHidden == currentHidden {
+		return
+	}
+	baselineHidden := beforeHidden
+	if hasProbe && probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
+		if saved, ok := m.pendingExternalBaselines.Load(sessionID); ok {
+			baselineHidden = saved.(bool)
+		} else {
+			m.pendingExternalBaselines.Store(sessionID, beforeHidden)
+		}
+	} else {
+		m.pendingExternalBaselines.Store(sessionID, beforeHidden)
+	}
+	postureChanged := false
+	if savedPosture, ok := m.pendingPostureBaselines.Load(sessionID); ok {
+		postureChanged = prompts.PostureChangedKickNeeded(savedPosture.(gate.Posture), currentPosture)
+	}
+	if baselineHidden == currentHidden && !postureChanged {
+		m.pendingExternalBaselines.Delete(sessionID)
 		if drop, ok := m.anchors.(droppableAnchors); ok {
 			drop.Drop(sessionID, anchor.ProjectPostureChanged)
 		}
 		return
 	}
-	data := prompts.PostureChangedKickData(current)
+	data := prompts.PostureChangedKickData(currentPosture)
+	if baselineHidden != currentHidden {
+		data["command_external_changed"] = true
+		data["command_external_hidden"] = currentHidden
+	}
 	m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
 }
 

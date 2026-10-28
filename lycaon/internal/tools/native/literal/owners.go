@@ -55,7 +55,7 @@ var utilities = map[string]utility{
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain DomainOwners) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +84,17 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 		}
 	}
 	return o, nil
+}
+
+// ForProgram binds the program memory while giving it a fresh account cache.
+func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
+	revisions := o.Revisions
+	revisions.Memory = memory
+	return &Owners{
+		Revisions: revisions, Pins: o.Pins, Domain: o.Domain,
+		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes,
+		catalog: o.catalog, specs: o.specs, ops: o.ops, signatures: o.signatures,
+	}
 }
 
 // Operation returns the catalog operation identity that owns a command.
@@ -131,13 +142,34 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Argv: bound, Review: bound.Review(o.ops[command]), owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = []commandprogram.PathTarget{}
+	for _, operand := range bound.Operands() {
+		if operand.Value != "-" {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: operand.Value})
+		}
+	}
+	for _, item := range bound.Items {
+		if item.Option == nil || item.Option.ValueRole != "path" {
+			continue
+		}
+		for _, value := range item.Option.Values {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: value.Value})
+		}
+	}
+	return Prepared{Operation: o.ops[command], Argv: bound, Review: review, owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
+	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
 	defer inv.closeInputs()
@@ -151,6 +183,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// The utility consumed what it needed; closing stdin is a consumer stop.
 	if streams.Input != nil {
 		_ = streams.Input.Close()
+	}
+	for _, closer := range inv.closers {
+		_ = closer.Close()
 	}
 	return inv.settle(err)
 }

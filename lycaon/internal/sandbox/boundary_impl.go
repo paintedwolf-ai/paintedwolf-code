@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // ErrToolNotAllowedByProfile classifies a profile allow-list rejection.
@@ -127,6 +129,9 @@ func (b *Boundary) AssertPathAllowed(_ context.Context, projectDir, relPath stri
 	if strings.ContainsRune(relPath, 0) {
 		return fmt.Errorf("path contains NUL byte")
 	}
+	if settingsoverlay.IsRecoveryRelPath(relPath) || settingsoverlay.HasRecoverySegment(relPath) {
+		return fmt.Errorf("%w: %q", ErrPathEscape, relPath)
+	}
 	if _, err := b.resolveAbs(projectDir, relPath, true); err != nil {
 		return err
 	}
@@ -146,6 +151,9 @@ func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, pro
 func (b *Boundary) AssertReadGlobs(ctx context.Context, relPath, profileID string) error {
 	if strings.ContainsRune(relPath, 0) {
 		return fmt.Errorf("path contains NUL byte")
+	}
+	if settingsoverlay.IsRecoveryRelPath(relPath) || settingsoverlay.HasRecoverySegment(relPath) {
+		return newOutsideReadScope(relPath, profileID)
 	}
 	prof, ok := b.lookupProfile(ctx, profileID)
 	if !ok {

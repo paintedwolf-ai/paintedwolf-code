@@ -25,19 +25,18 @@ type PosixRegexEngine interface {
 
 type sedCompiler struct{ engine PosixRegexEngine }
 
+type preparedSed struct {
+	source       sedSource
+	program      *sedscript.Program
+	pins         []toolcontract.ExecutionRevision
+	pinsRecorded bool
+}
+
 func (c sedCompiler) Compile(ctx context.Context, pattern string, extended, fold bool) (sedscript.Regex, error) {
 	if fold {
 		return c.engine.CompileFolded(ctx, pattern, extended)
 	}
 	return c.engine.Compile(ctx, pattern, extended)
-}
-
-// preparedSed retains the admitted parsed script for an inline sed invocation,
-// or the deferred script-file plan for -f forms whose files are captured and
-// pinned after the child execution receipt exists.
-type preparedSed struct {
-	source  sedSource
-	program *sedscript.Program
 }
 
 func (p *preparedSed) close() {
@@ -64,6 +63,13 @@ func runSed(inv *invocation) error {
 	}
 	script := plan.source
 	program := plan.program
+	if !plan.pinsRecorded {
+		for _, pin := range plan.pins {
+			if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin); err != nil {
+				return err
+			}
+		}
+	}
 	if program == nil {
 		var err error
 		script, program, err = loadSedFileScript(inv, script)
@@ -72,7 +78,7 @@ func runSed(inv *invocation) error {
 		}
 		plan.program = program
 	}
-	if script.fromFile && len(program.WriteFiles()) > 0 {
+	if script.fromFile && len(program.WriteFiles()) > 0 && len(plan.pins) == 0 {
 		return unsupported(inv, script.word, "w files named in an inline script (-e or SCRIPT), so the write is reviewed with the command")
 	}
 	run := &sedRun{inv: inv, program: program, word: script.word, stages: map[string]commandprogram.StagedOutput{}}
@@ -200,6 +206,12 @@ func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecif
 				out.suffix = option.Values[0].Value
 			}
 		}
+	}
+	// BSD sed spells an empty in-place backup suffix as a separate argument.
+	// With -e/-f, that empty argument precedes the file operands and cannot be
+	// mistaken for a file name.
+	if option, ok := bound.Last("-i"); ok && len(option.Values) == 0 && len(operands) > 0 && operands[0].Value == "" && (len(bound.Options("-e")) > 0 || len(bound.Options("-f")) > 0) {
+		operands = operands[1:]
 	}
 	var parts []string
 	for _, item := range bound.Items {

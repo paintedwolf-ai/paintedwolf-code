@@ -11,19 +11,174 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+// ProcessSubstitution is a typed handle to a concurrent <(list) or >(list)
+// stream created during word expansion. Its Path is the virtual descriptor
+// path (/dev/fd/N) used for display and unsplit word text; consumers bind
+// the stream by this handle's identity, never by matching Path text.
+type ProcessSubstitution struct {
+	path   string
+	op     string
+	reader func() (io.ReadCloser, bool)
+	writer func() (io.WriteCloser, bool)
+}
+
+// NewProcessSubstitution constructs a typed process-substitution handle.
+func NewProcessSubstitution(path, operator string, reader func() (io.ReadCloser, bool), writer func() (io.WriteCloser, bool)) *ProcessSubstitution {
+	return &ProcessSubstitution{
+		path:   path,
+		op:     operator,
+		reader: reader,
+		writer: writer,
+	}
+}
+
+// Path returns the virtual descriptor path (/dev/fd/N) of the substitution.
+func (p *ProcessSubstitution) Path() string {
+	if p == nil {
+		return ""
+	}
+	return p.path
+}
+
+// Operator returns "<(" or ">(".
+func (p *ProcessSubstitution) Operator() string {
+	if p == nil {
+		return ""
+	}
+	return p.op
+}
+
+// IsInput reports whether the substitution is <(list).
+func (p *ProcessSubstitution) IsInput() bool {
+	return p != nil && p.op == "<("
+}
+
+// IsOutput reports whether the substitution is >(list).
+func (p *ProcessSubstitution) IsOutput() bool {
+	return p != nil && p.op == ">("
+}
+
+// OpenReader returns the consumer end of an active <(list) stream.
+func (p *ProcessSubstitution) OpenReader() (io.ReadCloser, bool) {
+	if p == nil || p.reader == nil {
+		return nil, false
+	}
+	return p.reader()
+}
+
+// OpenWriter returns the producer end of an active >(list) stream.
+func (p *ProcessSubstitution) OpenWriter() (io.WriteCloser, bool) {
+	if p == nil || p.writer == nil {
+		return nil, false
+	}
+	return p.writer()
+}
+
 // Streams carry complete bytes (BytePipe consumer end, StreamInput, ScreenedPipe
 // or the typed null endpoints). Closing Input is a deliberate consumer stop,
 // never producer failure. Display previews are a separate projection.
 type Streams struct {
-	Input  io.ReadCloser
-	Output io.Writer
-	Error  io.Writer
+	Input   io.ReadCloser
+	Output  io.Writer
+	Error   io.Writer
+	readers [10]io.ReadCloser
+	writers [10]io.Writer
+}
+
+// Reader returns the input stream bound to descriptor fd (0..9).
+func (s Streams) Reader(fd int) io.ReadCloser {
+	if fd < 0 || fd >= len(s.readers) {
+		return NullInput()
+	}
+	if fd == 0 && s.Input != nil && s.writers[0] == nil {
+		return s.Input
+	}
+	if s.readers[fd] != nil {
+		return s.readers[fd]
+	}
+	return NullInput()
+}
+
+// SetReader binds descriptor fd (0..9) to r.
+func (s *Streams) SetReader(fd int, r io.ReadCloser) {
+	if fd < 0 || fd >= len(s.readers) {
+		return
+	}
+	s.readers[fd] = r
+	s.writers[fd] = nil
+	switch fd {
+	case 0:
+		s.Input = r
+	case 1:
+		s.Output = nil
+	case 2:
+		s.Error = nil
+	}
+}
+
+// Writer returns the output stream bound to descriptor fd (0..9).
+func (s Streams) Writer(fd int) io.Writer {
+	if fd < 0 || fd >= len(s.writers) {
+		return io.Discard
+	}
+	switch fd {
+	case 1:
+		if s.Output != nil && s.readers[1] == nil {
+			return s.Output
+		}
+	case 2:
+		if s.Error != nil && s.readers[2] == nil {
+			return s.Error
+		}
+	}
+	if s.writers[fd] != nil {
+		return s.writers[fd]
+	}
+	return io.Discard
+}
+
+// SetWriter binds descriptor fd (0..9) to w.
+func (s *Streams) SetWriter(fd int, w io.Writer) {
+	if fd < 0 || fd >= len(s.writers) {
+		return
+	}
+	s.writers[fd] = w
+	s.readers[fd] = nil
+	switch fd {
+	case 0:
+		s.Input = nil
+	case 1:
+		s.Output = w
+	case 2:
+		s.Error = w
+	}
+}
+
+func (s Streams) hasReader(fd int) bool {
+	if fd < 0 || fd >= len(s.readers) {
+		return false
+	}
+	if s.readers[fd] != nil {
+		return true
+	}
+	return fd == 0 && s.writers[0] == nil
+}
+
+func (s Streams) hasWriter(fd int) bool {
+	if fd < 0 || fd >= len(s.writers) {
+		return false
+	}
+	if s.writers[fd] != nil {
+		return true
+	}
+	return (fd == 1 || fd == 2) && s.readers[fd] == nil
 }
 
 // RefusalReport carries owner facts to the host's existing rejection renderer.
 // Diagnostic text is never a permission or effect discriminator.
 type RefusalReport struct {
 	Operation, Operand, Code string
+	Expected                 string
 	Span                     toolcontract.SourceSpan
 	Cause                    error
 }
@@ -79,6 +234,7 @@ type ExpansionScope interface {
 	Variable(name string) (value string, set bool)
 	// ProgramName is $0, the program or sourced unit identity.
 	ProgramName() string
+	// Positional borrows immutable values from the invocation frame.
 	Positional() []string
 	LastStatus() int
 	LastBackground() (job string, set bool)

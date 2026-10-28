@@ -68,6 +68,12 @@ func GrantKey(action ProposedAction) string {
 	if action.Execution.Contained.HostExecution {
 		identity += "\x00host_execution"
 	}
+	if action.Mutations.RecoveryLoss {
+		if strings.TrimSpace(action.Invocation.ActionID) == "" {
+			return ""
+		}
+		identity += "\x00recovery_loss:" + action.Invocation.ActionID
+	}
 	if len(action.Mutations.FileChanges) > 0 {
 		changes, err := json.Marshal(action.Mutations.FileChanges)
 		if err != nil {

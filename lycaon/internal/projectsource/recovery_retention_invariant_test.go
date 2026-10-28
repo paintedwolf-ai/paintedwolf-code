@@ -18,7 +18,7 @@ func TestRecoveryRetentionFollowsHistoryAcrossRestartAndBranching(t *testing.T) 
 			service, project, root, _ := sourceMutationFixture(t)
 			ledger := service.settlement.recorder.(*sourceledger.Store)
 			verify, reviewed := seedRetainedEntry(t, root, kind)
-			id, err := service.RemoveEntry(t.Context(), agentRemoval(project, "entry", reviewed))
+			id, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "entry", reviewed))
 			testutil.FailErr(t, "remove retained entry", err)
 			for cycle := 0; cycle < 3; cycle++ {
 				service = recoverWithMaintenance(t, service, ledger)
@@ -58,6 +58,7 @@ func TestRecoveryRetentionFollowsHistoryAcrossRestartAndBranching(t *testing.T) 
 
 func recoverWithMaintenance(t *testing.T, service *SourceMutationService, ledger *sourceledger.Store) *SourceMutationService {
 	t.Helper()
+	testutil.FailErr(t, "close previous service", service.Close())
 	testutil.FailErr(t, "collect before recovery", ledger.Retention.SweepBlobs(t.Context()))
 	restarted := NewSourceMutationService(service.Journal.db, ledger)
 	installTestTrash(t, restarted)
@@ -80,7 +81,7 @@ func seedRetainedEntry(t *testing.T, root, kind string) (func(), string) {
 			}
 		}, ""
 	case "symlink":
-		target := filepath.Join(t.TempDir(), "outside project")
+		target := filepath.Join(root, "unselected target")
 		testutil.FailErr(t, "seed unselected target", os.WriteFile(target, []byte("untouched"), 0o600))
 		testutil.FailErr(t, "seed symlink", os.Symlink(target, path))
 		return func() {
@@ -94,7 +95,7 @@ func seedRetainedEntry(t *testing.T, root, kind string) (func(), string) {
 			if string(data) != "untouched" {
 				t.Fatal("recovery changed unselected target")
 			}
-		}, ""
+		}, textfile.SHA256([]byte(target))
 	default:
 		var body []byte
 		if kind == "binary" {

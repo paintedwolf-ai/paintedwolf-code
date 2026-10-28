@@ -94,7 +94,7 @@ func (d ProgramDiagnostic) Feedback() (map[string]any, error) {
 		if expected == "" {
 			expected = command.Argv
 		}
-		facts["supported_options"] = commandSpellings(command)
+		facts["supported_options"] = CommandSpellings(command)
 	}
 	if expected != "" {
 		facts["expected_form"] = expected
@@ -108,7 +108,8 @@ func (d ProgramDiagnostic) Feedback() (map[string]any, error) {
 	return facts, nil
 }
 
-func commandSpellings(command CommandSpecification) []string {
+// CommandSpellings lists every option spelling a catalog command accepts.
+func CommandSpellings(command CommandSpecification) []string {
 	out := []string{}
 	for _, form := range command.Forms {
 		out = append(out, form.Spellings...)

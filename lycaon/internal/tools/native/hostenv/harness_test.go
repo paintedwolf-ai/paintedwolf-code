@@ -92,7 +92,7 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 	t.Helper()
 	root, bin := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "mkdir pkg", os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
-	for _, name := range []string{"cat", "pwtool"} {
+	for _, name := range []string{"cat", "git", "pwtool"} {
 		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	}
 	testutil.FailErr(t, "write plain file", os.WriteFile(filepath.Join(bin, "plain"), nil, 0o644))
@@ -131,8 +131,9 @@ func (h *harness) run(source string) run {
 		testutil.FailErr(h.t, "expand", err)
 		argv = append(argv, fields...)
 	}
-	entries, err := frame.Environment(nil)
+	entries, release, err := frame.Environment(h.t.Context(), nil)
 	testutil.FailErr(h.t, "environment", err)
+	defer release()
 	environment := entries
 	request := commandprogram.OperationRequest{
 		Invocation: toolcontract.OperationInvocation{
@@ -178,4 +179,5 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 // catalogBindings binds every catalog native, as a fully wired program does.
 type catalogBindings struct{}
 
-func (catalogBindings) NativeBound(string) bool { return true }
+func (catalogBindings) NativeBound(string) bool   { return true }
+func (catalogBindings) BaseEnvironment() []string { return nil }

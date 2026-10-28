@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func TestProgramDefinitionsStoredOncePerProgramAcrossLoopExecutions(t *testing.T) {
@@ -68,8 +69,19 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	testutil.FailErr(t, "start live progress", observer.BeforeProgressOwner(t.Context(), progressID, "actual-model-call", progressReview))
 
 	// Active reservations: parent (32/16384) + progress (32/16384) + 2 live children (64/32768) = 128 events, 65536 bytes.
-	// Exhaust non-terminal trace events up to 100000 - 128 = 99872.
-	_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_programs SET trace_events=100000-128 WHERE id=?`, f.program)
+	// Exhaust non-terminal trace events while preserving all live settlement reserves.
+	catalog, err := toolcontract.LanguageV1()
+	testutil.FailErr(t, "read command catalog", err)
+	var eventLimit, byteLimit int64
+	for _, limit := range catalog.Language.Limits {
+		switch limit.ID {
+		case "trace_events":
+			eventLimit = limit.Maximum
+		case "trace_bytes":
+			byteLimit = limit.Maximum
+		}
+	}
+	_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_programs SET trace_events=? WHERE id=?`, eventLimit-128, f.program)
 	testutil.FailErr(t, "set trace_events to non-terminal boundary", err)
 
 	// New child admission must be refused because it needs events + its own 32-event reserve.
@@ -80,8 +92,8 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze extra child inputs", err)
 	defer releaseExpanded()
-	if err := f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: extraIn, Definition: def, ArgumentsReference: "output:extra", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
-		t.Fatal("PrepareChild admitted child without settlement reserve")
+	if err := f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: extraIn, Definition: def, ArgumentsReference: "output:extra", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil || toolrejection.AsToolReject(err) == nil || toolrejection.AsToolReject(err).Code != "COMMAND_LIMIT_EXCEEDED" {
+		t.Fatalf("PrepareChild limit refusal = %v", err)
 	}
 
 	// Non-terminal output attachment must also be refused when non-terminal trace events are exhausted.
@@ -94,8 +106,8 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	}
 	testutil.FailErr(t, "close unattached candidate stream", spill.Close())
 
-	// Exhaust non-terminal trace bytes up to 8388608 - 65536 = 8323072 as well.
-	_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_programs SET trace_bytes=8388608-65536 WHERE id=?`, f.program)
+	// Exhaust non-terminal trace bytes up to the live settlement reservation.
+	_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_programs SET trace_bytes=? WHERE id=?`, byteLimit-65536, f.program)
 	testutil.FailErr(t, "set trace_bytes to non-terminal boundary", err)
 
 	// Started work (runningChild, heldChild, progress, and parent program) must all settle from reserved capacity.

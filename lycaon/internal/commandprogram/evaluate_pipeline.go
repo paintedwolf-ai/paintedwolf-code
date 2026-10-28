@@ -86,12 +86,14 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 		releases = append(releases, release)
 		g.parent, g.loops, g.returnable = run.inv, 0, false
-		g.io.streams = Streams{Input: f.io.streams.Input, Output: f.io.streams.Output, Error: stderr}
+		g.io.streams = f.io.streams
+		g.io.setWriter(2, stderr)
 		if i > 0 {
-			g.io.setInput(pipes[i-1].ConsumerEnd())
+			g.io.setReader(0, pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
-			g.io.setOutput(pipes[i])
+			g.producerPipe = pipes[i]
+			g.io.setWriter(1, pipes[i])
 		}
 		frames[i] = g
 	}
@@ -137,12 +139,8 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []comm
 	}
 	out, settleErr := SettlePipeline(run.inv.Identity.ExecutionID, outcomes, f.state.latch)
 	f.publish.mark(out.PublicationEligible)
-	pipeStatuses := make([]int, len(outcomes))
-	for i, outcome := range outcomes {
-		pipeStatuses[i] = outcome.Result.Status
-	}
-	f.state.pipeStatus = pipeStatuses
-	f.state.vars.SetPipeStatus(pipeStatuses)
+	f.state.pipeStatus = out.PipeStatuses
+	f.state.vars.SetPipeStatus(out.PipeStatuses)
 	aggregate := toolcontract.ProducerResult{Status: out.Status, Terminal: toolcontract.ProducerCompleted, Complete: out.Complete, EffectCertainty: toolcontract.NoEffect}
 	if stop, ok := f.state.latch.Stop(); ok {
 		aggregate = stop.Result
@@ -170,6 +168,12 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []comm
 // aggregation-only record of that status (exit, negation, bookkeeping).
 func (g *frame) stage(ctx context.Context, s commandsurface.Statement) stageResult {
 	_, err := g.statement(ctx, s)
+	if errors.Is(err, ErrConsumerClosed) && g.producerPipe != nil && g.producerPipe.Completion().Termination == StreamConsumerClosed {
+		err = nil
+	}
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	out := stageResult{err: err}
 	_, stopped := g.state.latch.Stop()
 	if last := g.state.last; last != nil && (stopped || last.Result.Status == g.state.control.Status()) {

@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
@@ -57,7 +56,7 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive && !directories, Recursive: recursive, Force: force}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.owners.Revisions.Memory, Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive && !directories, Recursive: recursive, Force: force}, inv.tc)
 		// The owner reports the operand as given and the entries beneath it
 		// scope-relative; both map back onto the bound path.
 		scope := filepath.ToSlash(bound.Resolved.ScopeRel) + "/"
@@ -92,7 +91,7 @@ func runRmdir(inv *invocation) error {
 		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.owners.Revisions.Memory, Paths: []string{bound.Resolved.Abs}}, inv.tc)
 		return len(result.Deleted), err
 	})
 }
@@ -124,11 +123,11 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
+		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Memory: inv.owners.Revisions.Memory, Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
 		if len(result.Moved) > 0 {
 			inv.verbose("renamed %s -> %s", quote(operand), quote(inv.destinationDisplay(dest, to)))
 		}
-		return len(result.Moved), err
+		return len(result.Moved) + len(result.DestinationCopied), err
 	})
 }
 
@@ -139,6 +138,11 @@ func runCp(inv *invocation) error {
 	}
 	archive := inv.flag("-a")
 	recursive, noClobber, preserve := inv.flag("-r") || archive, inv.flag("-n"), inv.flag("-p") || archive
+	operation, err := inv.owners.Operations.Copy.Begin(native.CopyInput{Recursive: recursive, NoClobber: noClobber, Preserve: preserve, MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.owners.Revisions.Memory)
+	if err != nil {
+		return err
+	}
+	defer operation.Close()
 	return inv.each(sources, func(operand string) (int, error) {
 		source, err := inv.bind(operand, false)
 		if err != nil {
@@ -160,13 +164,12 @@ func runCp(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: preserve,
-			MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.tc)
+		result, err := operation.CopyPair(inv.ctx, native.FilePair{From: source.Resolved.Abs, To: to}, inv.tc)
 		shown := inv.destinationDisplay(dest, to)
 		for _, copied := range result.Copied {
 			inv.verbose("%s -> %s", quote(displayed(copied.From, source.Resolved.Abs, operand)), quote(displayed(copied.To, to, shown)))
 		}
-		return len(result.Copied), err
+		return result.Effects, err
 	})
 }
 
@@ -208,12 +211,12 @@ func runMkdir(inv *invocation) error {
 			missing = append([]string{dir}, missing...)
 		}
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{bound.Resolved.Abs}, Mode: mode}, inv.tc)
-		if len(created) > 0 {
+		if created.Effects > 0 {
 			for _, dir := range missing {
 				inv.verbose("mkdir: created directory %s", quote(ancestorDisplay(dir, bound.Resolved.Abs, operand)))
 			}
 		}
-		return len(created), err
+		return created.Effects, err
 	})
 }
 
@@ -258,7 +261,7 @@ func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
 }
 
 // refuseLinks stops cp -a before copying a tree that holds a symbolic link:
-// -a copies links as links, and no owner creates links.
+// this copy operation has not admitted link entries for recursive publication.
 func (inv *invocation) refuseLinks(operand, abs string) error {
 	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
 	return filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
@@ -269,7 +272,7 @@ func (inv *invocation) refuseLinks(operand, abs string) error {
 			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
 		}
 		if entry.Type()&fs.ModeSymlink != 0 {
-			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a preserves symbolic links as links; native link creation is unavailable, so use cp -R -p to copy the link targets")
+			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a cannot preserve symbolic links here; use cp -R -p to copy the link targets or ln -s to recreate a link")
 		}
 		return nil
 	})
@@ -430,8 +433,18 @@ func (inv *invocation) capture(abs string) (pinnedTarget, error) {
 func runTee(inv *invocation) error {
 	appendMode := inv.flag("-a")
 	var targets []pinnedTarget
-	for _, operand := range inv.operands() {
-		bound, err := inv.paths.Bind(inv.ctx, operand, true)
+	var streamWriters []io.WriteCloser
+	defer func() {
+		for _, w := range streamWriters {
+			_ = w.Close()
+		}
+	}()
+	for _, operand := range inv.argv.Operands() {
+		if writer, ok := operand.ProcessSubstitution().OpenWriter(); ok {
+			streamWriters = append(streamWriters, writer)
+			continue
+		}
+		bound, err := inv.paths.Bind(inv.ctx, operand.Value, true)
 		if err != nil {
 			return err
 		}
@@ -460,11 +473,11 @@ func runTee(inv *invocation) error {
 				return &commandprogram.StreamLimitError{Limit: "stream_throughput_bytes", Maximum: maximum, Observed: total}
 			}
 			chunk := buf[:n]
-			if len(targets) > 0 {
+			if len(targets) > 0 || len(streamWriters) > 0 {
 				data = append(data, chunk...)
 			}
 			if _, werr := inv.stdout.Write(chunk); werr != nil {
-				if len(targets) > 0 {
+				if len(targets) > 0 || len(streamWriters) > 0 {
 					inv.uncertain = true
 				}
 				return werr
@@ -477,6 +490,15 @@ func runTee(inv *invocation) error {
 			return err
 		}
 	}
+	for _, w := range streamWriters {
+		if _, err := w.Write(data); err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+	}
+	streamWriters = nil
 	for _, target := range targets {
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 			return err
@@ -520,7 +542,7 @@ func runMktemp(inv *invocation) error {
 	abs := filepath.Join(dir, name)
 	if inv.flag("-d") {
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{abs}, Mode: 0o700}, inv.tc)
-		inv.effects += len(created)
+		inv.effects += created.Effects
 		if err != nil {
 			return err
 		}
@@ -550,208 +572,4 @@ func randomName(stem string, n int) (string, error) {
 		random[i] = mktempAlphabet[int(random[i])%len(mktempAlphabet)]
 	}
 	return stem + string(random), nil
-}
-
-func runEdit(inv *invocation) error {
-	if operands := inv.operands(); len(operands) > 0 {
-		return inv.usage(operands[0], "no operands")
-	}
-	path, ok := inv.value("--path")
-	if !ok || path == "" {
-		return inv.usage(inv.name(), "--path PATH")
-	}
-	oldString, ok := inv.value("--old-string")
-	if !ok || oldString == "" {
-		return inv.usage(inv.name(), "--old-string TEXT")
-	}
-	newString, ok := inv.value("--new-string")
-	if !ok {
-		return inv.usage(inv.name(), "--new-string TEXT")
-	}
-	if oldString == newString {
-		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"reason": "old_string and new_string must differ"}}
-	}
-	bound, err := inv.bind(path, true)
-	if err != nil {
-		return err
-	}
-	source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(source.Revision); err != nil {
-		return err
-	}
-	destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(destination); err != nil {
-		return err
-	}
-	occurrences := strings.Count(source.Content, oldString)
-	if occurrences == 0 {
-		return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_NOT_FOUND", Data: map[string]any{"path": bound.Resolved.DisplayPath}}
-	}
-	replaceAll := inv.flag("--replace-all")
-	if occurrences > 1 && !replaceAll {
-		return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_AMBIGUOUS", Data: map[string]any{"path": bound.Resolved.DisplayPath, "occurrences": occurrences}}
-	}
-	edited := strings.Replace(source.Content, oldString, newString, 1)
-	if replaceAll {
-		edited = strings.ReplaceAll(source.Content, oldString, newString)
-	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: edited,
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
-	if err != nil {
-		return err
-	}
-	if result.Accepted || result.Saved {
-		inv.effects++
-	}
-	return nil
-}
-
-func runReplaceLines(inv *invocation) error {
-	if operands := inv.operands(); len(operands) > 0 {
-		return inv.usage(operands[0], "no operands")
-	}
-	path, ok := inv.value("--path")
-	if !ok || path == "" {
-		return inv.usage(inv.name(), "--path PATH")
-	}
-	startRaw, ok := inv.value("--start")
-	if !ok {
-		return inv.usage(inv.name(), "--start LINE")
-	}
-	endRaw, ok := inv.value("--end")
-	if !ok {
-		return inv.usage(inv.name(), "--end LINE")
-	}
-	content, ok := inv.value("--content")
-	if !ok {
-		return inv.usage(inv.name(), "--content TEXT")
-	}
-	startLine, err := strconv.Atoi(startRaw)
-	if err != nil {
-		return inv.usage(startRaw, "1-based start line")
-	}
-	endLine, err := strconv.Atoi(endRaw)
-	if err != nil {
-		return inv.usage(endRaw, "1-based end line")
-	}
-	bound, err := inv.bind(path, true)
-	if err != nil {
-		return err
-	}
-	source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(source.Revision); err != nil {
-		return err
-	}
-	destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(destination); err != nil {
-		return err
-	}
-	edited, err := native.ReplaceLineRange(bound.Resolved.DisplayPath, source.Content, startLine, endLine, content)
-	if err != nil {
-		return err
-	}
-	if edited == source.Content {
-		return nil
-	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: edited,
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
-	if err != nil {
-		return err
-	}
-	if result.Accepted || result.Saved {
-		inv.effects++
-	}
-	return nil
-}
-
-func runCodeRewrite(inv *invocation) error {
-	if operands := inv.operands(); len(operands) > 0 {
-		return inv.usage(operands[0], "no operands")
-	}
-	pattern, ok := inv.value("--pattern")
-	if !ok || strings.TrimSpace(pattern) == "" {
-		return inv.usage(inv.name(), "--pattern PATTERN")
-	}
-	rewrite, ok := inv.value("--rewrite")
-	if !ok || strings.TrimSpace(rewrite) == "" {
-		return inv.usage(inv.name(), "--rewrite TEXT")
-	}
-	path, ok := inv.value("--path")
-	if !ok || strings.TrimSpace(path) == "" {
-		return inv.usage(inv.name(), "--path PATH")
-	}
-	dryRun := inv.flag("--dry-run")
-	recursive := inv.flag("--recursive")
-	bound, err := inv.bind(path, !dryRun)
-	if err != nil {
-		return err
-	}
-	targets := []string{bound.Resolved.Abs}
-	if info, statErr := os.Stat(bound.Resolved.Abs); statErr == nil && info.IsDir() {
-		if !recursive {
-			return inv.usage(path, "a file path, or pass --recursive for a directory")
-		}
-		targets = nil
-		if walkErr := filepath.WalkDir(bound.Resolved.Abs, func(entry string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.Type().IsRegular() && native.SupportsRewriteLanguage(entry) {
-				targets = append(targets, entry)
-			}
-			return nil
-		}); walkErr != nil {
-			return walkErr
-		}
-	}
-	for _, abs := range targets {
-		source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, abs)
-		if err != nil {
-			return err
-		}
-		if err := inv.recordPin(source.Revision); err != nil {
-			return err
-		}
-		rewritten, changed, err := native.RewriteSource(inv.ctx, source.Path, pattern, rewrite, source.Content)
-		if err != nil {
-			return err
-		}
-		if !changed || dryRun {
-			continue
-		}
-		destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, abs)
-		if err != nil {
-			return err
-		}
-		if err := inv.recordPin(destination); err != nil {
-			return err
-		}
-		result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: abs, Content: rewritten,
-			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
-		if err != nil {
-			return err
-		}
-		if result.Accepted || result.Saved {
-			inv.effects++
-		}
-	}
-	return nil
 }

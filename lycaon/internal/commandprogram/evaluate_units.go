@@ -35,9 +35,14 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.io.setInput(NullInput())
-	g.io.setOutput(stdout)
+	g.io.streams = f.io.streams
+	g.io.setReader(0, NullInput())
+	g.io.setWriter(1, stdout)
+	g.io.setWriter(2, f.io.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
@@ -53,23 +58,16 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 // owner, then runs it in the current frame. A capture, encoding or syntax
 // refusal latches before any sourced statement; earlier parent effects stay.
 func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields Fields) (finalErr error) {
-	if len(fields) > 1 && fields[1].Value != "--" && strings.HasPrefix(fields[1].Value, "-") {
-		return f.builtinStatus(s.SyntaxLocation, "source", 2)
-	}
-	spec, _, err := ResolveCommand(fields)
-	if err != nil {
+	if _, _, err := ResolveCommand(fields); err != nil {
 		return err
 	}
-	bound, err := f.e.ports.Binder.Bind(spec, fields)
-	var argv *ArgvError
-	if errors.As(err, &argv) {
-		return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
+	operands := fields[1:]
+	endOfOptions := false
+	if len(operands) > 0 && operands[0].Value == "--" {
+		endOfOptions = true
+		operands = operands[1:]
 	}
-	if err != nil {
-		return err
-	}
-	operands := bound.Operands()
-	if len(operands) != 1 || (!bound.EndOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
+	if len(operands) != 1 || (!endOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
 		return f.builtinStatus(s.SyntaxLocation, "source", 2)
 	}
 	if int64(f.sources+1) > f.e.limits["source_depth"] {
@@ -80,7 +78,13 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		return err
 	}
 	defer run.close(ctx)
-	parsed, captured, err := LoadSourceUnit(ctx, f.e.ports.Sources, run.inv, operands[0].Value, f.e.ports.Memory)
+	sources := f.e.ports.Sources
+	if inputs, _ := f.redirections(); inputs != nil {
+		if sc, ok := inputs.(SourceCapture); ok {
+			sources = sc
+		}
+	}
+	parsed, captured, err := LoadSourceUnit(ctx, sources, run.inv, operands[0].Value, f.e.ports.Memory)
 	if captured.Pin.SourceID != "" {
 		f.e.recordSource(run.inv.Identity.ExecutionID, captured.Pin)
 	}
@@ -167,6 +171,9 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		defer release()
 		job.io.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
+		if trapErr := runExitTrap(jobCtx, job, err); trapErr != nil && err == nil {
+			err = trapErr
+		}
 		result := ordinaryResult(job.state.control.Status())
 		if stop, ok := job.state.latch.Stop(); ok {
 			result = stop.Result
@@ -198,5 +205,8 @@ func (s Streams) withDefaults() Streams {
 	if s.Error == nil {
 		s.Error = io.Discard
 	}
+	s.readers[0] = s.Input
+	s.writers[1] = s.Output
+	s.writers[2] = s.Error
 	return s
 }

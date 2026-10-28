@@ -781,6 +781,9 @@ type InvocationProgramOutputs struct {
 	Preview           string         `json:"preview"`
 	PreviewTruncated  int64          `json:"preview_truncated"`
 	CreatedAt         string         `json:"created_at"`
+	InlineDigest      string         `json:"inline_digest"`
+	InlineBody        []byte         `json:"inline_body"`
+	BlobID            sql.NullString `json:"blob_id"`
 }
 
 type InvocationProgramProgress struct {

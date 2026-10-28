@@ -111,6 +111,12 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 	if err != nil {
 		return ExecutionStream{}, err
 	}
+	return e.OpenWalkedStream(ctx, tctx, resolved, nil, maxBytes)
+}
+
+// OpenWalkedStream pins published disk bytes for an already-resolved path,
+// reusing root when non-nil to avoid re-opening the root directory per file.
+func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, root *fseffect.ReadRoot, maxBytes int64) (ExecutionStream, error) {
 	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
 		return ExecutionStream{}, err
 	}
@@ -124,7 +130,15 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 	if resolved.Compressed {
 		return e.openCompressedStream(ctx, tctx, resolved)
 	}
-	file, err := fseffect.OpenRead(resolved.EffectLocation())
+	var (
+		file *os.File
+		err  error
+	)
+	if root != nil {
+		file, err = root.Open(resolved.EffectLocation().Rel)
+	} else {
+		file, err = fseffect.OpenRead(resolved.EffectLocation())
+	}
 	if err != nil {
 		if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
 			return ExecutionStream{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)

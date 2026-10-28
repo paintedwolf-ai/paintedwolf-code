@@ -1,5 +1,5 @@
 tags: [network, http]
-description: "Send one bounded request to an API, webhook, or service endpoint and return its status, headers, and raw body. Replaces command: ad hoc HTTP API request."
+description: "Send one bounded request to an API, webhook, or service endpoint and return its status, headers, and raw body."
 schema:
   type: object
   properties:

@@ -103,9 +103,11 @@ func TestCommandFamilyGrantedWhereverCommandIsGranted(t *testing.T) {
 	t.Parallel()
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
+	externalExec, err := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	contractcheck.FailErr(t, "NewCommandEffects", err)
 	granted := 0
 	for _, prof := range profiles {
-		if !prof.Tools["command"] || prof.ToolDenied("command") {
+		if !prof.Tools["command"] || prof.ToolDenied("command") || !prof.CommandEffects.Allows(externalExec) {
 			continue
 		}
 		granted++
@@ -182,8 +184,8 @@ func TestWorkerProfilesKeepCoreEagerAndOptionalCapabilitiesReachable(t *testing.
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "load worker profiles", err)
 	cases := map[string]struct{ eager, deferred, denied []string }{
-		"implement":        {eager: []string{"read", "write", "edit", "command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close"}, deferred: []string{"page_open", "page_act", "page_close", "capture_page", "http_request", "scan_pack", "secret_generate", "secret_list", "secret_revoke", "handoff_reserve"}, denied: []string{"delegate_start", "state_set"}},
-		"explore_readonly": {eager: []string{"read", "grep", "find", "summarize", "git_status", "git_diff", "record_finding", "complete_leg", "request_tools", "skills_read"}, deferred: []string{"page_open", "page_act", "page_close", "capture_page", "scan_query", "git_log", "git_show"}, denied: []string{"command", "write", "git_commit", "secret_generate"}},
+		"implement":        {eager: []string{"write", "edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close"}, deferred: []string{"read", "grep", "find", "list_dir", "jq", "jq_edit", "page_open", "page_act", "page_close", "capture_page", "http_request", "scan_pack", "secret_generate", "secret_list", "secret_revoke", "handoff_reserve"}, denied: []string{"delegate_start", "state_set"}},
+		"explore_readonly": {eager: []string{"command", "summarize", "survey_repo", "git_status", "git_diff", "record_finding", "complete_leg", "request_tools", "skills_read"}, deferred: []string{"read", "grep", "find", "list_dir", "jq", "page_open", "page_act", "page_close", "capture_page", "scan_query", "git_log", "git_show"}, denied: []string{"write", "git_commit", "secret_generate"}},
 	}
 	for _, profile := range profiles {
 		spec, ok := cases[profile.ID]

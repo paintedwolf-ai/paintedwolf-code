@@ -33,6 +33,14 @@ func (p *ApprovalPolicyEngine) WaitConditions(profileID string) []string {
 	return p.profile.WaitConditions(profileID)
 }
 
+// CommandEffects delegates to the underlying profile policy engine.
+func (p *ApprovalPolicyEngine) CommandEffects(ctx context.Context, profileID string) (toolcontract.CommandEffects, error) {
+	if p == nil || p.profile == nil {
+		return 0, nil
+	}
+	return p.profile.CommandEffects(ctx, profileID)
+}
+
 // EvaluateForList returns tools allowed by the sandbox profile only (not approval ask/deny).
 func (p *ApprovalPolicyEngine) EvaluateForList(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
 	if p == nil || p.profile == nil {
@@ -100,6 +108,13 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if args == nil {
 		return nil
 	}
+	if targets := nativePathTargetsFromArgs(args); targets != nil {
+		files := make([]string, 0, len(targets))
+		for _, target := range targets {
+			files = append(files, target.Path)
+		}
+		return files
+	}
 	if commandStreamTools[tool] {
 		return commandStreamFiles(args)
 	}
@@ -147,6 +162,32 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	}
 	files = append(files, pairFilesFromArgs(args)...)
 	return files
+}
+
+// nativePathTargetsFromArgs consumes the owner-bound projection. It never
+// guesses file operands from an argv word or a command's help prose.
+func nativePathTargetsFromArgs(args map[string]any) []hitl.NativePathTarget {
+	raw, present := args["path_targets"]
+	if !present {
+		return nil
+	}
+	targets := []hitl.NativePathTarget{}
+	items, ok := raw.([]any)
+	if !ok {
+		return targets
+	}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		path, _ := entry["path"].(string)
+		write, _ := entry["write"].(bool)
+		if path != "" {
+			targets = append(targets, hitl.NativePathTarget{Path: path, Write: write})
+		}
+	}
+	return targets
 }
 
 // commandStreamFiles reads redirection and stream-field paths from the plan.
@@ -204,13 +245,14 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:  eval.NativeInputs,
-			Tool:          eval.ToolName,
-			BoundStages:   toolcontract.CloneExecutionStages(eval.BoundStages),
-			Args:          eval.ToolArgs,
-			Files:         append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-			ResolvedFiles: append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-			ActionID:      eval.ActionID,
+			NativeInputs:      eval.NativeInputs,
+			Tool:              eval.ToolName,
+			BoundStages:       toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:              eval.ToolArgs,
+			Files:             append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:     append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets: append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ActionID:          eval.ActionID,
 		},
 		Resources: hitl.ActionResources{
 			ApprovalCategory:     eval.ApprovalCategory,

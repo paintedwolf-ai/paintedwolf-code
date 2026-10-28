@@ -4,7 +4,7 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
@@ -94,14 +94,10 @@ Typed syntax diagnostics carry byte ranges, line/column, expected forms and
 resource measurements through the existing rejection/OAR pipeline. They never
 guess missing source contents or create executable replacement calls.
 
-The new plan is separate from the existing process-stage plan. Retained verify,
-PTY, process launch, detection, secret inspection and command-identity consumers
-still require that process representation. The current command executor remains
-its consumer until the runtime integration replaces it. Do not flatten functions,
-loops or substitutions into process stages, broaden a retained surface merely
-because the new parser accepts a form, or remove a recognizer while one of these
-consumers still uses it. Their replacement and obsolete-path cleanup accompany
-the introducing runtime integration.
+Program plans retain functions, loops and substitutions through evaluation.
+Verify, terminal and process-launch surfaces use process-stage plans with their
+own accepted arguments. Dispatch binds each reached program operation to its
+owner rather than flattening the program into a process pipeline.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
@@ -664,7 +660,7 @@ A file the person has open in the editor is its editor document, for the agent a
 | Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
 | Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
+| `command`, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 
@@ -691,7 +687,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned task-bound instance references. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -891,7 +887,7 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
 
 ## Web research sources
 
@@ -903,8 +899,23 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P09 binds production admission. P08 supplies the shared status/control and complete-producer publication decision; P16 supplies staged destination publication.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. The evaluator settles each producer independently and publishes staged destinations only from complete eligible results.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
-Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
+
+### Command schema and guidance
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+
+The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+| Surface | Source |
+|---|---|
+| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
+| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
+| Per-call guidance | `platform/shared/partials/command-surface.md` |
+| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+
+OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
