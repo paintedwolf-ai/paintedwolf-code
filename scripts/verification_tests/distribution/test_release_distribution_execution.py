@@ -13,11 +13,26 @@ class Response(io.BytesIO):
         self.headers = {"Cache-Control": cache}
 
 
+def page(channel: str, version: str, urls=None) -> bytes:
+    """A download page offering every catalog-public package of the release, as the website publishes it."""
+    if urls is None:
+        urls = distribution.package_urls(version, distribution.ROOT / "packaging/release-platforms.json")
+    return "".join(f'<a data-release-channel="{channel}" download href="{url}">Download</a>' for url in urls).encode()
+
+
 class WebsitePublicationTests(unittest.TestCase):
     def setUp(self):
         self.expected = {"channel": "stable", "version": "1.0.0", "manifest_sha256": "a" * 64, "withdrawn_version": None}
         self.receipt = json.dumps({"schema_version": 1, **self.expected}).encode()
-        self.page = b'<a data-release-channel="stable" download href="https://downloads.paintedwolf.dev/releases/v1.0.0/painted-wolf-code_v1.0.0_darwin-aarch64.dmg">Download</a>'
+        self.page = page("stable", "1.0.0")
+
+    def test_download_page_must_offer_every_public_platform_package(self):
+        urls = distribution.package_urls("1.0.0", distribution.ROOT / "packaging/release-platforms.json")
+        self.assertTrue(any("_linux-x86_64.deb" in url for url in urls) and any("_linux-aarch64.pkg.tar.zst" in url for url in urls))
+        for missing in urls:
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, "do not match"):
+                distribution.validate_website_downloads(page("stable", "1.0.0", [url for url in urls if url != missing]).decode(), self.expected)
+        distribution.validate_website_downloads(self.page.decode(), self.expected)
 
     def test_awaits_actual_download_page_with_matching_confirmation(self):
         with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(self.page)]) as get:
@@ -28,14 +43,14 @@ class WebsitePublicationTests(unittest.TestCase):
     def test_preview_waits_on_the_unlisted_preview_page(self):
         expected = {**self.expected, "channel": "preview", "version": "1.0.0-rc.3"}
         receipt = json.dumps({"schema_version": 1, **expected}).encode()
-        page = self.page.replace(b"stable", b"preview").replace(b"1.0.0", b"1.0.0-rc.3")
-        with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(receipt), Response(page)]) as get:
+        page_bytes = page("preview", "1.0.0-rc.3")
+        with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(receipt), Response(page_bytes)]) as get:
             distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0)
         self.assertEqual(get.call_args_list[1].args[0].full_url, "https://paintedwolf.ai/download/preview/")
 
     def test_stale_page_or_cache_headers_cannot_confirm_a_release(self):
-        for page, headers in [(self.page.replace(b"1.0.0", b"0.9.0"), "no-store"), (self.page, "public, max-age=3600")]:
-            with self.subTest(headers=headers), patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(page, headers)]):
+        for served, headers in [(page("stable", "0.9.0"), "no-store"), (self.page, "public, max-age=3600")]:
+            with self.subTest(headers=headers), patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(served, headers)]):
                 with self.assertRaisesRegex(ValueError, "not verified"):
                     distribution.wait_for_website("https://paintedwolf.ai", self.expected, seconds=0)
 
@@ -63,8 +78,7 @@ class WebsitePublicationTests(unittest.TestCase):
     def test_stable_confirmation_preserves_preview_from_interrupted_activation(self):
         expected = {**self.expected, "channel": "preview"}
         newer = {**expected, "version": "1.1.0-rc.1", "manifest_sha256": "b" * 64}
-        page = self.page.replace(b"stable", b"preview").replace(b"1.0.0", b"1.1.0-rc.1")
-        responses = [Response(json.dumps({"schema_version": 1, **newer}).encode()), Response(page)]
+        responses = [Response(json.dumps({"schema_version": 1, **newer}).encode()), Response(page("preview", "1.1.0-rc.1"))]
         with patch.object(distribution.urllib.request, "urlopen", side_effect=responses):
             distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0, allow_newer=True)
         wrong_channel = {"schema_version": 1, **newer, "channel": "stable"}
