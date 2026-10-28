@@ -498,7 +498,7 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	launch := startLaunch(t, f, env, "--exec-probe")
 	probe := launch.facts.Exec
 	if probe == nil {
-		t.Fatalf("the fixture engine reported no launches: %+v", launch.facts)
+		t.Fatalf("the fixture engine reported no launches: %+v; bootstrap stderr: %s", launch.facts, launch.stderr.String())
 	}
 	initial, err := os.Readlink("/proc/self/ns/user")
 	testutil.FailErr(t, "initial user namespace", err)
@@ -511,26 +511,26 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 		"host execution": {probe.HostExecOutput, probe.HostExecError, probe.HostExecCode},
 	} {
 		if run.err != "" || run.code != 7 || !strings.Contains(run.output, initial) || !strings.Contains(run.output, "NoNewPrivs:\t0") {
-			t.Fatalf("%s launch did not run outside the protected namespace with its exit status: %q code %d error %q (want %s)", name, run.output, run.code, run.err, initial)
+			t.Fatalf("%s launch did not run outside the protected namespace with its exit status: %q code %d error %q (want %s); bootstrap stderr: %s", name, run.output, run.code, run.err, initial, launch.stderr.String())
 		}
 	}
 	if probe.ConfinedError != "" && !strings.Contains(probe.ConfinedError, "exit status") || strings.Contains(probe.ConfinedOutput, initial) || strings.Contains(probe.ConfinedOutput, protected) || !strings.Contains(probe.ConfinedOutput, "NoNewPrivs:\t1") {
-		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr)
+		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q; bootstrap stderr: %s", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr, launch.stderr.String())
 	}
 	if probe.PreparedError != "" || probe.PreparedCode != 7 || !strings.Contains(probe.PreparedOutput, "streamed-over-stdin") || !strings.Contains(probe.PreparedOutput, initial) || !strings.Contains(probe.PreparedOutput, "NoNewPrivs:\t0") {
-		t.Fatalf("prepared launch did not stream through the broker outside the protected namespace: %q code %d error %q (want %s)", probe.PreparedOutput, probe.PreparedCode, probe.PreparedError, initial)
+		t.Fatalf("prepared launch did not stream through the broker outside the protected namespace: %q code %d error %q (want %s); bootstrap stderr: %s", probe.PreparedOutput, probe.PreparedCode, probe.PreparedError, initial, launch.stderr.String())
 	}
 	if probe.PreparedConfinedError != "" || probe.PreparedConfinedCode != 7 || !strings.Contains(probe.PreparedConfinedOutput, "streamed-over-stdin") || strings.Contains(probe.PreparedConfinedOutput, initial) || strings.Contains(probe.PreparedConfinedOutput, protected) || !strings.Contains(probe.PreparedConfinedOutput, "NoNewPrivs:\t1") {
-		t.Fatalf("prepared confined launch did not run in its own nested namespace through the broker: %q code %d error %q", probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError)
+		t.Fatalf("prepared confined launch did not run in its own nested namespace through the broker: %q code %d error %q; bootstrap stderr: %s", probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError, launch.stderr.String())
 	}
 	if !probe.TerminalSurvive {
-		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s", probe.TerminalError)
+		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s; bootstrap stderr: %s", probe.TerminalError, launch.stderr.String())
 	}
 	if !probe.RelayLossEnded {
-		t.Fatalf("killing the relay did not end the brokered session: %s", probe.RelayLossError)
+		t.Fatalf("killing the relay did not end the brokered session: %s; bootstrap stderr: %s", probe.RelayLossError, launch.stderr.String())
 	}
 	if !probe.BrowserEngineLossEnded {
-		t.Fatalf("killing the protected engine did not end the brokered browser: %s", probe.BrowserEngineLossError)
+		t.Fatalf("killing the protected engine did not end the brokered browser: %s; bootstrap stderr: %s", probe.BrowserEngineLossError, launch.stderr.String())
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)
