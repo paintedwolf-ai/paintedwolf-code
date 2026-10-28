@@ -90,7 +90,7 @@ def delivery_records(directory, execution, vm_id):
                 binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
                            'native_input': {'binding': execution, 'vm_id': vm_id}}
                 account = observations.get(launch, {}).get('session', {}).get('User')
-                admitted = registered(json.loads(raw), binding, account, leaf=prior)
+                admitted = registered(json.loads(raw), binding, account, prior)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
                 order = (prompt,)

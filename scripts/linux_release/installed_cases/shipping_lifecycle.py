@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import time
 
-from .app import descends, process_identity
+from ..installed_process import descends, process_identity
 from .application_scope import APP_SCOPE_RE, observe_engine_scope
 from .keepawake import await_inhibitor
 

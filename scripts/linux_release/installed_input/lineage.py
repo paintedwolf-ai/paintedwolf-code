@@ -1,7 +1,7 @@
 """Bind an actual native UI process to its separately captured launch process."""
 from __future__ import annotations
 
-from ..installed_cases.app import process_identity
+from ..installed_process import process_identity
 
 MAX_ANCESTRY = 32
 

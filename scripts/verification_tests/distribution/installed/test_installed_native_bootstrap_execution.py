@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.installed_cases import native_bootstrap as owner
-from linux_release import hosted_bootstrap as supervisor
+from linux_release.hosted import bootstrap as supervisor
 from linux_release.installed_cases.records import retain
 
 

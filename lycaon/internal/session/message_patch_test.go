@@ -114,7 +114,6 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 		testutil.FailErr(t, "update message failed", err)
 	}
 
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -146,7 +145,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 				t.Fatalf("patch event seq = %d, stored seq = %d", ev.Message.Seq, stored[0].Seq)
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timeout waiting for message patch event")
 		}
 	}

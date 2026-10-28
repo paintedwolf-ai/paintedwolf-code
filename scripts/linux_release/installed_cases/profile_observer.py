@@ -11,7 +11,7 @@ import time
 import uuid
 
 from .products import require_owned_guest
-from .app import engine_image
+from ..installed_process import engine_image
 from .records import CaseUnavailable
 
 TOOLS = frozenset({'command', 'read', 'write', 'edit', 'list', 'search', 'view_image', 'page_open',

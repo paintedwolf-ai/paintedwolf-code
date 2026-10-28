@@ -10,7 +10,7 @@ import re
 import stat
 
 from ..installed_evidence import artifacts
-from ..installed_runtime import bind
+from ..campaign.runtime import bind
 from ..installed_storage import resolve as storage_for_launch
 from .native_command import command
 from .package_native import current_package, operations, owner_commands

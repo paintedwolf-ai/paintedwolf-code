@@ -43,14 +43,23 @@ type Owner struct {
 	Projects         ProjectReader
 	Extensions       *extensionstate.Owner
 	SuggestionsApply func(project.Project) bool
-	Delete           func(context.Context, string, bool) error
+	Delete           func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error
+	Run              func(context.Context, func(context.Context))
 	Store            *Store
 	mu               sync.Mutex
+	activeMu         sync.RWMutex
+	active           map[string]wire.ProjectRemovalResult
 }
 
 func (o *Owner) Result(ctx context.Context, projectID, operationID string) (wire.ProjectRemovalResult, error) {
+	if result, ok := o.live(projectID, operationID); ok {
+		return result, nil
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if result, ok := o.live(projectID, operationID); ok {
+		return result, nil
+	}
 	row, found, err := o.Store.read(ctx, operationID)
 	if err != nil {
 		return wire.ProjectRemovalResult{}, err
@@ -61,66 +70,95 @@ func (o *Owner) Result(ctx context.Context, projectID, operationID string) (wire
 	return o.replay(ctx, row)
 }
 
-func (o *Owner) replay(ctx context.Context, row record) (wire.ProjectRemovalResult, error) {
-	if row.Settled {
-		return row.Result, nil
+// Remove durably accepts an operation; its work belongs to the server's tracked runner.
+func (o *Owner) Remove(ctx context.Context, projectID string, req wire.ProjectRemovalRequest) (wire.ProjectRemovalResult, error) {
+	accepted, err := o.accept(ctx, projectID, req)
+	if err != nil || !accepted.start {
+		return accepted.result, err
 	}
-	row.Result.CleanupState = "interrupted"
-	row.Result.FailureCode = "removal_interrupted"
-	row.Result.Reason = "Removal was interrupted. Review the project and extension settings before starting another operation."
-	return row.Result, o.Store.save(ctx, row.Result, true)
+	o.Run(ctx, func(runCtx context.Context) {
+		defer o.forget(req.OperationID)
+		if _, err := o.execute(runCtx, projectID, accepted.request, accepted.assessment, accepted.result); err != nil {
+			slog.ErrorContext(runCtx, "project removal could not save outcome", "project_id", projectID, "operation_id", req.OperationID, "err", err)
+		}
+	})
+	return o.Result(context.WithoutCancel(ctx), projectID, req.OperationID)
 }
 
-func (o *Owner) Remove(ctx context.Context, projectID string, req wire.ProjectRemovalRequest) (wire.ProjectRemovalResult, error) {
+type acceptedRemoval struct {
+	result     wire.ProjectRemovalResult
+	assessment wire.ProjectRemovalAssessment
+	request    wire.ProjectRemovalRequest
+	start      bool
+}
+
+func (o *Owner) accept(ctx context.Context, projectID string, req wire.ProjectRemovalRequest) (acceptedRemoval, error) {
+	if o.Run == nil {
+		return acceptedRemoval{}, errors.New("project removal runner unavailable")
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if _, err := uuid.Parse(req.OperationID); err != nil {
-		return wire.ProjectRemovalResult{}, fmt.Errorf("invalid operation id: %w", err)
+		return acceptedRemoval{}, fmt.Errorf("invalid operation id: %w", err)
 	}
 	req.RemoveExtensions = append([]string{}, req.RemoveExtensions...)
 	sort.Strings(req.RemoveExtensions)
 	encoded, err := json.Marshal(req)
 	if err != nil {
-		return wire.ProjectRemovalResult{}, err
+		return acceptedRemoval{}, err
 	}
 	row, found, err := o.Store.read(ctx, req.OperationID)
 	if err != nil {
-		return wire.ProjectRemovalResult{}, err
+		return acceptedRemoval{}, err
 	}
 	if found {
 		if row.ProjectID != projectID || row.Request != string(encoded) {
-			return wire.ProjectRemovalResult{}, ErrOperationConflict
+			return acceptedRemoval{}, ErrOperationConflict
 		}
-		return o.replay(ctx, row)
+		if live, ok := o.live(projectID, req.OperationID); ok {
+			return acceptedRemoval{result: live}, nil
+		}
+		replay, err := o.replay(ctx, row)
+		return acceptedRemoval{result: replay}, err
+	}
+	// A running operation keeps the project's lifecycle; a new id is refused, not recorded as a failure.
+	if o.liveForProject(projectID) {
+		return acceptedRemoval{}, fmt.Errorf("project removal already running: %w", project.ErrProjectBusy)
 	}
 	assessment, err := o.reviewSelection(ctx, projectID, req)
 	if err != nil {
-		return wire.ProjectRemovalResult{}, err
+		return acceptedRemoval{}, err
 	}
 	result := wire.ProjectRemovalResult{OperationID: req.OperationID, ProjectID: projectID, ProjectState: "unknown", CleanupState: "not_requested", Extensions: append([]string{}, req.RemoveExtensions...)}
 	if len(req.RemoveExtensions) > 0 {
 		result.Assessment = &assessment
 	}
 	if err := o.Store.begin(ctx, record{ProjectID: projectID, Request: string(encoded), Result: result}); err != nil {
-		return result, err
+		return acceptedRemoval{}, err
 	}
-	// Accepted work settles even if its HTTP caller disconnects.
-	ctx = context.WithoutCancel(ctx)
-	if err := o.Delete(ctx, projectID, req.Force); err != nil {
+	o.track(result)
+	return acceptedRemoval{result: result, assessment: assessment, request: req, start: true}, nil
+}
+
+func (o *Owner) execute(ctx context.Context, projectID string, req wire.ProjectRemovalRequest, assessment wire.ProjectRemovalAssessment, result wire.ProjectRemovalResult) (wire.ProjectRemovalResult, error) {
+	// Receipts outlive runner cancellation: a run stopped by shutdown still records the observed state.
+	receiptCtx := context.WithoutCancel(ctx)
+	if err := o.Delete(ctx, projectID, req.Force, func(progress wire.ProjectRemovalProgress) { o.progress(req.OperationID, progress) }); err != nil {
 		slog.WarnContext(ctx, "project removal did not complete", "project_id", projectID, "operation_id", req.OperationID, "err", err)
-		result = o.deletionFailure(ctx, result, err)
-		return result, o.Store.save(ctx, result, true)
+		result = o.deletionFailure(receiptCtx, result, err)
+		return result, o.Store.save(receiptCtx, result, true)
 	}
 	result.ProjectState = "deleted"
 	if len(req.RemoveExtensions) == 0 {
-		return result, o.Store.save(ctx, result, true)
+		return result, o.Store.save(receiptCtx, result, true)
 	}
 	result.CleanupState = "interrupted"
-	if err := o.Store.save(ctx, result, false); err != nil {
+	if err := o.Store.save(receiptCtx, result, false); err != nil {
 		return result, err
 	}
+	o.progress(req.OperationID, wire.ProjectRemovalProgress{Phase: "extensions"})
 	result = o.cleanup(ctx, assessment, req, result)
-	return result, o.Store.save(ctx, result, true)
+	return result, o.Store.save(receiptCtx, result, true)
 }
 
 func (o *Owner) deletionFailure(ctx context.Context, result wire.ProjectRemovalResult, cause error) wire.ProjectRemovalResult {
