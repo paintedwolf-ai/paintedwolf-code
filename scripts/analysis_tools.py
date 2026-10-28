@@ -15,13 +15,14 @@ TOOLS = {
     "golangci-lint": ("scripts/lint-go.sh", "GOLANGCI_VERSION", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint", "github.com/golangci/golangci-lint/v2"),
     "deadcode": ("scripts/deadcode-check.sh", "DEADCODE_VERSION", "golang.org/x/tools/cmd/deadcode", "golang.org/x/tools"),
     "govulncheck": ("scripts/govulncheck-gate.py", "GOVULNCHECK_VERSION", "golang.org/x/vuln/cmd/govulncheck", "golang.org/x/vuln"),
+    "actionlint": ("scripts/workflow_lint/__init__.py", "ACTIONLINT_VERSION", "github.com/rhysd/actionlint/cmd/actionlint", "github.com/rhysd/actionlint"),
     "sqlc": ("scripts/sqlc-version.sh", "SQLC_VERSION", "github.com/sqlc-dev/sqlc/cmd/sqlc", "github.com/sqlc-dev/sqlc"),
 }
 SETS = {
     "base": ["task", "sqlc"],
-    "lint": ["golangci-lint", "deadcode"],
+    "lint": ["golangci-lint", "deadcode", "actionlint"],
     "vulnerabilities": ["govulncheck"],
-    "all": ["task", "sqlc", "golangci-lint", "deadcode", "govulncheck"],
+    "all": ["task", "sqlc", "golangci-lint", "deadcode", "actionlint", "govulncheck"],
 }
 
 

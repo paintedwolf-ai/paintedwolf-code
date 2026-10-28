@@ -169,23 +169,37 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/gitengine-fetch.sh
 
   lint:fast:
-    desc: Go vet + fast golangci-lint
+    desc: GitHub workflows + Go vet + fast golangci-lint
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
       - .golangci.yml
       - .deadcode-exclude
+      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
+      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
+      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
+      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
+      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
       - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: Go vet + full golangci-lint + deadcode
+    desc: GitHub workflows + Go vet + full golangci-lint + deadcode
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
       - .golangci.yml
+      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
+      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
+      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
+      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
+      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
       - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:

@@ -9,6 +9,7 @@ esac
 [[ $# -le 1 ]] || { echo "error: expected one CI input profile" >&2; exit 2; }
 (cd "$ROOT/lycaon" && go mod download)
 (cd "$ROOT/scripts/commentlint" && go mod download)
+PYTHONPATH="$ROOT/scripts${PYTHONPATH:+:$PYTHONPATH}" python3 -m workflow_lint --provision
 [[ "${1:-verification}" != analysis ]] || exit 0
 # Lanes cannot reach the module proxy, so pinned tools are built here, not by `go run`.
 python3 "$ROOT/scripts/analysis_tools.py" ensure sqlc
