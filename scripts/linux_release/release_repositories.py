@@ -10,8 +10,11 @@ import tempfile
 
 from release_distribution_contract.platforms import load_platforms
 
-from . import native_repositories, pacman_repository, pacman_r2, release_qualification, repository_r2
-from .r2_objects import current
+from . import (native_repositories, pacman_publication, pacman_repository, pacman_r2, release_qualification,
+               repository_r2, repository_transaction)
+from .r2_objects import current, public_bytes, put
+from .repository_objects import encoded
+from .repository_operations import identity, version_marker
 from .release_signing import private_key
 from .signing import CATALOG, digest
 
@@ -70,6 +73,13 @@ def plan(artifacts: Path, version: str, source_commit: str, catalog: Path | None
             "format_version": 1, "source_commit": source_commit, "version": version,
             "architecture": row["architecture"], "packages": [
                 {"file": name, "sha256": row["sha256"], "native_version": read_version("pacman", row["path"])}]}})
+    # Each offer is paired with the signed empty generation a halt activates when no earlier
+    # Linux release exists on that channel, or when the halt names no replacement.
+    for row in list(generations):
+        architectures = None if row["family"] == "pacman" else sorted(
+            {item["architecture"] for item in row["manifest"]["packages"]})
+        generations.append({"name": row["name"] + "-withdrawal", "family": row["family"], "architectures": architectures,
+                            "manifest": {**row["manifest"], "packages": []}})
     return generations
 
 
@@ -83,11 +93,16 @@ def assemble(families: set[str], artifacts: Path, output: Path, version: str, so
             receipt = pacman_repository.assemble(row["manifest"], artifacts, destination, channel, catalog, private)
         else:
             receipt = native_repositories.assemble(row["family"], row["manifest"], artifacts, destination,
-                                                   channel, catalog, private)
+                                                   channel, catalog, private, architectures=row.get("architectures"))
         (destination / "generation.json").write_text(json.dumps(receipt, indent=2) + "\n")
     (output / "generations.json").write_text(json.dumps(
         [{"name": row["name"], "family": row["family"]} for row in selected], indent=2) + "\n")
     return selected
+
+
+def withdrawal_key(receipt: dict) -> str:
+    """Where a release retains the empty generation that withdraws its offer on one channel."""
+    return f"{STORAGE_PREFIX}/withdrawal-generations/{version_marker(receipt).relative_to('withdrawn-versions').as_posix()}"
 
 
 def channel_key(receipt: dict) -> str:
@@ -113,23 +128,51 @@ class ReleaseAuthority:
         return {name: row["sha256"] for name, row in public.items()}
 
     def __call__(self, request: dict) -> bool:
-        manifest = request["manifest"]
         if (request["catalog"] != CATALOG or request["storage_prefix"] != STORAGE_PREFIX
                 or request["base_url"] != self.base_url or request["operation"] != "publish"):
             raise ValueError("Linux repository publication differs from the release lane's production target")
+        self.check(request["manifest"])
+        # Each authorization reads the exact-source qualification record again, as the macOS lane does.
+        self.qualified(self.source_commit)
+        return True
+
+    def check(self, manifest: dict):
         if (manifest.get("rehearsal") is not False or manifest.get("source_commit") != self.source_commit
                 or manifest.get("version") != self.version or manifest.get("channel") != self.channel):
             raise ValueError("Linux repository generation differs from the selected release")
         selected = {Path(row["file"]).name: row["sha256"] for row in manifest["packages"]}
         if not selected or selected != self.expected_packages(manifest):
             raise ValueError("Linux repository packages differ from this release's signed public packages")
-        # Each authorization reads the exact-source qualification record again, as the macOS lane does.
-        self.qualified(self.source_commit)
-        return True
+
+
+def retain_withdrawal(receipt: dict, offer: dict, directory: Path, base_url: str, qualified, *,
+                      upload=put, verify=public_bytes) -> str:
+    """Retain the signed empty generation before its offer activates, so a halt never needs signing."""
+    if (receipt.get("packages") != [] or receipt.get("rehearsal") is not False
+            or any(receipt.get(key) != offer.get(key) for key in
+                   ["family", "channel", "version", "source_commit", "architecture", "signing_generation", "key_fingerprint"])):
+        raise ValueError("Linux withdrawal generation differs from the offer it withdraws")
+    qualified(receipt["source_commit"])
+    origin = base_url.rstrip("/") + "/" + STORAGE_PREFIX
+    local = pacman_publication.publish if receipt["family"] == "pacman" else repository_transaction.publish
+    with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-withdrawal-") as temporary:
+        store = Path(temporary) / "origin"
+        local(receipt, directory, store, origin, CATALOG, None, False)
+        generation = store / "generations" / identity(receipt)
+        for source in sorted(generation.rglob("*")):
+            if source.is_file():
+                key = f"{STORAGE_PREFIX}/{source.relative_to(store).as_posix()}"
+                upload(key, source)
+                verify(f"{base_url.rstrip('/')}/{key}", source)
+        pointer = Path(temporary) / "withdrawal.json"
+        pointer.write_bytes(encoded(receipt))
+        upload(withdrawal_key(receipt), pointer)
+        verify(f"{base_url.rstrip('/')}/{withdrawal_key(receipt)}", pointer)
+    return identity(receipt)
 
 
 def publish(generations: list[Path], artifacts: Path, version: str, source_commit: str, channel: str, base_url: str,
-            qualified, *, read_current=current, publishers=None) -> list[dict]:
+            qualified, *, read_current=current, publishers=None, retain=retain_withdrawal) -> list[dict]:
     publishers = publishers or {"deb": repository_r2.publish_r2, "rpm": repository_r2.publish_r2,
                                 "pacman": pacman_r2.publish_r2}
     authority = ReleaseAuthority(artifacts, version, source_commit, channel, base_url, qualified)
@@ -139,12 +182,18 @@ def publish(generations: list[Path], artifacts: Path, version: str, source_commi
     if sorted(row["name"] for row in selected) != sorted(expected_names):
         raise ValueError("assembled Linux repositories differ from the catalog-public Linux platforms")
     results = []
+    loaded = {row["name"]: json.loads((row["directory"] / "generation.json").read_text()) for row in selected}
     with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-repositories-") as temporary:
         for row in selected:
+            if row["name"].endswith("-withdrawal"):
+                continue
             directory = row["directory"]
-            receipt = json.loads((directory / "generation.json").read_text())
+            receipt = loaded[row["name"]]
             if receipt.get("family") != row["family"]:
                 raise ValueError("assembled Linux repository index differs from its generation")
+            authority.check(receipt)
+            companion = next(item for item in selected if item["name"] == row["name"] + "-withdrawal")
+            retain(loaded[companion["name"]], receipt, companion["directory"], base_url, qualified)
             active = read_current(channel_key(receipt), Path(temporary))
             expected = None if active is None else active["generation"]
             results.append(publishers[row["family"]](receipt, directory, CATALOG, STORAGE_PREFIX, base_url, expected,

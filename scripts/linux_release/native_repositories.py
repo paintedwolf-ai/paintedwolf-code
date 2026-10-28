@@ -78,7 +78,8 @@ def apt_indexes(destination: Path, channel: str, architectures: list[str], catal
 
 def assemble(family: str, manifest: dict, inputs: Path, destination: Path, channel: str,
              catalog: Path = CATALOG, private: Path | None = None, rehearsal=False,
-             package="painted-wolf-code") -> dict:
+             package="painted-wolf-code", architectures: list[str] | None = None) -> dict:
+    """An empty package selection is a withdrawal generation for the named architectures."""
     if private is None:
         raise ValueError("batch repository signing requires an owner-only private key file")
     if family not in {"deb", "rpm"} or channel not in {"stable", "preview"}:
@@ -87,12 +88,16 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
             or not SAFE_NAME.fullmatch(manifest.get("version", ""))):
         raise ValueError("repository generation requires an exact source and product version")
     rows = manifest.get("packages")
-    if not isinstance(rows, list) or not rows or len({row["file"] for row in rows}) != len(rows):
-        raise ValueError("repository input receipt requires distinct packages")
+    if (not isinstance(rows, list) or len({row["file"] for row in rows}) != len(rows)
+            or bool(rows) == (architectures is not None)):
+        raise ValueError("repository input receipt requires distinct packages or explicit withdrawal architectures")
+    if architectures is not None and (not architectures or set(architectures) - set(ARCHITECTURES)):
+        raise ValueError("withdrawal generation requires supported architectures")
     signer, _ = selection(catalog, rehearsal)
     sources = [(row, checked_input(row, inputs, family, package)) for row in rows]
     destination.mkdir(parents=True, exist_ok=False)
-    architectures = sorted({row["architecture"] for row in rows})
+    architectures = sorted(architectures or {row["architecture"] for row in rows})
+    (destination / "pool").mkdir()
     final = []
     for row, source in sources:
         stage = destination / ".signing" / source.name
@@ -103,12 +108,13 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
             # A release RPM already carries the selected signature; its published bytes stay identical.
             shutil.copyfile(source, stage)
         target = destination / "pool" / digest(stage) / source.name
-        target.parent.mkdir(parents=True)
+        target.parent.mkdir()
         stage.replace(target)
         final.append({"architecture": row["architecture"], "native_version": row["native_version"],
                       "input_sha256": row["sha256"], "sha256": digest(target),
                       "file": target.relative_to(destination).as_posix()})
-    (destination / ".signing").rmdir()
+    if final:
+        (destination / ".signing").rmdir()
     if family == "deb":
         apt_indexes(destination, channel, architectures, catalog, private, rehearsal)
     else:

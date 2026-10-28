@@ -35,6 +35,10 @@ def catalog(directory: Path, linux="public") -> Path:
     return path
 
 
+def offer_name(receipt: dict) -> str:
+    return receipt["family"] + ("-" + receipt["architecture"] if receipt["family"] == "pacman" else "")
+
+
 def public_artifacts(directory: Path) -> Path:
     directory.mkdir()
     for platform in LINUX:
@@ -125,8 +129,17 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
         return plan(self.artifacts, VERSION, SOURCE, read_version=lambda family, path: "1.2.3-1")
 
     def test_every_public_linux_package_enters_exactly_one_repository_generation(self):
-        generations = {row["name"]: row["manifest"] for row in self.plan()}
+        rows = self.plan()
+        generations = {row["name"]: row["manifest"] for row in rows if not row["name"].endswith("-withdrawal")}
         self.assertEqual(sorted(generations), ["deb", "pacman-aarch64", "pacman-x86_64", "rpm"])
+        # Every offer carries the signed empty generation that withdraws it on the same channel.
+        withdrawals = {row["name"]: row for row in rows if row["name"].endswith("-withdrawal")}
+        self.assertEqual(sorted(withdrawals), sorted(name + "-withdrawal" for name in generations))
+        for name, manifest in generations.items():
+            empty = withdrawals[name + "-withdrawal"]
+            self.assertEqual(empty["manifest"], {**manifest, "packages": []})
+            expected = None if empty["family"] == "pacman" else ["amd64", "arm64"]
+            self.assertEqual(empty["architectures"], expected)
         selected = sorted(row["file"] for manifest in generations.values() for row in manifest["packages"])
         public = sorted(path.name for path in self.artifacts.iterdir() if not path.name.endswith(".sha256"))
         self.assertEqual(selected, public)
@@ -138,6 +151,13 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
         published = {release_repositories.channel_key({**row["manifest"], "family": row["family"], "channel": channel})
                      for row in self.plan() for channel in ["stable", "preview"]}
         self.assertEqual(published, {repository_withdrawal.state_key(*row) for row in repository_withdrawal.CHANNELS})
+        # Each retained empty generation sits where a halt of that channel looks for it.
+        retained = {release_repositories.withdrawal_key({**row["manifest"], "family": row["family"], "channel": channel})
+                    for row in self.plan() if row["name"].endswith("-withdrawal") for channel in ["stable", "preview"]}
+        looked_up = {release_repositories.withdrawal_key({"family": family, "channel": channel, "version": VERSION,
+                                                          **({"architecture": arch} if arch else {})})
+                     for family, channel, arch in repository_withdrawal.CHANNELS}
+        self.assertEqual(retained, looked_up)
 
     def test_candidate_linux_contributes_no_repository(self):
         self.assertEqual(plan(self.artifacts, VERSION, SOURCE, catalog(self.work, "candidate")), [])
@@ -154,12 +174,19 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
     def test_assembly_signs_each_selected_family_with_the_release_key(self):
         calls = []
 
-        def native(family, manifest, inputs, destination, channel, catalog, private):
+        def native(family, manifest, inputs, destination, channel, catalog, private, architectures=None):
+            if architectures is not None:
+                self.assertEqual((manifest["packages"], architectures), ([], ["amd64", "arm64"]))
+                destination.mkdir()
+                return {"family": family, "withdrawal": True}
             calls.append((family, channel, catalog, private))
             destination.mkdir()
             return {"family": family}
 
         def pacman(manifest, inputs, destination, channel, catalog, private):
+            if not manifest["packages"]:
+                destination.mkdir()
+                return {"family": "pacman", "withdrawal": True}
             calls.append(("pacman", channel, catalog, private))
             destination.mkdir()
             return {"family": "pacman", "architecture": manifest["architecture"]}
@@ -177,7 +204,9 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
                                  ("pacman", "stable", CATALOG, Path("key")), ("pacman", "stable", CATALOG, Path("key"))])
         index = json.loads((self.work / "pacman/generations.json").read_text())
         self.assertEqual(index, [{"name": "pacman-aarch64", "family": "pacman"},
-                                 {"name": "pacman-x86_64", "family": "pacman"}])
+                                 {"name": "pacman-x86_64", "family": "pacman"},
+                                 {"name": "pacman-aarch64-withdrawal", "family": "pacman"},
+                                 {"name": "pacman-x86_64-withdrawal", "family": "pacman"}])
         self.assertEqual(json.loads((self.work / "native/rpm/generation.json").read_text()), {"family": "rpm"})
 
     def generations(self, **changes):
@@ -198,7 +227,12 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
         return roots
 
     def publish(self, roots, qualified, active=None):
-        published, reads = [], []
+        published, reads, self.retained = [], [], []
+
+        def retain(receipt, offer, directory, base_url, qualified):
+            self.assertEqual((receipt["packages"], directory.name), ([], offer_name(offer) + "-withdrawal"))
+            self.assertFalse(any(item[:2] == (offer["family"], offer.get("architecture")) for item in published))
+            self.retained.append(directory.name)
 
         def publisher(receipt, directory, catalog, prefix, base_url, expected, rehearsal, operation, phase, *, authorize):
             request = {"manifest": receipt, "directory": directory, "catalog": catalog, "storage_prefix": prefix,
@@ -214,13 +248,16 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
             reads.append(key)
             return active
         result = publish(roots, self.artifacts, VERSION, SOURCE, "stable", "https://downloads.example.invalid", qualified,
-                         read_current=read, publishers={"deb": publisher, "rpm": publisher, "pacman": publisher})
+                         read_current=read, publishers={"deb": publisher, "rpm": publisher, "pacman": publisher},
+                         retain=retain)
         return result, published, reads
 
     def test_publication_rereads_qualification_and_binds_final_digests(self):
         qualified = []
         result, published, reads = self.publish(self.generations(), qualified.append, {"generation": "b" * 64})
         self.assertEqual(len(result), 4)
+        self.assertEqual(sorted(self.retained), ["deb-withdrawal", "pacman-aarch64-withdrawal",
+                                                 "pacman-x86_64-withdrawal", "rpm-withdrawal"])
         self.assertEqual(qualified, [SOURCE] * 8)
         self.assertEqual(sorted(published), [("deb", None, "b" * 64), ("pacman", "aarch64", "b" * 64),
                                              ("pacman", "x86_64", "b" * 64), ("rpm", None, "b" * 64)])

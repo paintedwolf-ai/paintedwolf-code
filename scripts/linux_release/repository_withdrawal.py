@@ -1,4 +1,4 @@
-"""Withdraw a halted release from every Linux repository channel by restoring its retained predecessor."""
+"""Withdraw a halted release from every Linux repository channel with a retained replacement generation."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from scripts.release_semver import parse
 
 from . import pacman_r2, repository_r2
 from .r2_objects import current
-from .release_repositories import STORAGE_PREFIX
+from .release_repositories import STORAGE_PREFIX, withdrawal_key
 from .repository_objects import encoded
 from .signing import CATALOG
 
@@ -27,22 +27,39 @@ def state_key(family: str, channel: str, architecture: str | None) -> str:
 
 
 def prepare(bad: str, last_good: str | None, *, read=current) -> list[dict]:
-    """Select, per affected channel, the exact retained generation the halted one replaced."""
+    """Select, per channel offering the halted version, the retained generation that replaces it.
+
+    An earlier offer named as last good is restored exactly. A first Linux release, or a halt that
+    names no replacement, activates the signed empty generation retained with the halted release:
+    it offers nothing, so installs and upgrades stop and installed packages stay untouched.
+    """
     parse(bad)
     rows = []
     with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-withdrawal-") as temporary:
         for family, channel, architecture in CHANNELS:
             active = read(state_key(family, channel, architecture), Path(temporary))
-            if active is None or active["version"] != bad:
+            if active is None or active["version"] != bad or active.get("packages") == []:
                 continue
-            replacement = active.get("previous")
-            if last_good is None or replacement is None:
-                raise ValueError(f"Linux {family} {channel} offers {bad} without a retained last-good generation")
-            receipt = read(f"{STORAGE_PREFIX}/generations/{replacement}/generation.json", Path(temporary))
-            if receipt is None or receipt.get("version") != last_good or hashlib.sha256(encoded(receipt)).hexdigest() != replacement:
-                raise ValueError(f"Linux {family} {channel} predecessor is not the retained {last_good} generation")
+            previous = active.get("previous")
+            earlier = None if previous is None else read(f"{STORAGE_PREFIX}/generations/{previous}/generation.json",
+                                                         Path(temporary))
+            if previous is not None and (earlier is None or hashlib.sha256(encoded(earlier)).hexdigest() != previous):
+                raise ValueError(f"Linux {family} {channel} predecessor is not retained")
+            if earlier is not None and earlier["packages"] and last_good is not None:
+                if earlier.get("version") != last_good:
+                    raise ValueError(f"Linux {family} {channel} predecessor is not the retained {last_good} generation")
+                receipt = earlier
+            else:
+                shape = {"family": family, "channel": channel, "version": bad,
+                         **({"architecture": architecture} if architecture else {})}
+                receipt = read(withdrawal_key(shape), Path(temporary))
+                if (receipt is None or receipt.get("packages") != []
+                        or any(receipt.get(key) != value for key, value in shape.items())
+                        or receipt.get("source_commit") != active.get("source_commit")):
+                    raise ValueError(f"Linux {family} {channel} has no retained withdrawal generation for {bad}")
             rows.append({"family": family, "channel": channel, "architecture": architecture, "bad": bad,
-                         "active": active["generation"], "replacement": replacement, "receipt": receipt})
+                         "active": active["generation"], "replacement": hashlib.sha256(encoded(receipt)).hexdigest(),
+                         "receipt": receipt})
     return rows
 
 
