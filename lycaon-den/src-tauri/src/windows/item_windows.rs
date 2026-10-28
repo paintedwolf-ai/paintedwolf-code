@@ -15,6 +15,8 @@ pub(crate) mod drag;
 #[cfg(target_os = "linux")]
 pub(crate) mod native_drag;
 pub(crate) mod presentation;
+#[cfg(target_os = "linux")]
+mod toplevel_drag;
 #[cfg(any(target_os = "linux", test))]
 mod transfer;
 #[cfg(test)]
