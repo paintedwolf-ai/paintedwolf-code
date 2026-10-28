@@ -53,7 +53,8 @@ static int pw_exec_offsets(int fd, cpu_type_t cpu, uint64_t offsets[64], int *co
   if (offset > INT64_MAX) return EOVERFLOW;
   struct mach_header header;
   if (pread(fd, &header, sizeof(header), (off_t)offset) != sizeof(header)) return ENOEXEC;
-  if ((header.magic != MH_MAGIC && header.magic != MH_MAGIC_64) || header.cputype != cpu || header.filetype != MH_EXECUTE) return ENOEXEC;
+  if ((header.magic != MH_MAGIC && header.magic != MH_MAGIC_64) ||
+      header.cputype != cpu || header.filetype != MH_EXECUTE) return ENOEXEC;
   offsets[(*count)++] = offset;
  }
  return *count ? 0 : ENOEXEC;
