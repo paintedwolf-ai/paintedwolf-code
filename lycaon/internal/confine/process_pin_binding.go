@@ -65,11 +65,33 @@ func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs
 		return nil, err
 	}
 	state := &processHandoff{ctx: ctx, inputs: inputs, readyRead: readyRead, readyWrite: readyWrite, releaseRead: releaseRead, releaseWrite: releaseWrite, check: check}
+	var hostProfileRead *os.File
 	closeState := func() {
+		if hostProfileRead != nil {
+			_ = hostProfileRead.Close()
+		}
 		_ = readyRead.Close()
 		_ = readyWrite.Close()
 		_ = releaseRead.Close()
 		_ = releaseWrite.Close()
+	}
+	if !IsHelperInvocation(cmd.Args) {
+		self, err := os.Executable()
+		if err != nil {
+			closeState()
+			return nil, err
+		}
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			closeState()
+			return nil, err
+		}
+		_ = pw.Close()
+		hostProfileRead = pr
+		cmd.Path = self
+		cmd.Err = nil
+		cmd.Args = append([]string{self, helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD), pinHostExecutionFlag, "--", name}, args...)
+		cmd.ExtraFiles = append([]*os.File{pr}, cmd.ExtraFiles...)
 	}
 	inputs.mu.Lock()
 	if inputs.closed || inputs.bound {

@@ -7,7 +7,23 @@ import (
 	"sync"
 )
 
-var operationLanguage = sync.OnceValues(LanguageV1)
+var operationLanguage = sync.OnceValues(func() (LanguageCatalog, error) {
+	return DecodeLanguageCatalog([]byte(languageV1JSON))
+})
+
+func cloneCompiledLanguageV1() (LanguageCatalog, error) {
+	catalog, err := operationLanguage()
+	if err != nil {
+		return LanguageCatalog{}, err
+	}
+	return cloneLanguageCatalog(catalog), nil
+}
+
+// ReadOnlyLanguageV1 returns the shared compiled catalog snapshot without cloning.
+// Callers must treat the returned slices and maps as immutable.
+func ReadOnlyLanguageV1() (LanguageCatalog, error) {
+	return operationLanguage()
+}
 
 var languageDigest = sync.OnceValue(func() string {
 	sum := sha256.Sum256([]byte(languageV1JSON))

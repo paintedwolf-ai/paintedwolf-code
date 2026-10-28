@@ -2,6 +2,8 @@
 
 package fseffect
 
+import "os"
+
 // Stat reports metadata through the handle-relative reader, which refuses
 // reparse traversal; owner, inode and link facts are not POSIX values here.
 func (r *ReadRoot) Stat(rel string, _ bool, admit func(string) error) (EntryStat, error) {
@@ -20,4 +22,9 @@ func (r *ReadRoot) Stat(rel string, _ bool, admit func(string) error) (EntryStat
 		return EntryStat{}, err
 	}
 	return EntryStat{Name: info.Name(), Mode: info.Mode(), Size: info.Size(), ModTime: info.ModTime().UTC()}, nil
+}
+
+// StatChildAt reports an immediate child's metadata through the held root.
+func (r *ReadRoot) StatChildAt(_ *os.File, childRel, _ string, admit func(string) error) (EntryStat, error) {
+	return r.Stat(childRel, false, admit)
 }

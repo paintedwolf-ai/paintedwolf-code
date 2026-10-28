@@ -24,8 +24,8 @@ streams and native dispatch.
 spellings, `--long[=value]`, clustered short options with attached or following
 values, the catalog's `shorthand` (`-N` or `-SIGNAL`), `--`, and permutation
 unless `operands_end_options` is declared. Find-style primaries bind whole words.
-The bound record keeps each form's typed values; approval review presents that
-record with the operation identity rather than a legacy tool schema.
+The bound record keeps each form's typed values; approval review presents it
+with the operation identity.
 
 ## Variables and expansion
 
@@ -35,8 +35,8 @@ entries; `Environment` applies one dispatch's `NAME=value` prefix without
 changing the frame, and `Clone` gives an isolated group or substitution unit its
 own copy. Entries are charged to `program_state_bytes` with old/new overlap and
 bounded by `variable_count`, `variable_value_bytes` and `environment_bytes`.
-Names follow the shell identifier grammar, NUL is refused and `IFS` cannot be
-assigned; an `IFS` inherited from the environment is inert data.
+Names follow the shell identifier grammar, and NUL is refused. `IFS` controls
+unquoted field splitting and `read`; a command prefix applies only to that command.
 
 `WordExpander` expands the detached plan's words, never upstream syntax objects.
 Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
@@ -100,20 +100,20 @@ and the streams `ProgramSupervision.StartJob` owns for it. The evaluator is the
 `Substitution` port of the `WordExpander` it builds over `EvaluationPorts.Files`:
 each reached unit runs in an isolated frame with its stdout going to the
 expander's bounded writer. A nonzero unit status is retained, prevents the
-containing dispatch (P08 `AdmitSubstitution`) and becomes that command's status;
+containing dispatch (`AdmitSubstitution`) and becomes that command's status;
 an `ExpansionError` latches as a refusal with its own code. `source` captures through `LoadSourceUnit`, preflights the
 unit and runs it in the current frame; its pin is recorded in the outcome.
 
 Before the first statement, preflight refuses reserved function names and any
 construct whose owner port is absent, with `COMMAND_SYNTAX_UNSUPPORTED`. Every
-reached statement is one `statement_visits` unit, each `while` test and `for`
-item one `loop_iterations` unit, and function, source and substitution nesting
-are bounded by depth ceilings. Operations, in-process native builtins, function
-calls, substitutions, redirections, source units, isolated groups, pipelines
-and jobs are child executions: each charges `child_executions` and holds the
-catalog's per-execution trace settlement reservation until it settles.
-Evaluator bookkeeping (assignments, declarations, branch and loop results) is
-not a child execution. Frames keep their variables in `Variables`; a function's
+reached statement and redirection is one `statement_visits` unit, each `while`
+test and `for` item one `loop_iterations` unit, and function, source and
+substitution nesting are bounded by depth ceilings. Real command and process
+dispatches count against `child_executions`, while AST frames, in-process
+evaluator builtins and redirects count against `statement_visits`. Recorded
+executions hold the catalog's per-execution trace settlement reservation until
+they settle. Evaluator bookkeeping (assignments, declarations, branch and loop
+results) is not a child execution. Frames keep their variables in `Variables`; a function's
 `NAME=value` prefixes overlay its frame without mutating the caller. Child receipts belong to the
 dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the
@@ -126,8 +126,8 @@ admission. Arbitrary operands, including dash-prefixed words, remain data.
 `PredicateRuntime.TestBuiltin` implements `test` and `[`. It validates the whole
 argv expression before probing paths: empty input is false, a single operand is
 its nonemptiness, binary comparison operands remain data, and compound forms use
-`!` before `-a` before `-o`, with parentheses. Unlike legacy argument-count
-dispatch, this explicitly frozen precedence also applies to four-operand forms.
+`!` before `-a` before `-o`, with parentheses. This precedence also applies to
+four-operand forms.
 A one-string primary before a boolean connector may contain operator-shaped
 data, as in `test -n -a x`. `[` requires its final `]`.
 Decimal comparisons accept signed decimal digits and leading zeroes without
@@ -155,8 +155,7 @@ existing contained-link traversal/refusal policy. A trailing directory separator
 requires a directory. Access predicates ask the effective OS identity/ACL policy,
 never route through `ResolveWrite`, and grant no future read, write or execute
 operation. A missing admitted target is false; authority refusal is an error.
-Windows retains its existing refusal of reparse traversal, rather than reporting
-a confined target it did not observe.
+Windows refuses reparse traversal when it cannot observe a confined target.
 
 ## Pattern resources and selected dependencies
 
@@ -170,8 +169,7 @@ can be removed or duplicated at the same position. Captures are unobservable
 and POSIX validation excludes backreferences, so text/assertion semantics are
 preserved. Fixtures cover nullable and anchored empty alternatives.
 The bounded existing regexp2 VM consumes that typed tree. It exposes no capture
-results, text-parser fallback or additional PCRE grammar. P13 engine/adapter
-qualification remains independent.
+results, text-parser fallback or additional PCRE grammar.
 
 ERE matching searches within the scalar. Dot and negated classes include LF;
 `^` and `$` anchor the whole scalar. There is no locale-dependent collation. Collating/equivalence bracket atoms
@@ -209,9 +207,8 @@ cooperative cancellation, with no abandoned match goroutine. All maxima come
 from the frozen catalog. A resource refusal returns no successful match claim.
 Snapshot hashes, licenses, omitted files and patches live in `third_party`.
 
-Tests use synthetic fixtures. Standard Go regex comparisons are reference probes
-for adapter equivalence. Passing unit tests do not qualify connected evaluator
-wiring, real model behavior, installed operating systems or milestone Q22.
+Tests use synthetic fixtures. Standard Go regex comparisons probe adapter
+equivalence; connected command workflows have separate integration coverage.
 
 ## Status and continuation
 
@@ -227,14 +224,6 @@ rightmost-nonzero aggregation rule. Expected consumer closure requires the
 existing executor classification or the exact native byte-endpoint close fact,
 bound to adjacent dynamic execution IDs. It cannot hide another producer failure.
 Typed completeness and eligibility remain separate from ordinary status and
-verification evidence: native comparison status1 may publish, while unclassified
-external status1 cannot. Destination review, revision checks, publication and
+verification evidence: native comparison status 1 may publish, while unclassified
+external status 1 cannot. Destination review, revision checks, publication and
 recovery remain with their existing operation domains.
-
-The legacy external executor now reports the rightmost nonzero pipeline status,
-instead of the first nonzero status. Its established SIGPIPE classification and
-raw per-stage outcomes are retained. Real helper-process fixtures cover3/7/0,
-and the document-owner fixture proves that a later actual refused review and
-exit0 preserve an earlier accepted/saved mutation. Additional publication fixtures
-use classified producer inputs and real document publication; they are not a
-claim that future native grep/diff adapters or full command entry are qualified.

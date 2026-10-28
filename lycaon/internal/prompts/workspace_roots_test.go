@@ -21,16 +21,16 @@ func TestWorkspaceRootsPartialSingleRoot(t *testing.T) {
 	}, "/tmp/lycaon")
 	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
 	testutil.FailErr(t, "render prompt template", err)
-	if !strings.Contains(out, "Workspace: /tmp/lycaon") {
+	if !strings.Contains(out, "Project folder: /tmp/lycaon") {
 		t.Fatalf("output = %q want single workspace line", out)
 	}
 	if strings.Contains(out, "@") {
 		t.Fatalf("single-root output must not mention @label: %q", out)
 	}
-	if !strings.Contains(out, "User absolute paths") {
+	if !strings.Contains(out, "For a path the person gives you") {
 		t.Fatalf("single-root output missing absolute-path grant rule: %q", out)
 	}
-	if !strings.Contains(out, "`src/main.py` for files, `.` for root") {
+	if !strings.Contains(out, "`src/main.py` for files, `.` for the folder") {
 		t.Fatalf("single-root output must distinguish file paths from folder root: %q", out)
 	}
 }
@@ -44,7 +44,7 @@ func TestWorkspaceRootsPartialMultiRoot(t *testing.T) {
 	}, "/tmp/lycaon")
 	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
 	testutil.FailErr(t, "render prompt template", err)
-	for _, want := range []string{"lycaon", "lycaon-den", "spans 2 folders", "@<label>", "User absolute paths"} {
+	for _, want := range []string{"lycaon", "lycaon-den", "spans 2 folders", "@<label>", "For a path the person gives you"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q: %s", want, out)
 		}
@@ -247,19 +247,6 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("no folders attached", func(t *testing.T) {
-		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
-			Posture: gate.PostureStrict,
-		})
-		vars["tool_profile"] = "implement"
-		prompts.MergeWorkspaceRootsVars(vars, nil, "")
-		out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
-		testutil.FailErr(t, "render command-surface without roots", err)
-		if strings.Contains(out, "These folders are the project") || strings.Contains(out, "Other paths") {
-			t.Fatalf("no-roots command-surface rendered folder coverage copy:\n%s", out)
-		}
-	})
 }
 
 func TestPostureChangedNoticeCopy(t *testing.T) {
@@ -285,10 +272,93 @@ func TestPostureChangedNoticeCopy(t *testing.T) {
 		if strings.TrimSpace(out) != "The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first." {
 			t.Fatalf("%s notice = %q", p, out)
 		}
-		for _, term := range []string{"posture", "gate", "lease", "grant", "floor"} {
+		for _, term := range []string{"posture", "gate", "lease", "grant", "floor", "owner", "oar"} {
 			if strings.Contains(strings.ToLower(out), term) || strings.Contains(strings.ToLower(strictNotice), term) {
 				t.Fatalf("posture notice leaked internal term %q", term)
 			}
 		}
+	}
+	extHiddenOut, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", map[string]any{
+		"reviews_confined_writes":  true,
+		"command_external_changed": true,
+		"command_external_hidden":  true,
+	})
+	testutil.FailErr(t, "render posture+external hidden notice", err)
+	if !strings.Contains(extHiddenOut, "The `external` selector is now hidden on `command`.") {
+		t.Fatalf("expected external hidden sentence, got %q", extHiddenOut)
+	}
+}
+
+func TestCommandSurfaceProjectCoverageAndPostureCopy(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
+	const (
+		coverage   = "These folders are the project; search indexing, history and undo cover only them."
+		strictLn   = "Other paths, including temporary folders, ask the person first."
+		nonStrictLn = "Other paths ask the person first, except temporary and cache folders."
+	)
+	for _, tc := range []struct {
+		name     string
+		posture  gate.Posture
+		wantLine string
+		omitLine string
+	}{
+		{
+			name:     "strict asks for temporary folders too",
+			posture:  gate.PostureStrict,
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "balanced exempts temporary and cache folders",
+			posture:  gate.PostureBalanced,
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
+		},
+		{
+			name:     "light exempts temporary and cache folders",
+			posture:  gate.PostureLight,
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
+		},
+		{
+			name:     "unset posture fails closed to strict",
+			posture:  "",
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "unknown posture fails closed to strict",
+			posture:  gate.Posture("unknown"),
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+				SessionScratchDir: "/scratch/s1",
+				Posture:           tc.posture,
+			})
+			vars["tool_profile"] = "implement"
+			prompts.MergeWorkspaceRootsVars(vars, roots, "/workspace/app")
+			out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+			testutil.FailErr(t, "render command-surface", err)
+			if !strings.Contains(out, coverage) {
+				t.Fatalf("missing project coverage sentence:\n%s", out)
+			}
+			if !strings.Contains(out, tc.wantLine) {
+				t.Fatalf("missing outside-folder sentence %q:\n%s", tc.wantLine, out)
+			}
+			if strings.Contains(out, tc.omitLine) {
+				t.Fatalf("unexpected outside-folder sentence %q:\n%s", tc.omitLine, out)
+			}
+			for _, term := range []string{"posture", "gate", "lease", "grant", "floor", "owner", "oar"} {
+				if strings.Contains(strings.ToLower(out), term) {
+					t.Fatalf("command-surface leaked internal term %q:\n%s", term, out)
+				}
+			}
+		})
 	}
 }

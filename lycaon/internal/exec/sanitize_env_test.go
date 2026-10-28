@@ -43,6 +43,17 @@ func TestReducedEnvironDropsAmbientCredentials(t *testing.T) {
 	if err != nil || !slices.Contains(opts.AppendEnv, "GIT_PAGER=cat") {
 		t.Fatalf("AgentLaunchOptions AppendEnv = %v, err = %v", opts.AppendEnv, err)
 	}
+	env, err := ProcessEnvironment(ExecOpts{
+		Launch: AgentLaunch(LaunchAgentCommand, "exec test", nil),
+		Env:    []string{"AWS_SECRET_ACCESS_KEY=caller-leaked"},
+	})
+	if err != nil {
+		t.Fatalf("ProcessEnvironment err = %v", err)
+	}
+	envJoined := strings.Join(env, "\n")
+	if strings.Contains(envJoined, "AWS_SECRET_ACCESS_KEY=") || !strings.Contains(envJoined, "LANG=en_US.UTF-8") {
+		t.Fatalf("ProcessEnvironment did not preserve reduced agent environment when Env was provided: %v", env)
+	}
 }
 
 func TestLocalGitEnvStripsInheritedGitKeepsExtras(t *testing.T) {

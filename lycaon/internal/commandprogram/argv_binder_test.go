@@ -128,7 +128,7 @@ func TestCatalogBinderOptionGrammar(t *testing.T) {
 	}{
 		{name: "separate value", command: "head", argv: []string{"head", "-n", "5", "file"}, want: []string{"-n[5]", "=file"}},
 		{name: "attached short value", command: "head", argv: []string{"head", "-n5"}, want: []string{"-n[5]"}},
-		{name: "legacy numeric shorthand", command: "head", argv: []string{"head", "-12", "file"}, want: []string{"-n[12]", "=file"}},
+		{name: "numeric shorthand", command: "head", argv: []string{"head", "-12", "file"}, want: []string{"-n[12]", "=file"}},
 		{name: "long equals value", command: "head", argv: []string{"head", "--lines=3"}, want: []string{"-n[3]"}},
 		{name: "long separate value", command: "head", argv: []string{"head", "--bytes", "7"}, want: []string{"-c[7]"}},
 		{name: "cluster ending in value", command: "head", argv: []string{"head", "-qn", "3", "a", "b"}, want: []string{"-q[]", "-n[3]", "=a", "=b"}},
@@ -248,5 +248,17 @@ func TestBoundArgvAccessorsAndReviewProjection(t *testing.T) {
 	empty, err := CatalogBinder{}.Bind(catalogCommand(t, "pwd"), argvFields("pwd"))
 	if err != nil || empty.Review("pwd").Options == nil || len(empty.Review("pwd").Operands) != 0 {
 		t.Fatalf("empty review %+v %v", empty.Review("pwd"), err)
+	}
+	helpBound, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "--help"))
+	if err != nil || !helpBound.Help {
+		t.Fatalf("grep --help: %v %+v", err, helpBound)
+	}
+	literalHelp, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "--", "--help", "file"))
+	if err != nil || literalHelp.Help {
+		t.Fatalf("grep -- --help: %v %+v", err, literalHelp)
+	}
+	valueHelp, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "-e", "--help", "file"))
+	if err != nil || valueHelp.Help {
+		t.Fatalf("grep -e --help: %v %+v", err, valueHelp)
 	}
 }

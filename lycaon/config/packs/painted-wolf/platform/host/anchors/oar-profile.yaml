@@ -458,8 +458,6 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_allowed_for_profile
    type: bool
- - name: paintedwolf.habit_redirect_match
-   type: string
  - name: paintedwolf.write_roots
    type: list<string>
  - name: paintedwolf.pattern_parse_ok
@@ -1229,6 +1227,8 @@ host_facts:
  - name: paintedwolf.code_instead
    type: string
  - name: paintedwolf.command
+   type: string
+ - name: paintedwolf.word
    type: string
  - name: paintedwolf.host
    type: string

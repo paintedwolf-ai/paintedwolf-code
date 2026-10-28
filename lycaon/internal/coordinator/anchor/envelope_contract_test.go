@@ -204,7 +204,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"worker_budget_exhausted": true, "child_session_id": true, "suggested_resume_max": true,
 		"workspace_path": true, "project_id": true, "config_root": true,
 		"coordinator_brief": true, "pending_feedback": true, "current_phase": true,
-		"folder": true, "roots": true, "active_root": true, "canceled": true, "root_id": true, "root_label": true,
+		"folder": true, "roots": true, "active_root": true, "reviews_confined_writes": true, "command_external_changed": true, "command_external_hidden": true, "canceled": true, "root_id": true, "root_label": true,
 		"path": true, "paths": true, "sessions": true, "overlays": true, "workers": true,
 		"before_count": true, "after_count": true, "after_omitted_count": true, "added_count": true, "removed_count": true,
 		"changes": true, "changes_omitted": true, "generation": true, "primary_changed": true,

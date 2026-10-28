@@ -2,6 +2,9 @@ package projectsource
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"testing"
 
 	"github.com/google/uuid"
 )
@@ -24,4 +27,11 @@ func copyProjectSource(p *Project, req SourceCopyRequest) (*SourceLifecycleResul
 
 func deleteProjectSource(p *Project, req SourceDeleteRequest) error {
 	return NewSourceMutationService(nil, nil).Delete(context.Background(), uuid.NewString(), p, req)
+}
+
+func testSourceOperationMemory(t testing.TB) *toolcontract.ProgramMemory {
+	t.Helper()
+	memory, err := newSourceOperationMemory()
+	testutil.FailErr(t, "create source operation memory", err)
+	return memory
 }

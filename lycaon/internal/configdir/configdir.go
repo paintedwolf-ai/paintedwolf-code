@@ -67,7 +67,7 @@ func LabelProd() string {
 
 // UserConfigDir returns the per-user config dir, creating it if missing.
 func UserConfigDir() (string, error) {
-	dir, err := configRoot()
+	dir, err := Root()
 	if err != nil {
 		return "", err
 	}
@@ -80,7 +80,8 @@ func UserConfigDir() (string, error) {
 	return dir, nil
 }
 
-func configRoot() (string, error) {
+// Root resolves the active configuration path without creating or changing it.
+func Root() (string, error) {
 	if dir := configDirOverrideForBuild(releaseBuild, performanceBuild, os.Getenv(EnvConfigDir)); dir != "" {
 		return dir, nil
 	}

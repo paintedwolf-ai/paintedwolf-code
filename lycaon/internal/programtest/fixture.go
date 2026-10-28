@@ -37,15 +37,14 @@ import (
 
 // Options select the fixture's session, process registry and native owners.
 type Options struct {
-	Session    string
-	Background *bgprocess.Registry
-	Natives    func(dir string) map[string]command.NativeOperation
-	// Context adjusts each call's tool context, for example its roots,
-	// scratch folder or root history.
-	Context func(dir string, tc *tools.ToolContext)
-	// Owners replaces the Natives-only owner set, for fixtures that compose
-	// real owners with the fixture's recorder and boundary.
-	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
+	Session     string
+	Background  *bgprocess.Registry
+	Natives     func(dir string) map[string]command.NativeOperation
+	Input       func(dir string) commandprogram.InputRedirection
+	Publication func(dir string) commandprogram.OutputPublication
+	Context     func(dir string, tc *tools.ToolContext)
+	Owners      func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
+	Tools       []string
 }
 
 // OwnerPorts are the fixture's shared dependencies for composed owners.
@@ -64,8 +63,11 @@ type Fixture struct {
 	Dir        string
 	ScratchDir string
 	OutputDir  string
+	progress   progress.Store
 	Background *bgprocess.Registry
+	Boundary   *sandbox.Boundary
 	Context    func(string, *tools.ToolContext)
+	Configure  func(*tools.ToolContext)
 	calls      int
 	mu         sync.Mutex
 	delivered  []evidence.Record
@@ -101,7 +103,7 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 }
 
 // New composes the entry. Structured tools exist only as owner identities.
-func New(t *testing.T, options Options) *Fixture {
+func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
@@ -116,7 +118,10 @@ func New(t *testing.T, options Options) *Fixture {
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
-	for _, name := range []string{"write", "read"} {
+	for _, name := range append([]string{"write", "read"}, options.Tools...) {
+		if _, exists := registry.Definition(name); exists {
+			continue
+		}
 		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			return "", errors.New("structured tool is not exercised")
 		}))
@@ -136,15 +141,23 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	var input commandprogram.InputRedirection
+	if options.Input != nil {
+		input = options.Input(dir)
+	}
+	var publication commandprogram.OutputPublication
+	if options.Publication != nil {
+		publication = options.Publication(dir)
+	}
 	scratchDir := fspath.CanonicalPath(t.TempDir())
-	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background}
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: natives}, nil
+			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},
 	}
 	if options.Owners != nil {
@@ -154,8 +167,11 @@ func New(t *testing.T, options Options) *Fixture {
 	return f
 }
 
+// SetProgress changes the session checklist observed by reached command writes.
+func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
+
 // Call opens a real model receipt for one command call and runs the entry.
-func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string, error) {
+func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {
 	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
@@ -169,6 +185,9 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	if f.Context != nil {
 		f.Context(f.Dir, &tc)
+	}
+	if f.Configure != nil {
+		f.Configure(&tc)
 	}
 	return f.Runtime.Run(ctx, args, tc)
 }

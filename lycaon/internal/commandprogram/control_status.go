@@ -122,6 +122,22 @@ func (s *StatusControl) Exit(status int) error {
 	return nil
 }
 
+// ResumeForTrap allows an EXIT trap handler to execute statements after the
+// main body has exited, while keeping $? equal to the exit status.
+func (s *StatusControl) ResumeForTrap() {
+	s.exited = false
+}
+
+// RestoreAfterTrap restores the pre-trap exit status and exited flag when the
+// EXIT trap handler did not invoke exit itself.
+func (s *StatusControl) RestoreAfterTrap(status int, exited bool) {
+	if _, stopped := s.latch.Stop(); stopped {
+		return
+	}
+	s.status = status
+	s.exited = exited
+}
+
 // StatusOperandError is a builtin usage error (status2), never modulo wrapping.
 type StatusOperandError struct{ Value int }
 

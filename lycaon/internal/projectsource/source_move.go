@@ -17,7 +17,7 @@ func (s *SourceEffects) applySourceMove(ctx context.Context, row *sourceMutation
 			if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 				return err
 			}
-			if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA); err != nil {
+			if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA, row.memory); err != nil {
 				return err
 			}
 			heldRel, err := sourceRelativePath(plan.RootPath, plan.HoldAbs)
@@ -34,7 +34,7 @@ func (s *SourceEffects) applySourceMove(ctx context.Context, row *sourceMutation
 		return s.publishSourceMove(ctx, row)
 	}
 	if !sourceMutationPathExists(plan.FromAbs) && sourceMutationPathExists(plan.ToAbs) {
-		return verifySourceMutationApplied(ctx, plan)
+		return verifySourceMutationApplied(ctx, plan, row.memory)
 	}
 	if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 		return err
@@ -44,7 +44,7 @@ func (s *SourceEffects) applySourceMove(ctx context.Context, row *sourceMutation
 	}
 	parent := filepath.Dir(filepath.FromSlash(plan.ToPath))
 	if parent != "." {
-		if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+		if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 			return err
 		}
 	}
@@ -109,7 +109,7 @@ func (s *SourceEffects) publishSourceMove(ctx context.Context, row *sourceMutati
 		return err
 	}
 	// Partial cleanup leaves only the destination available for full validation.
-	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA); err != nil {
+	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA, row.memory); err != nil {
 		return err
 	}
 	if heldExists {
@@ -117,7 +117,7 @@ func (s *SourceEffects) publishSourceMove(ctx context.Context, row *sourceMutati
 			return err
 		}
 		if !plan.MoveCleanupStarted {
-			if err := requireSourceFingerprint(ctx, plan.HoldAbs, plan.TreeSHA); err != nil {
+			if err := requireSourceFingerprint(ctx, plan.HoldAbs, plan.TreeSHA, row.memory); err != nil {
 				return err
 			}
 		}

@@ -239,6 +239,7 @@ var occurrenceFactDecls = []factDecl{
 	{"code", oarcore.TypeString, FactTierHost, ""},
 	{"code_instead", oarcore.TypeString, FactTierHost, ""},
 	{"command", oarcore.TypeString, FactTierHost, ""},
+	{"word", oarcore.TypeString, FactTierHost, ""},
 	{"conflict_count", oarcore.TypeString, FactTierHost, ""},
 	{"conflict_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"content_type", oarcore.TypeString, FactTierHost, ""},

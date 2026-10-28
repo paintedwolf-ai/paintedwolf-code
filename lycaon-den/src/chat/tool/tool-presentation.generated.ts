@@ -55,7 +55,7 @@ export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   chmod: ["paths", "mode"],
   chown: ["paths", "owner"],
   code_rewrite: ["pattern", "paths", "path"],
-  command: ["command", "pipeline"],
+  command: ["command"],
   command_output: [],
   command_stop: [],
   complete_leg: ["brief"],

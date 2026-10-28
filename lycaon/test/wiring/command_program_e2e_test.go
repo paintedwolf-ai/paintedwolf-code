@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -32,29 +33,33 @@ type commandProgramSession struct {
 	session string
 }
 
-func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
-	t.Helper()
-	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
-	s.h.SeedProgress(t, t.Context(), s.session)
-	return s
+func newCommandProgramSession(t *testing.T, program, approvals string, posture ...gate.Posture) *commandProgramSession {
+	return newCommandProgramSessionWithArgs(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals, posture...)
 }
 
-func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
+func newCommandProgramSessionWithArgs(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
 	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
-		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": program}}},
+		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: args}},
 		FollowUpText: "Program finished.",
 	}}})
-	h := BuildForTest(t, WithLLMClient(mock))
+	options := []Option{WithLLMClient(mock)}
+	if len(posture) > 0 {
+		options = append(options, withGlobalApprovalPosture(posture[0]))
+	}
+	h := BuildForTest(t, options...)
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed sub dir", os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	overlay := filepath.Join(dir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlay, 0o700))
 	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n" + approvals
+	if len(posture) > 0 {
+		rules = "approval_posture: " + string(posture[0]) + "\n" + rules
+	}
 	testutil.FailErr(t, "write approvals", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(rules), 0o600))
-	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
+	sess, err := h.CreateHarnessSession(t, request, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), sess.ID)
@@ -69,6 +74,12 @@ func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals st
 	}, 0)
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	return &commandProgramSession{h: h, dir: dir, session: sess.ID}
+}
+
+// seedProgress records the progress prerequisite that write programs need.
+func (s *commandProgramSession) seedProgress(t *testing.T, update string) {
+	t.Helper()
+	testutil.FailErr(t, "seed progress prerequisite", progress.NewSQLStore(s.h.DB).Set(s.session, update))
 }
 
 func (s *commandProgramSession) prompt(ctx context.Context) error {
@@ -452,27 +463,41 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 	}
 }
 
-func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
-	for _, tc := range []struct {
-		name, program, target string
-	}{
-		{"redirect", `echo via_redirect > redirected.txt`, "redirected.txt"},
-		{"tee", `printf 'via_tee\n' | tee teed.txt`, "teed.txt"},
+// Redirects and tee create project files, so both share the checklist rule.
+func TestCommandProgramTeeAndRedirectShareProgressRule(t *testing.T) {
+	for _, tc := range []struct{ name, program, file, want string }{
+		{"redirect", `echo via_redirect > redirected.txt`, "redirected.txt", "via_redirect\n"},
+		{"tee", `printf 'via_tee\n' | tee teed.txt`, "teed.txt", "via_tee\n"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSessionWithoutProgress(t, tc.program, "")
+		t.Run(tc.name+" without progress", func(t *testing.T) {
+			s := newCommandProgramSession(t, tc.program, "")
 			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
 			testutil.FailErr(t, "progress state", err)
 			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
 				t.Fatal("expected root session to start without progress")
 			}
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-			result := s.result(t)
-			if !strings.Contains(result, "PROGRESS_MISSING") {
-				t.Fatalf("expected PROGRESS_MISSING for %s without progress: %s", tc.name, result)
+			var programState, stopCode string
+			testutil.FailErr(t, "read program", s.h.DB.QueryRowContext(t.Context(), `SELECT p.state, p.stop_code FROM invocation_programs p
+				JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ?`, s.session).Scan(&programState, &stopCode))
+			if programState != "rejected" || stopCode != "PROGRESS_MISSING" {
+				t.Fatalf("program state=%q stop=%q", programState, stopCode)
 			}
-			if _, err := os.Stat(filepath.Join(s.dir, tc.target)); !os.IsNotExist(err) {
-				t.Fatalf("expected %s not to be written when progress is missing, stat err=%v", tc.target, err)
+			if _, err := os.Stat(filepath.Join(s.dir, tc.file)); !os.IsNotExist(err) {
+				t.Fatalf("refused write created %s: %v", tc.file, err)
+			}
+		})
+		t.Run(tc.name+" with progress", func(t *testing.T) {
+			s := newCommandProgramSession(t, tc.program, "")
+			testutil.FailErr(t, "seed progress", progress.NewSQLStore(s.h.DB).Set(s.session, "- [ ] Write the file"))
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			if got := s.programState(t); got != "completed" {
+				t.Fatalf("program state = %q: %s", got, s.result(t))
+			}
+			data, err := os.ReadFile(filepath.Join(s.dir, tc.file))
+			testutil.FailErr(t, "read written file", err)
+			if string(data) != tc.want {
+				t.Fatalf("%s = %q", tc.file, data)
 			}
 		})
 	}

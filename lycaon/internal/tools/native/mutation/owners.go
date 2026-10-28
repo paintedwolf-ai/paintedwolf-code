@@ -55,7 +55,7 @@ type Owners struct {
 type utility func(*invocation) error
 
 var utilities = map[string]utility{
-	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "mkdir": runMkdir,
+	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "ln": runLn, "mkdir": runMkdir,
 	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
 	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
 	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite,
@@ -72,7 +72,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations
 		operations.Chmod == nil || operations.Chown == nil || operations.Times == nil || operations.Extract == nil || pins == nil {
 		return nil, errors.New("mutation owners require every shared operation and a pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = mutationPathTargets(bound)
+	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
@@ -192,6 +194,11 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"
+	case "code-rewrite":
+		if hasOpt("--dry-run") {
+			return "dry-run"
+		}
+		return "mutation"
 	}
 	if len(spec.Effects) > 0 {
 		return spec.Effects[0].Mode
@@ -203,6 +210,12 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("mutation invocation is not prepared")
+	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
 	err := p.run(inv)

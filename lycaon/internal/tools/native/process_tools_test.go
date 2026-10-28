@@ -2,13 +2,16 @@ package native
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -38,38 +41,70 @@ func TestProcessListRequiresOwnerReview(t *testing.T) {
 	}
 }
 
-func TestProcessSignalSharesReferencesWithinTaskAndStopsAtReview(t *testing.T) {
+// References are bound to the session whose launch started the process; the
+// review sees the host-resolved instance, and nothing else reaches review.
+func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testing.T) {
 	service, err := hostprocess.New()
 	testutil.FailErr(t, "create process service", err)
-	snapshot, err := service.List(t.Context(), "task", os.Getpid(), 0, 1)
-	if errors.Is(err, hostprocess.ErrUnsupported) {
-		t.Skip("native process operations unavailable")
-	}
-	testutil.FailErr(t, "inspect owned process", err)
-	if len(snapshot.Processes) != 1 {
-		t.Fatal("owned process unavailable")
-	}
+	line, err := lineage.Open("command:call_1", "worker")
+	testutil.FailErr(t, "open lineage", err)
+	t.Cleanup(func() { _ = line.Close() })
+	child := exec.Command("/bin/sleep", "60")
+	child.ExtraFiles = []*os.File{line.ChildFile()}
+	testutil.FailErr(t, "start owned child", child.Start())
+	line.Started()
+	t.Cleanup(func() { _ = child.Process.Kill(); _ = child.Wait() })
+	unowned := exec.Command("/bin/sleep", "60")
+	testutil.FailErr(t, "start unowned child", unowned.Start())
+	t.Cleanup(func() { _ = unowned.Process.Kill(); _ = unowned.Wait() })
+
 	denied := errors.New("review denied")
+	reviewed := 0
 	tc := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "worker",
-			ParentSessionID: "task"},
+		Identity: tools.InvocationIdentity{SessionID: "worker", ParentSessionID: "task"},
 		Execution: tools.InvocationExecution{ProcessReview: func(_ context.Context, operation string, targets []hostprocess.Process) error {
-			if operation != "signal" || len(targets) != 1 || targets[0].PID != os.Getpid() {
+			if operation == "list" {
+				return nil
+			}
+			reviewed++
+			if operation != "signal" || len(targets) != 1 || targets[0].PID != child.Process.Pid || !targets[0].Owned {
 				t.Fatal("incorrect resolved review target")
 			}
 			return denied
 		}},
 	}
 	native := ProcessTools{Service: service}
-	args := map[string]any{"references": []any{snapshot.Processes[0].Reference}, "signal": "TERM"}
-	_, err = native.Signal(t.Context(), args, tc)
-	if !errors.Is(err, denied) {
-		t.Fatalf("worker reference did not reach review: %v", err)
+	reference := ""
+	for _, pid := range []int{child.Process.Pid, unowned.Process.Pid} {
+		raw, err := native.List(t.Context(), map[string]any{"pid": pid}, tc)
+		testutil.FailErr(t, "list process", err)
+		var listed struct{ Processes []hostprocess.Process }
+		testutil.FailErr(t, "decode listing", json.Unmarshal([]byte(raw), &listed))
+		if len(listed.Processes) != 1 {
+			t.Fatalf("listing %s", raw)
+		}
+		row := listed.Processes[0]
+		if pid == unowned.Process.Pid {
+			if row.Owned || row.Reference != "" {
+				t.Fatalf("a process the session did not start carries a reference: %s", raw)
+			}
+			continue
+		}
+		if !row.Owned || row.Reference == "" {
+			t.Fatalf("the session's own process carries no reference: %s", raw)
+		}
+		reference = row.Reference
 	}
-	tc.Identity.ParentSessionID = "other-task"
+	args := map[string]any{"references": []any{reference}, "signal": "TERM"}
+	if _, err := native.Signal(t.Context(), args, tc); !errors.Is(err, denied) || reviewed != 1 {
+		t.Fatalf("owned reference did not reach review: %v", err)
+	}
+	tc.Identity.SessionID = "task"
 	_, err = native.Signal(t.Context(), args, tc)
-	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "PROCESS_REFERENCE_STALE" {
-		t.Fatalf("reference crossed task boundary: %v", err)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "PROCESS_REFERENCE_STALE" || reviewed != 1 {
+		t.Fatalf("reference crossed the session boundary: %v", err)
+	}
+	if reject := toolrejection.AsToolReject(processError(hostprocess.ErrNotOwned)); reject == nil || reject.Code != "PROCESS_NOT_OWNED" {
+		t.Fatalf("unowned refusal code: %v", reject)
 	}
 }

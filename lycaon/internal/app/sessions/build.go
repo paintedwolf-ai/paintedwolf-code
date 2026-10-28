@@ -127,6 +127,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		return nil, fmt.Errorf("init progress-gated tools: %w", err)
 	}
 	mgr.Coordinator.Guards.SetToolMetadata(deps.Execution.Host.Executor.Metadata)
+	mgr.Profiles.SetCommandExternalHidden(deps.Execution.Host.Executor.Metadata.CommandExternalHidden)
 	if deps.Settings.Service != nil {
 		if deps.TestSessionLimits == nil {
 			mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits})

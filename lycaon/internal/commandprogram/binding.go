@@ -18,7 +18,7 @@ type OfferedOperations struct {
 func Offer(definitions ...toolcontract.OperationDefinition) OfferedOperations {
 	digests := make(map[string]string, len(definitions))
 	for _, definition := range definitions {
-		digests[definition.Facts().Identity] = definition.Digest()
+		digests[definition.ReadOnlyFacts().Identity] = definition.Digest()
 	}
 	return OfferedOperations{digests: digests, catalogDigest: toolcontract.LanguageCatalogDigest()}
 }
@@ -36,7 +36,7 @@ func Invoke[Input, Result any](ctx context.Context, offered OfferedOperations, b
 	if err := offered.Validate(binding.Definition, invocation); err != nil {
 		return zero, err
 	}
-	facts := binding.Definition.Facts()
+	facts := binding.Definition.ReadOnlyFacts()
 
 	if binding.InvokeOwner == nil {
 		return zero, fmt.Errorf("operation %s has no runtime binding", facts.Identity)
@@ -47,7 +47,7 @@ func Invoke[Input, Result any](ctx context.Context, offered OfferedOperations, b
 // Validate checks frozen exposure and invocation identity without invoking an
 // owner. Effect admission uses this same check before any authority request.
 func (offered OfferedOperations) Validate(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	if definition.Digest() == "" || offered.digests[facts.Identity] != definition.Digest() {
 		return &AdmissionError{Code: "TOOL_NOT_OFFERED", Operation: facts.Identity}
 	}

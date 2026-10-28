@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -152,11 +153,31 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 	}
 }
 
+func TestChildExecutionCounterChargeAtBoundaryAndOnePast(t *testing.T) {
+	limits, err := catalogEvaluationLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	maximum := limits["child_executions"]
+	e := &evaluation{limits: limits, counters: map[string]int64{"child_executions": maximum - 1}}
+	f := &frame{e: e, state: &frameState{latch: &OutcomeLatch{}}}
+	loc := commandsurface.SyntaxLocation{}
+	if err := e.charge(f, loc, "child_executions", 1); err != nil || e.counters["child_executions"] != maximum {
+		t.Fatalf("at limit: counter=%d err=%v", e.counters["child_executions"], err)
+	}
+	err = e.charge(f, loc, "child_executions", 1)
+	assertLimit(t, err, "child_executions", maximum, maximum+1)
+	if e.counters["child_executions"] != maximum {
+		t.Fatalf("over limit changed count to %d", e.counters["child_executions"])
+	}
+}
+
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never":      "loop_iterations",
-		"f() { while x=1; do continue; done; }; f": "loop_iterations",
-		"while :; do :; done; echo never":          "child_executions",
+		"while x=1; do x=2; done; echo never":       "loop_iterations",
+		"f() { while x=1; do continue; done; }; f":  "loop_iterations",
+		"while :; do :; done; echo never":           "loop_iterations",
+		"while echo a; do echo b; done; echo never": "loop_iterations",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)
@@ -164,7 +185,7 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 		if !errors.As(err, &limit) || limit.Limit != binding || out.Stop == nil {
 			t.Fatalf("%q: %v", program, err)
 		}
-		if len(f.log.calls) != 0 {
+		if slices.Contains(f.log.argv(), "echo never") {
 			t.Fatalf("%q admitted a child after exhaustion", program)
 		}
 	}
@@ -259,7 +280,7 @@ func TestSourceRunsCapturedUnitInCurrentFrame(t *testing.T) {
 // Q10: a sourced unit with excluded syntax runs nothing, and earlier parent
 // work stays recorded as executed rather than replayable.
 func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
-	for name, script := range map[string]string{"excluded": "echo inner\neval x\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
+	for name, script := range map[string]string{"excluded": "echo inner\ntrap x INT\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
 		t.Run(name, func(t *testing.T) {
 			f := newEvalFixture(t)
 			f.sources.files["./bad.sh"] = script

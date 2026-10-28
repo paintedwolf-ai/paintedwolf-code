@@ -111,6 +111,12 @@ func (m *Service) PromptSurface(
 	out.HostResources = hostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
 	out.Posture = m.EffectiveApprovalPosture(ctx, sess)
+	if m.commandExternalHidden != nil {
+		out.CommandExternalHidden = m.commandExternalHidden()
+		if m.externalObserver != nil && strings.TrimSpace(sess.ID) != "" {
+			m.externalObserver(ctx, sess.ID, out.Posture, out.CommandExternalHidden)
+		}
+	}
 	out.Fingerprint = promptSurfaceFingerprint(out)
 	return out
 }
@@ -122,7 +128,10 @@ func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Sessio
 	if m == nil || sess == nil {
 		return gate.PostureStrict
 	}
-	projectDir, _ := m.workspace.ActivePath(ctx, sess)
+	var projectDir string
+	if m.workspace != nil {
+		projectDir, _ = m.workspace.ActivePath(ctx, sess)
+	}
 	if strings.TrimSpace(projectDir) == "" {
 		projectDir = sess.WorkspacePath
 	}
@@ -157,10 +166,20 @@ func hostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResour
 // stay out of the prompt.
 func promptSurfaceFingerprint(surface prompts.AgentPromptSurface) string {
 	payload, err := json.Marshal(struct {
-		HasSkills            bool
-		HostResources        []prompts.AgentHostResourceView
-		HostResourcesOmitted int
-	}{len(surface.Skills) > 0, surface.HostResources, surface.HostResourcesOmitted})
+		HasSkills             bool
+		HostResources         []prompts.AgentHostResourceView
+		HostResourcesOmitted  int
+		SessionScratchDir     string
+		ReviewsConfinedWrites bool
+		CommandExternalHidden bool
+	}{
+		len(surface.Skills) > 0,
+		surface.HostResources,
+		surface.HostResourcesOmitted,
+		surface.SessionScratchDir,
+		surface.Posture.ReviewsConfinedWrites(),
+		surface.CommandExternalHidden,
+	})
 	if err != nil {
 		return surface.Fingerprint
 	}

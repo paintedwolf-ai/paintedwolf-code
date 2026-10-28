@@ -28,14 +28,21 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 	if err := inv.reserve(int64(len(operands)) * 128); err != nil {
 		return nil, err
 	}
-	paths, err := projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
-	if err != nil {
-		return nil, err
-	}
+	var paths *projectpaths.ProgramPaths
 	out := make([]source, 0, len(operands))
 	for _, operand := range operands {
 		reader := io.NopCloser(inv.streams.Input)
-		if operand.Value != "-" {
+		if substReader, ok := operand.ProcessSubstitution().OpenReader(); ok {
+			reader = substReader
+		} else if operand.Value != "-" {
+			if paths == nil {
+				var err error
+				paths, err = projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
+				if err != nil {
+					closeSources(out)
+					return nil, err
+				}
+			}
 			reader = &operandReader{inv: inv, paths: paths, operand: operand}
 		}
 		out = append(out, source{name: operand.Value, reader: reader})
@@ -103,6 +110,9 @@ func (r *operandReader) Close() error {
 // capture binds one operand under the invocation cwd, pins its accepted
 // revision and returns a reader over its bytes.
 func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, *toolcontract.ExecutionRevision, error) {
+	if reader, ok := operand.ProcessSubstitution().OpenReader(); ok {
+		return reader, nil, nil
+	}
 	bound, err := paths.Bind(inv.ctx, operand.Value, false)
 	if err != nil {
 		return nil, nil, err
@@ -111,6 +121,20 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 		return io.NopCloser(strings.NewReader("")), nil, nil
 	}
 	tc := inv.ports.ToolContext
+	if inv.preparing {
+		captured, err := inv.owners.Revisions.CaptureSource(inv.ctx, tc, bound.Resolved.Abs)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := inv.reserve(int64(len(captured.Content))); err != nil {
+			return nil, nil, err
+		}
+		if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
+			return nil, nil, err
+		}
+		inv.sed.pins = append(inv.sed.pins, captured.Revision)
+		return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
+	}
 	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, tc, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, nil, err
