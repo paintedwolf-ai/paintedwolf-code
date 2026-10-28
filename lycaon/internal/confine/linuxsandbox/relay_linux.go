@@ -65,8 +65,15 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	defer sup.close()
 	// The inner helper ends with this process, by its parent-death signal.
 	cmd := exec.CommandContext(context.Background(), self, args...)
-	// The standard descriptors are the command's streams, handed through as is.
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
+	settleStreams, err := handoverStandardStreams(cmd)
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = reportWrite.Close()
+		_ = controlChild.Close()
+		return 0, 0, err
+	}
+	defer func() { err = errors.Join(err, settleStreams()) }()
 	// A nil marker leaves its descriptor closed in the child.
 	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}
 	cmd.SysProcAttr = namespaceAttr()
