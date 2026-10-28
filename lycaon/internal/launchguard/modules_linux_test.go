@@ -349,14 +349,23 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 
 func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) error {
 	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
-		return fmt.Errorf("existing mount in module view mapped executable: %v, want EPERM", err)
+		if err == nil {
+			return errors.New("existing mount in module view mapped executable, want EPERM")
+		}
+		return fmt.Errorf("existing mount in module view mapped executable: %w, want EPERM", err)
 	}
 	if _, err := os.Stat(underlying); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("post-launch mount did not cover underlying directory in module view: stat %s = %v", underlying, err)
+		if err == nil {
+			return fmt.Errorf("post-launch mount did not cover underlying directory in module view: %s is still visible", underlying)
+		}
+		return fmt.Errorf("post-launch mount did not cover underlying directory in module view: stat %s: %w", underlying, err)
 	}
 	content, err := os.ReadFile(lateFile)
-	if err != nil || !bytes.Equal(content, []byte("late-module")) {
-		return fmt.Errorf("post-launch mount not readable in module view: %q (%v)", content, err)
+	if err != nil {
+		return fmt.Errorf("post-launch mount not readable in module view: %w", err)
+	}
+	if !bytes.Equal(content, []byte("late-module")) {
+		return fmt.Errorf("post-launch mount content in module view: %q, want late-module", content)
 	}
 	const bound = 100 * time.Millisecond
 	deadline := time.Now().Add(bound)
