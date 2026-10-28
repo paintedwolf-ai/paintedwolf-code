@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -110,10 +109,11 @@ def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=Non
 
 
 def current(key: str, directory: Path) -> dict | None:
+    from release_distribution import decode_storage
     if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
         from scripts.release_storage.s3 import read_bytes
         raw = read_bytes(key)
-        return None if raw is None else json.loads(raw)
+        return decode_storage(raw)
     output = directory / "remote-current.json"
     status = subprocess.check_output(["python3", str(ROOT / "scripts/release_distribution.py"),
                                       "storage-read", "--key", key, "--output", str(output)], text=True).strip()
@@ -121,7 +121,7 @@ def current(key: str, directory: Path) -> dict | None:
         return None
     if status != "200":
         raise ValueError("cannot establish authenticated repository activation state")
-    return json.loads(output.read_text())
+    return decode_storage(output.read_bytes())
 
 
 def put(key: str, source: Path, mutable=False):

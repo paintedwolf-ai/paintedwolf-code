@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-import release_distribution as distribution
+from release_distribution_contract import confirmation
 from release_distribution_contract.platforms import load_platforms, package_urls
 from update_keys import load_registry, release_binding
 from updater_signature import rehearsal_signature
@@ -49,14 +49,14 @@ class PublicPlatformTests(unittest.TestCase):
         self.assertFalse(any(".exe" in url or "app.tar.gz" in url for url in urls))
         def page(links):
             return "".join(f'<a data-release-channel="stable" download href="{url}">Download</a>' for url in links)
-        distribution.validate_website_downloads(page(reversed(urls)), expected, catalog=self.catalog)
+        confirmation.validate_website_downloads(page(reversed(urls)), expected, catalog=self.catalog)
         for links in [urls[:-1], urls + [urls[0]], urls + [urls[0].replace("linux-aarch64", "windows-x86_64")],
                       [url.replace(VERSION, "0.9.0") for url in urls], [url.replace("https://", "http://") for url in urls]]:
             with self.subTest(links=links), self.assertRaises(ValueError):
-                distribution.validate_website_downloads(page(links), expected, catalog=self.catalog)
-        distribution.validate_website_downloads("", {**expected, "version": None}, catalog=self.catalog)
+                confirmation.validate_website_downloads(page(links), expected, catalog=self.catalog)
+        confirmation.validate_website_downloads("", {**expected, "version": None}, catalog=self.catalog)
         with self.assertRaises(ValueError):
-            distribution.validate_website_downloads(page(urls), {**expected, "version": None}, catalog=self.catalog)
+            confirmation.validate_website_downloads(page(urls), {**expected, "version": None}, catalog=self.catalog)
 
     def test_catalog_selection_does_not_promote_candidate_packages(self):
         candidate_rows = [{**row, "publication": "candidate"} if row["updater_key"].startswith("linux-") else row for row in ROWS]

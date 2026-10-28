@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import release_distribution
+from release_distribution_contract import confirmation
 
 from scripts.release_distribution_contract import halt_plan, remote_document, withdrawal
 from scripts.release_distribution_contract.platforms import LEGACY_PLATFORMS
@@ -93,12 +93,12 @@ class DistributionConfirmationTests(unittest.TestCase):
             headers = {'Cache-Control': 'no-store'}
         if page is None:
             from scripts.release_distribution_contract.platforms import package_urls
-            catalog = LEGACY_PLATFORMS if legacy_catalog else release_distribution.ROOT / "packaging/release-platforms.json"
+            catalog = LEGACY_PLATFORMS if legacy_catalog else confirmation.ROOT / "packaging/release-platforms.json"
             urls = package_urls(expected['version'], catalog, origin='https://downloads.paintedwolf.dev' if legacy_catalog else ORIGIN) if expected['version'] else []
             page = ''.join(f'<a data-release-channel="{expected["channel"]}" download href="{url}">Download</a>' for url in urls)
         receipt = json.dumps({'schema_version': 2, **expected}).encode()
-        with patch.object(release_distribution.urllib.request, 'urlopen', side_effect=[Response(receipt), Response(page.encode())]):
-            release_distribution.wait_for_website('https://website.example.invalid', expected, seconds=0,
+        with patch.object(confirmation.urllib.request, 'urlopen', side_effect=[Response(receipt), Response(page.encode())]):
+            confirmation.wait_for_website('https://website.example.invalid', expected, seconds=0,
                 legacy_catalog=legacy_catalog, fetch=self.fetch, **self.options)
 
     def test_new_documents_require_all_seven_links_and_matching_channel_receipt(self):
@@ -146,9 +146,9 @@ class DistributionConfirmationTests(unittest.TestCase):
             self.selected('1.2.2')
 
     def test_production_page_gate_refuses_origin_override_before_any_transport(self):
-        with patch.object(release_distribution.urllib.request, 'urlopen') as page:
+        with patch.object(confirmation.urllib.request, 'urlopen') as page:
             with self.assertRaisesRegex(ValueError, 'maintained origin and trust'):
-                release_distribution.wait_for_website('https://website.example.invalid', self.receipt, seconds=0,
+                confirmation.wait_for_website('https://website.example.invalid', self.receipt, seconds=0,
                     origin=ORIGIN, registry=self.registry, fetch=self.fetch)
             page.assert_not_called()
 
@@ -195,14 +195,15 @@ class ClosedPublicHistoryTests(unittest.TestCase):
 
     def test_common_selection_refuses_withdrawn_good_before_immutable_reads_but_allows_bad_retry(self):
         for good in ('1.0.2', '1.2.2'):
-            calls = []
-            def read(key):
-                calls.append(key)
-                return json.dumps({'version': good, 'withdrawn': True}).encode()
-            with self.subTest(good=good), self.assertRaisesRegex(ValueError, 'withdrawn release'):
-                halt_plan.classify({'bad_versions': ['1.2.3'], 'channels': [
-                    {'channel': 'stable', 'bad': '1.2.3', 'last_good': good}]}, read=read)
-            self.assertEqual(calls, [f'release-metadata/{good}/withdrawn.json'])
+            for marker in (json.dumps({'version': good, 'withdrawn': True}).encode(), b'null', b'[]', b'42'):
+                calls = []
+                def read(key):
+                    calls.append(key)
+                    return marker
+                with self.subTest(good=good, marker=marker), self.assertRaisesRegex(ValueError, 'withdrawn release'):
+                    halt_plan.classify({'bad_versions': ['1.2.3'], 'channels': [
+                        {'channel': 'stable', 'bad': '1.2.3', 'last_good': good}]}, read=read)
+                self.assertEqual(calls, [f'release-metadata/{good}/withdrawn.json'])
         calls.clear()
         selected = halt_plan.classify({'bad_versions': ['1.2.3'], 'channels': [
             {'channel': 'stable', 'bad': '1.2.3', 'last_good': None}]}, read=read)

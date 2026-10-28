@@ -100,7 +100,7 @@ def classify(distribution, *, read=None, rehearsal=False, registry=None, origin=
     from .ledger import require_publishable
     for row in distribution['channels']:
         if row['last_good'] is not None and row['last_good'] not in selected:
-            require_publishable(row['last_good'], read=lambda key: None if (raw := read(key)) is None else json.loads(raw))
+            require_publishable(row['last_good'], read=read)
         facts = release(row['last_good']) if row['last_good'] is not None else {
             'last_good_legacy': False, 'last_good_manifest_sha256': None, 'last_good_dmg_sha256': None, 'distribution_sha256': None}
         facts = {**facts, 'bad_legacy': row['bad'] in baseline}

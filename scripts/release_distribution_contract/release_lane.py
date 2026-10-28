@@ -81,9 +81,10 @@ class ReleaseDocument:
             from scripts.nix_cache.release_lane import trust_policy
             cache_policy = trust_policy(policy_path)
         from .channels import validate, check
+        from release_distribution import decode_storage
         selected = validate(json.loads(snapshot(self.plan, retain=True, limit=2 << 20)[1]), self.source, self.version,
                             self.channel, registry["signing_generation"])
-        check(selected, read=lambda key: None if (raw := self.deliveries.read(key)) is None else json.loads(raw))
+        check(selected, read=lambda key: decode_storage(self.deliveries.read(key)))
         self.deliveries.channels = selected["channels"]
         return {"mode": "rehearsal" if self.rehearsal else "production", "version": self.version, "origin": self.origin,
                 "source_commit": self.source, "source_tree": self.tree, "controller_commit": self.controller,

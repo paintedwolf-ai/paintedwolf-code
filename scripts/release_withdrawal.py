@@ -12,7 +12,8 @@ import time
 import urllib.error
 import urllib.request
 
-from release_distribution import PUBLIC_READ_HEADERS, cask_version, wait_for_website
+from release_distribution import PUBLIC_READ_HEADERS, cask_version
+from release_distribution_contract import confirmation
 from release_distribution_contract.ledger import require_publishable
 from release_semver import parse
 from release_distribution_contract.withdrawal import identities
@@ -29,7 +30,10 @@ def api(token: str, endpoint: str, method: str = "GET", body: dict | None = None
             raw = response.read(2 * 1024 * 1024 + 1)
             if len(raw) > 2 * 1024 * 1024:
                 raise ValueError("GitHub release metadata exceeds its bound")
-            return json.loads(raw) if raw else None
+            value = json.loads(raw) if raw else None
+            if method == "GET" and not isinstance(value, dict):
+                raise ValueError("present GitHub GET metadata must be a JSON object")
+            return value
     except urllib.error.HTTPError as error:
         if method == "GET" and error.code == 404:
             return None
@@ -53,10 +57,9 @@ def token_for(channel: str) -> str:
 
 
 def website_receipt(channel):
-    from release_distribution import no_store, validate_website_receipt
     request = urllib.request.Request(f"https://paintedwolf.ai/.well-known/releases/{channel}.json", headers=PUBLIC_READ_HEADERS)
     with urllib.request.urlopen(request, timeout=30) as response:
-        no_store(response.headers)
+        confirmation.no_store(response.headers)
         raw = response.read(16385)
     if len(raw) > 16384:
         raise ValueError("website receipt exceeds its bound")
@@ -64,10 +67,20 @@ def website_receipt(channel):
     expected = {"channel": channel, **{key: receipt.get(key) for key in ("version", "manifest_sha256", "withdrawn_version")}}
     if receipt.get("schema_version") == 2:
         expected["distribution_sha256"] = receipt.get("distribution_sha256")
-    validate_website_receipt(receipt, expected)
+    confirmation.validate_website_receipt(receipt, expected)
     return receipt
 
 
+
+
+def mirror_control(release, version):
+    parse(version)
+    if (not isinstance(release, dict) or not {'id', 'tag_name', 'draft', 'body'} <= release.keys()
+            or type(release['id']) is not int or release['id'] <= 0 or release['tag_name'] != 'v' + version
+            or type(release['draft']) is not bool or type(release.get('immutable', False)) is not bool
+            or release['body'] is not None and not isinstance(release['body'], str)):
+        raise ValueError('GitHub mirror lacks its typed release identity or edited control facts')
+    return {key: release[key] for key in ('id', 'tag_name', 'draft', 'body')} | {'immutable': release.get('immutable', False)}
 
 
 def prepare(distribution: dict, *, receipt=None, binding=None) -> dict:
@@ -123,8 +136,9 @@ def prepare(distribution: dict, *, receipt=None, binding=None) -> dict:
     repository, token = os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"]
     for bad in distribution["bad_versions"]:
         published = api(token, f"repos/{repository}/releases/tags/v{bad}")
-        mirrors.append({"version": bad, "action": "withdraw" if published is not None and not published.get("draft", False) else "keep",
-                        "release": published})
+        control = mirror_control(published, bad) if published is not None else None
+        mirrors.append({"version": bad, "action": "withdraw" if control is not None and not control["draft"] else "keep",
+                        "release": control})
     return {"bad_versions": distribution["bad_versions"], "channels": rows, "mirrors": mirrors}
 
 
@@ -146,7 +160,7 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
                 legacy = (release is not None and release["version"] == row["last_good"] and row["last_good_legacy"])
                 if release is not None and release.get("distribution_sha256") is None and not legacy:
                     raise ValueError("website restored an unclassified legacy release")
-                wait_for_website("https://paintedwolf.ai", expected, legacy_catalog=legacy)
+                confirmation.wait_for_website("https://paintedwolf.ai", expected, legacy_catalog=legacy)
                 return
         if time.monotonic() >= deadline:
             raise ValueError("website has not recorded the withdrawal")
@@ -154,6 +168,17 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
 
 
 def apply(prepared: dict) -> None:
+    for row in prepared['mirrors']:
+        parse(row['version'])
+        selected = row['release']
+        if selected is not None and mirror_control(selected, row['version']) != selected:
+            raise ValueError('prepared GitHub mirror control has unsupported fields')
+        if row['action'] != ('withdraw' if selected is not None and not selected['draft'] else 'keep'):
+            raise ValueError('GitHub mirror action differs from its prepared public state')
+        current = api(os.environ['GH_TOKEN'], f"repos/{os.environ['GITHUB_REPOSITORY']}/releases/tags/v{row['version']}")
+        actual = mirror_control(current, row['version']) if current is not None else None
+        if actual != selected:
+            raise ValueError('package mirror control changed after complete halt preparation')
     for row in prepared["channels"]:
         if row["website_action"] == "withdraw":
             actual = identities({key: row[key] for key in FIELDS | FACTS}, row["advertised"])
@@ -192,7 +217,7 @@ def apply(prepared: dict) -> None:
             bad, release = row["version"], row["release"]
             repository, token = os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"]
             current = api(token, f"repos/{repository}/releases/tags/v{bad}")
-            if current != release:
+            if current is None or mirror_control(current, bad) != release:
                 raise ValueError("package mirror changed after complete halt preparation")
             notice = "This release has been withdrawn. Use the current release from https://paintedwolf.ai.\n\n"
             notes = release.get("body") or ""

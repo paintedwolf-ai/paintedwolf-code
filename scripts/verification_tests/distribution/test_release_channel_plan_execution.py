@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +12,8 @@ from scripts.linux_release import release_repositories as native, repository_wit
 from scripts.linux_release.repository_objects import encoded
 from scripts.linux_release.repository_operations import identity, transition
 from scripts.release_distribution_contract import channels
+from scripts.release_distribution_contract.channels import select
+import release_distribution as distribution
 
 SOURCE = 'a' * 40
 VERSION = '1.2.3'
@@ -18,6 +21,38 @@ BASE = 'https://downloads.paintedwolf.dev'
 
 
 class SharedChannelPlanTests(unittest.TestCase):
+    def test_stable_verifies_preview_when_it_advances(self):
+        for previous, expected in [(None, ["stable", "preview"]), ({"version": "1.0.0-rc.1"}, ["stable", "preview"]),
+                                   ({"version": "1.0.0"}, ["stable", "preview"]), ({"version": "1.1.0-rc.1"}, ["stable"])]:
+            with patch.object(distribution, "read_storage", side_effect=lambda key: previous if "/preview/" in key else None):
+                self.assertEqual(select("stable", "1.0.0", 1, "a" * 40)["channels"], expected)
+        with patch.object(distribution, "read_storage", return_value=None) as read:
+            self.assertEqual(select("preview", "1.0.0-rc.1", 1, "a" * 40)["channels"], ["preview"])
+            self.assertEqual(read.call_args.args[0], "updates/preview/key-1/latest.json")
+
+    def test_preview_storage_failure_cannot_be_treated_as_first_publication(self):
+        with patch.object(distribution, "read_storage", side_effect=ValueError("storage unavailable")) as read:
+            with self.assertRaisesRegex(ValueError, "storage unavailable"):
+                select("stable", "1.0.0", 2, "a" * 40)
+            read.assert_called_once_with("release-metadata/1.0.0/channel-plan.json")
+
+    def test_website_cli_confirms_only_selected_channels(self):
+        from release_distribution_contract import confirmation
+        for preview, expected in [('1.2.3-rc.1', ['stable', 'preview']), ('1.3.0-rc.1', ['stable'])]:
+            controls = {'updates/preview/key-1/latest.json': {'version': preview}}
+            selected = channels.select('stable', VERSION, 1, SOURCE, read=controls.get)
+            with tempfile.TemporaryDirectory() as temporary:
+                plan = Path(temporary) / 'plan.json'
+                plan.write_text(json.dumps(selected))
+                argv = ['release_distribution.py', 'website', '--channel', 'stable', '--version', VERSION,
+                        '--manifest-sha256', 'b' * 64, '--distribution-sha256', 'c' * 64, '--plan', str(plan)]
+                with patch.object(sys, 'argv', argv), patch.object(distribution, 'read_storage', side_effect=controls.get), \
+                     patch.object(confirmation, 'wait_for_website') as confirm:
+                    distribution.main()
+                self.assertEqual([call.args[1]['channel'] for call in confirm.call_args_list], expected)
+                self.assertTrue(all(call.args[1]['version'] == VERSION for call in confirm.call_args_list))
+                self.assertEqual(controls['updates/preview/key-1/latest.json']['version'], preview)
+
     def test_retained_plan_refuses_drift_and_retries_its_own_verified_activation(self):
         controls = {'updates/stable/key-1/latest.json': {'version': '1.2.2'},
                     'updates/preview/key-1/latest.json': {'version': '1.2.3-rc.1'}}
