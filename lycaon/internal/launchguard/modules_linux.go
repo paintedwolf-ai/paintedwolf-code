@@ -94,7 +94,9 @@ func applyModuleView(policy GenerationPolicy, interpreter string) error {
 // the administrator named is trusted, not whatever is later mounted inside it.
 func allowModules(path string) error {
 	directory := true
-	if info, err := os.Lstat(path); err == nil { // #nosec G703 -- an administrator-declared module root; openRootControlled verifies its ownership before anything is mounted
+	// The path is an administrator-declared module root; openRootControlled
+	// verifies its ownership before anything is mounted.
+	if info, err := os.Lstat(path); err == nil { // #nosec G703 -- root-controlled path, verified below
 		directory = info.IsDir()
 	}
 	object, err := openRootControlled(path, directory)
