@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const host = vi.hoisted(() => ({
-  platform: null as "macos" | null,
+  platform: null as "macos" | "linux" | null,
   invoke: vi.fn(async (_command: string) => undefined),
 }));
 vi.mock("../runtime.ts", async (importOriginal) => ({
@@ -157,8 +157,10 @@ describe("text-edit-context", () => {
     expect(area.value).toBe("keep");
   });
 
-  it("pastes on macOS through the system paste into the restored selection", async () => {
-    host.platform = "macos";
+  it.each(["macos", "linux"] as const)("pastes on %s through the system paste into the restored selection", async (platform) => {
+    host.platform = platform;
+    const readText = vi.fn(async () => "text must not replace native image paste");
+    vi.stubGlobal("navigator", { clipboard: { readText } });
     try {
       const area = document.createElement("textarea");
       area.value = "abcdef";
@@ -171,6 +173,7 @@ describe("text-edit-context", () => {
       await pasteEditable(snap);
 
       expect(host.invoke).toHaveBeenCalledWith("paste_into_focused_view");
+      expect(readText).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(area);
       expect([area.selectionStart, area.selectionEnd]).toEqual([1, 3]);
       expect(area.value).toBe("abcdef");

@@ -8,6 +8,8 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+mod observation;
+
 pub(super) const STARTUP_PROTOCOL_VERSION: u8 = 1;
 pub(super) const STARTUP_RECORD_MAX_BYTES: usize = 16 * 1024;
 pub(super) const STARTUP_RECV_POLL: Duration = Duration::from_millis(100);
@@ -266,31 +268,24 @@ where
                 if let Err(err) = validate_startup_record(&record, child_pid, sequence) {
                     return Err(SidecarStartError::Failed(engine_failure_message(err)));
                 }
+                let previous_sequence = sequence;
                 sequence = record.sequence;
                 phase = record.phase;
                 last_record_at = Instant::now();
                 last_stall_update = None;
                 match record.kind {
                     StartupKind::Failed => {
+                        observation::failed(&record, child_pid, previous_sequence);
                         let failure = match record.code.as_str() {
                             "store_locked" => {
                                 SidecarStartError::StoreLocked(engine_failure_message(
                                     "another engine is already serving this store".into(),
                                 ))
                             }
-                            "credential_vault_locked" => SidecarStartError::CredentialVaultLocked(
-                                "Enter your app password to unlock saved credentials.".into(),
-                            ),
-                            "credential_vault_uninitialized" => {
-                                SidecarStartError::CredentialVaultUninitialized(
-                                    "Create an app password to protect saved credentials.".into(),
-                                )
-                            }
-                            "credential_vault_unlock_failed" => {
-                                SidecarStartError::CredentialVaultUnlockFailed(
-                                    "That password did not unlock the credential vault.".into(),
-                                )
-                            }
+                            "credential_vault_custodian_absent" => SidecarStartError::CredentialVaultCustodianAbsent(engine_failure_message("the protected credential custodian is absent".into())),
+                            "credential_vault_custodian_unavailable" => SidecarStartError::CredentialVaultCustodianUnavailable(engine_failure_message("the protected credential custodian is unavailable".into())),
+                            "credential_vault_launcher_refused" => SidecarStartError::CredentialVaultLauncherRefused("Open the installed desktop app; encrypted credentials are preserved.".into()),
+                            "credential_vault_identity_missing" => SidecarStartError::CredentialVaultIdentityMissing("The credential vault key is missing; restore it or reset the vault.".into()),
                             "credential_vault_corrupt" => {
                                 SidecarStartError::CredentialVaultCorrupt(engine_failure_message(
                                     "the encrypted credential vault or its identity is damaged"

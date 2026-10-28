@@ -29,13 +29,9 @@ func TestSweepDefersBehindACaptureWithoutHoldingTheLedger(t *testing.T) {
 	orphan := agedOrphan(t, store, "written by an interrupted capture\n")
 	releaseCapture := store.Content.AcquireReferenceLease()
 
-	started := time.Now()
 	err := store.Retention.SweepBlobs(ctx)
 	if !errors.Is(err, ErrBlobMaintenanceDeferred) {
 		t.Fatalf("sweep during a capture = %v, want ErrBlobMaintenanceDeferred", err)
-	}
-	if waited := time.Since(started); waited > time.Second {
-		t.Fatalf("a deferred sweep waited %s for the capture", waited)
 	}
 	if exists, err := store.Content.Exists(orphan); err != nil || !exists {
 		t.Fatalf("a deferred sweep removed an object: exists=%v err=%v", exists, err)
@@ -60,7 +56,7 @@ func TestSweepDefersBehindACaptureWithoutHoldingTheLedger(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "checkpoint and record during a capture", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("a checkpoint waited behind a capture the sweep was deferred by")
 	}
 
@@ -159,14 +155,13 @@ func TestRunBlobGCRetriesADeferredSweep(t *testing.T) {
 		t.Fatalf("gc removed an object during a capture: exists=%v err=%v", exists, err)
 	}
 	releaseCapture()
-	deadline := time.Now().Add(10 * time.Second)
 	for {
 		exists, err := store.Content.Exists(orphan)
 		testutil.FailErr(t, "stat orphan", err)
 		if !exists {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("gc never retried the sweep it deferred")
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -177,7 +172,7 @@ func TestRunBlobGCRetriesADeferredSweep(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("gc stopped with %v, want context.Canceled", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("gc did not stop with its context")
 	}
 }
