@@ -18,7 +18,7 @@ from .provider_setup import configure_provider
 from .presence_setup import prepare_secret
 from .presence_confirmation import await_confirmation, confirmation_rows
 from .records import CaseFailed, CaseUnavailable
-from ..installed_environment import graphical_session
+from ..campaign.environment import graphical_session
 from ..installed_storage import resolve
 
 

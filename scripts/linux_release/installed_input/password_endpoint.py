@@ -7,7 +7,7 @@ import time
 
 from ..installed_cases.app import process_identity
 from ..installed_cases.profile_observer import physical
-from ..installed_environment import graphical_session
+from ..campaign.environment import graphical_session
 from . import password_wire
 from .password_exchange import observed
 from .password_socket import connect
