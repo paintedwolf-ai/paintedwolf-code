@@ -107,7 +107,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	run.producer = false
 	subCtx, cancel := context.WithCancel(ctx)
 	budget, err := NewByteBudget("stream_bytes", e.limits["stream_bytes"])
-	activity := e.waits.start()
+	activity, _ := f.wait.Fork()
 	var pipe *BytePipe
 	if err == nil {
 		pipe, err = NewBytePipe(subCtx, budget)

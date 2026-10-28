@@ -127,8 +127,14 @@ func (a *ExecutionWait) Block(ctx context.Context, state WaitState) (func(), err
 	w.live[key] = blocked
 	w.clear()
 	if err := w.publish(ctx); err != nil {
-		w.live[key] = prior
-		return nil, err
+		if a == w.foreground {
+			w.live[key] = prior
+			return nil, err
+		}
+		if w.err == nil {
+			w.err = err
+			w.cancel(err)
+		}
 	}
 	var once sync.Once
 	return func() {
