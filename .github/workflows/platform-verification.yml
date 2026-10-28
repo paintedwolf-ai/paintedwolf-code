@@ -39,7 +39,10 @@ jobs:
         with:
           ref: ${{ inputs.source-sha || github.sha }}
 
+      # The confinement step's launch leg builds and runs a GTK desktop under Xvfb.
       - uses: ./.github/actions/setup-verification
+        with:
+          linux-launch: 'true'
 
       - uses: ./.github/actions/setup-bialy
 
