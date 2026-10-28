@@ -2,6 +2,7 @@ package gitcmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -258,5 +259,58 @@ func TestCachedRemovalRechecksSavedContentAtIndexReview(t *testing.T) {
 	got := h.exec("git", "rm", "--cached", "--", "a.txt")
 	if got.err == nil || got.result.StopCode != "GIT_OPERATION_PRECONDITION" || got.result.EffectCertainty != toolcontract.NoEffect || h.git("ls-files", "--stage") != before {
 		t.Fatalf("cached stale safety %+v %v", got.result, got.err)
+	}
+}
+
+func TestFileMutationDefaultCommitLeavesUnrelatedStaging(t *testing.T) {
+	for _, command := range []string{"rm", "mv"} {
+		t.Run(command, func(t *testing.T) {
+			h := newApplyHarness(t)
+			args := []string{"git", command, "--", "sub/b.txt"}
+			if command == "mv" {
+				args = append(args, "moved.txt")
+			}
+			got := h.exec(args...)
+			testutil.FailErr(t, "tracked mutation", got.err)
+			if got.result.Status != 0 {
+				t.Fatalf("tracked mutation %+v %q", got.result, got.stderr)
+			}
+			got = h.exec("git", "commit", "-m", "track file change")
+			testutil.FailErr(t, "default commit", got.err)
+			if got.result.Status != 0 {
+				t.Fatalf("default commit %+v %q", got.result, got.stderr)
+			}
+			if staged := h.git("diff", "--cached", "--name-only"); staged != "staged.txt\n" {
+				t.Fatalf("unrelated staging %q", staged)
+			}
+			if paths := h.git("show", "--format=", "--name-status", "HEAD"); strings.Contains(paths, "staged.txt") || !strings.Contains(paths, "sub/b.txt") {
+				t.Fatalf("committed paths %q", paths)
+			}
+		})
+	}
+}
+
+type metadataMoveBackend struct {
+	Backend
+	blobReads int
+}
+
+func (b *metadataMoveBackend) BlobContent(context.Context, string, string, int) ([]byte, bool, error) {
+	b.blobReads++
+	return nil, false, fmt.Errorf("index content read was not needed")
+}
+
+func TestMoveReusesIndexBlobBeyondStreamLimit(t *testing.T) {
+	h := newApplyHarness(t)
+	h.write("large", strings.Repeat("x", 4096))
+	h.git("add", "large")
+	original := h.git("rev-parse", ":large")
+	backend := &metadataMoveBackend{Backend: h.owners.Git}
+	h.owners.Git = backend
+	h.owners.limitOverride = map[string]int64{"stream_bytes": 512}
+	got := h.exec("git", "mv", "--", "large", "renamed-large")
+	testutil.FailErr(t, "metadata move", got.err)
+	if got.result.Status != 0 || backend.blobReads != 0 || h.git("rev-parse", ":renamed-large") != original {
+		t.Fatalf("move %+v %q reads=%d", got.result, got.stderr, backend.blobReads)
 	}
 }

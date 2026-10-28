@@ -3,14 +3,12 @@ package gitcmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -92,22 +90,3 @@ func entryContent(ctx context.Context, p Prepared, root string, entry trackedEnt
 }
 
 func entryAbs(root, rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
-
-// plannedContent retains each move's index bytes in the program's shared
-// memory account before the blob is read.
-func (r *fileMutation) plannedContent(entry trackedEntry) ([]byte, error) {
-	size, err := r.p.owners.Git.BlobSize(r.ctx, r.repo.Root, entry.oid)
-	if err != nil {
-		return nil, err
-	}
-	release, err := r.p.filesystem.Revisions.Memory.ReserveProgramState(r.ctx, size)
-	if err != nil {
-		var limit *toolcontract.ProgramMemoryLimitError
-		if errors.As(err, &limit) {
-			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes", "maximum": limit.Maximum, "observed": limit.Observed, "path": entry.path}}
-		}
-		return nil, err
-	}
-	r.releases = append(r.releases, release)
-	return entryContent(r.ctx, r.p, r.repo.Root, entry)
-}

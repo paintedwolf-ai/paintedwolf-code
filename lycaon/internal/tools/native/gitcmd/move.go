@@ -133,15 +133,11 @@ func (r *fileMutation) planMove(source, target string) (trackedMove, error) {
 		if entry.mode != "100644" && entry.mode != "100755" && entry.mode != "120000" {
 			return plan, unsupportedFileForm(r.p, entry.path, "regular files or symbolic links")
 		}
-		content, err := r.plannedContent(entry)
-		if err != nil {
-			return plan, err
-		}
 		name := target + strings.TrimPrefix(entry.path, source)
 		plan.expected[entry.path] = entry
 		plan.expected[name] = tracked[name]
 		plan.entries = append(plan.entries, git.IndexEntry{Path: entry.path, Remove: true})
-		writes = append(writes, git.IndexEntry{Path: name, Mode: entry.mode, Content: content})
+		writes = append(writes, git.IndexEntry{Path: name, Mode: entry.mode, ObjectID: entry.oid})
 	}
 	if len(plan.entries) == 0 {
 		plan.problem = "not under version control"

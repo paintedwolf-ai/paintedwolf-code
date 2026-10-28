@@ -49,6 +49,9 @@ func reviewGitFiles(ctx context.Context, tc tools.ToolContext, boundary *sandbox
 				preview.PreviewNote = fmt.Sprintf("Conflict stage %d changes.", file.IndexStage)
 			}
 		}
+		if file.Before.ObjectID != "" || file.After.ObjectID != "" {
+			preview.PreviewNote = fmt.Sprintf("Index object changes from %s to %s.", file.Before.ObjectID, file.After.ObjectID)
+		}
 		if file.Before.SHA256 == file.After.SHA256 && file.Before.Mode != file.After.Mode {
 			preview.PreviewNote = fmt.Sprintf("File mode changes from %s to %s.", file.Before.Mode, file.After.Mode)
 		}

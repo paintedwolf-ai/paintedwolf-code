@@ -25,7 +25,6 @@ type fileMutation struct {
 	index        []trackedEntry
 	status       int
 	effects      bool
-	releases     []func()
 	indexUnknown bool
 	indexChanged bool
 }
@@ -48,11 +47,6 @@ func runFileMutation(ctx context.Context, p Prepared, tc tools.ToolContext, dir 
 		return settleMutationError(unsupportedFileForm(p, p.command.spec.Name, "shared filesystem operations"), toolcontract.NoEffect)
 	}
 	r := &fileMutation{ctx: ctx, p: p, tc: tc, dir: dir, repo: repo, out: out, stderr: stderr}
-	defer func() {
-		for _, release := range r.releases {
-			release()
-		}
-	}()
 	var err error
 	operands, err := fileOperands(ctx, p, dir, repo.Root)
 	if err == nil {

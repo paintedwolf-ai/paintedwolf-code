@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -43,6 +44,17 @@ func TestTrackedRemovalAndMoveSourceRecovery(t *testing.T) {
 			testutil.FailErr(t, "tracked mutation", got.err)
 			if got.result.Status != 0 {
 				t.Fatalf("mutation %+v %s", got.result, got.stderr)
+			}
+			if command == "rm" {
+				_, err := (&native.RestoreVersionTool{Boundary: h.owners.Boundary}).Run(t.Context(), map[string]any{"path": "sub/b.txt"}, h.tc)
+				testutil.FailErr(t, "restore_version after git rm", err)
+				if h.read("sub/b.txt") != "bee\n" {
+					t.Fatal("restore_version recovered different bytes")
+				}
+				if staged := h.git("ls-files", "--", "sub/b.txt"); staged != "" {
+					t.Fatal("source recovery changed index")
+				}
+				return
 			}
 			p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: rootID, ProjectID: testdbseed.DefaultProjectID, Path: h.root, IsPrimary: true}}}
 			state, err := service.History.State(t.Context(), p.ID)
