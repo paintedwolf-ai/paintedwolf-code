@@ -81,7 +81,7 @@ func seedRetainedEntry(t *testing.T, root, kind string) (func(), string) {
 			}
 		}, ""
 	case "symlink":
-		target := filepath.Join(t.TempDir(), "outside project")
+		target := filepath.Join(root, "unselected target")
 		testutil.FailErr(t, "seed unselected target", os.WriteFile(target, []byte("untouched"), 0o600))
 		testutil.FailErr(t, "seed symlink", os.Symlink(target, path))
 		return func() {
@@ -95,7 +95,7 @@ func seedRetainedEntry(t *testing.T, root, kind string) (func(), string) {
 			if string(data) != "untouched" {
 				t.Fatal("recovery changed unselected target")
 			}
-		}, ""
+		}, textfile.SHA256([]byte(target))
 	default:
 		var body []byte
 		if kind == "binary" {

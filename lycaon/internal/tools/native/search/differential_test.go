@@ -231,6 +231,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"rg", "-F", "a.b", "dots"}, kinds: []string{"rg"}},
 	{argv: []string{"rg", "-n", "-A", "1", "two", "a.txt"}, kinds: []string{"rg"}},
 	{argv: []string{"rg", "-l", "binary"}, kinds: []string{"rg"}},
+	{argv: []string{"rg", "-uuu", "-l", "binary"}, kinds: []string{"rg"}},
 	{argv: []string{"find", "tree"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-name", "*.go"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-type", "d"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -22,7 +21,7 @@ import (
 
 // SessionJobs puts a program's & jobs in the session's process registry, so
 // jobs, wait, kill, command_output and command_stop share one set of handles.
-// A native job has no fabricated OS PID; its stop cancels its own context.
+// A native job has a session numeric identifier; its stop cancels its context.
 type SessionJobs struct {
 	Registry      *bgprocess.Registry
 	Supervisor    *ProgramSupervisor
@@ -39,6 +38,8 @@ type SessionJobs struct {
 	order []string
 	// programOrder tracks handles started by the active program.
 	programOrder []string
+	publicIDs    map[string]int
+	nextNativeID int
 }
 
 type jobOutcome struct {
@@ -49,6 +50,7 @@ type jobOutcome struct {
 // jobStatus is the registry's observation; a stop request is not an exit.
 type jobProcess struct {
 	Identity    hostprocess.Process
+	PID         int
 	Name        string
 	CommandLine string
 }
@@ -76,7 +78,7 @@ func noteJobProcess(ctx context.Context, pid int, args []string) {
 	}
 	t.once.Do(func() {
 		if t.onRecord != nil {
-			p := jobProcess{CommandLine: strings.Join(args, " ")}
+			p := jobProcess{CommandLine: strings.Join(args, " "), PID: pid}
 			if len(args) > 0 {
 				p.Name = filepath.Base(args[0])
 			}
@@ -113,6 +115,7 @@ func (j *SessionJobs) BeginProgram() {
 			delete(j.processes, handle)
 			delete(j.results, handle)
 			delete(j.signals, handle)
+			delete(j.publicIDs, handle)
 		}
 	}
 	j.order = kept
@@ -174,12 +177,36 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	select {
 	case <-tracker.ready:
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
-	if pid := j.pid(handle); pid > 0 {
-		return strconv.Itoa(pid), nil
+	return strconv.Itoa(j.publicID(handle)), nil
+}
+
+// publicID exposes the real process PID when one started. Native jobs use a
+// session-unique positive integer above the platform process ID range.
+func (j *SessionJobs) publicID(handle string) int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if id := j.publicIDs[handle]; id > 0 {
+		return id
 	}
-	return handle, nil
+	if pid := j.processes[handle].PID; pid > 0 {
+		if j.publicIDs == nil {
+			j.publicIDs = map[string]int{}
+		}
+		j.publicIDs[handle] = pid
+		return pid
+	}
+	if j.nextNativeID == 0 {
+		j.nextNativeID = 1 << 22
+	}
+	j.nextNativeID++
+	if j.publicIDs == nil {
+		j.publicIDs = map[string]int{}
+	}
+	j.publicIDs[handle] = j.nextNativeID
+	return j.nextNativeID
 }
 
 func (j *SessionJobs) recordProcess(handle string, process jobProcess) {
@@ -197,7 +224,7 @@ func (j *SessionJobs) process(handle string) jobProcess {
 	return j.processes[handle]
 }
 
-func (j *SessionJobs) pid(handle string) int { return j.process(handle).Identity.PID }
+func (j *SessionJobs) pid(handle string) int { return j.process(handle).PID }
 
 func (j *SessionJobs) signalStatus(handle string) int {
 	j.mu.Lock()
@@ -235,8 +262,13 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 		}
 	default:
 		if pid, err := strconv.Atoi(reference); err == nil && pid > 0 {
+			for handle, id := range j.publicIDs {
+				if id == pid {
+					return handle, nil
+				}
+			}
 			for handle, process := range j.processes {
-				if process.Identity.PID != pid {
+				if process.PID != pid {
 					continue
 				}
 				if hostprocess.IsCurrent(process.Identity) || !hostprocess.ProcessExists(pid) {
@@ -351,7 +383,7 @@ func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 		if process.CommandLine != "" {
 			line = process.CommandLine
 		}
-		out = append(out, jobStatus{Handle: job.Handle, PID: process.Identity.PID,
+		out = append(out, jobStatus{Handle: job.Handle, PID: process.PID,
 			Process: process.Identity, Name: process.Name, CommandLine: line})
 	}
 	return out, nil

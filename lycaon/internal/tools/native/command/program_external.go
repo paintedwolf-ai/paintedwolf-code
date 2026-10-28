@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -61,6 +62,10 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
+	if _, err := lycexec.LaunchLookup(argv[0], opts); confine.IsCommandNotFound(err) {
+		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
+		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
@@ -82,6 +87,10 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
 		}
+		if errors.Is(err, exec.ErrNotFound) || confine.IsCommandNotFound(err) {
+			_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
+			return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+		}
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
 	select {
@@ -97,6 +106,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, waitErr
 	}
 	status := run.ExitCode
+	if len(run.Stages) == 1 {
+		status = run.Stages[0].ExitStatus()
+		if run.Stages[0].ExpectedConsumerClosure() {
+			status = 141
+		}
+	}
 	if status < 0 || status > 255 {
 		status = 255
 	}
