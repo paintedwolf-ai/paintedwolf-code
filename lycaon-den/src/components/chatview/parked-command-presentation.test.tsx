@@ -1,6 +1,10 @@
-import { cleanup, render, screen } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityEvent, Message } from "../../api/types.ts";
+import { toolPartFromCall } from "../../chat/tool/tool-part-model.ts";
+import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
+import { GenericToolCard } from "../tool/GenericToolCard.tsx";
 import { THINKING_LABEL_HOLD_MS } from "../../chat/session/thinking-label-hold.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
@@ -119,9 +123,33 @@ describe("parked command presentation", () => {
     expect(screen.getByRole("status").textContent).toBe("Running command · sleep 120; echo done...");
   });
 
-  it.each(["done", "error"] as const)("removes the wait when its host lease ends as %s", async (status) => {
+  it.each(["completed", "interrupted"] as const)("renders ordinary command output after the result settles as %s", (state) => {
+    const [result, setResult] = createSignal(parkedResult());
+    const part = () => toolPartFromCall(call.tool_calls![0]!, result(), call.id);
+    const view = render(() => <GenericToolCard part={part()} layout="chat" />);
+    const card = view.container.querySelector<HTMLElement>(".den-tool-part")!;
+    expect(card.textContent).toContain("command · parked");
+    fireEvent.click(disclosureToggle(card));
+    const output = state === "completed" ? "before\ndone\n" : "before\ncommand interrupted [TOOL_OWNER_INTERRUPTED]";
+    setResult({
+      ...parkedResult(), content: output,
+      tool_result: {
+        tool: "command", assistant_message_id: call.id, tool_call_id: "command-call",
+        content: output, outcome: state === "completed" ? "completed" : "error",
+        ...(state === "interrupted" ? { codes: ["TOOL_OWNER_INTERRUPTED"] } : {}),
+      },
+    });
+    expect(card.getAttribute("data-tool")).toBe("command");
+    expect(card.getAttribute("data-status")).toBe(state === "completed" ? "done" : "error");
+    expect(card.textContent).not.toContain("command · parked");
+    expect(card.textContent).toContain("before");
+    expect(part().args).toEqual({ command: "sleep 120; echo done" });
+    expect(part().output).toBe(output);
+  });
+
+  it("removes an interrupted wait while its historical parked result remains", async () => {
     const store = mountActivity();
-    store.actions.setActivity({ ...park, status });
+    store.actions.setActivity({ ...park, status: "done" });
     await Promise.resolve();
     expect(screen.queryByTestId("thinking-indicator")).toBeNull();
   });
