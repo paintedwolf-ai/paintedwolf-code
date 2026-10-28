@@ -90,6 +90,31 @@ def prepare(input_root: Path, source_commit: str, receipt: Path, operation: str,
     return plan_record
 
 
+def publish(input_root: Path, receipt: Path, source_commit: str, version: str, channel: str, private_key: Path,
+            known_hosts: Path, qualified, *, publisher_factory=None) -> dict:
+    """Deliver the prepared recipe from the release lane after the shared release admission."""
+    from . import aur_release_authority
+    from .aur_delivery import protected_publisher
+    selected_request(source_commit, "publish-aur")
+    root = input_root.resolve(strict=True)
+    prepared = json.loads(receipt.read_text())
+    selected = {key: value for key, value in prepared.items() if key not in {"availability", "aur_published"}}
+    delivery = json.loads((root / "delivery.json").read_text())
+    generations = [json.loads((selected_directory(root, name) / "generation.json").read_text())
+                   for name in delivery["generations"]]
+    artifacts = (root / "final-artifacts.json").read_bytes()
+
+    def authorize(plan_record, recipe):
+        return aur_release_authority.authorize(plan_record, recipe, artifacts_bytes=artifacts, generations=generations,
+                                               source_commit=source_commit, version=version, channel=channel,
+                                               qualified=qualified)
+    factory = publisher_factory or protected_publisher
+    work = receipt.parent / "delivery"
+    work.mkdir()
+    publisher = factory(work, selected["package"], private_key, known_hosts, authorize)
+    return publisher.publish(selected, receipt.parent / "recipe", publisher.head())
+
+
 def main(arguments=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -109,7 +134,14 @@ def main(arguments=None):
     prepared.add_argument("--receipt", type=Path, required=True)
     for command in [selected, prepared]:
         command.add_argument("--operation", required=True)
-    for command in [selected, provenance, collected, prepared]:
+    published = commands.add_parser("publish", help="deliver the prepared recipe with the release lane's admission")
+    published.add_argument("--input-root", type=Path, required=True)
+    published.add_argument("--receipt", type=Path, required=True)
+    published.add_argument("--version", required=True)
+    published.add_argument("--channel", choices=["stable", "preview"], required=True)
+    published.add_argument("--private-key", type=Path, required=True)
+    published.add_argument("--known-hosts", type=Path, required=True)
+    for command in [selected, provenance, collected, prepared, published]:
         command.add_argument("--source-commit", required=True)
     args = parser.parse_args(arguments)
     try:
@@ -120,6 +152,10 @@ def main(arguments=None):
                               args.source_commit)
         elif args.command == "collect":
             collect(args.repository_url, args.channel, args.source_commit, args.final_artifacts, args.output)
+        elif args.command == "publish":
+            from .release_qualification import require
+            print(json.dumps(publish(args.input_root, args.receipt, args.source_commit, args.version, args.channel,
+                                     args.private_key, args.known_hosts, require)))
         else:
             prepare(args.input_root, args.source_commit, args.receipt, args.operation)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:

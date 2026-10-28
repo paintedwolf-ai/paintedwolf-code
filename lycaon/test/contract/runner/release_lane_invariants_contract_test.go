@@ -283,3 +283,64 @@ func TestReleaseHaltWithdrawsLinuxRepositories(t *testing.T) {
 		t.Fatal("release halt must prepare Linux withdrawal in dry runs and apply it only when publishing")
 	}
 }
+
+// Each Linux delivery credential reaches only the job that publishes with it, after the
+// shared gates, the Linux repositories it depends on and a fresh Qualification lookup.
+func TestLinuxDeliveryCredentialsReachOnlyTheirGatedPublisher(t *testing.T) {
+	t.Parallel()
+	workflow := parseLane(t, ".github/workflows/release.yml")
+	for credential, want := range map[string]struct{ job, environment, command string }{
+		"secrets.NIX_CACHE_SIGNING_KEY": {"publish-nix-cache", "release-publication", "scripts.nix_cache.release_lane publish"},
+		"secrets.AUR_SSH_PRIVATE_KEY":   {"publish-aur", "release-aur", "release:publish:aur-recipe -- publish"},
+	} {
+		var holders []string
+		for _, name := range sortedJobs(workflow) {
+			if strings.Contains(workflow.Jobs[name].text(), credential) {
+				holders = append(holders, name)
+			}
+		}
+		if !slices.Equal(holders, []string{want.job}) {
+			t.Fatalf("%s holders = %v, want only %s", credential, holders, want.job)
+		}
+		job := workflow.Jobs[want.job]
+		ancestors := workflow.ancestors(want.job)
+		for _, gate := range []string{"ship-gates", "publish-immutable", "publish-linux-repositories"} {
+			if !ancestors[gate] {
+				t.Errorf("%s publishes before %s", want.job, gate)
+			}
+		}
+		if job.Environment != want.environment || !strings.Contains(job.If, "needs.classify.outputs.publish == 'true'") ||
+			!strings.Contains(job.If, "needs.classify.outputs.linux_public == 'true'") {
+			t.Errorf("%s must run in %s only when publishing a public Linux release", want.job, want.environment)
+		}
+		// The publishing command rereads Qualification with the run's token.
+		var rechecks bool
+		for _, step := range job.Steps {
+			rechecks = rechecks || (strings.Contains(step.Run, want.command) && step.Env["GH_TOKEN"] == "${{ github.token }}")
+		}
+		if !rechecks {
+			t.Errorf("%s must publish through %q with the Qualification token", want.job, want.command)
+		}
+	}
+	checks := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-secrets-check.yml")
+	for _, name := range []string{"NIX_CACHE_SIGNING_KEY", "AUR_SSH_PRIVATE_KEY"} {
+		if !strings.Contains(checks, "secrets."+name) {
+			t.Errorf("release secrets check must validate %s", name)
+		}
+	}
+}
+
+// A halt withdraws Nix cache availability in the same protected run as the repositories.
+func TestReleaseHaltWithdrawsNixCacheAvailability(t *testing.T) {
+	t.Parallel()
+	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
+	for _, step := range halt.Steps {
+		if strings.Contains(step.Run, "scripts.nix_cache.release_lane withdraw") {
+			if !strings.Contains(step.If, "!inputs.dry_run") {
+				t.Fatal("Nix cache withdrawal must apply only outside dry runs")
+			}
+			return
+		}
+	}
+	t.Fatal("release halt must withdraw the halted release's Nix cache availability")
+}

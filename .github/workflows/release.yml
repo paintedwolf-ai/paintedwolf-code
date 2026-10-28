@@ -105,6 +105,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       cask_token: ${{ steps.release.outputs.cask_token }}
       matrix: ${{ steps.release.outputs.matrix }}
+      linux_public: ${{ steps.release.outputs.linux_public }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -182,6 +183,7 @@ jobs:
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
           echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
+          echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
     needs: [classify, ship-gates, aggregate-release]
@@ -562,6 +564,44 @@ jobs:
     uses: ./.github/workflows/linux-candidates.yml
     with:
       source_sha: ${{ needs.classify.outputs.source_sha }}
+
+  # Each native system builds its own closure without credentials; publication signs it.
+  nix-closures:
+    needs: [classify, compatibility]
+    if: ${{ needs.classify.outputs.linux_public == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Install the pinned Nix
+        run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - name: Build and export the application closure
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/nix-closure/outputs"
+          nix build --extra-experimental-features 'nix-command flakes' --no-link --print-out-paths \
+            ".#packages.${SYSTEM}.default" > "${RUNNER_TEMP}/nix-closure/outputs/${SYSTEM}.txt"
+          xargs nix copy --extra-experimental-features nix-command \
+            --to "file://${RUNNER_TEMP}/nix-closure/${SYSTEM}" < "${RUNNER_TEMP}/nix-closure/outputs/${SYSTEM}.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-closure-${{ matrix.system }}
+          path: ${{ runner.temp }}/nix-closure
+          if-no-files-found: error
+          retention-days: 14
 
   aggregate-release:
     needs: [classify, build-release]
@@ -974,6 +1014,130 @@ jobs:
             --generations linux-native --generations linux-pacman --artifacts release-artifacts \
             --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
             --base-url "${DOWNLOAD_BASE_URL}"
+
+  publish-nix-cache:
+    needs: [classify, ship-gates, publish-immutable, publish-linux-repositories, nix-closures]
+    if: ${{ needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Require the provisioned production cache trust
+        run: python3 -m scripts.nix_cache.release_lane check-trust
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned Nix
+        run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: nix-closure-*
+          path: nix-closures
+          merge-multiple: true
+      - name: Import both closures into the local store
+        run: |
+          set -euo pipefail
+          for system in x86_64-linux aarch64-linux; do
+            xargs nix copy --extra-experimental-features nix-command --no-check-sigs \
+              --from "file://${GITHUB_WORKSPACE}/nix-closures/${system}" < "nix-closures/outputs/${system}.txt"
+          done
+      - name: Sign and publish the release's Nix closures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane publish --outputs nix-closures/outputs \
+            --source-commit "${SOURCE_SHA}" --version "${VERSION}"
+
+  # AUR availability is a separate delivery event after the pacman repositories it pins.
+  publish-aur:
+    needs: [classify, ship-gates, publish-immutable, publish-linux-repositories]
+    if: ${{ needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' }}
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: release-aur
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - name: Prepare the recipe owner
+        run: |
+          pacman -Syu --noconfirm --needed base-devel python git gnupg openssh sudo github-cli
+          useradd --create-home pw-aur
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: /tmp/final-artifacts
+      - name: Collect the published pacman generations
+        env:
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          ./task release:publish:aur-recipe -- collect --repository-url "${DOWNLOAD_BASE_URL}/linux" \
+            --channel "${CHANNEL}" --source-commit "${SOURCE_SHA}" \
+            --final-artifacts /tmp/final-artifacts --output /tmp/aur-inputs
+          mkdir /tmp/aur-output
+          chown -R pw-aur:pw-aur "${WORKSPACE}" /tmp/aur-inputs /tmp/aur-output
+      - name: Prepare the bound recipe
+        env:
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+        run: |
+          sudo -H --preserve-env=PATH -u pw-aur ./task release:publish:aur-recipe -- prepare \
+            --input-root /tmp/aur-inputs --source-commit "${SOURCE_SHA}" \
+            --operation prepare --receipt /tmp/aur-output/delivery.json
+      - name: Deliver the recipe to the AUR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${AUR_SSH_PRIVATE_KEY:?missing AUR_SSH_PRIVATE_KEY}"
+          sudo -H --preserve-env=PATH,GH_TOKEN,GITHUB_REPOSITORY,AUR_SSH_PRIVATE_KEY -u pw-aur bash -c '
+            set -euo pipefail
+            keys="$(mktemp -d)"
+            (umask 077; printf "%s\n" "${AUR_SSH_PRIVATE_KEY}" > "${keys}/id" && cp packaging/linux/aur-known-hosts "${keys}/known_hosts")
+            unset AUR_SSH_PRIVATE_KEY
+            ./task release:publish:aur-recipe -- publish --input-root /tmp/aur-inputs \
+              --receipt /tmp/aur-output/delivery.json --source-commit "$0" --version "$1" --channel "$2" \
+              --private-key "${keys}/id" --known-hosts "${keys}/known_hosts"' "${SOURCE_SHA}" "${VERSION}" "${CHANNEL}"
+      - name: Retain the delivered recipe
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: aur-recipe-delivery
+          path: /tmp/aur-output
+          if-no-files-found: warn
 
   update-cask:
     needs: [classify, publish-immutable]
