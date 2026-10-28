@@ -179,11 +179,11 @@ func (h *harness) run(source, stdin string) run {
 func (h *harness) runWith(ports Ports, source, stdin string) run {
 	h.t.Helper()
 	request, release := h.bind(source)
-	defer release()
 	argv := request.Argv
 	builtins := h.owners.Builtins(ports)
 	var stdout, stderr bytes.Buffer
 	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	release()
 	if validation := result.Validate(); validation != nil {
 		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
 	}

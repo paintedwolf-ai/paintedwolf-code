@@ -74,7 +74,7 @@ func TestDfRefusesPathsOutsideReadAuthority(t *testing.T) {
 		reached = true
 		return fixtureVolume(file, path)
 	}
-	r := h.exec("", "df", filepath.Dir(h.root))
+	r := h.exec("", "df", "/etc")
 	if r.err == nil || r.result.Status == 0 || reached || r.stdout != "" {
 		t.Fatalf("df outside the roots: %+v reached %v stdout %q", r.result, reached, r.stdout)
 	}

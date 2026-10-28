@@ -22,13 +22,14 @@ type treeRun struct {
 }
 
 // treeNode is one listed entry and, for a directory below -L, its listed
-// children. err marks a directory tree could not open.
+// children. err marks a directory tree could not open; missing marks an
+// operand that does not exist.
 type treeNode struct {
-	e        entry
-	display  string
-	target   string
-	children []treeNode
-	err      bool
+	e            entry
+	display      string
+	target       string
+	children     []treeNode
+	err, missing bool
 }
 
 // tree's UTF-8 branches; the vertical continuation uses no-break spaces.
@@ -69,7 +70,7 @@ func runTree(inv *invocation) error {
 			return err
 		}
 		if r.json {
-			roots = append(roots, r.jsonNode(root, 1, true))
+			roots = append(roots, r.jsonNode(root, 1))
 		} else {
 			r.textRoot(&text, root)
 		}
@@ -116,7 +117,7 @@ func (r *treeRun) root(operand string) (treeNode, error) {
 			return node, err
 		}
 		r.inv.status = max(r.inv.status, 2)
-		node.err = true
+		node.err, node.missing = true, true
 		return node, nil
 	}
 	if !e.dir() {
@@ -234,11 +235,11 @@ func (r *treeRun) textChildren(out *strings.Builder, children []treeNode, prefix
 }
 
 // jsonNode renders tree -J's object for one entry at an indentation level.
-func (r *treeRun) jsonNode(node treeNode, level int, root bool) string {
+func (r *treeRun) jsonNode(node treeNode, level int) string {
 	indent := strings.Repeat("    ", level)
 	kind := "file"
 	switch {
-	case root && node.err && node.e.bound.Resolved.Abs == "":
+	case node.missing:
 		kind = "unknown"
 	case node.e.link:
 		kind = "link"
@@ -257,7 +258,7 @@ func (r *treeRun) jsonNode(node treeNode, level int, root bool) string {
 	}
 	parts := make([]string, len(node.children))
 	for i, child := range node.children {
-		parts[i] = r.jsonNode(child, level+1, false)
+		parts[i] = r.jsonNode(child, level+1)
 	}
 	return out + `,"contents":[` + "\n" + strings.Join(parts, ",\n") + "\n" + indent + "]}"
 }

@@ -52,6 +52,10 @@ func runEnvsubst(inv *invocation) error {
 	maximum := inv.limit("record_bytes")
 	for {
 		text, err := reader.ReadSlice('$')
+		found := err == nil
+		if found {
+			text = text[:len(text)-1]
+		}
 		if _, werr := writer.Write(text); werr != nil {
 			return werr
 		}
@@ -61,14 +65,14 @@ func runEnvsubst(inv *invocation) error {
 		if err != nil && !errors.Is(err, bufio.ErrBufferFull) {
 			return err
 		}
-		if err != nil {
+		if !found {
 			continue
 		}
 		ref, err := readReference(reader, maximum)
 		if err != nil {
 			return err
 		}
-		replacement := ref.spelling
+		replacement := "$" + ref.spelling
 		if ref.name != "" && (only == nil || only[ref.name]) {
 			replacement = values[ref.name]
 		}
@@ -81,9 +85,9 @@ func runEnvsubst(inv *invocation) error {
 	}
 }
 
-// readReference reads what follows a $ already copied to output: a name or
-// a braced name. The spelling excludes that $; a reference GNU would not
-// substitute has no name and is copied as spelled.
+// readReference reads what follows a $: a name or a braced name. The
+// spelling excludes the $; a reference GNU would not substitute has no name
+// and is copied as spelled.
 func readReference(reader *bufio.Reader, maximum int64) (envsubstReference, error) {
 	var spelling strings.Builder
 	braced := false

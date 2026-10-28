@@ -114,7 +114,11 @@ func (w *duWalk) entry(display string, bound projectpaths.BoundPath, st fseffect
 	}
 	size := st.Blocks * 512
 	if w.opts.apparent {
-		size = st.Size
+		// GNU du 9 counts a directory's own apparent size as zero.
+		size = 0
+		if !dir {
+			size = st.Size
+		}
 	}
 	if dir {
 		children, _, err := w.inv.children(bound, lsOptions{almost: true}, &w.visited, w.maximum, depth == 0)

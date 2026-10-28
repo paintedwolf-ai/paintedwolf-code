@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // cmpOptions are cmp's selections; limit and skips are byte counts.
@@ -56,6 +57,9 @@ func runCmp(inv *invocation) error {
 			return err
 		}
 		defer release()
+	}
+	if err := inv.admitPaths(files[:]); err != nil {
+		return err
 	}
 	var sides [2]cmpSide
 	for i, file := range files {
@@ -215,6 +219,27 @@ func caretByte(c byte) string {
 // gnuQuote is GNU's locale quoting of a file name in diagnostics.
 func gnuQuote(name string) string {
 	return "'" + strings.ReplaceAll(name, "'", `'\''`) + "'"
+}
+
+// admitPaths binds every PATH operand and its link target before the first is
+// opened, so a refused operand stops the comparison before anything is pinned.
+// Ordinary failures are left for the open to report.
+func (inv *invocation) admitPaths(fields []commandprogram.Field) error {
+	for _, field := range fields {
+		if field.Value == "-" || field.ProcessSubstitution() != nil {
+			continue
+		}
+		bound, err := inv.paths.Bind(inv.ctx, field.Value, false)
+		if err == nil && !bound.Null {
+			_, err = bound.Stat(true)
+		}
+		if err != nil {
+			if _, ok := ordinary(projectpaths.PathOperationError(field.Value, err)); !ok {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // openHeld acquires one streamed operand that stays open beside later ones,

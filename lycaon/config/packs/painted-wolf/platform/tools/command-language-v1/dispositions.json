@@ -423,7 +423,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Implement comprehensive diff command frontend",
-      "behavior_change_or_retention": "Implement native diff (-u, -U N, -q, -w, -b, -B, -r) over document-aware sources with comparison statuses and binary handling; comparison status 1 can publish a typed complete result while remaining status 1",
+      "behavior_change_or_retention": "Implement native diff (-u, -U N, -q, -w, -b, -B, -r) over document-aware sources with comparison statuses and binary handling, and cmp (-s, -l, -b, -n, -i) over the same pinned inputs; comparison status 1 can publish a typed complete result while remaining status 1",
       "existing_semantic_difference": "Bounded two-file document-aware diff in structured result",
       "implementing_issues": [
         "P08",
@@ -1174,7 +1174,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Implement comprehensive ls and retain Bialy-loadable survey_repo",
-      "behavior_change_or_retention": "Implement literal ls (-l, -a, -A, -1, -d, -R, -h, -F, -t, -S, -r); retain survey_repo (repo_map) as a Bialy-loadable domain tool and command built-in",
+      "behavior_change_or_retention": "Implement literal ls (-l, -a, -A, -1, -d, -R, -h, -F, -t, -S, -r) and tree (-L, -a, -d, -f, -I, -P, --gitignore, --noreport, -J) over the search walk; retain survey_repo (repo_map) as a Bialy-loadable domain tool and command built-in",
       "existing_semantic_difference": "Targeted entries or unscoped repository map/orientation",
       "implementing_issues": [
         "P12",
@@ -1617,7 +1617,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Implement comprehensive cat/head/tail/nl and outline built-in",
-      "behavior_change_or_retention": "Implement cat, head (including legacy -N), tail (including legacy -N and +N), nl, file (-b, -i), xxd (-l, -s, -p, -g), hexdump -C (-n, -s), checksums (shasum -a/-c, sha1sum, sha256sum, sha512sum, md5sum) and base64 (GNU -d/-w, BSD -D/-b) over shared-document snapshots and read-floor files without advancing conversational read bases; expose outline as a domain operation and command built-in; delivered exact command source windows carry revision/range evidence for later retained surgical edits",
+      "behavior_change_or_retention": "Implement cat, head (including legacy -N), tail (including legacy -N and +N), nl, file (-b, -i), xxd (-l, -s, -p, -g), hexdump -C (-n, -s), od (-A, -t, -N, -j, -v), strings (-n, -t, -e), checksums (shasum -a/-c, sha1sum, sha256sum, sha512sum, md5sum) and base64 (GNU -d/-w, BSD -D/-b) over shared-document snapshots and read-floor files without advancing conversational read bases; expose outline as a domain operation and command built-in; delivered exact command source windows carry revision/range evidence for later retained surgical edits",
       "existing_semantic_difference": "Document snapshots; ranges/symbols/outlines; numbered lines and automatic digests",
       "implementing_issues": [
         "P07",
@@ -2100,7 +2100,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Implement dual GNU/BSD stat command frontend",
-      "behavior_change_or_retention": "Implement stat accepting both GNU -c and BSD -f format strings with explicit symlink behavior",
+      "behavior_change_or_retention": "Implement stat accepting both GNU -c and BSD -f format strings with explicit symlink behavior, du over bounded held-root walks and df over the volumes holding admitted paths",
       "existing_semantic_difference": "Lstat metadata and optional directory counts; structured fields",
       "implementing_issues": [
         "P05",

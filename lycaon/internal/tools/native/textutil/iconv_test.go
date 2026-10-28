@@ -35,6 +35,8 @@ func TestIconvConvertsBetweenCodeSets(t *testing.T) {
 		{"iconv -t ascii//TRANSLIT", "café “quoted” – naïve … ﬁ 日\n", "cafe \"quoted\" - naive ... fi ?\n", 0},
 		{"iconv -t latin1//TRANSLIT", "Ωé", "?\xe9", 0},
 		{"iconv -f latin1", "", "", 0},
+		{"iconv -f utf-16 -t utf-8", "\xfe\xff\xff\xfd", "\ufffd", 0},
+		{"iconv -f utf-16le", "\xfd\xff", "\ufffd", 0},
 	})
 }
 

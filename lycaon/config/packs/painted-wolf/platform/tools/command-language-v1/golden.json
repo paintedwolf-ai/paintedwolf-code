@@ -1946,6 +1946,215 @@
         }
       },
       "qualification": "normative definition; P08 fixture tests exercise predicate owners; connected parser/runtime execution remains required"
+    },
+    {
+      "id": "du-apparent-total",
+      "program": "du -cb ./a.txt ./b.txt",
+      "setup": {
+        "files": {
+          "a.txt": "alpha\n",
+          "b.txt": "be\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "6\t./a.txt\n3\t./b.txt\n9\ttotal\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "cmp-silent-different",
+      "program": "cmp -s ./a ./b",
+      "setup": {
+        "files": {
+          "a": "abc\n",
+          "b": "abd\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 1,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "cmp-list-offsets",
+      "program": "cmp -l ./a ./b",
+      "setup": {
+        "files": {
+          "a": "abcdef",
+          "b": "aXcdeY"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "2 142 130\n6 146 131\n",
+        "stderr": "",
+        "status": 1,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "od-hex-bytes",
+      "program": "od -A x -t x1 -N 16 ./bin",
+      "setup": {
+        "files": {
+          "bin": "Hello, world!\n\u0000\u0001"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "000000 48 65 6c 6c 6f 2c 20 77 6f 72 6c 64 21 0a 00 01\n000010\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "strings-min-length",
+      "program": "strings -n 8 ./bin",
+      "setup": {
+        "files": {
+          "bin": "ab\u0000hello world\u0000short\u0001longer string\u0002x"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "hello world\nlonger string\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "tree-gitignore-depth",
+      "program": "tree -L 2 --gitignore proj",
+      "setup": {
+        "files": {
+          "proj/.gitignore": "*.log\n",
+          "proj/README.md": "r\n",
+          "proj/src/main.go": "package main\n",
+          "proj/src/debug.log": "x\n",
+          "proj/src/pkg/util.go": "package pkg\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "proj\n├── README.md\n└── src\n    ├── main.go\n    └── pkg\n\n3 directories, 2 files\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "iconv-latin1-redirect",
+      "program": "printf 'caf\\351\\n' | iconv -f latin1 -t utf-8 > ./out.txt",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "document-publication",
+            "path": "out.txt",
+            "bytes": "café\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "envsubst-shell-format",
+      "program": "printf 'h=$HOST u=$USER\\n' | HOST=web USER=me envsubst '$HOST'",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "h=web u=$USER\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     }
   ]
 }

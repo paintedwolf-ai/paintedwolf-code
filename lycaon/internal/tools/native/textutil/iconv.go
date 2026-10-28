@@ -109,14 +109,15 @@ type conversion struct {
 	encoder          transform.Transformer
 	legitReplacement []byte
 	omitted          bool
-	scratch          [64]byte
+	// decoded holds one decoded character; encoded one encoded one.
+	decoded, encoded [64]byte
 }
 
 func newConversion(from, to charset, translit, ignore bool) *conversion {
 	c := &conversion{from: from, to: to, translit: translit, ignore: ignore}
 	if from.decode != nil {
 		c.decoder = from.decode.NewDecoder()
-		c.legitReplacement, _ = from.decode.NewEncoder().Bytes([]byte("�"))
+		c.legitReplacement = encodedReplacement(from.decode)
 	}
 	if to.encode != nil {
 		c.encoder = to.encode.NewEncoder()
@@ -124,9 +125,23 @@ func newConversion(from, to charset, translit, ignore bool) *conversion {
 	return c
 }
 
-// decodeOne reads one character at the start of src. It returns the
-// character's UTF-8 bytes (possibly none, for a shift sequence) and the
-// bytes it consumed; consumed is zero when src may hold only part of one.
+// encodedReplacement is U+FFFD as the code set itself encodes it, so a real
+// replacement character in the input is not mistaken for invalid bytes. Two
+// are encoded and the second kept, which leaves out any byte order mark.
+func encodedReplacement(e encoding.Encoding) []byte {
+	one, errOne := e.NewEncoder().Bytes([]byte("\ufffd"))
+	two, errTwo := e.NewEncoder().Bytes([]byte("\ufffd\ufffd"))
+	if errOne != nil || errTwo != nil {
+		return nil
+	}
+	return two[len(one):]
+}
+
+// decodeOne reads one character at the start of src, which holds eight
+// bytes unless the input ends sooner (atEOF). It returns the character's
+// UTF-8 bytes (possibly none, for a shift sequence) and the bytes it
+// consumed. A sequence still incomplete at the input's end is errIncomplete;
+// one no decoder completes within eight bytes is illegal.
 func (c *conversion) decodeOne(src []byte, atEOF bool) ([]byte, int, error) {
 	if c.decoder == nil {
 		if src[0] >= 0x80 {
@@ -135,19 +150,15 @@ func (c *conversion) decodeOne(src []byte, atEOF bool) ([]byte, int, error) {
 		return src[:1], 1, nil
 	}
 	for window := 1; window <= min(len(src), 8); window++ {
-		final := atEOF && window == len(src)
-		nDst, nSrc, err := c.decoder.Transform(c.scratch[:], src[:window], final)
+		nDst, nSrc, err := c.decoder.Transform(c.decoded[:], src[:window], false)
 		if errors.Is(err, transform.ErrShortSrc) && nSrc == 0 {
 			continue
 		}
 		if err != nil && !errors.Is(err, transform.ErrShortSrc) {
 			return nil, max(nSrc, 1), errIllegal
 		}
-		out := c.scratch[:nDst]
-		if bytes.Contains(out, []byte("�")) && !bytes.Equal(src[:nSrc], c.legitReplacement) {
-			if final {
-				return nil, nSrc, errIncomplete
-			}
+		out := c.decoded[:nDst]
+		if bytes.Contains(out, []byte("\ufffd")) && !bytes.Equal(src[:nSrc], c.legitReplacement) {
 			return nil, nSrc, errIllegal
 		}
 		return out, nSrc, nil
@@ -155,10 +166,7 @@ func (c *conversion) decodeOne(src []byte, atEOF bool) ([]byte, int, error) {
 	if atEOF {
 		return nil, len(src), errIncomplete
 	}
-	if len(src) >= 8 {
-		return nil, 1, errIllegal
-	}
-	return nil, 0, nil
+	return nil, 1, errIllegal
 }
 
 // encodeOne writes one character's encoding, or reports it unencodable.
@@ -171,11 +179,11 @@ func (c *conversion) encodeOne(out *bytes.Buffer, char []byte) bool {
 		out.Write(char)
 		return true
 	}
-	nDst, _, err := c.encoder.Transform(c.scratch[:], char, false)
+	nDst, _, err := c.encoder.Transform(c.encoded[:], char, false)
 	if err != nil {
 		return false
 	}
-	out.Write(c.scratch[:nDst])
+	out.Write(c.encoded[:nDst])
 	return true
 }
 
@@ -247,8 +255,6 @@ func (c *conversion) run(ctx context.Context, in io.Reader, w io.Writer) (int64,
 		}
 		char, n, err := c.decodeOne(src, len(src) < 8)
 		switch {
-		case n == 0:
-			err = errIncomplete
 		case errors.Is(err, errIllegal) && c.ignore:
 			c.omitted, err = true, nil
 		case err == nil && !c.emit(&out, char):
@@ -273,8 +279,8 @@ func (c *conversion) run(ctx context.Context, in io.Reader, w io.Writer) (int64,
 		}
 	}
 	if c.encoder != nil {
-		nDst, _, _ := c.encoder.Transform(c.scratch[:], nil, true)
-		out.Write(c.scratch[:nDst])
+		nDst, _, _ := c.encoder.Transform(c.encoded[:], nil, true)
+		out.Write(c.encoded[:nDst])
 	}
 	_, err := w.Write(out.Bytes())
 	return position, err
@@ -309,23 +315,20 @@ func runIconv(inv *invocation) error {
 		return err
 	}
 	defer closeSources(sources)
-	var w io.Writer = inv.out
 	destination, staged := inv.value("-o")
-	var output *nativeutility.Output
-	if staged {
-		stage, err := inv.openDestination(destination)
-		if err != nil {
-			return err
-		}
-		output = nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
-		w = output
-		err = inv.convertSources(sources, from, to, translit, ignore, w)
-		if err != nil || inv.status != 0 {
-			return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
-		}
-		return inv.settleStage(stage, output.Flush())
+	if !staged {
+		return inv.convertSources(sources, from, to, translit, ignore, inv.out)
 	}
-	return inv.convertSources(sources, from, to, translit, ignore, w)
+	// -o publishes only a complete conversion, like a redirect.
+	stage, err := inv.openDestination(destination)
+	if err != nil {
+		return err
+	}
+	output := nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
+	if err := inv.convertSources(sources, from, to, translit, ignore, output); err != nil || inv.status != 0 {
+		return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
+	}
+	return inv.settleStage(stage, output.Flush())
 }
 
 // convertSources converts each input in turn; glibc's diagnostics end the run

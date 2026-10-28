@@ -1001,7 +1001,7 @@
           }
         }
       },
-      "notes": "GNU du over the held roots: each operand's tree is walked through the same bounded directory reads as ls -R, links are not followed, and hard-linked files count once. Directories print after their contents in unsigned byte order; -a adds files, -s prints operand totals only and -d N/--max-depth=N limits printed depth. Sizes are allocated blocks (512-byte units from the platform) in KiB rounded up; --apparent-size and BSD -A use byte sizes, -b is apparent bytes, -m MiB, -h powers of 1024 like ls -h, and the last unit option wins. -c adds a total line; -x stays on each operand's device. Walks over traversal_visits refuse; a capped walk never reports a short total. Allocation sizes need POSIX metadata.",
+      "notes": "GNU du over the held roots: each operand's tree is walked through the same bounded directory reads as ls -R, links are not followed, and hard-linked files count once. Directories print after their contents in unsigned byte order; -a adds files, -s prints operand totals only and -d N/--max-depth=N limits printed depth. Sizes are allocated blocks (512-byte units from the platform) in KiB rounded up; --apparent-size and BSD -A use file byte sizes with directories counting zero as in GNU du 9, -b is apparent bytes, -m MiB, -h powers of 1024 like ls -h, and the last unit option wins. -c adds a total line; -x stays on each operand's device. Walks over traversal_visits refuse; a capped walk never reports a short total. Allocation sizes need POSIX metadata.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/literal/du.go",
         "tests": [
