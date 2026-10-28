@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 import tempfile
 import urllib.request
@@ -66,10 +66,19 @@ def prepare(bad: str, last_good: str | None, *, read=current) -> list[dict]:
     return rows
 
 
+def retained_path(directory: Path, item: dict) -> Path:
+    """A retained object lands inside the reconstruction directory, beside the generation record."""
+    path = PurePosixPath(item["path"])
+    if (not path.parts or path.is_absolute() or ".." in path.parts or path.as_posix() != item["path"]
+            or path.parts == ("generation.json",)):
+        raise ValueError(f"retained Linux generation lists an unsupported object path {item['path']!r}")
+    return directory / path
+
+
 def download(base_url: str, row: dict, directory: Path):
     """Reconstruct the retained generation from its public immutable objects."""
-    for item in row["receipt"]["objects"]:
-        target = directory / item["path"]
+    targets = [(item, retained_path(directory, item)) for item in row["receipt"]["objects"]]
+    for item, target in targets:
         target.parent.mkdir(parents=True, exist_ok=True)
         url = f"{base_url}/{STORAGE_PREFIX}/generations/{row['replacement']}/{item['path']}"
         with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "painted-wolf-release/1"}),
