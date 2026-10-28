@@ -22,10 +22,12 @@ type pipeRendezvous struct {
 	closed           bool
 	err              error
 	readers, writers map[*rendezvousWaiter]bool
+	writerActive     bool
+	writerQueue      map[*rendezvousWaiter]bool
 }
 
 func newPipeRendezvous(ctx context.Context) *pipeRendezvous {
-	p := &pipeRendezvous{lifetime: context.WithoutCancel(ctx), readers: map[*rendezvousWaiter]bool{}, writers: map[*rendezvousWaiter]bool{}}
+	p := &pipeRendezvous{lifetime: context.WithoutCancel(ctx), readers: map[*rendezvousWaiter]bool{}, writers: map[*rendezvousWaiter]bool{}, writerQueue: map[*rendezvousWaiter]bool{}}
 	p.cond = sync.NewCond(&p.mu)
 	return p
 }
@@ -141,4 +143,33 @@ func (p *pipeRendezvous) close(err error) {
 		wakeEndpoints(p.writers)
 		p.signal()
 	}
+}
+
+// acquireWriter serializes ingress accounting and completion with byte delivery.
+func (p *pipeRendezvous) acquireWriter(activity *ExecutionWait) (func(), error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var waiter *rendezvousWaiter
+	defer func() {
+		if waiter != nil {
+			wakeEndpoint(waiter)
+			delete(p.writerQueue, waiter)
+		}
+	}()
+	for p.writerActive {
+		if waiter == nil {
+			waiter = &rendezvousWaiter{activity: activity}
+		}
+		if err := p.wait(p.lifetime, waiter, p.writerQueue); err != nil {
+			return nil, err
+		}
+	}
+	p.writerActive = true
+	return func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		wakeEndpoints(p.writerQueue)
+		p.writerActive = false
+		p.signal()
+	}, nil
 }

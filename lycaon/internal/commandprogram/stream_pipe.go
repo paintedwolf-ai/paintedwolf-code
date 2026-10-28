@@ -44,7 +44,6 @@ type BytePipe struct {
 	budget        *ByteBudget
 	done          chan struct{}
 	once          sync.Once
-	writeMu       sync.Mutex
 	mu            sync.Mutex
 	digest        hash.Hash
 	completion    StreamCompletion
@@ -94,8 +93,11 @@ func (p *BytePipe) pipeError(err error) error {
 func (p *BytePipe) Write(b []byte) (int, error) { return p.write(b, nil) }
 
 func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
+	release, err := p.stream.acquireWriter(activity)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	p.mu.Lock()
 	terminal, terminalErr := p.completion.Termination, p.terminalError
 	p.mu.Unlock()
@@ -127,8 +129,11 @@ func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
 // complete stream. Utility exit status and publication eligibility remain in
 // ProducerResult; neither is inferred from this close.
 func (p *BytePipe) CloseProducer(err error) error {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
+	release, waitErr := p.stream.acquireWriter(nil)
+	if waitErr != nil {
+		return waitErr
+	}
+	defer release()
 	if err != nil {
 		p.finish(StreamIncomplete, err)
 	} else {
@@ -177,7 +182,7 @@ func (p *BytePipe) finish(termination StreamTermination, err error) {
 		p.completion.Termination = termination
 		p.terminalError = err
 		p.mu.Unlock()
-		// Close both ends so neither an idle writer nor a blocked reader leaks.
+		// Wake blocked endpoints after recording the terminal stream facts.
 		p.stream.close(err)
 		close(p.done)
 	})
