@@ -6,8 +6,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -85,11 +87,39 @@ func TestMutationTreePreflightCountsRootAndPreservesReadPolicy(t *testing.T) {
 
 func TestVerboseRemovalSurveysMetadataDirectories(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/.hidden/file": "a", "tree/.git/config": "b", "tree/.paintedwolf/settings": "c"})
+	argv, err := (commandprogram.CatalogBinder{}).Bind(h.owners.specs["rm"], commandprogram.Fields{{Value: "rm"}, {Value: "-v"}, {Value: "tree"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := &invocation{ctx: t.Context(), owners: h.owners, argv: argv}
+	dirs, err := inv.directoriesUnder(filepath.Join(h.root, "tree"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"tree", "tree/.hidden", "tree/.git", "tree/.paintedwolf"} {
+		if !dirs[filepath.Join(h.root, rel)] {
+			t.Fatalf("directory missing from preflight: %s", rel)
+		}
+	}
 	result := h.run("", "rm", "-r", "-v", "tree")
+	reject := toolrejection.AsToolReject(result.err)
+	if reject == nil || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
+		t.Fatalf("metadata confinement lost: %+v %v", result.result, result.err)
+	}
+	if _, err := os.Lstat(filepath.Join(h.root, "tree/.git/config")); err != nil {
+		t.Fatalf("refused removal changed tree: %v", err)
+	}
+	admissible := newHarness(t, map[string]string{"tree/.hidden/file": "a"})
+	result = admissible.run("", "rm", "-r", "-v", "tree")
 	if result.err != nil || result.result.Status != 0 {
 		t.Fatalf("remove %+v err=%v stderr=%s", result.result, result.err, result.stderr)
 	}
-	if _, err := os.Lstat(filepath.Join(h.root, "tree")); !errors.Is(err, fs.ErrNotExist) {
+	for _, rel := range []string{"tree", "tree/.hidden"} {
+		if !strings.Contains(result.stdout, "removed directory '"+rel+"'\n") {
+			t.Fatalf("directory classification: %q", result.stdout)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(admissible.root, "tree")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("tree remains: %v", err)
 	}
 }
