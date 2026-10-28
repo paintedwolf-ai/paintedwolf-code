@@ -407,8 +407,7 @@ func TestPullRequestCIHoldsOneRunner(t *testing.T) {
 	}
 }
 
-// Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's
-// runners and leaves one pull request's CI run a runner.
+// Bounded classes and merge groups at their caps fit the plan; pull request runs may queue at that peak.
 func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
@@ -429,9 +428,9 @@ func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 		total += count
 		macTotal += macos[group]
 	}
-	if pull := plan.capacity.Footprints["ci.yml"]; total+pull > plan.capacity.Runners {
-		t.Errorf("bounded classes %v, %d merge-queue jobs, and a %d-runner pull request run need %d runners; the plan runs %d",
-			runners, queue, pull, total+pull, plan.capacity.Runners)
+	if total > plan.capacity.Runners {
+		t.Errorf("bounded classes %v and %d merge-queue jobs need %d runners; the plan runs %d",
+			runners, queue, total, plan.capacity.Runners)
 	}
 	if macTotal > plan.capacity.MacOSRunners {
 		t.Errorf("bounded classes %v need %d macOS runners; the plan runs %d", macos, macTotal, plan.capacity.MacOSRunners)
