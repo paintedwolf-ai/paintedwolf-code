@@ -166,6 +166,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
+                           "linux_launch": bool({"test:full", "test:confine:linux", "coverage:changes"} & set(lane["targets"])),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
