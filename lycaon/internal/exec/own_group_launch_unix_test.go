@@ -26,16 +26,18 @@ func TestRunInOwnGroupReportsACommandRemovedAfterPreparation(t *testing.T) {
 }
 
 func TestHelperProbeGroupSharesSupervisedSettlement(t *testing.T) {
-	if _, err := StartInOwnGroup(exec.Command("/bin/true")); err == nil {
+	path, err := exec.LookPath("true")
+	testutil.FailErr(t, "locate synthetic probe", err)
+	if _, err := StartInOwnGroup(exec.Command(path)); err == nil {
 		t.Fatal("public group accepted an unprepared command")
 	}
-	testutil.FailErr(t, "settle fixed helper probe", runHelperProbeGroup(exec.CommandContext(t.Context(), "/bin/true")))
+	testutil.FailErr(t, "settle fixed helper probe", runHelperProbeGroup(exec.CommandContext(t.Context(), path)))
 	if err := runHelperProbeGroup(exec.CommandContext(t.Context(), "/nonexistent/probe")); err == nil {
 		t.Fatal("missing helper probe succeeded")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	cmd := exec.CommandContext(ctx, "/bin/true")
+	cmd := exec.CommandContext(ctx, path)
 	if err := runHelperProbeGroup(cmd); !errors.Is(err, context.Canceled) || cmd.Process != nil {
 		t.Fatalf("cancelled probe started: process=%v err=%v", cmd.Process, err)
 	}
