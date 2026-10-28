@@ -269,3 +269,53 @@ func TestBrokerEndsAbandonedNonDetachedCallAndSupervisesEmptyTree(t *testing.T) 
 	_ = client2.Close()
 	<-done2
 }
+
+func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
+	t.Cleanup(func() {
+		_ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0)
+	})
+	withTestTrustAnchor(t, t.TempDir())
+	testutil.FailErr(t, "initialUserNamespace", initialUserNamespace())
+	// The unprivileged test process is its own original caller.
+	groups, err := unix.Getgroups()
+	testutil.FailErr(t, "Getgroups", err)
+	spec := entryFixture()
+	// The broker pair's peer is this process, not the supervisor the frame names.
+	spec.SupervisorPID = os.Getppid()
+	spec.UID = uint32(os.Getuid())
+	spec.GID = uint32(os.Getgid())
+	spec.Groups = make([]uint32, len(groups))
+	for i, group := range groups {
+		spec.Groups[i] = uint32(group)
+	}
+	testutil.FailErr(t, "sealBrokerAgentIdentity", sealBrokerAgentIdentity(spec))
+	frame, err := sealEntrySpec(spec)
+	testutil.FailErr(t, "sealEntrySpec", err)
+	server, client, err := brokerPair()
+	testutil.FailErr(t, "brokerPair", err)
+	defer func() { _ = client.Close() }()
+	if err := runBrokerAgent(frame, server, nil); err == nil {
+		t.Fatal("expected runBrokerAgent to reject a peer other than the named supervisor")
+	}
+	badFrame, err := os.Open("/dev/null")
+	testutil.FailErr(t, "open /dev/null", err)
+	server2, client2, err := brokerPair()
+	testutil.FailErr(t, "brokerPair2", err)
+	defer func() { _ = client2.Close() }()
+	if err := runBrokerAgent(badFrame, server2, nil); err == nil {
+		t.Fatal("expected runBrokerAgent to reject invalid frame")
+	}
+	if !DropPrivilegesForError() {
+		t.Fatal("expected DropPrivilegesForError to report unprivileged caller")
+	}
+	if _, err := openSelf(); err == nil {
+		t.Fatal("expected openSelf to reject non-root test binary")
+	}
+	if err := RunStage(); err == nil {
+		t.Fatal("expected RunStage to reject non-root caller")
+	}
+	if err := RunBrokerAgent(); err == nil {
+		t.Fatal("expected RunBrokerAgent to reject unsealed fd")
+	}
+}
+
