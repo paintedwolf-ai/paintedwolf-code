@@ -71,7 +71,7 @@ func (p memberPatterns) matchComponents(name string) bool {
 // vcsNames are the version control files and directories tar --exclude-vcs
 // leaves out.
 var vcsNames = []string{
-	"CVS", ".cvsignore", "RCS", "SCCS", ".git", ".gitignore", ".gitattributes", ".gitmodules",
+	"CVS", ".cvsignore", "RCS", "SCCS", ".svn", ".git", ".gitignore", ".gitattributes", ".gitmodules",
 	".arch-ids", "{arch}", "=RELEASE-ID", "=meta-update", "=update",
 	".bzr", ".bzrignore", ".bzrtags", ".hg", ".hgignore", ".hgtags", "_darcs",
 }

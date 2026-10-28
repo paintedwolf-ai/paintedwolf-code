@@ -59,7 +59,7 @@ func canonicalModeOf(bound commandprogram.BoundArgv) canonicalMode {
 // components before the first .. resolves at once, then each later component
 // resolves against the canonical directory so far. From the first missing
 // component on, the rest follows lexically when mode admits it. With lexical
-// (-s) no link is resolved and only existence is checked.
+// (-s) no link is resolved.
 func (p *ProgramPaths) resolveCanonical(ctx context.Context, operand string, mode canonicalMode, lexical bool) (string, error) {
 	if lexical {
 		return p.resolveLexical(ctx, operand, mode)
@@ -112,23 +112,20 @@ func (p *ProgramPaths) resolveCanonical(ctx context.Context, operand string, mod
 	return appendLexically(current, components[resolved:]), nil
 }
 
-// resolveLexical is realpath -s: the operand joined to the working directory
-// and cleaned, checked for the components mode requires.
+// resolveLexical is realpath -s: the operand joined to the canonical working
+// directory and cleaned; only -e requires the result to exist.
 func (p *ProgramPaths) resolveLexical(ctx context.Context, operand string, mode canonicalMode) (string, error) {
 	path := operand
 	if !filepath.IsAbs(path) {
-		path = filepath.Join(p.Directory(), path)
+		cwd, err := p.Canonical(ctx, ".")
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(cwd, path)
 	}
 	path = filepath.Clean(path)
-	check := ""
-	switch mode {
-	case canonicalExisting:
-		check = path
-	case canonicalAllButLast:
-		check = filepath.Dir(path)
-	}
-	if check != "" {
-		bound, err := p.Bind(ctx, check, false)
+	if mode == canonicalExisting {
+		bound, err := p.Bind(ctx, path, false)
 		if err == nil {
 			_, err = bound.Stat(true)
 		}

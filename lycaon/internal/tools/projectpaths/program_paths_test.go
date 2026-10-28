@@ -248,7 +248,7 @@ func TestPathProducerSettlesShortWriteAndTypedRefusals(t *testing.T) {
 	testutil.FailErr(t, "validate short-write terminal", result.Validate())
 	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "basename", Argv: pathArgv("basename", "--bad")}, commandprogram.Streams{})
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "COMMAND_OPTION_UNSUPPORTED" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code || reject.Data["expected_form"] != "basename [--] PATH [SUFFIX]" {
+	if !errors.As(err, &reject) || reject.Code != "COMMAND_OPTION_UNSUPPORTED" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code || reject.Data["expected_form"] != "basename [-a] [-s SUFFIX] [-z] [--] PATH [SUFFIX] | PATH ..." {
 		t.Fatalf("unsupported result=%+v reject=%+v", result, reject)
 	}
 	ctx, cancel := context.WithCancel(t.Context())

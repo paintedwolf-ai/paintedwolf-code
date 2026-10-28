@@ -97,13 +97,7 @@ func (it items) resolve(now time.Time, loc *time.Location) (time.Time, error) {
 		hour, minute, sec, nanos = 0, 0, 0, 0
 	}
 	if w := it.weekday; w.set && !it.date.set {
-		wd := time.Date(year, month, day, 12, 0, 0, 0, zone).Weekday()
-		shift := (int(w.day) - int(wd) + 7) % 7
-		ordinal := int(w.ordinal)
-		if ordinal > 0 && wd != w.day {
-			ordinal--
-		}
-		day += shift + 7*ordinal
+		day += weekdayShift(time.Date(year, month, day, 12, 0, 0, 0, zone).Weekday(), w)
 	}
 	t := time.Date(year+int(it.rel.years), month+time.Month(it.rel.months), day+int(it.rel.days), hour, minute, sec, nanos, zone)
 	return t.Add(time.Duration(it.rel.seconds) * time.Second).In(loc), nil
@@ -134,4 +128,21 @@ func meridianHour(hour int64, meridian byte) (int64, error) {
 
 func daysIn(month time.Month, year int) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+}
+
+// weekdayShift is the days from today to the named weekday. A bare or this
+// weekday is its next occurrence, today included; next N skips today's and
+// counts N occurrences ahead; last N counts back N weeks from the next
+// occurrence, so last on that weekday is a week ago.
+func weekdayShift(today time.Weekday, w weekdayItem) int {
+	shift := (int(w.day) - int(today) + 7) % 7
+	switch {
+	case w.ordinal > 0 && shift == 0:
+		shift += 7 * int(w.ordinal)
+	case w.ordinal > 0:
+		shift += 7 * int(w.ordinal-1)
+	case w.ordinal < 0:
+		shift += 7 * int(w.ordinal)
+	}
+	return shift
 }
