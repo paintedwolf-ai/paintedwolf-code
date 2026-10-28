@@ -66,7 +66,7 @@ func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
 	}
 	directories := map[string]bool{}
 	err := inv.visitTree(abs, missingEntry, func(entry sandbox.SurveyEntry) error {
-		if entry.IsDir() {
+		if entry.IsDir {
 			directories[entry.Abs] = true
 		}
 		return nil
