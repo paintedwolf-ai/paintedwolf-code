@@ -60,5 +60,3 @@ class WebsitePublicationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not verified"):
                 confirmation.wait_for_website("https://paintedwolf.ai", self.expected, seconds=0, legacy_catalog=True)
         self.assertEqual(get.call_count, 1)
-
-

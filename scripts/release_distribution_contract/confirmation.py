@@ -118,5 +118,3 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, catalog:
         if time.monotonic() >= deadline:
             raise ValueError("website publication was not verified: " + last_error)
         time.sleep(min(5, max(0, deadline - time.monotonic())))
-
-
