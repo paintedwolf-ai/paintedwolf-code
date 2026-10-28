@@ -52,7 +52,7 @@ func reviewGitFiles(ctx context.Context, tc tools.ToolContext, boundary *sandbox
 		if file.Before.ObjectID != "" || file.After.ObjectID != "" {
 			preview.PreviewNote = fmt.Sprintf("Index object changes from %s to %s.", file.Before.ObjectID, file.After.ObjectID)
 		}
-		if file.Before.SHA256 == file.After.SHA256 && file.Before.Mode != file.After.Mode {
+		if file.Before.Exists && file.After.Exists && file.Before.SHA256 == file.After.SHA256 && file.Before.Mode != file.After.Mode {
 			preview.PreviewNote = fmt.Sprintf("File mode changes from %s to %s.", file.Before.Mode, file.After.Mode)
 		}
 		changes = append(changes, tools.FileChange{Path: absolute, Preview: preview})

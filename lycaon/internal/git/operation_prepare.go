@@ -226,7 +226,7 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 }
 
 func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.Repo, scratch string) ([]string, error) {
-	if p.request.metadataStage() {
+	if p.request.Kind == "stage" {
 		return nil, nil
 	}
 	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
