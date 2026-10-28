@@ -101,3 +101,77 @@ func metadataFlags(t *testing.T, path string) int {
 	testutil.FailErr(t, "read flags fixture", err)
 	return flags
 }
+
+func TestLinuxMetadataFollowsTargetsAndExactWriteGrants(t *testing.T) {
+	requireLinuxSandbox(t)
+	root := t.TempDir()
+	outside := outsideTemporaryWriteRoots(t)
+	allowed, denied := filepath.Join(root, "allowed"), filepath.Join(outside, "denied")
+	mask := filepath.Join(root, "read-only")
+	exact, sibling := filepath.Join(mask, "AGENTS.md"), filepath.Join(mask, "neighbor")
+	for _, p := range []string{allowed, denied, exact, sibling} {
+		seedMetadataFile(t, p)
+	}
+	outward, inward := filepath.Join(root, "outward"), filepath.Join(outside, "inward")
+	testutil.FailErr(t, "create outward symlink", os.Symlink(denied, outward))
+	testutil.FailErr(t, "create inward symlink", os.Symlink(allowed, inward))
+	c := denyConfinement(root)
+	c.ReadRoots = []string{mask}
+	grants, err := confine.ValidatePolicyWriteGrants([]confine.ProtectedPathGrant{confine.NewProtectedPathGrant(exact)}, []string{root})
+	testutil.FailErr(t, "validate exact metadata grant", err)
+	c.PolicyWriteGrants = grants
+	script := []string{}
+	for _, op := range []string{"chmod", "fchmod", "fchmodat-empty", "utimensat", "utimensat-empty", "setxattr", "fsetxattr", "setflags"} {
+		for _, p := range []string{outward, inward, exact, sibling} {
+			script = append(script, op+" "+p)
+		}
+	}
+	got := runMetadata(t, c, script)
+	for _, line := range script {
+		want := "EROFS"
+		if strings.HasSuffix(line, " "+inward) || strings.HasSuffix(line, " "+exact) {
+			want = "ok"
+		}
+		if got[line] != want {
+			t.Errorf("%s = %q, want %s", line, got[line], want)
+		}
+	}
+	got = runMetadata(t, c, []string{"lchown " + outward, "lutimensat " + outward, "lchown " + inward, "lutimensat " + inward})
+	for line, value := range got {
+		want := "EROFS"
+		if strings.HasSuffix(line, " "+outward) {
+			want = "ok"
+		}
+		if value != want {
+			t.Errorf("symlink inode %s = %q, want %s", line, value, want)
+		}
+	}
+}
+
+func TestLinuxReadRestorationDoesNotGrantMetadataWrites(t *testing.T) {
+	requireLinuxSandbox(t)
+	cfg := filepath.Join(outsideTemporaryWriteRoots(t), "control")
+	readable := filepath.Join(cfg, "public", "file")
+	scratch := filepath.Join(cfg, "sessions", "own", "scratch")
+	scratchFile := filepath.Join(scratch, "file")
+	seedMetadataFile(t, readable)
+	seedMetadataFile(t, scratchFile)
+	t.Setenv("LYCAON_CONFIG_DIR", cfg)
+	c := denyConfinement(t.TempDir())
+	c.ReadRoots = []string{filepath.Dir(readable)}
+	c.SessionScratchRoot = scratch
+	script := []string{}
+	for _, op := range []string{"chmod", "fchmodat-empty", "utimensat-empty", "setxattr", "setflags"} {
+		script = append(script, op+" "+readable, op+" "+scratchFile)
+	}
+	got := runMetadata(t, c, script)
+	for _, line := range script {
+		want := "EROFS"
+		if strings.HasSuffix(line, " "+scratchFile) {
+			want = "ok"
+		}
+		if got[line] != want {
+			t.Errorf("%s = %q, want %s", line, got[line], want)
+		}
+	}
+}

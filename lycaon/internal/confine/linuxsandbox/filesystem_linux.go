@@ -89,7 +89,7 @@ func applyFilesystem(fs Filesystem) error {
 	}()
 	// Landlock governs content access; the read-only mount view also holds
 	// metadata operations for which Landlock defines no access right.
-	if err := bindReadOnly("/"); err != nil {
+	if err := unix.MountSetattr(unix.AT_FDCWD, "/", unix.AT_RECURSIVE, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY}); err != nil {
 		return mountFailure("seal root mount view", err)
 	}
 	for _, op := range ops {
