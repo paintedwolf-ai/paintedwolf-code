@@ -551,17 +551,18 @@ func unobservedChannel(f Facts) (bool, []Fact, string) {
 			fact("boundary.visibility", "neither writes nor destinations are observed", "confine"),
 		}, "unconfined"
 	}
-	if f.Leased {
+	if f.Leased && f.Containment.SocketCount == 0 {
 		return false, nil, ""
 	}
 	switch {
-	case f.Containment.DirectIP:
+	case f.Containment.DirectIP && !f.Leased:
 		return true, []Fact{
 			fact("boundary.egress", EgressDirectIP, "confine"),
 			fact("boundary.visibility", "destinations are not observed", "confine"),
 		}, "direct_ip"
 	case f.Containment.SocketCount > 0:
-		// Quieting is scoped to the reviewed socket set.
+		// The producer subtracts bound socket authority. An action lease cannot
+		// authorize a newly captured local-service object.
 		return true, []Fact{
 			fact("boundary.sockets", strconv.Itoa(f.Containment.SocketCount), "confine"),
 			fact("boundary.visibility", "effects inside the service are not observed", "confine"),
