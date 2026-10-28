@@ -73,7 +73,7 @@ func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() boo
 			}
 		}
 
-		conn, dialErr := hostproxy.DialPinned(dialCtx, target, "tcp", endpoint)
+		conn, dialErr := hostproxy.DialPinned(dialCtx, target, "tcp", netip.AddrPortFrom(ip, ep.Port))
 		if dialErr == nil {
 			if authorized != nil && !authorized() {
 				_ = conn.Close()
