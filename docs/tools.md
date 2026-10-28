@@ -45,6 +45,17 @@ qualify conversational edit evidence, while internal execution reads do not.
 Diff reuses the existing engine; complete stream bounds are independent from
 structured preview and context caps.
 
+`patch` and `git apply` share one hunk applier over parsed unified and Git
+diffs: offset search, GNU fuzz for `patch` (`-F`, default 2), exact context
+for `git apply`, reversal and Git binary patches (`git apply` only). Both
+capture every touched file before the first write and publish each file through
+the pinned write door; `patch` publishes files whose hunks applied and reports
+failed hunks on stderr and in receipt evidence without writing `.rej` or `.orig`
+files, while `git apply` changes nothing unless every section applies.
+`git apply --index` and `--cached` change the index through one reviewed Git
+operation with `git add`'s session-staging rules, and `--3way` merges from the
+preimage blob with Git's merge-file, reporting conflicted paths and index stages.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete

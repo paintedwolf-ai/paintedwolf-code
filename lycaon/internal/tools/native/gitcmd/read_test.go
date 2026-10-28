@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -43,6 +44,11 @@ type harness struct {
 	owners   *Owners
 	paths    *projectpaths.ProgramPaths
 	tc       tools.ToolContext
+	// patches is the staged publication git apply uses; nil unless a test
+	// wires it.
+	patches *mutation.Owners
+	// stdin feeds the next exec.
+	stdin string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -139,12 +145,12 @@ func (h *harness) exec(words ...string) run {
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
 	request := commandprogram.OperationRequest{Invocation: inv, OperationID: "git", Statement: statement, Argv: argv}
-	prepared, err := h.owners.PrepareGit(h.paths, request)
+	prepared, err := h.owners.PrepareGit(h.paths, h.patches, request)
 	if err != nil {
 		return run{err: err, result: toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.NoEffect}}
 	}
 	var stdout, stderr bytes.Buffer
-	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &stdout, Error: &stderr})
+	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(h.stdin)), Output: &stdout, Error: &stderr})
 	if invalid := result.Validate(); invalid != nil {
 		h.t.Fatalf("%v produced an invalid result %+v: %v", words, result, invalid)
 	}

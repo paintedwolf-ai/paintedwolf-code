@@ -1559,6 +1559,259 @@
       ]
     },
     {
+      "name": "patch",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "patch [-p N] [-i PATCHFILE] [-R] [-N] [--dry-run] [-d DIR] [-F N] [-s] [-t] [-f] [-E] [--no-backup-if-mismatch] [-u] [ORIGFILE [PATCHFILE]]",
+      "forms": [
+        {
+          "spellings": [
+            "-p",
+            "--strip"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "patch-option-p-strip",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-i",
+            "--input"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "patch-option-i-input",
+          "consumption": "fixed",
+          "sample_values": [
+            "./fix.diff"
+          ]
+        },
+        {
+          "spellings": [
+            "-R",
+            "--reverse"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-R-reverse",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-N",
+            "--forward"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-N-forward",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-dry-run",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--directory"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "patch-option-d-directory",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fuzz"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "patch-option-F-fuzz",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "-s",
+            "--quiet",
+            "--silent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-s-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--batch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-t-batch",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E",
+            "--remove-empty-files"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-E-remove-empty-files",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-backup-if-mismatch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-no-backup-if-mismatch",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unified"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-u-unified",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. patch [OPTION ...] [ORIGFILE [PATCHFILE]]; the patch is read from -i PATCHFILE, the PATCHFILE operand, or standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "every hunk applied",
+        "1": "some hunks failed or were skipped; the files whose hunks applied still publish",
+        "2": "usage error or malformed patch input"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "patch -p1 -i ./fix.diff",
+        "stdout": "patching file input\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          },
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n\\ No newline at end of file\n"
+        }
+      },
+      "notes": "Applies unified and Git text diffs through the shared hunk applier (offset search, fuzz up to -F, default 2; -R reverses). Every touched file is captured before anything is written; each file then publishes through the pinned write door, creations and deletions from /dev/null headers through the recoverable write and delete owners. A file changed after capture refuses with COMMAND_REVISION_CONFLICT and nothing lands for it. Without -p, Git sections strip a/ and b/, and other names stay as written when their directory exists, otherwise their base name is used. Status 1 when hunks fail: the other files still publish and failed hunks are reported on stderr in GNU's wording and in the receipt evidence. Never writes .rej or .orig files. Git binary patches refuse here; git apply applies them. -b, --merge and -o are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/mutation/patch.go",
+        "tests": [
+          "lycaon/internal/tools/native/mutation/patch_test.go",
+          "lycaon/internal/tools/native/patchapply/apply_test.go"
+        ],
+        "extension": "Shared hunk applier in internal/tools/native/patchapply over github.com/bluekeyes/go-gitdiff parsing; publication reuses the pinned write door and delete owner.",
+        "evidence_kind": "owner tests over fixture trees and golden programs"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "-b"
+        ]
+      },
+      "fixture_ids": [
+        "patch-operands-valid",
+        "patch-rejection",
+        "patch-option-p-strip",
+        "patch-option-i-input",
+        "patch-option-R-reverse",
+        "patch-option-N-forward",
+        "patch-option-dry-run",
+        "patch-option-d-directory",
+        "patch-option-F-fuzz",
+        "patch-option-s-quiet",
+        "patch-option-t-batch",
+        "patch-option-f-force",
+        "patch-option-E-remove-empty-files",
+        "patch-option-no-backup-if-mismatch",
+        "patch-option-u-unified"
+      ]
+    },
+    {
       "name": "jq-edit",
       "aliases": [],
       "family": "mutation",
