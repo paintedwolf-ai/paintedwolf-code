@@ -126,6 +126,7 @@ class VaultServiceRecoveryTests(unittest.TestCase):
                                       return_value={'native_terminal': ROW}),
                 'retain': Mock(side_effect=lambda *args: args)}
             for key, value in values.items(): stack.enter_context(patch.object(case, key, value))
+            stack.enter_context(patch.object(case.ProviderFixture, 'gui', return_value=fixture))
             stack.enter_context(patch.object(vault_quiet, 'process_identity', side_effect=ProcessLookupError))
             self.apps, self.phases, self.retained, self.events = apps, phases, values['retain'], events
             return case.execute({'native_input': {'binding': {}, 'vm_id': 'owned'}},
