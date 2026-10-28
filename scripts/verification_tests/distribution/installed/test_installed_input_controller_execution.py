@@ -14,7 +14,10 @@ EXECUTION = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 
              'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
 SELECTED = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
 IDENTITY = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
-FOCUS = {'launch': IDENTITY, 'entry': IDENTITY, 'frame': IDENTITY, 'entry_focused': True, 'frame_active': True, 'frame_visible': True}
+FOCUS = {'launch': IDENTITY, 'entry': IDENTITY, 'frame': IDENTITY,
+         'frame_lineage': [IDENTITY], 'entry_lineage': [IDENTITY],
+         'accessible_chain': [{'bus_name': ':1.2', 'path': '/frame', 'pid': IDENTITY['pid']}],
+         'entry_focused': True, 'frame_active': True, 'frame_visible': True}
 OPERATION = 'editor-replace-save-v1'
 
 

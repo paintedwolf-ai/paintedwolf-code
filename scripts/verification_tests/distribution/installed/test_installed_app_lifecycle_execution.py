@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import app as owner
 from linux_release.installed_cases.app import InstalledApp
+from linux_release.installed_cases import storage as installed_storage
 from linux_release.installed_cases.records import CaseUnavailable
 
 STAT = '42 (pw engine) ' + ' '.join(['S', '7'] + ['0'] * 17 + ['999']) + '\n'
@@ -148,7 +149,7 @@ class Launch:
         self.process.poll.return_value = None
         native_exists = Path.exists
         self.patches = [patch.object(owner, 'require_owned_guest'), patch.object(owner, 'graphical_session', return_value=SESSION),
-                        patch.object(owner, 'session_environment', return_value={'DISPLAY': ':1'}),
+                        patch.object(owner, 'session_environment', return_value={'DISPLAY': ':1', 'HOME': str(home)}),
                         patch.object(Path, 'home', return_value=home),
                         patch.object(Path, 'exists', lambda p, **k: str(p) == f'/proc/{self.live_pid}' if str(p).startswith('/proc/') else native_exists(p, **k)),
                         patch.object(owner, 'file_identity', return_value=dict(self.identity, header=b'ELF')),
@@ -172,7 +173,7 @@ class LaunchTests(unittest.TestCase):
             for reader in app._readers:
                 reader.join(5)
             self.assertEqual(launch.mocks[6].call_args.args[0], [LAUNCHER['path'], '/'])
-            self.assertEqual(launch.mocks[6].call_args.kwargs['env'], {'DISPLAY': ':1'})
+            self.assertEqual(launch.mocks[6].call_args.kwargs['env'], {'DISPLAY': ':1', 'HOME': str(Path(launch.temporary.name))})
             self.assertTrue(launch.mocks[6].call_args.kwargs['start_new_session'])
             launch.mocks[0].assert_called_once_with(binding())
             launch.mocks[5].assert_called_once_with(Path(LAUNCHER['path']))
@@ -259,6 +260,8 @@ class ReadinessTests(unittest.TestCase):
         with patch.object(InstalledApp, 'try_ready', return_value=True):
             self.assertIs(app.wait_ready(), app)
         with tempfile.TemporaryDirectory() as temporary, patch.object(Path, 'home', return_value=Path(temporary)):
+            app.storage = installed_storage.resolve({'HOME': temporary})
+            app.observations['storage'] = app.storage.facts()
             self.assertFalse(app.try_ready())
 
     def test_requests_need_a_captured_ready_engine(self):
