@@ -236,9 +236,7 @@ func (s *scan) zoneOffset() error {
 		return err
 	}
 	minutes := 0
-	if strings.HasPrefix(s.text, ":") {
-		s.text = s.text[1:]
-	}
+	s.text = strings.TrimPrefix(s.text, ":")
 	if len(s.text) >= 2 && isDigit(s.text[0]) {
 		if minutes, err = s.number(2, 0, 59); err != nil {
 			return err
