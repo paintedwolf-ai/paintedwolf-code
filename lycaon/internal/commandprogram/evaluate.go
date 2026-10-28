@@ -139,6 +139,9 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	e := &evaluation{ports: ports, limits: limits, programName: plan.SourceName}
+	ctx, cancelWait := context.WithCancelCause(ctx)
+	defer cancelWait(nil)
+	e.waits = newExecutionWaits(e.clock(), ports.Waits, cancelWait)
 	e.expander, err = NewWordExpander(ExpanderPorts{Substitutions: e, Files: ports.Files, Memory: ports.Memory})
 	if err != nil {
 		return ProgramOutcome{}, err
@@ -148,9 +151,19 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	defer release()
+	e.waits.cancel = func(cause error) {
+		_ = root.state.latch.Record(root.parent.Identity.ExecutionID, ownerResult(cause), true)
+		cancelWait(cause)
+	}
 	_, err = root.statements(ctx, plan.Statements)
 	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
 		err = trapErr
+	}
+	e.waits.mu.Lock()
+	waitErr := e.waits.err
+	e.waits.mu.Unlock()
+	if waitErr != nil {
+		err = waitErr
 	}
 	return e.outcome(root), err
 }

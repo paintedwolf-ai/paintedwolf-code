@@ -59,8 +59,22 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 			names[i] = op.Value
 		}
 	}
+	duration, timed, valid := readTimeoutDuration(bound)
 	return f.inProcess(ctx, s, "read", func(ctx context.Context, _ toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-		record, escaped, sawDelim, readErr := f.readRecord(ctx, s.SyntaxLocation, delim, raw)
+		if !valid {
+			option, _ := bound.Last("-t")
+			if _, err := fmt.Fprintf(f.io.streams.Error, "read: %s: invalid timeout specification\n", option.Values[0].Value); err != nil {
+				return ownerResult(err), err
+			}
+			return ordinaryResult(1), nil
+		}
+		if timed && duration == 0 {
+			if inputReady(f.io.streams.Input) {
+				return ordinaryResult(0), nil
+			}
+			return ordinaryResult(1), nil
+		}
+		record, escaped, sawDelim, timedOut, readErr := readRecordWithTimeout(ctx, f, s, fields, duration, timed, delim, raw)
 		if readErr != nil {
 			return ownerResult(readErr), readErr
 		}
@@ -78,6 +92,9 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		if !sawDelim {
 			status = 1
 		}
+		if timedOut {
+			status = 142
+		}
 		return ordinaryResult(status), nil
 	})
 }
@@ -92,13 +109,13 @@ func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocatio
 	var b [1]byte
 	for {
 		if err := ctx.Err(); err != nil {
-			return nil, nil, false, f.interrupt(err)
+			return record, escaped, false, err
 		}
-		n, err := f.io.streams.Input.Read(b[:])
+		n, err := readContext(ctx, f.io.streams.Input, b[:])
 		if n > 0 {
 			c := b[0]
 			if !raw && c == '\\' {
-				n2, err2 := f.io.streams.Input.Read(b[:])
+				n2, err2 := readContext(ctx, f.io.streams.Input, b[:])
 				if n2 > 0 {
 					if b[0] == '\n' {
 						continue
@@ -116,7 +133,7 @@ func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocatio
 					if errors.Is(err2, io.EOF) {
 						return record, escaped, false, nil
 					}
-					return nil, nil, false, err2
+					return record, escaped, false, err2
 				}
 				continue
 			}
@@ -133,7 +150,7 @@ func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocatio
 			if errors.Is(err, io.EOF) {
 				return record, escaped, false, nil
 			}
-			return nil, nil, false, err
+			return record, escaped, false, err
 		}
 	}
 }

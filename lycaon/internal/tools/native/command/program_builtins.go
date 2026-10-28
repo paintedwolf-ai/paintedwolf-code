@@ -168,8 +168,21 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 					return ownerFailure(err), err
 				}
 			}
+			exact := make([]string, len(handles))
+			for i, reference := range handles {
+				handle, err := jobs.Resolve(reference)
+				if err != nil {
+					return ownerFailure(err), err
+				}
+				exact[i] = handle
+			}
+			unblock, err := request.Wait.Block(ctx, commandprogram.WaitState{Statement: strings.Join(request.Argv.Values(), " "), Jobs: exact})
+			if err != nil {
+				return ownerFailure(err), err
+			}
+			defer unblock()
 			last := readResult(0)
-			for _, handle := range handles {
+			for _, handle := range exact {
 				result, err := jobs.Wait(ctx, handle)
 				if err != nil {
 					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {

@@ -70,7 +70,6 @@ type ProgramRuntime struct {
 	// SourceRuns records a parked program's run evidence.
 	SourceRuns SourceRunRecorder
 
-
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
 	resources map[string]*sessionOutputResources

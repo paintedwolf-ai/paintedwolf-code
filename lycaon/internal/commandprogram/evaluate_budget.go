@@ -51,6 +51,7 @@ var catalogEvaluationLimits = sync.OnceValues(func() (evaluationLimits, error) {
 // and background job of one invocation. Counters are cumulative per program.
 type evaluation struct {
 	ports       EvaluationPorts
+	waits       *executionWaits
 	expander    *WordExpander
 	limits      evaluationLimits
 	programName string

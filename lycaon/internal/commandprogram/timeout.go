@@ -31,7 +31,7 @@ func ParseDuration(word string) (time.Duration, bool) {
 		return 0, false
 	}
 	scaled := value * float64(unit)
-	if scaled > float64(math.MaxInt64) {
+	if scaled >= float64(math.MaxInt64) {
 		return 0, false
 	}
 	return time.Duration(scaled), true

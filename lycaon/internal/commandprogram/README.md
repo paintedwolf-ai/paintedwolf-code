@@ -130,7 +130,14 @@ When every live statement and job is blocked, the evaluator reports a
 `WaitState` through `EvaluationPorts.Waits`: the waiting statement's text, the
 earliest timer wake on the program's `Clock`, and the exact job handles whose
 settlement wakes it. The host uses it to park the call and to refuse, before
-blocking, a wait that cannot complete within the call's bound.
+blocking, a wait that cannot complete within the call's bound. Concurrent frames
+register distinct activities; synchronous nested commands share one activity.
+Pipe endpoints bind the current frame and report blocking only from the stream
+rendezvous after checking readiness. Publishing bytes makes the reader runnable
+before its goroutine resumes. A timed read cancels only its own read, retaining
+partial fields and leaving the inherited descriptor usable. `-t 0` checks
+readiness without consuming bytes. Timer waits use the injected clock and keep
+their complete interval even when another activity becomes ready.
 
 ## Native predicates
 

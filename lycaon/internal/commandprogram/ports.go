@@ -197,6 +197,7 @@ type StreamPreparation interface {
 
 type OperationRequest struct {
 	StreamPreparation StreamPreparation
+	Wait              *ExecutionWait
 	Invocation        toolcontract.OperationInvocation
 	// OperationID is the catalog command name ("external" for launches); the
 	// typed owner's operation identity is the owner's own fact.

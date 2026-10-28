@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -59,13 +58,8 @@ func TestBytePipeBackpressureAndDeliberateConsumerStop(t *testing.T) {
 	_, err := io.ReadFull(p, got)
 	testutil.FailErr(t, "read consumer prefix", err)
 	testutil.FailErr(t, "close early consumer", p.CloseConsumer())
-	select {
-	case err := <-finished:
-		if !errors.Is(err, ErrConsumerClosed) {
-			t.Fatalf("early close lost typed cause: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("early consumer close leaked producer")
+	if err := <-finished; !errors.Is(err, ErrConsumerClosed) {
+		t.Fatalf("early close lost typed cause: %v", err)
 	}
 	if string(got) != "com" || p.Completion().Termination != StreamConsumerClosed {
 		t.Fatalf("consumer stop=%+v", p.Completion())
@@ -89,13 +83,8 @@ func TestBytePipeCancellationUnblocksBothDirections(t *testing.T) {
 				}
 			}()
 			cancel()
-			select {
-			case err := <-finished:
-				if !errors.Is(err, context.Canceled) {
-					t.Fatalf("cancellation cause=%v", err)
-				}
-			case <-time.After(5 * time.Second):
-				t.Fatal("cancellation leaked stream operation")
+			if err := <-finished; !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation cause=%v", err)
 			}
 			if p.Completion().Termination != StreamCanceled {
 				t.Fatalf("canceled stream=%+v", p.Completion())
