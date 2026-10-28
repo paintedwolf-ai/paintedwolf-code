@@ -21,6 +21,10 @@ func settleOperate(p Prepared, res git.OperationResult, out *meteredOutput, stde
 		return settleGitError(err, stderr, toolcontract.NoEffect)
 	}
 	diag := strings.TrimSpace(res.Diagnostics)
+	diagnostics := io.Writer(out)
+	if p.command.spec.Name == "git add" {
+		diagnostics = stderr
+	}
 	switch res.Status {
 	case "conflicts":
 		writeLine(stderr, diag)
@@ -32,7 +36,7 @@ func settleOperate(p Prepared, res git.OperationResult, out *meteredOutput, stde
 		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	case "no_op":
 		if !quiet && diag != "" {
-			writeLine(out, diag)
+			writeLine(diagnostics, diag)
 		}
 		if out.err != nil {
 			return settleMutationError(out.err, toolcontract.NoEffect)
@@ -40,7 +44,7 @@ func settleOperate(p Prepared, res git.OperationResult, out *meteredOutput, stde
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 	default:
 		if !quiet && diag != "" {
-			writeLine(out, diag)
+			writeLine(diagnostics, diag)
 		}
 		if out.err != nil {
 			return settleMutationError(out.err, toolcontract.EffectCompleted)

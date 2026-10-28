@@ -41,17 +41,17 @@ func TestRuntimeDetectionReloadPreservesSealedGate(t *testing.T) {
 		t.Fatal("install ask quiet")
 	}
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-Scope: hitl.ActionScope{
-SessionID: "session",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "echo hi"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "session",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+		},
+	}
 	for _, source := range []settings.DetectionSource{nil, runtimeDetectionFixture{}, runtimeDetectionFixture{true}, nil, runtimeDetectionFixture{}} {
 		if source == nil {
 			published.Store(nil)
