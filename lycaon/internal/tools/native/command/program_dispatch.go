@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"slices"
 	"strings"
 	"sync"
 
@@ -305,7 +306,17 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := operation.Prepare(ctx, d.paths, d, request)
+	prepareReq := request
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(request.Environment) > 0 {
+		var explicit []string
+		for _, entry := range request.Environment {
+			if !slices.Contains(d.run.baseEnv, entry) {
+				explicit = append(explicit, entry)
+			}
+		}
+		prepareReq.Environment = explicit
+	}
+	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
 		if gap := unsupportedForm(spec, err); gap != nil && d.GapLaunchable(request) {
 			request.Gap = gap
@@ -382,6 +393,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 // catalog command's own execution: recorded, started and settled like a
 // builtin, on this frame.
 func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	request.OperationID = spec.Name
 	if prepared.Mode != "" && request.EffectMode == "" {
 		request.EffectMode = prepared.Mode
 	}
