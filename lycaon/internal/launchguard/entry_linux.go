@@ -53,7 +53,7 @@ type EntrySpec struct {
 func EnterDesktop() error {
 	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
 	if seals, err := unix.FcntlInt(entrySpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
-		return errors.New("entry specification is not sealed")
+		return unsealedEntry(entrySpecFD, seals, err)
 	}
 	runtime.LockOSThread()
 	return enterDesktop(
@@ -163,7 +163,7 @@ func readEntry(file *os.File) (EntrySpec, error) {
 	}
 	seals, err := unix.FcntlInt(file.Fd(), unix.F_GET_SEALS, 0)
 	if err != nil || seals&entrySeals != entrySeals {
-		return EntrySpec{}, errors.New("entry specification is not sealed")
+		return EntrySpec{}, unsealedEntry(file.Fd(), seals, err)
 	}
 	raw, err := io.ReadAll(io.NewSectionReader(file, 0, maxEntryBytes+1))
 	if err != nil {
@@ -173,6 +173,22 @@ func readEntry(file *os.File) (EntrySpec, error) {
 		return EntrySpec{}, errors.New("entry specification exceeds its bound")
 	}
 	return decodeEntry(raw)
+}
+
+// unsealedEntry refuses a descriptor that does not carry the sealed frame and
+// names what sat at that number, so a refusal inside a supervised launch can
+// be traced to the handoff that produced it. The facts are diagnostic only.
+func unsealedEntry(fd uintptr, seals int, err error) error {
+	target, linkErr := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", fd))
+	if linkErr != nil {
+		target = "unreadable link: " + linkErr.Error()
+	}
+	identity := "fstat failed"
+	var info unix.Stat_t
+	if statErr := unix.Fstat(int(fd), &info); statErr == nil {
+		identity = fmt.Sprintf("mode %#o dev %d inode %d size %d", info.Mode, info.Dev, info.Ino, info.Size)
+	}
+	return fmt.Errorf("entry specification is not sealed: descriptor %d is %s (%s) with seals %#x: %w", fd, target, identity, seals, err)
 }
 
 func decodeEntry(raw []byte) (EntrySpec, error) {
