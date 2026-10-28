@@ -229,7 +229,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return "", err
 		}
 	}
-	run := &programRun{catalog: catalog, commands: commandIndex(catalog), baseEnv: programEnvironment(tc), envelope: launchEnvelope(args)}
+	run := &programRun{catalog: catalog, commands: commandIndex(catalog), envelope: launchEnvelope(args)}
 	surface, err := freezeSurface(ctx, r, run, owners, tc)
 	if err != nil {
 		return "", err
