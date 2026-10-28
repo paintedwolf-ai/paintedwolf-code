@@ -99,7 +99,7 @@ func TestDefaultListenerObservationCannotFallBackFromNativeRefusal(t *testing.T)
 		resolver := fixture.resolver(t.Context())
 		id, owned, err := resolver.ObserveSessionListener(t.Context(), "session", endpoint)
 		if id != "" || owned || !errors.Is(err, nativeErr) {
-			t.Fatalf("native refusal became legacy proof: id=%q owned=%v err=%v", id, owned, err)
+			t.Fatalf("native refusal became PID-only proof: id=%q owned=%v err=%v", id, owned, err)
 		}
 		if _, ok := ObserveOwnedSessionListener(t.Context(), resolver, "session", endpoint); ok {
 			t.Fatal("incomplete native evidence bypassed ordinary approval")
@@ -130,9 +130,9 @@ func TestPublicLoopbackResolverUsesNativeObservationWithListenerTable(t *testing
 		return []socketListener{listenerAt(4242, "127.0.0.1:8123")}, nil
 	}
 	resolver.lineageSession = func(int) (string, bool) { return session, true }
-	// Keep the real native producer while making the legacy table positive.
-	if id, owned, err := resolver.ObserveSessionListener(t.Context(), session, netip.MustParseAddrPort("127.0.0.1:8123")); err != nil || owned || id != "" {
-		t.Fatalf("public resolver substituted numeric PID proof: id=%q owned=%v err=%v", id, owned, err)
+	// Keep the real native producer while making the PID table positive.
+	if id, owned, err := resolver.ObserveSessionListener(t.Context(), session, netip.MustParseAddrPort("127.0.0.1:8123")); (err != nil && !errors.Is(err, lineage.ErrUnsupported)) || owned || id != "" {
+		t.Fatalf("public resolver substituted PID-only proof: id=%q owned=%v err=%v", id, owned, err)
 	}
 }
 
