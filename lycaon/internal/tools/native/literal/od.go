@@ -73,7 +73,7 @@ func parseOdType(spec string) ([]odType, bool) {
 }
 
 // odTypes collects -t values and traditional letters in argv order.
-func (inv *invocation) odTypes() ([]odType, error) {
+func odTypes(inv *invocation) ([]odType, error) {
 	var out []odType
 	for _, item := range inv.argv.Items {
 		if item.Option == nil {
@@ -98,7 +98,7 @@ func (inv *invocation) odTypes() ([]odType, error) {
 }
 
 // odAddress formats offsets for -A; width is its column for later formats.
-func (inv *invocation) odAddress() (func(int64) string, int, error) {
+func odAddress(inv *invocation) (func(int64) string, int, error) {
 	radix, _ := inv.value("-A")
 	switch radix {
 	case "", "o":
@@ -117,11 +117,11 @@ func (inv *invocation) odAddress() (func(int64) string, int, error) {
 // one line per format, columns aligned across formats, repeated lines
 // collapsed to * unless -v.
 func runOd(inv *invocation) error {
-	types, err := inv.odTypes()
+	types, err := odTypes(inv)
 	if err != nil {
 		return err
 	}
-	address, addressWidth, err := inv.odAddress()
+	address, addressWidth, err := odAddress(inv)
 	if err != nil {
 		return err
 	}

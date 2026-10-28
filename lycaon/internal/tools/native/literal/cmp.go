@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // cmpOptions are cmp's selections; limit and skips are byte counts.
@@ -61,18 +60,18 @@ func runCmp(inv *invocation) error {
 	if err := inv.admitPaths(files[:]); err != nil {
 		return err
 	}
-	var sides [2]cmpSide
+	run := cmpRun{inv: inv, opts: opts}
 	for i, file := range files {
 		in, err := inv.openHeld(file)
 		if err != nil || in == nil {
 			return err
 		}
-		sides[i] = cmpSide{name: file.Value, in: in, reader: bufio.NewReaderSize(in.reader(), 64<<10)}
-		if _, err := io.CopyN(io.Discard, sides[i].reader, opts.skip[i]); err != nil && err != io.EOF {
+		run.sides[i] = cmpSide{name: file.Value, in: in, reader: bufio.NewReaderSize(in.reader(), 64<<10)}
+		if _, err := io.CopyN(io.Discard, run.sides[i].reader, opts.skip[i]); err != nil && err != io.EOF {
 			return err
 		}
 	}
-	return inv.compareBytes(sides, opts)
+	return run.compare()
 }
 
 func cmpSelections(inv *invocation) (cmpOptions, error) {
@@ -108,10 +107,18 @@ func cmpSelections(inv *invocation) (cmpOptions, error) {
 	return opts, nil
 }
 
-// compareBytes walks both inputs to the first difference (all of them with
-// -l), the limit, or the end of the shorter input.
-func (inv *invocation) compareBytes(sides [2]cmpSide, opts cmpOptions) error {
-	width := inv.cmpOffsetWidth(sides, opts)
+// cmpRun is one comparison of two opened inputs.
+type cmpRun struct {
+	inv   *invocation
+	opts  cmpOptions
+	sides [2]cmpSide
+}
+
+// compare walks both inputs to the first difference (all of them with -l),
+// the limit, or the end of the shorter input.
+func (r cmpRun) compare() error {
+	inv, sides, opts := r.inv, r.sides, r.opts
+	width := r.offsetWidth()
 	var compared, lines int64
 	var last byte
 	for compared < opts.limit {
@@ -185,13 +192,13 @@ func eofPosition(compared, lines int64, last byte, list bool) string {
 	return fmt.Sprintf(" after byte %d, in line %d", compared, lines+1)
 }
 
-// cmpOffsetWidth is GNU's -l offset column: wide enough for the largest
+// offsetWidth is GNU's -l offset column: wide enough for the largest
 // offset the limit and the regular inputs' remaining bytes allow.
-func (inv *invocation) cmpOffsetWidth(sides [2]cmpSide, opts cmpOptions) int {
-	largest := opts.limit
-	for i, side := range sides {
+func (r cmpRun) offsetWidth() int {
+	largest := r.opts.limit
+	for i, side := range r.sides {
 		if side.in.pin != nil {
-			largest = min(largest, max(side.in.pin.EndByte-opts.skip[i], 0))
+			largest = min(largest, max(side.in.pin.EndByte-r.opts.skip[i], 0))
 		}
 	}
 	return len(strconv.FormatInt(largest, 10))
@@ -219,36 +226,4 @@ func caretByte(c byte) string {
 // gnuQuote is GNU's locale quoting of a file name in diagnostics.
 func gnuQuote(name string) string {
 	return "'" + strings.ReplaceAll(name, "'", `'\''`) + "'"
-}
-
-// admitPaths binds every PATH operand and its link target before the first is
-// opened, so a refused operand stops the comparison before anything is pinned.
-// Ordinary failures are left for the open to report.
-func (inv *invocation) admitPaths(fields []commandprogram.Field) error {
-	for _, field := range fields {
-		if field.Value == "-" || field.ProcessSubstitution() != nil {
-			continue
-		}
-		bound, err := inv.paths.Bind(inv.ctx, field.Value, false)
-		if err == nil && !bound.Null {
-			_, err = bound.Stat(true)
-		}
-		if err != nil {
-			if _, ok := ordinary(projectpaths.PathOperationError(field.Value, err)); !ok {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// openHeld acquires one streamed operand that stays open beside later ones,
-// as cmp reads two inputs in step. The invocation closes it when it ends.
-func (inv *invocation) openHeld(field commandprogram.Field) (*input, error) {
-	in, err := inv.openField(field, false)
-	if inv.currentStream != nil {
-		inv.closers = append(inv.closers, inv.currentStream)
-		inv.currentStream = nil
-	}
-	return in, err
 }
