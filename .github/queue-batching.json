@@ -1,0 +1,6 @@
+{
+  "maximum": 4,
+  "preserve_front": 2,
+  "held_branches": ["*linux*", "*portable*", "feat/command-*", "fix/command-*", "test/command-*"],
+  "held_paths": ["scripts/linux_*", "scripts/linux-**", "packaging/linux/**", "lycaon/internal/tools/command/**", "lycaon/internal/command/**" ]
+}

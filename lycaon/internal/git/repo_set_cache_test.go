@@ -107,13 +107,12 @@ func TestRepoSetCache_PeekOrRevalidateColdReturnsBeforeDiscovery(t *testing.T) {
 	}
 	select {
 	case <-started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background discovery did not start")
 	}
 	close(release)
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if repos, found := cache.PeekOrRevalidate(t.Context(), "proj", 1, roots); found {
 			if len(repos) != 1 || repos[0].Toplevel != "/t" {
 				t.Fatalf("warm peek = %#v", repos)

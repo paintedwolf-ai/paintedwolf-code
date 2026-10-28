@@ -2,8 +2,8 @@ package session
 
 import (
 	"context"
+	"runtime"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
@@ -22,21 +22,25 @@ func TestWaitResumeAcquiresItsOwnDispatchLane(t *testing.T) {
 			session := newReceiptTestSession(t, manager, sessions)
 			ctx, release := manager.Submissions.LockDispatch(t.Context(), session.ID)
 			defer func() { release() }()
+			started := make(chan struct{})
 			admitted := make(chan struct{}, 1)
 			finished := make(chan error, 1)
 			leaseID := uuid.NewString()
 			pending := true
 			go func() {
+				close(started)
 				_, err := manager.Submissions.WaitResume(context.WithoutCancel(ctx), session.ID, loopwake.WaitDelivery{
 					LeaseID: leaseID, Condition: awaitstore.Condition{Kind: "timer", Outcome: "timed_out"},
 					Pending: func() bool { return pending }, Admitted: func() error { admitted <- struct{}{}; return nil },
 				})
 				finished <- err
 			}()
+			<-started
+			runtime.Gosched()
 			select {
 			case <-admitted:
 				t.Error("wait delivery inherited another execution's dispatch ownership")
-			case <-time.After(50 * time.Millisecond):
+			default:
 			}
 			pending = !canceled
 			release()
@@ -44,7 +48,7 @@ func TestWaitResumeAcquiresItsOwnDispatchLane(t *testing.T) {
 			select {
 			case err := <-finished:
 				testutil.FailErr(t, "deliver wait after dispatch release", err)
-			case <-time.After(3 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("wait delivery did not acquire the released lane")
 			}
 			ids := sessions.admitted()

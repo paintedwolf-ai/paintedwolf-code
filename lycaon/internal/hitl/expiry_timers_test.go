@@ -24,7 +24,7 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 		if got != "first: "+expiryReason {
 			t.Fatalf("expiry fired %q", got)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("armed expiry never fired")
 	}
 
@@ -40,10 +40,16 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 	}
 
 	timers.schedule(t.Context(), "late", time.Millisecond, expire)
+	timers.mu.Lock()
+	armed = len(timers.timers)
+	timers.mu.Unlock()
+	if armed != 0 {
+		t.Fatalf("%d expiries armed after stop", armed)
+	}
 	select {
 	case got := <-fired:
 		t.Fatalf("expiry %q fired after stop", got)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	var manager *Checkpoints
 	if err := manager.StopExpiryTimers(t.Context()); err != nil {
@@ -68,14 +74,22 @@ func TestExpiryStopDrainsRunningCallback(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("callback did not start")
 	}
 	go func() { finished <- timers.stop(t.Context()) }()
+	for t.Context().Err() == nil {
+		timers.mu.Lock()
+		stopped := timers.stopped
+		timers.mu.Unlock()
+		if stopped {
+			break
+		}
+	}
 	select {
 	case err := <-finished:
 		t.Fatalf("stop returned before callback drain: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(release)
 	select {
@@ -83,7 +97,7 @@ func TestExpiryStopDrainsRunningCallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("drain expiry timers: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stop did not drain")
 	}
 }
@@ -105,7 +119,7 @@ func TestExpiryDrainHonorsShutdownCancellation(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("callback did not start")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -138,7 +152,7 @@ func TestCanceledExpiryDrainKeepsPersistenceUntilRetry(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("expiry callback did not start")
 	}
 	registry, scope := resourcelifecycle.New(), resourcelifecycle.DeviceScope()
@@ -164,7 +178,7 @@ func TestCanceledExpiryDrainKeepsPersistenceUntilRetry(t *testing.T) {
 	select {
 	case <-stopping:
 		cancel()
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("shutdown did not start expiry drain")
 	}
 	select {
@@ -172,7 +186,7 @@ func TestCanceledExpiryDrainKeepsPersistenceUntilRetry(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("shutdown cancellation lost: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("canceled drain did not return")
 	}
 	if persistenceClosed {

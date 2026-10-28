@@ -1,10 +1,4 @@
-"""Cancel this run once the merge queue removes its group.
-
-When a group is invalidated, GitHub deletes its gh-readonly-queue branch but
-lets the group's runs continue. Each long merge-group job runs this in the
-background: it reads its own branch with git ls-remote, which spends no REST
-API quota, and makes one API call to cancel the run once the branch is gone.
-"""
+"""Cancel verification when its merge-group branch is removed."""
 import base64
 import os
 import subprocess
@@ -20,7 +14,7 @@ def branch_exists(url, ref, token=''):
     """True or False from the remote's answer; None when the remote could not answer."""
     environment = dict(os.environ, GIT_TERMINAL_PROMPT='0')
     if token:
-        # Through the environment, so the token never appears in a process's arguments.
+        # Keep credentials out of process arguments.
         credential = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
         environment.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.extraHeader',
                            GIT_CONFIG_VALUE_0=f'AUTHORIZATION: basic {credential}')
@@ -39,7 +33,11 @@ def watch(ref, url, cancel, exists=branch_exists, sleep=time.sleep, interval=INT
         sleep(interval)
         if exists(url, ref) is False:
             print(f'{ref} is gone; the merge queue removed this group, so this run stops.', flush=True)
-            cancel()
+            try:
+                cancel()
+            except (subprocess.SubprocessError, OSError):
+                print("Cancellation request failed; retrying after the next branch check.", flush=True)
+                continue
             return
 
 

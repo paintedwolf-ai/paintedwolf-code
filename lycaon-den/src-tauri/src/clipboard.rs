@@ -58,12 +58,39 @@ pub async fn read_clipboard_text(
     state.service.read(&app).await
 }
 
+/// The clipboard image as PNG bytes, empty when it holds none. Only Linux needs
+/// it: WebKitGTK paste events carry no clipboard images, while WebKit on macOS
+/// and WebView2 deliver them with the event.
+#[tauri::command]
+pub async fn read_clipboard_image(app: tauri::AppHandle) -> Result<tauri::ipc::Response, ClipboardError> {
+    #[cfg(target_os = "linux")]
+    {
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || linux::request_image(reply))
+            .map_err(|_| ClipboardError::Stopped)?;
+        let png = tokio::time::timeout(service::OPERATION_TIMEOUT, receiver)
+            .await
+            .map_err(|_| ClipboardError::Timeout)?
+            .map_err(|_| ClipboardError::Stopped)??;
+        Ok(tauri::ipc::Response::new(png))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        Err(ClipboardError::Backend("clipboard images arrive with the paste event on this platform".into()))
+    }
+}
+
 /// Pastes into the focused web view through the system paste action, the
 /// same path Edit > Paste takes.
 #[tauri::command]
-pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn paste_into_focused_view(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = window;
         app.run_on_main_thread(|| {
             let Some(mtm) = objc2::MainThreadMarker::new() else {
                 return;
@@ -75,12 +102,26 @@ pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
         let _ = app;
-        Err("system paste is available on macOS only".to_string())
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        window
+            .with_webview(move |view| {
+                let _ = reply.send(linux::paste_into_view(&view.inner()));
+            })
+            .map_err(|error| error.to_string())?;
+        receiver.await.map_err(|_| "paste view closed".to_string())?
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (app, window);
+        Err("system paste is unavailable on this platform".to_string())
     }
 }
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests_linux;
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests_native_paste;

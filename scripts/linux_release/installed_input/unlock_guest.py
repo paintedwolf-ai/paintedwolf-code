@@ -109,7 +109,7 @@ def serve_prepare(pending, execution, vm_id, mailbox):
     from types import SimpleNamespace
     from .private_pipe import Pipe
     from .session_lock import NativeLockObserver
-    from ..installed_environment import graphical_session
+    from ..campaign.environment import graphical_session
     unlock_wire.request(pending, execution)
     if pending['operation'] != unlock_wire.PREPARE or mailbox.read('request.json') != pending:
         raise ValueError('native credential preparation lost its exact published request')
@@ -150,7 +150,7 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
     from .private_pipe import Pipe
     from .native_unlock import NativeUnlockObserver
     from .session_lock import NativeLockObserver
-    from ..installed_environment import graphical_session
+    from ..campaign.environment import graphical_session
     unlock_wire.request(pending, execution)
     if pending['operation'] != unlock_wire.PURPOSE or mailbox.read('request.json') != pending:
         raise ValueError('native unlock lost its exact published request')

@@ -11,7 +11,7 @@ from . import polkit_control, protocol
 from .polkit_stage import CANCEL, PURPOSE
 from .polkit_target import Target
 from .private_pipe import Pipe
-from ..installed_environment import graphical_session
+from ..campaign.environment import graphical_session
 
 
 def exchange(pipe, target, pending):
