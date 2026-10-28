@@ -187,7 +187,7 @@ func unsealedEntry(fd uintptr, seals int, err error) error {
 	if statErr := unix.Fstat(int(fd), &info); statErr == nil {
 		identity = fmt.Sprintf("mode %#o dev %d inode %d size %d", info.Mode, info.Dev, info.Ino, info.Size)
 	}
-	return fmt.Errorf("entry specification is not sealed: descriptor %d is %s (%s) with seals %#x: %v", fd, target, identity, seals, err)
+	return fmt.Errorf("entry specification is not sealed: descriptor %d is %s (%s) with seals %#x: %w", fd, target, identity, seals, err)
 }
 
 func decodeEntry(raw []byte) (EntrySpec, error) {
