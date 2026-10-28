@@ -119,12 +119,16 @@ describe("parked command presentation", () => {
   it("returns to the ordinary command label when the host resumes work", () => {
     const store = mountActivity();
     store.actions.setActivity({ ...park, status: "done" });
+    store.actions.upsertMessage({
+      ...call, id: "resumed-assistant",
+      tool_calls: [{ id: "resumed-call", name: "command", args: { command: "printf done" } }],
+    });
     store.actions.setActivity({
-      ...park, activity_id: "running", kind: "running_tool", wait_triggers: undefined,
+      ...park, activity_id: "running", kind: "running_tool", tool_call_id: "resumed-call", wait_triggers: undefined,
       started_at: "2026-10-28T00:02:00Z",
     });
     vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
-    expect(screen.getByRole("status").textContent).toBe("Running command · sleep 120; echo done...");
+    expect(screen.getByRole("status").textContent).toBe("Running command · printf done...");
   });
 
   it("removes an interrupted wait while its historical parked result remains", async () => {
