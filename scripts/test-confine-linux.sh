@@ -9,7 +9,7 @@ source "${ROOT}/scripts/artifact-paths.sh"
 # User-wide like the other pinned tools, so a lane can provision it before it goes offline.
 BROWSER_CACHE="${PW_BIN_DIR}/confine-browser"
 
-LEGS=(sandbox supervisor browser helpers)
+LEGS=(sandbox supervisor launch browser helpers)
 # --prepare provisions the pinned browser and runs nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
@@ -57,6 +57,9 @@ run_leg() {
       ;;
     helpers)
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-helpers -- ./internal/mcp ./internal/scan/integration ./internal/documentcore -run '^(TestLinuxStdioMCPAppliedBoundary|TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable|TestLinuxDocumentCoreAppliedBoundary|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestRegisterStdioEgressAttributesTheServerLineage|TestBundledScannerConfinementDeniesNetwork)$' -count=1
+      ;;
+    launch)
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch -- ./internal/launchguard/... ./internal/launchverify/... ./cmd/pw-launch/... ./cmd/pw-launch-entry/... ./cmd/pw-vault-identity/... -count=1
       ;;
     browser)
       if ! browser="$(browser_path)"; then

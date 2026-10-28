@@ -26,6 +26,13 @@ const reaperWriteTimeout = time.Second
 var reaper struct {
 	mu   sync.Mutex
 	pipe *os.File
+	cmd  *exec.Cmd
+}
+
+func init() {
+	if len(os.Args) > 1 && os.Args[1] == ReaperCommand {
+		os.Exit(RunReaper(os.Stdin))
+	}
 }
 
 // StartReaper launches the companion that kills every tracked child once this
@@ -34,6 +41,25 @@ var reaper struct {
 // closing it at exit is the trigger. The companion leads its own process group,
 // out of reach of signals sent to the engine's group.
 func StartReaper(name string, args ...string) error {
+	reaper.mu.Lock()
+	defer reaper.mu.Unlock()
+	return startReaperLocked(name, args...)
+}
+
+func ensureReaper() error {
+	reaper.mu.Lock()
+	defer reaper.mu.Unlock()
+	if reaper.pipe != nil {
+		return nil
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("reaper executable: %w", err)
+	}
+	return startReaperLocked(self, ReaperCommand)
+}
+
+func startReaperLocked(name string, args ...string) error {
 	if err := installbinding.Verify(name); err != nil {
 		return err
 	}
@@ -50,15 +76,16 @@ func StartReaper(name string, args ...string) error {
 		return fmt.Errorf("start reaper: %w", err)
 	}
 	_ = read.Close()
-	// Collects the companion only if it exits while this process still runs.
-	go func() { _ = cmd.Wait() }()
 
-	reaper.mu.Lock()
 	previous := reaper.pipe
+	previousCmd := reaper.cmd
 	reaper.pipe = write
-	reaper.mu.Unlock()
+	reaper.cmd = cmd
 	if previous != nil {
 		_ = previous.Close()
+		if previousCmd != nil {
+			_ = previousCmd.Wait()
+		}
 	}
 	return nil
 }
@@ -81,7 +108,11 @@ func sendReaper(op, kind byte, payload string) bool {
 	if _, err := reaper.pipe.WriteString(string([]byte{op, kind}) + payload + "\n"); err != nil {
 		slog.Warn("process reaper unavailable; engine children can outlive an abrupt exit", "err", err)
 		_ = reaper.pipe.Close()
+		if reaper.cmd != nil {
+			_ = reaper.cmd.Wait()
+		}
 		reaper.pipe = nil
+		reaper.cmd = nil
 		return false
 	}
 	return true
