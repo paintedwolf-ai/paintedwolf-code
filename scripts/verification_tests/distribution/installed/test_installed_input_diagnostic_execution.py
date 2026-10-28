@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_input import diagnostic
-from linux_release import installed_execution
+from linux_release.campaign import execution as installed_execution
 
 
 class InputDiagnosticTests(unittest.TestCase):

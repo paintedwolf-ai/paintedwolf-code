@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import reply_observer as observer, reply_restart as owner
-from linux_release import installed_execution
+from linux_release.campaign import execution as installed_execution
 from linux_release.installed_cases import desktop_launch, provider_setup
 from linux_release.installed_input.protocol import steps
 
@@ -161,6 +161,13 @@ class ReplyRestartTests(unittest.TestCase):
                          ['Name (optional) e.g. GPU box, Work account',
                           'Endpoint URL http://localhost:4000/v1', 'API key Paste your API key…'])
         self.assertEqual(physical.call_args_list[-1].kwargs, {'password': True})
+        ui.click.reset_mock()
+        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(
+                provider_setup, 'setup_state', return_value={'onboarding_completed': False}), patch.object(
+                provider_setup, 'select_default_model'), patch.object(
+                provider_setup, 'find_gui_provider', return_value={'provider_id': 'fixture', 'configured_models': [provider_setup.MODEL]}):
+            self.assertEqual(provider_setup.configure_provider(app, fixture)['provider_id'], 'fixture')
+        self.assertEqual([call.args[0] for call in ui.click.call_args_list], ['Skip'])
 
     def test_physical_input_retains_exact_guest_delivery_records(self):
         app = SimpleNamespace(binding={'native_input': {'binding': 'binding', 'vm_id': 'owned'}}, observations={})

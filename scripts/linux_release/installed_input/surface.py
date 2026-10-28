@@ -5,7 +5,8 @@ import os
 import select
 import time
 
-from ..installed_cases.app import process_identity
+from ..installed_process import process_identity
+from ..installed_cases.desktop_ui import retry_inventory
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from . import accessibility, lineage, surface_wire as wire
 
@@ -100,13 +101,13 @@ class FrameObserver:
             raise CaseFailed('retained accessible object identity or parent changed')
         self.nodes[marker] = node, metadata
 
-    def _quit_control(self, surfaces):
+    def _quit_control(self, surfaces, deadline):
         matches = []
         for row in surfaces:
             if row['kind'] != 'quit-dialog' or not wire.active(row):
                 continue
             node = self.nodes[self._key(row['identity'])][0]
-            for control in accessibility.descendants(node):
+            for control in self.ui.descendants(node, deadline):
                 if (control.getRole() == self.ui.api.ROLE_PUSH_BUTTON and control.name in {'Quit', 'Keep working'}
                         and self.ui.visible(control) and control.getState().contains(self.ui.api.STATE_FOCUSED)):
                     matches.append({'identity': self._identity(control), 'kind': 'quit-button' if control.name == 'Quit' else 'keep-working-button',
@@ -115,19 +116,39 @@ class FrameObserver:
             raise CaseUnavailable('native-quit-control-focus-is-ambiguous')
         return matches[0] if matches else None
 
-    def observe(self):
+    def observe(self, deadline=None):
+        deadline = time.monotonic() + 15 if deadline is None else deadline
+        while time.monotonic() < deadline:
+            previous = self.nodes.copy()
+            try:
+                snapshot = self._observe_snapshot(deadline)
+                if time.monotonic() >= deadline:
+                    raise CaseUnavailable('owned-frame-observation-deadline')
+                return snapshot
+            except Exception as error:
+                self.nodes = previous
+                self._runtime()
+                if not retry_inventory(self.app, error):
+                    raise
+                time.sleep(0.05)
+        raise CaseUnavailable('owned-frame-observation-deadline')
+
+    def _observe_snapshot(self, deadline):
         self._runtime()
-        for _, node in self.ui.windows():
+        for _, node in self.ui.windows(deadline):
             self._capture(node)
         if len(self.nodes) > 16:
             raise ValueError('captured app surface inventory exceeds its bound')
         surfaces = []
         for marker, (node, metadata) in sorted(self.nodes.items()):
-            if marker != (node.app.bus_name, node.path):
-                raise CaseFailed('retained accessible object address changed')
             state = node.getState()
             defunct = bool(state.contains(self.ui.api.STATE_DEFUNCT))
             if not defunct:
+                application = getattr(node, 'app', None)
+                if application is None:
+                    raise accessibility.InventoryChanged()
+                if marker != (application.bus_name, node.path):
+                    raise CaseFailed('retained accessible object address changed')
                 self._capture(node)
             # A defunct retained object keeps its previously verified identity and
             # parent; it cannot authorize input or stand in for a replacement frame.
@@ -136,7 +157,7 @@ class FrameObserver:
                 'defunct': defunct, 'modal': not defunct and bool(state.contains(self.ui.api.STATE_MODAL))})
         self._runtime()
         return wire.proof({'launch': self.launch, 'engine': self.engine, 'main': self.main,
-                           'surfaces': surfaces, 'control': self._quit_control(surfaces)})
+                           'surfaces': surfaces, 'control': self._quit_control(surfaces, deadline)})
 
     def prepare(self, operation):
         return wire.before(operation, self.observe())
@@ -149,11 +170,11 @@ class FrameObserver:
             result[name] = bool(poll.poll(0))
         return result
 
-    def during(self, operation, before):
+    def during(self, operation, before, deadline=None):
         if operation == 'workspace-approve-quit-v1':
             self._exited()
         else:
-            wire.same_runtime(before, self.observe())
+            wire.same_runtime(before, self.observe(deadline))
 
     def settle(self, operation, before):
         deadline = time.monotonic() + 15
@@ -165,7 +186,12 @@ class FrameObserver:
                     after = {'launch': self.launch, 'engine': self.engine, 'main': self.main,
                              'exited': exited, 'exit_code': code}
             else:
-                after = self.observe()
+                try:
+                    after = self.observe(deadline)
+                except Exception as error:
+                    error.observations = {**getattr(error, 'observations', {}),
+                                          'surface_before': before, 'surface_after': after}
+                    raise
             if after is not None and wire.finished(operation, before, after):
                 return after
             if time.monotonic() >= deadline:

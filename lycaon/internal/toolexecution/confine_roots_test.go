@@ -88,7 +88,8 @@ func TestConfineRootsUnaffectedByModelCwdSymlink(t *testing.T) {
 	testutil.FailErr(t, "symlink", os.Symlink(outside, link))
 
 	tctx := rootsCtx(proj)
-	writeRoots := confine.WriteRootsForProject(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx))
+	writeRoots, err := confine.WriteRootsForBoundary(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx), nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 
 	resolvedOutside, err := filepath.EvalSymlinks(outside)
 	testutil.FailErr(t, "eval outside", err)
@@ -100,7 +101,9 @@ func TestConfineRootsUnaffectedByModelCwdSymlink(t *testing.T) {
 
 	// The union ignores tool arguments, so it is identical without the symlink.
 	testutil.FailErr(t, "remove link", os.Remove(link))
-	if after := confine.WriteRootsForProject(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx)); !slices.Equal(writeRoots, after) {
+	after, err := confine.WriteRootsForBoundary(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx), nil, "")
+	testutil.FailErr(t, "admit unchanged roots", err)
+	if !slices.Equal(writeRoots, after) {
 		t.Fatalf("write roots changed with the symlink removed: %v vs %v", writeRoots, after)
 	}
 }
@@ -124,7 +127,9 @@ func TestSymlinkedCwdStaysUsable(t *testing.T) {
 			t.Fatalf("roots = %v, want no path other than the project root; got %q", roots, r)
 		}
 	}
-	if slices.Contains(confine.WriteRootsForProject("", roots), mustEval(t, cache)) {
+	writeRoots, err := confine.WriteRootsForBoundary("", roots, nil, "")
+	testutil.FailErr(t, "admit cwd roots", err)
+	if slices.Contains(writeRoots, mustEval(t, cache)) {
 		t.Fatalf("write roots must not contain the symlink target %q", cache)
 	}
 }

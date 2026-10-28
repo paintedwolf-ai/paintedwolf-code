@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from scripts.linux_release.installed_cases import shipping_lifecycle as routes
-from scripts.linux_release import installed_execution
+from scripts.linux_release.campaign import execution as installed_execution
 from scripts.linux_release.installed_input import controller
 from scripts.linux_release.support_matrix import CATALOG
 

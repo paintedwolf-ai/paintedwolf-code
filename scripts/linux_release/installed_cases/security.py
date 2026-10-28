@@ -12,7 +12,7 @@ import struct
 import subprocess
 import time
 
-from ..installed_runtime import unchanged
+from ..campaign.runtime import unchanged
 from .app import InstalledApp
 from .ipc import system_v_isolation
 from .lifecycle import background_cancel

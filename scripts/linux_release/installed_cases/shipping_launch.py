@@ -3,7 +3,7 @@ import configparser
 from pathlib import Path
 import shlex
 
-from ..installed_runtime import SETUID_LAUNCHER, file_identity
+from ..campaign.runtime import SETUID_LAUNCHER, file_identity
 
 
 def launch_command(mode, launcher, storage, arguments, binding):

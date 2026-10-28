@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
@@ -51,12 +50,11 @@ func TestScanSSEIntegrationPublishesTransitions(t *testing.T) {
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() { _ = runner.Run(ctx) }()
 
 	var sawComplete bool
-	deadline := time.After(2 * time.Second)
 	for !sawComplete {
 		select {
 		case envelope := <-ch:
@@ -73,7 +71,7 @@ func TestScanSSEIntegrationPublishesTransitions(t *testing.T) {
 			if payload.Status == api.CodeScanStatusComplete {
 				sawComplete = true
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timed out waiting for scan SSE complete event")
 		}
 	}

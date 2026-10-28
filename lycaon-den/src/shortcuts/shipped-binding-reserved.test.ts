@@ -4,7 +4,7 @@ import YAML from "yaml";
 import { describe, expect, it } from "vitest";
 import { parseBinding, bindingIsProducible } from "./chord.ts";
 import { defaultBindingAllowedOnPlatform } from "./binding-policy.ts";
-import { DEFAULT_NAV_LEADER_CHORD } from "./keymap.ts";
+import { DEFAULT_NAV_LEADER_CHORDS } from "./keymap.ts";
 import {
   reservedReason,
   TAURI_PLATFORMS,
@@ -42,9 +42,9 @@ const declarations: Declaration[] = keybindingFiles(packsRoot).map((path) => {
   return { ...body, file: relative(packsRoot, path) };
 });
 
-function expandLeader(declared: string): string {
+function expandLeader(declared: string, platform: TauriPlatform): string {
   return declared.startsWith("Leader ")
-    ? `${DEFAULT_NAV_LEADER_CHORD} ${declared.slice("Leader ".length)}`
+    ? `${DEFAULT_NAV_LEADER_CHORDS[platform]} ${declared.slice("Leader ".length)}`
     : declared;
 }
 
@@ -93,7 +93,7 @@ describe("every shipped keybinding against the reserved-chord tables", () => {
     for (const declaration of declarations) {
       for (const platform of TAURI_PLATFORMS) {
         for (const declared of declaration.bindings?.[platform] ?? []) {
-          const reason = violation(expandLeader(declared), platform);
+          const reason = violation(expandLeader(declared, platform), platform);
           if (reason) {
             failures.push(
               `${declaration.file} (${declaration.id}) ${platform} "${declared}": ${reason}. ` +
