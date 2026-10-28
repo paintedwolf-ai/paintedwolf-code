@@ -1,0 +1,16 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-module-view-fixtures",
+  "disposition": "retain",
+  "reason": "Retain protected-launch fixture construction and instrumented root actor setup within 500 code-bearing lines. The same sealed generation and inherited descriptor frame drive the actual RunStage, broker and watcher paths; child counters are collected after final-identity-writable actors exit. Separate desktop payload and harness output descriptors, propagated deadlines and private mount cleanup are part of this one fixture lifecycle.",
+  "reviewed_commit": "f3e72a790c51e544bbb71bc9d4ec1e8f61aef2ba",
+  "ceiling": 500,
+  "boundaries": {
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "fce8ac212edf13640a1fdb6b86ad226c6c8090d0be621cdd05c95bc774af5ab7",
+    "lycaon/internal/launchguard/agent_linux_test.go": "78c7d263d369325ddd1771185f08b881c1e04b519f719096da296e9157527b9c",
+    "lycaon/internal/launchguard/modules_linux_test.go": "67523b6cb472db5a448d78143d71e4e41dfc13557c8eaf0ecf5a658a6e42c65c",
+    "lycaon/internal/launchguard/protected_launch_linux_test.go": "782916c07cbd1f3fb4009aa13fa6516c8da93686cd3d80dd59cbbed1e7ba2a01"
+  }
+}

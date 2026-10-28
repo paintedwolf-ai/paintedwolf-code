@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/agent_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-module-view-fixtures",
+  "disposition": "retain",
+  "reason": "Retain the broker and module-view watcher contracts within 550 code-bearing lines. They verify one agent identity boundary: sealed dispatch, every thread\u2019s credentials and capabilities, readiness, and newly propagated mounts beneath an allowed library root. Keeping the shared process facts and these actor assertions together makes the initial and child user namespace controls directly comparable.",
+  "reviewed_commit": "f3e72a790c51e544bbb71bc9d4ec1e8f61aef2ba",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/internal/launchguard/agent_linux_test.go": "78c7d263d369325ddd1771185f08b881c1e04b519f719096da296e9157527b9c",
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "fce8ac212edf13640a1fdb6b86ad226c6c8090d0be621cdd05c95bc774af5ab7"
+  }
+}
