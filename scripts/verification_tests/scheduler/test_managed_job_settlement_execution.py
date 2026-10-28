@@ -213,6 +213,46 @@ else:
                 self.assertEqual(result.returncode,0,result.stdout+result.stderr)
                 self.assertEqual(marker.exists(),alias=='namespace')
 
+    def test_cached_regular_package_search_paths_stay_inside_the_checkout(self):
+        source=Path(__file__).resolve().parents[3]
+        script=r'''
+from pathlib import Path
+import importlib
+import sys
+source,checkout,foreign,marker=map(Path,sys.argv[1:5])
+alias=sys.argv[5]
+sys.path.insert(0,str(source/'scripts'))
+from managed_job_settlement import JobSettlement
+sys.path.pop(0)
+sys.path.insert(0,str(checkout))
+package=importlib.import_module('scripts.caller')
+assert Path(package.__file__)==checkout/'scripts/caller/__init__.py'
+if alias in ('path','both'):package.__path__=[str(foreign)]
+if alias in ('spec','both'):package.__spec__.submodule_search_locations=[str(foreign)]
+before=list(sys.path)
+value=JobSettlement(checkout=checkout,arguments=[],save=None,command=None)
+try:value.validate_checkout({'scripts.caller.module':'scripts/caller/module.py'})
+except ValueError:
+    assert sys.path==before and not marker.exists()
+else:
+    import scripts.caller.module
+    raise AssertionError('a cached foreign package search path was admitted')
+'''
+        for alias in ('path','spec','both'):
+            with self.subTest(alias=alias),tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary).resolve();checkout=root/'checkout';namespace=checkout/'scripts'
+                (namespace/'verification_process').mkdir(parents=True)
+                for relative in ('artifact_paths.py','verification_process/__init__.py'):
+                    shutil.copyfile(source/'scripts'/relative,namespace/relative)
+                caller=namespace/'caller';caller.mkdir();(caller/'__init__.py').write_text('')
+                (caller/'module.py').write_text('pass\n')
+                foreign=root/'foreign';foreign.mkdir();marker=root/'executed'
+                (foreign/'module.py').write_text('from pathlib import Path\nPath('+repr(str(marker))+').write_bytes(b"unexpected")\n')
+                result=subprocess.run([sys.executable,'-I','-B','-c',script,str(source),str(checkout),str(foreign),str(marker),alias],
+                                      capture_output=True,text=True,timeout=15)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertFalse(marker.exists())
+
     def test_completion_races_never_cancel_an_unrelated_invocation(self):
         for when in ('before-status','after-status','during-cancel'):
             value,records=self.fixture()
