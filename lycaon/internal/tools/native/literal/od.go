@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// odBlock is GNU od's bytes per output line.
+// odBlock is the bytes per output line.
 const odBlock = 16
 
 // odType is one output format: a (named characters), c (escaped
@@ -21,7 +21,7 @@ type odType struct {
 	width int
 }
 
-// odDigits are GNU od's field widths by kind and size.
+// odDigits are the field widths by kind and size.
 var odDigits = map[byte]map[int]int{
 	'd': {1: 4, 2: 6, 4: 11, 8: 20},
 	'o': {1: 3, 2: 6, 4: 11, 8: 22},
@@ -29,7 +29,7 @@ var odDigits = map[byte]map[int]int{
 	'x': {1: 2, 2: 4, 4: 8, 8: 16},
 }
 
-// odTraditional are the single-letter formats GNU and BSD share.
+// odTraditional are the single-letter format options.
 var odTraditional = map[string]string{"-b": "o1", "-c": "c", "-d": "u2", "-o": "o2", "-s": "d2", "-x": "x2"}
 
 // odNames are -t a's names for the ASCII control characters and space.
@@ -113,9 +113,9 @@ func odAddress(inv *invocation) (func(int64) string, int, error) {
 	return nil, 0, inv.usage(radix, "-A d, o, x or n")
 }
 
-// runOd dumps concatenated pinned inputs as GNU od does: 16 bytes per line,
-// one line per format, columns aligned across formats, repeated lines
-// collapsed to * unless -v.
+// runOd dumps concatenated pinned inputs: 16 bytes per line, one line per
+// format, columns aligned across formats, repeated lines collapsed to *
+// unless -v.
 func runOd(inv *invocation) error {
 	types, err := odTypes(inv)
 	if err != nil {
@@ -203,9 +203,9 @@ func runOd(inv *invocation) error {
 	return inv.out.text(address(offset) + "\n")
 }
 
-// write prints the fields covering n bytes of a zero-filled block. GNU
-// spreads each format's spare width over its fields so every format's line
-// is lineWidth columns wide.
+// write prints the fields covering n bytes of a zero-filled block. Each
+// format's spare width is spread over its fields so every format's line is
+// lineWidth columns wide.
 func (t odType) write(out *strings.Builder, block []byte, n, lineWidth int) {
 	fields := odBlock / t.size
 	pad := lineWidth - t.width*fields

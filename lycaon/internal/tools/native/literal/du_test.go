@@ -24,7 +24,7 @@ var duFiles = map[string]string{
 	"proj/empty/":          "",
 }
 
-// diskUsage sums an independent walk with GNU du's rules: every entry's
+// diskUsage sums an independent walk with du's rules: every entry's
 // allocated 512-byte blocks, or each file's byte size; hard links once.
 func diskUsage(t *testing.T, root string, apparent bool) int64 {
 	t.Helper()
@@ -149,7 +149,7 @@ func TestDuWalksPostOrderAndSelectsDepth(t *testing.T) {
 	}
 }
 
-// TestDuCountsHardLinksOnceAndNeverFollowsLinks: GNU du charges a file's
+// TestDuCountsHardLinksOnceAndNeverFollowsLinks: du charges a file's
 // blocks to its first link only and sizes a symbolic link itself.
 func TestDuCountsHardLinksOnceAndNeverFollowsLinks(t *testing.T) {
 	h := newHarness(t, map[string]string{"d/big": strings.Repeat("x", 5000)})

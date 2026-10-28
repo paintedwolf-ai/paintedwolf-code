@@ -78,8 +78,8 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 }
 
 // effectMode names the catalog mode of commands with several: sort -o,
-// iconv -o and uniq OUTPUT write; every other form reads. sed's mode is resolved by its
-// admitted prepared plan.
+// iconv -o and uniq OUTPUT write; every other form reads. sed's mode is
+// resolved by its admitted prepared plan.
 func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
 	switch argv.Command {
 	case "sort", "iconv":

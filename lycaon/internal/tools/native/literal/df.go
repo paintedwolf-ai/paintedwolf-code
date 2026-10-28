@@ -24,16 +24,16 @@ type volume struct {
 // path.
 type volumeStats func(file *os.File, path string) (volume, error)
 
-// dfColumn is one GNU df column: its header, minimum width and alignment.
+// dfColumn is one df column: its header, minimum width and alignment.
 type dfColumn struct {
 	header string
 	width  int
 	left   bool
 }
 
-// runDf reports GNU df rows for the volumes holding the named paths, or
-// for the attached folders and session scratch. Every path binds through
-// the read authority first; the volume is read through the bound entry.
+// runDf reports rows for the volumes holding the named paths, or for the
+// attached folders and session scratch. Every path binds through the read
+// authority first; the volume is read through the bound entry.
 func runDf(inv *invocation) error {
 	if inv.owners.volumes == nil {
 		return platformUnavailable("df", "file system statistics")
@@ -101,8 +101,8 @@ func (inv *invocation) volumeOf(operand string) (volume, bool, error) {
 	return vol, err == nil, err
 }
 
-// dfTable lays out GNU df's columns: each is as wide as its header, its
-// widest cell and GNU's minimum; Filesystem aligns left, Mounted on is last.
+// dfTable lays out the columns: each is as wide as its header, its widest
+// cell and its minimum; Filesystem aligns left, Mounted on is last.
 func dfTable(rows []volume, inodes, human, posix bool) string {
 	columns := []dfColumn{{header: "Filesystem", width: 14, left: true}}
 	switch {

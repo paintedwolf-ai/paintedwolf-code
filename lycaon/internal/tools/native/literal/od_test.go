@@ -5,15 +5,14 @@ import (
 	"testing"
 )
 
-// odFiles hold every byte class od renders. Expected bytes were observed
-// from GNU coreutils 9.12 od over the same files.
+// odFiles hold every byte class od renders.
 var odFiles = map[string]string{
 	"o":     "Hello, world!\n\x00\x01\x7f\x80\xff abcdefghijklmnopqrstuvwxyz0123456789",
 	"zeros": strings.Repeat("\x00", 64),
 	"empty": "",
 }
 
-func TestOdMatchesGNU(t *testing.T) {
+func TestOdFormsProduceExactBytes(t *testing.T) {
 	h := newHarness(t, odFiles)
 	for _, c := range []formCase{
 		{argv: "od -A x -t x1 -N 16 o", stdout: "000000 48 65 6c 6c 6f 2c 20 77 6f 72 6c 64 21 0a 00 01\n000010\n"},

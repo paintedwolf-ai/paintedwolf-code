@@ -9,9 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-// Expected bytes were observed from GNU gettext-runtime 1.0 envsubst with the
-// same environment.
-func TestEnvsubstMatchesGNU(t *testing.T) {
+func TestEnvsubstFormsProduceExactBytes(t *testing.T) {
 	h := newHarness(t)
 	h.env = []string{"HOST=h1", "USER2=me", "X=", "_u=U", "PATH=/bin"}
 	h.goldens(t, []golden{

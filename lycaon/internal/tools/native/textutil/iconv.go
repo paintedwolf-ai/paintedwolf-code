@@ -22,14 +22,13 @@ import (
 
 // charset is one iconv code set: how its bytes decode and how runes encode.
 // UTF-16 and UTF-32 decode big-endian unless a BOM says otherwise and
-// encode with a BOM in little-endian order, as glibc does on little-endian
-// hosts. A nil Encoding is strict 7-bit ASCII.
+// encode with a BOM in little-endian order. A nil Encoding is strict 7-bit
+// ASCII.
 type charset struct {
 	decode, encode encoding.Encoding
 }
 
-// charsetAliases are spellings glibc and libiconv accept that the IANA
-// registry does not name.
+// charsetAliases are common spellings the IANA registry does not name.
 var charsetAliases = map[string]string{
 	"UTF8": "UTF-8", "LATIN1": "ISO-8859-1", "LATIN-1": "ISO-8859-1", "L1": "ISO-8859-1", "ISO88591": "ISO-8859-1",
 	"CP1250": "windows-1250", "CP1251": "windows-1251", "CP1252": "windows-1252", "CP1253": "windows-1253",
@@ -94,7 +93,7 @@ func lookupCharset(spec string) (set charset, translit, ignore, ok bool) {
 
 func pair(e encoding.Encoding) charset { return charset{decode: e, encode: e} }
 
-// errIllegal and errIncomplete stop a conversion at glibc's diagnostics.
+// errIllegal and errIncomplete stop a conversion with a diagnostic.
 var (
 	errIllegal    = errors.New("illegal input sequence")
 	errIncomplete = errors.New("incomplete character or shift sequence at end of buffer")
@@ -109,7 +108,7 @@ type conversion struct {
 	encoder          transform.Transformer
 	legitReplacement []byte
 	omitted          bool
-	// decoded holds one decoded character; encoded one encoded one.
+	// decoded and encoded each hold one character's bytes.
 	decoded, encoded [64]byte
 }
 
@@ -217,7 +216,8 @@ func (c *conversion) emit(out *bytes.Buffer, char []byte) bool {
 	return false
 }
 
-// transliterationTable covers punctuation compatibility decomposition keeps.
+// transliterationTable covers characters compatibility decomposition leaves
+// unencodable, mostly punctuation.
 var transliterationTable = map[rune]string{
 	'‘': "'", '’': "'", '‚': "'", '‛': "'", '“': `"`, '”': `"`, '„': `"`,
 	'–': "-", '—': "-", '−': "-", '…': "...", '€': "EUR", ' ': " ", 'ß': "ss",
@@ -331,7 +331,7 @@ func runIconv(inv *invocation) error {
 	return inv.settleStage(stage, output.Flush())
 }
 
-// convertSources converts each input in turn; glibc's diagnostics end the run
+// convertSources converts each input in turn; a diagnostic ends the run
 // with status 1, and -c's omissions also leave status 1.
 func (inv *invocation) convertSources(sources []source, from, to charset, translit, ignore bool, w io.Writer) error {
 	for _, src := range sources {
@@ -356,7 +356,7 @@ func (inv *invocation) convertSources(sources []source, from, to charset, transl
 	return nil
 }
 
-// iconvUnsupported is glibc's refusal of an unknown code set: status 1.
+// iconvUnsupported refuses an unknown code set with status 1.
 func (inv *invocation) iconvUnsupported(from, to string, fromOK, toOK bool) error {
 	switch {
 	case !fromOK && !toOK:

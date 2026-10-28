@@ -18,16 +18,16 @@ type cmpOptions struct {
 	skip                [2]int64
 }
 
-// cmpSide is one compared input with the name GNU prints for it.
+// cmpSide is one compared input and the name diagnostics print for it.
 type cmpSide struct {
 	name   string
 	in     *input
 	reader *bufio.Reader
 }
 
-// runCmp compares two pinned streams byte by byte, as GNU cmp does: status
-// 0 same, 1 different, 2 trouble. Both inputs stay open while they are read
-// in step; neither is gathered.
+// runCmp compares two pinned streams byte by byte: status 0 same, 1
+// different, 2 trouble. Both inputs stay open while they are read in step;
+// neither is gathered.
 func runCmp(inv *invocation) error {
 	opts, err := cmpSelections(inv)
 	if err != nil {
@@ -47,7 +47,7 @@ func runCmp(inv *invocation) error {
 		opts.skip[i] = n
 	}
 	if opts.silent {
-		// GNU cmp -s reports trouble only through its status.
+		// -s reports trouble only through its status.
 		inv.stderr = io.Discard
 	}
 	if memory := inv.owners.Revisions.Memory; memory != nil {
@@ -144,7 +144,7 @@ func (r cmpRun) compare() error {
 				short = sides[1].name
 			}
 			inv.status = 1
-			_, _ = fmt.Fprintf(inv.stderr, "cmp: EOF on %s%s\n", gnuQuote(short), eofPosition(compared, lines, last, opts.list))
+			_, _ = fmt.Fprintf(inv.stderr, "cmp: EOF on %s%s\n", quoteName(short), eofPosition(compared, lines, last, opts.list))
 			return nil
 		}
 		compared++
@@ -179,7 +179,7 @@ func cmpDifference(sides [2]cmpSide, at, line int64, a, b byte, bytes bool) stri
 	return fmt.Sprintf("%s %s differ: char %d, line %d\n", sides[0].name, sides[1].name, at, line)
 }
 
-// eofPosition is GNU cmp's account of where the shorter input ended.
+// eofPosition says where the shorter input ended.
 func eofPosition(compared, lines int64, last byte, list bool) string {
 	switch {
 	case compared == 0:
@@ -192,7 +192,7 @@ func eofPosition(compared, lines int64, last byte, list bool) string {
 	return fmt.Sprintf(" after byte %d, in line %d", compared, lines+1)
 }
 
-// offsetWidth is GNU's -l offset column: wide enough for the largest
+// offsetWidth is the -l offset column: wide enough for the largest
 // offset the limit and the regular inputs' remaining bytes allow.
 func (r cmpRun) offsetWidth() int {
 	largest := r.opts.limit
@@ -204,7 +204,7 @@ func (r cmpRun) offsetWidth() int {
 	return len(strconv.FormatInt(largest, 10))
 }
 
-// caretByte is GNU cmp's printable notation: M- for the high bit, ^ for
+// caretByte is the printable byte notation: M- for the high bit, ^ for
 // control characters and ^? for DEL.
 func caretByte(c byte) string {
 	var out []byte
@@ -223,7 +223,7 @@ func caretByte(c byte) string {
 	return string(out)
 }
 
-// gnuQuote is GNU's locale quoting of a file name in diagnostics.
-func gnuQuote(name string) string {
+// quoteName quotes a file name in diagnostics.
+func quoteName(name string) string {
 	return "'" + strings.ReplaceAll(name, "'", `'\''`) + "'"
 }

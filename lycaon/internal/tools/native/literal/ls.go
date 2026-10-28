@@ -199,8 +199,8 @@ func runLs(inv *invocation) error {
 
 // children reads one directory's entries itself: no ignore rules or map.
 // ls -R and du share it. An unreadable directory is reported and yields no
-// entries; GNU ls treats an unreadable command-line operand as serious (2)
-// and a nested one as minor, and du treats both as minor.
+// entries. ls treats an unreadable command-line operand as serious (2) and
+// a nested one as minor; du treats both as minor.
 func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
 	opened, err := dir.OpenDir()
 	if err != nil {

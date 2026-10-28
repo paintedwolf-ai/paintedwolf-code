@@ -6,11 +6,10 @@ import (
 )
 
 // stringsBinary mixes runs of every length around the default and -n 8
-// minimums, a tab, high bytes and a trailing short run. Expected bytes were
-// observed from GNU Binutils 2.47 strings over the same file.
+// minimums, a tab, high bytes and a trailing short run.
 const stringsBinary = "ab\x00hello world\x00\x01short\x02longer string here\ttab\x80\xffhighbits\nnext line ok\n12345678\x00end"
 
-func TestStringsMatchesGNU(t *testing.T) {
+func TestStringsFormsProduceExactBytes(t *testing.T) {
 	h := newHarness(t, map[string]string{"bin": stringsBinary, "dir/": ""})
 	all := "hello world\nshort\nlonger string here\ttab\nhighbits\nnext line ok\n12345678\n"
 	eight := "hello world\nlonger string here\ttab\nhighbits\nnext line ok\n12345678\n"
