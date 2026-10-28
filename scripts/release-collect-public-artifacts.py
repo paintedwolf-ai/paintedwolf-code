@@ -10,7 +10,7 @@ import shutil
 import sys
 
 from release_semver import parse
-from release_distribution_contract.platforms import load_platforms
+from release_distribution_contract.platforms import detached_signatures, load_platforms
 
 
 def main() -> int:
@@ -34,6 +34,7 @@ def main() -> int:
             if not isinstance(extensions, list) or not extensions:
                 raise ValueError(f"public release platform {row['updater_key']} lists no package")
             names = [f"{stem}.{extension}{suffix}" for extension in extensions for suffix in ("", ".sha256")]
+            names += [f"{stem}.{extension}.sig" for extension in detached_signatures(row)]
             updater = row.get("updater_extension")
             if updater is not None:
                 names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]

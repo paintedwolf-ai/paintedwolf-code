@@ -57,7 +57,8 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         if operation in {"recover", "withdraw"} and current(
                 storage_prefix + "/generations/" + identity + "/generation.json", work) != receipt:
             raise ValueError("R2 pacman recovery requires the exact retained healthy generation")
-        if current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
+        # An empty withdrawal generation offers no version, so a retry stays possible.
+        if receipt["packages"] and current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
             raise ValueError("a withdrawn repository version cannot be offered again")
         for source in sorted(generation.iterdir()):
             relative = "generations/" + identity + "/" + source.name
