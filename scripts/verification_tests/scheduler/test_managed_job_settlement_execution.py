@@ -68,13 +68,15 @@ assert sys.path.count(str(namespace))==1
 assert sys.path.count(str(checkout))==1
 import scripts.artifact_paths
 value.validate_checkout()
+caller={'scripts.linux_release.campaign.guests':'scripts/linux_release/campaign/guests.py',
+        'scripts.harness':'scripts/harness'}
+value.validate_checkout(caller)
 from scripts.linux_release.campaign.guests import command
 import scripts.harness
 assert callable(command)
 assert scripts.harness.__file__ is None
 assert list(scripts.harness.__path__)==[str(namespace/'harness')]
-value.validate_checkout({'scripts.linux_release.campaign.guests':'scripts/linux_release/campaign/guests.py',
-                         'scripts.harness':'scripts/harness'})
+value.validate_checkout(caller)
 value.validate_checkout()
 """
         result=subprocess.run([sys.executable,'-I','-B','-c',script,str(checkout)],
