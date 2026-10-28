@@ -150,7 +150,7 @@ class Launch:
         self.patches = [patch.object(owner, 'require_owned_guest'), patch.object(owner, 'graphical_session', return_value=SESSION),
                         patch.object(owner, 'session_environment', return_value={'DISPLAY': ':1'}),
                         patch.object(Path, 'home', return_value=home),
-                        patch.object(Path, 'exists', lambda p, **k: True if str(p) == f'/proc/{self.live_pid}' else native_exists(p, **k)),
+                        patch.object(Path, 'exists', lambda p, **k: str(p) == f'/proc/{self.live_pid}' if str(p).startswith('/proc/') else native_exists(p, **k)),
                         patch.object(owner, 'file_identity', return_value=dict(self.identity, header=b'ELF')),
                         patch.object(owner.subprocess, 'Popen', return_value=self.process),
                         patch.object(owner, 'process_identity', return_value=IDENTITY),
