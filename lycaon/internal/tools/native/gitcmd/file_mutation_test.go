@@ -314,3 +314,39 @@ func TestMoveReusesIndexBlobBeyondStreamLimit(t *testing.T) {
 		t.Fatalf("move %+v %q reads=%d", got.result, got.stderr, backend.blobReads)
 	}
 }
+
+type stageResultBackend struct {
+	Backend
+	result  git.OperationResult
+	failure error
+}
+
+func (b stageResultBackend) Operate(context.Context, string, git.OperationRequest) (git.OperationResult, error) {
+	return b.result, b.failure
+}
+
+func TestIndexAttemptCertaintyUsesObservedState(t *testing.T) {
+	for _, test := range []struct {
+		name                         string
+		attempted, observed, changed bool
+		certainty                    toolcontract.EffectCertainty
+	}{
+		{"before-attempt", false, false, false, toolcontract.NoEffect},
+		{"unobserved", true, false, false, toolcontract.EffectUnknown},
+		{"observed-unchanged", true, true, false, toolcontract.NoEffect},
+		{"observed-changed", true, true, true, toolcontract.EffectCompleted},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newApplyHarness(t)
+			result := git.OperationResult{Attempted: test.attempted, AfterObserved: test.observed, Status: "failed", Before: git.RepositoryState{Index: "before"}, After: git.RepositoryState{Index: "before"}}
+			if test.changed {
+				result.After.Index = "after"
+			}
+			h.owners.Git = stageResultBackend{Backend: h.owners.Git, result: result, failure: fmt.Errorf("fixture index failure")}
+			got := h.exec("git", "rm", "-f", "--cached", "--", "sub/b.txt")
+			if got.result.EffectCertainty != test.certainty || h.absent("sub/b.txt") {
+				t.Fatalf("certainty %+v", got.result)
+			}
+		})
+	}
+}

@@ -7,14 +7,16 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 type trackedMove struct {
-	from, to string
-	entries  []git.IndexEntry
-	expected map[string]trackedEntry
-	problem  string
+	from, to  string
+	entries   []git.IndexEntry
+	expected  map[string]trackedEntry
+	problem   string
+	overwrite bool
 }
 
 func (r *fileMutation) move() error {
@@ -68,7 +70,19 @@ func (r *fileMutation) move() error {
 		if _, err := os.Lstat(entryAbs(r.repo.Root, plan.to)); err == nil {
 			fmt.Fprintf(r.stderr, "warning: overwriting '%s'\n", plan.to)
 		}
-		result, err := r.p.filesystem.Operations.Move.Move(r.ctx, native.MoveInput{Memory: r.p.filesystem.Revisions.Memory, Pairs: []native.FilePair{{From: entryAbs(r.repo.Root, plan.from), To: entryAbs(r.repo.Root, plan.to)}}, Directories: true}, r.reviewContext(plan.expected, nil))
+		result, err := r.p.filesystem.Operations.Move.Move(r.ctx, native.MoveInput{Memory: r.p.filesystem.Revisions.Memory, Pairs: []native.FilePair{{From: entryAbs(r.repo.Root, plan.from), To: entryAbs(r.repo.Root, plan.to)}}, Directories: true}, r.reviewContext(plan.expected, func() error {
+			if plan.overwrite {
+				return nil
+			}
+			_, err := os.Lstat(entryAbs(r.repo.Root, plan.to))
+			if os.IsNotExist(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": plan.to}}
+		}))
 		r.effects = r.effects || len(result.Moved) > 0 || len(result.DestinationCopied) > 0
 		if err != nil {
 			return err
@@ -115,6 +129,7 @@ func (r *fileMutation) planMove(source, target string) (trackedMove, error) {
 			plan.problem = "destination exists"
 			return plan, nil
 		}
+		plan.overwrite = true
 	} else if !os.IsNotExist(destErr) {
 		return plan, destErr
 	}

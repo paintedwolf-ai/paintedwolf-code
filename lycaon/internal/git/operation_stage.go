@@ -69,9 +69,12 @@ func (p *operationPlan) runStage(ctx context.Context, dir string) ([]byte, int, 
 			continue
 		}
 		if entry.ObjectID != "" {
-			out, code, err := gitexec.Run(ctx, dir, []string{"--no-replace-objects", "cat-file", "-e", entry.ObjectID + "^{blob}"}, p.opts)
+			out, code, err := gitexec.Run(ctx, dir, []string{"--no-replace-objects", "cat-file", "-t", entry.ObjectID}, p.opts)
 			if err != nil || code != 0 {
 				return out, code, err
+			}
+			if strings.TrimSpace(string(out)) != "blob" {
+				return []byte("index entry requires a blob object"), 1, nil
 			}
 			fmt.Fprintf(&info, "%s %s 0\t%s\x00", entry.Mode, entry.ObjectID, entry.Path)
 			continue
