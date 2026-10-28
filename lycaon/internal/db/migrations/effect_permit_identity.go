@@ -13,14 +13,15 @@ import (
 //go:embed effect_permit_identity.go
 var effectPermitIdentityImplementation []byte
 
-// Revision5 stores native approval authority losslessly beside its screened
-// JSON display in the same authority rows. Revision4 holds no native authority,
+// Revision7 stores native approval authority losslessly beside its screened
+// JSON display in the same authority rows. Revision6 holds no native authority,
 // so every retained row keeps the empty structured format.
 var nativeAuthorityColumns = []string{"checkpoints", "approval_operations", "chat_grants"}
 
-const nativeAuthorityColumnsDDL = `ALTER TABLE %[1]s ADD COLUMN authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1'));
-ALTER TABLE %[1]s ADD COLUMN authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64));
-ALTER TABLE %[1]s ADD COLUMN authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body)));`
+//go:embed effect_permit_identity.sql
+var nativeAuthorityColumnsDDL string
+
+var effectPermitIdentitySourceBytes = append(append([]byte(nil), []byte(nativeAuthorityColumnsDDL)...), effectPermitIdentityImplementation...)
 
 func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
 	for _, table := range nativeAuthorityColumns {
@@ -77,7 +78,7 @@ func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
 	}
 }
 
-// Revision4 contains only structured once descriptors. Make that empty child
+// Revision6 contains only structured once descriptors. Make that empty child
 // scope explicit without manufacturing an execution identity or changing plan
 // ids, semantic action digests, recorded options or grant lifetimes.
 func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
@@ -86,7 +87,7 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("payload must be an object")
 	}
 	if _, present := payload["native_arguments_representation"]; present {
-		return nil, fmt.Errorf("revision4 cannot assert native argument representation")
+		return nil, fmt.Errorf("revision6 cannot assert native argument representation")
 	}
 	encoded, ok := payload["approval_plan"]
 	if !ok {
@@ -155,7 +156,7 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 				return nil, err
 			}
 			if _, present := delta["execution_id"]; present {
-				return nil, fmt.Errorf("revision4 cannot assert native child authority")
+				return nil, fmt.Errorf("revision6 cannot assert native child authority")
 			}
 			delta["execution_id"] = json.RawMessage(`""`)
 			changed = true
