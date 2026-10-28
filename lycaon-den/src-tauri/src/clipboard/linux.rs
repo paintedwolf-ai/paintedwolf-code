@@ -63,7 +63,7 @@ impl NativeClipboard {
             let result = clipboard().and_then(|board| super::secret_linux::write(&board, text));
             if let Err(Ok(copy)) = reply.send(result) {
                 if let Ok(board) = clipboard() {
-                    super::secret_linux::clear(&board, Some(copy));
+                    super::secret_linux::clear(&board, copy);
                 }
             }
         })
@@ -72,7 +72,7 @@ impl NativeClipboard {
     pub(super) fn clear_secret_text(&mut self, main: &dyn MainThread, copy: u64) -> Reply<()> {
         on_main_thread(main, move |reply| {
             let _ = reply.send(clipboard().map(|clipboard| {
-                super::secret_linux::clear(&clipboard, Some(copy));
+                super::secret_linux::clear(&clipboard, copy);
             }));
         })
     }
@@ -101,9 +101,7 @@ impl ClipboardAdapter for NativeClipboard {
         // otherwise ownership ends with the process, as for any GTK window.
         let _ = main.dispatch(Box::new(|| {
             if let Ok(clipboard) = clipboard() {
-                if !super::secret_linux::clear(&clipboard, None) {
-                    clipboard.store();
-                }
+                clipboard.store();
             }
         }));
     }

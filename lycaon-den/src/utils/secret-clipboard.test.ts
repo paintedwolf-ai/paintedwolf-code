@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { secretClipboardLease } from "./secret-clipboard.ts";
+import { SECRET_COPY_LIFETIME_MS, secretClipboardLease } from "./secret-clipboard.ts";
 
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
@@ -9,28 +9,33 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe("secret clipboard ownership", () => {
-  it("clears the owned receipt without reading clipboard bytes", async () => {
-    const adapter = { write: vi.fn(async () => 17), clear: vi.fn(async () => {}) };
+describe("secret clipboard lease", () => {
+  it("clears the owned copy only at expiry", async () => {
+    vi.useFakeTimers();
+    const adapter = { write: vi.fn(async () => 9), clear: vi.fn(async () => {}) };
     const lease = secretClipboardLease(adapter);
     expect(await lease.write("private")).toBe(true);
-    lease.clear();
-    lease.clear();
-    expect(adapter.clear.mock.calls).toEqual([[17]]);
+    await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS - 1);
+    expect(adapter.clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(adapter.clear.mock.calls).toEqual([[9]]);
   });
 
-  it("clears a native write after explicit cancellation", async () => {
-    const pending = deferred<number>();
-    const adapter = { write: vi.fn(() => pending.promise), clear: vi.fn(async () => {}) };
+  it("restarts the timer for a second copy and clears only that copy", async () => {
+    vi.useFakeTimers();
+    const adapter = { write: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(2), clear: vi.fn(async () => {}) };
     const lease = secretClipboardLease(adapter);
-    const writing = lease.write("private");
-    lease.clear();
-    pending.resolve(23);
-    expect(await writing).toBe(false);
-    expect(adapter.clear).toHaveBeenCalledWith(23);
+    await lease.write("first");
+    await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS / 2);
+    await lease.write("second");
+    await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS - 1);
+    expect(adapter.clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(adapter.clear.mock.calls).toEqual([[2]]);
   });
 
-  it("keeps a newer copy when an earlier completion arrives late", async () => {
+  it("ignores a late completion from an earlier copy", async () => {
+    vi.useFakeTimers();
     const first = deferred<number>();
     const adapter = { write: vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce(2), clear: vi.fn(async () => {}) };
     const lease = secretClipboardLease(adapter);
@@ -38,28 +43,17 @@ describe("secret clipboard ownership", () => {
     expect(await lease.write("second")).toBe(true);
     first.resolve(1);
     expect(await old).toBe(false);
-    expect(adapter.clear.mock.calls).toEqual([[1]]);
-    lease.clear();
-    expect(adapter.clear.mock.calls).toEqual([[1], [2]]);
+    await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS);
+    expect(adapter.clear.mock.calls).toEqual([[2]]);
   });
 
-  it("expires the current copy after the documented paste lifetime", async () => {
+  it("keeps the earlier timer when a later write fails", async () => {
     vi.useFakeTimers();
-    const adapter = { write: vi.fn(async () => 9), clear: vi.fn(async () => {}) };
-    const lease = secretClipboardLease(adapter);
-    await lease.write("private");
-    await vi.advanceTimersByTimeAsync(59_999);
-    expect(adapter.clear).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(adapter.clear).toHaveBeenCalledWith(9);
-  });
-
-  it("retains ownership when a later write fails", async () => {
     const adapter = { write: vi.fn().mockResolvedValueOnce(1).mockRejectedValueOnce(new Error("refused")), clear: vi.fn(async () => {}) };
     const lease = secretClipboardLease(adapter);
     await lease.write("first");
     await expect(lease.write("second")).rejects.toThrow("refused");
-    lease.clear();
-    expect(adapter.clear).toHaveBeenCalledWith(1);
+    await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS);
+    expect(adapter.clear.mock.calls).toEqual([[1]]);
   });
 });

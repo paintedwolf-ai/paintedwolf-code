@@ -367,8 +367,13 @@ export function ManagedSecretsPanel(props: Props) {
       return;
     }
     setRevealCopyFailed(false);
+    // A copy event already put the selection on the clipboard.
+    if (selection) {
+      setRevealCopied(true);
+      return;
+    }
     setRevealCopied(false);
-    void secretClipboard.write(selection ?? current.value).then(
+    void secretClipboard.write(current.value).then(
       (copied) => {
         if (copied && alive && revealed() === current) {
           setRevealCopied(true);

@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ManagedSecret } from "../../api/types.ts";
-import { textEditMenuItems } from "../text-edit-menu-items.ts";
 import { ManagedSecretsPanel, SECRETS_PAGE_SIZE } from "./ManagedSecretsPanel.tsx";
 
 const revealManagedSecret = vi.hoisted(() => vi.fn());
@@ -437,18 +436,11 @@ describe("ManagedSecretsPanel", () => {
     } as unknown as Selection);
     fireEvent.copy(screen.getByTestId("managed-secret-revealed-value"));
 
-    expect(clipboard.write).toHaveBeenCalledWith("nat");
-    await waitFor(() => expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe("Value copied"));
-  });
-
-  it("marks a revealed selection copied through the context menu", async () => {
-    revealResolves();
-    await revealValue();
-    const target = screen.getByTestId("managed-secret-revealed-value");
-    const action = textEditMenuItems({ kind: "selection", text: "nat", target }).find((item) => item.label === "Copy");
-    action?.onSelect?.();
-    expect(clipboard.write).toHaveBeenCalledWith("nat");
-    await waitFor(() => expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe("Value copied"));
+    // The copy event already contains the selection.
+    expect(clipboard.write).not.toHaveBeenCalled();
+    expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe(
+      "Value copied",
+    );
   });
 
   it("stores an entered value and never asks for it back", async () => {

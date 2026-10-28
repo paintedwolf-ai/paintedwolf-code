@@ -7,17 +7,16 @@ pub(super) fn write(board: &mut arboard::Clipboard, text: String) -> Result<u64,
     board
         .set()
         .exclude_from_monitoring()
+        .exclude_from_history()
+        .exclude_from_cloud()
         .text(text)
         .map_err(|error| ClipboardError::Backend(error.to_string()))?;
-    let copy = unsafe { GetClipboardSequenceNumber() } as u64;
-    tokio::spawn(async move {
-        tokio::time::sleep(super::secret::lifetime()).await;
-        let _ = clear(copy);
-    });
-    Ok(copy)
+    // SAFETY: takes no arguments and only reads the clipboard's change counter.
+    Ok(unsafe { GetClipboardSequenceNumber() } as u64)
 }
 
 pub(super) fn clear(copy: u64) -> Result<(), ClipboardError> {
+    // SAFETY: as in `write`.
     if copy == 0 || unsafe { GetClipboardSequenceNumber() } as u64 != copy {
         return Ok(());
     }

@@ -1,5 +1,7 @@
-import policy from "../../shared/secret-clipboard.json";
 import { isTauriRuntime } from "../platform/runtime.ts";
+
+/** How long a copied secret stays available for paste before Den clears it. */
+export const SECRET_COPY_LIFETIME_MS = 60_000;
 
 /** Identifies one native clipboard generation without reading its contents. */
 export type SecretClipboardCopy = number;
@@ -16,32 +18,23 @@ export async function clearSecretClipboardText(copy: SecretClipboardCopy): Promi
   await invoke("clear_secret_text", { copy });
 }
 
-/** A copied value stays usable for paste while its reveal remasks. */
+/**
+ * The single clear timer for copied secrets. Remasking never clears; a newer
+ * copy restarts the timer, and native ownership decides whether ours is still current.
+ */
 export function secretClipboardLease(adapter = {
   write: writeSecretClipboardText,
   clear: clearSecretClipboardText,
 }) {
   let generation = 0;
-  let owned: SecretClipboardCopy | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const clear = () => {
-    generation++;
-    clearTimeout(timer);
-    const copy = owned;
-    owned = undefined;
-    if (copy !== undefined) void adapter.clear(copy).catch(() => {});
-  };
   const write = async (text: string): Promise<boolean> => {
     const request = ++generation;
     const copy = await adapter.write(text);
-    if (request !== generation) {
-      await adapter.clear(copy);
-      return false;
-    }
-    owned = copy;
+    if (request !== generation) return false;
     clearTimeout(timer);
-    timer = setTimeout(clear, policy.lifetime_ms);
+    timer = setTimeout(() => void adapter.clear(copy).catch(() => {}), SECRET_COPY_LIFETIME_MS);
     return true;
   };
-  return { clear, write };
+  return { write };
 }

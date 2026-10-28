@@ -1,4 +1,4 @@
-import secretClipboardPolicy from "../../../shared/secret-clipboard.json";
+import { SECRET_COPY_LIFETIME_MS } from "../../utils/secret-clipboard.ts";
 import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
 import type {
   AgentUseDeadlineChoice,
@@ -149,7 +149,7 @@ export const MANAGED_SECRETS_COPY = {
   revealError: "This secret could not be revealed.",
   revealUnavailable: "There is no readable current value to reveal.",
   revealedHint: (seconds: number) =>
-    `Hides in ${seconds} second${seconds === 1 ? "" : "s"}. It also hides when this window loses focus. Copies are marked as secret for clipboard history and clear after ${Math.ceil(secretClipboardPolicy.lifetime_ms / 1000)} seconds, unless another copy has replaced them.`,
+    `Hides in ${seconds} second${seconds === 1 ? "" : "s"}. It also hides when this window loses focus. Copy value marks the copy as secret so clipboard history skips it, and clears it after ${SECRET_COPY_LIFETIME_MS / 1000} seconds unless something else has replaced it.`,
   copyValue: "Copy value",
   copiedValue: "Value copied",
   copyValueFailed: "Could not copy",

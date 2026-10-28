@@ -11,12 +11,7 @@ const SECRET_TYPES: [&str; 2] = [
 ];
 
 pub(super) fn write(text: String) -> Result<u64, ClipboardError> {
-    let copy = write_to(&NSPasteboard::generalPasteboard(), &text)?;
-    tokio::spawn(async move {
-        tokio::time::sleep(super::secret::lifetime()).await;
-        clear(copy);
-    });
-    Ok(copy)
+    write_to(&NSPasteboard::generalPasteboard(), &text)
 }
 
 fn write_to(board: &NSPasteboard, text: &str) -> Result<u64, ClipboardError> {

@@ -1,5 +1,4 @@
-import { For, Show, onCleanup, type JSX } from "solid-js";
-import { bindSelectionCopy } from "../../utils/selection-copy.ts";
+import { For, Show, type JSX } from "solid-js";
 import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
 import {
   MANAGED_SECRETS_COPY as C,
@@ -134,9 +133,7 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
                 <code
                   class="den-secret-reveal__code"
                   data-testid="managed-secret-revealed-value"
-                  ref={(element) => onCleanup(bindSelectionCopy(element, (text) => props.onCopyValue(text)))}
                   onCopy={(event) => {
-                    event.preventDefault();
                     // A partial selection copies only the selected text.
                     const selected =
                       event.currentTarget.ownerDocument.getSelection()?.toString() ?? "";

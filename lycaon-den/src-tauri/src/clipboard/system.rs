@@ -9,7 +9,6 @@ use super::service::{
 #[derive(Default)]
 pub(crate) struct NativeClipboard {
     board: Option<arboard::Clipboard>,
-    secret: Option<u64>,
 }
 
 pub(crate) fn startup_facts() -> Result<ClipboardFacts, ClipboardError> {
@@ -28,23 +27,12 @@ fn settled<T>(result: Result<T, ClipboardError>) -> Reply<T> {
 impl NativeClipboard {
     pub(super) fn write_secret_text(&mut self, _main: &dyn MainThread, text: String) -> Reply<u64> {
         #[cfg(target_os = "macos")]
-        {
-            let result = super::secret_macos::write(text);
-            if let Ok(copy) = result {
-                self.secret = Some(copy);
-            }
-            settled(result)
-        }
+        return settled(super::secret_macos::write(text));
         #[cfg(target_os = "windows")]
-        {
-            let result = self
-                .board()
-                .and_then(|board| super::secret_windows::write(board, text));
-            if let Ok(copy) = result {
-                self.secret = Some(copy);
-            }
-            settled(result)
-        }
+        return settled(
+            self.board()
+                .and_then(|board| super::secret_windows::write(board, text)),
+        );
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             let _ = text;
@@ -58,12 +46,10 @@ impl NativeClipboard {
         #[cfg(target_os = "macos")]
         super::secret_macos::clear(copy);
         #[cfg(target_os = "windows")]
-        if let Err(error) = super::secret_windows::clear(copy) {
-            return settled(Err(error));
-        }
-        if self.secret == Some(copy) {
-            self.secret = None;
-        }
+        return settled(super::secret_windows::clear(copy));
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = copy;
+        #[cfg(not(target_os = "windows"))]
         settled(Ok(()))
     }
 
@@ -96,14 +82,6 @@ impl ClipboardAdapter for NativeClipboard {
     }
 
     fn release(&mut self, _main: &dyn MainThread) {
-        #[cfg(target_os = "macos")]
-        if let Some(copy) = self.secret.take() {
-            super::secret_macos::clear(copy);
-        }
-        #[cfg(target_os = "windows")]
-        if let Some(copy) = self.secret.take() {
-            let _ = super::secret_windows::clear(copy);
-        }
         self.board.take();
     }
 }
