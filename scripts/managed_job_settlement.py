@@ -135,12 +135,14 @@ class JobSettlement:
         namespace_search = [str(namespace), str(self.checkout),
                   *[entry for entry in sys.path if entry not in {str(namespace), str(self.checkout)}]]
 
-        def require_namespace(name, spec, locations):
+        def require_package(name, spec, locations, origin=None):
             physical = module_path(name)
             paths = [Path(location) for location in locations] if locations is not None else []
             declared = getattr(spec, 'submodule_search_locations', None)
             declared_paths = [Path(location) for location in declared] if declared is not None else []
-            _require(spec is not None and spec.origin is None and paths
+            observed = getattr(spec, 'origin', None)
+            matches = observed is None if origin is None else observed is not None and Path(observed) == origin and Path(observed).resolve(strict=True) == origin
+            _require(spec is not None and matches and paths
                      and declared_paths
                      and physical.is_dir() and physical.resolve(strict=True) == physical
                      and all(path == physical and path.resolve(strict=True) == physical
@@ -149,7 +151,7 @@ class JobSettlement:
 
         # Namespace packages have no __file__; identical search roots add no authority.
         candidate = PathFinder.find_spec('scripts', namespace_search)
-        require_namespace('scripts', candidate, candidate.submodule_search_locations if candidate else None)
+        require_package('scripts', candidate, candidate.submodule_search_locations if candidate else None)
         # Reject a cached dependency from another checkout before importing any observer.
         for name, loaded in list(sys.modules.items()):
             if name == 'scripts' or name.startswith('scripts.') or name.startswith('verification_'):
@@ -158,8 +160,8 @@ class JobSettlement:
                     _require(source is None, 'scripts must remain the reviewed namespace package')
                     physical = module_path(name)
                     candidate = FileFinder(str(physical.parent), (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
-                    require_namespace(name, candidate, candidate.submodule_search_locations if candidate else None)
-                    require_namespace(name, getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
+                    require_package(name, candidate, candidate.submodule_search_locations if candidate else None)
+                    require_package(name, getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
                     continue
                 _require(source is not None and Path(source).resolve().is_relative_to(self.checkout),
                          'cached observation dependency is outside the reviewed checkout')
@@ -169,12 +171,18 @@ class JobSettlement:
                          'cached observation dependency has the wrong concrete origin')
                 if name in expected:
                     _require(native == self.checkout / expected[name], 'caller dependency has the wrong concrete origin')
+                if native.name == '__init__.py':
+                    require_package(name, getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None), native)
+                else:
+                    _require(getattr(loaded, '__path__', None) is None
+                             and getattr(getattr(loaded, '__spec__', None), 'submodule_search_locations', None) is None,
+                             'a concrete module cannot supply a package search path')
         for name, relative in expected.items():
             source = self.checkout / relative
             _require(source.resolve(strict=True) == source, 'observation dependency is not physical')
             if source.is_dir():
                 spec = FileFinder(str(source.parent), (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
-                require_namespace(name, spec, spec.submodule_search_locations if spec else None)
+                require_package(name, spec, spec.submodule_search_locations if spec else None)
                 continue
             _require(name not in ancestors or source.name == '__init__.py',
                      'a module ancestor must be a reviewed package')
@@ -183,6 +191,8 @@ class JobSettlement:
             _require(spec is not None and spec.origin is not None
                      and Path(spec.origin).resolve() == source.resolve(strict=True),
                      'observation dependency differs from the reviewed checkout')
+            if source.name == '__init__.py':
+                require_package(name, spec, spec.submodule_search_locations, source)
         sys.path[:] = namespace_search
 
     def _observer(self):
