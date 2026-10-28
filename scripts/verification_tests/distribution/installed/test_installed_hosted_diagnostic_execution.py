@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import hosted_installed_diagnostic as diagnostic
+from linux_release.hosted import diagnostic
 from linux_release.hosted import installed as runtime
 
 
