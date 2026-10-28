@@ -384,6 +384,19 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 	return ""
 }
 
+// programPublicationTool is offered to programs with its structured
+// definition, because accepted document publication binds that definition.
+const programPublicationTool = "write"
+
+// offeredProgramDefinition is the exact definition a program surface offers
+// for a registered tool, so a child bound through it passes surface admission.
+func offeredProgramDefinition(tool string, definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
+	if tool == programPublicationTool {
+		return definition
+	}
+	return programOperationDefinition(definition)
+}
+
 func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
 	facts := definition.Facts()
 	// A command child retains its structured owner's identity, while the
