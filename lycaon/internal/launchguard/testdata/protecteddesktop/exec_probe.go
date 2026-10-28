@@ -56,18 +56,14 @@ func execProbe(scratch string) ExecProbe {
 	_ = os.Setenv(exec.LaunchBrokerFDEnv, "6")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, _, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
+	out, hostStderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
 	probe.HostOutput, probe.HostCode = string(out), code
-	if err != nil {
-		probe.HostError = err.Error()
-	}
-	out, _, code, err = exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
+	probe.HostError = launchError(err, hostStderr)
+	out, hostStderr, code, err = exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
 		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", &confine.Confinement{HostExecution: true}),
 	})
 	probe.HostExecOutput, probe.HostExecCode = string(out), code
-	if err != nil {
-		probe.HostExecError = err.Error()
-	}
+	probe.HostExecError = launchError(err, hostStderr)
 	confinement := &confine.Confinement{Roots: []string{scratch}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 	out, stderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
 		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", confinement),
@@ -82,6 +78,18 @@ func execProbe(scratch string) ExecProbe {
 	probe.RelayLossEnded, probe.RelayLossError = relayLossProbe(ctx)
 	probe.BrowserEngineLossEnded, probe.BrowserEngineLossError = browserEngineLossProbe(scratch)
 	return probe
+}
+
+// launchError names a failed launch together with what its relay or
+// supervisor wrote, which is where a refused brokered start explains itself.
+func launchError(err error, stderr []byte) string {
+	if err == nil {
+		return ""
+	}
+	if text := strings.TrimSpace(string(stderr)); text != "" {
+		return err.Error() + "; stderr: " + text
+	}
+	return err.Error()
 }
 
 func preparedProbe(ctx context.Context, launch exec.LaunchPlan) (string, int, string) {

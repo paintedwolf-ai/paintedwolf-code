@@ -338,8 +338,12 @@ class DiagnosticProcessTests(unittest.TestCase):
         self.assertEqual((result.returncode, result.stdout), (0, b'owned child\n'))
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            status = Path(f'/proc/{grandchild}/stat')
-            if not status.exists() or status.read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+            try:
+                # procfs raises ESRCH when the task exits between open and read.
+                state = Path(f'/proc/{grandchild}/stat').read_text().rsplit(')', 1)[1].split()[0]
+            except (FileNotFoundError, ProcessLookupError):
+                return
+            if state == 'Z':
                 return
             time.sleep(0.05)
         self.fail('diagnostic left a process from its own group running')
