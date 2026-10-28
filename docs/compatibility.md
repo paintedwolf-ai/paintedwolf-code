@@ -277,9 +277,11 @@ checkpoint plan's `ApprovalSocketTarget`, record an enforcement mode and an
 opaque instance ID. These are additive receipts in existing configuration and
 JSON plan records; no SQL schema changes or rewriting of old rows is involved.
 The retained descriptor or private socket alias and its ownership leases are
-ephemeral capabilities, never backup or restart recovery data. Loading an absent,
-unknown or released object binding preserves the grant record as unavailable and
-requires a fresh approval. Reading saved intent never recaptures a pathname.
+ephemeral capabilities, never backup or restart recovery data. A missing, unknown
+or released retained instance ID preserves the grant record
+as unavailable and requires a fresh approval. An unknown enforcement mode refuses
+loading without mutating the saved data. Reading saved intent never recaptures a
+pathname.
 
 Existing macOS command grants retain their kernel pathname-at-connect contract;
 an absent mode means that contract on macOS. They cannot establish authority for
@@ -288,6 +290,8 @@ require the retained-object mode and a live instance ID. Mode and instance enter
 permission keys, action digests and grant IDs, so a new approval after a service
 or engine restart cannot accidentally reuse an unexpired stale grant. Changing
 the realization never silently broadens the earlier approval.
+
+Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.
 
 Native HTTP's local-service secret recipient and captured-token issuer identity
 include that same retained binding. Existing credential and token data stays
@@ -354,5 +358,3 @@ Internal packages that do not leak into a sticky surface can be reshaped directl
 - Rebuildable cache identity may outlive its evictable bytes; durable history keeps the bytes it names.
 - Version fields keep distinct meanings.
 - Breaking evolution is explicit, attributable, and recoverable.
-
-Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.
