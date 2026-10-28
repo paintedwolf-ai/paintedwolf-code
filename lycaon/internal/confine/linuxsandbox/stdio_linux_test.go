@@ -244,3 +244,14 @@ func TestStandardStreamsDrainQueuedBytesWithoutWaitingForAnotherWriter(t *testin
 		t.Fatalf("retained writer still reaches output after settlement: %v", err)
 	}
 }
+
+func TestStandardStreamsRefuseDirectoryMetadataAuthority(t *testing.T) {
+	directory, err := os.Open(t.TempDir())
+	testutil.FailErr(t, "open owned directory fixture", err)
+	defer directory.Close()
+	_, err = newStandardStreams([3]*os.File{directory, nil, nil}, sameOpenFile)
+	var failure *StreamError
+	if !errors.As(err, &failure) || failure.Stream != 0 || failure.Operation != "unsupported descriptor kind" {
+		t.Fatalf("directory descriptor entered a byte stream: %v", err)
+	}
+}

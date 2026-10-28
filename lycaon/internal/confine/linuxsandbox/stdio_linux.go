@@ -81,6 +81,11 @@ func newStandardStreams(files [3]*os.File, query func(*os.File, *os.File) (bool,
 		if err != nil {
 			return nil, &StreamError{i, "inspect", err}
 		}
+		switch stats[i].Mode & unix.S_IFMT {
+		case unix.S_IFREG, unix.S_IFIFO, unix.S_IFSOCK, unix.S_IFCHR:
+		default:
+			return nil, &StreamError{i, "unsupported descriptor kind", unix.EINVAL}
+		}
 	}
 	sharedOutput := false
 	if stats[1].Mode&unix.S_IFMT == unix.S_IFREG && stats[2].Mode&unix.S_IFMT == unix.S_IFREG && stats[1].Dev == stats[2].Dev && stats[1].Ino == stats[2].Ino {
