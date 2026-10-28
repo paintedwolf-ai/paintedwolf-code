@@ -36,16 +36,6 @@ def query(arguments: list[str]) -> dict:
             "stdout": result.stdout.decode("utf-8", "replace"), "stderr": result.stderr.decode("utf-8", "replace")}
 
 
-def properties(text: str) -> dict:
-    result = {}
-    for line in text.splitlines():
-        key, separator, value = line.partition("=")
-        if not separator or key in result:
-            raise ValueError("platform properties have an invalid or duplicate field")
-        result[key] = value
-    return result
-
-
 def release(path=Path("/etc/os-release")) -> dict:
     result = {}
     for raw in path.read_text().splitlines():
@@ -137,7 +127,7 @@ def graphical_session(*, account_name=None, deadline=None) -> GraphicalSessionOb
             before = _inventory(reader, observations, 'inventory_before')
             observations['phase'] = 'properties-before'
             first = [_session_properties(reader, row, observations) for row in before if row['uid'] == uid]
-            matches = [row for row in first if row is not None and row['User'] == str(uid)
+            matches = [row for row in first if row['User'] == str(uid)
                        and row['Active'] == 'yes' and row['Remote'] == 'no'
                        and row['Type'] in {'wayland', 'x11'}]
             observations['graphical_candidates_before'] = [row['id'] for row in matches]
@@ -155,7 +145,7 @@ def graphical_session(*, account_name=None, deadline=None) -> GraphicalSessionOb
                 raise ValueError('selected account session identity changed during observation')
             observations['phase'] = 'properties-after'
             second = [_session_properties(reader, row, observations) for row in after if row['uid'] == uid]
-            sessions = [row for row in second if row is not None and row['User'] == str(uid)
+            sessions = [row for row in second if row['User'] == str(uid)
                         and row['Active'] == 'yes' and row['Remote'] == 'no'
                         and row['Type'] in {'wayland', 'x11'}]
             observations['graphical_candidates_after'] = [row['id'] for row in sessions]

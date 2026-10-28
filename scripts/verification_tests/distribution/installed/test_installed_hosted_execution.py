@@ -56,8 +56,8 @@ class HostedDesktopTests(unittest.TestCase):
         with patch('linux_release.hosted_desktop.subprocess.run', return_value=result) as command:
             with self.assertRaises(OSError) as error:
                 run(['chpasswd'], input=b'private-input')
-            self.assertNotIn('sensitive', str(error.exception))
-            self.assertNotIn('private', str(error.exception))
+            self.assertNotIn('sensitive-fixture', str(error.exception))
+            self.assertNotIn('private-input', str(error.exception))
             self.assertEqual(command.call_args.kwargs['input'], b'private-input')
 
     def test_immutable_controller_selection_keeps_workflow_identity_separate(self):

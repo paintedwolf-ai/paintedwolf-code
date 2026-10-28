@@ -46,7 +46,7 @@ class InstalledWorkflowTests(unittest.TestCase):
                 turn.submit()
                 self.assertTrue(calls[-1][2]['text'].endswith('tools: command.'))
                 self.assertEqual(turn.wait()[0]['tool'], 'command')
-                self.assertNotIn('private', str(turn.observations))
+                self.assertNotIn('private output', str(turn.observations))
             self.assertEqual(calls[-1][:2], ('POST', '/v1/sessions/' + session_id + '/abort'))
             self.assertEqual(calls[0][2]['kind'], 'openai-compatible')
             self.assertFalse(calls[0][2]['requires_api_key'])

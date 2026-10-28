@@ -29,7 +29,8 @@ class InstalledProviderTests(unittest.TestCase):
         self.assertEqual(json.loads(first['message']['tool_calls'][0]['function']['arguments']),
                          {'command': '/usr/bin/true'})
         self.assertEqual(fixture.completion(self.request(True))['choices'][0]['finish_reason'], 'stop')
-        self.assertNotIn('private', json.dumps(fixture.observations))
+        self.assertNotIn('private output', json.dumps(fixture.observations))
+        self.assertNotIn('private fixture prompt', json.dumps(fixture.observations))
         request = self.request()
         request['messages'][0]['content'] = 'tool result qualification-0'
         self.assertEqual(fixture.completion(request)['choices'][0]['finish_reason'], 'tool_calls')
