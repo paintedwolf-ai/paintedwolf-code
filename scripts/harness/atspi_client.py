@@ -1,6 +1,4 @@
-"""AT-SPI client setup shared by the WebKitGTK accessibility harness and the
-installed desktop cases: which session bus to talk to, the client library with
-bounded call timeouts, and asking toolkits to expose their trees."""
+"""Shared AT-SPI session setup and bounded toolkit calls."""
 
 from contextlib import contextmanager
 import os
@@ -11,7 +9,7 @@ SESSION_BUS_VARIABLES = ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")
 
 @contextmanager
 def session_bus(environment):
-    """Points this process's AT-SPI client at the given graphical session for the block."""
+    """Restore the caller's bus environment when the scope exits."""
     previous = {name: os.environ.get(name) for name in SESSION_BUS_VARIABLES}
     try:
         os.environ.update({name: environment[name] for name in SESSION_BUS_VARIABLES})
@@ -25,7 +23,7 @@ def session_bus(environment):
 
 
 def load_atspi(call_timeout_ms: int, startup_timeout_ms: int):
-    """The AT-SPI client library with bounded calls; ImportError when it is not installed."""
+    """Load bounded AT-SPI calls; report an unavailable namespace as ImportError."""
     import gi
 
     try:
@@ -39,7 +37,7 @@ def load_atspi(call_timeout_ms: int, startup_timeout_ms: int):
 
 
 def enable_accessibility_bus() -> None:
-    """Asks toolkits on this session to expose their accessibility trees, as a running screen reader does."""
+    """Enable AT-SPI exposure for toolkits on the session bus."""
     from gi.repository import Gio, GLib
 
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)

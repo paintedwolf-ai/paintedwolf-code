@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_execution as leaf
+from linux_release.campaign import execution as leaf
 from linux_release.installed_cases.records import CaseFailed, retain
 
 SOURCE, TREE = 'b' * 40, 'a' * 40
@@ -30,7 +30,7 @@ class InstalledLeafFailureTests(unittest.TestCase):
         stack.enter_context(patch.object(leaf, 'collect', return_value=({'OS': 'fixture'}, {'session': {'Type': 'x11'}, 'os_release': {'ID': 'fixture'}})))
         stack.enter_context(patch.object(leaf, 'prepare_monitors', return_value={}))
         stack.enter_context(patch.object(leaf, 'observe', return_value={'variant': variant}))
-        module = leaf.__package__ + '.installed_cases.native_workflows'
+        module = leaf.__package__.rpartition('.')[0] + '.installed_cases.native_workflows'
         stack.enter_context(patch.dict(sys.modules, {module: SimpleNamespace(prepare_install=prepare)}))
         return binder
 
@@ -133,7 +133,7 @@ class InstalledLeafFailureTests(unittest.TestCase):
                     time.sleep(5)
                 return {'id': case, 'status': 'passed', 'evidence': [retain(binding, capability, case, root, 'passed', {})['evidence'][0]]}
             family = SimpleNamespace(execute=slow_or_quick, TIME_BUDGET_SECONDS=1)
-            stack.enter_context(patch.dict(sys.modules, {leaf.__package__ + '.installed_cases.fixture_family': family}))
+            stack.enter_context(patch.dict(sys.modules, {leaf.__package__.rpartition('.')[0] + '.installed_cases.fixture_family': family}))
             stack.enter_context(patch.object(leaf.importlib.util, 'find_spec', return_value=object()))
             stack.enter_context(patch.object(leaf.evidence, 'retained_file', return_value=None))
             output = Path(directory) / 'leaf'

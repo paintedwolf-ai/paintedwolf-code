@@ -11,14 +11,16 @@
       "libssl3t64 | libssl3",
       "ca-certificates",
       "xdg-utils",
-      "polkitd | policykit-1"
-    ],
-    "recommends": [
+      "polkitd | policykit-1",
       "libnss3",
+      "libnspr4",
       "libatk-bridge2.0-0t64 | libatk-bridge2.0-0",
       "libgbm1",
       "libxkbcommon0",
       "libasound2t64 | libasound2",
+      "python3-apt"
+    ],
+    "recommends": [
       "libvulkan1",
       "mesa-vulkan-drivers"
     ]
@@ -32,16 +34,46 @@
       "openssl-libs",
       "ca-certificates",
       "xdg-utils",
-      "polkit"
-    ],
-    "recommends": [
+      "polkit",
       "nss",
+      "nspr",
       "at-spi2-atk",
       "mesa-libgbm",
       "libxkbcommon",
-      "alsa-lib",
+      "alsa-lib"
+    ],
+    "recommends": [
       "vulkan-loader",
       "mesa-vulkan-drivers"
+    ]
+  },
+  "pacman": {
+    "depends": [
+      "glibc>={glibc}",
+      "gcc-libs>=14.1",
+      "webkit2gtk-4.1>={webkitgtk}",
+      "gtk3>={gtk3}",
+      "libsoup3",
+      "openssl",
+      "ca-certificates",
+      "xdg-utils",
+      "polkit",
+      "nss",
+      "nspr",
+      "at-spi2-core",
+      "alsa-lib",
+      "libxkbcommon",
+      "libxcomposite",
+      "libxdamage",
+      "libxrandr",
+      "libxfixes",
+      "libcups",
+      "mesa",
+      "libdrm"
+    ],
+    "recommends": [
+      "vulkan-icd-loader: Bialy Vulkan acceleration",
+      "vulkan-driver: Vulkan hardware driver"
     ]
   }
 }

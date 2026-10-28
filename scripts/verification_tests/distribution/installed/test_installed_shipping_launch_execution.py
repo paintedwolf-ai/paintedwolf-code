@@ -161,10 +161,16 @@ class ShippingLaunchTests(unittest.TestCase):
         sleeper = [sys.executable, '-c', 'import time; time.sleep(60)']
         command = [sys.executable, '-c',
             'import subprocess,sys; subprocess.Popen([sys.executable,"-c","import time; time.sleep(60)"],start_new_session=True)']
+        foreign = tempfile.TemporaryDirectory()
+        self.addCleanup(foreign.cleanup)
+        package = Path(foreign.name) / 'scripts'
+        package.mkdir()
+        (package / '__init__.py').write_text('raise AssertionError("ambient scripts package imported")')
+        environment = {**os.environ, 'PYTHONPATH': foreign.name}
         bystander = subprocess.Popen(sleeper, start_new_session=True)
         owner, owned = None, []
         try:
-            owner = LaunchOwner(command, os.environ.copy())
+            owner = LaunchOwner(command, environment)
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
                 owned = children(owner.process.pid)

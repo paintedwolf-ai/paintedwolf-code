@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import hosted_installed as runtime
-from linux_release import hosted_bootstrap as supervisor
-from linux_release import hosted_installed_plan as plan
+from linux_release.hosted import installed as runtime
+from linux_release.hosted import bootstrap as supervisor
+from linux_release.hosted import plan
 
 
 def selected():
@@ -37,7 +37,7 @@ class HostedSelectionTests(unittest.TestCase):
             plan.controller(Path('/controller'), selected())
         with patch.object(plan.subprocess, 'run', side_effect=clean()), self.assertRaisesRegex(ValueError, 'differs'):
             plan.controller(Path('/controller'), {**selected(), 'controller_tree': 'c' * 40})
-        dirty = [SimpleNamespace(stdout=' M scripts/linux_release/hosted_installed.py')]
+        dirty = [SimpleNamespace(stdout=' M scripts/linux_release/hosted/installed.py')]
         with patch.object(plan.subprocess, 'run', side_effect=dirty), self.assertRaisesRegex(ValueError, 'outside its immutable'):
             plan.observed_controller(Path('/controller'))
 
@@ -64,7 +64,7 @@ class HostedRuntimeEntryTests(unittest.TestCase):
                 '--facts', str(directory / 'f.json'), '--output', str(directory / 'out')]
 
     def test_retention_fails_the_step_unless_the_campaign_or_diagnosis_is_accepted(self):
-        from linux_release import hosted_installed_diagnostic as diagnostic
+        from linux_release.hosted import diagnostic
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             with patch.object(runtime, 'selection', return_value=selected()), patch.object(runtime, 'read', return_value={}):
@@ -77,7 +77,7 @@ class HostedRuntimeEntryTests(unittest.TestCase):
                         self.assertEqual(runtime.main(self.arguments('retain-diagnostic', directory)), code)
 
     def test_desktop_preparation_runs_through_the_lane(self):
-        from linux_release import hosted_desktop
+        from linux_release.hosted import desktop as hosted_desktop
         with patch.object(hosted_desktop, 'prepare') as prepare:
             self.assertEqual(runtime.main(['desktop', '--checkout', '/controller', '--output', '/facts.json']), 0)
         prepare.assert_called_once_with(Path('/controller'), Path('/facts.json'), None)

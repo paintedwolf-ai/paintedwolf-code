@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_qualification_producer as producer
+from linux_release.campaign import qualification_producer as producer
 
 
 class InstalledQualificationProducerTests(unittest.TestCase):

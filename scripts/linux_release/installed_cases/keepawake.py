@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import time
 
-from .app import engine_image, process_identity
+from ..installed_process import engine_image, process_identity
 from .native_session import kernel_owner
 from .records import CaseUnavailable
 

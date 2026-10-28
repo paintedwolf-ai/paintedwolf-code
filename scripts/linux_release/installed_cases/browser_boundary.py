@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from .app import process_identity
+from ..installed_process import process_identity
 from .process import probe_path
 
 NAMES = {'user', 'mnt', 'pid', 'net'}

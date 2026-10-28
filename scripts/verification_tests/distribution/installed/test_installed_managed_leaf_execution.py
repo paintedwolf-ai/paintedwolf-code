@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import installed_campaign as owner
+from scripts.linux_release.campaign import guests as owner
 
 
 class ManagedLeafImportTests(unittest.TestCase):

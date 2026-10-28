@@ -55,17 +55,17 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
 			PackageExts: []string{"dmg"}, UpdaterExt: stringPtr("app.tar.gz"),
 		},
-		// Linux installs through the package manager: one .deb and one .rpm per
-		// architecture, and no Tauri updater artifact.
+		// Linux installs through the package manager: one .deb, one .rpm, and one
+		// native pacman package per architecture, and no Tauri updater artifact.
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
@@ -112,8 +112,9 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
-		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
 		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
+		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
 		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
 		"name: linux-candidate-${{ matrix.updater_key }}",
 		"retention-days: 90", "Verify the catalog row for this candidate",
@@ -127,10 +128,10 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		}
 	}
 	// Candidate runs carry no branch-scoped triggers, use one source checkout,
-	// and prepare the user namespace locally without a probe lease.
+	// and prepare userns locally without a probe lease.
 	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
 		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
-		"PW_PACKAGE_PROBE_LEASE"} {
+		"--package-extensions deb,rpm", "PW_PACKAGE_PROBE_LEASE"} {
 		if strings.Contains(candidates, forbidden) {
 			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}

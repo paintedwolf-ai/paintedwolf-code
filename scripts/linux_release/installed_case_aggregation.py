@@ -6,7 +6,7 @@ import json
 
 from .installed_input.protocol import binding
 from .installed_coverage import mismatches
-from .installed_variants import requirements
+from .campaign.variants import requirements
 
 
 def platform_facts(facts):
