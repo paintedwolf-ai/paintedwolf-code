@@ -1,7 +1,9 @@
 """Invariant controls for the actual shared host-only job settlement implementation."""
 import fcntl
+from importlib.machinery import EXTENSION_SUFFIXES
 import json
 import os
+import py_compile
 from pathlib import Path
 import shutil
 import sys
@@ -251,6 +253,38 @@ else:
                 result=subprocess.run([sys.executable,'-I','-B','-c',script,str(source),str(checkout),str(foreign),str(marker),alias],
                                       capture_output=True,text=True,timeout=15)
                 self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertFalse(marker.exists())
+
+    def test_native_and_bytecode_origins_cannot_hide_behind_reviewed_source_or_namespaces(self):
+        source = Path(__file__).resolve().parents[3]
+        for flavor in ('extension', 'bytecode'):
+            with self.subTest(flavor=flavor), tempfile.TemporaryDirectory() as temporary:
+                checkout = Path(temporary).resolve()
+                namespace = checkout / 'scripts'
+                package = namespace / 'caller'
+                package.mkdir(parents=True)
+                (namespace / 'verification_process').mkdir()
+                for relative in ('artifact_paths.py', 'verification_process/__init__.py'):
+                    shutil.copyfile(source / 'scripts' / relative, namespace / relative)
+                (package / 'module.py').write_text('raise AssertionError("must not import")')
+                marker = checkout / 'imported'
+                if flavor == 'extension':
+                    (package / ('module' + EXTENSION_SUFFIXES[0])).write_bytes(b'unreviewed native origin')
+                else:
+                    initializer = checkout / 'initializer.py'
+                    initializer.write_text('from pathlib import Path\nPath(' + repr(str(marker)) + ').touch()\n')
+                    py_compile.compile(str(initializer), cfile=str(package / '__init__.pyc'), doraise=True)
+                value, _ = self.fixture()
+                value.checkout = checkout
+                original = [str(checkout)]
+                state = SimpleNamespace(modules={}, path=list(original))
+                declaration = {'scripts.caller': 'scripts/caller',
+                               'scripts.caller.module': 'scripts/caller/module.py'}
+                with patch.object(module, 'sys', state), patch.object(module.importlib, 'import_module') as imported:
+                    with self.assertRaises(ValueError):
+                        value.validate_checkout(declaration)
+                    imported.assert_not_called()
+                self.assertEqual(state.path, original)
                 self.assertFalse(marker.exists())
 
     def test_completion_races_never_cancel_an_unrelated_invocation(self):
