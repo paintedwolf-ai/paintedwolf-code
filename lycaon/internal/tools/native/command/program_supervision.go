@@ -57,7 +57,7 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 }
 
 // StartJob supervises one statement-trailing & job in the session registry.
-func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	if s == nil || s.Background == nil {
 		return "", fmt.Errorf("program jobs require the session process registry")
 	}

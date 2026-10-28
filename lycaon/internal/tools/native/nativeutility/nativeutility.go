@@ -119,14 +119,16 @@ func NewOutput(ctx context.Context, w io.Writer, limitID string, maximum int64) 
 	return o
 }
 
-func (o *Output) Write(p []byte) (int, error) {
+func (o *Output) Write(p []byte) (int, error) { return o.writeTo(o.w, p) }
+
+func (o *Output) writeTo(w io.Writer, p []byte) (int, error) {
 	if err := o.ctx.Err(); err != nil {
 		return 0, err
 	}
 	if o.written+int64(len(p)) > o.maximum {
 		return 0, tools.CommandLimitExceeded(o.limitID, o.maximum, o.written+int64(len(p)))
 	}
-	n, err := o.w.Write(p)
+	n, err := w.Write(p)
 	o.written += int64(n)
 	if err == nil && n != len(p) {
 		err = io.ErrShortWrite
@@ -180,4 +182,25 @@ func (o *Output) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {
 		return recorder.RecordSourceMapping(m)
 	}
 	return nil
+}
+
+// WithActivity preserves this output's meter while rebinding its stream endpoint.
+func (o *Output) WithActivity(activity *commandprogram.ExecutionWait) io.Writer {
+	streams := (commandprogram.Streams{Output: o.w}).WithActivity(activity)
+	return activityOutput{output: o, writer: streams.Output}
+}
+
+type activityOutput struct {
+	output *Output
+	writer io.Writer
+}
+
+func (o activityOutput) Write(data []byte) (int, error) { return o.output.writeTo(o.writer, data) }
+
+func (o activityOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
+	return o.output.RecordSourceMapping(mapping)
+}
+
+func (o activityOutput) WithActivity(activity *commandprogram.ExecutionWait) io.Writer {
+	return o.output.WithActivity(activity)
 }

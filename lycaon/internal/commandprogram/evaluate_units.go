@@ -169,9 +169,10 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	statement := s
 	statement.Background = false
 	releaseDescriptors := job.io.retain()
-	handle, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, streams Streams) (toolcontract.ProducerResult, error) {
+	handle, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, handle string, streams Streams) (toolcontract.ProducerResult, error) {
 		defer release()
 		defer job.wait.finish()
+		job.wait.Job(handle)
 		job.io.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
 		if trapErr := runExitTrap(jobCtx, job, err); trapErr != nil && err == nil {

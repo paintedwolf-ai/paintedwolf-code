@@ -1,9 +1,15 @@
+//go:build unix
+
 package toolhost
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -310,5 +316,133 @@ func TestCommandWaitingCatalogGoldenPrograms(t *testing.T) {
 				t.Fatalf("golden result %+v", got)
 			}
 		})
+	}
+}
+
+func TestCommandEntryParallelXargsTracksEachLiveActivity(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+		completed   int
+	}{
+		{"all children waiting", "120\n120\n", 0},
+		{"second child runnable", "120\n0\n", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newWaitStateFixture(t)
+			program := "printf '" + strings.ReplaceAll(tc.input, "\n", `\n`) + "' | xargs -n1 -P2 sleep; echo done"
+			f.call(t, program)
+			pending := <-f.parked
+			completed := 0
+			for operation, states := range f.Executions(t) {
+				if strings.Contains(operation, "sleep") {
+					completed += strings.Count(states, "completed;")
+				}
+			}
+			if completed != tc.completed {
+				t.Fatalf("completed sleep children %d, want %d", completed, tc.completed)
+			}
+			f.clock.Advance(120 * time.Second)
+			outcome := decodeWaitOutcome(t, <-pending.settled)
+			if outcome.Status != 0 || outcome.State != "completed" || outcome.Stdout != "done\n" {
+				t.Fatalf("parallel wait %+v", outcome)
+			}
+		})
+	}
+}
+
+func TestCommandEntryCompletedOrEmptyWaitStaysInlinePastTheThreshold(t *testing.T) {
+	for _, source := range []string{"sleep 0.2; wait", "true & sleep 0.2; wait %1"} {
+		t.Run(source, func(t *testing.T) {
+			f := newWaitStateFixture(t)
+			done := f.start(t, source)
+			f.waitTimers(1)
+			for len(f.Background.ActiveJobs(f.Session)) > 0 {
+				runtime.Gosched()
+			}
+			f.clock.Advance(20 * time.Second)
+			outcome := decodeWaitOutcome(t, <-done)
+			if outcome.Status != 0 {
+				t.Fatalf("inline wait %+v", outcome)
+			}
+			select {
+			case parked := <-f.parked:
+				t.Fatalf("ready wait parked %+v", parked.request)
+			default:
+			}
+		})
+	}
+}
+
+func TestCommandWaitingExternalHelper(t *testing.T) {
+	if os.Getenv("PW_COMMAND_WAIT_HELPER") != "1" {
+		return
+	}
+	if err := os.WriteFile("running", []byte("ready"), 0o600); err != nil {
+		os.Exit(2)
+	}
+	for {
+		if _, err := os.Stat("release"); err == nil {
+			break
+		}
+		runtime.Gosched()
+	}
+	fmt.Print("external done\n")
+	os.Exit(7)
+}
+func (f *waitStateFixture) externalHelper() string {
+	return "PW_COMMAND_WAIT_HELPER=1 external -- " + strconv.Quote(f.helper) + " '-test.run=^TestCommandWaitingExternalHelper$'"
+}
+func (f *waitStateFixture) awaitExternal() {
+	for {
+		if _, err := os.Stat(filepath.Join(f.Dir, "running")); err == nil {
+			return
+		}
+		runtime.Gosched()
+	}
+}
+func TestCommandEntryOrdinaryExternalRemainsRunnableBesideBackgroundSleep(t *testing.T) {
+	f := newWaitStateFixture(t)
+	done := f.start(t, "sleep 120 & "+f.externalHelper())
+	f.awaitExternal()
+	f.waitTimers(1)
+	f.clock.Advance(20 * time.Second)
+	select {
+	case parked := <-f.parked:
+		t.Fatalf("running external process parked %+v", parked.request)
+	default:
+	}
+	testutil.FailErr(t, "release external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+	outcome := decodeWaitOutcome(t, <-done)
+	if outcome.Status != 7 || outcome.Stdout != "external done\n" {
+		t.Fatalf("external result %+v", outcome)
+	}
+	f.clock.Advance(100 * time.Second)
+}
+func TestCommandEntryExactExternalJobWaitParksAndResumes(t *testing.T) {
+	f := newWaitStateFixture(t)
+	done := f.start(t, f.externalHelper()+" & wait $!")
+	f.awaitExternal()
+	f.waitTimers(1)
+	f.clock.Advance(10 * time.Second)
+	pending := <-f.parked
+	if got := <-done; !strings.Contains(got, "parked") {
+		t.Fatalf("job wait result %s", got)
+	}
+	testutil.FailErr(t, "complete external job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+	outcome := decodeWaitOutcome(t, <-pending.settled)
+	if outcome.Status != 7 || outcome.State != "completed" {
+		t.Fatalf("external job %+v", outcome)
+	}
+}
+func TestCommandEntryExternalTimeoutParksAndReapsTheChild(t *testing.T) {
+	f := newWaitStateFixture(t)
+	done := f.start(t, strings.Replace(f.externalHelper(), " external -- ", " timeout 60 external -- ", 1))
+	f.awaitExternal()
+	pending := <-f.parked
+	<-done
+	f.clock.Advance(60 * time.Second)
+	outcome := decodeWaitOutcome(t, <-pending.settled)
+	if outcome.Status != 124 || outcome.State != "completed" {
+		t.Fatalf("external timeout %+v", outcome)
 	}
 }

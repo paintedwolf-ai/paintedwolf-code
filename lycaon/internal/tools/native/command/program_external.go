@@ -98,7 +98,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	detach := request.Process.Signals.Attach(func(sig commandprogram.Signal) bool {
 		return async.Signal(syscall.Signal(sig.Number))
 	})
-	unblock, blockErr := request.Wait.Block(ctx, commandprogram.WaitState{})
+	unblock, blockErr := async.ObserveWait(func() (func(), error) { return request.Wait.Process(ctx) })
 	if blockErr != nil {
 		async.Kill()
 		_, _ = async.Wait()

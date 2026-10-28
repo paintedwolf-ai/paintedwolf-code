@@ -31,6 +31,7 @@ type blockedActivity struct {
 // commands share it; concurrent frames register distinct activities.
 type ExecutionWait struct {
 	set *executionWaits
+	job string
 }
 
 func newExecutionWaits(clock Clock, port ProgramWaits, cancel context.CancelCauseFunc) *executionWaits {
@@ -160,6 +161,15 @@ func (w *executionWaits) publish(ctx context.Context) error {
 	}
 	state := WaitState{}
 	jobs := map[string]bool{}
+	for _, head := range w.live {
+		for blocked := head; blocked != nil; blocked = blocked.prior {
+			if blocked.active {
+				for _, job := range blocked.state.Jobs {
+					jobs[job] = true
+				}
+			}
+		}
+	}
 	foregroundReason := ""
 	for activity, head := range w.live {
 		if head == nil {
@@ -170,6 +180,9 @@ func (w *executionWaits) publish(ctx context.Context) error {
 				continue
 			}
 			fact := blocked.state
+			if fact.process && fact.Until.IsZero() && !jobs[activity.job] {
+				return nil
+			}
 			if !fact.Until.IsZero() && (state.Until.IsZero() || fact.Until.Before(state.Until) || fact.Until.Equal(state.Until) && fact.Statement < state.Statement) {
 				state.Until, state.Statement = fact.Until, fact.Statement
 			}
@@ -246,4 +259,35 @@ func (a *ExecutionWait) Until(ctx context.Context, until time.Time, statement st
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// Fork registers a concurrent activity before its goroutine can run.
+func (a *ExecutionWait) Fork() (*ExecutionWait, func()) {
+	if a == nil {
+		return nil, func() {}
+	}
+	child := a.set.start()
+	a.set.mu.Lock()
+	child.job = a.job
+	if deadline, ok := a.set.deadlines[a]; ok {
+		a.set.deadlines[child] = deadline
+	}
+	a.set.mu.Unlock()
+	return child, child.finish
+}
+
+// Job associates a supervised callback's exact handle before its body runs.
+func (a *ExecutionWait) Job(handle string) {
+	if a == nil {
+		return
+	}
+	a.set.mu.Lock()
+	a.job = handle
+	a.set.mu.Unlock()
+}
+
+// Process observes supervised completion without guessing whether the child runs.
+// Only a deadline or an explicit wait on its job makes this a program wait.
+func (a *ExecutionWait) Process(ctx context.Context) (func(), error) {
+	return a.Block(ctx, WaitState{process: true})
 }
