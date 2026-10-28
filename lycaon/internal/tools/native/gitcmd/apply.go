@@ -47,7 +47,6 @@ type applyRun struct {
 	ctx      context.Context
 	p        Prepared
 	tc       tools.ToolContext
-	stdout   io.Writer
 	stderr   io.Writer
 	dir      string
 	repo     gitrepo.Repo
@@ -69,9 +68,9 @@ func runApply(ctx context.Context, p Prepared, tc tools.ToolContext, streams com
 	if p.patches == nil {
 		return settleMutationError(toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": p.command.spec.Name, "capability": "the program's staged publication owner"}), toolcontract.NoEffect)
 	}
-	run := &applyRun{ctx: ctx, p: p, tc: tc, stdout: out, stderr: stderr, cached: has(p.Argv, "--cached"), threeWay: has(p.Argv, "-3")}
+	run := &applyRun{ctx: ctx, p: p, tc: tc, stderr: stderr, cached: has(p.Argv, "--cached"), threeWay: has(p.Argv, "-3")}
 	run.index = has(p.Argv, "--index") || (run.threeWay && !run.cached)
-	err := run.apply(streams.Input)
+	err := run.apply(streams.Input, out)
 	if out.err != nil && err == nil {
 		err = out.err
 	}
@@ -89,7 +88,7 @@ func runApply(ctx context.Context, p Prepared, tc tools.ToolContext, streams com
 	return result, nil
 }
 
-func (r *applyRun) apply(stdin io.Reader) error {
+func (r *applyRun) apply(stdin io.Reader, stdout io.Writer) error {
 	dir, status, err := resolveCommandDir(r.ctx, r.p, r.stderr, false)
 	if err != nil || status != 0 {
 		r.status = status
@@ -110,16 +109,15 @@ func (r *applyRun) apply(stdin io.Reader) error {
 	if err != nil || r.status != 0 {
 		return err
 	}
-	ws := r.whitespace(sections)
-	if r.status != 0 {
+	ws, status := checkWhitespace(r.p.Argv, sections, r.stderr)
+	if r.status = status; status != 0 {
 		return nil
 	}
-	reportOnly := has(r.p.Argv, "--stat") || has(r.p.Argv, "--numstat") || has(r.p.Argv, "--summary")
-	if reportOnly {
-		r.report(sections)
-	}
-	if reportOnly && !has(r.p.Argv, "--check") {
-		return nil
+	if reportOnly(r.p.Argv) {
+		writeReports(stdout, r.p.Argv, sections)
+		if !has(r.p.Argv, "--check") {
+			return nil
+		}
 	}
 	if err := r.compute(sections); err != nil {
 		return err
@@ -136,6 +134,12 @@ func (r *applyRun) apply(stdin io.Reader) error {
 	}
 	ws.summarize(r.stderr)
 	return nil
+}
+
+// reportOnly reports --stat, --numstat or --summary, which print instead of
+// applying unless --check also checks.
+func reportOnly(argv commandprogram.BoundArgv) bool {
+	return has(argv, "--stat") || has(argv, "--numstat") || has(argv, "--summary")
 }
 
 // inputs reads each PATCH operand as a pinned source, or standard input.

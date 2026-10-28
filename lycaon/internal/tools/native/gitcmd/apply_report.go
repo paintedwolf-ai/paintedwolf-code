@@ -1,34 +1,34 @@
 package gitcmd
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"regexp"
 	"strings"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/tools/native/patchapply"
 )
 
-// report prints --stat, --numstat and --summary the way git apply does.
-func (r *applyRun) report(sections []*applySection) {
-	if has(r.p.Argv, "--stat") {
-		writeStat(r.stdout, sections)
+// writeReports prints --stat, --numstat and --summary the way git apply does.
+func writeReports(w io.Writer, argv commandprogram.BoundArgv, sections []*applySection) {
+	if has(argv, "--stat") {
+		writeStat(w, sections)
 	}
-	if has(r.p.Argv, "--numstat") {
+	if has(argv, "--numstat") {
 		for _, s := range sections {
 			added, deleted := lineCounts(s.file.File)
 			if s.file.IsBinary {
-				_, _ = fmt.Fprintf(r.stdout, "-\t-\t%s\n", quoteName(s.name))
+				_, _ = fmt.Fprintf(w, "-\t-\t%s\n", quoteName(s.name))
 				continue
 			}
-			_, _ = fmt.Fprintf(r.stdout, "%d\t%d\t%s\n", added, deleted, quoteName(s.name))
+			_, _ = fmt.Fprintf(w, "%d\t%d\t%s\n", added, deleted, quoteName(s.name))
 		}
 	}
-	if has(r.p.Argv, "--summary") {
+	if has(argv, "--summary") {
 		for _, s := range sections {
-			writeSummary(r.stdout, s)
+			writeSummary(w, s)
 		}
 	}
 }
@@ -220,117 +220,4 @@ func wildmatch(pattern, name string) bool {
 	expr.WriteString("$")
 	re, err := regexp.Compile(expr.String())
 	return err == nil && re.MatchString(name)
-}
-
-// whitespaceCheck holds the added lines that break Git's default
-// whitespace rules (blank-at-eol, space-before-tab) and the action chosen.
-type whitespaceCheck struct {
-	action string
-	count  int
-	// checking reports --check, where nothing is fixed and the default is
-	// not to warn.
-	checking bool
-}
-
-// whitespace finds whitespace errors in added lines, reports the first five
-// with their patch line the way Git does, and applies --whitespace: error
-// stops with status 128, fix strips trailing whitespace from added lines.
-func (r *applyRun) whitespace(sections []*applySection) *whitespaceCheck {
-	check := &whitespaceCheck{action: "warn", checking: has(r.p.Argv, "--check")}
-	if check.checking {
-		check.action = "nowarn"
-	}
-	if action, ok := optionValue(r.p.Argv, "--whitespace"); ok {
-		check.action = action
-	}
-	switch check.action {
-	case "nowarn", "warn", "fix", "error", "error-all":
-	default:
-		writeLine(r.stderr, "error: unrecognized whitespace option '"+check.action+"'")
-		r.status = 128
-		return check
-	}
-	if check.action == "nowarn" || ((has(r.p.Argv, "--stat") || has(r.p.Argv, "--numstat") || has(r.p.Argv, "--summary")) && !has(r.p.Argv, "--check")) {
-		return check
-	}
-	cursors := map[string]int{}
-	for _, s := range sections {
-		marker := byte('+')
-		if has(r.p.Argv, "-R") {
-			marker = '-'
-		}
-		for _, frag := range s.file.TextFragments {
-			for i, line := range frag.Lines {
-				if line.Op != gitdiff.OpAdd {
-					continue
-				}
-				problem := whitespaceProblem(line.Line)
-				if problem == "" {
-					continue
-				}
-				check.count++
-				lineNo := locateAddedLine(s.input, marker, line.Line, cursors)
-				if check.count <= 5 {
-					writeLine(r.stderr, fmt.Sprintf("%s:%d: %s.\n%s", s.input.name, lineNo, problem, strings.TrimSuffix(line.Line, "\n")))
-				}
-				if check.action == "fix" && !check.checking {
-					frag.Lines[i].Line = fixTrailing(line.Line)
-				}
-			}
-		}
-	}
-	if check.count > 5 {
-		writeLine(r.stderr, fmt.Sprintf("warning: squelched %d whitespace %s", check.count-5, pluralWord(check.count-5, "error", "errors")))
-	}
-	if check.count > 0 && (check.action == "error" || check.action == "error-all") {
-		writeLine(r.stderr, fmt.Sprintf("error: %d %s whitespace errors.", check.count, pluralWord(check.count, "line adds", "lines add")))
-		r.status = 128
-	}
-	return check
-}
-
-func (c *whitespaceCheck) summarize(w io.Writer) {
-	switch {
-	case c.count == 0:
-	case c.action == "warn" || (c.action == "fix" && c.checking):
-		writeLine(w, fmt.Sprintf("warning: %d %s whitespace errors.", c.count, pluralWord(c.count, "line adds", "lines add")))
-	case c.action == "fix":
-		writeLine(w, fmt.Sprintf("warning: %d %s after fixing whitespace errors.", c.count, pluralWord(c.count, "line applied", "lines applied")))
-	}
-}
-
-func whitespaceProblem(line string) string {
-	body := strings.TrimSuffix(line, "\n")
-	if trimmed := strings.TrimRight(body, " \t\r"); trimmed != body {
-		return "trailing whitespace"
-	}
-	indent := body[:len(body)-len(strings.TrimLeft(body, " \t"))]
-	if strings.Contains(indent, " \t") {
-		return "space before tab in indent"
-	}
-	return ""
-}
-
-func fixTrailing(line string) string {
-	body := strings.TrimSuffix(line, "\n")
-	fixed := strings.TrimRight(body, " \t\r")
-	if len(body) != len(line) {
-		fixed += "\n"
-	}
-	return fixed
-}
-
-// locateAddedLine finds an added line's 1-based line in its patch input,
-// searching forward from the previous match so repeated lines resolve in
-// order.
-func locateAddedLine(input applyInput, marker byte, line string, cursors map[string]int) int {
-	needle := append([]byte{'\n', marker}, line...)
-	from := cursors[input.name]
-	at := bytes.Index(input.data[from:], needle)
-	if at < 0 {
-		return 0
-	}
-	at += from + 1
-	cursors[input.name] = at
-	return bytes.Count(input.data[:at], []byte("\n")) + 1
 }
