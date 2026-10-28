@@ -4,6 +4,8 @@ package confine_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,6 +184,9 @@ func TestLinuxInheritedInputMetadata(t *testing.T) {
 	requireLinuxSandbox(t)
 	outside := filepath.Join(outsideTemporaryWriteRoots(t), "input")
 	seedMetadataFile(t, outside)
+	payload := strings.Repeat("byte-stream-", 20000)
+	testutil.FailErr(t, "seed multiple byte-copy blocks", os.WriteFile(outside, []byte(payload), 0o644))
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
 	// Prime ordinary read atime before testing explicit descriptor mutations.
 	_, err := os.ReadFile(outside)
 	testutil.FailErr(t, "read input control", err)
@@ -191,7 +196,7 @@ func TestLinuxInheritedInputMetadata(t *testing.T) {
 	testutil.FailErr(t, "open owned no-atime read-only input stream", err)
 	input := os.NewFile(uintptr(fd), "owned-byte-input")
 	defer func() { _ = input.Close() }()
-	script := []string{"stdin-pipe input", "fchmod-stdin input", "fchown-stdin input", "futimes-stdin input", "fsetxattr-stdin input", "read-stdin original"}
+	script := []string{"stdin-pipe input", "fchmod-stdin input", "fchown-stdin input", "futimes-stdin input", "fsetxattr-stdin input", "read-stdin-digest " + digest}
 	got := runMetadata(t, denyConfinement(t.TempDir()), script, input)
 	if got[script[0]] != "ok" || got[script[5]] != "ok" {
 		t.Fatalf("regular input was not delivered as bytes through EOF: %v", got)

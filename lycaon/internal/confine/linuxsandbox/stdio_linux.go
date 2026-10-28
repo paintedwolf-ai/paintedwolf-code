@@ -45,7 +45,8 @@ type standardStreams struct {
 }
 
 // handoverStandardStreams owns regular-file copies until the helper has reaped
-// its target and descendants. Other standard descriptor kinds retain their ABI.
+// its target and descendants. Pipes, terminals, sockets and character devices
+// keep their descriptors; unsupported descriptor kinds refuse.
 func handoverStandardStreams(cmd *exec.Cmd) (func() error, error) {
 	streams, err := newStandardStreams([3]*os.File{os.Stdin, os.Stdout, os.Stderr}, sameOpenFile)
 	if err != nil {

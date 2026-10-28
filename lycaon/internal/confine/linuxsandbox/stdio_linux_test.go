@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,7 +27,8 @@ func streamFile(t *testing.T, content string) *os.File {
 }
 
 func TestStandardStreamsRetainObjectsAndJoinCopies(t *testing.T) {
-	source := streamFile(t, "retained bytes")
+	payload := strings.Repeat("retained bytes", 8192)
+	source := streamFile(t, payload)
 	original := source.Name()
 	renamed := original + "-retained"
 	testutil.FailErr(t, "rename source fixture", os.Rename(original, renamed))
@@ -36,7 +38,7 @@ func TestStandardStreamsRetainObjectsAndJoinCopies(t *testing.T) {
 	t.Cleanup(func() { _ = streams.finish() })
 	raw, err := io.ReadAll(streams.files[0])
 	testutil.FailErr(t, "read byte input through EOF", err)
-	if string(raw) != "retained bytes" {
+	if string(raw) != payload {
 		t.Fatalf("read %q", raw)
 	}
 	testutil.FailErr(t, "settle byte input", streams.finish())
@@ -180,6 +182,7 @@ func TestStandardStreamsReportInitializationAndCopyFailures(t *testing.T) {
 		testutil.FailErr(t, "prepare sealed byte output", err)
 		_, err = streams.files[1].Write([]byte("cannot arrive"))
 		testutil.FailErr(t, "submit output bytes", err)
+		<-streams.bridges[0].done
 		err = streams.finish()
 		var failure *StreamError
 		if !errors.As(err, &failure) || failure.Stream != 1 || failure.Operation != "copy" || !errors.Is(err, unix.EPERM) {

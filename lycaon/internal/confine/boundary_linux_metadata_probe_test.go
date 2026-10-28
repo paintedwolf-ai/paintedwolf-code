@@ -4,6 +4,7 @@ package confine_test
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -45,6 +46,15 @@ func metadataOperation(op, path string) error {
 		return unix.Futimes(0, []unix.Timeval{{Sec: 123456789}, {Sec: 123456789}})
 	case "fsetxattr-stdin":
 		return unix.Fsetxattr(0, "user.pw-metadata", []byte("changed"), 0)
+	case "read-stdin-digest":
+		digest := sha256.New()
+		if _, err := io.Copy(digest, os.Stdin); err != nil {
+			return err
+		}
+		if fmt.Sprintf("%x", digest.Sum(nil)) != path {
+			return fmt.Errorf("input digest differs")
+		}
+		return nil
 	case "read-stdin":
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
