@@ -2,6 +2,8 @@
 
 package fseffect
 
+import "os"
+
 // Stat reports metadata through the handle-relative reader, which refuses
 // reparse traversal; owner, inode and link facts are not POSIX values here.
 func (r *ReadRoot) Stat(rel string, _ bool, admit func(string) error) (EntryStat, error) {
