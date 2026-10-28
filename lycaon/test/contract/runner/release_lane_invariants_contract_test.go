@@ -164,10 +164,9 @@ func TestLinuxPackageKeyStaysInSigningCustody(t *testing.T) {
 	if !slices.Equal(holders, []string{"build-release", "linux-pacman-repositories", "linux-repositories"}) {
 		t.Fatalf("Linux package key holders = %v", holders)
 	}
-	for _, path := range []string{".github/workflows/release-halt.yml", ".github/workflows/release-aur-delivery.yml"} {
-		if strings.Contains(contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), path), "LINUX_PACKAGE_SIGNING_KEY") {
-			t.Fatalf("%s must reuse retained signed generations, not the package key", path)
-		}
+	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
+	if strings.Contains(halt, "LINUX_PACKAGE_SIGNING_KEY") {
+		t.Fatal("release halt must reuse retained signed generations, not the package key")
 	}
 }
 
@@ -284,10 +283,8 @@ func TestReleaseHaltWithdrawsLinuxRepositories(t *testing.T) {
 	}
 }
 
-// Each Linux delivery credential reaches only the job that publishes with it. The delivery
-// workflow runs only from release.yml, after the shared gates and the Linux repositories, and
-// each publishing command rereads Qualification with the run's token.
-func TestLinuxDeliveryCredentialsReachOnlyTheirGatedPublisher(t *testing.T) {
+// The cache key reaches only its protected publisher after the shared release gates.
+func TestNixCacheCredentialReachesOnlyItsGatedPublisher(t *testing.T) {
 	t.Parallel()
 	release := parseLane(t, ".github/workflows/release.yml")
 	caller := release.Jobs["linux-delivery"]
@@ -303,35 +300,29 @@ func TestLinuxDeliveryCredentialsReachOnlyTheirGatedPublisher(t *testing.T) {
 			t.Errorf("Linux delivery must require %s", condition)
 		}
 	}
+	const credential = "secrets.NIX_CACHE_SIGNING_KEY"
 	for _, name := range sortedJobs(release) {
-		for _, credential := range []string{"NIX_CACHE_SIGNING_KEY", "AUR_SSH_PRIVATE_KEY"} {
-			if strings.Contains(release.Jobs[name].text(), credential) {
-				t.Errorf("release.yml %s holds %s outside the delivery workflow", name, credential)
-			}
+		if strings.Contains(release.Jobs[name].text(), credential) {
+			t.Errorf("release.yml %s holds the cache key outside the delivery workflow", name)
 		}
 	}
 	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
-	for credential, want := range map[string]struct{ job, environment, command string }{
-		"secrets.NIX_CACHE_SIGNING_KEY": {"publish-nix-cache", "release-publication", "scripts.nix_cache.release_lane publish"},
-		"secrets.AUR_SSH_PRIVATE_KEY":   {"publish-aur", "release-aur", "release:publish:aur-recipe -- publish"},
-	} {
-		var holders []string
-		for _, name := range sortedJobs(delivery) {
-			if strings.Contains(delivery.Jobs[name].text(), credential) {
-				holders = append(holders, name)
-			}
+	var holders []string
+	for _, name := range sortedJobs(delivery) {
+		if strings.Contains(delivery.Jobs[name].text(), credential) {
+			holders = append(holders, name)
 		}
-		if !slices.Equal(holders, []string{want.job}) {
-			t.Fatalf("%s holders = %v, want only %s", credential, holders, want.job)
-		}
-		job := delivery.Jobs[want.job]
-		var rechecks bool
-		for _, step := range job.Steps {
-			rechecks = rechecks || (strings.Contains(step.Run, want.command) && step.Env["GH_TOKEN"] == "${{ github.token }}")
-		}
-		if job.Environment != want.environment || !rechecks {
-			t.Errorf("%s must publish in %s through %q with the Qualification token", want.job, want.environment, want.command)
-		}
+	}
+	if !slices.Equal(holders, []string{"publish-nix-cache"}) {
+		t.Fatalf("cache key holders = %v, want only publish-nix-cache", holders)
+	}
+	job := delivery.Jobs["publish-nix-cache"]
+	var rechecks bool
+	for _, step := range job.Steps {
+		rechecks = rechecks || (strings.Contains(step.Run, "scripts.nix_cache.release_lane publish") && step.Env["GH_TOKEN"] == "${{ github.token }}")
+	}
+	if job.Environment != "release-publication" || !rechecks {
+		t.Error("the cache publisher must reread Qualification in release-publication")
 	}
 	for _, name := range sortedJobs(delivery) {
 		job := delivery.Jobs[name]
@@ -342,10 +333,8 @@ func TestLinuxDeliveryCredentialsReachOnlyTheirGatedPublisher(t *testing.T) {
 		}
 	}
 	checks := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-secrets-check.yml")
-	for _, name := range []string{"NIX_CACHE_SIGNING_KEY", "AUR_SSH_PRIVATE_KEY"} {
-		if !strings.Contains(checks, "secrets."+name) {
-			t.Errorf("release secrets check must validate %s", name)
-		}
+	if !strings.Contains(checks, credential) {
+		t.Error("release secrets check must validate the cache key")
 	}
 }
 

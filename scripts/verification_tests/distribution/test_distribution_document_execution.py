@@ -44,8 +44,7 @@ class DocumentFixture(unittest.TestCase):
             'source_commit': 'a' * 40, 'source_tree': 'b' * 40, 'controller_commit': 'c' * 40,
             'signing_generation': 1, 'package_content_types': {}, 'repositories': [],
             'nix': {'source': {'git_url': 'github:paintedwolf-ai/paintedwolf-code/' + 'a' * 40,
-                              'commit': 'a' * 40, 'flake_lock_sha256': 'd' * 64}, 'cache': {'enabled': False}},
-            'aur': {'enabled': False}}
+                              'commit': 'a' * 40, 'flake_lock_sha256': 'd' * 64}, 'cache': {'enabled': False}}}
         for extension in row['package_extensions']:
             name = 'painted-wolf-code_v1.2.3_linux-x86_64.' + extension
             (self.artifacts / name).write_bytes(('actual signed ' + extension).encode())
@@ -110,21 +109,6 @@ class DistributionDocumentTests(DocumentFixture):
         with self.assertRaises(ValueError):
             validate(document)
 
-    def test_aur_origins_are_fixed_and_channel_bound(self):
-        stable = self.construct()
-        preview = json.loads(json.dumps(stable).replace('1.2.3', '1.2.4-rc.1'))
-        preview['channel'] = 'preview'
-        for document, names in [(stable, ['painted-wolf-code', 'painted-wolf-code-bin']),
-                                 (preview, ['painted-wolf-code-preview-bin'])]:
-            for name in names:
-                document['aur'] = {'enabled': True, 'git_url': 'https://aur.archlinux.org/' + name + '.git',
-                                   'commit': 'e' * 40, 'source_sha256': 'f' * 64, 'package_sha256': 'a' * 64}
-                self.assertIs(validate(document), document)
-            for url in ['https://foreign.invalid/package.git',
-                        'https://aur.archlinux.org/' + ('painted-wolf-code-preview-bin' if document is stable else 'painted-wolf-code-bin') + '.git']:
-                document['aur']['git_url'] = url
-                with self.assertRaises(ValueError):
-                    validate(document)
 
 
 class DistributionSigningTests(DocumentFixture):

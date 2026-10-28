@@ -11,12 +11,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from scripts.linux_release import (
-    aur_rehearsal,
     pacman_installation,
     pacman_rehearsal,
     pacman_repository,
     repository_remote,
-    yay_rehearsal,
 )
 from scripts.linux_release.signing import digest
 from scripts.verification_tests.distribution.pacman_repository_fixtures import (
@@ -88,7 +86,7 @@ class PacmanRepositoryCliAndSignatureTests(unittest.TestCase):
                 pacman_repository.main()
 
 
-class PacmanAndYayInstallationContractTests(unittest.TestCase):
+class PacmanInstallationContractTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -113,79 +111,14 @@ class PacmanAndYayInstallationContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "wrong package owner"):
                 pacman_installation.install(pkg, root, self.work / "cat", PACKAGE)
 
-    def test_yay_rehearsal_installs_and_verifies_ownership(self):
-        recipe = self.work / "recipe"
-        recipe.mkdir()
-        (recipe / "PKGBUILD").write_text("pkgname=fixture\n")
-        root = self.work / "yay-root"
-        with patch.object(yay_rehearsal.shutil, "which", return_value=None):
-            with self.assertRaisesRegex(ValueError, "requires yay"):
-                yay_rehearsal.install(recipe, root, self.work / "cat", PACKAGE, "0.0.1")
-
-        def fake_run(cmd, **_kwargs):
-            if cmd[0] == "/usr/bin/yay":
-                val = root / "usr/share" / PACKAGE / "value"
-                val.parent.mkdir(parents=True, exist_ok=True)
-                val.write_text("0.0.1\n")
-
-        with patch.object(yay_rehearsal.shutil, "which", return_value="/usr/bin/yay"), \
-             patch.object(yay_rehearsal, "selection", return_value=({"fingerprint": "F" * 40}, self.work / "pub.asc")), \
-             patch.object(yay_rehearsal, "keyring", side_effect=lambda *_a: fake_keyring(self.work)), \
-             patch.object(yay_rehearsal, "run"), \
-             patch.object(yay_rehearsal.subprocess, "run", side_effect=fake_run), \
-             patch.object(yay_rehearsal.subprocess, "check_output", side_effect=[PACKAGE + "\n", "yay v12.0\n"]):
-            self.assertEqual(yay_rehearsal.install(recipe, root, self.work / "cat", PACKAGE, "0.0.1"), "yay v12.0")
-        with patch.object(yay_rehearsal.shutil, "which", return_value="/usr/bin/yay"), \
-             patch.object(yay_rehearsal, "selection", return_value=({"fingerprint": "F" * 40}, self.work / "pub.asc")), \
-             patch.object(yay_rehearsal, "keyring", side_effect=lambda *_a: fake_keyring(self.work)), \
-             patch.object(yay_rehearsal, "run"), \
-             patch.object(yay_rehearsal.subprocess, "run"), \
-             patch.object(yay_rehearsal.subprocess, "check_output", return_value="other\n"):
-            with self.assertRaisesRegex(ValueError, "yay did not install"):
-                yay_rehearsal.install(recipe, self.work / "yay-bad", self.work / "cat", PACKAGE, "0.0.1")
 
 
-class AurAndPacmanRehearsalContractTests(unittest.TestCase):
+class PacmanRehearsalContractTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
 
-    def test_aur_rehearsal_verifies_recipe_and_refuses_tampering(self):
-        dest = self.work / "dest"
-        dest.mkdir()
-        pkg = dest / (PACKAGE + "-0.0.1-1-x86_64.pkg.tar.zst")
-        pkg.write_bytes(b"pkg")
-        (dest / (pkg.name + ".sig")).write_bytes(b"sig")
-        receipt = {"objects": [{"path": pkg.name}, {"path": pkg.name + ".sig"}]}
-        aur_pkg = PACKAGE + "-preview-bin"
-
-        def gen(_gens, recipe_dir, *_a):
-            recipe_dir.mkdir(parents=True, exist_ok=True)
-            (recipe_dir / ".SRCINFO").write_text(f"pkgname = {aur_pkg}\n")
-            return {"package": aur_pkg}
-
-        def makepkg_run(cmd, cwd=None, **_kwargs):
-            if "--cleanbuild" in cmd:
-                (Path(cwd) / f"{aur_pkg}-0.0.1-1-x86_64.pkg.tar.zst").write_bytes(b"rebuilt")
-                return Mock(returncode=0)
-            return Mock(returncode=1)
-
-        def fake_install(_pkg, root, *_a):
-            val = root / "usr/share" / PACKAGE / "value"
-            val.parent.mkdir(parents=True, exist_ok=True)
-            val.write_text("0.0.1\n")
-
-        with patch.object(aur_rehearsal, "generate", side_effect=gen), \
-             patch.object(aur_rehearsal, "selection", return_value=({"fingerprint": "F" * 40}, self.work / "pub.asc")), \
-             patch.object(aur_rehearsal, "keyring", side_effect=lambda *_a: fake_keyring(self.work)), \
-             patch.object(aur_rehearsal.subprocess, "run", side_effect=makepkg_run), \
-             patch.object(aur_rehearsal, "package_info", return_value={"pkgname": aur_pkg, "pkgver": "0.0.1-1", "arch": "x86_64"}), \
-             patch.object(aur_rehearsal, "binary_signature"), \
-             patch.object(aur_rehearsal, "install_yay"), \
-             patch.object(aur_rehearsal, "install", side_effect=fake_install), \
-             patch.object(aur_rehearsal.subprocess, "check_output", return_value=b"0.0.1\n"):
-            aur_rehearsal.rehearse(self.work, receipt, dest, pkg, self.work / "cat", self.work / "wrong", "0.0.1", "x86_64")
 
     def test_repository_remote_transfers_bundle_and_validates_receipt(self):
         receipt = self.work / "remote-receipt.json"
@@ -284,7 +217,6 @@ class AurAndPacmanRehearsalContractTests(unittest.TestCase):
             stack.enter_context(patch.object(pacman_rehearsal, "publish", side_effect=fake_publish))
             stack.enter_context(patch.object(pacman_rehearsal, "publish_r2", side_effect=fake_publish_r2))
             stack.enter_context(patch.object(pacman_rehearsal, "install", side_effect=fake_install))
-            stack.enter_context(patch.object(pacman_rehearsal, "rehearse_recipe"))
             stack.enter_context(patch.object(pacman_rehearsal, "warm_absence"))
             stack.enter_context(patch.object(pacman_rehearsal, "put"))
             stack.enter_context(patch.object(pacman_rehearsal, "public_bytes"))

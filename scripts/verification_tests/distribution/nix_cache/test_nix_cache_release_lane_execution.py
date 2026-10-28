@@ -15,7 +15,8 @@ from scripts.nix_cache import release_lane
 
 ROOT = Path(__file__).resolve().parents[4]
 SOURCE = "a" * 40
-SECRET = bytes(range(64))
+SECRET = base64.b64decode('MSsARpZiQF/tzyvH6dthUbU8qX6ojohVwQqBgV/+3rZ7tl6jymCcYf3lGTUuzhsy2lDVQ12pe+0cA4wH4klHIQ==')
+OTHER_SECRET = 'rtsn7TU+rDYlvuYFrvHWraYdNKkezF5gM3o5OrzRlyNKAhN4PGCt2Ank5vyM5zNhJ4jdcz1R+SFwY1Am3KfOTA=='
 PUBLIC = "paintedwolf-cache-1:" + base64.b64encode(SECRET[32:]).decode()
 
 
@@ -31,11 +32,14 @@ class NixCacheReleaseLaneTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
 
-    def test_committed_trust_refuses_until_the_key_is_provisioned(self):
+    def test_committed_trust_selects_the_maintained_cache_key(self):
         committed = json.loads((ROOT / "packaging/linux/nix-cache-trust.json").read_text())
-        self.assertEqual(committed, {"schema_version": 1, "mode": "production", "public_keys": []})
-        with self.assertRaisesRegex(ValueError, "NIX_CACHE_SIGNING_KEY in the release-publication environment"):
-            release_lane.trust_policy()
+        self.assertEqual((committed["schema_version"], committed["mode"]), (1, "production"))
+        self.assertEqual(len(committed["public_keys"]), 1)
+        self.assertEqual(release_lane.trust_policy(), committed)
+        self.assertEqual(release_lane.public_key(committed["public_keys"][0]), release_lane.KEY_NAME)
+        with self.assertRaisesRegex(ValueError, "not provisioned"):
+            release_lane.trust_policy(policy(self.work, []))
         with self.assertRaisesRegex(ValueError, "only the paintedwolf-cache-1"):
             release_lane.trust_policy(policy(self.work, ["other-1:" + base64.b64encode(bytes(32)).decode()]))
         self.assertEqual(release_lane.trust_policy(policy(self.work, [PUBLIC]))["public_keys"], [PUBLIC])
@@ -45,7 +49,7 @@ class NixCacheReleaseLaneTests(unittest.TestCase):
         secret = "paintedwolf-cache-1:" + base64.b64encode(SECRET).decode()
         self.assertEqual(release_lane.credential(secret, trusted), PUBLIC)
         for wrong in [None, "", "other-1:" + base64.b64encode(SECRET).decode(), "paintedwolf-cache-1:not-base64",
-                      "paintedwolf-cache-1:" + base64.b64encode(bytes(64)).decode()]:
+                      "paintedwolf-cache-1:" + OTHER_SECRET]:
             with self.subTest(wrong=wrong), self.assertRaises(ValueError):
                 release_lane.credential(wrong, trusted)
 
@@ -83,8 +87,9 @@ class NixCacheReleaseLaneTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "every native Linux system"):
             release_lane.publish({"x86_64-linux": []}, SOURCE, "1.2.3", self.work, self.work / "key", qualified.append,
                                  lock=lock, policy=trust, construct=construct, deliver=deliver)
-        with self.assertRaisesRegex(ValueError, "not provisioned"):
-            release_lane.publish(outputs, SOURCE, "1.2.3", self.work, self.work / "key", qualified.append, lock=lock)
+        with patch.object(release_lane, "trust_policy", side_effect=ValueError("not provisioned")):
+            with self.assertRaisesRegex(ValueError, "not provisioned"):
+                release_lane.publish(outputs, SOURCE, "1.2.3", self.work, self.work / "key", qualified.append, lock=lock)
 
     def test_halt_withdraws_availability_of_each_published_system(self):
         records = {"release-records/1.2.3/x86_64-linux.json": json.dumps({"request": {
@@ -118,7 +123,7 @@ class NixCacheReleaseLaneTests(unittest.TestCase):
         return 0
 
     def test_commands_fail_closed_only_once_linux_is_public(self):
-        self.assertEqual(self.run_main(["check-trust"]), 1)
+        self.assertEqual(self.run_main(["check-trust"]), 0)
         with patch.object(release_lane, "linux_public", return_value=False):
             self.assertEqual(self.run_main(["check-credential"]), 0)
         with patch.object(release_lane, "linux_public", return_value=True):

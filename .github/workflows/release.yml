@@ -981,7 +981,7 @@ jobs:
             --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
             --base-url "${DOWNLOAD_BASE_URL}"
 
-  # The Nix cache and the AUR recipe are separate delivery events after the announced release.
+  # Publish the Nix cache after the announced release.
   linux-delivery:
     needs: [classify, ship-gates, publish-immutable, publish-linux-repositories, publish-github-release]
     if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.publish-linux-repositories.result == 'success' }}

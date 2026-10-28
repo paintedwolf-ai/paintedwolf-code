@@ -152,12 +152,12 @@ Installation modes remain separate even when they share the same payload:
 | Installation mode | Installation and integration | Updates and qualification |
 |-------------------|------------------------------|---------------------------|
 | deb and rpm | #758 owns package identity; #736 owns launchers | #759/#450 own delivery and notices; #456 qualifies installed workflows |
-| pacman, including packages installed through AUR/yay | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories and AUR recipes; #943 qualifies installed workflows |
+| pacman | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories; #943 qualifies installed workflows |
 | NixOS system module | #927/#928 own the closure and running layout; #929 owns administrator-selected generation trust | #931 owns pins and generation updates; #932 qualifies installed workflows |
 | Nix package-only, user profile, Home Manager and temporary `nix run` | #927/#928 own four distinct installation modes; system service trust requires separate administrator integration | #931 owns the actual installation owner's update/rollback contract; #932 qualifies each mode |
 
-A package installed through yay is pacman-owned. Nix-on-Arch is an additional
-installation mode and cannot satisfy a native pacman row. Store immutability,
+Nix-on-Arch is an additional installation mode and cannot satisfy a native pacman
+row. Store immutability,
 Nix build sandboxing and application command confinement are distinct: #930
 owns Nix development and daemon authority inside the application boundary.
 Nix generation rollback does not roll back the application's mutable data or
