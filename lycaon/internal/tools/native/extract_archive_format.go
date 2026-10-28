@@ -51,7 +51,7 @@ type extractBudget struct {
 
 // archiveLimit reads one archive ceiling from the frozen catalog.
 func archiveLimit(id string) int64 {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return 0
 	}
@@ -280,7 +280,7 @@ func (s extractSink) entry(name string, isDir, isLink bool, budget *extractBudge
 		return err
 	}
 	if isDir {
-		if err := mkdirAgentPath(s.ctx, s.tctx, target, 0o755); err != nil {
+		if _, err := mkdirAgentPath(s.ctx, s.tctx, target, 0o755); err != nil {
 			return fmt.Errorf("mkdir %s: %w", rel, err)
 		}
 		budget.addEntry(rel, 0)
@@ -292,7 +292,7 @@ func (s extractSink) entry(name string, isDir, isLink bool, budget *extractBudge
 			return nil
 		}
 	}
-	if err := mkdirAgentPath(s.ctx, s.tctx, s.target(filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))), 0o755); err != nil {
+	if _, err := mkdirAgentPath(s.ctx, s.tctx, s.target(filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))), 0o755); err != nil {
 		return fmt.Errorf("mkdir parent %s: %w", rel, err)
 	}
 	rc, err := open()

@@ -90,6 +90,9 @@ func HumanFilesSurveyOptions() SurveyOptions {
 }
 
 func surveySkipsDir(rel, name string, opts SurveyOptions) bool {
+	if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
+		return true
+	}
 	if !opts.IncludeVCSMetadata && (IsVCSDirBaseName(name) || pathHasDirSegment(rel, vcsDirName)) {
 		return true
 	}
@@ -189,7 +192,7 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 		isDir := d.IsDir()
 		isSymlink := d.Type()&fs.ModeSymlink != 0
 		if isDir {
-			if surveySkipsDir(childRel, name, w.opts) {
+			if surveySkipsDir(childRel, name, w.opts) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
 				continue
 			}
 			if w.opts.PruneNestedVCS && gitrepo.IsRoot(childAbs) {
@@ -360,10 +363,13 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 		if relDir != "" && relDir != "." {
 			rel = relDir + "/" + name
 		}
-		if surveySkipsDirName(name, opts) {
+		if surveySkipsDirName(name, opts) || settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
 			continue
 		}
 		abs := filepath.Join(dir, name)
+		if e.IsDir() && settingsoverlay.IsRecoveryOnlyDir(abs) {
+			continue
+		}
 		if opts.Admit != nil && !opts.Admit(rel, abs, e.IsDir()) {
 			continue
 		}

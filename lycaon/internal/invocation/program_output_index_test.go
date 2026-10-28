@@ -25,7 +25,7 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 	testutil.FailErr(t, "close output statement", statement.Close())
 	testutil.FailErr(t, "commit output rows", tx.Commit())
 
-	store := f.recorder.ProgramBlobStore(blobstore.Store{})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{})
 	for _, tc := range []struct {
 		id       string
 		retained bool

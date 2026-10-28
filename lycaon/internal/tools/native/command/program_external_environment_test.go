@@ -74,7 +74,7 @@ func TestProgramExternalLaunchCarriesOnlyTheAgentEnvironment(t *testing.T) {
 	}
 }
 
-func TestProgramSessionJobsAndPsScopeToTheSession(t *testing.T) {
+func TestProgramJobsStaySessionScopedWhilePsRunsForBothSessions(t *testing.T) {
 	shared := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = shared.Lifecycle.Close(context.Background()) })
 	s1 := &programFixture{programtest.New(t, programtest.Options{Session: "session-1", Background: shared})}
@@ -92,8 +92,8 @@ func TestProgramSessionJobsAndPsScopeToTheSession(t *testing.T) {
 
 	psOut1, err := s1.call(t, t.Context(), "ps")
 	testutil.FailErr(t, "run ps in session-1", err)
-	if outcome := decodeOutcome(t, psOut1); !strings.Contains(outcome.Stdout, handle) {
-		t.Fatalf("session-1 ps did not list its own job %s: %q", handle, outcome.Stdout)
+	if outcome := decodeOutcome(t, psOut1); !strings.HasPrefix(outcome.Stdout, "PID ") {
+		t.Fatalf("session-1 ps did not report the process table: %q", outcome.Stdout)
 	}
 
 	jobsOut2, err := s2.call(t, t.Context(), "jobs")
@@ -103,8 +103,8 @@ func TestProgramSessionJobsAndPsScopeToTheSession(t *testing.T) {
 	}
 	psOut2, err := s2.call(t, t.Context(), "ps")
 	testutil.FailErr(t, "run ps in session-2", err)
-	if outcome := decodeOutcome(t, psOut2); strings.Contains(outcome.Stdout, handle) || strings.Contains(outcome.Stdout, "[session job") {
-		t.Fatalf("session-2 ps listed another session's job: %q", outcome.Stdout)
+	if outcome := decodeOutcome(t, psOut2); !strings.HasPrefix(outcome.Stdout, "PID ") || strings.Contains(outcome.Stdout, "[session job") {
+		t.Fatalf("session-2 ps did not report the process table without claiming a job: %q", outcome.Stdout)
 	}
 }
 

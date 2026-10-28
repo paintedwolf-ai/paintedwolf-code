@@ -55,7 +55,7 @@ var utilities = map[string]utility{
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain DomainOwners) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +165,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// The utility consumed what it needed; closing stdin is a consumer stop.
 	if streams.Input != nil {
 		_ = streams.Input.Close()
+	}
+	for _, closer := range inv.closers {
+		_ = closer.Close()
 	}
 	return inv.settle(err)
 }

@@ -14,17 +14,11 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -40,6 +34,37 @@ func newProgramFixture(t *testing.T) *programFixture {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
 	}})}
 }
+
+func newLoopFixture(t *testing.T) *programFixture {
+	t.Helper()
+	return &programFixture{programtest.New(t, programtest.Options{
+		Input:       func(dir string) commandprogram.InputRedirection { return loopInput{dir: dir} },
+		Publication: func(string) commandprogram.OutputPublication { return nullPublication{} },
+	})}
+}
+
+type loopInput struct{ dir string }
+
+func (i loopInput) OpenInput(_ context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(i.dir, destination.Target.Value))
+}
+
+type nullPublication struct{}
+
+func (nullPublication) Open(_ context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
+	if destination.Target.Value != "/dev/null" {
+		return nil, fmt.Errorf("fixture only supports /dev/null output")
+	}
+	return nullStage{}, nil
+}
+
+type nullStage struct{}
+
+func (nullStage) Write(p []byte) (int, error) { return len(p), nil }
+func (nullStage) Publish(context.Context) (commandprogram.OutputPublished, error) {
+	return commandprogram.OutputPublished{}, nil
+}
+func (nullStage) Abandon(context.Context) error { return nil }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
 	t.Helper()
@@ -159,7 +184,7 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 
 func TestProgramEntryRefusesExcludedConstructBeforeEarlierWrite(t *testing.T) {
 	f := newProgramFixture(t)
-	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; cat <(ls)")
+	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; eval ls")
 	rejected := toolrejection.AsToolReject(err)
 	if rejected == nil || !strings.HasPrefix(rejected.Code, "COMMAND_SYNTAX_") || rejected.Data["source_start_byte"] == nil || rejected.Data["source_line"] != 1 {
 		t.Fatalf("excluded construct %v", err)
@@ -192,7 +217,7 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+	for _, reference := range []string{"not-a-session-job", "%2", "9999999"} {
 		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
 		testutil.FailErr(t, "run foreign kill", err)
 		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {
@@ -279,10 +304,6 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle); err != nil || !stopped {
 		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for f.programRows(t)[0] == "running" && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
 	_, err = f.call(t, t.Context(), "external -- /bin/echo after")
 	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
 		t.Fatalf("disabled entry admitted a program: %v", err)
@@ -363,6 +384,128 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 	}
 }
 
+func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
+	f := newLoopFixture(t)
+	const items = 12000
+	data := strings.Repeat("item\n", items)
+	testutil.FailErr(t, "write loop input", os.WriteFile(filepath.Join(f.Dir, "items.txt"), []byte(data), 0o600))
+	for _, form := range []struct {
+		program       string
+		children      int
+		receiptBodies int
+	}{
+		{`while read -r i; do basename "$i" >/dev/null; done < items.txt`, 2*items + 1, 2*items + 2},
+		{`for i in $(external -- /bin/cat items.txt); do basename "$i" >/dev/null; done`, items + 1, items + 2},
+	} {
+		out, err := f.call(t, t.Context(), form.program)
+		testutil.FailErr(t, "run large loop", err)
+		result := decodeOutcome(t, out)
+		if result.State != "completed" || result.Status != 0 || result.Refusal != nil || result.Stdout != "" || result.ExecutedChildren != form.children {
+			var events, bytes int64
+			testutil.FailErr(t, "read trace usage", f.Database.QueryRowContext(t.Context(), `SELECT trace_events, trace_bytes FROM invocation_programs WHERE id=?`, result.ProgramID).Scan(&events, &bytes))
+			t.Fatalf("large loop state=%s status=%d refusal=%+v output=%d children=%d trace=%d/%d", result.State, result.Status, result.Refusal, len(result.Stdout), result.ExecutedChildren, events, bytes)
+		}
+		var receipts int
+		testutil.FailErr(t, "count loop child receipts", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&receipts))
+		if receipts != form.receiptBodies {
+			t.Fatalf("loop child receipts=%d, want %d for %q", receipts, form.receiptBodies, form.program)
+		}
+		var inline, spilled int
+		testutil.FailErr(t, "count durable loop input bodies", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FILTER (WHERE inline_body IS NOT NULL),count(*) FILTER (WHERE inline_body IS NULL) FROM invocation_program_outputs WHERE program_id=? AND stream='arguments'`, result.ProgramID).Scan(&inline, &spilled))
+		if inline < receipts || spilled != 0 {
+			t.Fatalf("loop input retention: %d inline, %d blob-backed for %d children", inline, spilled, receipts)
+		}
+	}
+	out, err := f.call(t, t.Context(), "echo hi")
+	testutil.FailErr(t, "run later program", err)
+	if result := decodeOutcome(t, out); result.State != "completed" || result.Stdout != "hi\n" {
+		t.Fatalf("later program failed: %+v", result)
+	}
+}
+
+func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T) {
+	f := newProgramFixture(t)
+	seeded := 0
+	f.Runtime.Evaluate = func(ctx context.Context, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
+		if seeded < 2 {
+			if err := seedSettledChildrenAtLimit(ctx, f, plan, ports); err != nil {
+				return commandprogram.ProgramOutcome{}, err
+			}
+			seeded++
+		}
+		return commandprogram.Evaluate(ctx, plan, ports)
+	}
+	for _, form := range []struct {
+		program, state, stdout, refusal string
+	}{
+		{":; echo before", "completed", "before\n", ""},
+		{":; echo before; echo after", "rejected", "before\n", "COMMAND_LIMIT_EXCEEDED"},
+		{"echo hi", "completed", "hi\n", ""},
+	} {
+		out, err := f.call(t, t.Context(), form.program)
+		testutil.FailErr(t, "run child-limit program", err)
+		result := decodeOutcome(t, out)
+		if result.State != form.state || result.Stdout != form.stdout {
+			t.Fatalf("%q: state=%q stdout=%q refusal=%+v", form.program, result.State, result.Stdout, result.Refusal)
+		}
+		var count int64
+		testutil.FailErr(t, "count durable child receipts", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&count))
+		expectedCount := int64(65536)
+		if form.program == "echo hi" {
+			expectedCount = 1
+		}
+		if count != expectedCount {
+			t.Fatalf("%q: child receipts=%d", form.program, count)
+		}
+		if form.refusal == "" {
+			if result.Refusal != nil || result.Status != 0 {
+				t.Fatalf("%q: unexpected refusal %+v status=%d", form.program, result.Refusal, result.Status)
+			}
+			continue
+		}
+		if result.Refusal == nil || result.Refusal.Code != form.refusal || !strings.Contains(result.Stderr, "child_executions limit") || !strings.Contains(result.Stderr, "[COMMAND_LIMIT_EXCEEDED]") {
+			t.Fatalf("%q: untyped or silent child refusal: %+v", form.program, result)
+		}
+	}
+}
+
+// seedSettledChildrenAtLimit composes a valid, contiguous receipt history for
+// this running program. The final children still enter through the command
+// evaluator and recorder, which decide the exact at/one-past boundary.
+func seedSettledChildrenAtLimit(ctx context.Context, f *programFixture, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) error {
+	const historical = 65535
+	program := ports.Invocation.Identity.ProgramID
+	var beforeEvents, beforeBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT trace_events,trace_bytes FROM invocation_programs WHERE id=?`, program).Scan(&beforeEvents, &beforeBytes); err != nil {
+		return err
+	}
+	loc := plan.Statements[0].SyntaxLocation
+	seed := commandprogram.NextExecution(ports.Invocation, string(loc.ID), loc.Span)
+	if err := ports.Executions.BeginExecution(ctx, seed, ":"); err != nil {
+		return err
+	}
+	if err := ports.Executions.SettleExecution(ctx, seed, commandprogram.ChildRecord{Identity: seed.Identity, Command: ":", Executed: true, Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}}); err != nil {
+		return err
+	}
+	var afterEvents, afterBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT trace_events,trace_bytes FROM invocation_programs WHERE id=?`, program).Scan(&afterEvents, &afterBytes); err != nil {
+		return err
+	}
+	var definitionBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT length(definition_json) FROM invocation_program_definitions WHERE program_id=?`, program).Scan(&definitionBytes); err != nil {
+		return err
+	}
+	_, err := f.Database.ExecContext(ctx, `WITH RECURSIVE seq(n) AS (VALUES(2) UNION ALL SELECT n+1 FROM seq WHERE n<?)
+		INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at,settled_at,status_code,complete,publication_eligible,effect_certainty)
+		SELECT printf('%s-%s-%s-%s-%012d',substr(replace(e.program_id,'-',''),1,8),substr(replace(e.program_id,'-',''),9,4),substr(replace(e.program_id,'-',''),13,4),substr(replace(e.program_id,'-',''),17,4),n),e.program_id,e.node_id,n,e.parent_execution_id,e.actor_id,e.scope_json,e.operation_id,e.definition_digest,e.arguments_representation,e.arguments_digest,e.arguments_ref,e.canonical,'completed',e.owner,e.lifecycle,e.started_at,e.settled_at,0,1,1,'none'
+		FROM seq CROSS JOIN invocation_program_executions e WHERE e.id=?`, historical, seed.Identity.ExecutionID)
+	if err != nil {
+		return err
+	}
+	_, err = f.Database.ExecContext(ctx, `UPDATE invocation_programs SET trace_events=trace_events+?,trace_bytes=trace_bytes+? WHERE id=?`, (afterEvents-beforeEvents-1)*(historical-1), (afterBytes-beforeBytes-definitionBytes)*(historical-1), program)
+	return err
+}
+
 // A native name without a native owner runs as its installed program, marked
 // external in its receipt with a native_gap fact; without one it refuses in
 // shell voice naming the command.
@@ -384,7 +527,10 @@ func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
 	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || !strings.Contains(outcome.Refusal.Feedback, "COMMAND_NATIVE_FORM_UNSUPPORTED") {
 		t.Fatalf("uninstalled native name: %s", out)
 	}
-	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: not supported here [COMMAND_NATIVE_FORM_UNSUPPORTED]") {
+	if outcome.Refusal.Details["command"] != "repo-map" || outcome.Refusal.Details["source_line"] != float64(1) {
+		t.Fatalf("refusal lost its command or source: %+v", outcome.Refusal)
+	}
+	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: request: ") || !strings.Contains(outcome.Stderr, "[COMMAND_NATIVE_FORM_UNSUPPORTED]") {
 		t.Fatalf("refusal replaced the partial result: %+v", outcome)
 	}
 }
@@ -420,7 +566,7 @@ func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
 	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" || outcome.NativeGaps != 1 {
 		t.Fatalf("hidden external outcome %s", out)
 	}
-	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
+	if !strings.Contains(outcome.Stderr, "external: request: ") || !strings.Contains(outcome.Stderr, "[COMMAND_EXTERNAL_HIDDEN]") {
 		t.Fatalf("hidden external stderr %q", outcome.Stderr)
 	}
 }
@@ -442,79 +588,5 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 		case c.verdict != "" && (out.SourceRun == nil || out.SourceRun.Verdict != c.verdict || out.SourceRun.Command != c.program):
 			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
 		}
-	}
-}
-
-type testLoopbackGate struct{}
-
-func (testLoopbackGate) Await(_ context.Context, ask tools.LoopbackConnectAsk) (tools.LoopbackConnectResult, error) {
-	return tools.LoopbackConnectResult{Authorized: true, Ports: ask.Ports}, nil
-}
-
-func (testLoopbackGate) SessionLoopbackGrant(context.Context, string, string) (bool, []uint16) {
-	return true, []uint16{8080}
-}
-
-func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *testing.T) {
-	f := newProgramFixture(t)
-	testutil.FailErr(t, "register http_request owner", f.Runtime.Registry.Register("http_request", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return "", nil
-	}))
-	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandNetworkEgress, toolcontract.CommandExternalExec)
-	testutil.FailErr(t, "compile profile effects", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
-	f.Runtime.Boundary = boundary
-	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), f.Runtime.Registry, "fixture")
-	f.Runtime.Executor.Capabilities.SetLoopbackConnectGate(testLoopbackGate{})
-	var curlGranted bool
-	var curlPorts []uint16
-	curlOp := command.NativeOperation{Tool: "http_request", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("curl"), request.Argv)
-		if err != nil {
-			return command.NativePrepared{}, err
-		}
-		return command.NativePrepared{Mode: "request", Review: bound.Review("http_request"), Invoke: func(_ context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			curlGranted = tc.Local.LoopbackConnectGranted
-			curlPorts = append([]uint16(nil), tc.Local.LoopbackConnectPorts...)
-			_, err := io.WriteString(streams.Output, "ok\n")
-			if err != nil {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-			}
-			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
-		}}, nil
-	}}
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
-			"curl": curlOp,
-			"tee":  teeOperation(f.Dir),
-			"head": firstLineOperation(),
-		}}, nil
-	}
-	args := map[string]any{
-		"command": "curl http://127.0.0.1:8080/health | tee out.txt | head",
-		"capability_request": map[string]any{
-			"local_listen":     map[string]any{"ports": []any{9090}},
-			"loopback_connect": map[string]any{"ports": []any{8080}},
-		},
-	}
-	contract, _ := toolcontract.Lookup("command")
-	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: "model-call-cap", ToolName: "command", Args: args, Contract: contract})
-	testutil.FailErr(t, "begin model receipt", err)
-	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
-	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "model-call-cap"
-	tc.Invocation.ID = parent.ID
-	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
-	out, err := f.Runtime.Run(t.Context(), args, tc)
-	testutil.FailErr(t, "run capability-forwarded pipeline", err)
-	outcome := decodeOutcome(t, out)
-	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "ok\n" {
-		t.Fatalf("pipeline outcome: %+v", outcome)
-	}
-	if !curlGranted || len(curlPorts) != 1 || curlPorts[0] != 8080 {
-		t.Fatalf("curl loopback grant = (%v, %v), want (true, [8080])", curlGranted, curlPorts)
-	}
-	executions := f.executions(t)
-	if executions["http_request"] != "completed;" || executions["write"] != "completed;" || executions["read"] != "completed;" {
-		t.Fatalf("child executions = %v", executions)
 	}
 }

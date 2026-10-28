@@ -774,7 +774,6 @@ type InvocationProgramOutputs struct {
 	Reference         string         `json:"reference"`
 	RetentionClaimID  string         `json:"retention_claim_id"`
 	InitiatingClaimID string         `json:"initiating_claim_id"`
-	BlobID            string         `json:"blob_id"`
 	BlobJson          string         `json:"blob_json"`
 	Complete          int64          `json:"complete"`
 	Redacted          int64          `json:"redacted"`
@@ -782,6 +781,9 @@ type InvocationProgramOutputs struct {
 	Preview           string         `json:"preview"`
 	PreviewTruncated  int64          `json:"preview_truncated"`
 	CreatedAt         string         `json:"created_at"`
+	InlineDigest      string         `json:"inline_digest"`
+	InlineBody        []byte         `json:"inline_body"`
+	BlobID            sql.NullString `json:"blob_id"`
 }
 
 type InvocationProgramProgress struct {

@@ -1,0 +1,25 @@
+oar: '1.0'
+id: FILE_CHANGE_APPROVAL_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "FILE_CHANGE_APPROVAL_UNAVAILABLE"
+effect: block
+copy:
+  what: This call cannot review the change to {{ paintedwolf.path }}.
+  cause: File change approvals are unavailable.
+  fix: Ask the person to enable approvals or make this change.
+  instead: Do not retry the file change through another command while approval is unavailable.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: file change approval is unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: .paintedwolf/rules.md
+  expect_contains:
+  - 'Code: FILE_CHANGE_APPROVAL_UNAVAILABLE'
+  - 'File change approvals are unavailable.'
+  - '.paintedwolf/rules.md'

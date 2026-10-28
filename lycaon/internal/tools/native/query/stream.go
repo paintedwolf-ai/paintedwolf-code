@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -21,7 +22,7 @@ import (
 // a typed refusal (budget, authority) that ends the run.
 type inputs struct {
 	inv      *invocation
-	operands []string
+	operands commandprogram.Fields
 	// raw yields each line as a string (-R) instead of JSON values; yaml
 	// decodes each operand's YAML documents (gojq --yaml-input, python yq).
 	raw       bool
@@ -140,9 +141,9 @@ func (in *inputs) nextValue() (any, bool) {
 }
 
 // open starts one operand: stdin streams; a file is captured and pinned.
-func (in *inputs) open(operand string) {
+func (in *inputs) open(operand commandprogram.Field) {
 	in.close()
-	in.label = operand
+	in.label = operand.Value
 	in.text = ""
 	in.data = nil
 	if !in.yaml {
@@ -151,7 +152,7 @@ func (in *inputs) open(operand string) {
 	}
 	in.data = &bytes.Buffer{}
 	var data io.Reader
-	if operand == "-" {
+	if operand.Value == "-" {
 		in.label = "<stdin>"
 		data = io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data)
 	} else {
@@ -173,7 +174,7 @@ func (in *inputs) open(operand string) {
 		data = strings.NewReader(captured.text)
 	}
 
-	text, err := in.readAll(data, operand == "-")
+	text, err := in.readAll(data, operand.Value == "-")
 	if err != nil {
 		in.stop = err
 		return

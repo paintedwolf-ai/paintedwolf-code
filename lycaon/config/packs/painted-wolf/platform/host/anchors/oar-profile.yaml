@@ -1228,6 +1228,8 @@ host_facts:
    type: string
  - name: paintedwolf.command
    type: string
+ - name: paintedwolf.word
+   type: string
  - name: paintedwolf.host
    type: string
  - name: paintedwolf.id

@@ -21,9 +21,11 @@ Compatibility begins with identifying what persists independently of the code th
 | `device-config` | provider settings, credentials, and device model policy | evolve explicitly without treating database deletion as a reset |
 | `ephemeral` | indexes, caches, downloaded bytes, scratch | wipe and rebuild on mismatch |
 
-Classification follows the artifact, not the package. A database row can point to ephemeral content-addressed bytes; the row and bytes then have different compatibility classes. Lifecycle deletion recovery manifests and their referenced source objects are `durable-db` history: they travel in backups and remain retained with their pending operation or lifecycle undo entry. New human Trash operations and create/copy history plans use an additive `native_trash` receipt in the durable plan; its presence selects native recovery, and its absence preserves the retained recovery contract of existing rows. The receipt identifies an OS-owned entry and retains no bytes; removal or replacement of that entry makes restoration unavailable. Trash failure/retry fields are co-shipped `bundle` wire.
+Classification follows the artifact, not the package. A database row can point to ephemeral content-addressed bytes; the row and bytes then have different compatibility classes. Lifecycle deletion recovery manifests and their referenced source objects are `durable-db` history: they travel in backups and remain retained with their pending operation or lifecycle undo entry. New human Trash operations, agent removals into `.paintedwolf/recovery/`, and create/copy history plans use an additive `native_trash` receipt in the durable plan; its presence selects native recovery, and its absence preserves the retained recovery contract of existing rows. The receipt identifies an OS-owned or host-protected entry and retains no bytes; removal, reclamation, or replacement of that entry makes restoration unavailable. Trash failure/retry fields are co-shipped `bundle` wire.
 
 ## Main store (`durable-db`)
+
+New source-ledger row identities use time-ordered UUIDs in the existing opaque string columns. Stored identities and causal operation keys keep their exact values. Readers take history order, timestamps, authorization and ownership from their recorded facts, without inferring them from identifiers. This changes neither the stored shape nor existing references.
 
 The main store persists sessions, messages, workflows, evidence, authorization history, project records, and other facts that users expect to survive an application update.
 

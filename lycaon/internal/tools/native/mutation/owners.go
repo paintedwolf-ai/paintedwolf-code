@@ -74,7 +74,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations
 		operations.Chmod == nil || operations.Chown == nil || operations.Times == nil || operations.Extract == nil || pins == nil {
 		return nil, errors.New("mutation owners require every shared operation and a pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +194,11 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"
+	case "code-rewrite":
+		if hasOpt("--dry-run") {
+			return "dry-run"
+		}
+		return "mutation"
 	}
 	if len(spec.Effects) > 0 {
 		return spec.Effects[0].Mode

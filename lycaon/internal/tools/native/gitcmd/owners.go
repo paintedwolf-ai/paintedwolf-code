@@ -64,7 +64,7 @@ func NewOwners(backend Backend) (*Owners, error) {
 	if backend == nil {
 		return nil, errors.New("git command owners require the Git backend")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

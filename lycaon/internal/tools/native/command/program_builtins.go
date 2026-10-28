@@ -21,6 +21,15 @@ type sessionOutputResources struct {
 	spill, limit int64
 }
 
+func (s *sessionOutputResources) ReserveProgramState(ctx context.Context, n int64) (func(), error) {
+	release, err := s.ProgramMemory.ReserveProgramState(ctx, n)
+	var limit *toolcontract.ProgramMemoryLimitError
+	if errors.As(err, &limit) {
+		return nil, &toolcontract.ProgramMemoryLimitError{Account: "session_output_state", Maximum: limit.Maximum, Observed: limit.Observed}
+	}
+	return release, err
+}
+
 func (s *sessionOutputResources) ReserveSpill(ctx context.Context, n int64) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -69,15 +78,22 @@ func newSessionOutputResources() *sessionOutputResources {
 	// A spill read's decoder scratch, its screening window and one program's
 	// working storage can be held at once by the session's output lifetime.
 	limits.Working *= 3
-	memory, _ := toolcontract.NewProgramMemory(limits)
+	// Durable output handles outlive one program. Their own session account can
+	// retain a full child-execution budget and a later command without charging
+	// the settled program's 64 MiB state account.
+	limits.State = 256 << 20
 	spill := int64(1 << 30)
-	if catalog, err := toolcontract.LanguageV1(); err == nil {
+	if catalog, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
 		for _, limit := range catalog.Language.Limits {
-			if limit.ID == "session_spill_bytes" {
+			switch limit.ID {
+			case "session_spill_bytes":
 				spill = limit.Maximum
+			case "session_output_state_bytes":
+				limits.State = limit.Maximum
 			}
 		}
 	}
+	memory, _ := toolcontract.NewProgramMemory(limits)
 	return &sessionOutputResources{ProgramMemory: memory, limit: spill}
 }
 
@@ -88,31 +104,22 @@ func (f jobBuiltin) Invoke(ctx context.Context, request commandprogram.Operation
 	return f(ctx, request, streams)
 }
 
-// jobBuiltins implement jobs, wait, kill and ps over session-owned handles
-// only; no host-global PID or process name is ever addressed.
+// jobBuiltins implement jobs, wait, kill, ps, pgrep and pkill. Read-only
+// process inspection (ps, pgrep) lists visible host processes and marks
+// session-owned jobs; signalling (kill, pkill) is restricted to session-owned
+// jobs and refuses foreign processes with PROCESS_NOT_OWNED.
 func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpecification) map[string]commandprogram.OperationDispatcher {
-	list := jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		name := request.Argv[0].Value
-		bound, err := (commandprogram.CatalogBinder{}).Bind(commands[name], request.Argv)
+	listJobs := jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		bound, err := (commandprogram.CatalogBinder{}).Bind(commands["jobs"], request.Argv)
 		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(commands[name], err)
+			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(commands["jobs"], err)
 		}
 		statuses, err := jobs.List(ctx)
 		if err != nil {
 			return ownerFailure(err), err
 		}
 		var targets []string
-		if name == "ps" {
-			for _, opt := range bound.Options("-p") {
-				if len(opt.Values) > 0 {
-					targets = append(targets, opt.Values[0].Value)
-				}
-			}
-		}
 		for _, op := range bound.Operands() {
-			if name == "ps" && strings.TrimLeft(op.Value, "auxef") == "" {
-				continue
-			}
 			targets = append(targets, op.Value)
 		}
 		if len(targets) > 0 {
@@ -120,7 +127,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 			for _, target := range targets {
 				handle, resolveErr := jobs.Resolve(target)
 				if resolveErr != nil {
-					_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "%s: %s: session-owned background jobs only (no session job %s)\n", name, target, target)
+					_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "jobs: %s: session-owned background jobs only (no session job %s)\n", target, target)
 					continue
 				}
 				wanted[handle] = true
@@ -133,7 +140,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 			}
 			statuses = filtered
 		}
-		showCmd := name == "ps" || len(bound.Options("-l")) > 0
+		showCmd := len(bound.Options("-l")) > 0
 		var out strings.Builder
 		for _, job := range statuses {
 			if showCmd && job.CommandLine != "" {
@@ -148,8 +155,10 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		return readResult(0), nil
 	})
 	return map[string]commandprogram.OperationDispatcher{
-		"jobs": list,
-		"ps":   list,
+		"jobs":  listJobs,
+		"ps":    psBuiltin(jobs, commands["ps"]),
+		"pgrep": pgrepBuiltin(jobs, commands["pgrep"]),
+		"pkill": pkillBuiltin(jobs, commands["pkill"]),
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
 			if len(handles) == 0 {

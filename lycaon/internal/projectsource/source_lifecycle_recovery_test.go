@@ -19,14 +19,14 @@ func TestSourceMoveRecoveryRefusesDamagedDestinationDuringCleanup(t *testing.T) 
 		testutil.FailErr(t, "create move tree", os.Mkdir(path, 0o700))
 		testutil.FailErr(t, "seed complete child", os.WriteFile(filepath.Join(path, "file"), []byte("complete"), 0o600))
 	}
-	sha, err := sourceTreeFingerprint(t.Context(), destination)
+	sha, _, err := sourceTreeFingerprint(t.Context(), destination, testSourceOperationMemory(t))
 	testutil.FailErr(t, "fingerprint complete destination", err)
 	heldID, err := fspath.EntryIdentity(held)
 	testutil.FailErr(t, "identify held source", err)
 	destinationID, err := fspath.EntryIdentity(destination)
 	testutil.FailErr(t, "identify destination", err)
 	testutil.FailErr(t, "damage published destination", os.WriteFile(filepath.Join(destination, "file"), []byte("damaged"), 0o600))
-	row := &sourceMutationRow{Plan: sourceMutationPlan{
+	row := &sourceMutationRow{memory: testSourceOperationMemory(t), Plan: sourceMutationPlan{
 		sourceMutationPublication: sourceMutationPublication{HoldAbs: held, EntryIdentity: heldID, DestinationIdentity: destinationID, CrossVolume: true, HoldStarted: true, MoveCleanupStarted: true},
 		sourceMutationRecovery:    sourceMutationRecovery{TreeSHA: sha},
 		RootPath:                  root,
@@ -76,7 +76,7 @@ func TestSourceCapturePreservesRecordedContentExpectation(t *testing.T) {
 			} else {
 				plan.AfterSHA = expected
 			}
-			if err := service.recovery.captureRecovery(t.Context(), plan, path); !errors.Is(err, ErrSourceMutationDiverged) {
+			if err := service.recovery.captureRecovery(t.Context(), plan, path, testSourceOperationMemory(t)); !errors.Is(err, ErrSourceMutationDiverged) {
 				t.Fatalf("captured contents replaced recorded expectation: %v", err)
 			}
 			if plan.RecoveryCount != 0 {
