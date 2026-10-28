@@ -42,13 +42,20 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 
 	initialAssistants := 0
+	waitDeadline := func() (time.Time, bool) {
+		deadline, ok := t.Deadline()
+		if !ok {
+			return time.Time{}, false
+		}
+		return time.Now().Add(time.Until(deadline) / 8), true
+	}
 	for _, msg := range listMessagesHTTP(t, srv, sess.ID) {
 		if msg.Role == wire.MessageRoleAssistant {
 			initialAssistants++
 		}
 	}
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "plan implement leg")
-	deadline := time.Now().Add(30 * time.Second)
+	deadline, hasDeadline := waitDeadline()
 	for {
 		msgs := listMessagesHTTP(t, srv, sess.ID)
 		seenReceipt, assistants := false, 0
@@ -61,7 +68,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 		if seenReceipt && assistants > initialAssistants && getSessionHTTP(t, srv, sess.ID).Status == wire.SessionStatusIdle {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil || hasDeadline && time.Now().After(deadline) {
 			t.Fatalf("prompt did not complete: receipt=%t assistants=%d initial=%d", seenReceipt, assistants, initialAssistants)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -81,14 +88,14 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 	var allowed bool
 	var reason string
-	deadline = time.Now().Add(30 * time.Second)
+	deadline, hasDeadline = waitDeadline()
 	for {
 		var err error
 		allowed, reason, err = mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 		if err == nil && allowed {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil || hasDeadline && time.Now().After(deadline) {
 			t.Fatalf("completed leg did not become eligible to wake coordinator: reason=%q error=%v", reason, err)
 		}
 		time.Sleep(20 * time.Millisecond)
