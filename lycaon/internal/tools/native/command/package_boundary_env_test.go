@@ -15,10 +15,9 @@ import (
 )
 
 func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		t.Skip("no home directory")
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
 	tctx := tools.ToolContext{
 		Files: tools.InvocationFiles{PackageExecution: &packageexec.Execution{
 			Manager: "bun",
@@ -52,6 +51,10 @@ func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
 				val := strings.TrimPrefix(env, key)
 				if !strings.HasPrefix(val, cacheBase) {
 					t.Fatalf("expected %s to point within %s, got %s", key, cacheBase, val)
+				}
+				root, err := confine.FilesystemRootForPath("", nil, nil, "", val)
+				if err != nil || root != cacheBase {
+					t.Fatalf("package execution cache %s is outside its actual default boundary: %v", key, err)
 				}
 				break
 			}
