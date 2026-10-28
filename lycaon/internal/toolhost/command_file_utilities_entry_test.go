@@ -197,10 +197,11 @@ func TestCommandIconvRedirectPublishesWithCapturedRevisions(t *testing.T) {
 	}
 }
 
-// TestCommandFileUtilitiesAreNativeAndRefuseUncataloguedForms: each name
-// binds to its native owner; a form outside the catalog refuses with focused
-// help and never falls through to an installed program.
-func TestCommandFileUtilitiesAreNativeAndRefuseUncataloguedForms(t *testing.T) {
+// TestCommandFileUtilitiesAreNativeAndRecordUncataloguedForms: each name
+// binds to its native owner. A form outside the catalog is a recorded native
+// gap: it refuses with the option code, or runs an installed program under
+// that receipt fact.
+func TestCommandFileUtilitiesAreNativeAndRecordUncataloguedForms(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	names := []string{"du", "df", "cmp", "od", "strings", "tree", "iconv", "envsubst"}
 	out, err := env.Call(t, t.Context(), "type "+strings.Join(names, " "))
@@ -216,7 +217,7 @@ func TestCommandFileUtilitiesAreNativeAndRefuseUncataloguedForms(t *testing.T) {
 		out, err := env.Call(t, t.Context(), program)
 		testutil.FailErr(t, program, err)
 		result := decodePipeOutcome(t, out)
-		if result.Refusal == nil || result.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" || result.NativeGaps != 0 {
+		if result.NativeGaps != 1 || result.Refusal != nil && result.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
 			t.Fatalf("%s: %+v refusal %+v", program, result, result.Refusal)
 		}
 	}
