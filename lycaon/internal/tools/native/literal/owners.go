@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -64,7 +65,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, volumes: statVolume, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
+	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, volumes: fseffect.VolumeOf, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
 	if o.signatures, err = decodeSignatures(catalog.Contracts["signatures"]); err != nil {
 		return nil, err
 	}

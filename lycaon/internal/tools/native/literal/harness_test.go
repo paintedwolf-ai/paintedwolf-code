@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -25,8 +26,8 @@ import (
 
 // fixtureVolume is the file system every harness path reports to df, so
 // statistics are fixed; the platform reader has its own test.
-func fixtureVolume(*os.File, string) (volume, error) {
-	return volume{source: "/dev/fixture", target: "/fixture", blockSize: 4096, blocks: 1000, free: 400, avail: 300, files: 5000, freeFiles: 4000}, nil
+func fixtureVolume(*os.File, string) (fseffect.Volume, error) {
+	return fseffect.Volume{Source: "/dev/fixture", Target: "/fixture", BlockSize: 4096, Blocks: 1000, Free: 400, Available: 300, Files: 5000, FreeFiles: 4000}, nil
 }
 
 // fixtureTime is the deterministic mtime every seeded entry carries.
