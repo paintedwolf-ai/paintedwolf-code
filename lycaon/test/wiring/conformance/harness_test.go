@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/commandconformance"
@@ -32,6 +33,7 @@ type runtimeObservation struct {
 	TopLevelReject string
 	Files          map[string]*commandconformance.File
 	ChildReceipts  []string
+	NativeGaps     []toolcontract.NativeGap
 	ApprovalPlans  []wire.ApprovalPlan
 	// Roots are the absolute spellings of the case's workspace.
 	Roots []string
@@ -138,9 +140,11 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 		plans = r.promptAnsweringApprovals(t, projectID, sess.ID, c.ID, expectedCards)
 	}
 
+	receipts := r.queryChildReceipts(t, sess.ID)
 	obs := runtimeObservation{
 		Files:         trackedFiles(t, dir, c.Tracked),
-		ChildReceipts: r.queryChildReceipts(t, sess.ID),
+		ChildReceipts: receipts.Children,
+		NativeGaps:    receipts.Gaps,
 		ApprovalPlans: plans,
 		Roots:         workspaceRoots(dir),
 	}
@@ -254,18 +258,28 @@ func trackedFiles(t *testing.T, dir string, tracked []string) map[string]*comman
 	return out
 }
 
-func (r *conformanceRunner) queryChildReceipts(t *testing.T, sessionID string) []string {
+type caseReceipts struct {
+	Children []string
+	Gaps     []toolcontract.NativeGap
+}
+
+func (r *conformanceRunner) queryChildReceipts(t *testing.T, sessionID string) caseReceipts {
 	t.Helper()
-	rows, err := r.h.DB.QueryContext(t.Context(), `SELECT e.operation_id, e.state FROM invocation_program_executions e
+	rows, err := r.h.DB.QueryContext(t.Context(), `SELECT e.operation_id, e.state, e.native_gap_json FROM invocation_program_executions e
 		JOIN invocation_programs p ON p.id = e.program_id JOIN invocation_receipts r ON r.id = p.parent_receipt_id
 		WHERE r.session_id = ? AND e.operation_id NOT LIKE 'program %' ORDER BY e.ordinal`, sessionID)
 	testutil.FailErr(t, "query child receipts", err)
 	defer rows.Close()
-	var out []string
+	var out caseReceipts
 	for rows.Next() {
-		var op, state string
-		testutil.FailErr(t, "scan child receipt", rows.Scan(&op, &state))
-		out = append(out, op+"="+state)
+		var op, state, gap string
+		testutil.FailErr(t, "scan child receipt", rows.Scan(&op, &state, &gap))
+		out.Children = append(out.Children, op+"="+state)
+		if gap != "" {
+			var fact toolcontract.NativeGap
+			testutil.FailErr(t, "decode native gap receipt", json.Unmarshal([]byte(gap), &fact))
+			out.Gaps = append(out.Gaps, fact)
+		}
 	}
 	testutil.FailErr(t, "iterate child receipts", rows.Err())
 	return out

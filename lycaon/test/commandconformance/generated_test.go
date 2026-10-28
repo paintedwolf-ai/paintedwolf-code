@@ -49,7 +49,7 @@ func TestGeneratedProgramsAreDeterministicAndBounded(t *testing.T) {
 			testutil.FailErr(t, "parse generated program", err)
 			testutil.FailErr(t, "close generated program", parsed.Close())
 			for _, reduced := range p.ReductionCandidates() {
-				if generatedMeasure(reduced) >= generatedMeasure(p) {
+				if reduced.complexity() >= p.complexity() {
 					t.Fatal("reduction did not decrease grammar measure")
 				}
 				if !reflect.DeepEqual(reduced.Case().References, c.References) {
@@ -71,14 +71,6 @@ func TestGeneratedProgramsAreDeterministicAndBounded(t *testing.T) {
 	if left[0].Case().Program == right[0].Case().Program {
 		t.Fatal("different seeds did not vary programs")
 	}
-}
-
-func generatedMeasure(p GeneratedProgram) int {
-	weight := 0
-	for _, f := range p.fragments {
-		weight += 1 + len(f.text) + f.number
-	}
-	return weight
 }
 
 func TestShrinkFindsAFixedPoint(t *testing.T) {

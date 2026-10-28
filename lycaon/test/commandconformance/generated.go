@@ -118,6 +118,15 @@ func (f generatedFragment) source(index int) string {
 	}
 }
 
+// complexity decreases on every fragment deletion or scalar reduction.
+func (p GeneratedProgram) complexity() int {
+	weight := 0
+	for _, f := range p.fragments {
+		weight += 1 + len(f.text) + f.number
+	}
+	return weight
+}
+
 // ReductionCandidates are strictly smaller grammar-preserving programs.
 func (p GeneratedProgram) ReductionCandidates() []GeneratedProgram {
 	var candidates []GeneratedProgram
@@ -140,5 +149,6 @@ func (p GeneratedProgram) ReductionCandidates() []GeneratedProgram {
 			candidates = append(candidates, c)
 		}
 	}
+	slices.SortStableFunc(candidates, func(a, b GeneratedProgram) int { return a.complexity() - b.complexity() })
 	return candidates
 }

@@ -1,12 +1,15 @@
 package conformance_test
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/test/commandconformance"
 	"github.com/lycaon/lycaon/test/referenceuserland"
 )
@@ -14,6 +17,8 @@ import (
 type generatedDefect struct {
 	Kind       string
 	Code       string
+	Facts      map[string]string
+	Gaps       []toolcontract.NativeGap
 	References map[referenceuserland.ID]commandconformance.Difference
 }
 
@@ -22,9 +27,19 @@ func generatedMismatch(obs runtimeObservation, refs map[referenceuserland.ID]com
 	case obs.TopLevelReject != "":
 		return generatedDefect{Kind: "top_level_rejection"}
 	case obs.Outcome.Refusal != nil:
-		return generatedDefect{Kind: "refusal", Code: obs.Outcome.Refusal.Code}
+		facts := map[string]string{}
+		for _, key := range []string{"command", "word", "option", "limit_id"} {
+			if value, ok := obs.Outcome.Refusal.Details[key].(string); ok {
+				facts[key] = value
+			}
+		}
+		return generatedDefect{Kind: "refusal", Code: obs.Outcome.Refusal.Code, Facts: facts}
 	case obs.Outcome.NativeGaps != 0:
-		return generatedDefect{Kind: "native_gap"}
+		gaps := slices.Clone(obs.NativeGaps)
+		slices.SortFunc(gaps, func(a, b toolcontract.NativeGap) int {
+			return cmp.Or(cmp.Compare(a.Command, b.Command), cmp.Compare(a.Code, b.Code), cmp.Compare(a.Form, b.Form))
+		})
+		return generatedDefect{Kind: "native_gap", Gaps: slices.Compact(gaps)}
 	case obs.Outcome.State != "completed":
 		return generatedDefect{Kind: "program_state", Code: obs.Outcome.State}
 	}

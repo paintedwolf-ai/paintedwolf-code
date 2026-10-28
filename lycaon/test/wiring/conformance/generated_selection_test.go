@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/test/commandconformance"
 	"github.com/lycaon/lycaon/test/referenceuserland"
@@ -60,6 +61,18 @@ func TestGeneratedMismatchIdentity(t *testing.T) {
 	obs.Outcome.NativeGaps = 1
 	if generatedMismatch(obs, refs).Kind != "native_gap" {
 		t.Fatal("fallback treated as differential success")
+	}
+	obs.NativeGaps = []toolcontract.NativeGap{{Command: "sed", Code: "COMMAND_OPTION_UNSUPPORTED", Form: "-x"}}
+	gap := generatedMismatch(obs, refs)
+	obs.NativeGaps[0].Command = "grep"
+	if reflect.DeepEqual(gap, generatedMismatch(obs, refs)) {
+		t.Fatal("different native gap replaced original")
+	}
+	obs.Outcome.Refusal = &command.ProgramRefusal{Code: "COMMAND_OPTION_UNSUPPORTED", Details: map[string]any{"command": "sed", "word": "-x"}}
+	refusal := generatedMismatch(obs, refs)
+	obs.Outcome.Refusal.Details["command"] = "grep"
+	if reflect.DeepEqual(refusal, generatedMismatch(obs, refs)) {
+		t.Fatal("different refused command replaced original")
 	}
 	obs.TopLevelReject = "diagnostic only"
 	if generatedMismatch(obs, refs).Kind != "top_level_rejection" {
