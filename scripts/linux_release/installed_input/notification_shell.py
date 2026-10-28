@@ -11,7 +11,7 @@ from ..installed_cases.desktop_ui import load_api
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from ..installed_cases.logind_context import Reader
 from .. import installed_gnome, notification_display
-from .. import scripts_module
+from scripts.harness import atspi_client
 
 BUS = 'org.freedesktop.DBus'
 BUS_PATH = '/org/freedesktop/DBus'
@@ -193,7 +193,7 @@ def observe(surface, service, shell, delivery, deadline=None, expected=None):
         geometry = notification_geometry.mapping(result.unpack())
         geometry.update(display_owner=shell, shell_extent=list(geometry['logical_extent']))
         # The target's actual ancestor must independently report this rectangle.
-        with scripts_module('harness.atspi_client').session_bus(environment):
+        with atspi_client.session_bus(environment):
             api = load_api()
             target = capture_target(api, shell['process'], delivery, geometry, deadline, expected)
         require_owners()

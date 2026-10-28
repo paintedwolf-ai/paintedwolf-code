@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -55,7 +56,7 @@ func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T)
 	defer cleanup()
 	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(cmd))
 	pid := waitForPIDFile(t, path)
-	testutil.FailErr(t, "detached daemon survived completion", waitForProcessGone(pid, 5*time.Second))
+	testutil.FailErr(t, "detached daemon survived completion", waitForProcessGone(t.Context(), pid))
 }
 
 func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T) {
@@ -74,11 +75,11 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(8 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cancelled supervisor did not settle")
 	}
-	testutil.FailErr(t, "cancelled detached daemon survived", waitForProcessGone(pid, 5*time.Second))
-	if err := waitForProcessGone(otherPID, 100*time.Millisecond); err == nil {
+	testutil.FailErr(t, "cancelled detached daemon survived", waitForProcessGone(t.Context(), pid))
+	if !osprocess.Alive(otherPID) {
 		t.Fatal("cancellation killed a different command's daemon")
 	}
 }
@@ -90,7 +91,7 @@ func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 	pid := waitForPIDFile(t, path)
 	cleanup()
 	_ = cmd.Wait()
-	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(pid, 5*time.Second))
+	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(t.Context(), pid))
 }
 
 func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
@@ -100,7 +101,7 @@ func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
 	pid := waitForPIDFile(t, path)
 	reapLines(fmt.Sprintf("+s%d\n", cmd.Process.Pid))
 	_ = cmd.Wait()
-	testutil.FailErr(t, "daemon survived companion cleanup", waitForProcessGone(pid, 5*time.Second))
+	testutil.FailErr(t, "daemon survived companion cleanup", waitForProcessGone(t.Context(), pid))
 }
 
 func TestGuardedPipelinePriorityReachesPrimary(t *testing.T) {
@@ -136,7 +137,7 @@ func TestSupervisedPTYInteractiveShellOwnsForeground(t *testing.T) {
 		if !strings.Contains(output, "__foreground_ok__\r\n") || strings.Contains(output, "no job control") {
 			t.Fatalf("interactive shell did not control terminal: %q", output)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal output did not settle")
 	}
 }
@@ -167,9 +168,8 @@ func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
 	text := func() string { mu.Lock(); defer mu.Unlock(); return seen.String() }
 	await := func(marker string) {
 		t.Helper()
-		deadline := time.Now().Add(15 * time.Second)
 		for !strings.Contains(text(), marker) {
-			if time.Now().After(deadline) {
+			if t.Context().Err() != nil {
 				t.Fatalf("terminal never showed %q:\n%q", marker, text())
 			}
 			time.Sleep(20 * time.Millisecond)

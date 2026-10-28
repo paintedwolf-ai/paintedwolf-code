@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -40,7 +39,7 @@ func TestStopAdmissionIsLinearizedPerSessionTree(t *testing.T) {
 		firstResult <- flight
 	}()
 	<-firstStarted
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		mgr.mu.Lock()
 		defer mgr.mu.Unlock()
 		gate := mgr.gates[first]

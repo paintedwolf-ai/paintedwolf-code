@@ -196,7 +196,7 @@ const SETTING_SPECS = [
   { section: "debug", tab: "approvals", id: "never-ask", label: NEVER_ASK_COPY.heading, keywords: ["never ask", "disable approvals", "auto approve", "skip permissions", "yolo"] },
   { section: "debug", tab: "cache", id: "clear-caches", label: CACHE_SETTINGS_COPY.clearAllLabel, keywords: ["clear cache", "free disk space", "reset caches"] },
   { section: "debug", tab: "data", id: "backup-restore", label: DATA_SETTINGS_COPY.heading, keywords: ["backup", "restore", "export", "import"] },
-  { section: "debug", tab: "data", id: "credential-vault", label: CREDENTIAL_VAULT_COPY.heading, keywords: ["vault", "app password", "identity service", "credentials", "keychain"] },
+  { section: "debug", tab: "data", id: "credential-vault", label: CREDENTIAL_VAULT_COPY.heading, keywords: ["vault", "identity service", "credentials", "keychain"] },
   { section: "debug", tab: "data", id: "history-storage", label: "History storage", keywords: ["retention", "prune", "delete history", "disk usage", "protected history"] },
   { ...DIAGNOSTICS, id: "verbose-mode", label: "Verbose mode", keywords: ["debug", "rejects", "diagnostics"] },
   { ...DIAGNOSTICS, id: "debug-logging", label: "Full debug logging", keywords: ["logs", "trace", "debug"] },

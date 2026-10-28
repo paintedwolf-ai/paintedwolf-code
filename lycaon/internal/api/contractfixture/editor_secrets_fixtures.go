@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
@@ -171,7 +170,7 @@ func (f SecretSpanFixture) AwaitScreen(t *testing.T) *api.SecretScreen {
 	testutil.FailErr(t, "snapshot screening evidence", err)
 	digest := hex.EncodeToString(sum[:]) + evidence
 	var screen *api.SecretScreen
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		screen, _ = f.Srv.Sources.Editor.EditorScreen(f.FixtureDocument.ID, digest)
 		return screen != nil
 	})
