@@ -16,6 +16,7 @@ func cacheRootFixture(t *testing.T) string {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("home", home)
 	for name, relative := range map[string]string{
 		"XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "XDG_STATE_HOME": "state",
 		"XDG_CONFIG_HOME": "config", "APPDATA": "config", "LYCAON_SANDBOX_WRITE_ROOTS": "granted",
