@@ -98,7 +98,7 @@ func (p *operationPlan) stashPaths(ctx context.Context, dir string) ([]string, e
 			return nil, err
 		}
 	}
-	untracked, err := optionalObject(ctx, dir, p.stashOID+"^3")
+	untracked, err := ResolveOptionalObject(ctx, dir, p.stashOID+"^3")
 	if err != nil {
 		return nil, err
 	}

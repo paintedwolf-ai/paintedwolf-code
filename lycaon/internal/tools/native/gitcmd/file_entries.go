@@ -3,26 +3,35 @@ package gitcmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 type trackedEntry struct {
 	path, mode, oid string
-	content         []byte
+	unmerged        string
 }
 
 // trackedEntries reads the exact index records, including paths containing
-// whitespace. Unmerged entries and submodules need a different operation.
-func trackedEntries(ctx context.Context, p Prepared, root string) ([]trackedEntry, error) {
+// whitespace. Conflict records remain scoped to their paths.
+func trackedEntries(ctx context.Context, p Prepared, root string, paths []string, literal bool) ([]trackedEntry, error) {
 	var output bytes.Buffer
 	out := &meteredOutput{ctx: ctx, w: &output, maximum: p.owners.limit("stream_bytes")}
-	diagnostics, code, err := (git.CommandReader{}).ReadCommand(ctx, root, []string{"ls-files", "--stage", "-z"}, nil, out)
+	args := []string{"ls-files", "--stage", "-z", "--"}
+	for _, path := range paths {
+		if literal {
+			path = ":(literal)" + path
+		}
+		args = append(args, path)
+	}
+	diagnostics, code, err := (git.CommandReader{}).ReadCommand(ctx, root, args, nil, out)
 	if err != nil {
 		return nil, err
 	}
@@ -33,6 +42,7 @@ func trackedEntries(ctx context.Context, p Prepared, root string) ([]trackedEntr
 		return nil, fmt.Errorf("read index: %s", bytes.TrimSpace(diagnostics))
 	}
 	var entries []trackedEntry
+	conflicts := map[string]string{}
 	for _, record := range strings.Split(output.String(), "\x00") {
 		if record == "" {
 			continue
@@ -43,9 +53,13 @@ func trackedEntries(ctx context.Context, p Prepared, root string) ([]trackedEntr
 			return nil, fmt.Errorf("malformed index record")
 		}
 		if fields[2] != "0" {
-			return nil, unsupportedFileForm(p, name, "a merged index")
+			conflicts[name] += meta + ";"
+			continue
 		}
 		entries = append(entries, trackedEntry{path: name, mode: fields[0], oid: fields[1]})
+	}
+	for name, records := range conflicts {
+		entries = append(entries, trackedEntry{path: name, unmerged: records})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].path < entries[j].path })
 	return entries, nil
@@ -78,3 +92,22 @@ func entryContent(ctx context.Context, p Prepared, root string, entry trackedEnt
 }
 
 func entryAbs(root, rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
+
+// plannedContent retains each move's index bytes in the program's shared
+// memory account before the blob is read.
+func (r *fileMutation) plannedContent(entry trackedEntry) ([]byte, error) {
+	size, err := r.p.owners.Git.BlobSize(r.ctx, r.repo.Root, entry.oid)
+	if err != nil {
+		return nil, err
+	}
+	release, err := r.p.filesystem.Revisions.Memory.ReserveProgramState(r.ctx, size)
+	if err != nil {
+		var limit *toolcontract.ProgramMemoryLimitError
+		if errors.As(err, &limit) {
+			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes", "maximum": limit.Maximum, "observed": limit.Observed, "path": entry.path}}
+		}
+		return nil, err
+	}
+	r.releases = append(r.releases, release)
+	return entryContent(r.ctx, r.p, r.repo.Root, entry)
+}

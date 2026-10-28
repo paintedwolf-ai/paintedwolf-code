@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -173,5 +174,89 @@ func TestFileMutationDryRunAndPathRefusals(t *testing.T) {
 		if got.err == nil || got.result.EffectCertainty != toolcontract.NoEffect {
 			t.Fatalf("path refusal %+v %v", got.result, got.err)
 		}
+	}
+}
+
+func TestMoveForceAndSymbolicLink(t *testing.T) {
+	h := newApplyHarness(t)
+	h.write("destination", "replaced\n")
+	got := h.exec("git", "mv", "-f", "--", "sub/b.txt", "destination")
+	testutil.FailErr(t, "force move", got.err)
+	if got.result.Status != 0 || got.stderr != "warning: overwriting 'destination'\n" || h.read("destination") != "bee\n" {
+		t.Fatalf("force move %+v %q", got.result, got.stderr)
+	}
+	testutil.FailErr(t, "symbolic link", os.Symlink("a.txt", filepath.Join(h.root, "link")))
+	h.git("add", "link")
+	got = h.exec("git", "mv", "--", "link", "moved-link")
+	testutil.FailErr(t, "move link", got.err)
+	if got.result.Status != 0 {
+		t.Fatalf("move link %+v %q", got.result, got.stderr)
+	}
+	target, err := os.Readlink(filepath.Join(h.root, "moved-link"))
+	testutil.FailErr(t, "read moved link", err)
+	if target != "a.txt" || !strings.HasPrefix(h.git("ls-files", "--stage", "--", "moved-link"), "120000 ") {
+		t.Fatal("symbolic link type changed")
+	}
+	got = h.exec("git", "rm", "--", "moved-link")
+	testutil.FailErr(t, "remove link", got.err)
+	if got.result.Status != 0 || !h.absent("moved-link") || h.absent("a.txt") {
+		t.Fatalf("remove link %+v %q", got.result, got.stderr)
+	}
+}
+
+func TestRemoveMissingAndGroupedSafety(t *testing.T) {
+	h := newApplyHarness(t)
+	testutil.FailErr(t, "remove saved file", os.Remove(filepath.Join(h.root, "sub/b.txt")))
+	got := h.exec("git", "rm", "--", "sub/b.txt")
+	testutil.FailErr(t, "remove missing", got.err)
+	if got.result.Status != 0 {
+		t.Fatalf("missing file %+v %q", got.result, got.stderr)
+	}
+	h.write("sub/b.txt", "bee\n")
+	h.git("add", "sub/b.txt")
+	h.write("sub/b.txt", "index\n")
+	h.git("add", "sub/b.txt")
+	got = h.exec("git", "rm", "--", "a.txt", "sub/b.txt")
+	testutil.FailErr(t, "grouped safety", got.err)
+	want := "error: the following file has changes staged in the index:\n    sub/b.txt\n(use --cached to keep the file, or -f to force removal)\nerror: the following file has local modifications:\n    a.txt\n(use --cached to keep the file, or -f to force removal)\n"
+	if got.result.Status != 1 || got.stderr != want {
+		t.Fatalf("grouped safety %q", got.stderr)
+	}
+}
+
+func TestSelectedMutationPreservesUnrelatedConflict(t *testing.T) {
+	for _, command := range []string{"rm", "mv"} {
+		t.Run(command, func(t *testing.T) {
+			h := newApplyHarness(t)
+			_, err := h.owners.Git.Operate(t.Context(), h.root, git.OperationRequest{Kind: "stage", Entries: []git.IndexEntry{{Path: "a.txt", Mode: "100644", Stages: &[3][]byte{[]byte("base\n"), []byte("ours\n"), []byte("theirs\n")}}}})
+			testutil.FailErr(t, "seed unrelated conflict", err)
+			before := h.git("ls-files", "--unmerged", "--", "a.txt")
+			args := []string{"git", command, "--", "sub/b.txt"}
+			if command == "mv" {
+				args = append(args, "moved.txt")
+			}
+			got := h.exec(args...)
+			testutil.FailErr(t, "selected mutation", got.err)
+			if got.result.Status != 0 || h.git("ls-files", "--unmerged", "--", "a.txt") != before {
+				t.Fatalf("unrelated conflict changed %+v %q", got.result, got.stderr)
+			}
+		})
+	}
+}
+
+func TestCachedRemovalRechecksSavedContentAtIndexReview(t *testing.T) {
+	h := newApplyHarness(t)
+	h.write("a.txt", "staged\n")
+	h.git("add", "a.txt")
+	before := h.git("ls-files", "--stage")
+	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		if len(changes) > 0 && changes[0].Preview.Target == "index" {
+			h.write("a.txt", "edited during review\n")
+		}
+		return nil
+	}
+	got := h.exec("git", "rm", "--cached", "--", "a.txt")
+	if got.err == nil || got.result.StopCode != "GIT_OPERATION_PRECONDITION" || got.result.EffectCertainty != toolcontract.NoEffect || h.git("ls-files", "--stage") != before {
+		t.Fatalf("cached stale safety %+v %v", got.result, got.err)
 	}
 }
