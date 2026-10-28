@@ -20,7 +20,7 @@ func TestConfigReadDoorKeepsLocalQueriesAndRefusesWrites(t *testing.T) {
 	global := []byte("[user]\nname = Global author\n")
 	testutil.FailErr(t, "seed global config", os.WriteFile(globalPath, global, 0o600))
 	t.Setenv("GIT_CONFIG_GLOBAL", globalPath)
-	reader := git.NewManager()
+	reader := git.CommandReader{}
 	list := h.git("config", "--local", "--list")
 	for _, tc := range []struct {
 		args   []string
