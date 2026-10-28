@@ -29,7 +29,7 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 			if rejection.Data["limit_id"] != "program_bytes" || rejection.Data["resource_unit"] != "bytes" {
 				t.Fatalf("resource feedback lacks typed limit facts: %+v", rejection.Data)
 			}
-			wantFacts = append(wantFacts, "Earlier completed changes remain in effect")
+			wantFacts = append(wantFacts, "Earlier completed steps and their results remain recorded")
 		} else if rejection.Code == "COMMAND_SYNTAX_UNSUPPORTED" {
 			wantFacts = append(wantFacts, "Earlier commands that finished still count")
 		} else {
