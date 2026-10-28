@@ -150,8 +150,8 @@ func TestLinuxUnavailablePackageStoreDoesNotPreventPlainLaunch(t *testing.T) {
 	}
 }
 
-// The positive-control service exits without owning its name. The bus reports
-// that exit only after its unconfined marker write completes.
+// The positive control exits nonzero after writing, so the bus reports its
+// completed process even though it deliberately never owns the service name.
 func TestLinuxDataActivationProbeProcess(t *testing.T) {
 	switch os.Getenv(dataActivationMode) {
 	case "plant":
@@ -167,6 +167,7 @@ func TestLinuxDataActivationProbeProcess(t *testing.T) {
 		raw, err := json.Marshal(map[string]string{"network_namespace": namespace})
 		testutil.FailErr(t, "encode activated marker", err)
 		testutil.FailErr(t, "write unconfined activation marker", os.WriteFile(os.Getenv("PW_ACTIVATION_MARKER"), raw, 0o600))
+		os.Exit(7)
 	}
 }
 
