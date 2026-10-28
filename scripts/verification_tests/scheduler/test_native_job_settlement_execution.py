@@ -20,7 +20,9 @@ def child(path=None):
     body+='print("ready",flush=True);sys.stdin.buffer.read()\n'
     process=subprocess.Popen([sys.executable,'-c',body,*([str(path)] if path else [])],
         stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    assert process.stdout.readline()==b'ready\n'
+    if process.stdout.readline()!=b'ready\n':
+        close(process)
+        raise AssertionError('native settlement fixture did not become ready')
     return process
 
 def close(process):
@@ -32,7 +34,7 @@ def close(process):
     for stream in (process.stdout,process.stderr):stream.close()
 
 for mode in ('fixture','native'):
-  for case in ('match','wrong-ticket','unreleased','missing','before-status','after-status','during-cancel'):
+  for case in ('match','released','release-retry','wrong-ticket','unreleased','missing','before-status','after-status','during-cancel'):
     with tempfile.TemporaryDirectory() as temporary:
         root=pathlib.Path(temporary).resolve()
         os.environ['PW_TEST_ARTIFACT_ROOT']=str(root)
@@ -42,8 +44,9 @@ for mode in ('fixture','native'):
              'wait':'./task --wait '+'a'*32,'log':str(directory/'output.log')}
         (directory/'job.json').write_text(json.dumps({'job_id':job['job_id'],'arguments':[],
             'submitted_at':1,'on_complete':None}))
-        own,foreign=child(lock),child()
+        own=child(lock);foreign=None
         try:
+            foreign=child()
             identity=verification_process.identity(own.pid)
             row={'kind':'invocation','pid':own.pid,'owner_identity':identity,'ticket':'1-'+'b'*32}
             other={**row,'pid':foreign.pid,'owner_identity':verification_process.identity(foreign.pid),'ticket':'2-'+'c'*32}
@@ -81,6 +84,10 @@ for mode in ('fixture','native'):
                 if case=='during-cancel':
                     complete()
                     return SimpleNamespace(returncode=2,stdout='completion raced cancellation')
+                if case in ('released','release-retry') and (case=='released' or len(calls)==3):
+                    complete()
+                    assert value.completed(job)==terminal
+                    return SimpleNamespace(returncode=0,stdout=json.dumps({'ticket':row['ticket'],'released':True}))
                 return SimpleNamespace(returncode=0,stdout=json.dumps({
                     'ticket':'foreign' if case=='wrong-ticket' else row['ticket'], 'released':False}))
             value.command=command
@@ -90,6 +97,7 @@ for mode in ('fixture','native'):
             if case=='match':
                 complete()
                 assert value.completed(job)==terminal
+                assert foreign.poll() is None
                 continue
             if case in ('missing','wrong-ticket','unreleased'):
                 try:value.settle(job)
@@ -98,10 +106,14 @@ for mode in ('fixture','native'):
                 assert len(calls)=={'missing':1,'wrong-ticket':2,'unreleased':3}[case]
             else:
                 assert value.settle(job) is True
-                assert len(calls)=={'before-status':0,'after-status':1,'during-cancel':2}[case]
-                assert records[-1]==('owned-cleanup-completion-race.json',terminal)
+                assert len(calls)=={'released':2,'release-retry':3,'before-status':0,'after-status':1,'during-cancel':2}[case]
+                assert value.completed(job)==terminal
+                if case not in ('released','release-retry'):
+                    assert records[-1]==('owned-cleanup-completion-race.json',terminal)
+            assert foreign.poll() is None
         finally:
-            close(own);close(foreign)
+            close(own)
+            if foreign is not None:close(foreign)
 print('fixture and native settlement controls passed')
 '''
 

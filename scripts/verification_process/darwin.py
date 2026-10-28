@@ -3,6 +3,11 @@ import ctypes as c
 import errno
 from . import ProcessObserver
 
+PROC_PIDLISTFDS = 1
+PROC_PIDTBSDINFO = 3
+PROC_PIDFDVNODEINFO = 1
+PROX_FDTYPE_VNODE = 1
+
 
 class BsdInfo(c.Structure):
     _fields_ = [(name, c.c_uint32) for name in
@@ -48,7 +53,7 @@ class Observer(ProcessObserver):
 
     def native_birth(self, pid):
         info = BsdInfo()
-        size = self.lib.proc_pidinfo(pid, 3, 0, c.byref(info), c.sizeof(info))
+        size = self.lib.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, c.byref(info), c.sizeof(info))
         if size != c.sizeof(info):
             self.fail('verification process birth')
         if info.pid != pid:
@@ -60,17 +65,17 @@ class Observer(ProcessObserver):
         # One extra slot distinguishes an over-bound inventory without allocating
         # memory from a count controlled by the observed process.
         inventory = (FdInfo * (limit + 1))()
-        size = self.lib.proc_pidinfo(pid, 1, 0, inventory, c.sizeof(inventory))
+        size = self.lib.proc_pidinfo(pid, PROC_PIDLISTFDS, 0, inventory, c.sizeof(inventory))
         if size <= 0:
             self.fail('verification process descriptors')
         if size % c.sizeof(FdInfo) or size > limit * c.sizeof(FdInfo):
             raise ValueError('scheduler process descriptor inventory exceeds bound')
         rows = []
         for record in inventory[:size // c.sizeof(FdInfo)]:
-            if record.type != 1:  # PROX_FDTYPE_VNODE
+            if record.type != PROX_FDTYPE_VNODE:
                 continue
             info = VnodeFdInfo()
-            size = self.lib.proc_pidfdinfo(pid, record.fd, 1, c.byref(info), c.sizeof(info))
+            size = self.lib.proc_pidfdinfo(pid, record.fd, PROC_PIDFDVNODEINFO, c.byref(info), c.sizeof(info))
             if size != c.sizeof(info):
                 error = c.get_errno()
                 if error in (errno.EBADF, errno.ENOENT):
