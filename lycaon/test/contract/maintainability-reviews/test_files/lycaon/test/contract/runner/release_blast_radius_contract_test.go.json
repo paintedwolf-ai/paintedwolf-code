@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/contract/runner/release_blast_radius_contract_test.go",
+  "kind": "test_suite",
+  "workstream": "release-admission",
+  "disposition": "retain",
+  "reason": "The measured 434 code-bearing lines bind the retained upgrade corpus, source admission, immutable deposit order and halt/recovery contract to one release blast-radius boundary. Keep the shared corpus fixtures and publication-order checks together at this measured ceiling; graph topology and public-artifact flow are enforced by the separate shared lane model.",
+  "reviewed_commit": "a4270f6bf4d58a44d6fc3993ffc1a22d494d0a86",
+  "ceiling": 434,
+  "boundaries": {
+    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "8b38cd3106329ae542dfe9d802eded5e38ab949c989ed2a0f8f72cbc9160ac34",
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "c049f97a26963ac6bbc6f7b1f2f1b1ff99307261b3ad64cd3cc9b9283c918bba"
+  }
+}
