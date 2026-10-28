@@ -498,7 +498,7 @@ class UnlockCredentialCleanupTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import MagicMock
         from linux_release.installed_input import unlock_account, unlock_guest, private_pipe, session_lock, native_unlock
-        from linux_release import installed_environment
+        from linux_release.campaign import environment as installed_environment
         for operation in (unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK):
             for uncertain in (False, True):
                 with self.subTest(operation=operation, uncertain=uncertain), ExitStack() as stack:

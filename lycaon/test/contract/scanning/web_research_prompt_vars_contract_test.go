@@ -43,7 +43,7 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 	}
 
 	// Assembly must wire MergeForTurn so render sites cannot silently omit the vars.
-	asmPath := filepath.Join(lycaonRoot, "internal", "coordinator", "assembly", "tripartite_prompt.go")
+	asmPath := filepath.Join(lycaonRoot, "internal", "coordinator", "assembly", "standing_prompt.go")
 	asm, err := os.ReadFile(asmPath)
 	contractcheck.FailErr(t, "read file", err)
 	if !strings.Contains(string(asm), "MergeForTurn(") {

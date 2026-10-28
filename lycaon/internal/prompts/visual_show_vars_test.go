@@ -69,7 +69,7 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 	into := map[string]any{}
 	err := prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
-	}, prompts.CoordinatorPromptGates{}, into)
+	}, "", into)
 	testutil.FailErr(t, "merge investigate prompt vars", err)
 	if into["visual_show_page"] != false || into["visual_show_needs_request"] != true || into["visual_show_available"] != true {
 		t.Fatalf("the investigate floor carries no capture tool but must ask to load one: %#v", into)
@@ -77,7 +77,7 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 	loaded := map[string]any{"surface_offered": []string{"read", "capture_page", "request_tools"}}
 	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
-	}, prompts.CoordinatorPromptGates{}, loaded)
+	}, "", loaded)
 	testutil.FailErr(t, "merge loaded prompt vars", err)
 	if loaded["visual_show_available"] != true || loaded["visual_show_page"] != true {
 		t.Fatalf("a loaded capture tool must advertise page show: %#v", loaded)
@@ -88,7 +88,7 @@ func TestMergeCoordinatorPromptVarsSynthesisDoesNotRequireRuntimeCapture(t *test
 	into := map[string]any{}
 	err := prompts.MergeCoordinatorPromptVars("implement_synthesis", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "wrapup",
-	}, prompts.CoordinatorPromptGates{}, into)
+	}, "", into)
 	testutil.FailErr(t, "merge synthesis prompt vars", err)
 	if into["visual_show_available"] != false || into["visual_show_page"] != false || into["visual_show_terminal"] != false {
 		t.Fatalf("render_view authors intent, not a running interface capture: %#v", into)

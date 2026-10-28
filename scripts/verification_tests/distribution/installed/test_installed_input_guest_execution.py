@@ -56,6 +56,7 @@ class GuestInputTests(unittest.TestCase):
         self.assertTrue(result['completed'])
         self.assertEqual(len(result['events']), count)
         self.assertEqual(actor.observe.call_count, count * 2)
+        self.sleep.assert_called_once_with(0.2)
         self.assertEqual(box.clear_completed.call_count, count)
         self.assertEqual([event['request']['ordinal'] for event in result['events']], list(range(count)))
         with tempfile.TemporaryDirectory() as temporary:
@@ -193,6 +194,56 @@ class GuestInputTests(unittest.TestCase):
                 (leaf / 'execution.json').write_text(json.dumps(saved))
                 with self.assertRaises(ValueError):
                     controller.verify_deliveries(root, self.execution, selected)
+
+    def test_compacted_physical_input_stream_verifies_and_rejects_tampered_summary_or_stream(self):
+        import copy, json
+        from linux_release.installed_cases.records import compact_physical_input
+        actor = Mock()
+        actor.observe.return_value = self.focus
+        operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
+                      'provider-fixture-credential-v1', 'reply-fixture-prompt-v1']
+        records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
+                   for operation in operations]
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            leaf = root / 'leaf/evidence/conversation/restart-and-reconnect'
+            leaf.mkdir(parents=True)
+            compacted, streams = compact_physical_input({'launch_before': {'fixed_input': records}}, {})
+            self.assertGreater(len(streams['physical-input']), protocol.MAX_DOCUMENT)
+            (leaf / 'execution.json').write_text(json.dumps({'observations': compacted}))
+            (leaf / 'physical-input.bin').write_bytes(streams['physical-input'])
+            host = [protocol.canonical({'request': event['request'], 'acknowledgment': {
+                'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']), 'delivery': event['delivery']}})
+                for record in records for event in record['events']]
+            (root / 'native-input.jsonl').write_bytes(b''.join(host))
+            controller.verify_deliveries(root, self.execution, selected)
+            tampered_obs = copy.deepcopy(compacted)
+            tampered_obs['launch_before']['fixed_input'][0]['event_count'] += 1
+            (leaf / 'execution.json').write_text(json.dumps({'observations': tampered_obs}))
+            with self.assertRaisesRegex(ValueError, 'summary differs'):
+                controller.verify_deliveries(root, self.execution, selected)
+            (leaf / 'execution.json').write_text(json.dumps({'observations': compacted}))
+            (leaf / 'physical-input.bin').write_bytes(
+                json.dumps({'format_version': 1, 'transactions': [records[0], records[0]]}).encode())
+            with self.assertRaisesRegex(ValueError, 'duplicate transactions'):
+                controller.verify_deliveries(root, self.execution, selected)
+            (leaf / 'physical-input.bin').unlink()
+            with self.assertRaisesRegex(ValueError, 'missing or exceeds'):
+                controller.verify_deliveries(root, self.execution, selected)
+            ws_leaf = root / 'leaf/evidence/windowing/workspace-activation-and-exit'
+            ws_leaf.mkdir(parents=True)
+            ws_transition = {'format_version': 1, 'vm_id': 'owned', 'transaction_id': 'f' * 32,
+                             'operation': 'workspace-open-peer-v1', 'completed': True,
+                             'events': [{'request': {}, 'delivery': {}, 'surface_after': {}}], 'text_readback': False}
+            ws_compacted, ws_streams = compact_physical_input(
+                {'launch': {'fixed_input': records}, 'transitions': [ws_transition]}, {})
+            (ws_leaf / 'execution.json').write_text(json.dumps({'observations': ws_compacted}))
+            (ws_leaf / 'physical-input.bin').write_bytes(ws_streams['physical-input'])
+            (leaf / 'execution.json').unlink()
+            ws_records, ws_ops = controller.delivery_records(root, self.execution, 'owned')
+            self.assertEqual(ws_records, [*records, ws_transition])
+            self.assertEqual(ws_ops, [*operations, 'workspace-open-peer-v1'])
 
 
 class BridgeNativeOnlyTests(unittest.TestCase):

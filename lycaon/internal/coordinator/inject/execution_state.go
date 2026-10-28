@@ -54,20 +54,26 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 		receipt := result.Invocation
 		if (result.Tool == "update_progress" || result.Tool == "request_tools") && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			for _, row := range operations {
+				code, _ := row["code"].(string)
 				switch result.Tool {
 				case "update_progress":
-					row["checklist_after"] = true
+					if code == "PROGRESS_MISSING" || code == "PROGRESS_ITEM_NOT_CLOSED" {
+						row["checklist_after"] = true
+					}
 				case "request_tools":
-					row["tool_request_after"] = true
+					if code == "TOOL_NOT_OFFERED" {
+						row["tool_request_after"] = true
+					}
 				}
 			}
 		}
 		if rejectedChange(result) {
 			operations = append(operations, executionStateRow(message))
 		} else if receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
-			// Exact argument identity proves a retry; a different write to the
-			// same path does not prove the rejected operation was performed.
-			operations = withoutRetriedOperation(operations, receipt)
+			// A later successful change to the same path retires prior rejected
+			// changes to that path; pathless change rows retire on any later change.
+			// Other tools require an exact retry.
+			operations = withoutRetiredOperation(operations, result)
 		}
 		switch result.Tool {
 		case "command", "verify", "terminal_open", "terminal_write", "command_output", "terminal_read":
@@ -93,15 +99,32 @@ func pairedExecutionReceipt(result *api.ToolResult) bool {
 		result.ToolCallID != "" && len(result.ToolCallID) <= 128 && result.Invocation.ToolCallID == result.ToolCallID && result.Invocation.Tool == result.Tool
 }
 
-func withoutRetriedOperation(rows []map[string]any, receipt *api.InvocationReceipt) []map[string]any {
-	if receipt.ArgsDigest == "" {
-		return rows
+func isChangeTool(tool string) bool {
+	return tool == "write" || tool == "edit" || tool == "replace_lines"
+}
+
+func withoutRetiredOperation(rows []map[string]any, result *api.ToolResult) []map[string]any {
+	receipt := result.Invocation
+	completedTool := receipt.Tool
+	isChange := isChangeTool(completedTool)
+	var completedPath string
+	if isChange && result.ToolArgs != nil {
+		completedPath, _ = result.ToolArgs["path"].(string)
 	}
+
 	kept := rows[:0]
 	for _, row := range rows {
-		if row["tool"] != receipt.Tool || row["args_digest"] != receipt.ArgsDigest {
-			kept = append(kept, row)
+		rowTool, _ := row["tool"].(string)
+		if isChange && isChangeTool(rowTool) {
+			rawPath, _ := row["raw_path"].(string)
+			if rawPath == "" || rawPath == completedPath {
+				continue
+			}
 		}
+		if receipt.ArgsDigest != "" && rowTool == completedTool && row["args_digest"] == receipt.ArgsDigest {
+			continue
+		}
+		kept = append(kept, row)
 	}
 	return kept
 }
@@ -117,6 +140,11 @@ func executionStateRow(message api.Message) map[string]any {
 	}
 	if receipt.Failure != nil {
 		row["code"] = receipt.Failure.Code
+	}
+	if result.ToolArgs != nil {
+		if rawPath, ok := result.ToolArgs["path"].(string); ok {
+			row["raw_path"] = rawPath
+		}
 	}
 	for _, key := range []string{"path", "command", "cwd"} {
 		value, _ := result.ToolArgs[key].(string)
@@ -153,7 +181,7 @@ func rejectedChange(result *api.ToolResult) bool {
 	if receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
 		return false
 	}
-	if receipt.Failure.Code == "PROGRESS_MISSING" {
+	if receipt.Failure.Code == "PROGRESS_MISSING" || receipt.Failure.Code == "PROGRESS_ITEM_NOT_CLOSED" {
 		return true
 	}
 	switch result.Tool {

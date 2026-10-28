@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import installed_plasma as plasma
+from scripts.linux_release.campaign import plasma
 from scripts.linux_release.installed_cases.records import CaseUnavailable
 
 
