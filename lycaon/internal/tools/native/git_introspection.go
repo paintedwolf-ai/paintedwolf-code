@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
@@ -44,7 +45,11 @@ func (t *GitShowTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 	}
 	if err == nil && show != nil && !show.Stat {
 		if show.Kind == "blob" {
-			if deliveryErr := tctx.ObserveCredentialDelivery(ctx, filepath.Join(cwd, show.Path), show.Path, show.Content); deliveryErr != nil {
+			abs, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, show.Path)
+			if resolveErr != nil {
+				return "", resolveErr
+			}
+			if deliveryErr := tctx.ObserveCredentialDelivery(ctx, abs, show.Path, show.Content); deliveryErr != nil {
 				return "", deliveryErr
 			}
 		} else if deliveryErr := deliverGitPatchCredentials(ctx, tctx, show.Content); deliveryErr != nil {
@@ -84,7 +89,11 @@ func (t *GitBlameTool) Run(ctx context.Context, args map[string]any, tctx tools.
 			content.WriteString(line.Content)
 			content.WriteByte('\n')
 		}
-		if deliveryErr := tctx.ObserveCredentialDelivery(ctx, filepath.Join(tctx.ActiveRootPath(), path), path, content.String()); deliveryErr != nil {
+		abs, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, path)
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+		if deliveryErr := tctx.ObserveCredentialDelivery(ctx, abs, path, content.String()); deliveryErr != nil {
 			return "", deliveryErr
 		}
 	}

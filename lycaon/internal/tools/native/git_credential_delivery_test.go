@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
@@ -49,6 +50,25 @@ func TestGitPatchCredentialDeliveryPreservesLeadingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(recorder.reads) != 1 || recorder.reads[0].Path != "b/.env" {
+		t.Fatalf("attribution=%+v", recorder.reads)
+	}
+}
+
+func TestGitPatchCredentialDeliveryUsesActiveAttachedRoot(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	tc := nativefixture.Context(first)
+	tc.Source.Roots = []projectroot.RootRef{
+		{ID: "first", Label: "first", Path: first, IsPrimary: true},
+		{ID: "second", Label: "second", Path: second},
+	}
+	tc.Source.ActiveRootID = "second"
+	recorder := &gitCredentialRecorder{}
+	tc.Effects.CredentialFiles = recorder
+	patch := "diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n@@ -1 +1 @@\n-TOKEN=old\n+TOKEN=new\n"
+	if err := deliverGitPatchCredentials(t.Context(), tc, patch); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.reads) != 1 || recorder.reads[0].RootID != "second" || recorder.reads[0].Path != ".env" {
 		t.Fatalf("attribution=%+v", recorder.reads)
 	}
 }

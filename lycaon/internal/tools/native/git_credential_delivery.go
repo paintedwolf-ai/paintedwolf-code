@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -39,7 +40,11 @@ func deliverGitPatchCredentials(ctx context.Context, tc tools.ToolContext, patch
 				continue
 			}
 			seen[path] = true
-			if err := tc.ObserveCredentialDelivery(ctx, filepath.Join(tc.ActiveRootPath(), path), path, block); err != nil {
+			abs, _, err := projectroot.ResolveAbs(tc.Source.Roots, tc.Source.ActiveRootID, path)
+			if err != nil {
+				return err
+			}
+			if err := tc.ObserveCredentialDelivery(ctx, abs, path, block); err != nil {
 				return err
 			}
 		}
