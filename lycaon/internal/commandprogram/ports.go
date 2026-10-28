@@ -249,8 +249,9 @@ type Expander interface {
 	ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error)
 	// ExpandPattern keeps quoted fragments literal for glob and ERE matching.
 	ExpandPattern(context.Context, ExpansionScope, commandsurface.DeferredWord) (PredicateValue, error)
-	// ExpandDocument yields a here-document body: literal when its delimiter
-	// is quoted, otherwise parameters and substitutions without splitting.
+	// ExpandDocument yields a here-document body (literal when its delimiter
+	// is quoted, otherwise parameters and substitutions without splitting) or
+	// a here-string's expanded word with a trailing LF.
 	ExpandDocument(context.Context, ExpansionScope, commandsurface.ProgramRedirect) (string, error)
 }
 

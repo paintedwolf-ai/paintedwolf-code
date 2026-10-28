@@ -909,7 +909,7 @@ Producer results separate ordinary status, typed terminal/host-stop facts, compl
 
 `command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
 
-The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
 
 | Surface | Source |
 |---|---|

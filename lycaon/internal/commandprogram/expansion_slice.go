@@ -3,7 +3,6 @@ package commandprogram
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -242,8 +241,9 @@ func (r *expansionRun) unboundIndexed(part commandsurface.ParameterPart) (bool, 
 	return set, nil
 }
 
-func assignArithmeticVariable(ctx context.Context, scope ExpansionScope, name string, index *int64, value int64, span toolcontract.SourceSpan) error {
-	text := strconv.FormatInt(value, 10)
+// assignScopeValue assigns a variable, or one indexed array element, in the
+// frame an arithmetic command or assigning parameter operator expands in.
+func assignScopeValue(ctx context.Context, scope ExpansionScope, name string, index *int64, text string, span toolcontract.SourceSpan) error {
 	if f, ok := scope.(*frame); ok {
 		if index != nil {
 			return f.state.vars.AssignIndex(ctx, name, *index, text, false)
