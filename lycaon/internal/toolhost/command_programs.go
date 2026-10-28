@@ -236,9 +236,9 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 			identities = append(identities, tool)
 		}
 	}
-	return func(patches *mutation.Owners) command.NativeOperation {
+	return func(filesystem *mutation.Owners) command.NativeOperation {
 		return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-			prepared, err := owners.PrepareGit(frame, patches, request)
+			prepared, err := owners.PrepareGit(frame, filesystem, request)
 			if err != nil {
 				return command.NativePrepared{}, err
 			}

@@ -18,7 +18,7 @@ If not already present in the active tool set, load any missing `git_diff`, `git
 
 ## Survey at the scale of the tree
 
-Use native Git tools (`git_status`, `git_diff`, `git_log`, `git_show`, `git_commit`) exclusively; invoking `git` through `command` is refused.
+Use the structured Git tools for the survey and commits. For an intentional tracked removal or rename, `command` supports `git rm -- PATH ...` and `git mv -- SOURCE DESTINATION`; these use recoverable filesystem operations and session staging. `git rm --cached` keeps the saved file. Inspect the affected paths before committing.
 
 The inventory is `git_status` plus `git_diff` with `stat: true`, never a read of every hunk. `git_status` returns pages of 80 files. On large trees, start with `git_status` and `group_depth` (2 or 3): it returns `groups`, showing which areas changed and how much, largest first, before any file is listed. Use `groups` as the first draft of the commit groups. Then page files: follow `next_offset` until absent, or pass `paths: ["<prefix>/"]` to narrow inspection to target areas so file lists fit comfortably within the 80-file window. `git_diff` with `stat: true` gives per-file insertion and deletion counts for an area. With `git_log` for recent commit conventions, that completes the survey in a handful of calls.
 

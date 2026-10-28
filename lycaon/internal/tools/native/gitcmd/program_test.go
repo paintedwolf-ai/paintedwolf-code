@@ -220,7 +220,7 @@ func (f *programFixture) executions(t *testing.T) map[string]string {
 }
 
 // TestProgramEntryAppliesHeredocPatchesThroughBothCommands: a model's
-// command call carrying heredoc patches reaches patch and git apply through
+// command call carrying heredoc filesystem reaches patch and git apply through
 // the command entry, publishes through the staged publication, and records
 // completed child receipts.
 func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {

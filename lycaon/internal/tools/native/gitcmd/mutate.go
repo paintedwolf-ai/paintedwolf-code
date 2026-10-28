@@ -58,6 +58,8 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	}
 	scopedTC := withRepoRoot(tc, repo.Root)
 	switch spec.Name {
+	case "git rm", "git mv":
+		return runFileMutation(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git add":
 		return runAdd(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git commit":

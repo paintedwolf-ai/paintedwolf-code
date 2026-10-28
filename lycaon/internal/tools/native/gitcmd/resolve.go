@@ -45,13 +45,13 @@ func (o *Owners) Resolve(argv commandprogram.Fields) (string, bool) {
 
 // PrepareGit serves the git umbrella command: it resolves the subcommand
 // and binds it, or refuses a Git form these owners do not run.
-func (o *Owners) PrepareGit(paths *projectpaths.ProgramPaths, patches *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) PrepareGit(paths *projectpaths.ProgramPaths, filesystem *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
 	name, ok := o.Resolve(request.Argv)
 	if _, served := o.specs[name]; !ok || !served {
 		return Prepared{}, o.unsupported(name, request)
 	}
 	request.OperationID = name
-	return o.Prepare(paths, patches, request)
+	return o.Prepare(paths, filesystem, request)
 }
 
 // unsupported refuses a Git form with the forms this command language runs.
