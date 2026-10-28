@@ -39,12 +39,16 @@ class HostedPlanTests(unittest.TestCase):
         stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
         self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
-                                       "coverage:changes", "comments:check", "test:fail-messages:check", "docs:links"})
+                                       "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                       "comments:check", "test:fail-messages:check", "docs:links"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
+        # Changed coverage of every language admits here: a shortfall found only in the
+        # merge group ejects the group and rebuilds the one behind it.
+        self.assertLessEqual({"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"}, set(stages))
         # Product suites remain in the integration gate.
-        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:coverage:changes"})
+        self.assertFalse(set(stages) & {"test:short", "test:contract"})
         self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
