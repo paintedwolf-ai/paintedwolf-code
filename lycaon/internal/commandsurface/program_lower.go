@@ -82,12 +82,7 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 	case *syntax.ArithmCmd:
 		return ArithmeticCommand{SyntaxLocation: loc, Expression: c.arithmetic(v.X)}
 	case *syntax.TimeClause:
-		out := TimedCommand{SyntaxLocation: loc, POSIX: v.PosixFormat}
-		if v.Stmt != nil {
-			pipeline := c.statement(v.Stmt)
-			out.Pipeline = &pipeline
-		}
-		return out
+		return TimedCommand{SyntaxLocation: loc, POSIX: v.PosixFormat, Pipeline: c.statements(timedStatements(v))}
 	}
 	c.unsupported(cmd, "supported command syntax")
 	return nil
@@ -116,12 +111,26 @@ func (c *programCompiler) assignment(a *syntax.Assign) Assignment {
 		out.Value = c.word(a.Value)
 	}
 	if a.Array != nil {
-		out.Array = make([]DeferredWord, 0, len(a.Array.Elems))
-		for _, elem := range a.Array.Elems {
-			out.Array = append(out.Array, c.word(elem.Value))
-		}
+		out.Array = c.words(elementWords(a.Array.Elems))
 	}
 	return out
+}
+
+// elementWords are an array literal's element values in order.
+func elementWords(elems []*syntax.ArrayElem) []*syntax.Word {
+	out := make([]*syntax.Word, len(elems))
+	for i, elem := range elems {
+		out[i] = elem.Value
+	}
+	return out
+}
+
+// timedStatements is the pipeline after time; a bare time has none.
+func timedStatements(v *syntax.TimeClause) []*syntax.Stmt {
+	if v.Stmt == nil {
+		return nil
+	}
+	return []*syntax.Stmt{v.Stmt}
 }
 func (c *programCompiler) redirect(r *syntax.Redirect) ProgramRedirect {
 	fd := -1

@@ -99,10 +99,10 @@ var ulimitResources = []ulimitResource{
 	{'v', "virtual memory", "kbytes", 1024},
 }
 
-// ulimit reports or lowers the limits later external children start with.
+// runUlimit reports or lowers the limits later external children start with.
 // Without -H a value sets the soft limit, at most the hard limit; -H changes
 // are refused. Reading uses the soft limit unless -H is given.
-func (f *frame) ulimit(ctx context.Context, s commandsurface.Statement, fields Fields) error {
+func runUlimit(ctx context.Context, f *frame, s commandsurface.Statement, fields Fields) error {
 	spec, ok, err := ResolveCommand(fields)
 	if err != nil || !ok {
 		return errors.Join(err, fmt.Errorf("ulimit is missing from the language catalog"))
@@ -110,7 +110,7 @@ func (f *frame) ulimit(ctx context.Context, s commandsurface.Statement, fields F
 	bound, err := f.e.ports.Binder.Bind(spec, fields)
 	var argv *ArgvError
 	if errors.As(err, &argv) {
-		return f.ulimitRefusal(s, spec, argv)
+		return ulimitRefusal(f, s, spec, argv)
 	} else if err != nil {
 		return err
 	}
@@ -129,10 +129,10 @@ func (f *frame) ulimit(ctx context.Context, s commandsurface.Statement, fields F
 		value = operands[0].Value
 		if hard {
 			option, _ := bound.Last("-H")
-			return f.ulimitRefusal(s, spec, &ArgvError{Code: argvOptionUnsupported, Command: spec.Name, Word: "-H", Expected: "ulimit [-S] -n LIMIT, which lowers the soft limit or raises it up to the hard limit", Span: option.Span})
+			return ulimitRefusal(f, s, spec, &ArgvError{Code: argvOptionUnsupported, Command: spec.Name, Word: "-H", Expected: "ulimit [-S] -n LIMIT, which lowers the soft limit or raises it up to the hard limit", Span: option.Span})
 		}
 		if runtime.GOOS == "windows" {
-			return f.ulimitRefusal(s, spec, &ArgvError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Command: spec.Name, Word: value, Expected: "a platform with per-process resource limits", Span: operands[0].Span})
+			return ulimitRefusal(f, s, spec, &ArgvError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Command: spec.Name, Word: value, Expected: "a platform with per-process resource limits", Span: operands[0].Span})
 		}
 	}
 	read := f.e.ports.ResourceLimits
@@ -149,7 +149,7 @@ func (f *frame) ulimit(ctx context.Context, s commandsurface.Statement, fields F
 			}
 			switch {
 			case value != "" && i == len(selected)-1:
-				status = f.setUlimit(resource, limit, value)
+				status = setUlimit(f, resource, limit, value)
 			case len(selected) == 1:
 				out.WriteString(ulimitValue(limit, hard, resource.factor) + "\n")
 			default:
@@ -189,7 +189,7 @@ func ulimitSelection(bound BoundArgv, all bool) []ulimitResource {
 
 // setUlimit fixes a new soft limit for later children. Bash's own errors
 // keep their text and status 1.
-func (f *frame) setUlimit(resource ulimitResource, limit confine.ResourceLimit, word string) int {
+func setUlimit(f *frame, resource ulimitResource, limit confine.ResourceLimit, word string) int {
 	value, ok := uint64(0), true
 	switch word {
 	case "unlimited":
@@ -227,7 +227,7 @@ func ulimitValue(limit confine.ResourceLimit, hard bool, factor uint64) string {
 	return strconv.FormatUint(value/factor, 10)
 }
 
-func (f *frame) ulimitRefusal(s commandsurface.Statement, spec toolcontract.CommandSpecification, argv *ArgvError) error {
+func ulimitRefusal(f *frame, s commandsurface.Statement, spec toolcontract.CommandSpecification, argv *ArgvError) error {
 	f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
 	loc := s.SyntaxLocation
 	if argv.Span != (toolcontract.SourceSpan{}) {

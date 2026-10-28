@@ -167,12 +167,12 @@ type TrapCommand struct {
 
 func (TrapCommand) commandNode() {}
 
-// TimedCommand is the time reserved word before a pipeline; Pipeline is nil
-// for a bare time. POSIX selects the -p report.
+// TimedCommand is the time reserved word before a pipeline; Pipeline is
+// empty for a bare time. POSIX selects the -p report.
 type TimedCommand struct {
 	SyntaxLocation
 	POSIX    bool
-	Pipeline *Statement
+	Pipeline []Statement
 }
 
 func (TimedCommand) commandNode() {}
