@@ -9,8 +9,8 @@ from .protocol import canonical
 
 
 def main(arguments):
-    from ..installed_campaign import command, absolute
-    from ..installed_execution import read, current_tree
+    from ..campaign.guests import command, absolute
+    from ..campaign.execution import read, current_tree
     from ..installed_evidence import source
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', type=Path, required=True)

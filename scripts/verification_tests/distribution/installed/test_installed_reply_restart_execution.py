@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import reply_observer as observer, reply_restart as owner
-from linux_release import installed_execution
+from linux_release.campaign import execution as installed_execution
 from linux_release.installed_cases import desktop_launch, provider_setup
 from linux_release.installed_input.protocol import steps
 

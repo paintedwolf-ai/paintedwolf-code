@@ -10,7 +10,7 @@ import stat
 import subprocess
 import sys
 
-from ..installed_runtime import nix_command
+from ..campaign.runtime import nix_command
 from .records import CaseUnavailable
 
 MARKER = Path('/etc/paintedwolf-nix-fixture.json')
