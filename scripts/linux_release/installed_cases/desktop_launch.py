@@ -4,11 +4,11 @@ import subprocess
 
 from .app import session_environment
 from ..installed_process import process_identity
-from ..installed_environment import graphical_session
-from ..installed_runtime import file_identity
+from ..campaign.environment import graphical_session
+from ..campaign.runtime import file_identity
 
 from .records import CaseUnavailable
-from ..installed_runtime import SETUID_LAUNCHER, elf
+from ..campaign.runtime import SETUID_LAUNCHER, elf
 
 
 def protected_launcher(binding):

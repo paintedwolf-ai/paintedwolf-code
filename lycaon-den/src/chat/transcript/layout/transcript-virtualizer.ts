@@ -284,7 +284,15 @@ export type TranscriptAnchorResolution = {
   measureOffsetPx?: () => number | undefined;
 };
 
-type ReadingAnchor = { index: number; key: VirtualItem["key"]; start: number; offsetInRow: number };
+type AnchorNeighbor = { key: VirtualItem["key"]; start: number };
+type ReadingAnchor = {
+  index: number;
+  key: VirtualItem["key"];
+  start: number;
+  offsetInRow: number;
+  predecessor?: AnchorNeighbor;
+  successor?: AnchorNeighbor;
+};
 
 /** Row under the reading offset in the current layout. */
 function readingAnchor(instance: TranscriptVirtualizer, offset = instance.scrollOffset): ReadingAnchor | null {
@@ -293,7 +301,37 @@ function readingAnchor(instance: TranscriptVirtualizer, offset = instance.scroll
   if (instance.options.count === 0) return null;
   let row = instance.getVirtualItemForOffset(offset);
   if (row && row.end <= offset) row = instance.measurementsCache[row.index + 1] ?? row;
-  return row ? { index: row.index, key: row.key, start: row.start, offsetInRow: Math.max(0, offset - row.start) } : null;
+  if (!row) return null;
+  const neighbor = (index: number): AnchorNeighbor | undefined => {
+    const item = instance.measurementsCache[index];
+    return item ? { key: item.key, start: item.start } : undefined;
+  };
+  return {
+    index: row.index,
+    key: row.key,
+    start: row.start,
+    offsetInRow: Math.max(0, offset - row.start),
+    predecessor: neighbor(row.index - 1),
+    successor: neighbor(row.index + 1),
+  };
+}
+
+/**
+ * A neighbor that kept its place beside a reordered anchor. Content around the reader holds still
+ * when a row under it moves elsewhere in the list, as when its ordinal changes.
+ */
+function reorderedAnchorStandIn(
+  instance: TranscriptVirtualizer,
+  anchor: ReadingAnchor,
+  index: number,
+): AnchorNeighbor | undefined {
+  const successorIndex = anchor.successor ? indexOfKey(instance, anchor.successor.key, anchor.index + 1) : -1;
+  const predecessorIndex = anchor.predecessor ? indexOfKey(instance, anchor.predecessor.key, anchor.index - 1) : -1;
+  const passedSuccessor = successorIndex >= 0 && successorIndex < index;
+  const passedPredecessor = predecessorIndex > index;
+  if (!passedSuccessor && !passedPredecessor) return undefined;
+  if (successorIndex >= 0) return anchor.successor;
+  return predecessorIndex >= 0 ? anchor.predecessor : undefined;
 }
 
 function indexOfKey(instance: TranscriptVirtualizer, key: VirtualItem["key"], hint: number): number {
@@ -312,8 +350,10 @@ function readingAnchorDrift(
   originDelta = 0,
   resolveLostAnchor?: (rowKey: string) => TranscriptAnchorResolution | undefined,
   onResolvedMeasure?: (measure: { appliedOffsetPx: number; measureOffsetPx: () => number | undefined }) => void,
+  onStandIn?: (rowKey: VirtualItem["key"]) => void,
 ): number {
   let index = indexOfKey(instance, anchor.key, anchor.index);
+  const present = index >= 0;
   let offsetPx = 0;
   if (index < 0 && resolveLostAnchor) {
     const resolved = resolveLostAnchor(String(anchor.key));
@@ -328,6 +368,13 @@ function readingAnchorDrift(
   if (index < 0) return 0;
   // Rebuild measurements for the anchored offset.
   instance.getVirtualItemForOffset(anchor.start);
+  const standIn = present ? reorderedAnchorStandIn(instance, anchor, index) : undefined;
+  if (standIn) {
+    const moved = instance.measurementsCache[indexOfKey(instance, standIn.key, -1)];
+    if (!moved) return 0;
+    onStandIn?.(standIn.key);
+    return moved.start - standIn.start - originDelta;
+  }
   const row = instance.measurementsCache[index];
   return row ? row.start + offsetPx - anchor.start - originDelta : 0;
 }
@@ -819,6 +866,9 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       },
       (measure) => {
         pendingAnchorMeasure = measure;
+      },
+      (rowKey) => {
+        resolvedKey = rowKey;
       },
     );
     if ((drift === 0 && !pendingAnchorMeasure) || virtualizer.scrollOffset === null) return;

@@ -8,8 +8,8 @@ from ..installed_storage import Storage, resolve as storage_for_launch
 from .app_api import EngineAPI
 from .products import require_owned_guest
 from .records import CaseUnavailable, CaseFailed
-from ..installed_environment import graphical_session
-from ..installed_runtime import file_identity
+from ..campaign.environment import graphical_session
+from ..campaign.runtime import file_identity
 from scripts.harness.supervise import stop_stack
 
 LIMIT = 8 << 20

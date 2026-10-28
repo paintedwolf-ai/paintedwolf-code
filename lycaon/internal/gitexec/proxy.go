@@ -6,12 +6,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
 // proxyConfigurationFn is the host's proxy policy; tests replace it.
-var proxyConfigurationFn = httpclient.CurrentProxyConfiguration
+var proxyConfigurationFn = hostproxy.Current
 
 // ProxyPlanMode is how a Git network invocation receives the host's proxy policy.
 type ProxyPlanMode string
@@ -67,7 +67,7 @@ func NetworkProxyPlan(remote string) (ProxyPlan, error) {
 	return planFor(proxyConfigurationFn(), remote)
 }
 
-func planFor(config httpclient.ProxyConfiguration, remote string) (ProxyPlan, error) {
+func planFor(config hostproxy.Configuration, remote string) (ProxyPlan, error) {
 	env, reasons := perHostEnvironment(config)
 	if len(reasons) == 0 {
 		return ProxyPlan{Mode: ProxyPlanPerHost, env: env}, nil
@@ -94,11 +94,15 @@ func planFor(config httpclient.ProxyConfiguration, remote string) (ProxyPlan, er
 // perHostEnvironment states the policy in the grammar curl and Git LFS share:
 // per-scheme proxies and a no_proxy list of `*`, names (covering subdomains),
 // address literals and CIDR ranges.
-func perHostEnvironment(config httpclient.ProxyConfiguration) ([]string, []ProxyPlanReason) {
+func perHostEnvironment(config hostproxy.Configuration) ([]string, []ProxyPlanReason) {
 	var reasons []ProxyPlanReason
 	proxies := map[string]*url.URL{}
 	fromSystem, fromEnvironment := false, false
 	for _, scheme := range []string{"http", "https"} {
+		if err := config.ExplicitProxyError(scheme); err != nil {
+			reasons = appendReason(reasons, ProxyPlanReason{Kind: ProxyReasonSystemUnavailable, Detail: err.Error()})
+			continue
+		}
 		if explicit := config.ExplicitProxy(scheme); explicit != nil {
 			proxies[scheme], fromEnvironment = explicit, true
 			continue

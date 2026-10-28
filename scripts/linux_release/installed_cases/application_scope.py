@@ -5,7 +5,7 @@ import re
 import subprocess
 import time
 
-from ..installed_runtime import file_identity
+from ..campaign.runtime import file_identity
 from ..installed_storage import Storage
 from .records import CaseUnavailable
 from ..installed_process import process_identity
