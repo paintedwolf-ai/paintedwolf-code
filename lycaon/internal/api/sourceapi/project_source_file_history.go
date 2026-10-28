@@ -22,12 +22,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Arrival anchoring is bounded by calls and elapsed time.
+// Arrival anchoring is bounded by calls and elapsed time. A page ends where
+// anchoring stops, so every row it carries has an answered arrival.
 const (
 	arrivalWindowSpan      = 12
 	arrivalAncestryBudget  = 40
 	arrivalAnchorTimeBound = 2 * time.Second
 )
+
+// errArrivalBudgetExhausted marks an anchor that spent its ancestry calls.
+var errArrivalBudgetExhausted = errors.New("arrival ancestry budget exhausted")
 
 // fileGitLane joins one lineage page to retained versions and arrivals.
 func (s *Review) fileGitLane(
@@ -73,11 +77,49 @@ func (s *Review) fileGitLane(
 	if err != nil {
 		oids = nil
 	}
-	anchorCtx, cancelAnchor := context.WithTimeout(ctx, arrivalAnchorTimeBound)
+	anchorCtx, cancelAnchor := s.anchorContext(ctx)
 	defer cancelAnchor()
 	anchor := s.newArrivalAnchor(anchorCtx, mgr, rootAbs, p.ID, head.RootID)
+	commits, arrivals, answered := joinLineage(lineage, oids, anchor)
+	if answered < len(lineage) {
+		// An unanswered arrival ends the page; the cursor resumes there rather
+		// than presenting the rest as commits that arrived in no window.
+		if answered == 0 {
+			return commits, arrivals, anchorFailureState(anchor.err), 0
+		}
+		if gitSkip+answered < git.MaxFileHistoryDepth {
+			nextSkip = gitSkip + answered
+		}
+		return commits, arrivals, wire.SourceGitHistoryStateAvailable, nextSkip
+	}
+	if len(lineage) == git.DefaultFileHistoryPage &&
+		gitSkip+len(lineage) < git.MaxFileHistoryDepth {
+		nextSkip = gitSkip + len(lineage)
+	}
+	return commits, arrivals, wire.SourceGitHistoryStateAvailable, nextSkip
+}
+
+// anchorContext bounds one page's ancestry checks by the configured elapsed
+// time; without one, the request context is the only bound.
+func (s *Review) anchorContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if s.ArrivalAnchorTimeBound <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, s.ArrivalAnchorTimeBound)
+}
+
+// joinLineage projects lineage rows onto retained versions and arrivals. It
+// stops at the first commit whose arrival the anchor cannot answer and reports
+// how many lineage entries the returned rows cover.
+func joinLineage(
+	lineage []git.GitFileCommit,
+	oids map[string]string,
+	anchor *arrivalAnchor,
+) ([]wire.SourceFileCommit, []wire.SourceGitChange, int) {
+	commits := make([]wire.SourceFileCommit, 0, len(lineage))
+	arrivals := []wire.SourceGitChange{}
 	seenArrivals := map[string]struct{}{}
-	for _, entry := range lineage {
+	for i, entry := range lineage {
 		row := wire.SourceFileCommit{
 			Commit:      entry.Hash,
 			Subject:     entry.Subject,
@@ -96,21 +138,23 @@ func (s *Review) fileGitLane(
 		if versionID, held := oids[entry.BlobOID]; held && entry.BlobOID != "" {
 			id := versionID
 			row.MatchesVersionID = &id
-		} else if transition, found := anchor.arrivalOf(entry.Hash); found {
-			id := transition.ID
-			row.ArrivalGitChangeID = &id
-			if _, listed := seenArrivals[transition.ID]; !listed {
-				seenArrivals[transition.ID] = struct{}{}
-				arrivals = append(arrivals, *mapSourceGitChange(transition))
+		} else {
+			transition, found, answered := anchor.arrivalOf(entry.Hash)
+			if !answered {
+				return commits, arrivals, i
+			}
+			if found {
+				id := transition.ID
+				row.ArrivalGitChangeID = &id
+				if _, listed := seenArrivals[transition.ID]; !listed {
+					seenArrivals[transition.ID] = struct{}{}
+					arrivals = append(arrivals, *mapSourceGitChange(transition))
+				}
 			}
 		}
 		commits = append(commits, row)
 	}
-	if len(lineage) == git.DefaultFileHistoryPage &&
-		gitSkip+len(lineage) < git.MaxFileHistoryDepth {
-		nextSkip = gitSkip + len(lineage)
-	}
-	return commits, arrivals, wire.SourceGitHistoryStateAvailable, nextSkip
+	return commits, arrivals, len(lineage)
 }
 
 // gitLaneFailureState distinguishes timeouts from other failures.
@@ -121,7 +165,16 @@ func gitLaneFailureState(err error) wire.SourceGitHistoryState {
 	return wire.SourceGitHistoryStateFailed
 }
 
-// arrivalAnchor finds the first observed head that reaches a commit.
+// anchorFailureState names why a page could answer no arrival at all.
+func anchorFailureState(err error) wire.SourceGitHistoryState {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return wire.SourceGitHistoryStateTimedOut
+	}
+	return wire.SourceGitHistoryStateFailed
+}
+
+// arrivalAnchor finds the first observed head that reaches a commit. err holds
+// the first reason an ancestry check went unanswered.
 type arrivalAnchor struct {
 	ctx     context.Context
 	mgr     git.GitManager
@@ -129,6 +182,7 @@ type arrivalAnchor struct {
 	chain   []sourceledger.GitTransition
 	memo    map[string]bool
 	budget  int
+	err     error
 }
 
 func (s *Review) newArrivalAnchor(
@@ -155,27 +209,42 @@ func (a *arrivalAnchor) isAncestor(commit, head string) (bool, bool) {
 		return held, true
 	}
 	if a.budget <= 0 {
+		a.fail(errArrivalBudgetExhausted)
 		return false, false
 	}
 	a.budget--
 	held, err := a.mgr.IsAncestor(a.ctx, a.rootAbs, commit, head)
 	if err != nil {
+		if ctxErr := a.ctx.Err(); ctxErr != nil {
+			err = ctxErr
+		}
+		a.fail(err)
 		return false, false
 	}
 	a.memo[key] = held
 	return held, true
 }
 
+func (a *arrivalAnchor) fail(err error) {
+	if a.err == nil {
+		a.err = err
+	}
+}
+
 // arrivalOf returns the first newly reachable window in the bounded chain.
-func (a *arrivalAnchor) arrivalOf(commit string) (sourceledger.GitTransition, bool) {
+// answered is false when the anchor could not say whether the commit arrived.
+func (a *arrivalAnchor) arrivalOf(commit string) (window sourceledger.GitTransition, found, answered bool) {
 	start, pivot, bounded := a.boundedStart()
 	if !bounded {
-		return sourceledger.GitTransition{}, false
+		return sourceledger.GitTransition{}, false, true
 	}
 	// Anything the pivot already reached was present before this scope opened.
 	reached, known := a.isAncestor(commit, pivot)
-	if !known || reached {
-		return sourceledger.GitTransition{}, false
+	if !known {
+		return sourceledger.GitTransition{}, false, false
+	}
+	if reached {
+		return sourceledger.GitTransition{}, false, true
 	}
 	for i := start; i < len(a.chain); i++ {
 		window := a.chain[i]
@@ -184,13 +253,13 @@ func (a *arrivalAnchor) arrivalOf(commit string) (sourceledger.GitTransition, bo
 		}
 		reached, known := a.isAncestor(commit, window.ToCommit)
 		if !known {
-			return sourceledger.GitTransition{}, false
+			return sourceledger.GitTransition{}, false, false
 		}
 		if reached {
-			return window, true
+			return window, true, true
 		}
 	}
-	return sourceledger.GitTransition{}, false
+	return sourceledger.GitTransition{}, false, true
 }
 
 // boundedStart finds the earliest window with an observed lower commit bound.
