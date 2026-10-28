@@ -1,0 +1,48 @@
+package httpaction
+
+import (
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/secretmatch"
+)
+
+// Recipient identity includes routing overrides that can change the service reached.
+func requestDestination(spec requestSpec) (id, label string) {
+	if spec.socket != "" {
+		label = "unix:" + spec.socket
+		return secretmatch.DestinationKey(label, "unix", spec.socket), label
+	}
+	id, label = secretmatch.HTTPDestination(spec.target)
+	overrides := spec.recipientOverrides()
+	if len(overrides) == 0 {
+		return id, label
+	}
+	return secretmatch.DestinationKey(id, "request_overrides", strings.Join(overrides, "\x00")), label + " (" + strings.Join(overrides, "; ") + ")"
+}
+
+func (spec requestSpec) recipientOverrides() []string {
+	if spec.target == nil {
+		return nil
+	}
+	var facts []string
+	if spec.hostHeader != "" {
+		override := &url.URL{Scheme: spec.target.Scheme, Host: spec.hostHeader}
+		originalID, _ := secretmatch.HTTPDestination(spec.target)
+		overrideID, _ := secretmatch.HTTPDestination(override)
+		if originalID != overrideID {
+			facts = append(facts, "Host: "+strings.ToLower(spec.hostHeader))
+		}
+	}
+	if spec.socket == "" && spec.unixSocket == "" {
+		port, err := outboundhttp.EffectivePort(spec.target)
+		if err == nil {
+			if address, targetPort, applies := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); applies {
+				facts = append(facts, "dial: "+address.String()+":"+strconv.Itoa(int(targetPort)))
+			}
+		}
+	}
+	return facts
+}
