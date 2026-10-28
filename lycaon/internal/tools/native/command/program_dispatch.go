@@ -281,14 +281,14 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	prepareReq := request
-	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(prepareReq.Environment) > 0 {
-		filtered := make([]string, 0, len(prepareReq.Environment))
-		for _, entry := range prepareReq.Environment {
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(request.Environment) > 0 {
+		var explicit []string
+		for _, entry := range request.Environment {
 			if !slices.Contains(d.run.baseEnv, entry) {
-				filtered = append(filtered, entry)
+				explicit = append(explicit, entry)
 			}
 		}
-		prepareReq.Environment = filtered
+		prepareReq.Environment = explicit
 	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {

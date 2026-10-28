@@ -58,7 +58,7 @@ time.sleep(60)
 	})
 	testutil.FailErr(t, "prepare owned engine loss command", err)
 	defer cleanup()
-	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(context.Background(), cmd))
 }
 
 func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {

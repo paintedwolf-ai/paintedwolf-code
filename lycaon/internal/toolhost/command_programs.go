@@ -91,14 +91,15 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		literalProgram, searchProgram, queryProgram, mutationProgram, textProgram := *literalOwners, *searchOwners, *queryOwners, *mutationOwners, *textOwners
-		literalProgram.Revisions.Memory = memory
+		literalProgram := literalOwners.ForProgram(memory)
+		searchProgram, queryProgram, mutationProgram, textProgram := *searchOwners, *queryOwners, *mutationOwners, *textOwners
 		searchProgram.Revisions.Memory = memory
 		searchProgram.Admission = admission
 		queryProgram.Revisions.Memory = memory
 		mutationProgram.Revisions.Memory = memory
+		mutationProgram.Admission = admission
 		textProgram.Revisions.Memory = memory
-		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
+		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		program := mutation.Program{Paths: paths}
 		httpNative, err := t.httpOperation(mutationOwners)
 		if err != nil {

@@ -2,19 +2,10 @@ oar: '1.0'
 id: SANDBOX_TRY_LOOPBACK_CONNECT
 kind: policy
 anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - wait
-    - capture_page
-    - measure_page
-    - page_open
-    - http_request
-    - command
 requires:
   profiles:
     - tool
   facts:
-    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.port
 when: paintedwolf.rejection_code == "SANDBOX_TRY_LOOPBACK_CONNECT"

@@ -8,12 +8,20 @@ import (
 )
 
 var mutateForms = map[string]operandRule{
-	"git add": addOperands, "git commit": commitOperands, "git restore": restoreOperands,
+	"git init": initOperands,
+	"git add":  addOperands, "git commit": commitOperands, "git restore": restoreOperands,
 	"git checkout": checkoutOperands, "git switch": switchOperands, "git merge": mergeOperands,
 	"git cherry-pick": sequenceOperands, "git revert": sequenceOperands, "git rebase": rebaseOperands,
 	"git stash": stashOperands, "git reset": resetOperands, "git clean": cleanOperands,
 	"git worktree": worktreeOperands, "git fetch": anyOperands, "git pull": pullOperands,
 	"git push": anyOperands, "git ls-remote": anyOperands, "git clone": cloneOperands,
+}
+
+func initOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	if len(bound.Operands()) > 1 {
+		return operandInvalid(spec, bound.Operands()[1].Value, "at most one directory")
+	}
+	return nil
 }
 
 func addOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {

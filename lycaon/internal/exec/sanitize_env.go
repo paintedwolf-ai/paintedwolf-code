@@ -76,9 +76,8 @@ func InheritedEnviron() []string {
 	return withResolvedPath(SanitizeEnviron(os.Environ()))
 }
 
-// ReducedEnviron returns process plumbing without ambient credentials: the
-// account identity, the base directories the boundary derives its default
-// roots from, locale and terminal settings.
+// ReducedEnviron returns process plumbing without ambient credentials and sets
+// non-interactive terminal and pager defaults (TERM=dumb, PAGER=cat).
 func ReducedEnviron() []string {
 	allowed := map[string]struct{}{
 		"PATH": {},
