@@ -57,7 +57,7 @@ type protectedFacts struct {
 	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
