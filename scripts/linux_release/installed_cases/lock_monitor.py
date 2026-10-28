@@ -308,9 +308,10 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
         raise CaseUnavailable('lock-monitor-transitions-require-bound-physical-input')
     execution, vm_id = native_input['binding'], native_input['vm_id']
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
-    storage = resolve(session_environment(graphical_session()))
+    selected_session = graphical_session()
+    storage = resolve(session_environment(selected_session.session))
     reservation = Reservation(launch_binding, storage)
-    observations, streams, status = {}, {}, 'unverified'
+    observations, streams, status = dict(selected_session.observations), {}, 'unverified'
     app, fixture, policy = InstalledApp(launch_binding), None, None
     calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
     try:

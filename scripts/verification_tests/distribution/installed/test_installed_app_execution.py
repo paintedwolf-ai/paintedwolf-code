@@ -1,17 +1,21 @@
 """Actual application identity and platform-owner boundaries fail closed."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 import io
+import json
 import os
 import re
 import tempfile
 from pathlib import Path
+from contextlib import contextmanager, redirect_stderr
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from scripts.linux_release.installed_process import engine_image
 from scripts.linux_release.installed_cases.app import InstalledApp
 from scripts.linux_release.installed_cases.records import CaseUnavailable, CaseFailed
-from scripts.linux_release.installed_environment import graphical_session
+from scripts.linux_release import installed_environment as owner
+from scripts.linux_release.installed_cases.logind_context import CallFailure, Reader
 from scripts.linux_release.installed_gnome import owner as gnome_owner
 
 
@@ -37,16 +41,7 @@ class InstalledAppTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 engine_image(321)
 
-    def test_empty_logind_desktop_requires_actual_typed_compositor_owner(self):
-        listing = {"exit_code": 0, "stdout": "1 1000 tester seat0\n"}
-        details = {"exit_code": 0, "stdout": "User=1000\nActive=yes\nRemote=no\nType=wayland\nDesktop=\n"}
-        with patch("scripts.linux_release.installed_environment.os.getuid", return_value=1000), patch(
-                "scripts.linux_release.installed_environment.query", side_effect=[listing, details]), patch(
-                "scripts.linux_release.installed_environment.installed_gnome.owner", return_value={"pid": 2000}) as owner:
-            value = graphical_session()
-            self.assertEqual(value["Desktop"], "GNOME")
-            self.assertEqual(value["DesktopOwner"], {"pid": 2000})
-            owner.assert_called_once_with()
+    def test_compositor_owner_rejects_invalid_typed_protocol(self):
         invalid = SimpleNamespace(unpack=lambda: (123,))
         reader = SimpleNamespace(call=lambda *args, **kwargs: invalid)
         with self.assertRaises(ValueError):
@@ -245,7 +240,7 @@ class InstalledAppPipeCaptureTests(unittest.TestCase):
         with ExitStack() as patches:
             patches.enter_context(patch.object(owner, 'require_owned_guest'))
             patches.enter_context(patch('scripts.linux_release.installed_generation.require_current'))
-            patches.enter_context(patch.object(owner, 'graphical_session', return_value={}))
+            patches.enter_context(patch.object(owner, 'graphical_session', return_value=GraphicalSessionObservation({}, {})))
             patches.enter_context(patch.object(owner, 'session_environment', return_value={}))
             patches.enter_context(patch.object(owner, 'storage_for_launch', return_value=storage))
             patches.enter_context(patch.object(owner, 'file_identity', return_value={**identity, 'header': b'x'}))
@@ -309,3 +304,192 @@ class InstalledAppPipeCaptureTests(unittest.TestCase):
                 self.assertFalse(any(reader.is_alive() for reader in app._readers))
             finally:
                 with patch.object(owner, 'stop_stack', side_effect=finish): app.stop()
+
+
+SESSION = '/org/freedesktop/login1/session/current'
+FOREIGN = '/org/freedesktop/login1/session/foreign'
+OTHER = '/org/freedesktop/login1/session/other'
+DISPLAY = ('7', 1000, 'fixture', 'seat0', SESSION)
+UNRELATED = ('8', 2000, 'fixture', '', FOREIGN)
+
+
+def details(uid=1000, *, active=True, remote=False, kind='wayland', desktop='GNOME', seat='seat0'):
+    return {'User': (uid, '/org/freedesktop/login1/user/account'),
+            'Seat': (seat, '/org/freedesktop/login1/seat/seat0' if seat else '/'),
+            'Type': kind, 'Desktop': desktop, 'Class': 'user', 'Display': '',
+            'Active': active, 'Remote': remote}
+
+
+class GraphicalSessionTests(unittest.TestCase):
+    @contextmanager
+    def observe(self, before=None, after=None, properties=None, failures=None):
+        before = [DISPLAY] if before is None else before
+        after = before if after is None else after
+        values = {SESSION: details(), FOREIGN: details(2000, remote=True, kind='tty', seat='')}
+        values.update(properties or {})
+        failures = failures or {}
+        def property_value(path, interface, name, signature):
+            if path in failures:
+                raise failures[path]
+            return values[path][name]
+        reader = Mock()
+        inventories = iter([before, after])
+        last = before
+        def inventory(*_args, **_kwargs):
+            nonlocal last
+            last = next(inventories, last)
+            return SimpleNamespace(unpack=lambda: (last,))
+        reader.call.side_effect = inventory
+        reader.sessions.side_effect = lambda: Reader.sessions(reader)
+        reader.property.side_effect = property_value
+        context = MagicMock()
+        context.__enter__.return_value = reader
+        cli_listing = {'exit_code': 0, 'stdout': '8 2000 fixture -\n7 1000 fixture seat0\n'}
+        cli_refusal = {'exit_code': 1, 'stdout': '', 'stderr': 'diagnostic only'}
+        account = SimpleNamespace(pw_name='fixture', pw_uid=1000)
+        with patch.object(owner.os, 'getuid', return_value=1000), \
+                patch.object(owner.pwd, 'getpwuid', return_value=account), \
+                patch.object(owner.pwd, 'getpwall', return_value=[account]), \
+                patch.object(owner, 'Reader', return_value=context, create=True), \
+                patch.object(owner, 'query', side_effect=[cli_listing, cli_refusal]) as query:
+            yield reader, query
+
+    def test_unrelated_unreadable_session_cannot_block_the_selected_account(self):
+        with self.observe([UNRELATED, DISPLAY], [DISPLAY], failures={FOREIGN: CallFailure('org.freedesktop.DBus.Error.UnknownObject')}) as (reader, query):
+            selection = owner.graphical_session(deadline=123)
+            result = selection.session
+            owner.Reader.assert_called_once_with(deadline=123)
+        self.assertEqual(result['id'], '7')
+        self.assertEqual(result['User'], '1000')
+        self.assertEqual(result['Active'], 'yes')
+        self.assertEqual(result['Remote'], 'no')
+        facts = selection.observations['graphical_session']
+        self.assertEqual([row['id'] for row in facts['inventory_before']], ['7', '8'])
+        self.assertEqual([row['id'] for row in facts['inventory_after']], ['7'])
+        self.assertEqual({call.args[0] for call in reader.property.call_args_list}, {SESSION})
+        query.assert_not_called()
+
+    def test_selected_unreadability_retains_exact_identity_property_and_remote_status(self):
+        for name in ('org.freedesktop.DBus.Error.UnknownObject', 'org.freedesktop.DBus.Error.AccessDenied', None):
+            with self.subTest(remote_name=name), self.observe(failures={SESSION: CallFailure(name)}), self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session()
+            observed = failure.exception.observations['graphical_session']
+            self.assertEqual(observed['session_id'], '7')
+            self.assertEqual(observed['session_object'], SESSION)
+            self.assertEqual(observed['property'], 'User')
+            self.assertEqual(observed['remote_name'], name)
+            self.assertEqual(observed['phase'], 'properties-before')
+
+    def test_foreign_properties_are_never_an_authority_prerequisite(self):
+        for name in ('org.freedesktop.DBus.Error.UnknownObject', 'org.freedesktop.DBus.Error.AccessDenied', None):
+            for after in ([UNRELATED, DISPLAY], [DISPLAY]):
+                with self.subTest(remote_name=name, after=after), self.observe([UNRELATED, DISPLAY], after, failures={FOREIGN: CallFailure(name)}) as (reader, _):
+                    self.assertEqual(owner.graphical_session(deadline=123).session['id'], '7')
+                self.assertEqual({call.args[0] for call in reader.property.call_args_list}, {SESSION})
+
+    def test_any_needed_selected_account_property_failure_refuses(self):
+        remote = ('9', 1000, 'fixture', '', OTHER)
+        for error in ('org.freedesktop.DBus.Error.UnknownObject', 'org.freedesktop.DBus.Error.AccessDenied', None):
+            with self.subTest(remote_name=error), self.observe([DISPLAY, remote], properties={OTHER: details(remote=True, kind='tty', seat='')}, failures={OTHER: CallFailure(error)}), self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session()
+            self.assertEqual(failure.exception.observations['graphical_session']['session_id'], '9')
+
+    def test_selected_disappearance_or_replacement_refuses(self):
+        for after in ([], [('9', 1000, 'fixture', 'seat0', OTHER)]):
+            with self.subTest(after=after), self.observe(after=after), self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session()
+            observation = failure.exception.observations['graphical_session']
+            self.assertEqual(observation['phase'], 'inventory-after')
+            self.assertIn('inventory_after', observation)
+
+    def test_duplicate_active_graphical_sessions_refuse(self):
+        additional = ('9', 1000, 'fixture', 'seat0', OTHER)
+        with self.observe([DISPLAY, additional], properties={OTHER: details()}), self.assertRaises(CaseFailed):
+            owner.graphical_session()
+
+    def test_selected_properties_must_remain_stable(self):
+        with self.observe() as (reader, _):
+            calls = 0
+            def observe(path, interface, name, signature):
+                nonlocal calls
+                if name == 'Active':
+                    calls += 1
+                    return calls == 1
+                return details()[name]
+            reader.property.side_effect = observe
+            with self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session()
+        self.assertEqual(failure.exception.observations['graphical_session']['phase'], 'properties-after')
+
+    def test_malformed_inventory_or_selected_property_refuses(self):
+        for row in (('7', True, 'fixture', 'seat0', SESSION), ('7', 1000, 'fixture', 'seat0', 'foreign')):
+            with self.subTest(row=row), self.observe([row]), self.assertRaises(CaseFailed):
+                owner.graphical_session()
+        with self.observe(properties={SESSION: {**details(), 'Active': 'yes'}}), self.assertRaises(CaseFailed):
+            owner.graphical_session()
+        with self.observe(properties={SESSION: {**details(), 'User': (2000, '/org/freedesktop/login1/user/account')}}), self.assertRaises(CaseFailed):
+            owner.graphical_session()
+
+    def test_invalid_inventory_envelope_and_duplicate_identities_refuse(self):
+        for payload in (None, ([], []), ('invalid',), ([DISPLAY, DISPLAY],)):
+            with self.subTest(payload=payload), self.observe() as (reader, _):
+                reader.call.side_effect = None
+                reader.call.return_value = SimpleNamespace(unpack=lambda: payload)
+                with self.assertRaises(CaseFailed):
+                    owner.graphical_session()
+
+    def test_remote_inactive_and_non_graphical_selected_sessions_never_pass(self):
+        for selected in (details(remote=True), details(active=False), details(kind='tty')):
+            with self.subTest(properties=selected), self.observe(properties={SESSION: selected}), self.assertRaises(CaseFailed):
+                owner.graphical_session()
+
+    def test_empty_desktop_keeps_the_actual_typed_compositor_owner(self):
+        with self.observe(properties={SESSION: details(desktop='')}), patch.object(owner.installed_gnome, 'owner', return_value={'pid': 2000}) as compositor:
+            result = owner.graphical_session().session
+        self.assertEqual(result['Desktop'], 'GNOME')
+        self.assertEqual(result['DesktopOwner'], {'pid': 2000})
+        compositor.assert_called_once_with()
+
+
+    def test_inventory_transport_failure_retains_the_exact_manager_call(self):
+        with self.observe() as (reader, _):
+            reader.call.side_effect = CallFailure(None)
+            with self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session(deadline=123)
+        facts = failure.exception.observations['graphical_session']
+        self.assertEqual(facts['failed_calls'], [{'object': '/org/freedesktop/login1',
+            'interface': 'org.freedesktop.login1.Manager', 'method': 'ListSessions', 'remote_name': None}])
+        self.assertEqual(facts['phase'], 'inventory-before')
+
+    def test_compositor_failure_uses_the_same_observation_contract(self):
+        with self.observe(properties={SESSION: details(desktop='')}), patch.object(owner.installed_gnome, 'owner', side_effect=ValueError('fixture compositor')), self.assertRaises(CaseFailed) as failure:
+            owner.graphical_session(deadline=123)
+        self.assertEqual(failure.exception.observations['graphical_session']['phase'], 'compositor-owner')
+
+    def test_missing_or_ambiguous_passwd_account_refuses_before_session_reads(self):
+        selected = SimpleNamespace(pw_name='fixture', pw_uid=1000)
+        for entries in ([], [selected, selected], [SimpleNamespace(pw_name='alias', pw_uid=1000), selected]):
+            with self.subTest(entries=entries), self.observe() as (reader, _), patch.object(owner.pwd, 'getpwall', return_value=entries), self.assertRaises(CaseFailed) as failure:
+                owner.graphical_session(account_name='fixture', deadline=123)
+            facts = failure.exception.observations['graphical_session']
+            self.assertEqual(facts['phase'], 'account-lookup')
+            self.assertEqual(facts['account_name'], 'fixture')
+            self.assertEqual(facts['account_matches'], [{'name': row.pw_name, 'uid': row.pw_uid} for row in entries])
+            reader.call.assert_not_called()
+        with self.observe(), patch.object(owner.pwd, 'getpwuid', side_effect=KeyError), self.assertRaises(CaseFailed):
+            owner.graphical_session(deadline=123)
+
+
+class GraphicalSessionExecutionBoundaryTests(unittest.TestCase):
+    def test_execution_cli_keeps_structured_pre_case_observation_failure(self):
+        from scripts.linux_release import installed_execution as execution
+        error = CaseFailed('typed refusal')
+        error.observations = {'graphical_session': {'phase': 'inventory-before', 'remote_name': None}}
+        arguments = ['--final-artifacts', 'final.json', '--source-commit', 'a' * 40,
+            '--artifact-id', 'app', '--file-root', '/owned/files', '--install-root', '/owned/install',
+            '--environment-id', 'noble', '--output', '/owned/output', '--driver-tree', 'b' * 40,
+            '--execution-nonce', 'c' * 32, '--variant-id', 'gnome-wayland', '--snapshot', '{}']
+        with patch.object(execution, 'read', return_value={}), \
+                patch.object(execution, 'execute', side_effect=error), redirect_stderr(io.StringIO()) as output:
+            self.assertEqual(execution.main(arguments), 2)
+        self.assertEqual(json.loads(output.getvalue()), {'status': 'failed', 'observations': error.observations})

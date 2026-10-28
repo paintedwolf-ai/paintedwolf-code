@@ -1,4 +1,5 @@
 """Public launcher and workspace evidence cannot replace the captured runtime or active turn."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 from contextlib import ExitStack
 import json
 from pathlib import Path
@@ -31,7 +32,7 @@ class WorkspaceTests(unittest.TestCase):
             stack.enter_context(patch.object(desktop_launch, 'file_identity',
                 return_value={**image, 'header': b'ELF', 'mode': 0o755 if changed_image else 0o4755}))
             stack.enter_context(patch.object(desktop_launch, 'graphical_session',
-                return_value={'id': 'other' if changed_session else 'session'}))
+                return_value=GraphicalSessionObservation({'id': 'other' if changed_session else 'session'}, {})))
             stack.enter_context(patch.object(desktop_launch, 'session_environment', return_value={}))
             spawned = stack.enter_context(patch.object(desktop_launch.subprocess, 'Popen', return_value=child))
             stack.enter_context(patch.object(desktop_launch, 'process_identity',

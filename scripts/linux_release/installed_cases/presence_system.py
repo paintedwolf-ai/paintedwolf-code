@@ -91,7 +91,9 @@ def run_reveal(app, ui, project_id, native_input, observations, *, cancel):
     before = reveal_audit(app, project_id)
     record['host_audit_before'] = before
     native_after, confirmation_after = len(attempt_rows(app, owner)), len(confirmation_rows(app))
-    with NativeSessionObserver(graphical_session()) as session:
+    selected_session = graphical_session()
+    record.update(selected_session.observations)
+    with NativeSessionObserver(selected_session.session) as session:
         control = NativePolkitControl(app, owner, session, native_input['binding'], native_input['vm_id'])
         record['controls'] = control.records
         try:

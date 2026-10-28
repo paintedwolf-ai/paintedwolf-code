@@ -1,6 +1,7 @@
 """Bind a probe to its real logind session or owned graphical user application unit."""
 from __future__ import annotations
 
+import json
 import math
 import os
 from pathlib import Path
@@ -8,11 +9,14 @@ import stat
 import threading
 import time
 
-from .records import CaseUnavailable
+from .records import CaseUnavailable, MAX_OBSERVATION_BYTES
 
 LOGIN = 'org.freedesktop.login1'
 MANAGER = '/org/freedesktop/login1'
 PROPERTIES = 'org.freedesktop.DBus.Properties'
+SESSION_INVENTORY_LIMIT = 1024
+SESSION_FIELD_BYTES = 256
+SESSION_INVENTORY_BYTES = MAX_OBSERVATION_BYTES // 4
 
 
 class CallFailure(Exception):
@@ -135,6 +139,28 @@ class Reader:
         except BaseException:
             self.close()
             raise
+
+    def sessions(self):
+        reply = self.call(MANAGER, LOGIN + '.Manager', 'ListSessions', None,
+                          '(a(susso))').unpack()
+        if (not isinstance(reply, tuple) or len(reply) != 1 or not isinstance(reply[0], list)
+                or len(reply[0]) > SESSION_INVENTORY_LIMIT):
+            raise ValueError('login manager session inventory has an invalid shape or count')
+        rows = []
+        for value in reply[0]:
+            if (not isinstance(value, tuple) or len(value) != 5
+                    or any(not isinstance(value[index], str)
+                           or len(value[index].encode()) > SESSION_FIELD_BYTES for index in (0, 2, 3, 4))
+                    or not value[0].isalnum() or type(value[1]) is not int
+                    or not 0 <= value[1] < 1 << 32
+                    or not value[4].startswith(MANAGER + '/session/')):
+                raise ValueError('login manager session identity has an invalid shape or bound')
+            rows.append(dict(id=value[0], uid=value[1], name=value[2], seat=value[3], object=value[4]))
+        if len({row['id'] for row in rows}) != len(rows) or len({row['object'] for row in rows}) != len(rows):
+            raise ValueError('login manager session inventory repeats an identity')
+        if len(json.dumps(rows, sort_keys=True).encode()) > SESSION_INVENTORY_BYTES:
+            raise ValueError('login manager session inventory exceeds its observation budget')
+        return sorted(rows, key=lambda row: row['id'])
 
     def object(self, method, pid, *, user=False):
         base = '/org/freedesktop/systemd1' if user else MANAGER

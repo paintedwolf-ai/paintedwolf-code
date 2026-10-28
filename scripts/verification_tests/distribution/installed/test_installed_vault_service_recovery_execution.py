@@ -1,4 +1,5 @@
 """Source fixtures for the exact1433 diagnostic, never startup error prose."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 import json
 from contextlib import ExitStack
 from copy import deepcopy
@@ -112,7 +113,7 @@ class VaultServiceRecoveryTests(unittest.TestCase):
                 raise case.CaseUnavailable('restore unverified')
         phases.phase.side_effect = phase
         with ExitStack() as stack:
-            values = {'protected_launcher': Mock(return_value={}), 'graphical_session': Mock(return_value={}),
+            values = {'protected_launcher': Mock(return_value={}), 'graphical_session': Mock(return_value=GraphicalSessionObservation({}, {})),
                 'session_environment': Mock(return_value={}), 'resolve': Mock(return_value=SimpleNamespace(home=directory)),
                 'Reservation': Mock(return_value=reservation), 'InstalledApp': Mock(side_effect=apps),
                 'interactive_window': Mock(return_value={}), 'GuestPhases': Mock(return_value=phases),

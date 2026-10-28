@@ -1,4 +1,5 @@
 """Sleep ownership is exact engine custody, independent of provider and locker assertions."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 from contextlib import ExitStack
 import unittest
 from unittest.mock import Mock, patch
@@ -126,7 +127,7 @@ class EngineInhibitorTests(unittest.TestCase):
         for target_mod, attr, value in (
                 (desktop_launch, 'protected_launcher', {}),
                 (provider_recovery, 'load', None),
-                (app_mod, 'graphical_session', {'id': '2', 'User': '30008'}),
+                (app_mod, 'graphical_session', GraphicalSessionObservation({'id': '2', 'User': '30008'}, {})),
                 (app_mod, 'session_environment', {'HOME': '/home/pwqual058a1'}),
                 (installed_storage, 'resolve', {'home': '/home/pwqual058a1'}),
                 (fresh_profile, 'Reservation', fake_reservation),

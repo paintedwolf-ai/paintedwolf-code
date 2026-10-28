@@ -1,14 +1,19 @@
 """Observe installed Linux package, graphical session and platform identities."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
 import platform
+import pwd
 import shlex
 import subprocess
+import time
 
 from . import installed_gnome
+from .installed_cases.logind_context import CallFailure, LOGIN, MANAGER, PROPERTIES, Reader, SESSION_FIELD_BYTES
+from .installed_cases.records import CaseFailed
 
 OS_IDS = {"Ubuntu": {"ubuntu"}, "Fedora": {"fedora"}, "Debian": {"debian"}, "RHEL-compatible": {"rhel", "rocky", "almalinux", "centos"},
           "Arch Linux": {"arch"}, "Arch Linux ARM": {"archarm"}, "Artix": {"artix"},
@@ -58,35 +63,119 @@ def release(path=Path("/etc/os-release")) -> dict:
     return result
 
 
-def graphical_session() -> dict:
-    listing = query(["loginctl", "list-sessions", "--no-legend", "--no-pager"])
-    if listing["exit_code"] != 0:
-        raise ValueError("graphical qualification requires actual logind or elogind session facts")
-    sessions = []
-    for line in listing["stdout"].splitlines():
-        fields = line.split()
-        if not fields:
-            continue
-        session_id = fields[0]
-        if not session_id.isalnum():
-            raise ValueError("login manager returned an invalid session identifier")
-        result = query(["loginctl", "show-session", session_id, "--no-pager",
-                        "--property=User", "--property=Type", "--property=Desktop", "--property=Active",
-                        "--property=Remote", "--property=Class", "--property=Display", "--property=Seat"])
-        if result["exit_code"] != 0:
-            raise ValueError("login manager could not describe a listed session")
-        row = properties(result["stdout"])
-        if (row.get("User") == str(os.getuid()) and row.get("Active") == "yes"
-                and row.get("Remote") == "no" and row.get("Type") in {"wayland", "x11"}):
-            sessions.append({"id": session_id, **row})
-    if len(sessions) != 1:
-        raise ValueError("qualification requires one active local graphical session for its nonroot account")
-    session = sessions[0]
-    if not session.get("Desktop"):
-        session["DesktopOwner"] = installed_gnome.owner()
-        session["Desktop"] = "GNOME"
-    return session
+@dataclass(frozen=True)
+class GraphicalSessionObservation:
+    session: dict
+    observations: dict
 
+
+def _inventory(reader, observations, name):
+    call = {'object': MANAGER, 'interface': LOGIN + '.Manager', 'method': 'ListSessions'}
+    observations['call'] = call
+    try:
+        result = reader.sessions()
+    except CallFailure as error:
+        observations.setdefault('failed_calls', []).append({**call, 'remote_name': error.name})
+        raise
+    observations[name] = result
+    return result
+
+
+def _session_properties(reader, listed, observations):
+    observations.update(session_id=listed['id'], session_object=listed['object'])
+    values = {}
+    fields = [('User', '(uo)', tuple), ('Seat', '(so)', tuple),
+              ('Type', 's', str), ('Desktop', 's', str), ('Class', 's', str),
+              ('Display', 's', str), ('Active', 'b', bool), ('Remote', 'b', bool)]
+    for name, signature, expected in fields:
+        observations['property'] = name
+        observations['call'] = {'session_id': listed['id'], 'object': listed['object'],
+                                'interface': PROPERTIES, 'method': 'Get',
+                                'property_interface': LOGIN + '.Session', 'property': name}
+        try:
+            value = reader.property(listed['object'], LOGIN + '.Session', name, signature)
+        except CallFailure as error:
+            observations.setdefault('failed_calls', []).append({**observations['call'], 'remote_name': error.name})
+            raise
+        if type(value) is not expected or isinstance(value, str) and len(value.encode()) > SESSION_FIELD_BYTES:
+            raise ValueError('login manager session property has an invalid type or bound')
+        values[name] = value
+    user, seat = values['User'], values['Seat']
+    if (len(user) != 2 or type(user[0]) is not int or user[0] != listed['uid']
+            or not isinstance(user[1], str) or len(user[1].encode()) > SESSION_FIELD_BYTES
+            or not user[1].startswith(MANAGER + '/user/')
+            or len(seat) != 2 or seat[0] != listed['seat'] or not isinstance(seat[1], str)
+            or len(seat[1].encode()) > SESSION_FIELD_BYTES
+            or seat[1] != '/' and not seat[1].startswith(MANAGER + '/seat/')):
+        raise ValueError('login manager session owner or seat changed')
+    return {'id': listed['id'], **values, 'User': str(user[0]), 'Seat': seat[0],
+            'Active': 'yes' if values['Active'] else 'no',
+            'Remote': 'yes' if values['Remote'] else 'no'}
+
+
+def graphical_session(*, account_name=None, deadline=None) -> GraphicalSessionObservation:
+    actual_uid = os.getuid()
+    observations = {'process_uid': actual_uid, 'phase': 'account-lookup'}
+    try:
+        name = pwd.getpwuid(actual_uid).pw_name if account_name is None else account_name
+        if not isinstance(name, str) or not name or len(name.encode()) > SESSION_FIELD_BYTES:
+            raise ValueError('graphical session selection requires a bounded account name')
+        observations['account_name'] = name
+        matches = [row for row in pwd.getpwall() if row.pw_name == name or row.pw_uid == actual_uid]
+        observations['account_match_count'] = len(matches)
+        if len(matches) > 32 or any(not isinstance(row.pw_name, str)
+                or len(row.pw_name.encode()) > SESSION_FIELD_BYTES for row in matches):
+            raise ValueError('passwd account facts exceed their observation bound')
+        observations['account_matches'] = [{'name': row.pw_name, 'uid': row.pw_uid} for row in matches]
+        if (len(matches) != 1 or matches[0].pw_name != name or type(matches[0].pw_uid) is not int
+                or matches[0].pw_uid != actual_uid or actual_uid <= 0):
+            raise ValueError('graphical session selection requires one unambiguous nonroot passwd account')
+        uid = matches[0].pw_uid
+        observations.update(account={'name': name, 'uid': uid}, phase='inventory-before')
+        with Reader(deadline=time.monotonic() + 30 if deadline is None else deadline) as reader:
+            before = _inventory(reader, observations, 'inventory_before')
+            observations['phase'] = 'properties-before'
+            first = [_session_properties(reader, row, observations) for row in before if row['uid'] == uid]
+            matches = [row for row in first if row is not None and row['User'] == str(uid)
+                       and row['Active'] == 'yes' and row['Remote'] == 'no'
+                       and row['Type'] in {'wayland', 'x11'}]
+            observations['graphical_candidates_before'] = [row['id'] for row in matches]
+            if len(matches) != 1:
+                observations['code'] = ('GRAPHICAL_SESSION_NOT_READY' if not matches
+                                        else 'GRAPHICAL_SESSION_AMBIGUOUS')
+                raise ValueError('qualification requires one active local graphical session for its nonroot account')
+            initial = matches[0]
+            selected = next(row for row in before if row['id'] == initial['id'])
+            observations['selected_identity'] = selected
+            observations['selected_properties_before'] = initial
+            observations['phase'] = 'inventory-after'
+            after = _inventory(reader, observations, 'inventory_after')
+            if selected not in after:
+                raise ValueError('selected account session identity changed during observation')
+            observations['phase'] = 'properties-after'
+            second = [_session_properties(reader, row, observations) for row in after if row['uid'] == uid]
+            sessions = [row for row in second if row is not None and row['User'] == str(uid)
+                        and row['Active'] == 'yes' and row['Remote'] == 'no'
+                        and row['Type'] in {'wayland', 'x11'}]
+            observations['graphical_candidates_after'] = [row['id'] for row in sessions]
+            if len(sessions) != 1 or initial != sessions[0]:
+                raise ValueError('selected graphical session changed during observation')
+            session = sessions[0]
+            observations['selected_properties_after'] = dict(session)
+            if not session.get('Desktop'):
+                observations['phase'] = 'compositor-owner'
+                session['DesktopOwner'] = installed_gnome.owner()
+                session['Desktop'] = 'GNOME'
+    except (CallFailure, OSError, ValueError, TypeError, KeyError) as error:
+        failure = CaseFailed('graphical session observation failed')
+        observations['error_type'] = type(error).__name__
+        if isinstance(error, CallFailure):
+            observations['remote_name'] = error.name
+        else:
+            observations['detail'] = str(error)
+        failure.observations = {'graphical_session': observations}
+        raise failure from None
+    return GraphicalSessionObservation(session, {'graphical_session': observations})
 
 def package_inventory_arguments(installation: str) -> list[str]:
     if installation == "deb":
@@ -108,7 +197,8 @@ def collect(environment: dict, binding: dict, guest: dict, display_protocol: str
     actual = release()
     if actual["ID"] not in OS_IDS.get(environment["distribution"], set()):
         raise ValueError("installed distribution differs from its selected support row")
-    session = graphical_session()
+    session_observation = graphical_session()
+    session = session_observation.session
     desktop = environment["desktop"]
     reported = set(session.get("Desktop", "").casefold().split(":"))
     marker_desktop = {"GNOME": "gnome", "Plasma": "plasma"}.get(desktop, desktop.casefold())
@@ -121,7 +211,7 @@ def collect(environment: dict, binding: dict, guest: dict, display_protocol: str
     inventory = package_inventory(family)
     if inventory["exit_code"] != 0:
         raise ValueError("installed package inventory could not be recorded")
-    observations = {"os_release": actual, "kernel": platform.uname()._asdict(), "session": session,
+    observations = {**session_observation.observations, "os_release": actual, "kernel": platform.uname()._asdict(), "session": session,
                     "packages": inventory, "libc": query(["getconf", "GNU_LIBC_VERSION"]),
                     "login_manager": query(["loginctl", "--version"]),
                     "security": {"apparmor": read_optional(Path("/sys/module/apparmor/parameters/enabled")),

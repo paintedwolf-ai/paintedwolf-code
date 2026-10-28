@@ -93,7 +93,9 @@ def execute(binding, capability, case, root):
         recovery = load_provider_recovery(binding)
         if recovery is not None:
             observations['provider_recovery'], streams['provider-registration'] = recovery
-        storage = resolve(session_environment(graphical_session()))
+        selected_session = graphical_session()
+        observations.update(selected_session.observations)
+        storage = resolve(session_environment(selected_session.session))
         reservation = Reservation(launch_binding, storage)
         with reservation:
             try:

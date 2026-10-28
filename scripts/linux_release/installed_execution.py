@@ -277,6 +277,10 @@ def main(arguments: list[str]) -> int:
         campaign = execute(read(args.catalog), read(args.final_artifacts), args.source_commit,
                            args.artifact_id, args.file_root, args.install_root, args.environment_id,
                            args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot, args.input_vm_id, args.input_fixture_actor)
+    except CaseFailed as error:
+        print(json.dumps({'status': 'failed', 'observations': getattr(error, 'observations', {})},
+                         sort_keys=True), file=sys.stderr)
+        return 2
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
         print("Installed case execution refused: " + str(error), file=sys.stderr)
         return 2

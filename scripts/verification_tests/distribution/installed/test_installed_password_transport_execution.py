@@ -1,4 +1,5 @@
 """All three private roles exchange real bounded pipes and kernel-checked Unix frames."""
+from linux_release.installed_environment import GraphicalSessionObservation
 import copy
 import os
 from pathlib import Path
@@ -81,7 +82,7 @@ class PasswordTransportTests(unittest.TestCase):
             case_thread.start()
             self.assertTrue(ready.wait(3))
             endpoint_thread = threading.Thread(target=ssh_endpoint)
-            with patch.object(password_endpoint, 'graphical_session', return_value=self.pending['session']):
+            with patch.object(password_endpoint, 'graphical_session', return_value=GraphicalSessionObservation(self.pending['session'], {'graphical_session': {'inventory_before': [], 'inventory_after': []}})):
                 endpoint_thread.start()
                 try:
                     if changed:
@@ -129,9 +130,36 @@ class PasswordTransportTests(unittest.TestCase):
         pipe = Mock()
         info = self.pending['profile']
         with patch.object(password_endpoint, 'physical', return_value=(info['device'], info['inode'], info['uid'], 0o40700)), \
-             patch.object(password_endpoint, 'graphical_session', return_value=self.pending['session']), \
+             patch.object(password_endpoint, 'graphical_session', return_value=GraphicalSessionObservation(self.pending['session'], {'graphical_session': {'inventory_before': [], 'inventory_after': []}})), \
              patch.object(password_endpoint, 'connect') as connect:
             with self.assertRaises(ValueError):
                 password_endpoint.relay(mailbox, self.pending, self.pending['actor'], pipe)
         connect.assert_not_called()
         pipe.send_frame.assert_not_called()
+
+
+class PasswordSessionAuthorityTests(unittest.TestCase):
+    setUp = actor_tests.PrivateActorTests.setUp
+
+    def test_fresh_exact_session_is_required_before_connection_and_observations_are_separate(self):
+        identity = self.pending['actor']['process']
+        self.pending['actor']['uid'] = os.getuid()
+        mailbox = SimpleNamespace(execution=self.pending['binding'])
+        info = self.pending['profile']
+        for changed in (False, True):
+            session = dict(self.pending['session'])
+            if changed:
+                session['id'] = 'replacement'
+            frame = GraphicalSessionObservation(session, {'graphical_session': {'inventory_after': ['extra-facts']}})
+            with self.subTest(changed=changed), \
+                    patch.object(password_endpoint, 'process_identity', return_value=identity), \
+                    patch.object(password_endpoint, 'physical', return_value=(info['device'], info['inode'], info['uid'], 0o40700)), \
+                    patch.object(password_endpoint, 'graphical_session', return_value=frame) as observer, \
+                    patch.object(password_endpoint.time, 'monotonic', return_value=0), \
+                    patch.object(password_endpoint, 'connect', side_effect=RuntimeError('connection reached')) as connect:
+                expected = ValueError if changed else RuntimeError
+                with self.assertRaises(expected):
+                    password_endpoint.relay(mailbox, self.pending, self.pending['actor'], Mock(deadline=1))
+                observer.assert_called_once_with()
+                self.assertEqual(connect.call_count, 0 if changed else 1)
+        self.assertEqual(set(self.pending['session']), {'id', 'User', 'Type', 'Active', 'Remote'})

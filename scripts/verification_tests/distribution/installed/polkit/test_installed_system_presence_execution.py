@@ -1,4 +1,5 @@
 """Real reveal qualification needs the bound system transaction and host audit together."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 from contextlib import ExitStack
 from copy import deepcopy
 import unittest
@@ -25,7 +26,7 @@ class InstalledSystemPresenceTests(unittest.TestCase):
             values = {'native_caller': Mock(return_value={'pid': 401, 'uid': 30008}),
                 'reveal_audit': Mock(side_effect=[before, after]),
                 'attempt_rows': Mock(return_value=[]), 'confirmation_rows': Mock(return_value=[]),
-                'graphical_session': Mock(return_value={}),
+                'graphical_session': Mock(return_value=GraphicalSessionObservation({}, {})),
                 'NativeSessionObserver': Mock(return_value=Mock(__enter__=Mock(return_value=Mock()),
                     __exit__=Mock(return_value=False))),
                 'NativePolkitControl': Mock(return_value=control),

@@ -114,7 +114,8 @@ def serve_prepare(pending, execution, vm_id, mailbox):
     if pending['operation'] != unlock_wire.PREPARE or mailbox.read('request.json') != pending:
         raise ValueError('native credential preparation lost its exact published request')
     mailbox.attach()
-    session = graphical_session()
+    selected_session = graphical_session()
+    session = selected_session.session
     if session['User'] != str(pending['account']['uid']):
         raise ValueError('native credential preparation endpoint has a foreign current account')
     with NativeLockObserver(session) as lock:
@@ -155,7 +156,8 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
     if pending['operation'] != unlock_wire.PURPOSE or mailbox.read('request.json') != pending:
         raise ValueError('native unlock lost its exact published request')
     mailbox.attach()
-    session = graphical_session()
+    selected_session = graphical_session()
+    session = selected_session.session
     if session['User'] != str(pending['account']['uid']):
         raise ValueError('native unlock endpoint has a foreign current account')
     with NativeLockObserver(session) as lock, NativeUnlockObserver(lock) as observer:

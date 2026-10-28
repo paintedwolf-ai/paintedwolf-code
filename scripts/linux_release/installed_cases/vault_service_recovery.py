@@ -23,8 +23,9 @@ def execute(binding, capability, case, root):
     native = binding.get('native_input')
     if not isinstance(native, dict): raise CaseUnavailable('recovery-requires-its-owned-execution')
     launch = {**binding, 'launcher': protected_launcher(binding)}
-    storage = resolve(session_environment(graphical_session()))
-    observations, apps, streams = {'phase': 'before-launch'}, [], {}
+    selected_session = graphical_session()
+    storage = resolve(session_environment(selected_session.session))
+    observations, apps, streams = {**selected_session.observations, 'phase': 'before-launch'}, [], {}
     reservation = Reservation(launch, storage)
     phases = fixture = None
     try:

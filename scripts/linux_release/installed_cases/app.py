@@ -149,7 +149,10 @@ class InstalledApp:
         from ..installed_generation import require_current
         require_current(self.binding)
         require_owned_guest(self.binding)
-        session = graphical_session(); environment = session_environment(session)
+        selected = graphical_session()
+        session = selected.session
+        self.observations.update(selected.observations)
+        environment = session_environment(session)
         storage = storage_for_launch(environment); daemon = storage.config / "daemon.json"
         if daemon.exists():
             previous = private_json(daemon); pid = previous.get("pid")

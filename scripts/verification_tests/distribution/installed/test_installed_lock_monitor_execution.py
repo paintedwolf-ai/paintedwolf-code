@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release import installed_execution, installed_storage
+from linux_release.installed_environment import GraphicalSessionObservation
 from linux_release.installed_cases import (
     app as app_mod, desktop_launch, desktop_turn, desktop_ui,
     fixture_turn, fresh_profile, lock_monitor, native_session,
@@ -199,7 +200,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
             self.stack.enter_context(patch.object(lock_monitor, 'alerts', side_effect=post_confirm_alerts))
         for target_mod, attr, value in (
                 (lock_monitor, 'protected_launcher', {}),
-                (lock_monitor, 'graphical_session', SESSION),
+                (lock_monitor, 'graphical_session', GraphicalSessionObservation(SESSION, {})),
                 (lock_monitor, 'session_environment', {'HOME': tmp}),
                 (lock_monitor, 'resolve', fake_storage),
                 (lock_monitor, 'Reservation', fake_reservation),

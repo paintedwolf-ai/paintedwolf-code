@@ -1,4 +1,5 @@
 """Quiet custody requires new authenticated work, not an old persisted reply."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 from contextlib import ExitStack, nullcontext
 import copy
 import json
@@ -128,7 +129,7 @@ class QuietCustodyCaseTests(unittest.TestCase):
         fixture.transport_clipped = False
         before, after = turn(0), turn(1)
         if duplicate: after['reply']['tool_invocation'] = before['reply']['tool_invocation']
-        for name, value in [('protected_launcher', {}), ('graphical_session', {}),
+        for name, value in [('protected_launcher', {}), ('graphical_session', GraphicalSessionObservation({}, {})),
                 ('session_environment', {}), ('resolve', SimpleNamespace(home=root)),
                 ('Reservation', reservation), ('InstalledApp', None), ('interactive_window', {}),
                 ('configure_provider', provider), ('setup_state', {'onboarding_completed': True,

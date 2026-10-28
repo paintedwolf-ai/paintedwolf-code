@@ -38,7 +38,8 @@ def activate(app):
     actual.pop('header')
     if actual != selected:
         raise ValueError('public activation image changed after artifact selection')
-    session = graphical_session()
+    selected_session = graphical_session()
+    session = selected_session.session
     if session != app.observations['session']:
         raise ValueError('public activation changed its captured graphical session')
     child = subprocess.Popen([str(path)], env=session_environment(session),
@@ -54,7 +55,8 @@ def activate(app):
             raise ValueError('public launcher refused repeated activation')
         app.require_running()
         app.require_engine()
-        return {'launch_identity': identity, 'exit_code': code, 'same_graphical_session': True}
+        return {'launch_identity': identity, 'exit_code': code, 'same_graphical_session': True,
+                **selected_session.observations}
     finally:
         # This function owns only the secondary launcher it created.
         if child.poll() is None:
@@ -119,6 +121,6 @@ def activate_visible_frame(app, ui):
             'identity-refused' if isinstance(error, (ValueError, TypeError, KeyError)) else
             'operating-system-error' if isinstance(error, OSError) else 'native-observation-error')
         failure = error if isinstance(error, (ValueError, TypeError, KeyError, OSError)) else CaseUnavailable('public-activation-native-observation-unavailable')
-        failure.observations = {'public_activation': {'before': before, 'public_launcher': launched,
+        failure.observations = {**getattr(error, 'observations', {}), 'public_activation': {'before': before, 'public_launcher': launched,
             'after': after, 'phase': phase, 'failure_type': failure_type, 'verified': False}}
         raise failure from None

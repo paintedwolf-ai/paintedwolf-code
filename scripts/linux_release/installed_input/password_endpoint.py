@@ -21,7 +21,7 @@ def relay(mailbox, pending, selected_actor, pipe):
         raise ValueError('private fixture differs from its independently captured peers')
     profile = pending['profile']
     info = physical(Path(profile['path']), True)
-    if info[:3] != (profile['device'], profile['inode'], profile['uid']) or graphical_session() != pending['session']:
+    if info[:3] != (profile['device'], profile['inode'], profile['uid']) or graphical_session().session != pending['session']:
         raise ValueError('private fixture differs from its captured profile or graphical session')
     # expires_ns was created by the case on this same guest monotonic clock.
     deadline = pending['expires_ns'] / 1_000_000_000

@@ -10,9 +10,11 @@ import pwd
 import secrets
 import stat
 import subprocess
+import sys
 import time
 
-from .installed_environment import release
+from .installed_environment import graphical_session, release
+from .installed_cases.records import CaseFailed
 
 USER = 'paintedwolf-test'
 INSTALL_PARENT = Path('/opt')
@@ -125,6 +127,60 @@ def desktop_record(environment: dict, controller: str, checkout: Path, session: 
             'application_qualified': False, 'physical_gpu_qualified': False}
 
 
+def write_graphical_probe(*, deadline=None):
+    try:
+        selected = graphical_session(deadline=time.monotonic() + 10 if deadline is None else deadline)
+        result = {'status': 'observed', 'session': selected.session, 'observations': selected.observations}
+    except CaseFailed as error:
+        result = {'status': 'refused', 'observations': error.observations}
+    print(json.dumps(result, sort_keys=True))
+
+
+def await_hosted_session(command, home, *, deadline):
+    readiness = {'not_ready_observations': 0, 'last_not_ready': None}
+    while time.monotonic() < deadline:
+        try:
+            raw = run(command, timeout=15, cwd=home)
+            observed = json.loads(raw)
+            if not isinstance(observed, dict) or observed.get('status') not in {'observed', 'refused'}:
+                raise ValueError('hosted session probe returned an unsupported frame')
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            failure = CaseFailed('hosted graphical-session probe transport failed')
+            failure.observations = {'graphical_session': {'phase': 'hosted-probe-transport',
+                                                         'error_type': type(error).__name__}}
+            raise failure from None
+        if observed['status'] == 'refused':
+            facts = observed.get('observations')
+            if (not isinstance(facts, dict) or set(facts) != {'graphical_session'}
+                    or not isinstance(facts['graphical_session'], dict)
+                    or set(observed) != {'status', 'observations'}):
+                failure = CaseFailed('hosted session refusal has an unsupported frame')
+                failure.observations = {'graphical_session': {'phase': 'hosted-probe-frame'}}
+                raise failure
+            if facts.get('graphical_session', {}).get('code') != 'GRAPHICAL_SESSION_NOT_READY':
+                failure = CaseFailed('hosted graphical-session observation refused')
+                failure.observations = facts
+                raise failure
+            readiness['not_ready_observations'] += 1
+            readiness['last_not_ready'] = facts
+        else:
+            session = observed.get('session')
+            if (set(observed) != {'status', 'session', 'observations'}
+                    or not isinstance(observed['observations'], dict) or not isinstance(session, dict)
+                    or session.get('Type') != 'x11' or session.get('Active') != 'yes'):
+                failure = CaseFailed('hosted graphical session differs from the selected X11 desktop')
+                failure.observations = {'graphical_session': {'phase': 'hosted-probe-frame'}}
+                raise failure
+            readiness['selected_observation'] = observed['observations']
+            break
+        time.sleep(1)
+    else:
+        failure = CaseFailed('hosted GNOME did not establish a measured active X11 session')
+        failure.observations = {'graphical_session_readiness': readiness}
+        raise failure
+    return session, readiness
+
+
 def prepare(checkout: Path, output: Path, controller_commit: str | None = None) -> dict:
     validate_host(os.environ, os.getuid(), platform.machine(), release())
     selected = selected_controller(os.environ, controller_commit)
@@ -186,21 +242,10 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     with environment_file.open('a') as stream:
         stream.write('\nLIBGL_ALWAYS_SOFTWARE=1\n')
     run(['systemctl', 'restart', 'gdm3'])
-    probe = ('import json; from linux_release.installed_environment import graphical_session; '
-             'print(json.dumps(graphical_session()))')
-    deadline, session = time.monotonic() + 180, None
-    while time.monotonic() < deadline:
-        try:
-            raw = run(['runuser', '-u', USER, '--', 'env',
-                       'HOME=' + str(home), 'PYTHONPATH=' + str(controller / 'scripts'), '/usr/bin/python3', '-c', probe], timeout=15, cwd=home)
-            session = json.loads(raw)
-            if session.get('Type') == 'x11' and session.get('Active') == 'yes':
-                break
-        except (OSError, subprocess.TimeoutExpired, ValueError):
-            pass
-        time.sleep(1)
-    else:
-        raise OSError('hosted GNOME did not establish a measured active X11 session')
+    probe = 'from linux_release.hosted_desktop import write_graphical_probe; write_graphical_probe()'
+    command = ['runuser', '-u', USER, '--', 'env', 'HOME=' + str(home),
+               'PYTHONPATH=' + str(controller / 'scripts'), '/usr/bin/python3', '-c', probe]
+    session, readiness = await_hosted_session(command, home, deadline=time.monotonic() + 180)
     authority = Path('/run/user') / str(account.pw_uid) / 'gdm/Xauthority'
     info = authority.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != account.pw_uid or stat.S_IMODE(info.st_mode) & 0o077:
@@ -212,6 +257,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     result['install_parent_preparation'] = install_parent
     result['shared_parent_preparation'] = shared_parent
     result['desktop_parent_preparation'] = desktop_parents
+    result['graphical_session_readiness'] = readiness
     fresh(output, json.dumps(result, indent=2, sort_keys=True) + '\n')
     return result
 
@@ -222,5 +268,9 @@ def main(argv=None) -> int:
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--controller-commit')
     arguments = parser.parse_args(argv)
-    prepare(arguments.checkout, arguments.output, arguments.controller_commit)
+    try:
+        prepare(arguments.checkout, arguments.output, arguments.controller_commit)
+    except CaseFailed as error:
+        print(json.dumps({'status': 'refused', 'observations': error.observations}, sort_keys=True), file=sys.stderr)
+        return 2
     return 0

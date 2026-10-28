@@ -1,4 +1,5 @@
 """The reveal prerequisite preserves system authentication, cancellation and expiry obligations."""
+from scripts.linux_release.installed_environment import GraphicalSessionObservation
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,7 +31,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.ui.__enter__ = Mock(return_value=self.ui)
         self.ui.__exit__ = Mock(return_value=False)
         values = {'protected_launcher': Mock(return_value={'path': '/bootstrap'}),
-            'resolve': Mock(return_value=self.storage), 'graphical_session': Mock(return_value={}),
+            'resolve': Mock(return_value=self.storage), 'graphical_session': Mock(return_value=GraphicalSessionObservation({}, {})),
             'session_environment': Mock(return_value={}), 'Reservation': Mock(return_value=self.reservation),
             'InstalledApp': Mock(return_value=self.app), 'PresencePolicy': Mock(return_value=self.policy),
             'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}),

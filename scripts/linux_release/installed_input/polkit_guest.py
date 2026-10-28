@@ -34,7 +34,8 @@ def serve(mailbox, pending, vm_id):
     if pending['operation'] not in {PURPOSE, CANCEL} or mailbox.read('request.json') != pending:
         raise ValueError('Polkit input endpoint has no exact current mailbox publication')
     mailbox.attach()
-    session = graphical_session()
+    selected_session = graphical_session()
+    session = selected_session.session
     if session['User'] != str(pending['account']['uid']):
         raise ValueError('Polkit target endpoint has a foreign actual graphical account')
     with Target(session) as target:

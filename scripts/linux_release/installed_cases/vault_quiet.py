@@ -96,8 +96,9 @@ def execute(binding, capability, case, root):
             or any(type(value) is not int for value in selected.values())):
         raise ValueError('quiet custody permits only fixed native case inputs')
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
-    storage = resolve(session_environment(graphical_session()))
-    observations, streams, apps = {'phase': 'before-launch'}, {}, []
+    selected_session = graphical_session()
+    storage = resolve(session_environment(selected_session.session))
+    observations, streams, apps = {**selected_session.observations, 'phase': 'before-launch'}, {}, []
     reservation, fixture = Reservation(launch_binding, storage), None
     try:
         with reservation, ProviderFixture.gui(

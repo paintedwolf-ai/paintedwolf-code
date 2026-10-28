@@ -2,7 +2,7 @@
 import io
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import logind_context as owner
 
@@ -158,3 +158,37 @@ class ExecutionContextTests(unittest.TestCase):
         reader.values['Id'] = 'owned.slice'
         with self.assertRaises(CaseUnavailable):
             observed(reader, 123, 1000, '0::' + GROUP + '\n')
+
+
+class SessionInventoryTests(unittest.TestCase):
+    def observe(self, reply):
+        reader = Mock()
+        reader.call.return_value = SimpleNamespace(unpack=lambda: reply)
+        return owner.Reader.sessions(reader)
+
+    def test_real_typed_owner_checks_count_and_identifier_bounds(self):
+        from linux_release.installed_cases.logind_context import SESSION_FIELD_BYTES, SESSION_INVENTORY_LIMIT
+        rows = [[('7', 1000, 'fixture', 'seat0', SESSION)] * (SESSION_INVENTORY_LIMIT + 1),
+                [('x' * (SESSION_FIELD_BYTES + 1), 1000, 'fixture', 'seat0', SESSION)],
+                [('7', 1000, 'x' * (SESSION_FIELD_BYTES + 1), 'seat0', SESSION)],
+                [('7', 1000, 'fixture', 'x' * (SESSION_FIELD_BYTES + 1), SESSION)],
+                [('7', 1000, 'fixture', 'seat0', SESSION + 'x' * SESSION_FIELD_BYTES)]]
+        for inventory in rows:
+            with self.subTest(rows=len(inventory)), self.assertRaises(ValueError):
+                self.observe((inventory,))
+
+    def test_inventory_uses_the_declared_manager_wire_grammar(self):
+        reader = Mock()
+        reader.call.return_value = SimpleNamespace(unpack=lambda: ([('7', 1000, 'fixture', 'seat0', SESSION)],))
+        result = owner.Reader.sessions(reader)
+        self.assertEqual(result, [{'id': '7', 'uid': 1000, 'name': 'fixture', 'seat': 'seat0', 'object': SESSION}])
+        reader.call.assert_called_once_with('/org/freedesktop/login1',
+            'org.freedesktop.login1.Manager', 'ListSessions', None, '(a(susso))')
+
+    def test_aggregate_budget_is_enforced_before_inventory_leaves_the_reader(self):
+        from linux_release.installed_cases.logind_context import SESSION_FIELD_BYTES, SESSION_INVENTORY_LIMIT
+        rows = [(str(index), 1000, 'x' * SESSION_FIELD_BYTES, 'x' * SESSION_FIELD_BYTES,
+                 '/org/freedesktop/login1/session/s' + str(index))
+                for index in range(SESSION_INVENTORY_LIMIT)]
+        with self.assertRaises(ValueError):
+            self.observe((rows,))

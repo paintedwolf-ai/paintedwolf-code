@@ -24,9 +24,10 @@ from ..installed_storage import resolve
 
 def unchallenged_presence(binding):
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
-    storage = resolve(session_environment(graphical_session()))
+    selected_session = graphical_session()
+    storage = resolve(session_environment(selected_session.session))
     reservation = Reservation(launch_binding, storage)
-    observations = {'startup_phase': 'launch-and-wait-ready-without-onboarding',
+    observations = {**selected_session.observations, 'startup_phase': 'launch-and-wait-ready-without-onboarding',
                     'typed_refusal_verified': False, 'system_authentication_verified': False,
                     'cancel_verified': False, 'expiry_verified': False}
     streams = {}
