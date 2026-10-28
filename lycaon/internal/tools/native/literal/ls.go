@@ -201,7 +201,7 @@ func runLs(inv *invocation) error {
 // An unreadable directory is reported and yields no entries; GNU treats an
 // unreadable command-line operand as serious (2) and a nested one as minor.
 func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
-	names, err := dir.ReadDir()
+	opened, err := dir.OpenDir()
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			_, _ = fmt.Fprintf(inv.stderr, "ls: cannot open directory '%s': %s\n", dir.Resolved.DisplayPath, reason)
@@ -214,6 +214,8 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		}
 		return nil, false, err
 	}
+	defer opened.Close()
+	names := opened.Names()
 	if opts.all {
 		names = append([]string{"."}, names...)
 	}
@@ -226,11 +228,21 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		if maximum > 0 && *visited > maximum {
 			return nil, false, tools.CommandLimitExceeded("traversal_visits", maximum, *visited)
 		}
-		child := dir
-		if name != "." {
-			child = dir.Child(name)
+		var (
+			child projectpaths.BoundPath
+			st    fseffect.EntryStat
+		)
+		if name == "." {
+			child = dir
+			st, err = opts.stat(child)
+		} else {
+			child, st, err = opened.StatChild(name)
+			if err == nil && opts.deref && typeLetter(st.Mode) == 'l' {
+				if target, targetErr := opened.StatChildFollowed(child); targetErr == nil {
+					st = target
+				}
+			}
 		}
-		st, err := opts.stat(child)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				inv.fail(1, path.Join(dir.Resolved.DisplayPath, name), reason)

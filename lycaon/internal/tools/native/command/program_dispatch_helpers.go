@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -110,9 +111,14 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 // redirection) owns no effect of its own.
 func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
 	spec, native := d.run.commands[command]
-	definition, err := d.structuralDefinition(command)
+	var (
+		definition toolcontract.OperationDefinition
+		err        error
+	)
 	if native {
 		definition, err = d.catalogDefinition(spec)
+	} else {
+		definition, err = d.structuralDefinition(command)
 	}
 	if err != nil {
 		return err
@@ -121,23 +127,41 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
 		display = display[span.StartByte:span.EndByte]
 	}
-	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command}, nil)
-	if err != nil {
-		return err
-	}
+	inputs := map[string]any{"operation_id": command}
 	invoked := false
+	var child programChild
 	if native && len(spec.Effects) > 0 {
-		mode := selectEffectMode(spec, "")
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, mode, d.childEffectSet(spec, mode, commandprogram.OperationRequest{Invocation: invocation})); err == nil {
-			err = d.start(ctx, child)
+		bound, bindErr := toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil)
+		if bindErr == nil && d.run.tc.Identity.ToolCallID != "" {
+			if prepared, prepErr := d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, nil, &bound); prepErr == nil {
+				prepared.bound = bound
+				child = prepared
+				invoked = true
+			}
 		}
+		if !invoked {
+			child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
+			if err != nil {
+				return err
+			}
+			child.bound = bound
+			if bindErr != nil {
+				err = bindErr
+			} else {
+				err = d.start(ctx, child)
+			}
+			if err != nil {
+				_ = d.settle(ctx, child, ownerFailure(err), false, "")
+				child.release()
+				return err
+			}
+			invoked = true
+		}
+	} else {
+		child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
 		if err != nil {
-			_ = d.settle(ctx, child, ownerFailure(err), false, "")
-			child.release()
 			return err
 		}
-		invoked = true
-
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -169,11 +193,16 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
 }
 
+var compiledStructuralDefinitions sync.Map
+
 // structuralDefinition compiles one definition per evaluator construct.
 func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
+	key := "construct " + construct
+	if cached, ok := compiledStructuralDefinitions.Load(key); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
-	key := "construct " + construct
 	if definition, ok := d.shared.definitions[key]; ok {
 		return definition, nil
 	}
@@ -194,6 +223,7 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[key] = definition
+	compiledStructuralDefinitions.Store(key, definition)
 	return definition, nil
 }
 
@@ -259,14 +289,47 @@ func unsupportedForm(spec toolcontract.CommandSpecification, cause error) *toolc
 // writeHostRefusal adds the host's refusal to the stopped statement's stderr
 // in shell voice beside the structured refusal.
 func writeHostRefusal(streams commandprogram.Streams, command, form, code string) {
-	if streams.Error == nil {
+	writeShellRefusal(streams.Error, command, form, code, nil, nil)
+}
+
+func writeShellRefusal(w io.Writer, command, subject, code string, policyCopy map[string]string, facts map[string]any) {
+	if w == nil || code == "" {
 		return
 	}
-	subject := command
-	if form != "" {
-		subject += ": " + form
+	if subject == "" || strings.HasPrefix(subject, "-") {
+		subject = "request"
 	}
-	_, _ = fmt.Fprintf(streams.Error, "%s: not supported here [%s]\n", subject, code)
+	reason := strings.TrimSpace(policyCopy["cause"])
+	if reason == "" {
+		reason = strings.TrimSpace(policyCopy["what"])
+	}
+	if reason == "" {
+		reason = catalogShellReason(code, command, facts)
+	}
+	if reason == "" {
+		return
+	}
+	reason = strings.Join(strings.Fields(reason), " ")
+	_, _ = fmt.Fprintf(w, "%s: %s: %s [%s]\n", command, subject, strings.TrimSuffix(reason, "."), code)
+}
+
+func catalogShellReason(code, command string, facts map[string]any) string {
+	catalog, err := guidance.LoadHintConfigStock()
+	if err != nil || catalog == nil {
+		return ""
+	}
+	entry, ok := catalog.HintCodes[code]
+	if !ok {
+		return ""
+	}
+	data := make(map[string]any, len(facts)+2)
+	for key, value := range facts {
+		data[key] = value
+	}
+	data["command"] = command
+	data["rejection_code"] = code
+	_, cause, _ := guidance.RenderHintFields(code, entry, data)
+	return strings.TrimSpace(cause)
 }
 
 type trackingWriter struct {
@@ -281,56 +344,27 @@ func (t *trackingWriter) Write(p []byte) (int, error) {
 	return t.w.Write(p)
 }
 
-func writeRejectRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, reject *toolrejection.ToolReject) {
+func writeRejectRefusal(streams commandprogram.Streams, command string, cause error) {
+	reject := toolrejection.AsToolReject(cause)
 	if streams.Error == nil || reject == nil {
 		return
 	}
-	if programResourceRefusal(reject) {
-		// Resource refusals render once through settled program feedback, where
-		// the original limit facts and completed effects are available.
-		return
-	}
-	subject := command
-	for _, key := range []string{"word", "path", "operand", "job", "signal", "pattern"} {
+	subject := ""
+	for _, key := range []string{"word", "path", "destination", "url", "host", "operand", "job", "signal", "pattern"} {
 		if val, _ := reject.Data[key].(string); val != "" {
-			subject += ": " + val
+			subject = val
 			break
 		}
 	}
-	if subject == command && len(request.Argv) > 1 {
-		subject += ": " + request.Argv[1].Value
+	var policyCopy map[string]string
+	if refusal, ok := guidance.RefusalFromError(cause); ok {
+		policyCopy = refusal.Copy
 	}
-	detail := ""
-	for _, key := range []string{"expected", "reason", "remedy", "expected_form"} {
-		if val, _ := reject.Data[key].(string); val != "" {
-			detail = val
-			break
-		}
-	}
-	switch reject.Code {
-	case "SURVEY_PATH_ESCAPE":
-		detail = "path is outside the project root; use a relative path inside the workspace"
-	case "GREP_REGEX_INVALID":
-		if detail == "" {
-			detail = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
-		}
-	case "COMMAND_JOB_UNKNOWN":
-		detail = "no such job in this session; check active jobs with jobs"
-	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
-		if detail != "" {
-			detail = "not supported here (expected " + detail + ")"
-		} else {
-			detail = "not supported here"
-		}
-	}
-	if detail == "" {
-		detail = "not supported here"
-	}
-	_, _ = fmt.Fprintf(streams.Error, "%s: %s [%s]\n", subject, detail, reject.Code)
+	writeShellRefusal(streams.Error, command, subject, reject.Code, policyCopy, reject.Data)
 }
 
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {
-	for _, cmd := range definition.Facts().Commands {
+	for _, cmd := range definition.ReadOnlyFacts().Commands {
 		if cmd.Name == name {
 			return true
 		}
@@ -446,14 +480,6 @@ func revisionConflict(err error) *toolcontract.RevisionConflict {
 	return &toolcontract.RevisionConflict{Path: path, ExpectedRevision: expected, ObservedRevision: observed}
 }
 
-type renderedProgramRefusal struct {
-	text  string
-	cause error
-}
-
-func (r *renderedProgramRefusal) Error() string { return r.text }
-func (r *renderedProgramRefusal) Unwrap() error { return r.cause }
-
 func programResourceRefusal(reject *toolrejection.ToolReject) bool {
 	if reject == nil {
 		return false
@@ -504,57 +530,6 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 	if _, ok := reject.Data["source_end_byte"]; !ok {
 		reject.Data["source_end_byte"] = defaultSpan.EndByte
 	}
-	if programResourceRefusal(reject) {
-		return
-	}
-	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
-	switch reject.Code {
-	case "SURVEY_PATH_ESCAPE":
-		remedy = "path is outside the project root; use a relative path inside the workspace"
-	case "GREP_REGEX_INVALID":
-		remedy = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
-	case "COMMAND_JOB_UNKNOWN":
-		remedy = "no such job in this session; use jobs to list this session's background jobs, then pass %N, %% or $!"
-	}
-	if remedy == "" {
-		remedy = "rewrite the command with a supported form"
-	}
-	if _, ok := reject.Data["expected_form"]; !ok {
-		reject.Data["expected_form"] = remedy
-	}
-	reject.Data["reason"] = programRefusalLine(cmd, word, line, col, remedy)
-}
-
-func ensureProgramRefusalText(rendered error, reject *toolrejection.ToolReject) error {
-	if reject == nil {
-		return rendered
-	}
-	if rendered == nil {
-		rendered = toolrejection.RenderReject(reject, nil)
-	}
-	if programResourceRefusal(reject) {
-		return rendered
-	}
-	text := rendered.Error()
-	cmd := firstStringFact(reject.Data, "command", "native_command", "operation")
-	word := firstStringFact(reject.Data, "word", "path", "operand", "job", "signal", "pattern")
-	line := firstIntFact(reject.Data, 1, "source_line", "operation_source_line")
-	col := firstIntFact(reject.Data, 1, "source_column", "operation_source_column")
-	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
-	spanText := fmt.Sprintf("%d:%d", line, col)
-	summary := programRefusalLine(cmd, word, line, col, remedy)
-	if !strings.Contains(text, cmd) || (word != "" && !strings.Contains(text, word)) || !strings.Contains(text, spanText) || (remedy != "" && !strings.Contains(text, remedy)) {
-		text = text + "\nStop: " + summary
-	}
-	return &renderedProgramRefusal{text: text, cause: rendered}
-}
-
-func programRefusalLine(cmd, word string, line, col int, remedy string) string {
-	subject := cmd
-	if word != "" {
-		subject += " (" + word + ")"
-	}
-	return fmt.Sprintf("%s at %d:%d: %s", subject, line, col, remedy)
 }
 
 func firstStringFact(data map[string]any, keys ...string) string {

@@ -63,7 +63,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	if pins == nil {
 		return nil, errors.New("text utilities require a revision pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

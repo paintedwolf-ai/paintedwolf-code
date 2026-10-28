@@ -1131,6 +1131,12 @@
       "emit": "guard:fetch_url",
       "summary": "mode=raw refused Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }})."
     },
+    "FILE_CHANGE_APPROVAL_UNAVAILABLE": {
+      "branch_instruction": "Do not retry the file change through another command while approval is unavailable.",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This call cannot review the change to {{ paintedwolf.path }}."
+    },
     "FINDING_UNGROUNDED": {
       "branch_instruction": "Preserve the finding’s intent and correct its evidence reference; do not invent a handle or re-record an already accepted note.",
       "category": "recoverable",
@@ -2675,6 +2681,12 @@
       "category": "recoverable",
       "emit": "guard:source_parse",
       "summary": "{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing could not finish."
+    },
+    "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE": {
+      "branch_instruction": "Do not discard the source through another command without recovery approval.",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."
     },
     "SOURCE_VERSION_BASE_MISMATCH": {
       "branch_instruction": "Branch on Code; re-read current version from source_history",

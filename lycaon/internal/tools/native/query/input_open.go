@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
@@ -27,14 +28,17 @@ func (in *inputs) close() {
 
 // openStream binds exactly the reached operand and delegates its physical read,
 // revision pin and representation to the existing native capture owner.
-func (in *inputs) openStream(operand string) {
+func (in *inputs) openStream(operand commandprogram.Field) {
 	reader := in.inv.input
-	if operand == "-" {
+	if operand.Value == "-" {
 		in.label = "<stdin>"
+	} else if substReader, ok := operand.ProcessSubstitution().OpenReader(); ok {
+		in.currentCloser = substReader
+		reader = substReader
 	} else {
-		bound, err := in.inv.paths.Bind(in.inv.ctx, operand, false)
+		bound, err := in.inv.paths.Bind(in.inv.ctx, operand.Value, false)
 		if err != nil {
-			in.openFailure(operand, err)
+			in.openFailure(operand.Value, err)
 			return
 		}
 		if bound.Null {
@@ -46,7 +50,7 @@ func (in *inputs) openStream(operand string) {
 			}
 			stream, err := in.inv.owners.Revisions.OpenTextStream(in.inv.ctx, in.inv.tc, bound.Resolved.Abs)
 			if err != nil {
-				in.openFailure(operand, err)
+				in.openFailure(operand.Value, err)
 				return
 			}
 			in.currentCloser = stream.Reader

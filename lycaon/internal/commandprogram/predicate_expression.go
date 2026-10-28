@@ -162,7 +162,7 @@ func (p *predicateParser) expression(level int) (*predicateExpr, error) {
 }
 func predicateUnary(op string) bool {
 	switch op {
-	case "-n", "-z", "-e", "-f", "-d", "-L", "-r", "-w", "-x":
+	case "-n", "-z", "-e", "-f", "-d", "-L", "-r", "-w", "-x", "-s":
 		return true
 	}
 	return false

@@ -111,13 +111,13 @@ func (d *fakeDispatch) Invoke(ctx context.Context, request OperationRequest, str
 	if d.log.started != nil {
 		d.log.started <- argv[0]
 	}
-	result, err := d.run(ctx, argv, request.Environment, streams, &call)
+	result, err := d.run(ctx, request, argv, request.Environment, streams, &call)
 	call.err = err
 	d.log.add(call)
 	return result, err
 }
 
-func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Streams, call *dispatchCall) (toolcontract.ProducerResult, error) {
+func (d *fakeDispatch) run(ctx context.Context, req OperationRequest, argv, env []string, streams Streams, call *dispatchCall) (toolcontract.ProducerResult, error) {
 	write := func(text string) (toolcontract.ProducerResult, error) {
 		if _, err := io.WriteString(streams.Output, text); err != nil {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
@@ -125,6 +125,8 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		return completed(0), nil
 	}
 	switch argv[0] {
+	case "basename":
+		return write("item\n")
 	case "echo":
 		return write(strings.Join(argv[1:], " ") + "\n")
 	case "pwd":
@@ -135,11 +137,32 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 	case "env":
 		return write(strings.Join(env, "\n") + "\n")
 	case "cat":
-		if len(argv) > 1 {
+		var operands Fields
+		for _, field := range req.Argv[1:] {
+			if field.Value == "--" {
+				continue
+			}
+			operands = append(operands, field)
+		}
+		if len(operands) > 0 {
 			var out strings.Builder
-			for _, name := range argv[1:] {
+			for _, field := range operands {
+				if strings.HasPrefix(field.Value, "--file=") {
+					field = field.SliceFrom(len("--file="))
+				}
+				if subst := field.ProcessSubstitution(); subst != nil {
+					if reader, ok := subst.OpenReader(); ok {
+						data, err := io.ReadAll(reader)
+						_ = reader.Close()
+						if err != nil {
+							return ownerResult(err), err
+						}
+						out.Write(data)
+						continue
+					}
+				}
 				d.log.mu.Lock()
-				content, ok := d.log.files[name]
+				content, ok := d.log.files[field.Value]
 				d.log.mu.Unlock()
 				if !ok {
 					return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("no such file")
@@ -155,11 +178,36 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		}
 		return write(string(data))
 	case "head":
-		line, _ := bufio.NewReader(streams.Input).ReadString('\n')
+		in := streams.Input
+		if len(req.Argv) > 1 {
+			if subst := req.Argv[len(req.Argv)-1].ProcessSubstitution(); subst != nil {
+				if reader, ok := subst.OpenReader(); ok {
+					in = reader
+				}
+			}
+		}
+		line, _ := bufio.NewReader(in).ReadString('\n')
 		call.stdin = line
-		_ = streams.Input.Close()
+		_ = in.Close()
 		return write(line)
 	case "grep":
+		pattern := ""
+		if len(req.Argv) > 1 {
+			pattern = req.Argv[1].Value
+			if strings.HasPrefix(req.Argv[1].Value, "--file=") {
+				field := req.Argv[1].SliceFrom(len("--file="))
+				if subst := field.ProcessSubstitution(); subst != nil {
+					if reader, ok := subst.OpenReader(); ok {
+						raw, err := io.ReadAll(reader)
+						_ = reader.Close()
+						if err != nil {
+							return ownerResult(err), err
+						}
+						pattern = strings.TrimSuffix(string(raw), "\n")
+					}
+				}
+			}
+		}
 		data, err := io.ReadAll(streams.Input)
 		call.stdin = string(data)
 		if err != nil {
@@ -167,7 +215,7 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		}
 		var matched []string
 		for _, line := range strings.SplitAfter(string(data), "\n") {
-			if line != "" && strings.Contains(line, argv[1]) {
+			if line != "" && strings.Contains(line, pattern) {
 				matched = append(matched, line)
 			}
 		}
@@ -331,9 +379,9 @@ type evalFixture struct {
 	jobs        *fakeJobs
 }
 
-func newEvalFixture(t *testing.T) *evalFixture {
+func newEvalFixture(t testing.TB) *evalFixture {
 	t.Helper()
-	log := &dispatchLog{}
+	log := &dispatchLog{files: map[string]string{}}
 	stdout := &bytes.Buffer{}
 	f := &evalFixture{log: log, stdout: stdout, publication: &fakePublication{}, sources: &fakeSources{files: map[string]string{}, changes: map[string]string{}}, jobs: &fakeJobs{}}
 	root := fixtureInvocation()
@@ -344,7 +392,7 @@ func newEvalFixture(t *testing.T) *evalFixture {
 	return f
 }
 
-func (f *evalFixture) run(t *testing.T, ctx context.Context, program string) (ProgramOutcome, error) {
+func (f *evalFixture) run(t testing.TB, ctx context.Context, program string) (ProgramOutcome, error) {
 	t.Helper()
 	parsed, err := commandsurface.ParseAdmitted(ctx, f.ports.Memory, []byte(program), commandsurface.ParseOptions{SourceName: "program"})
 	testutil.FailErr(t, "parse fixture program", err)

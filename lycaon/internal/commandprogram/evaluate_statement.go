@@ -54,20 +54,27 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	}
 	inner := *f
 	inner.errexitIgnored = f.errexitIgnored || s.Negated
+	inner.procSubst = newProcSubstScope(f.procSubst)
 	var descriptors *descriptorScope
 	if len(s.Redirects) > 0 {
 		descriptors = &descriptorScope{}
 		prevented, err := descriptors.prepare(ctx, &inner, s)
 		if prevented || err != nil {
+			_ = inner.procSubst.finish(ctx, &inner, err)
 			return signal{}, err
 		}
 	}
-	previousChild := inner.state.last
 	sig, err := inner.command(ctx, s)
 	if descriptors != nil {
-		if !descriptors.opened.Load() && !descriptors.prevented && err == nil && inner.state.last == previousChild {
+		if !descriptors.opened.Load() && !descriptors.prevented && err == nil {
 			_, err = (&evaluatorOperation{frame: &inner, statement: s, fields: Fields{{Value: ":", Span: s.Span}}}).invoke(ctx)
 		}
+		descriptors.closeEndpoints()
+	}
+	if procErr := inner.procSubst.finish(ctx, &inner, err); procErr != nil && err == nil {
+		err = procErr
+	}
+	if descriptors != nil {
 		_, stopped := f.state.latch.Stop()
 		eligible := err == nil && !stopped && inner.publish.eligible()
 		f.publish.mark(eligible)
@@ -122,6 +129,10 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
 		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
+	case commandsurface.ArithmeticCommand:
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "((", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, runArithmeticCommand(ctx, g, s, c) }}).invoke(ctx)
+	case commandsurface.TrapCommand:
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "trap", Span: s.Span}}, body: func(_ context.Context, g *frame) (signal, error) { return signal{}, runTrapCommand(g, s, c) }}).invoke(ctx)
 	case nil:
 		return signal{}, nil
 	default:
@@ -296,6 +307,9 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	_, err = g.statements(ctx, list)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	f.publish.mark(g.publish.eligible())
 	return f.settleFrame(ctx, run, g, err)
 }
@@ -317,9 +331,20 @@ func (f *frame) settleFrame(ctx context.Context, run *childRun, g *frame, err er
 // invokes no operation (assignments, declarations, loop and branch results,
 // builtin usage errors). It is not a child execution and adds no trace event.
 func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
-	f.state.pipeStatus = []int{status}
+	if len(f.state.pipeStatus) == 1 {
+		f.state.pipeStatus[0] = status
+	} else {
+		f.state.pipeStatus = []int{status}
+	}
 	f.state.vars.SetPipeStatus(f.state.pipeStatus)
-	return f.state.control.Record(uuid.NewString(), ordinaryResult(status), true, false)
+	id := string(loc.ID)
+	if id == "" {
+		id = command
+	}
+	if id == "" || status < 0 || status > 255 {
+		id = uuid.NewString()
+	}
+	return f.state.control.Record(id, ordinaryResult(status), true, false)
 }
 
 // stateRefusal turns an expansion, variable or memory admission refusal into a

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -147,5 +148,70 @@ func TestAgentUTF16EditEmitsRawEncodedSHA(t *testing.T) {
 	events := hub.take()
 	if len(events) != 1 || events[0].AfterSHA256 != textfile.SHA256(want) {
 		t.Fatalf("source_changed events = %+v, want raw sha %s", events, textfile.SHA256(want))
+	}
+}
+
+type replaceAfterRecordedMutation struct {
+	*sourceledger.Store
+	replace func() error
+}
+
+func (r replaceAfterRecordedMutation) Prepare(ctx context.Context, inputs []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	prepared, err := r.Store.Prepare(ctx, inputs)
+	if err != nil {
+		return nil, err
+	}
+	return replaceAfterPreparedMutation{PreparedRecording: prepared, replace: r.replace}, nil
+}
+
+type replaceAfterPreparedMutation struct {
+	sourceledger.PreparedRecording
+	replace func() error
+}
+
+func (p replaceAfterPreparedMutation) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	tracked, err := p.PreparedRecording.CommitTx(ctx, tx)
+	if err != nil {
+		return tracked, err
+	}
+	return tracked, p.replace()
+}
+
+func TestAgentWriteEventKeepsObservedKindAfterRacedReplacement(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "file")
+	store := bindLedgerForWrites(t, root)
+	hub := &agentFeedCap{}
+	t.Cleanup(sourcefeed.Bind(hub))
+	tc := nativefixture.Context(root)
+	tc.Identity.ProjectID = "p1"
+	replaced := false
+	tc.Source.SourceLedger = replaceAfterRecordedMutation{Store: store, replace: func() error {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if string(content) != "published" {
+			t.Fatalf("race preceded actual publication: %q", content)
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		if err := os.Mkdir(path, 0o700); err != nil {
+			return err
+		}
+		replaced = true
+		return nil
+	}}
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "file", "content": "published"}, tc)
+	testutil.FailErr(t, "publish actual write and event", err)
+	info, err := os.Stat(path)
+	testutil.FailErr(t, "inspect external replacement", err)
+	if !replaced || !info.IsDir() {
+		t.Fatal("replacement race was not exercised")
+	}
+	events := hub.take()
+	if len(events) != 1 || events[0].IsDir == nil || *events[0].IsDir {
+		t.Fatalf("write event inferred later path kind: %+v", events)
 	}
 }

@@ -70,7 +70,7 @@ func (in *inputs) slurpRaw() (string, bool) {
 		operand := in.operands[0]
 		in.operands = in.operands[1:]
 		in.close()
-		in.label = operand
+		in.label = operand.Value
 		in.openStream(operand)
 		if in.stop != nil {
 			return "", false

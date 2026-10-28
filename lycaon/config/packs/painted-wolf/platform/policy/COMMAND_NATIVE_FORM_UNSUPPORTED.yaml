@@ -4,15 +4,15 @@ kind: policy
 anchor: tool.rejected
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.command, paintedwolf.source_line, paintedwolf.source_column]
 when: paintedwolf.rejection_code == "COMMAND_NATIVE_FORM_UNSUPPORTED"
 effect: block
 copy:
-  what: The requested native form was refused before its effect attempt.
-  cause: The runtime does not provide the admission contract required by this form, and no installed program of this name can run it here.
-  why: A refused form never refreshes input or replays earlier effects.
-  fix: Use a documented supported form from command help, or reach the same result with another supported command. Earlier statements' output and effects are in this result.
-  instead: Branch on Code; use a supported form and keep the earlier outcomes in this result.
+  what: '{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}'
+  cause: No supported command or installed program can run this form here.
+  why: Earlier commands that finished still count.
+  fix: Use a supported form or another command that reaches the same result. Earlier output and changes remain in this result.
+  instead: Use a supported command form.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_native_admission
 x-paintedwolf-message: native operation form is unavailable
@@ -22,5 +22,5 @@ x-paintedwolf-scenarios:
       tool: command
     expect_contains:
       - 'Code: COMMAND_NATIVE_FORM_UNSUPPORTED'
-      - before its effect attempt
-      - use a supported form
+      - cannot run in the requested form
+      - supported command form

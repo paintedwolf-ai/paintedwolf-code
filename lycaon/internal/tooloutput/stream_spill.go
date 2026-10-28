@@ -75,8 +75,8 @@ type StreamSpill struct {
 	closed         bool
 }
 
-// retainedFrameBytes covers a retained blob's framing and filesystem slack.
-const retainedFrameBytes = 4096
+// RetainedFrameBytes covers a retained blob's framing and filesystem slack.
+const RetainedFrameBytes = 4096
 
 func RetainScreenedStream(ctx context.Context, input ScreenedStream, options StreamSpillOptions) (*StreamSpill, error) {
 	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
@@ -91,7 +91,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 		return nil, err
 	}
 	defer staging.Close()
-	releaseState, err := options.RetainedState.ReserveProgramState(ctx, int64(len(options.ClaimID))*2+4096)
+	releaseState, err := options.RetainedState.ReserveProgramState(ctx, int64(len(options.ClaimID))*2+512)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +131,20 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if err != nil {
 		return nil, err
 	}
+	// The maximum preview is scratch while reading. Once the stream settles,
+	// retain only bytes that were actually captured.
+	releasePreview()
+	settledPreview, reserveErr := options.RetainedState.ReserveProgramState(ctx, int64(len(reader.preview))+256)
+	if reserveErr != nil || settledPreview == nil {
+		err = reserveErr
+		if err == nil {
+			err = fmt.Errorf("preview state admission returned no release")
+		}
+		return nil, err
+	}
+	releasePreview = settledPreview
 	// Retention holds the stored bytes, not the encoder's worst case.
-	release, err := options.Admission.ReserveSpill(ctx, blob.Size+retainedFrameBytes)
+	release, err := options.Admission.ReserveSpill(ctx, blob.Size+RetainedFrameBytes)
 	if err != nil || release == nil {
 		if err == nil {
 			err = fmt.Errorf("spill admission returned no release")

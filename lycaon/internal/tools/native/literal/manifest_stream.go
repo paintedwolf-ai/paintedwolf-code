@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"errors"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
 // manifestRecords keeps the original manifest stream open while each named
 // target acquires and releases its own capture. It never recaptures the manifest.
-func (inv *invocation) manifestRecords(operand string, consume func(int, string) error) (finalErr error) {
-	in, err := inv.open(operand, false)
+func (inv *invocation) manifestRecords(operand commandprogram.Field, consume func(int, string) error) (finalErr error) {
+	in, err := inv.openField(operand, false)
 	if err != nil || in == nil {
 		return err
 	}
