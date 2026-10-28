@@ -7,7 +7,7 @@ import secrets
 import re
 import time
 
-from .app import process_identity
+from ..installed_process import process_identity
 from .desktop_ui import accessibility_bus, owned_process, load_api
 from .records import CaseUnavailable
 
