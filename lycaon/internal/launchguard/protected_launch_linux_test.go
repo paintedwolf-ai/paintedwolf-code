@@ -583,3 +583,9 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)
 }
+
+func TestProtectedLaunchModulePathsReportTheirCoverage(t *testing.T) {
+	f := installLaunchFixture(t)
+	testutil.FailErr(t, "instrumented module path contracts", sudoFixture(t, "module-paths", f.dir,
+		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
+}

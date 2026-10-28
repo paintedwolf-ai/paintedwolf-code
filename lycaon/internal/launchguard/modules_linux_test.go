@@ -12,10 +12,13 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 const fixtureDesktopPIDEnv = "PW_LAUNCH_DESKTOP_PID"
@@ -525,4 +528,39 @@ func TestWatchModuleMountsArmsItsBaselineAndEndsWithItsLifetime(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("watchModuleMounts after its lifetime ended: %v", err)
 	}
+}
+
+func checkInstrumentedModulePaths(t *testing.T, dir string) error {
+	runtime.LockOSThread()
+	testutil.FailErr(t, "private actor filesystem", unix.Unshare(unix.CLONE_FS|unix.CLONE_NEWNS))
+	testutil.FailErr(t, "private actor mounts", unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""))
+	testutil.FailErr(t, "actor subreaper", unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0))
+	t.Cleanup(func() {
+		tasks, err := os.ReadDir("/proc/self/task")
+		testutil.FailErr(t, "fixture child threads", err)
+		for _, task := range tasks {
+			raw, _ := os.ReadFile(filepath.Join("/proc/self/task", task.Name(), "children"))
+			for _, child := range strings.Fields(string(raw)) {
+				pid, err := strconv.Atoi(child)
+				testutil.FailErr(t, "fixture child identity", err)
+				_ = unix.Kill(pid, unix.SIGKILL)
+			}
+		}
+		for {
+			var status unix.WaitStatus
+			_, err := unix.Wait4(-1, &status, 0, nil)
+			if errors.Is(err, unix.ECHILD) {
+				break
+			}
+			if !errors.Is(err, unix.EINTR) {
+				testutil.FailErr(t, "reap fixture child", err)
+			}
+		}
+	})
+	spec, frame := moduleFixtureSelection(t, dir)
+	testutil.FailErr(t, "fixture generation mount", unix.Mount(spec.Generation.GenerationRoot, spec.Generation.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""))
+	checkInstrumentedModuleStage(t, dir, spec, frame)
+	checkInstrumentedBrokerAgent(t, spec, frame)
+	checkInstrumentedModuleWatcher(t, dir, spec, frame)
+	return nil
 }
