@@ -333,7 +333,12 @@ func checkModuleWatcherSeal() error {
 }
 
 func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
-	cmd := exec.Command(os.Args[0], "-test.run=^TestChildUserNamespaceMountSetattrRefused$")
+	args := []string{"-test.run=^TestChildUserNamespaceMountSetattrRefused$"}
+	// A coverage build reports the child's counters beside the fixture's own.
+	if coverDir := os.Getenv("GOCOVERDIR"); testing.CoverMode() != "" && coverDir != "" {
+		args = append(args, "-test.gocoverdir="+coverDir)
+	}
+	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = append(os.Environ(), "PW_WATCHER_CHILD_USERNS_MOUNT="+mountPoint)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:                 unix.CLONE_NEWUSER,

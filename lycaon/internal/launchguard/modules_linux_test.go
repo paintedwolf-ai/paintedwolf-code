@@ -399,3 +399,130 @@ func canMapExecutable(path string) error {
 	}
 	return unix.Munmap(region)
 }
+
+func TestReopenImageReturnsTheRetainedSelectionInode(t *testing.T) {
+	root := t.TempDir()
+	image := filepath.Join(root, "bin/painted-wolf-code")
+	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(image, []byte("desktop"), 0o755); err != nil {
+		t.Fatalf("write desktop image: %v", err)
+	}
+	selected, err := os.Open(image)
+	if err != nil {
+		t.Fatalf("open selected image: %v", err)
+	}
+	defer func() { _ = selected.Close() }()
+	reopened, err := reopenImage(GenerationPolicy{LogicalInstallRoot: root}, selected)
+	if err != nil {
+		t.Fatalf("reopenImage: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	var want, got unix.Stat_t
+	if err := unix.Fstat(int(selected.Fd()), &want); err != nil {
+		t.Fatalf("fstat selected image: %v", err)
+	}
+	if err := unix.Fstat(int(reopened.Fd()), &got); err != nil {
+		t.Fatalf("fstat reopened image: %v", err)
+	}
+	if got.Dev != want.Dev || got.Ino != want.Ino {
+		t.Fatalf("reopened image = %d:%d, want the selected inode %d:%d", got.Dev, got.Ino, want.Dev, want.Ino)
+	}
+}
+
+func TestAllowedModuleMountPointsFollowTheDesktopImageInterpreter(t *testing.T) {
+	root := t.TempDir()
+	image := filepath.Join(root, "bin/painted-wolf-code")
+	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	copyTestExecutable(t, image)
+	desktop, err := os.Open(image)
+	if err != nil {
+		t.Fatalf("open desktop image: %v", err)
+	}
+	defer func() { _ = desktop.Close() }()
+	interpreter, err := programInterpreter(desktop)
+	if err != nil {
+		t.Fatalf("programInterpreter: %v", err)
+	}
+	policy := GenerationPolicy{
+		LogicalInstallRoot: root,
+		LibraryRoots:       []string{"/usr/lib", "/usr/lib64"},
+		SystemExecutables:  []string{"/usr/libexec/webkit2gtk-4.1"},
+	}
+	got, err := allowedModuleMountPoints(policy)
+	if err != nil {
+		t.Fatalf("allowedModuleMountPoints: %v", err)
+	}
+	if want := moduleRoots(policy, interpreter); !slices.Equal(got, want) {
+		t.Fatalf("allowedModuleMountPoints = %v, want %v", got, want)
+	}
+}
+
+func copyTestExecutable(t *testing.T, destination string) {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("test executable: %v", err)
+	}
+	source, err := os.Open(executable)
+	if err != nil {
+		t.Fatalf("open test executable: %v", err)
+	}
+	defer func() { _ = source.Close() }()
+	target, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("create %s: %v", destination, err)
+	}
+	if _, err := io.Copy(target, source); err != nil {
+		_ = target.Close()
+		t.Fatalf("copy test executable: %v", err)
+	}
+	if err := target.Close(); err != nil {
+		t.Fatalf("close %s: %v", destination, err)
+	}
+}
+
+// The watcher arms its baseline from the mount table it is given, reports
+// readiness once, and ends when the last writer of its lifetime pipe closes.
+// With the logical installation root at "/" every mount is exempt, so the
+// test's own mount namespace is left untouched.
+func TestWatchModuleMountsArmsItsBaselineAndEndsWithItsLifetime(t *testing.T) {
+	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+	if err != nil {
+		t.Fatalf("open mountinfo: %v", err)
+	}
+	defer func() { _ = mountinfo.Close() }()
+	var lifetime, ready [2]int
+	if err := unix.Pipe2(lifetime[:], unix.O_CLOEXEC); err != nil {
+		t.Fatalf("lifetime pipe: %v", err)
+	}
+	defer func() { _ = unix.Close(lifetime[0]) }()
+	// The watcher closes the ready write end itself once its baseline is armed.
+	if err := unix.Pipe2(ready[:], unix.O_CLOEXEC); err != nil {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("ready pipe: %v", err)
+	}
+	defer func() { _ = unix.Close(ready[0]) }()
+	done := make(chan error, 1)
+	go func() {
+		done <- watchModuleMounts(int(mountinfo.Fd()), lifetime[0], ready[1], "/", nil)
+	}()
+	var armed [1]byte
+	if n, err := unix.Read(ready[0], armed[:]); err != nil || n != 1 || armed[0] != 1 {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("watcher readiness = %v (%d bytes, %v), want the single byte 1", armed, n, err)
+	}
+	if n, err := unix.Read(ready[0], armed[:]); err != nil || n != 0 {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("ready pipe after arming = %d bytes, %v; want end of file", n, err)
+	}
+	if err := unix.Close(lifetime[1]); err != nil {
+		t.Fatalf("close lifetime writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("watchModuleMounts after its lifetime ended: %v", err)
+	}
+}
