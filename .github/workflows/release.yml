@@ -36,7 +36,7 @@ env:
 jobs:
   replay-bundle-upgrade:
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.rehearsal_run_id != '' }}
-    needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]
+    needs: [ship-gates, bundle-upgrade, publish-github-release]
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
@@ -559,14 +559,6 @@ jobs:
           security delete-keychain "${RUNNER_TEMP}/app-signing.keychain-db" 2>/dev/null || true
           rm -f "${RUNNER_TEMP}/AuthKey.p8"
 
-  # Candidate builds share the independent, non-publishing workflow.
-  linux-candidates:
-    needs: [classify, ship-gates, aggregate-release]
-    if: ${{ !cancelled() && needs.classify.result == 'success' }}
-    uses: ./.github/workflows/linux-candidates.yml
-    with:
-      source_sha: ${{ needs.classify.outputs.source_sha }}
-
   aggregate-release:
     needs: [classify, build-release]
     runs-on: ubuntu-latest
@@ -670,6 +662,24 @@ jobs:
           PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories assemble --family native \
             --artifacts release-artifacts --version "${VERSION}" --source-commit "${SOURCE_SHA}" \
             --channel "${CHANNEL}" --output "${RUNNER_TEMP}/linux-native"
+      - name: Build and admit repository setup packages
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_repository_setup \
+            --generations "${RUNNER_TEMP}/linux-native" --artifacts release-artifacts \
+            --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
+            --base-url "${DOWNLOAD_BASE_URL}/linux" --output "${RUNNER_TEMP}/linux-setup"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-repository-setup
+          path: ${{ runner.temp }}/linux-setup/*
+          if-no-files-found: error
+          retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-repositories-native
@@ -855,6 +865,11 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: linux-repository-setup
+          path: release-artifacts
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
           name: release-metadata
           path: release-metadata
 
@@ -884,7 +899,7 @@ jobs:
             bash scripts/release-r2-immutable-put.sh --key "$1" --file "$2" \
               --content-type "${3:-application/octet-stream}"
           }
-          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+          for artifact in release-artifacts/*; do
             put "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
           done
           put "updates/releases/${VERSION}.json" release-metadata/latest.json application/json
@@ -920,7 +935,7 @@ jobs:
             echo "error: public object did not converge: ${key}" >&2
             return 1
           }
-          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+          for artifact in release-artifacts/*; do
             verify_public "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
           done
           verify_public "updates/releases/${VERSION}.json" release-metadata/latest.json
@@ -996,7 +1011,7 @@ jobs:
       version: ${{ needs.classify.outputs.version }}
       channel: ${{ needs.classify.outputs.channel }}
 
-  # Follows the Linux activation so publication holds one runner beside the candidate build.
+  # Follows Linux repository activation before announcing the release.
   update-cask:
     needs: [classify, publish-immutable, publish-linux-repositories]
     runs-on: ubuntu-latest
@@ -1130,6 +1145,11 @@ jobs:
           name: release-public-artifacts
           path: release-artifacts
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repository-setup
+          path: release-artifacts
+
       - name: Publish trailing GitHub mirror
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1153,7 +1173,7 @@ jobs:
               diff -u "${RUNNER_TEMP}/expected-assets" "${RUNNER_TEMP}/actual-assets" >&2 || true
               exit 1
             }
-            for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+            for artifact in release-artifacts/*; do
               name="$(basename "${artifact}")"
               [[ -f "${existing}/${name}" ]] && cmp -s "${artifact}" "${existing}/${name}" || {
                 echo "error: existing GitHub mirror differs at ${name}" >&2
@@ -1172,6 +1192,6 @@ jobs:
             else
               flags+=(--latest)
             fi
-            gh release create "v${VERSION}" release-artifacts/painted-wolf-code_v${VERSION}_* \
+            gh release create "v${VERSION}" release-artifacts/* \
               "${flags[@]}" --title "Painted Wolf Code v${VERSION}" --notes-file "${NOTES}"
           fi

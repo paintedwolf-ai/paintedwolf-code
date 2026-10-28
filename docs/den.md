@@ -28,8 +28,9 @@ The Linux release uses the same host contracts and client stores. An OS adapter
 owns native effects and reports capability facts; feature code must not infer
 support from a platform name or treat a successful no-op as implementation.
 The release target catalog is [`packaging/release-platforms.json`](../packaging/release-platforms.json).
-Both Linux architectures are candidates, not qualified public releases. Broad
-compatibility uses shared workflows and protocol-based native effects; a named
+Both Linux architectures are public release targets. Catalog selection does not
+establish installed or final-artifact qualification. Broad compatibility uses
+shared workflows and protocol-based native effects; a named
 adapter owns an environment-specific effect when standards or toolkit behavior
 do not preserve the required outcome.
 
@@ -42,9 +43,10 @@ implementation owns the workflow on every platform. Verification has three tiers
   runs applied confinement on amd64 and arm64. `den:webkit:atspi` checks
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
-- **Candidate:** the `linux-candidates` release job builds, stages, and audits
-  deb/rpm for both architectures without publishing. Pacman and Nix candidate
-  builds are owned by #940 and #927/#932; a deb/rpm result does not qualify them.
+- **Package source:** the independent `linux-candidates` workflow builds, stages
+  and audits DEB, RPM and pacman packages without publication authority. Regular
+  releases build both public architectures through the shared release lane; Nix
+  delivery builds the native closures. A build does not qualify installation.
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).

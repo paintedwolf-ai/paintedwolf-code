@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 import unittest
 
-from release_distribution_contract.platforms import public_updaters, validate_release_catalog
+from release_distribution_contract.platforms import package_urls, public_updaters, validate_release_catalog
+from linux_release.candidates import matrix
+from scripts.linux_release.release_repositories import public_linux
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +28,20 @@ class ReleasePlatformAdmissionTests(unittest.TestCase):
     def test_repository_catalog_has_supported_adapters_and_mac_os_updater(self):
         platforms = validate_release_catalog(json.dumps(self.repository_catalog).encode())
         self.assertEqual(set(public_updaters(platforms)), {'darwin-aarch64'})
+        self.assertEqual({key for key, row in platforms.items() if row['publication'] == 'public'},
+                         {'darwin-aarch64', 'linux-x86_64', 'linux-aarch64'})
+
+    def test_current_catalog_drives_public_downloads_and_independent_candidate_builds(self):
+        catalog = ROOT / 'packaging/release-platforms.json'
+        urls = package_urls('1.2.3', catalog)
+        expected = {'darwin-aarch64': ['dmg'], 'linux-x86_64': ['deb', 'rpm', 'pkg.tar.zst'],
+                    'linux-aarch64': ['deb', 'rpm', 'pkg.tar.zst']}
+        self.assertEqual(urls, sorted('https://downloads.paintedwolf.dev/releases/v1.2.3/'
+                         f'painted-wolf-code_v1.2.3_{platform}.{extension}'
+                         for platform, extensions in expected.items() for extension in extensions))
+        native = {row['updater_key'] for row in public_linux(catalog)}
+        self.assertEqual(native, {'linux-x86_64', 'linux-aarch64'})
+        self.assertEqual({row['updater_key'] for row in matrix(self.repository_catalog)['include']}, native)
 
     def test_candidate_state_does_not_require_linux_publication(self):
         platforms = self.validate()

@@ -136,8 +136,10 @@ class ReleaseAuthority:
         self.qualified(self.source_commit)
         return True
 
-    def check(self, manifest: dict):
-        if (manifest.get("rehearsal") is not False or manifest.get("source_commit") != self.source_commit
+    def check(self, manifest: dict, *, rehearsal: bool = False):
+        if type(rehearsal) is not bool:
+            raise ValueError("repository trust mode must be explicit")
+        if (manifest.get("rehearsal") is not rehearsal or manifest.get("source_commit") != self.source_commit
                 or manifest.get("version") != self.version or manifest.get("channel") != self.channel):
             raise ValueError("Linux repository generation differs from the selected release")
         selected = {Path(row["file"]).name: row["sha256"] for row in manifest["packages"]}
