@@ -64,6 +64,8 @@ type protectedFacts struct {
 	BrokerOutput    string                      `json:"broker_output,omitempty"`
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
+	SupervisorState string                      `json:"supervisor_state,omitempty"`
+	BrokerAgents    int                         `json:"broker_agents"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
@@ -129,6 +131,13 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	stopProbe := make(chan struct{})
 	probeErr := make(chan error, 1)
 	go probeEarlyBrokerAgent(stopProbe, probeErr)
+	// Registered before the wait below so it runs after the bootstrap has
+	// exited and its standard error is complete.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("bootstrap stderr:\n%s", stderr.String())
+		}
+	})
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
 	t.Cleanup(func() {
 		_ = stdin.Close()
@@ -161,6 +170,25 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
 	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, stderr: &stderr}
+}
+
+// processState reads the kernel's State line for pid.
+func processState(t *testing.T, pid int) string {
+	t.Helper()
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	testutil.FailErr(t, "process status", err)
+	for _, line := range strings.Split(string(raw), "\n") {
+		if state, ok := strings.CutPrefix(line, "State:"); ok {
+			return strings.TrimSpace(state)
+		}
+	}
+	t.Fatalf("no State line in /proc/%d/status", pid)
+	return ""
+}
+
+// exitedState reports a zombie or dead State line.
+func exitedState(state string) bool {
+	return strings.HasPrefix(state, "Z") || strings.HasPrefix(state, "X")
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
@@ -233,12 +261,18 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
+	// The supervisor waits on the launch from before the desktop's first
+	// broker request until the tree ends; one that exited left the desktop
+	// with a broker nobody serves.
+	if state := processState(t, launch.cmd.Process.Pid); exitedState(state) || exitedState(facts.SupervisorState) {
+		t.Fatalf("supervisor %d is %q now and was %q at the desktop's broker probe, with %d broker agents", launch.cmd.Process.Pid, state, facts.SupervisorState, facts.BrokerAgents)
+	}
 	// The broker starts programs outside the protected namespace, with the
 	// caller's ordinary authority, and ends one whose caller abandons it.
 	own, err := os.Readlink("/proc/self/ns/user")
 	testutil.FailErr(t, "own user namespace", err)
 	if facts.BrokerError != "" || facts.BrokerExit != 0 || !strings.Contains(facts.BrokerOutput, own) || !strings.Contains(facts.BrokerOutput, "NoNewPrivs:\t0") {
-		t.Fatalf("brokered program did not run in the caller's namespace without no_new_privs: %q exit %d error %q (want %s)", facts.BrokerOutput, facts.BrokerExit, facts.BrokerError, own)
+		t.Fatalf("brokered program did not run in the caller's namespace without no_new_privs: %q exit %d error %q (want %s); supervisor %q with %d broker agents at the probe", facts.BrokerOutput, facts.BrokerExit, facts.BrokerError, own, facts.SupervisorState, facts.BrokerAgents)
 	}
 	if !facts.AbandonedEnded {
 		t.Fatal("an abandoned brokered program kept running")
@@ -407,7 +441,9 @@ func assertBrokerAgentSealed(t *testing.T, pid int) {
 // to hold only the caller's identity, zero capabilities, and the expected NoNewPrivs flag.
 func assertProcessThreadCredentials(t *testing.T, pid int, wantNoNewPrivs string, minThreads int) {
 	t.Helper()
-	threads, err := verifyProcessThreadsStatus(pid, os.Getuid(), os.Getgid(), wantNoNewPrivs)
+	groups, err := unix.Getgroups()
+	testutil.FailErr(t, "caller groups", err)
+	threads, err := verifyProcessThreadsStatus(pid, os.Getuid(), os.Getgid(), groups, wantNoNewPrivs)
 	testutil.FailErr(t, "process thread credentials", err)
 	if threads < minThreads {
 		t.Fatalf("process %d checked %d threads, want at least %d", pid, threads, minThreads)

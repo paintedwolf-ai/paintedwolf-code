@@ -255,7 +255,11 @@ func runSealEntryChild(dir string) error {
 	if err := SealEntry(origin); err != nil {
 		return fmt.Errorf("SealEntry: %w", err)
 	}
-	threads, err := verifyProcessThreadsStatus(os.Getpid(), os.Getuid(), os.Getgid(), "1")
+	groups, err := unix.Getgroups()
+	if err != nil {
+		return err
+	}
+	threads, err := verifyProcessThreadsStatus(os.Getpid(), os.Getuid(), os.Getgid(), groups, "1")
 	if err != nil {
 		return fmt.Errorf("entry thread status after SealEntry: %w", err)
 	}
@@ -309,7 +313,10 @@ func runSealEntryChild(dir string) error {
 	return nil
 }
 
-func verifyProcessThreadsStatus(pid, uid, gid int, wantNoNewPrivs string) (int, error) {
+// verifyProcessThreadsStatus requires every task of pid to carry exactly the
+// given identity on each credential, the given supplementary groups, no
+// capabilities beyond the bounding set, and the given no_new_privs flag.
+func verifyProcessThreadsStatus(pid, uid, gid int, groups []int, wantNoNewPrivs string) (int, error) {
 	taskDir := fmt.Sprintf("/proc/%d/task", pid)
 	entries, err := os.ReadDir(taskDir)
 	if err != nil {
@@ -330,7 +337,7 @@ func verifyProcessThreadsStatus(pid, uid, gid int, wantNoNewPrivs string) (int, 
 		if err != nil {
 			return checked, fmt.Errorf("read %s: %w", statusPath, err)
 		}
-		if err := verifyThreadStatus(statusPath, string(status), uidStr, gidStr, wantNoNewPrivs); err != nil {
+		if err := verifyThreadStatus(statusPath, string(status), uidStr, gidStr, groups, wantNoNewPrivs); err != nil {
 			return checked, err
 		}
 		checked++
@@ -341,7 +348,7 @@ func verifyProcessThreadsStatus(pid, uid, gid int, wantNoNewPrivs string) (int, 
 	return checked, nil
 }
 
-func verifyThreadStatus(path, status, uid, gid, wantNoNewPrivs string) error {
+func verifyThreadStatus(path, status, uid, gid string, groups []int, wantNoNewPrivs string) error {
 	seen := map[string]bool{}
 	for _, line := range strings.Split(status, "\n") {
 		key, value, ok := strings.Cut(line, ":")
@@ -360,6 +367,19 @@ func verifyThreadStatus(path, status, uid, gid, wantNoNewPrivs string) error {
 			if len(fields) != 4 || slices.ContainsFunc(fields, func(f string) bool { return f != gid }) {
 				return fmt.Errorf("%s gids %v, want %s", path, fields, gid)
 			}
+		case "Groups":
+			seen[key] = true
+			got := make([]int, 0, len(fields))
+			for _, field := range fields {
+				group, err := strconv.Atoi(field)
+				if err != nil {
+					return fmt.Errorf("%s groups %v: %w", path, fields, err)
+				}
+				got = append(got, group)
+			}
+			if !slices.Equal(got, groups) {
+				return fmt.Errorf("%s groups %v, want %v", path, got, groups)
+			}
 		case "CapInh", "CapPrm", "CapEff", "CapAmb":
 			seen[key] = true
 			if strings.Trim(value, " \t0") != "" {
@@ -377,7 +397,7 @@ func verifyThreadStatus(path, status, uid, gid, wantNoNewPrivs string) error {
 			}
 		}
 	}
-	for _, required := range []string{"Uid", "Gid", "CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb", "NoNewPrivs"} {
+	for _, required := range []string{"Uid", "Gid", "Groups", "CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb", "NoNewPrivs"} {
 		if !seen[required] {
 			return fmt.Errorf("%s missing %s", path, required)
 		}

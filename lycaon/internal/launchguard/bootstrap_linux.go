@@ -197,7 +197,11 @@ func dropPrivileges(caller Identity) error {
 	for i, group := range caller.Groups {
 		groups[i] = int(group)
 	}
-	if err := unix.Setgroups(groups); err != nil {
+	// The kernel keeps supplementary groups per thread. The standard library's
+	// call reaches every thread; x/sys/unix's Setgroups is a raw call on the
+	// calling thread alone, which would leave the broker agent's other threads
+	// with the stage's empty list.
+	if err := syscall.Setgroups(groups); err != nil {
 		return err
 	}
 	if err := unix.Setresgid(int(caller.GID), int(caller.GID), int(caller.GID)); err != nil {
