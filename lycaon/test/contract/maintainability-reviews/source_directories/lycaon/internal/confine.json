@@ -1,7 +1,7 @@
 {
   "category": "source_directories",
   "artifact": "lycaon/internal/confine",
-  "kind": "package",
+  "kind": "module",
   "workstream": "linux-default-data-authority",
   "disposition": "retain",
   "reason": "Retain the 59-file shared confinement owner without adding production members. Platform adapters compile the same root and floor facts that host verdicts consume; package-store selection and first-use preparation remain together in the existing cache-root owner. Splitting that policy or adding a per-launch override would make permission facts diverge. Focused root, preparation and applied-boundary tests support this bounded retention.",
