@@ -569,7 +569,8 @@ func (s *ApprovalStore) GlobalGrants() []ApprovalGrant {
 		}
 		cloned := cloneSecretPermissionGrant(grant)
 		cloned.ExpiresAt = copySocketExpiry(grant.ExpiresAt)
-		cloned.Unavailable = cloned.Category == ApprovalCategorySocketPath && socketref.Platform().Command == socketref.NoRealization && socketref.Platform().Native == socketref.NoRealization
+		adapter, mode := socketref.Platform(), cloned.Binding.Mode()
+		cloned.Unavailable = cloned.Category == ApprovalCategorySocketPath && (s.closed || mode == socketref.NoRealization || mode != adapter.Command && mode != adapter.Native)
 		if cloned.Category == ApprovalCategorySocketPath && cloned.Binding.Mode() == socketref.RetainedObject {
 			owner, live := s.socketLeases[cloned.ID]
 			g := confine.SocketGrant{ApprovedPath: cloned.ApprovedPath, ResolvedPath: cloned.ResolvedPath, Binding: cloned.Binding}

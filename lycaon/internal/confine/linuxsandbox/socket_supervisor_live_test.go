@@ -35,7 +35,7 @@ import (
 
 func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 	for _, kind := range []int{unix.SOCK_STREAM, unix.SOCK_SEQPACKET} {
-		for _, transition := range []string{"replacement", "unlink", "restart", "cancel"} {
+		for _, transition := range []string{"replacement", "unlink", "ancestor", "symlink", "restart", "cancel"} {
 			t.Run(fmt.Sprintf("%d/%s", kind, transition), func(t *testing.T) {
 				root, err := os.MkdirTemp("/tmp", "sv-") //nolint:usetesting // Kernel socket addresses are bounded.
 				testutil.FailErr(t, "supervisor fixture", err)
@@ -43,7 +43,9 @@ func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 				workspace := filepath.Join(root, "workspace")
 				testutil.FailErr(t, "supervisor workspace", os.Mkdir(workspace, 0700))
 				t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
-				path := filepath.Join(root, "service")
+				socketDir := filepath.Join(root, "listener")
+				testutil.FailErr(t, "listener parent", os.Mkdir(socketDir, 0700))
+				path := filepath.Join(socketDir, "service")
 				network := "unix"
 				if kind == unix.SOCK_SEQPACKET {
 					network = "unixpacket"
@@ -92,13 +94,25 @@ func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 					}
 					return
 				}
-				testutil.FailErr(t, "swap final name after supervisor resolution", os.Rename(path, path+"-original"))
+				if transition == "ancestor" {
+					testutil.FailErr(t, "move listener ancestor", os.Rename(socketDir, socketDir+"-original"))
+					testutil.FailErr(t, "replace listener ancestor", os.Mkdir(socketDir, 0700))
+				} else {
+					testutil.FailErr(t, "swap final name after supervisor resolution", os.Rename(path, path+"-original"))
+				}
 				if transition == "unlink" {
 					testutil.FailErr(t, "unlink retained listener name", os.Remove(path+"-original"))
 				}
-				decoy, err := net.ListenUnix(network, &net.UnixAddr{Name: path, Net: network})
+				decoyPath := path
+				if transition == "symlink" {
+					decoyPath += "-decoy"
+				}
+				decoy, err := net.ListenUnix(network, &net.UnixAddr{Name: decoyPath, Net: network})
 				testutil.FailErr(t, "replacement listener", err)
 				defer decoy.Close()
+				if transition == "symlink" {
+					testutil.FailErr(t, "replace approved name with symlink", os.Symlink(decoyPath, path))
+				}
 				if transition == "restart" {
 					testutil.FailErr(t, "stop approved listener", original.Close())
 					process.resumeAndWaitResult(t, false)
