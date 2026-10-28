@@ -177,7 +177,7 @@ func operationStatus(before, after RepositoryState, code int, err error) string 
 func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
 	state := RepositoryState{Conflicts: []string{}}
 	var err error
-	state.Head, err = resolveCommit(ctx, dir, "HEAD")
+	state.Head, err = optionalObject(ctx, dir, "HEAD^{commit}")
 	if err != nil {
 		return state, err
 	}
