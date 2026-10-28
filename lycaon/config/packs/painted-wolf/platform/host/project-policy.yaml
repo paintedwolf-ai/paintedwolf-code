@@ -31,6 +31,7 @@ deny_path_prefixes:
   - ~/.docker/trust
   - ~/.password-store
   - ~/.local/share/keyrings
+  - ~/.local/share/kwalletd
   # Catalogued credential stores the pack names.
   - ~/.config/containers/auth.json
   - ~/.oci

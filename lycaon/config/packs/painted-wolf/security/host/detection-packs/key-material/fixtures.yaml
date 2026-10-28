@@ -38,7 +38,11 @@ fixtures:
     target_files: ['~/.password-store/work/deploy.gpg']
   - command: secret-tool store --label=api service api
     target_files: ['~/.local/share/keyrings/login.keyring']
+  - command: cp wallet.kwl ~/.local/share/kwalletd/kdewallet.kwl
+    target_files: ['~/.local/share/kwalletd/kdewallet.kwl']
   negative:
+  - command: cp wallet.kwl ~/.local/share/kwalletd-backup/kdewallet.kwl
+    target_files: ['~/.local/share/kwalletd-backup/kdewallet.kwl']
   - command: pass show work/deploy > notes.txt
     target_files: ['~/code/app/notes.txt']
   - command: pass insert work/deploy --help
