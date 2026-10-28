@@ -94,7 +94,7 @@ func applyModuleView(policy GenerationPolicy, interpreter string) error {
 // the administrator named is trusted, not whatever is later mounted inside it.
 func allowModules(path string) error {
 	directory := true
-	if info, err := os.Lstat(path); err == nil {
+	if info, err := os.Lstat(path); err == nil { // #nosec G703 -- an administrator-declared module root; openRootControlled verifies its ownership before anything is mounted
 		directory = info.IsDir()
 	}
 	object, err := openRootControlled(path, directory)
@@ -167,8 +167,8 @@ func watchModuleMounts(mountinfoFD, lifetimeFD, readyFD int, installRoot string,
 		_ = unix.Close(readyFD)
 	}
 	fds := []unix.PollFd{
-		{Fd: int32(mountinfoFD), Events: unix.POLLPRI | unix.POLLERR},
-		{Fd: int32(lifetimeFD), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR},
+		{Fd: int32(mountinfoFD), Events: unix.POLLPRI | unix.POLLERR},              // #nosec G115 -- open descriptors are non-negative and below the process limit
+		{Fd: int32(lifetimeFD), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, // #nosec G115 -- open descriptors are non-negative and below the process limit
 	}
 	for {
 		_, err := unix.Poll(fds, -1)

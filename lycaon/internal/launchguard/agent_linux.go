@@ -238,6 +238,7 @@ func sealModuleWatcher(caller Identity) error {
 	}
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
 	capabilities := [2]unix.CapUserData{{Permitted: watcherCapabilityMask, Effective: watcherCapabilityMask}}
+	// #nosec G103 -- both pointers name fixed-layout capability structures copied synchronously by the kernel.
 	if _, _, errno := syscall.AllThreadsSyscall(
 		unix.SYS_CAPSET,
 		uintptr(unsafe.Pointer(&header)),

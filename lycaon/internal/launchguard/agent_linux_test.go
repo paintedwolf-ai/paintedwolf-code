@@ -155,8 +155,11 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 		return err
 	}
 	userNS, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/user", watcherPID))
-	if err != nil || userNS == initUser {
-		return fmt.Errorf("watcher user namespace = %q (%v), must not be initial %q", userNS, err, initUser)
+	if err != nil {
+		return fmt.Errorf("watcher user namespace: %w", err)
+	}
+	if userNS == initUser {
+		return fmt.Errorf("watcher user namespace = %q, must not be initial", userNS)
 	}
 	info, err := os.Stat(fmt.Sprintf("/proc/%d/fd", watcherPID))
 	if err != nil {
@@ -230,11 +233,19 @@ func verifyMountNamespaceOwner(desktopPID, watcherPID int, initUser string) erro
 		return fmt.Errorf("NS_GET_USERNS on desktop mnt namespace: %w", err)
 	}
 	defer func() { _ = unix.Close(ownerUserFD) }()
-	if kind, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_NSTYPE); err != nil || kind != unix.CLONE_NEWUSER {
-		return fmt.Errorf("M_view owning namespace type = %#x (%v), want CLONE_NEWUSER", kind, err)
+	kind, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_NSTYPE)
+	if err != nil {
+		return fmt.Errorf("NS_GET_NSTYPE on the M_view owner: %w", err)
 	}
-	if ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID); err != nil || ownerUID != 0 {
-		return fmt.Errorf("M_view owning user namespace owner UID = %d (%v), want 0", ownerUID, err)
+	if kind != unix.CLONE_NEWUSER {
+		return fmt.Errorf("M_view owning namespace type = %#x, want CLONE_NEWUSER", kind)
+	}
+	ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID)
+	if err != nil {
+		return fmt.Errorf("NS_GET_OWNER_UID on the M_view owner: %w", err)
+	}
+	if ownerUID != 0 {
+		return fmt.Errorf("M_view owning user namespace owner UID = %d, want 0", ownerUID)
 	}
 	parentFD, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_PARENT)
 	if err != nil {

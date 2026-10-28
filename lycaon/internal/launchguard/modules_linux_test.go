@@ -322,7 +322,7 @@ func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func
 		_ = watchR.Close()
 		return nil, err
 	}
-	return func() { _ = watchW.Close(); _ = <-done; _ = watchR.Close() }, nil
+	return func() { _ = watchW.Close(); <-done; _ = watchR.Close() }, nil
 }
 
 func prepareLateMountPoint(baseDir string) (dir, underlying, lateFile string, err error) {
