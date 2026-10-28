@@ -41,8 +41,10 @@ type Facts struct {
 	BrokerPeerPID   int                         `json:"broker_peer_pid"`
 	BrokerPeerUID   int                         `json:"broker_peer_uid"`
 	BrokerType      int                         `json:"broker_type"`
+	ProtectedLaunch string                      `json:"protected_launch"`
+	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
@@ -73,6 +75,10 @@ func main() {
 		runEngineVault(os.Args[2])
 		return
 	}
+	// Consume the same sealed startup frame the desktop claims before threads.
+	frame := os.NewFile(4, "selected-generation")
+	frameRaw, _ := io.ReadAll(io.NewSectionReader(frame, 0, 128<<10))
+	_ = frame.Close()
 	desktopBroker = os.NewFile(6, "broker")
 	ready := make(chan struct{}, 4)
 	for range 4 {
@@ -86,6 +92,8 @@ func main() {
 		<-ready
 	}
 	var facts Facts
+	facts.GenerationFrame = frameRaw
+	facts.ProtectedLaunch = os.Getenv("PW_PROTECTED_LAUNCH")
 	facts.PID = os.Getpid()
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()
 	facts.GIDs[0], facts.GIDs[1], facts.GIDs[2] = unix.Getresgid()
@@ -108,10 +116,15 @@ func main() {
 	facts.BrokerType, _ = unix.GetsockoptInt(6, unix.SOL_SOCKET, unix.SO_TYPE)
 	var lifetime unix.Stat_t
 	facts.LifetimeRegular = unix.Fstat(7, &lifetime) == nil && lifetime.Mode&unix.S_IFMT == unix.S_IFREG
+	// Descriptors beyond the handed-off set, named by their /proc link. The Go
+	// runtime opens its poller, wake eventfd and cgroup CPU limit file at startup
+	// on the lowest free numbers, which reach 8 once the frame holds 4.
 	for fd := 8; fd < 64; fd++ {
-		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil {
-			facts.OpenBeyond = append(facts.OpenBeyond, fd)
+		target, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(fd))
+		if err != nil || runtimeDescriptor(target) {
+			continue
 		}
+		facts.OpenBeyond = append(facts.OpenBeyond, strconv.Itoa(fd)+" "+target)
 	}
 	install := filepath.Dir(filepath.Dir(facts.Executable))
 	facts.ExecOutside = startName("/bin/true")
@@ -280,4 +293,9 @@ func errnoName(err error) string {
 	default:
 		return err.Error()
 	}
+}
+
+// runtimeDescriptor reports a descriptor the Go runtime holds for itself.
+func runtimeDescriptor(target string) bool {
+	return target == "anon_inode:[eventpoll]" || target == "anon_inode:[eventfd]" || strings.HasPrefix(target, "/sys/fs/cgroup/")
 }

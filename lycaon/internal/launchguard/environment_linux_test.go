@@ -17,7 +17,7 @@ func TestDesktopEnvironmentKeepsOnlySessionFacts(t *testing.T) {
 		"HOME=" + home, "PATH=/usr/bin", "WAYLAND_DISPLAY=wayland-0", "LC_TIME=C", "LANG=C.UTF-8",
 		"PATH=/attacker/bin", "LD_PRELOAD=/tmp/x.so", "GTK_MODULES=x", "GTK_PATH=/tmp", "GIO_EXTRA_MODULES=/tmp",
 		"GDK_PIXBUF_MODULE_FILE=/tmp/x", "LYCAON_SANDBOX=off", "LYCAON_BYPASS_APPROVALS=1", "SSL_CERT_FILE=/tmp/ca",
-		"WEBKIT_INJECTED_BUNDLE_PATH=/tmp", "PYTHONPATH=/tmp", "malformed", "=empty", "DISPLAY=:0\x00x",
+		"PW_PROTECTED_LAUNCH=1", "PW_PROTECTED_LAUNCH=forged", "WEBKIT_INJECTED_BUNDLE_PATH=/tmp", "PYTHONPATH=/tmp", "malformed", "=empty", "DISPLAY=:0\x00x",
 	}, uint32(os.Getuid()))
 	want := []string{"HOME=" + home, "PATH=/usr/bin", "WAYLAND_DISPLAY=wayland-0", "LC_TIME=C", "LANG=C.UTF-8"}
 	if !slices.Equal(got, want) {

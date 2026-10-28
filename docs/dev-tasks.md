@@ -664,6 +664,46 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
 | `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
+### Protected Linux desktop component
+
+`./task test:confine:linux -- launch` tests the real launcher with its reporting
+fixture desktop. The optional `launch-desktop` selection consumes a separately
+built **actual Den** and engine payload; it does not build Rust inside the Go
+leg or add a required CI gate. Run both selections for the transport and runtime
+contracts. Submit through `./task --background` and consume its sole `--wait`
+result as described below.
+
+Prepare Den through `./task den:bundle` on the exact committed source, retaining
+its background job metadata, completed result and full build output. Record the
+Git tree before and after preparation: both must equal the runtime check's source
+tree. Extract the resulting package without registering it. Use its owned installation
+directory, including desktop, engine helpers, `engine-root` and the complete
+native `manifest.json`, as the component directory. This is
+component evidence, not a published package or release qualification. Preparation
+is passthrough: its source record does not become a captured verification receipt.
+
+Set `PW_LAUNCH_DESKTOP_ARTIFACT` to an absolute JSON evidence file containing:
+`version` (1), `root` (the component directory), `source_commit`, `source_tree`,
+`before_tree`, `after_tree`, `manifest_sha256`, `preparation_job` and
+`preparation_result` (absolute paths to the retained background job files),
+`preparation_job_sha256`, `preparation_result_sha256`, and `system_executables`
+(the root-controlled system helper paths the fixture policy needs, including its
+WebKit helpers). Hash the exact bytes of each referenced evidence file. The
+manifest must cover the actual desktop, `pw`, `pw-logs`, `pw-vault-identity` and
+complete engine resources. The fixture retains those bytes and substitutes only
+the entry and bootstrap built from the runtime check's captured source, recording
+the resulting generation's own manifest and logical prefix.
+
+The selection refuses missing or inconsistent input rather than skipping. It
+needs passwordless `sudo`, Xvfb, the session bus, GTK/WebKit runtime dependencies,
+`ip` and `curl` on the native lane. Its root fixture creates private mount and
+network namespaces, an empty package database, a private display and session bus,
+a private identity service, and a fresh home. It admits only selected payload
+bytes, requires actual Den to start the selected engine and serve health, checks
+their kernel image/parent/namespace identities, and tears down its owned processes.
+No host package registration, desktop session or existing application is changed;
+external services cannot be reached from the private network namespace.
+
 ### OpenAPI release review
 
 `./task openapi:diff` compares the generated `docs/openapi.yaml` with
