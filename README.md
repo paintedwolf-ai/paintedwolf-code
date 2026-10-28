@@ -9,7 +9,7 @@
 - **Security by construction** — attached roots define read/write scope, egress is mediated, approvals are requested when an effect needs authority. See [security](docs/security.md).
 - **Extensible** — first-party Go tools, confined MCP providers, detection packs, and extension packs; composition is data, not runtime branches. See [extend](docs/extend.md).
 
-The public release target is **macOS 14 (Sonoma) or later on Apple Silicon**. Each release run also builds candidate Linux packages, a `.deb` and an `.rpm` for **x86_64 and aarch64**, retained as workflow artifacts; they are not published, linked, or offered through the updater. Windows x86_64 is a candidate catalog entry that release runs do not build. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
+The public release targets are **macOS 14 (Sonoma) or later on Apple Silicon** and **Linux x86_64 and aarch64** as signed `.deb`, `.rpm` and pacman packages with apt, dnf and pacman repositories; Linux installs update through the package manager, not the in-app updater. Windows x86_64 is a candidate catalog entry that release runs do not build. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
 
 ## Features
 
@@ -23,9 +23,9 @@ The public release target is **macOS 14 (Sonoma) or later on Apple Silicon**. Ea
 
 ## Getting started
 
-Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; Linux candidates are built per release but not linked or offered through the updater.
+Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; Linux packages are published with each release and update through the distribution's package manager.
 
-Linux packages (`.deb`, `.rpm` and pacman) are release candidates: no package repository is published yet. A package installed from a candidate file receives no updates through the package manager until its signed repository is configured. The app never installs anything itself. It reports a newer release from its channel, and says whether the configured package source offers that release, rather than printing an upgrade command. Supported distribution releases are listed in the [Linux capability contract](docs/den.md#linux-capability-contract).
+Linux packages (`.deb`, `.rpm` and pacman) are signed and published with each release, together with apt, dnf and pacman repositories. A package installed from a downloaded file receives no updates through the package manager until its signed repository is configured. The app never installs anything itself. It reports a newer release from its channel, and says whether the configured package source offers that release, rather than printing an upgrade command. Supported distribution releases are listed in the [Linux capability contract](docs/den.md#linux-capability-contract).
 
 The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.39+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
 

@@ -42,9 +42,10 @@ implementation owns the workflow on every platform. Verification has three tiers
   runs applied confinement on amd64 and arm64. `den:webkit:atspi` checks
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
-- **Candidate:** the `linux-candidates` release job builds, stages, and audits
-  deb/rpm for both architectures without publishing. Pacman and Nix candidate
-  builds are owned by #940 and #927/#932; a deb/rpm result does not qualify them.
+- **Candidate:** `linux-candidate-requests.yml` builds, stages, and audits the
+  deb/rpm/pacman packages for both architectures on packaging pull requests and
+  weekly, without signing or publishing. Release runs build Linux once, signed,
+  in `build-release`. Nix builds are qualified separately (#927/#932).
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).
@@ -76,7 +77,7 @@ implementation owns the workflow on every platform. Verification has three tiers
 | Launch from the desktop and the command line | The package installs `/usr/bin/pw`, `/usr/bin/pw-logs`, and `dev.paintedwolf.code.desktop`; a second launch activates the running instance ([Linux packages](dev-tasks.md#linux-packages)) | Candidate: staging audit. Installed: KDE and window-manager launchers, upgrade while running, Unicode and encoded-URI arguments | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
 | Start the packaged engine and detect unsupported hosts | Den `src-tauri/src/sidecar/`; host `internal/preflight` compares the kernel and glibc with `internal/platformfloor/linux_floor.txt`; package dependencies carry the WebKitGTK and GTK floors; disk availability uses `statfs` | CI: `test:full`. Candidate: staging audit. Installed: missing libraries, low space, startup failure and recovery on each family's floor release | [#731](https://github.com/paintedwolf-ai/paintedwolf-code/issues/731), [#51](https://github.com/paintedwolf-ai/paintedwolf-code/issues/51) |
 | Run local decision, scanning, and document helpers | Host `internal/decide`, `internal/scan`, `internal/documentcore`; pinned native executables for both architectures, including OpenGrep | CI: `test:full`, `test:confine:linux`. Candidate: arm64 staging. Installed: scans and documents on both architectures; performance against declared thresholds | [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49), [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
-| Install and consume a complete release | `packaging/release-platforms.json`, the package manifest, signed packages and repositories, and the publication scripts | Candidate: `linux-candidates`. Installed: install, upgrade, removal, and downgrade refusal on every family and architecture; download authenticity | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758), [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759), [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
+| Install and consume a complete release | `packaging/release-platforms.json`, the package manifest, signed packages and repositories, and the publication scripts | Candidate: `linux-candidate-requests`. Release: the shared `release.yml` lane. Installed: install, upgrade, removal, and downgrade refusal on every family and architecture; download authenticity | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758), [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759), [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
 
 The Go session transport lives in `internal/linuxbus`; native feature owners select protocol names and authorize operations. Discovery reports the current unique owner or an installed activation contract without starting the service. Power inhibition can request an idle activatable provider, and its actual call still determines whether inhibition succeeds. Permission denial, unsupported operations, service disconnection, and cancellation retain structured causes. Tauri adapters own their separate connections and shell authority; shared protocol discovery does not grant an effect in either process.
 

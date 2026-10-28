@@ -57,14 +57,15 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		},
 		// Linux installs through the package manager: one .deb, one .rpm, and one
 		// native pacman package per architecture, and no Tauri updater artifact.
+		// Both architectures are public together; see docs/dev-tasks.md "Linux in the release lane".
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
-			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
+			GOOS: "linux", GOARCH: "amd64", Publication: "public",
 			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
-			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
+			GOOS: "linux", GOARCH: "arm64", Publication: "public",
 			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
@@ -103,13 +104,12 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Release and independent candidate runs share one non-publishing build path.
-	call := extractYAMLJob(workflow, "linux-candidates")
-	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
-		if !strings.Contains(call, needle) {
-			t.Fatalf("release candidate caller is missing %q", needle)
-		}
+	// Public Linux builds once, signed, in build-release; the release run never
+	// rebuilds the same source as an unsigned candidate.
+	if strings.Contains(workflow, "linux-candidates") {
+		t.Fatal("release workflow still calls the non-publishing Linux candidate build")
 	}
+	// Independent candidate requests keep their own non-publishing build path.
 	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
 		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
