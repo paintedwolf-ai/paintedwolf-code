@@ -47,6 +47,9 @@ func wakeEndpoints(waiters map[*rendezvousWaiter]bool) {
 }
 
 func (p *pipeRendezvous) wait(ctx context.Context, waiter *rendezvousWaiter, waiters map[*rendezvousWaiter]bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if waiter.unblock == nil {
 		var err error
 		waiter.unblock, err = waiter.activity.Block(ctx, WaitState{})
