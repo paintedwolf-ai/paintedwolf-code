@@ -52,7 +52,7 @@ func TestAsyncPipelineSettlesAfterEscapedOutputHolder(t *testing.T) {
 	t.Cleanup(run.Kill)
 	select {
 	case <-run.Done():
-	case <-time.After(PipelineWaitDelay + 10*time.Second):
+	case <-t.Context().Done():
 		t.Fatal("leader exited but async pipeline did not settle")
 	}
 	result, err := run.Wait()

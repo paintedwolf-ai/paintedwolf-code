@@ -13,7 +13,7 @@ from verification_tests.distribution.installed.polkit.test_installed_polkit_stag
 
 class RootProxyTests(unittest.TestCase):
     def test_root_process_uses_fixed_empty_environment_and_isolated_no_bytecode_python(self):
-        from scripts.linux_release import installed_campaign
+        from scripts.linux_release.campaign import guests as installed_campaign
         selected = {'host': '127.0.0.1', 'port': 2222, 'user': 'qa'}
         actor = Mock(nonce=EXECUTION['execution_nonce'], value={'vm_id': 'owned', 'ssh': selected})
         process = Mock(pid=901)

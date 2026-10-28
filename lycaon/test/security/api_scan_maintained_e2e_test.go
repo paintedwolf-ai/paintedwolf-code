@@ -38,7 +38,7 @@ func TestAPIScanMaintainedSASTE2E(t *testing.T) {
 					filepath.Join(project, name), []byte(source), 0o600))
 			}
 			created := enqueueCodeScan(t, h.Server, project, []wire.ScanCategory{wire.ScanCategorySAST})
-			got := waitScanComplete(t, h.Server, created.ProjectID, created.ID, bundledScannerWaitBudget)
+			got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 			assertMaintainedScanResult(t, fixture, got)
 			assertMaintainedExecutionIdentity(t, manifest, binary, got)
 		})

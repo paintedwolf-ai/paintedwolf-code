@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
@@ -57,7 +56,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 	}
 
 	// Recovery is exercised only after a confirmed overflow.
-	delivered := drainUntilClosed(t, stream, 10*time.Second)
+	delivered := drainUntilClosed(t, stream)
 	if delivered >= overflowSessionMessages {
 		t.Fatalf("subscriber received all %d appends without being dropped — "+
 			"buffer size or publish path changed; this test needs a real overflow",
@@ -111,16 +110,24 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 				Message:   after,
 			}))
 
-	select {
-	case env, ok := <-resub:
-		if !ok {
-			t.Fatal("reconnected subscriber closed immediately")
+	for {
+		select {
+		case env, ok := <-resub:
+			if !ok {
+				t.Fatal("reconnected subscriber closed before the published message")
+			}
+			// Project source-watch events may arrive before the message.
+			if env.Topic != wire.EventTopicMessage {
+				continue
+			}
+			var delivered wire.MessageEvent
+			testutil.FailErr(t, "decode reconnected message", json.Unmarshal(env.Data, &delivered))
+			if delivered.SessionID == sess.ID && delivered.Message.ID == after.ID {
+				return
+			}
+		case <-t.Context().Done():
+			t.Fatal("reconnected subscriber did not receive the published message")
 		}
-		if env.Topic != wire.EventTopicMessage {
-			t.Fatalf("reconnected subscriber topic = %q want message", env.Topic)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("reconnected subscriber received nothing — the drop poisoned the project stream")
 	}
 }
 
@@ -157,11 +164,9 @@ func pageWholeTranscript(t *testing.T, srv *api.Server, sessionID string) []wire
 }
 
 // Buffered events remain readable after the hub closes a dropped subscriber.
-func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.Duration) int {
+func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope) int {
 	t.Helper()
 	count := 0
-	timeout = testutil.Timeout(timeout)
-	deadline := time.After(timeout)
 	for {
 		select {
 		case _, ok := <-ch:
@@ -169,9 +174,8 @@ func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.D
 				return count
 			}
 			count++
-		case <-deadline:
-			t.Fatalf("subscriber still open after %s and %d events — expected the hub to drop it",
-				timeout, count)
+		case <-t.Context().Done():
+			t.Fatalf("subscriber still open after %d events — expected the hub to drop it", count)
 			return count
 		}
 	}

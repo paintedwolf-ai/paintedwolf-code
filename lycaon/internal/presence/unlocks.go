@@ -6,15 +6,7 @@ import (
 	"time"
 )
 
-const (
-	// UnlockIdle closes an unlock when no held value has been used for this long.
-	UnlockIdle = 15 * time.Minute
-	// UnlockCeiling closes an unlock this long after presence opened it,
-	// however busy the chat is.
-	UnlockCeiling = 4 * time.Hour
-
-	sweepInterval = 30 * time.Second
-)
+const sweepInterval = 30 * time.Second
 
 // EndReason says why an unlock ended.
 type EndReason string
@@ -24,8 +16,10 @@ const (
 	EndCeiling      EndReason = "ceiling"
 	EndScreenLocked EndReason = "screen_locked"
 	EndSleep        EndReason = "sleep"
-	EndAppQuit      EndReason = "app_quit"
-	EndManual       EndReason = "manual"
+	// EndAway: the person's input stayed idle for the desktop's step-away period.
+	EndAway    EndReason = "away"
+	EndAppQuit EndReason = "app_quit"
+	EndManual  EndReason = "manual"
 	// EndRenewed: presence unlocked the same chat afresh.
 	EndRenewed EndReason = "renewed"
 	// EndRestart: the engine stopped while the unlock was open.
@@ -35,7 +29,7 @@ const (
 // IsLockReason reports whether reason names a lock a client may request.
 func IsLockReason(reason EndReason) bool {
 	switch reason {
-	case EndScreenLocked, EndSleep, EndAppQuit, EndManual:
+	case EndScreenLocked, EndSleep, EndAway, EndAppQuit, EndManual:
 		return true
 	case EndIdle, EndCeiling, EndRenewed, EndRestart:
 		return false

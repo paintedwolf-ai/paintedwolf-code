@@ -10,11 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
-// WriteRootsForProject returns the compiled write-root union.
-func WriteRootsForProject(projectID string, projectRoots []string) []string {
-	return WriteRootsForBoundary(projectID, projectRoots, nil, "")
-}
-
 // PathWithinWriteRoots matches existing and not-yet-created paths.
 func PathWithinWriteRoots(path string, writeRoots []string) bool {
 	p := fspath.CanonicalPath(path)
@@ -66,7 +61,7 @@ func isWindowsAbsPath(path string) bool {
 
 // WriteRootsForBoundary is the write profile for one confinement: attached
 // roots, session scratch, OS caches, durable grants, and per-action granted overlays.
-func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) []string {
+func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
 	roots := []string{}
 	add := func(p string) {
 		if strings.TrimSpace(p) == "" {
@@ -94,13 +89,11 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	if sessionScratchRoot != "" {
 		add(sessionScratchRoot)
 	}
-	add("/tmp")
-	add("/private/tmp")
-	add("/var/tmp")
-	add("/private/var/tmp")
-	add(os.TempDir())
-	for _, r := range standardCacheDataRoots() {
-		add(r)
+	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
+	for _, root := range standard {
+		if !writeRootContainsStateTree(fspath.CanonicalPath(root)) {
+			add(root)
+		}
 	}
 	for _, r := range granted {
 		add(r)
@@ -120,13 +113,8 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 		out = append(out, r)
 	}
 	sort.Strings(out)
-	return out
-}
-
-func validatedWriteRoots(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
-	roots := WriteRootsForBoundary(projectID, projectRoots, granted, sessionScratchRoot)
-	if err := validateEffectiveWriteRoots(roots); err != nil {
+	if err := validateEffectiveWriteRoots(out); err != nil {
 		return nil, err
 	}
-	return roots, nil
+	return out, nil
 }

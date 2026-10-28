@@ -53,7 +53,7 @@ func (s *HeldValues) HandleLockVault(w http.ResponseWriter, r *http.Request) {
 	}
 	reason := presence.EndReason(body.Reason)
 	if !presence.IsLockReason(reason) || reason == presence.EndManual {
-		s.responses.InvalidField(w, "reason", "must be screen_locked, sleep, or app_quit")
+		s.responses.InvalidField(w, "reason", "must be screen_locked, sleep, away, or app_quit")
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.LockVaultResponse{Locked: s.Vault.LockAll(reason)})

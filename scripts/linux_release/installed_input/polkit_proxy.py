@@ -30,7 +30,7 @@ class Proxy:
         self.process = None
         self.selector = selectors.DefaultSelector()
         try:
-            from ..installed_campaign import command
+            from ..campaign.guests import command
             arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
                          'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', OBSERVER_BOOTSTRAP,
                          self.execution['driver_tree']]

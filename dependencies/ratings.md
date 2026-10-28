@@ -21,5 +21,5 @@ because the migration is hard.
   runtimes, as with Yrs in Go-hosted WASM paired with Yjs in Den. Platform signing,
   per-platform hashes, and size budgets also count here.
 * **Moderate:** API deprecations, regenerated output that needs review, or verification that no
-  automated gate fully covers, such as Seatbelt confinement or the Windows shell.
+  automated gate fully covers, such as Seatbelt or Linux confinement (`./task test:confine:linux`) or the Windows shell.
 * **Low:** A semver-compatible bump that `./task check-fast` or `./task check` fully verifies.

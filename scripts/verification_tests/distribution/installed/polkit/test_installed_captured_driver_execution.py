@@ -99,7 +99,7 @@ class AccountCaptureCommandTests(unittest.TestCase):
         ready={'disabled':True,'account':ACCOUNT,'shadow_locked':True,
                'credential_state':'locked','sessions_terminated':False}
         with patch.object(polkit_account,'bounded_command',return_value=(0,json.dumps(ready).encode(),b'')) as command, \
-                patch('scripts.linux_release.installed_campaign.command',side_effect=lambda target,args:args):
+                patch('scripts.linux_release.campaign.guests.command',side_effect=lambda target,args:args):
             value._command('disable')
         self.assertEqual(command.call_args.args[0],['/usr/bin/sudo','-n',*unlock_account.helper_python_arguments(
             'disable',ACCOUNT,driver_tree=EXECUTION['driver_tree'],vm_id='owned')])
