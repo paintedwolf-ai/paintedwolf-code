@@ -1311,9 +1311,12 @@ fifteen minutes.
 
 Linux package construction is a reusable workflow. Release calls consume the
 release class's existing two-runner footprint without entering maintenance.
-Weekly, manual, and ready packaging pull requests share the maintenance class's
-single runner through `linux-candidate-requests.yml`. Its path filter includes
-packaging, native setup, release builders, and toolchain inputs. Pending standalone
+Weekly, manual, and ready packaging pull requests into `main` share the
+maintenance class's single runner through `linux-candidate-requests.yml`. Its
+path filter includes packaging, native setup, release builders, and toolchain
+inputs. A pull request into another branch builds nothing: its head cannot land,
+and each push would hold the shared executor for a full package build while the
+queue coordinator and health report wait behind it. Pending standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 

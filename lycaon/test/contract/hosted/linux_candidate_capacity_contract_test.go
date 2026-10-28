@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"slices"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -21,6 +22,19 @@ func TestLinuxCandidateRequestsShareMaintenanceWithoutBlockingRelease(t *testing
 	}
 	if len(requests.On) != 3 || len(requests.Jobs) != 1 {
 		t.Fatal("standalone package requests must be one scheduled, manual, or packaging pull request build")
+	}
+	var pullRequest struct {
+		Types    []string
+		Branches []string
+		Paths    []string
+	}
+	trigger := requests.On["pull_request"]
+	contractcheck.FailErr(t, "decode candidate pull_request trigger", trigger.Decode(&pullRequest))
+	if !slices.Equal(pullRequest.Branches, []string{"main"}) {
+		t.Fatalf("packaging pull requests build candidates only when they target main, got branches %v: a stacked pull request cannot land and its build would hold the shared maintenance executor", pullRequest.Branches)
+	}
+	if !slices.Contains(pullRequest.Types, "ready_for_review") || len(pullRequest.Paths) == 0 {
+		t.Fatal("packaging pull requests must build when marked ready and only when packaging inputs change")
 	}
 	var concurrency struct {
 		Group  string
