@@ -149,7 +149,7 @@ func (c *programCompiler) word(w *syntax.Word) DeferredWord {
 	prev := c.spanOverride
 	c.spanOverride = &loc.Span
 	defer func() { c.spanOverride = prev }()
-	return DeferredWord{SyntaxLocation: loc, Parts: c.parts(split.Parts)}
+	return DeferredWord{SyntaxLocation: loc, Parts: c.parts(nonEmptyParts(split.Parts))}
 }
 func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 	out := make([]WordNode, 0, len(parts))

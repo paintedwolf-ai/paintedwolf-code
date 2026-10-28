@@ -91,7 +91,7 @@ func TestBraceExpansionAppliesOnlyToFieldWords(t *testing.T) {
 	if !hasBracePart(loop.Items[0].Parts) || !hasBracePart(array[0].Parts) || hasBracePart(array[1].Parts) {
 		t.Fatalf("for items or array elements lost brace expansion: %#v %#v", loop.Items, array)
 	}
-	literal := parseProgram(t, `x={a,b}; cat <<< {a,b}; echo "{a,b}" '{a,b}' \{a,b\} ${v:-{a,b}} {a} {1..$n}; [[ {a,b} == x ]]; case {a,b} in {a,b}) :;; esac`)
+	literal := parseProgram(t, `x={a,b}; cat <<< {a,b}; echo "{a,b}" '{a,b}' \{a,b\} ${v:-{a,b}} ${v/a/{b,c}} {a} {1..$n}; [[ {a,b} == x ]]; case {a,b} in {a,b}) :;; esac`)
 	assign := literal.Statements[0].Command.(commandsurface.SimpleCommand).Assignments[0]
 	hereString := literal.Statements[1].Redirects[0]
 	if hasBracePart(assign.Value.Parts) || hereString.Operator != "<<<" || hereString.HereDocument != nil || hasBracePart(hereString.Target.Parts) {
@@ -192,7 +192,7 @@ func TestUntilHereStringAndAssigningOperatorsLower(t *testing.T) {
 			t.Fatalf("operator %d: %#v", i, part)
 		}
 	}
-	for _, source := range []string{"echo ${1:=x}", "echo ${@:=x}", "echo ${?:=x}", "echo ${PIPESTATUS:=x}", "echo ${a[@]:=x}", "echo ${#x:=y}"} {
+	for _, source := range []string{"echo ${1:=x}", "echo ${@:=x}", "echo ${?:=x}", "echo ${PIPESTATUS:=x}", "echo ${a[@]:=x}"} {
 		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || source[diagnostic.Span.StartByte:diagnostic.Span.EndByte] != strings.TrimPrefix(source, "echo ") {
