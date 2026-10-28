@@ -148,7 +148,9 @@ func TestProgramParkRefusesAWaitPastTheCallBound(t *testing.T) {
 				t.Fatalf("refused wait outcome %s", content)
 			}
 			details := outcome.Refusal.Details
-			if details["limit_id"] != tc.limit || fmt.Sprint(details["maximum"]) != fmt.Sprint(tc.maximum) || fmt.Sprint(details["observed"]) != fmt.Sprint(tc.observed) {
+			maximum, _ := details["maximum"].(float64)
+			observed, _ := details["observed"].(float64)
+			if details["limit_id"] != tc.limit || details["resource_unit"] != "milliseconds" || int64(maximum) != tc.maximum || int64(observed) != tc.observed {
 				t.Fatalf("refusal details %v", details)
 			}
 			if f.parking.count() != 0 {
