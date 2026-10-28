@@ -888,26 +888,29 @@ func TestLinuxHelperRefusesWhenAttestationFails(t *testing.T) {
 	}
 }
 
-func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
+// A helper whose namespaces are not the engine's, as when the protected
+// launch's broker starts it outside the engine's namespace, still relaunches
+// itself into fresh namespaces rather than taking itself for the inner helper.
+func TestLinuxHelperRelaunchesFromOutsideTheEnginesNamespaces(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	// Namespaces that match nothing make the outer helper believe it is already
-	// inside, so it must fail on the first privileged step and say so.
 	plan := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
-		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]"}},
+		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]", "ipc": "ipc:[0]"}},
 		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
-	status, stderr := rawHelper(t, self, plan, "/bin/true")
-	reason, ok := linuxsandbox.ParseUnavailable(stderr)
-	if status.ExitStatus() != confine.HelperUnavailableExit || !ok || reason.Code != linuxsandbox.UnavailableMount {
-		t.Fatalf("exit %d, reason %+v (%v): %s", status.ExitStatus(), reason, ok, stderr)
+	if status, stderr := rawHelper(t, self, plan, "/bin/true"); status.ExitStatus() != 0 {
+		t.Fatalf("helper started outside the engine's namespaces: exit %d: %s", status.ExitStatus(), stderr)
 	}
+}
+
+func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
+	self := requireLinuxSandbox(t)
 	unsupported := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
 		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
 		Network: linuxsandbox.Network{Mode: "tunnel"},
 	}
-	status, stderr = rawHelper(t, self, unsupported, "/bin/true")
+	status, stderr := rawHelper(t, self, unsupported, "/bin/true")
 	if status.ExitStatus() != confine.HelperFailureExit || !strings.Contains(stderr, linuxsandbox.UnsupportedNetworkMode) {
 		t.Fatalf("unsupported plan: exit %d: %s", status.ExitStatus(), stderr)
 	}

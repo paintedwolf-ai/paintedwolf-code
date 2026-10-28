@@ -80,16 +80,9 @@ var fastOpenSends = []struct{ nr, flagsArg uint32 }{
 // seccompArgLow is the offset of the low half of syscall argument n.
 func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
 
-// seccompProgram builds the filter: kill on an escape syscall, a terminal
-// injection ioctl, or a clone that asks for a namespace; hand connect, bind,
-// and listen to the supervisor, since a network namespace does not isolate
-// path sockets and the filter cannot read an address; refuse creating a
-// Unix-domain datagram socket or pair, whose sends name a path the supervisor
-// never sees, or a socket of a family the namespaces do not isolate. Hand
-// every call that would create, link, or move a name to the supervisor; deny
-// Fast Open sends and answer io_uring and clone3
-// with ENOSYS so libraries fall back to calls the filter can read; allow
-// everything else.
+// seccompProgram mediates socket addresses and name creation, which the filter
+// cannot inspect. It refuses namespace escapes, unmediated socket families and
+// Fast Open. io_uring and clone3 receive ENOSYS so libraries use mediated calls.
 func seccompProgram() ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{

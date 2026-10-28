@@ -343,7 +343,7 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 		NewFD:      uint32(fd),
 		NewFDFlags: target.fdFlags(fd),
 	}
-	if err := ioctlPtr(target.listener, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(&add)); err != nil {
+	if _, err := ioctlAddFD(target.listener, &add); err != nil {
 		s.host.forget(cookie)
 		return 0, unix.EINTR
 	}
@@ -508,12 +508,35 @@ func (t *targetProcess) close() {
 	}
 }
 
+var seccompIoctl = func(fd int, req uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+	r1, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
+	return r1, errno
+}
+
 func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
-	if errno != 0 {
-		return errno
+	for {
+		_, errno := seccompIoctl(fd, req, arg)
+		if errno == unix.EINTR && req != unix.SECCOMP_IOCTL_NOTIF_RECV {
+			continue
+		}
+		if errno != 0 {
+			return errno
+		}
+		return nil
 	}
-	return nil
+}
+
+func ioctlAddFD(fd int, add *seccompNotifAddfd) (int, error) {
+	for {
+		r1, errno := seccompIoctl(fd, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(add))
+		if errno == unix.EINTR {
+			continue
+		}
+		if errno != 0 {
+			return -1, errno
+		}
+		return int(r1), nil
+	}
 }
 
 func rawResult(r1, _ uintptr, errno unix.Errno) (int64, unix.Errno) {

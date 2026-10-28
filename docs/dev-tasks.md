@@ -944,7 +944,7 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The current set is the Apple Silicon macOS DMG and updater archive. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Linux x86_64, Linux aarch64, and Windows x86_64 remain `candidate` catalog entries outside the release matrix; promoting a platform requires a matching prebuilt engine release and platform install/update qualification. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. The non-publishing `linux-candidates` job builds, audits, and retains both Linux packages per architecture on every release run without signing or publication authority; see [Linux packages](#linux-packages). The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The current set is the Apple Silicon macOS DMG and updater archive. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Linux x86_64, Linux aarch64, and Windows x86_64 remain `candidate` catalog entries outside the release matrix; promoting a platform requires a matching prebuilt engine release and platform install/update qualification. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates` and `publish-immutable`; see [Linux in the release lane](#linux-in-the-release-lane). The non-publishing `linux-candidates` job builds, audits, and retains both Linux packages per architecture on every release run without signing or publication authority; see [Linux packages](#linux-packages). The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
@@ -960,7 +960,9 @@ flowchart TD
     verify --> aggregate["aggregate-release:<br/>require every public platform build"]
     aggregate --> boundary["select only publication=public bytes"]
     boundary --> r2["Publish immutable R2 objects:<br/>public artifacts, corpus, manifest, cask"]
-    r2 --> cask["update-cask<br/>Homebrew tap"]
+    r2 --> linux["publish-linux-repositories<br/>apt, dnf and pacman generations"]
+    linux --> cask["update-cask<br/>Homebrew tap"]
+    linux --> www
     r2 --> mirror["publish-github-release<br/>(trailing mirror — gates nothing)"]
     r2 --> www["notify-website"]
     cask --> activate["activate-updater last<br/>publish channel latest.json pointer"]
@@ -968,11 +970,11 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
-The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The protected controller supplies a fresh `release_admission.verify_release` selection through `scripts.nix_cache.release_authority.authorize`; it binds every selected architecture output, source, version, lock and actual NAR hash before transport credentials load. A saved accepted JSON receipt grants no publication authority.
+The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The release controller calls `scripts.nix_cache.release_authority.authorize` with the selected source and version; it binds the verified report, request and trust policy to that release and reads the exact-source Qualification record before transport credentials load. A saved accepted JSON receipt grants no publication authority.
 
 Nix constructs and verifies the standard signed file cache. Admission requires the entire runtime closure here, including dependencies available upstream. `scripts.nix_cache.publication.publish` rechecks signatures, actual NAR identities and local inventory, then uses the dedicated R2 transport to upload immutable NARs before metadata. It verifies each ordinary custom-domain URL before writing an immutable availability record. Public metadata must carry `no-store`, have no cache age or stale-hit status, and match exact admitted bytes. Configure the delivery domain to bypass caching, including negative caching, for `nix-cache-info` and `.narinfo`; a cached 404 or stale response refuses completion. No cache-busting URL can substitute for this check. NARs use immutable caching. Signature rotation can add signatures without changing their store identity or removing retained signatures, and appends a separate record while preserving the original release record.
 
-`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh installed-release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
+`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
 
 Publication, withdrawal and collection share a conditional R2 write lock. The lock never expires automatically: after a crashed publisher, the protected controller must explicitly authorize recovery of the exact recorded operation. A retry reuses identical objects and completes the availability record last. All writers for this prefix must use this owner. An immutable publication plan roots its objects before uploading begins; interrupted plans retain those bytes because a lost request may still commit. Withdrawal preserves every published `.narinfo`, release record and referenced NAR, including old pins. The retention operation only collects unreferenced upload debris older than an explicitly selected cutoff of at least one day; a missing retained object refuses collection. It never removes a published store path because an offer was withdrawn.
 
@@ -1142,19 +1144,22 @@ A Nix generation rollback changes application/package files, not the live databa
 
 See the [update qualification matrix](operations/update-qualification.md#nix-owner-and-recovery-qualification) for owner-specific installed checks. The recipes above describe the package contract; the first released-pin, owner switching and both-architecture qualification remain pending the package/cache foundation.
 
-### Installed Linux result admission
+### Linux in the release lane
 
-The shared [`support-matrix.json`](../packaging/linux/support-matrix.json) defines required environment/installation/architecture/capability rows. `scripts.linux_release.installed_results` admits a collector campaign against that catalog, an exact source commit, and the final artifact manifest supplied by the release owner. It emits JSON with `accepted`, every row's `passed`/`failed`/`unverified` outcome, errors and a checklist for native observations. Missing rows or cases, unknown/duplicate identities, skipped results, stale source/artifact identities and emulation of native-only tiers refuse admission. A file digest checks retained evidence bytes; the collector still owns the truth of each observation.
+When the two Linux rows in [`packaging/release-platforms.json`](../packaging/release-platforms.json) are `public`, a regular release publishes them through [`release.yml`](../.github/workflows/release.yml) with the same admission and gates as macOS. There is no separate Linux approval, attestation or evidence upload; native field qualification against [`support-matrix.json`](../packaging/linux/support-matrix.json) is milestone evidence, not a recurring release gate.
 
-The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifact carries `id`, `installation`, `architecture`, `source_commit` and `identity`. File identity is `{ "kind": "file", "sha256": "<final payload digest>" }`. Nix identity is `{ "kind": "nix-closure", "sha256": "<NAR digest>", "store_path": "<exact output>", "lock_sha256": "<lock digest>" }`. Digests are lowercase SHA-256 hex; source commits are full lowercase Git SHAs. The campaign repeats the exact final manifest and adds `results`.
+- **Admission.** `classify` requires the exact-source Qualification record for the release commit. Every Linux repository authorization reads that record again before credentials are used and again before client authority changes.
+- **Signing.** Each Linux `build-release` leg stages and audits its packages, then `scripts.linux_release.release_signing` signs them under `release-signing` with `LINUX_PACKAGE_SIGNING_KEY`: an embedded RPM signature (the audited identity and payload must be unchanged) and binary detached `.sig` files for the DEB and pacman packages. Checksums and the package inventory are rewritten over the final signed bytes before upload.
+- **Collection.** `aggregate-release` requires every public package, checksum, detached signature and scanner audit. The public artifacts are deposited by `publish-immutable` with the macOS artifacts and mirrored to the GitHub Release.
+- **Repositories.** `linux-repositories` (apt and dnf, both architectures) and `linux-pacman-repositories` (one generation per architecture, in the pinned Arch container) assemble signed generations from those same public artifacts under `release-signing`, in turn and before `publication-credentials`, so a failed assembly refuses the release before any publication credential is used. A signed release RPM enters the dnf pool unchanged. After `publish-immutable`, `publish-linux-repositories` activates them under `downloads.paintedwolf.dev/linux` through `repository_r2` and `pacman_r2`. Its authorization binds each generation to the selected source, version, channel and the exact public package digests, and requires every catalog-public package to be offered. `update-cask` and `notify-website` wait for it.
+- **Withdrawal generations.** Each assembled offer is paired with a signed empty generation for the same channel and architectures: valid apt, dnf and pacman metadata that offers no package. `publish-linux-repositories` retains it under `linux/generations/` and indexes it at `linux/withdrawal-generations/<family>/<channel>/<architecture or all>/<version>.json` before the offer activates, so a halt never needs the signing key.
+- **Withdrawal.** `release-halt` prepares `scripts.linux_release.repository_withdrawal` in every run. Every channel that offers the halted version gets the existing `withdraw` operation and its permanent markers. If an earlier Linux release exists and `last_good_version` names it, that retained generation is restored; any other named version refuses. A first Linux release, or a halt with no `last_good_version`, activates the halted release's empty generation instead. Installs and upgrades stop, and installed packages stay untouched. An empty generation offers no version, so the next release publishes over it normally.
 
-Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
-
-`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+AUR and the Nix binary cache use the same admission: `aur_release_authority.authorize` and `nix_cache.release_authority.authorize` bind the selected release and read the Qualification record at authorization time. `release-aur-delivery` prepares the AUR recipe. The repository declares no AUR deploy credential or production Nix cache key and trust policy, so the release lane publishes neither.
 
 #### Installed qualification lane
 
-Installed GUI qualification is a local pre-release lane on the native qualification host's VMs, like `den:webkit:atspi`. No GitHub runner executes it: CI runs only what GitHub-hosted Ubuntu runners can. The lane runs three steps from a clean checkout of the release controller commit that produced the selected plan:
+Installed GUI qualification is a local pre-release lane on the native qualification host's VMs, like `den:webkit:atspi`. No GitHub runner executes it: CI runs only what GitHub-hosted Ubuntu runners can. It produces milestone evidence against [`support-matrix.json`](../packaging/linux/support-matrix.json), not a release gate. The lane runs three steps from a clean checkout of the release controller commit that produced the selected plan:
 
 1. `./task test:linux:installed -- --prepare-qualification --source-commit SHA --source-tree TREE --control-run-id N --control-artifact-id N --qualification-plan-run-id N --qualification-plan-artifact-id N --output DIR`. This downloads the release controller's control inputs and plan by exact run and artifact ID, and refuses a checkout whose commit is not the plan's controller commit.
 2. `./task test:linux:installed -- --execute-plan --plan DIR/plan/qualification-plan.json --final-artifacts DIR/controls/final-artifacts.json --output EXECUTED`. This runs every planned guest target over SSH and physical input.
@@ -1162,9 +1167,13 @@ Installed GUI qualification is a local pre-release lane on the native qualificat
 
 Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
 
+`scripts.linux_release.installed_results` admits the retained campaign against that catalog, an exact source commit and the final artifact manifest. Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs that admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+
 The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
 
-Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance. Release publication requires an authenticated handoff that binds the exact retained observations to the protected attempt; that handoff is not implemented. A local producer record or accepted report cannot substitute for it.
+Architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance, and the release lane reads the exact-source Qualification record rather than these campaigns, so an accepted report grants nothing to a release.
 
 ### Updates
 
@@ -1262,7 +1271,8 @@ checks the private identity when signing, verifies the result with RSA/SHA-512,
 and replaces the destination only after verification. The private key comes
 from the protected `LINUX_PACKAGE_SIGNING_KEY` environment or an explicitly
 selected owner-only file; it is never a command argument. This trust is distinct
-from updater/feed signatures and Nix cache trust.
+from updater/feed signatures and Nix cache trust. In the release lane only the
+`release-signing` jobs receive this key; see [Linux in the release lane](#linux-in-the-release-lane).
 
 `./task release:rehearse:linux-signing -- --receipt /absolute/path/result.json`
 runs a local, non-publishing rehearsal with a disposable key and tiny RPM fixture.
@@ -1373,9 +1383,8 @@ installed packages or mutable application data. A withdrawn offer is replaced by
 retained last-good index. Keep every referenced object while any supported index may
 still be cached. Rotation requires explicit verification/import of the successor key;
 keep predecessor public keys and generations for skipped-release recovery. This local
-origin rehearsal does not establish custom-domain CDN convergence or both-architecture
-installed package qualification; the release controller must admit that evidence before
-production publication.
+origin rehearsal does not establish custom-domain CDN convergence; production publication
+verifies public bytes and cache roles itself.
 
 **Pacman repositories and AUR recipe rehearsal.**
 `./task release:rehearse:pacman-repositories -- --receipt /absolute/path/result.json`
@@ -1460,7 +1469,7 @@ this recovery record does not grant independent writers or replace predecessor c
 `python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
 through the existing R2 immutable-object helper and serialized release owner. Its
 current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`
-prefix; production use refuses until the final release controller supplies admission.
+prefix; production use comes only from the release lane's `scripts.linux_release.release_repositories`, which supplies the authorization callback.
 It verifies public custom-domain bytes and object cache roles before replacing
 `InRelease` or a dnf mirrorlist, then verifies the authority and activation record.
 Interrupted uploads retain unreferenced objects and retries accept identical bytes.
@@ -1476,8 +1485,8 @@ their selected object rows for final-controller admission.
 
 `python3 -m scripts.linux_release.pacman_r2` uses the same explicit manifest and shared
 R2 object transport. It currently requires `--rehearsal` and an isolated
-`release-system-tests/<run>/...` prefix. Production refuses until the final release
-controller supplies exact source/final-artifact admission. Protected workflow
+`release-system-tests/<run>/...` prefix. Production use comes only from the release lane,
+whose callback binds the exact source and final public package digests. Protected workflow
 serialization owns cross-host publishers; expected-generation checks before and after
 upload refuse stale competing plans. `test:runner` covers ordering, interrupted pairs
 and retries against a real local generation and an in-memory object store. Real CDN
@@ -1507,12 +1516,29 @@ Binary publication can succeed while recipe delivery remains unavailable: inspec
 retained plan and remote commit before retrying and report each source's actual state.
 Do not label a prepared recipe as published. Public transport requires owner-only SSH
 identity/known-host files and strict host verification. The protected controller must
-call `aur_release_authority.authorize` to freshly reevaluate the complete campaign,
-actual final files and repository inventories with independently selected release facts,
-including the immutable source's `RELEASE_BUILD` for native package revisions.
-A caller-provided accepted JSON receipt is insufficient. The public CLI remains closed
+call `aur_release_authority.authorize`, which binds the selected release, its final file
+inventory and every published pacman generation and signer, then reads the exact-source
+Qualification record. A caller-provided accepted JSON receipt is insufficient. The public CLI remains closed
 until that controller integration supplies separate `publish-aur` authorization; no
 AUR workflow or external push is invoked by the fixture rehearsal.
+
+A signed distribution document may advertise an AUR recipe only after a separate
+read-only `aur_observation.observe` operation. The protected caller selects the
+channel-specific package and exact Git commit; `ReadOnlyOrigin` accepts only its
+fixed HTTPS AUR origin. It fetches a bounded shallow snapshot, compares the publisher
+plan and every regular recipe blob, re-reads the branch, and repeats complete release
+admission. A saved publication or observation report cannot replace this callback.
+The observer never pushes, executes a PKGBUILD, changes a package source or installs
+trust. Fixture origins are explicitly nonproduction and cannot authorize public facts.
+
+In the AUR document fields, `source_sha256` hashes the canonical recipe-object
+inventory: rows sorted by path, each containing `path`, `sha256` and `size`, encoded
+as JSON with sorted keys, two-space indentation and a final newline.
+`package_sha256` hashes the exact complete `final-artifacts.json` bytes across both
+CPUs; it is not the hash of one package archive. Individual download links retain
+their own archive hashes. The exact Git commit independently pins the complete recipe.
+Stable and Preview select distinct maintained `-bin` and `-preview-bin` origins;
+preparing either recipe does not reserve a name or establish public availability.
 
 For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
 then use `sudo pacman-key --add /path/to/package-key.asc`, inspect
@@ -1532,7 +1558,7 @@ strictly newer signing generation; `recover` selects an exact retained healthy
 manifest; `withdraw` selects that retained replacement and permanently marks the
 previous generation and version as withdrawn. Reoffering either identity refuses.
 Operation receipts carry `operation`, `previous`, source, signer and final inventory
-facts; an ordinary release campaign cannot authorize another operation. Retained
+facts; an ordinary release publication cannot authorize another operation. Retained
 `key-catalog.json` contains only the selected public key facts, so private or unknown
 catalog fields never enter the origin. Existing installations and mutable data are
 outside this publication owner's mutation scope.
@@ -1562,9 +1588,10 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly, on ready PRs that change packaging inputs,
-or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
-request needs package artifacts. The release workflow calls the reusable
+and staging path. It runs weekly, on ready pull requests into `main` that change
+packaging inputs, or by manual dispatch on the selected branch. Use
+`gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+request into another branch needs package artifacts. The release workflow calls the reusable
 [package build](../.github/workflows/linux-candidates.yml) directly with its exact
 selected source commit, within the release runner budget. Candidate
 artifacts include checksums and the source commit and are retained for 90 days.
