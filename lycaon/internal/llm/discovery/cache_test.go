@@ -114,7 +114,7 @@ func TestDiscoveryCloseCancelsAndDrainsRefresh(t *testing.T) {
 		return nil, ctx.Err()
 	})
 	<-started
-	testutil.FailErr(t, "stop discovery refresh", c.Close(testutil.BoundedContext(t, time.Second)))
+	testutil.FailErr(t, "stop discovery refresh", c.Close(t.Context()))
 	_, err := c.Load(t.Context(), "provider", func(context.Context) ([]modelinfo.Entry, error) {
 		t.Error("discovery restarted after shutdown")
 		return nil, nil

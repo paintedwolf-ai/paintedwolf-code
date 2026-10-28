@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -109,7 +108,7 @@ func TestRecoveryBootReportsReadyToTheStartupProtocol(t *testing.T) {
 	case <-sink.ready:
 	case err := <-done:
 		t.Fatalf("recovery Run returned before reporting ready: %v", err)
-	case <-time.After(30 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("recovery boot never reported ready — the startup stage would wait forever")
 	}
 

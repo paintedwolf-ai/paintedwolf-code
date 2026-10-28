@@ -253,6 +253,7 @@ class Queue:
             if stale:
                 path.unlink()
                 path.with_suffix(".batch.json").unlink(missing_ok=True)
+                path.with_suffix(".progress").unlink(missing_ok=True)
         return sorted(entries, key=lambda entry: entry["ticket"])
 
     def pause(self, reason):
@@ -404,6 +405,11 @@ def run(queue, name, command, spec=EXCLUSIVE):
         print(admission_notice(queue, queue.status(), name, reservation.entry), file=sys.stderr, flush=True)
         lease.acquire(reservation)
         env = foreground_git_environment(bounded_environment(os.environ, workers))
+        env.pop("PW_TEST_STAGE_PROGRESS", None)
+        progress = lease.path.with_suffix(".progress") if spec.get("progress") else None
+        if progress is not None:
+            progress.unlink(missing_ok=True)
+            env["PW_TEST_STAGE_PROGRESS"] = str(progress)
         if "*" in reservation.entry["locks"]:
             # Cache eviction needs every other operation drained, which only exclusive admission ensures.
             from verification_cache import Maintenance
@@ -425,8 +431,12 @@ def run(queue, name, command, spec=EXCLUSIVE):
             with queue.locked():
                 lease.entry["child_pid"] = child.pid
                 lease.entry["child_identity"] = identity(child.pid)
+                if progress is not None:
+                    lease.entry["activity_paths"] = [str(progress)]
                 lease.write()
                 reservation.entry.update(child_pid=child.pid, child_identity=lease.entry["child_identity"])
+                if progress is not None:
+                    reservation.entry["activity_paths"] = [str(progress)]
                 reservation.write()
             while True:
                 try:
@@ -454,6 +464,8 @@ def run(queue, name, command, spec=EXCLUSIVE):
                     child.wait()
             if fd is not None:
                 os.close(fd)
+            if progress is not None:
+                progress.unlink(missing_ok=True)
 
 
 def main():

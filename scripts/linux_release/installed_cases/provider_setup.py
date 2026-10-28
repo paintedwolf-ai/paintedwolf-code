@@ -2,7 +2,7 @@
 import time
 
 from .desktop_ui import DesktopUI, retry_inventory
-from .app import process_identity
+from ..installed_process import process_identity
 from .profile_providers import find_gui_provider
 from .profile_setup import state as setup_state
 from .provider import MODEL, GUI_LABEL

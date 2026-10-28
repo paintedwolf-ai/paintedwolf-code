@@ -82,7 +82,7 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 		return inject.ActiveWorkflowInjectToMap(data, nil, nil)["phase_exit"].(map[string]any)["verdict_outline"].(string)
 	}
 	raw := projectedOutline()
-	offered := tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: exit.SubmitVerdictArgsSchema}).ArgsSchema
+	offered := tools.ProjectProviderToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: exit.SubmitVerdictArgsSchema}).ArgsSchema
 	if raw != verdictcall.Outline(exit.SubmitVerdictArgsSchema) {
 		t.Fatalf("projected outline = %q, want the offered schema's outline", raw)
 	}

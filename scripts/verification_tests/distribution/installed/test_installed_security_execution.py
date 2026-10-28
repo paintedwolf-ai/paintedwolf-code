@@ -40,7 +40,7 @@ class InstalledSecurityTests(unittest.TestCase):
                 security.refusal(frame)
 
     def test_session_inhibitor_lifetime_routes_to_dedicated_keepawake_driver(self):
-        from linux_release import installed_execution
+        from linux_release.campaign import execution as installed_execution
         self.assertNotIn(('session', 'inhibitor-lifetime'), security.PROBES)
         self.assertEqual(installed_execution.case_family('session', 'inhibitor-lifetime', 'deb'), 'keepawake')
 
