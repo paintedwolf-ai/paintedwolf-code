@@ -132,7 +132,8 @@ def graphical_session(*, account_name=None, deadline=None) -> GraphicalSessionOb
             raise ValueError('graphical session selection requires one unambiguous nonroot passwd account')
         uid = matches[0].pw_uid
         observations.update(account={'name': name, 'uid': uid}, phase='inventory-before')
-        with Reader(deadline=time.monotonic() + 30 if deadline is None else deadline) as reader:
+        observation_deadline = time.monotonic() + 30 if deadline is None else deadline
+        with Reader(deadline=observation_deadline) as reader:
             before = _inventory(reader, observations, 'inventory_before')
             observations['phase'] = 'properties-before'
             first = [_session_properties(reader, row, observations) for row in before if row['uid'] == uid]
@@ -164,11 +165,13 @@ def graphical_session(*, account_name=None, deadline=None) -> GraphicalSessionOb
             observations['selected_properties_after'] = dict(session)
             if not session.get('Desktop'):
                 observations['phase'] = 'compositor-owner'
-                session['DesktopOwner'] = installed_gnome.owner()
+                session['DesktopOwner'] = installed_gnome.owner(reader, expected_uid=uid, deadline=observation_deadline)
                 session['Desktop'] = 'GNOME'
     except (CallFailure, OSError, ValueError, TypeError, KeyError) as error:
         failure = CaseFailed('graphical session observation failed')
         observations['error_type'] = type(error).__name__
+        if isinstance(error, CaseFailed) and isinstance(getattr(error, 'observations', None), dict):
+            observations['cause_observations'] = error.observations
         if isinstance(error, CallFailure):
             observations['remote_name'] = error.name
         else:

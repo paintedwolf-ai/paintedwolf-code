@@ -444,11 +444,11 @@ class GraphicalSessionTests(unittest.TestCase):
                 owner.graphical_session()
 
     def test_empty_desktop_keeps_the_actual_typed_compositor_owner(self):
-        with self.observe(properties={SESSION: details(desktop='')}), patch.object(owner.installed_gnome, 'owner', return_value={'pid': 2000}) as compositor:
-            result = owner.graphical_session().session
+        with self.observe(properties={SESSION: details(desktop='')}) as (reader, _), patch.object(owner.installed_gnome, 'owner', return_value={'pid': 2000}) as compositor:
+            result = owner.graphical_session(deadline=123).session
         self.assertEqual(result['Desktop'], 'GNOME')
         self.assertEqual(result['DesktopOwner'], {'pid': 2000})
-        compositor.assert_called_once_with()
+        compositor.assert_called_once_with(reader, expected_uid=1000, deadline=123)
 
 
     def test_inventory_transport_failure_retains_the_exact_manager_call(self):
@@ -462,9 +462,13 @@ class GraphicalSessionTests(unittest.TestCase):
         self.assertEqual(facts['phase'], 'inventory-before')
 
     def test_compositor_failure_uses_the_same_observation_contract(self):
-        with self.observe(properties={SESSION: details(desktop='')}), patch.object(owner.installed_gnome, 'owner', side_effect=ValueError('fixture compositor')), self.assertRaises(CaseFailed) as failure:
+        upstream = CaseFailed('fixture compositor')
+        upstream.observations = {'compositor': {'owner': ':1.2', 'property': 'GetNameOwner'}}
+        with self.observe(properties={SESSION: details(desktop='')}), patch.object(owner.installed_gnome, 'owner', side_effect=upstream), self.assertRaises(CaseFailed) as failure:
             owner.graphical_session(deadline=123)
-        self.assertEqual(failure.exception.observations['graphical_session']['phase'], 'compositor-owner')
+        facts = failure.exception.observations['graphical_session']
+        self.assertEqual(facts['phase'], 'compositor-owner')
+        self.assertEqual(facts['cause_observations'], upstream.observations)
 
     def test_missing_or_ambiguous_passwd_account_refuses_before_session_reads(self):
         selected = SimpleNamespace(pw_name='fixture', pw_uid=1000)

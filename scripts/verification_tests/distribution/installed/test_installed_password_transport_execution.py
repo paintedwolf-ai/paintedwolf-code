@@ -144,6 +144,8 @@ class PasswordSessionAuthorityTests(unittest.TestCase):
     def test_fresh_exact_session_is_required_before_connection_and_observations_are_separate(self):
         identity = self.pending['actor']['process']
         self.pending['actor']['uid'] = os.getuid()
+        self.pending['profile']['uid'] = os.getuid()
+        self.pending['session']['User'] = str(os.getuid())
         mailbox = SimpleNamespace(execution=self.pending['binding'])
         info = self.pending['profile']
         for changed in (False, True):

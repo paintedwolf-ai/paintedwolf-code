@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "linux-session-observation",
   "disposition": "retain",
-  "reason": "The existing application owner tests now exercise the graphical-session authority it consumes and its execution error boundary. Typed Reader fixtures remain in the Reader owner suite. Retain this bounded suite rather than add a member to the already excessive installed-test directory.",
+  "reason": "The existing application owner tests now exercise the graphical-session authority it consumes and its execution error boundary. Typed Reader fixtures remain in the Reader owner suite. Retain this bounded suite rather than add a member to the already excessive installed-test directory. The compositor fallback reuses that Reader and absolute deadline, and its safe upstream refusal facts remain part of the observer contract.",
   "reviewed_commit": "4211e2d670f16311eaf7214631db2be004d81217",
   "ceiling": 475,
   "boundaries": {
-    "scripts/linux_release/installed_environment.py": "21b3b4458ea78b5a6e1ab5233da5725fa566bd1243f743aca226c43f5a5b5198",
+    "scripts/linux_release/installed_environment.py": "b971228d6f93286cab810edc048ac3a463b9e8d184a23448b972becd1c5954b9",
     "scripts/linux_release/installed_cases/logind_context.py": "32113f2c1fe4b3c002be83d7745a88c4e8f14f114280a62033e31f6423fc2683"
   }
 }
