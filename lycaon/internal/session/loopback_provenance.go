@@ -14,7 +14,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,6 +84,7 @@ type DefaultLoopbackProvenance struct {
 	listeners func(ctx context.Context) ([]socketListener, error)
 	// lineageSession names the session whose action launched pid.
 	lineageSession func(pid int) (string, bool)
+	observeNative  nativeListenerObserver
 	// containers lists running containers from every reachable engine.
 	containers        func(ctx context.Context) []dockerContainerInfo
 	mu                sync.RWMutex
@@ -96,7 +96,7 @@ func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 	sockets := discoverDockerSockets()
 	return newLoopbackProvenance(ctx, hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
 		return queryDockerContainers(ctx, sockets)
-	})
+	}, lineage.ObserveSessionListener)
 }
 
 func newLoopbackProvenance(
@@ -104,8 +104,9 @@ func newLoopbackProvenance(
 	listeners func(context.Context) ([]socketListener, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
+	observeNative nativeListenerObserver,
 ) *DefaultLoopbackProvenance {
-	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers}
+	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers, observeNative: observeNative}
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	if current, err := listeners(ctx); err == nil {
@@ -155,57 +156,6 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 	}
 	owned, _ := p.ownership(ctx, sessionID, workspaceDir, port, held)
 	return !owned
-}
-
-// ObserveSessionListener implements ExactSessionListener by verifying complete
-// holder observation across the port and returning an endpoint resource ID
-// bound to the current holder set.
-func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, sessionID string, endpoint netip.AddrPort) (string, bool, error) {
-	if p == nil || sessionID == "" || !endpoint.IsValid() || endpoint.Port() == 0 || !endpoint.Addr().Unmap().IsLoopback() {
-		return "", false, nil
-	}
-	current, err := p.listeners(ctx)
-	if err != nil {
-		return "", false, err
-	}
-	port := endpoint.Port()
-	targetAddr := endpoint.Addr().Unmap()
-	canonicalEndpoint := netip.AddrPortFrom(targetAddr, port)
-	held := onPort(current, port)
-	var endpointPIDs []int
-	for _, l := range held {
-		if l.PID <= 0 || !l.Addr.IsValid() {
-			return "", false, fmt.Errorf("port %d has a listener with incomplete holder observation", port)
-		}
-		if l.Addr.Unmap() == targetAddr {
-			endpointPIDs = append(endpointPIDs, l.PID)
-		}
-	}
-	owned, evidence := p.ownership(ctx, sessionID, "", port, held)
-	if owned {
-		if len(held) == 0 {
-			return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, evidence.OwnerID, canonicalEndpoint), true, nil
-		}
-		if len(endpointPIDs) == 0 {
-			return "", false, nil
-		}
-		return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, canonicalEndpoint, joinSortedPIDs(endpointPIDs)), true, nil
-	}
-	if len(endpointPIDs) > 0 {
-		return fmt.Sprintf("foreign:%s:%s", canonicalEndpoint, joinSortedPIDs(endpointPIDs)), false, nil
-	}
-	return "", false, nil
-}
-
-func joinSortedPIDs(pids []int) string {
-	sorted := slices.Clone(pids)
-	slices.Sort(sorted)
-	sorted = slices.Compact(sorted)
-	parts := make([]string, len(sorted))
-	for i, pid := range sorted {
-		parts[i] = strconv.Itoa(pid)
-	}
-	return strings.Join(parts, ",")
 }
 
 func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, workspaceDir string, port uint16, held []socketListener) (bool, ProvenanceEvidence) {
