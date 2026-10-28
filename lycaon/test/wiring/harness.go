@@ -76,6 +76,9 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.globalApprovalPosture != "" {
+		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
+	}
 
 	cfg := configuration.Config{}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()

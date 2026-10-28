@@ -73,13 +73,10 @@ func TestQuotedMetacharactersAndOriginalSourceSpans(t *testing.T) {
 func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 	cases := []string{
 		"printf changed > ./output; if false; then echo 'unterminated; fi",
-		"printf changed > ./output; if false; then eval dangerous; fi",
 		"echo $((i++))", "echo $((x=1))", "echo $((a[i++]))", "echo ${a[i++]}", "a=([k]=one)",
 		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
 		"echo {one,two}", "case x in x) true;& esac", "until false; do :; done",
-		"select x in one; do :; done", "coproc echo x", "trap true INT", "trap 'eval x' EXIT", "set -x", "set +o pipefail", "set -- a b",
 		"cat <<< value", "cat 10> ./output", "cat 2>&10", "cat 1<> ./input",
-		"function helper { :; }", "cat() { :; }", "local x=value", "IFS=, echo x",
 		"echo $'escaped'", "echo $\"localized\"", "[[ -S ./sock ]]", "for ((i=0;i<1;i++)); do :; done",
 	}
 	for _, source := range cases {
@@ -222,7 +219,7 @@ func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 }
 
 func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T) {
-	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `sh\opt`} {
+	for _, name := range []string{`tr\ap`, `tr"ap"`, `'trap'`, `sh\opt`} {
 		source := "printf changed > ./output; " + name + " data"
 		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic

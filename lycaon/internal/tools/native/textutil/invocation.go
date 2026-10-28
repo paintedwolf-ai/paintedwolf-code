@@ -28,6 +28,7 @@ type invocation struct {
 	uncertain bool
 	releases  []func()
 	sed       *preparedSed
+	preparing bool
 	// The ordered xargs settlement loop owns the first stopped child outcome.
 	stoppedBatch *toolcontract.ProducerResult
 }

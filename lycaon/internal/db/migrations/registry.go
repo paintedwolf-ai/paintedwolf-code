@@ -24,10 +24,14 @@ type Step struct {
 	ScratchBytes uint64
 	ID           string
 	Checksum     string
-	From         Baseline
-	To           Baseline
-	Apply        func(context.Context, *sql.Tx) error
-	Validate     func(context.Context, *sql.Tx) error
+	// RebuildTables requires foreign-key enforcement off on the migration's
+	// held connection while tables are replaced. Execute still checks every
+	// foreign key before committing the complete route.
+	RebuildTables bool
+	From          Baseline
+	To            Baseline
+	Apply         func(context.Context, *sql.Tx) error
+	Validate      func(context.Context, *sql.Tx) error
 }
 
 // Plan contains a complete route; callers cannot replace its registered steps.
