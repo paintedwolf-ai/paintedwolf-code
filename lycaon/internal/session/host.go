@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -211,6 +212,13 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	turnSettlement := turnsettlement.New(store, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, workerResults, turnSpend)
 	turnInstructions := instructions.New(store, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
+	turnInstructions.SetWaitEnds(func(sessionID string) []string {
+		var texts []string
+		for _, ended := range m.Coordinator.Runtime.CoordinatorLoop().Deliveries.TakeEndedWaits(sessionID) {
+			texts = append(texts, loopwake.WaitEndedText(ended))
+		}
+		return texts
+	})
 	m.Runner = turnexecution.New(store, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
 	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProof)
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)

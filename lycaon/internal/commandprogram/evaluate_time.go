@@ -70,5 +70,5 @@ func (e *evaluation) clock() Clock {
 	if e.ports.Clock != nil {
 		return e.ports.Clock
 	}
-	return SystemClock{}
+	return SystemClock()
 }

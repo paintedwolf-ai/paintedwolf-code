@@ -27,10 +27,12 @@ type ActivityEvent struct {
 	Kind       ActivityKind   `json:"kind"`
 	Status     ActivityStatus `json:"status"`
 	StartedAt  time.Time      `json:"started_at"`
-	ToolName   string         `json:"tool_name,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	Progress   *ToolProgress  `json:"progress,omitempty"`
-	// Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason.
+	// The running tool, or on awaiting_wake the tool call that parked the session (`wait`, or `command` whose program waits). Absent on a host-armed awaiting_wake lease.
+	ToolName string `json:"tool_name,omitempty"`
+	// The call tool_name names. On awaiting_wake it binds the lease to the parked call, whose result carries completion state parked.
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+	Progress   *ToolProgress `json:"progress,omitempty"`
+	// Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason. A parked command's lease subscribes to program_done, which only the host arms.
 	WaitTriggers []string `json:"wait_triggers,omitempty"`
 	// What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event.
 	DecisionTrigger TurnLoadTrigger `json:"decision_trigger,omitempty"`
@@ -8050,13 +8052,15 @@ type ToolCall struct {
 	ExtraContent map[string]any `json:"extra_content,omitempty"`
 }
 
-// ToolCompletion
+// ToolCompletion A call's lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session's wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease's awaiting_wake activity carries the call's tool_call_id; when that activity closes, the wait has ended and the call's outcome arrives in a later message.
 type ToolCompletion struct {
 	Operation    string `json:"operation"`
 	State        string `json:"state"`
 	ResourceKind string `json:"resource_kind,omitempty"`
 	ResourceID   string `json:"resource_id,omitempty"`
 	ResultHandle string `json:"result_handle,omitempty"`
+	// What a parked call waits on: the wait's stated reason, or the statement a parked command's program waits at (`sleep 30`, `wait %1`). Present only with state parked.
+	Reason string `json:"reason,omitempty"`
 }
 
 // ToolDescriptor

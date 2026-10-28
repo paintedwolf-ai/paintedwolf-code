@@ -20,6 +20,10 @@ type ProgramInterrupter interface {
 // ErrProgramStopped is the cancellation cause of an explicit stop.
 var ErrProgramStopped = errors.New("command program stopped")
 
+// ErrProgramInterrupted is the cancellation cause when the host interrupts a
+// program at the statement it waits at.
+var ErrProgramInterrupted = errors.New("command program interrupted")
+
 // errSupervisorLost is the cancellation cause when supervision is lost.
 var errSupervisorLost = errors.New("command program supervisor lost")
 
@@ -67,7 +71,9 @@ type supervisedProgram struct {
 	jobs       map[int]*supervisedJob
 	nextJob    int
 	foreground bool
-	settle     func(stopped bool)
+	// interrupted records a foreground the host interrupted.
+	interrupted bool
+	settle      func(stopped bool)
 }
 
 type supervisedKey struct{}
@@ -97,10 +103,14 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	defer s.foregroundDone(root.Identity.ProgramID)
 	result, err := run(context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID))
 	switch cause := context.Cause(ctx); {
-	case errors.Is(cause, ErrProgramStopped), errors.Is(cause, errSupervisorLost):
+	case errors.Is(cause, ErrProgramStopped), errors.Is(cause, errSupervisorLost), errors.Is(cause, ErrProgramInterrupted):
 		stopped := toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: result.EffectCertainty}
 		if stopped.EffectCertainty == "" {
 			stopped.EffectCertainty = toolcontract.EffectUnknown
+		}
+		if errors.Is(cause, ErrProgramInterrupted) {
+			// An interrupted wait is the program's typed stop; its result still reaches the turn.
+			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": root.Identity.ProgramID}))
 		}
 		return stopped, errors.Join(err, cause)
 	}
@@ -140,6 +150,26 @@ func (s *ProgramSupervisor) Lost(ctx context.Context, sessionID, detailReference
 		return 0, fmt.Errorf("program supervisor has no receipt reconciliation")
 	}
 	return s.Interrupter.InterruptPrograms(ctx, sessionID, detailReference)
+}
+
+// Interrupt cancels a program's foreground at the statement it waits at. Its
+// & jobs keep running under supervision, as a shell's background jobs outlive
+// an interrupted foreground. It reports whether a foreground was running.
+func (s *ProgramSupervisor) Interrupt(programID string) bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	program, ok := s.programs[programID]
+	running := ok && !program.foreground && !program.closed
+	if running {
+		program.interrupted = true
+	}
+	s.mu.Unlock()
+	if running {
+		program.cancel(ErrProgramInterrupted)
+	}
+	return running
 }
 
 // StopAll stops every session's programs, for the host disable control.
@@ -274,7 +304,7 @@ func (s *ProgramSupervisor) finishIfIdle(programID string) {
 		return
 	}
 	delete(s.programs, programID)
-	settle, stopped := program.settle, program.closed
+	settle, stopped := program.settle, program.closed || program.interrupted
 	s.mu.Unlock()
 	settle(stopped)
 }
