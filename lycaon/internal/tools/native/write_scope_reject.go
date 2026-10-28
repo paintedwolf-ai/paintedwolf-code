@@ -26,6 +26,9 @@ func mapWriteScopeDenied(ctx context.Context, boundary *sandbox.Boundary, path, 
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, sandbox.ErrPathEscape) {
+		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": path, "reason": err.Error()}}
+	}
 	if !opts.mapCoordinator && profileID == coordinatorProfileID {
 		return err
 	}

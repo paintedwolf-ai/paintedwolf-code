@@ -250,6 +250,23 @@ describe("ComposerStatusChips preparation", () => {
     await waitFor(() => expect(screen.getByTestId("status-chip-cost").textContent).toBe("$0.20"));
   });
 
+  it("never shows another chat's summary held by the shared cost store", async () => {
+    const client = readyClient();
+    connection.client = client;
+    const { costStore } = mountChips({ tracking: true });
+    const chip = screen.getByTestId("status-chip-cost");
+    await waitFor(() => expect(chip.textContent).toBe("$0.12"));
+
+    const other = deferred<CostSummary>();
+    const otherClient = readyClient({ getCostSummary: vi.fn(() => other.promise) });
+    void costStore.refreshSession(otherClient, "s2");
+    other.resolve(costDoc("s2", 9.99));
+    await waitFor(() => expect(costStore.state.session?.session_id).toBe("s2"));
+    expect(chip.textContent).toBe("");
+    fireEvent.click(chip);
+    expect(screen.getByText("Loading estimated cost…")).toBeTruthy();
+  });
+
   it("keeps the project chips mounted while the presented chat changes", async () => {
     const secondCost = deferred<CostSummary>();
     const getCostSummary = vi.fn((sessionId: string) =>

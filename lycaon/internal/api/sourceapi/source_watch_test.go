@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -88,13 +87,13 @@ func TestWatchStopDrainsInstallingWatchAndSealsRebind(t *testing.T) {
 	go func() { defer close(done); server.Watch.EnsureSourceWatch(t.Context(), p.ID) }()
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("watch seeding did not enter")
 	}
 	server.Watch.Stop(t.Context())
 	select {
 	case <-cancelled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("watch installation was not canceled")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

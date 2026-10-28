@@ -29,8 +29,9 @@ ENTRY_POINTS = tuple(PAYLOAD["entry_points"])
 # Optional packaging fragments: repository directory -> (destination directory,
 # accepted suffixes, package families).
 OPTIONAL_FRAGMENTS = {
-    "polkit": ("/usr/share/polkit-1/actions", (".policy",), ("deb", "rpm")),
-    "systemd": ("/usr/lib/systemd/system", (".service", ".socket", ".timer"), ("deb", "rpm")),
+    "polkit": ("/usr/share/polkit-1/actions", (".policy",), ("deb", "rpm", "pacman")),
+    "systemd": ("/usr/lib/systemd/system", (".service", ".socket", ".timer"), ("deb", "rpm", "pacman")),
+    "openrc": ("/etc/init.d", ("",), ("pacman",)),
     "apparmor": ("/etc/apparmor.d", ("",), ("deb",)),
 }
 

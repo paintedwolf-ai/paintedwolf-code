@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod captured_engine;
 pub(crate) mod commands;
 pub(crate) mod custody;
 pub(crate) mod daemon;
@@ -48,11 +50,9 @@ pub enum SidecarStartError {
     StoreLocked(String),
     EngineNotStarted(String),
     Cancelled(String),
-    CredentialVaultLocked(String),
-    CredentialVaultUninitialized(String),
-    CredentialVaultUnlockFailed(String),
     CredentialVaultCorrupt(String),
     DesktopRestartRequired(String),
+    InstallationUnverified(String),
     CredentialVaultCustodianUnavailable(String),
     CredentialVaultCustodianAbsent(String),
     CredentialVaultLauncherRefused(String),
@@ -72,11 +72,9 @@ impl SidecarStartError {
             Self::StoreLocked(message)
             | Self::EngineNotStarted(message)
             | Self::Cancelled(message)
-            | Self::CredentialVaultLocked(message)
-            | Self::CredentialVaultUninitialized(message)
-            | Self::CredentialVaultUnlockFailed(message)
             | Self::CredentialVaultCorrupt(message)
             | Self::DesktopRestartRequired(message)
+            | Self::InstallationUnverified(message)
             | Self::CredentialVaultCustodianUnavailable(message)
             | Self::CredentialVaultCustodianAbsent(message)
             | Self::CredentialVaultLauncherRefused(message)
@@ -89,14 +87,6 @@ impl SidecarStartError {
 enum ChildState {
     Running,
     Exited(Option<i32>),
-}
-
-struct VaultPassword(Vec<u8>);
-
-impl Drop for VaultPassword {
-    fn drop(&mut self) {
-        self.0.fill(0);
-    }
 }
 
 type EngineStateObserver = Box<dyn Fn(&EngineState) + Send>;
@@ -112,7 +102,6 @@ pub struct SidecarState {
     lifecycle: Mutex<()>,
     starting: AtomicBool,
     cancel_start: AtomicBool,
-    vault_password: Mutex<Option<VaultPassword>>,
     /// Advances on every launch and every stop, so a supervisor watching an
     /// older process knows its exit is already accounted for.
     generation: AtomicU64,
@@ -135,7 +124,6 @@ impl SidecarState {
             lifecycle: Mutex::new(()),
             starting: AtomicBool::new(false),
             cancel_start: AtomicBool::new(false),
-            vault_password: Mutex::new(None),
             generation: AtomicU64::new(0),
             engine_state: Mutex::new(EngineState::Idle),
             observer: Mutex::new(None),
@@ -216,19 +204,6 @@ impl SidecarState {
         URL_SAFE_NO_PAD.encode(self.presence_signing_key.verifying_key().as_bytes())
     }
 
-    /// Whether this shell unlocked the vault with an app password it still holds.
-    pub(crate) fn holds_vault_password(&self) -> bool {
-        self.vault_password.lock().unwrap().is_some()
-    }
-
-    /// Compares a re-entered app password with the one that unlocked the
-    /// vault. None when the vault is not on the app-password path.
-    pub(crate) fn verify_vault_password(&self, candidate: &[u8]) -> Option<bool> {
-        let held = self.vault_password.lock().unwrap();
-        held.as_ref()
-            .map(|held| constant_time_eq(&held.0, candidate))
-    }
-
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
         let message =
             format!("painted-wolf-presence-v1\n{proof_payload}\nauthenticator={authenticator}");
@@ -238,19 +213,6 @@ impl SidecarState {
                 .to_bytes(),
         )
     }
-}
-
-/// Equal-length byte comparison whose time does not depend on where the
-/// inputs differ.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b) {
-        diff |= x ^ y;
-    }
-    std::hint::black_box(diff) == 0
 }
 
 fn generate_presence_signing_key() -> SigningKey {
@@ -283,7 +245,6 @@ pub(crate) fn attach_only_requested() -> bool {
 
 fn start_sidecar_with_progress<F>(
     state: &SidecarState,
-    password: Option<String>,
     emit: F,
 ) -> Result<SidecarInfo, SidecarStartError>
 where
@@ -292,7 +253,7 @@ where
     let _lifecycle = state.lifecycle.lock().unwrap();
     // A person asking for the engine starts a fresh crash window.
     state.crashes.lock().unwrap().clear();
-    start_sidecar_locked(state, password, &emit)
+    start_sidecar_locked(state, &emit)
 }
 
 struct StartingGuard<'a>(&'a AtomicBool);
@@ -305,7 +266,6 @@ impl Drop for StartingGuard<'_> {
 
 fn start_sidecar_locked<F>(
     state: &SidecarState,
-    password: Option<String>,
     emit: &F,
 ) -> Result<SidecarInfo, SidecarStartError>
 where
@@ -318,44 +278,26 @@ where
         return Ok(info);
     }
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     stop_sidecar_locked(state);
 
-    launch_sidecar_locked(state, password, emit)
+    launch_sidecar_locked(state, emit)
 }
 
 fn launch_sidecar_locked<F>(
     state: &SidecarState,
-    password: Option<String>,
     emit: &F,
 ) -> Result<SidecarInfo, SidecarStartError>
 where
     F: Fn(StartupProgress),
 {
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     state.cancel_start.store(false, Ordering::Release);
     state.starting.store(true, Ordering::Release);
     let _starting = StartingGuard(&state.starting);
     let api_token = generate_api_token();
-    let supplied = password.map(|value| VaultPassword(value.into_bytes()));
-    let mut password_bytes = supplied.as_ref().map(|value| value.0.clone()).or_else(|| {
-        state
-            .vault_password
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|value| value.0.clone())
-    });
-    let spawned = spawn_sidecar_process(
-        &api_token,
-        &state.presence_public_key(),
-        password_bytes.as_deref(),
-    );
-    if let Some(value) = password_bytes.as_mut() {
-        value.fill(0);
-    }
-    let spawned = spawned?;
+    let spawned = spawn_sidecar_process(&api_token, &state.presence_public_key())?;
     let child_pid = spawned.child.id();
     *state.process.lock().unwrap() = Some(spawned.child);
 
@@ -370,9 +312,6 @@ where
 
     *state.port.lock().unwrap() = port;
     *state.api_token.lock().unwrap() = api_token.clone();
-    if let Some(value) = supplied {
-        *state.vault_password.lock().unwrap() = Some(value);
-    }
     let generation = state.generation.fetch_add(1, Ordering::AcqRel) + 1;
     let _ = state.watches.send(ExitWatch {
         generation,
@@ -448,16 +387,16 @@ where
         return attach_or_explain(&crate::config_dir::host_config_dir()?);
     }
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     state.crashes.lock().unwrap().clear();
     stop_sidecar_locked(state);
-    launch_sidecar_locked(state, None, &emit)
+    launch_sidecar_locked(state, &emit)
 }
 
 /// Starts a replacement for an engine that exited; the supervisor holds the
 /// lifecycle lock.
 pub(crate) fn relaunch_sidecar(state: &SidecarState) -> Result<SidecarInfo, SidecarStartError> {
-    launch_sidecar_locked(state, None, &|_| {})
+    launch_sidecar_locked(state, &|_| {})
 }
 
 fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
@@ -467,8 +406,9 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
     }
     installation::ensure_current().map_err(|reason| reason.guidance())?;
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::host_config_dir()?;
-    let status = Command::new(&bin)
+    let status = Command::new(&image.path)
         .args(["credentials", "purge", "--yes"])
         .env("LYCAON_CONFIG_DIR", config_dir)
         .stdin(Stdio::null())
@@ -482,7 +422,6 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
             status.code().unwrap_or(-1)
         ));
     }
-    *state.vault_password.lock().unwrap() = None;
     state.clear();
     Ok(())
 }

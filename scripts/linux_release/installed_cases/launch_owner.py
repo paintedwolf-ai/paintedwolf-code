@@ -11,14 +11,9 @@ import sys
 import threading
 import time
 
+from ..installed_process import process_identity
+
 LIMIT = 64 << 10
-
-
-def process_identity(pid):
-    fields = Path(f'/proc/{pid}/stat').read_text().rpartition(') ')[2].split()
-    if len(fields) < 20:
-        raise ValueError('installed process identity is unavailable')
-    return {'pid': pid, 'parent_pid': int(fields[1]), 'start_time_ticks': int(fields[19])}
 
 
 def children(pid):
@@ -140,7 +135,10 @@ class LaunchOwner:
         self.events, self.failure, self.closed = [], None, threading.Event()
         try:
             self.process = subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve()), str(write_fd), *command],
+                [sys.executable, '-I', '-S', '-B', '-c',
+                 'import sys;sys.path.insert(0,sys.argv.pop(1));'
+                 'from scripts.linux_release.installed_cases.launch_owner import main;raise SystemExit(main())',
+                 str(Path(__file__).resolve().parents[3]), str(write_fd), *command],
                 env=environment, pass_fds=(write_fd,), stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         except BaseException:

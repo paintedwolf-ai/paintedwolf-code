@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -70,7 +69,7 @@ func TestEvaluationMeasuresWorkersAndCancelsOwnedGroup(t *testing.T) {
 	}
 	executable, err := os.Executable()
 	testutil.FailErr(t, "locate process helper", err)
-	ctx, cancel := context.WithCancel(testutil.BoundedContext(t, 30*time.Second))
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestEvaluationProcessHelper$")
 	cmd.Env = append(os.Environ(), evaluationHelperMode+"=parent")
@@ -103,7 +102,7 @@ func TestEvaluationMeasuresWorkersAndCancelsOwnedGroup(t *testing.T) {
 		t.Fatal("cancellation did not terminate the scanner process")
 	}
 	for _, pid := range workers {
-		testutil.WaitFor(t, 30*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			alive, err := evaluationWorkerAlive(pid)
 			testutil.FailErr(t, "check owned worker", err)
 			return !alive

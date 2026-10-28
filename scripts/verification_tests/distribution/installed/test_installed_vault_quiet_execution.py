@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
-from linux_release import installed_execution
+from linux_release.campaign import execution as installed_execution
 from linux_release.installed_cases import vault_quiet as owner
 from linux_release.installed_input import controller
 

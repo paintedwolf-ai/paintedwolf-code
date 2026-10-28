@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_variants as owner
+from linux_release.campaign import variants as owner
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -23,7 +23,7 @@ class InstalledVariantTests(unittest.TestCase):
 
     def test_typed_plasma_session_selects_its_sole_monitor_authority(self):
         import hashlib
-        from linux_release import installed_plasma
+        from linux_release.campaign import plasma as installed_plasma
         variant = {'release': {'os_ids': ['arch'], 'version_id': None, 'snapshot_kind': 'package-inventory', 'channel': None},
             'display': {'protocol': 'wayland', 'xwayland': 'required', 'clipboard_manager': 'allowed'}, 'scales_percent': [100]}
         selected = {'kind': 'package-inventory', 'value': hashlib.sha256(json.dumps({}, sort_keys=True).encode()).hexdigest(), 'channel': None}
@@ -95,7 +95,7 @@ class InstalledVariantAggregationTests(unittest.TestCase):
 class InstalledPlanVariantTests(unittest.TestCase):
     def test_plan_rejects_legacy_ambiguous_or_repeated_variant_authority(self):
         import copy
-        from linux_release import installed_campaign as campaign
+        from linux_release.campaign import guests as campaign
         target = {'id': 'guest', 'host': '127.0.0.1', 'port': 1234, 'user': 'tester',
                   'identity_file': '/private/key', 'known_hosts': '/private/known', 'checkout': '/controller',
                   'runtime_bin_dirs': [], 'artifact_id': 'selected', 'environment_id': 'fedora',
@@ -122,7 +122,7 @@ class InstalledPlanVariantTests(unittest.TestCase):
 
 class CatalogCapacityTests(unittest.TestCase):
     def test_transport_planning_covers_catalog_and_tightens_selected_artifacts(self):
-        from linux_release import installed_capacity as capacity
+        from linux_release.campaign import capacity
         rows = [{'installation': installation, 'architecture': 'amd64', 'environment': 'desktop',
                  'capability': 'windowing', 'cases': ['resize', 'move']} for installation in ('deb', 'rpm')]
         with patch.object(capacity, 'expand', return_value=rows), \
@@ -138,7 +138,7 @@ class CatalogCapacityTests(unittest.TestCase):
                 capacity.limits({}, {'artifacts': []})
 
     def test_native_preinstallation_journal_has_independent_transport_capacity(self):
-        from linux_release import installed_capacity as capacity
+        from linux_release.campaign import capacity
         row = {'installation': 'rpm', 'architecture': 'amd64', 'environment': 'desktop',
                'capability': 'windowing', 'cases': ['resize']}
         with patch.object(capacity, 'expand', return_value=[row]), \

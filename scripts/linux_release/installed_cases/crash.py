@@ -12,7 +12,8 @@ import sys
 import tempfile
 import time
 
-from .app import InstalledApp, process_identity
+from .app import InstalledApp
+from ..installed_process import process_identity
 from .approval import approve_host_execution
 from .lifecycle import SCRIPT, capture, cleanup, handle, scenario, state, witness
 from .provider import ProviderFixture
