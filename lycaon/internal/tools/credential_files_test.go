@@ -95,3 +95,5 @@ func TestObserveCredentialDeliveryAddressesTheRootFile(t *testing.T) {
 		t.Fatalf("read = %+v", read)
 	}
 }
+
+func (*recordedCredentialFiles) ForgetProject(context.Context, string) error { return nil }

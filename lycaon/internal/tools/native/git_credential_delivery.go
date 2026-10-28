@@ -32,7 +32,9 @@ func deliverGitPatchCredentials(ctx context.Context, tc tools.ToolContext, patch
 			if path == "/dev/null" {
 				continue
 			}
-			path = strings.TrimPrefix(strings.TrimPrefix(path, "a/"), "b/")
+			if strings.HasPrefix(path, "a/") || strings.HasPrefix(path, "b/") {
+				path = path[2:]
+			}
 			if path == "" || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") || seen[path] {
 				continue
 			}

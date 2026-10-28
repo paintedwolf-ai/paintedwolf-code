@@ -219,6 +219,9 @@ func (v *vaultFile) commit(doc vaultDocument) error {
 	if err != nil {
 		return fmt.Errorf("encode credential vault: %w", err)
 	}
+	if len(plaintext) > maxVaultBytes {
+		return fmt.Errorf("credential vault exceeds %d-byte limit", maxVaultBytes)
+	}
 	var ciphertext bytes.Buffer
 	writer, err := age.Encrypt(&ciphertext, v.identity.Recipient())
 	if err != nil {

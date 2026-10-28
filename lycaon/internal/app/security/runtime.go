@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type Runtime struct {
@@ -37,6 +38,7 @@ type Runtime struct {
 	Matcher                *secretmatch.Matcher
 	Ignores                *projectignore.SecretService
 	Harvest                *secretharvest.Runtime
+	CredentialFiles        tools.CredentialFiles
 	Capabilities           *secretcap.Service
 	Fingerprinter          *secretmatch.Fingerprinter
 	releaseCaptureRedactor func()

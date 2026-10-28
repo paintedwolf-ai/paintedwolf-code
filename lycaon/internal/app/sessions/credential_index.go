@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -17,6 +18,7 @@ type credentialRoot struct {
 	known               map[string]bool
 	epoch               repochange.Epoch
 	ready               bool
+	validated           time.Time
 }
 
 type credentialIndex struct {
@@ -57,8 +59,7 @@ func (c *credentialFiles) startCredentialIndex(ctx context.Context) error {
 	}
 	for project := range projects {
 		if err := c.EnsureProject(ctx, project); err != nil {
-			i.stop()
-			return err
+			slog.WarnContext(ctx, "credential-file index awaits repair", "project_id", project, "error", err)
 		}
 	}
 	return nil
@@ -94,24 +95,29 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 		root := i.roots[key]
 		if root == nil || root.path != row.Path {
 			if root != nil {
-				i.withdraw(root)
+				if err := i.withdraw(root); err != nil {
+					return err
+				}
 			}
 			root = rootFromRow(row)
 			i.roots[key] = root
 		}
 		repochange.EnsureRoot(ctx, root.path)
-		if !root.ready || !repochange.EpochCurrent(root.path, root.epoch) {
+		coverageStale := root.coverageExpired(repochange.Coverage(root.path), time.Now())
+		if !root.ready || coverageStale || !repochange.EpochCurrent(root.path, root.epoch) {
 			epoch := repochange.CurrentEpoch(root.path)
 			if err := i.scan(ctx, root, "."); err != nil {
 				root.ready = false
 				return fmt.Errorf("credential-file index: %w", err)
 			}
-			root.ready, root.epoch = true, epoch
+			root.ready, root.epoch, root.validated = true, epoch, time.Now()
 		}
 	}
 	for key, root := range i.roots {
 		if root.projectID == projectID && !attached[key] {
-			i.withdraw(root)
+			if err := i.withdraw(root); err != nil {
+				return err
+			}
 			delete(i.roots, key)
 		}
 	}
@@ -132,10 +138,12 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 		if filepath.Clean(root.path) != filepath.Clean(event.ProjectDir) {
 			continue
 		}
-		epoch := repochange.CurrentEpoch(root.path)
+		epoch := repochange.Epoch{BootID: event.EpochBootID, Value: event.WorktreeEpoch}
+		contiguous := root.ready && epoch.BootID == root.epoch.BootID && epoch.Value == root.epoch.Value+1
 		paths := event.Paths
-		if event.Kind == repochange.HeadMoved || len(paths) == 0 {
+		if !contiguous || event.Kind == repochange.HeadMoved || len(paths) == 0 {
 			paths = []string{"."}
+			epoch = repochange.CurrentEpoch(root.path)
 		}
 		for _, path := range paths {
 			if err := i.scan(ctx, root, path); err != nil {
@@ -144,6 +152,13 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 			}
 		}
 		root.ready, root.epoch = true, epoch
+		if len(paths) == 1 && paths[0] == "." {
+			root.validated = time.Now()
+		}
 	}
 	return nil
+}
+
+func (r *credentialRoot) coverageExpired(coverage repochange.WatchCoverage, now time.Time) bool {
+	return !coverage.Complete && now.Sub(r.validated) >= repochange.CoverageRevalidationInterval
 }

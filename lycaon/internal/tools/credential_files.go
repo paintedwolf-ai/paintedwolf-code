@@ -12,6 +12,7 @@ import (
 // CredentialFiles indexes credential bindings and records attributed delivery.
 type CredentialFiles interface {
 	EnsureProject(ctx context.Context, projectID string) error
+	ForgetProject(ctx context.Context, projectID string) error
 	// Delivered records the session's exposure to a credential file.
 	Delivered(ctx context.Context, read CredentialFileRead) error
 	// Authored records values the model already holds.

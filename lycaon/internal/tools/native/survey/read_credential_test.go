@@ -75,3 +75,5 @@ func TestReadWithholdsCredentialFileWhenExposureFails(t *testing.T) {
 		t.Fatalf("the unrecorded read returned its text: %q", out)
 	}
 }
+
+func (*deliveredRecorder) ForgetProject(context.Context, string) error { return nil }

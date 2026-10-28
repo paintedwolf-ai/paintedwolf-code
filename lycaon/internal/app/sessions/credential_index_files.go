@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/textfile"
 )
 
 const credentialFileBytes = 16 << 20
@@ -49,20 +50,17 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if repochange.IsPrivatePath(abs) {
-			if entry.IsDir() {
+		if entry.IsDir() {
+			if entry.Name() == ".git" || repochange.IsPrivatePath(abs) {
 				return filepath.SkipDir
 			}
-			return nil
-		}
-		if entry.IsDir() {
 			seeds = append(seeds, repochange.WatchDirectory{Path: abs})
 			if len(seeds) == 128 {
 				flush()
 			}
 			return nil
 		}
-		if !entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0 || !protectedpath.IsCredentialFile(rel) {
+		if !entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0 || !protectedpath.IsCredentialFile(rel) || repochange.IsPrivatePath(abs) {
 			return nil
 		}
 		if err := i.read(ctx, root, rel); err != nil {
@@ -77,7 +75,9 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 	for known := range root.known {
 		inScope := path == "." || known == path || strings.HasPrefix(known, path+"/")
 		if inScope && !seen[known] {
-			i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: known})
+			if err := i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: known}); err != nil {
+				return err
+			}
 			delete(root.known, known)
 		}
 	}
@@ -110,6 +110,9 @@ func (i *credentialIndex) read(ctx context.Context, root *credentialRoot, path s
 	if len(raw) > credentialFileBytes {
 		return fmt.Errorf("credential file %s grew beyond the parsing limit", path)
 	}
+	if text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(credentialFileBytes)); err == nil {
+		raw = []byte(text)
+	}
 	return i.observe(ctx, root, path, raw)
 }
 
@@ -122,12 +125,14 @@ func (i *credentialIndex) observe(ctx context.Context, root *credentialRoot, pat
 	for _, fingerprint := range authored {
 		held[secretmatch.SecretFingerprint(fingerprint)] = true
 	}
-	i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path, Content: raw, Held: func(fp secretmatch.SecretFingerprint) bool { return held[fp] }})
-	return nil
+	return i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path, Content: raw, Held: func(fp secretmatch.SecretFingerprint) bool { return held[fp] }})
 }
 
-func (i *credentialIndex) withdraw(root *credentialRoot) {
+func (i *credentialIndex) withdraw(root *credentialRoot) error {
 	for path := range root.known {
-		i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path})
+		if err := i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path}); err != nil {
+			return err
+		}
 	}
+	return nil
 }

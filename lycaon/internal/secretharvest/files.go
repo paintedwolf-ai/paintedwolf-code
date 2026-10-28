@@ -15,9 +15,9 @@ type FileContent struct {
 }
 
 // ObserveFile replaces a path's active bindings and retains bytes that left it.
-func (r *Runtime) ObserveFile(file FileContent) {
+func (r *Runtime) ObserveFile(file FileContent) error {
 	if r == nil || r.fp == nil || file.ProjectID == "" || file.RootID == "" || file.Path == "" {
-		return
+		return nil
 	}
 	current := map[string]Value{}
 	for _, pair := range ParseContainer(file.Path, file.Content) {
@@ -30,6 +30,10 @@ func (r *Runtime) ObserveFile(file FileContent) {
 	r.mu.Lock()
 	key := fileIdentity{file.ProjectID, file.RootID, file.Path}
 	previous := r.byFile[key]
+	if err := r.persistFileLocked(key, current); err != nil {
+		r.mu.Unlock()
+		return err
+	}
 	if r.byFile == nil {
 		r.byFile = map[fileIdentity]map[string]Value{}
 	}
@@ -69,6 +73,7 @@ func (r *Runtime) ObserveFile(file FileContent) {
 	for _, root := range roots {
 		r.Invalidate(root)
 	}
+	return nil
 }
 
 func (r *Runtime) FileValues(projectID string) []Value {
@@ -123,7 +128,7 @@ func (r *Runtime) FileValuesForSession(rootSessionID string) []Value {
 	r.mu.RUnlock()
 	if project == "" && resolve != nil {
 		project = resolve(rootSessionID)
-		r.bindProject(rootSessionID, project)
+		r.BindSessionProject(rootSessionID, project)
 	}
 	return r.FileValues(project)
 }

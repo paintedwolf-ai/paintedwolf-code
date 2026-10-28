@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -31,7 +32,7 @@ type Value struct {
 	Source secretmatch.RedactionSource
 	// Reference is the managed capability that can replace the raw value.
 	Reference string
-	// Retired marks managed bytes whose capability no longer resolves.
+	// Retired marks bytes no longer held by their active source.
 	Retired bool
 	// NonDisclosable prevents this exact value from crossing the model boundary.
 	NonDisclosable bool
@@ -41,10 +42,11 @@ type Value struct {
 // Secret returns the raw value for exact matching.
 func (v Value) Secret() string { return v.secret }
 
-// Runtime holds harvested values per session tree.
+// Runtime holds session evidence and retained project file bindings.
 type Runtime struct {
 	mu sync.RWMutex
 	// Eviction would remove active screening evidence.
+	fileStore    *credentialstore.Store
 	byFile       map[fileIdentity]map[string]Value
 	retiredFiles map[string]map[string]Value
 	bySession    map[string]map[string]Value // root session → secret → Value
@@ -126,7 +128,7 @@ func (r *Runtime) Harvest(read ContainerRead) []Value {
 	if len(pairs) == 0 {
 		return nil
 	}
-	r.bindProject(read.RootSessionID, read.ProjectID)
+	r.BindSessionProject(read.RootSessionID, read.ProjectID)
 	values := make([]Value, 0, len(pairs))
 	for _, p := range pairs {
 		if read.Held != nil && r.fp != nil && read.Held(r.fp.Fingerprint(p.Value)) {
@@ -144,8 +146,9 @@ func (r *Runtime) Harvest(read ContainerRead) []Value {
 	return r.add(read.RootSessionID, values)
 }
 
-func (r *Runtime) bindProject(rootSessionID, projectID string) {
-	if strings.TrimSpace(projectID) == "" {
+// BindSessionProject scopes file evidence and later transcript sweeps to this chat.
+func (r *Runtime) BindSessionProject(rootSessionID, projectID string) {
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(rootSessionID) == "" {
 		return
 	}
 	r.mu.Lock()

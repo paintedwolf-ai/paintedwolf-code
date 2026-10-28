@@ -39,3 +39,18 @@ func TestGitPatchCredentialDeliveryUsesFileHeaders(t *testing.T) {
 		t.Fatalf("delivery error=%v", err)
 	}
 }
+
+func TestGitPatchCredentialDeliveryPreservesLeadingDirectory(t *testing.T) {
+	tc := nativefixture.Context(t.TempDir())
+	recorder := &gitCredentialRecorder{}
+	tc.Effects.CredentialFiles = recorder
+	patch := "diff --git a/b/.env b/b/.env\n--- a/b/.env\n+++ b/b/.env\n@@ -1 +1 @@\n-TOKEN=old-value-4411\n+TOKEN=new-value-5533\n"
+	if err := deliverGitPatchCredentials(t.Context(), tc, patch); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.reads) != 1 || recorder.reads[0].Path != "b/.env" {
+		t.Fatalf("attribution=%+v", recorder.reads)
+	}
+}
+
+func (*gitCredentialRecorder) ForgetProject(context.Context, string) error { return nil }

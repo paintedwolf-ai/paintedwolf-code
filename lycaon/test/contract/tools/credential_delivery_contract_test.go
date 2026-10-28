@@ -11,7 +11,7 @@ import (
 // Every native source-content surface has an attributed delivery seam.
 func TestNativeCredentialContentDeliveryInventory(t *testing.T) {
 	surfaces := []struct{ tool, file, function, delivery string }{
-		{"read", "internal/tools/native/survey/read.go", "runRead", "ObserveCredentialDelivery"},
+		{"read", "internal/tools/native/survey/read.go", "Run", "ObserveCredentialDelivery"},
 		{"grep", "internal/tools/native/survey/grep.go", "finalizeGrepResponse", "deliverGrepCredentials"},
 		{"diff", "internal/tools/native/survey/diff.go", "Run", "deliverCredentialText"},
 		{"summarize", "internal/tools/native/survey/summarize.go", "Run", "deliverSummaryCredentials"},
