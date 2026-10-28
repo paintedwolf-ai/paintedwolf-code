@@ -254,8 +254,11 @@ func verifyMountNamespaceOwner(desktopPID, watcherPID int, initUser string) erro
 	var parentStat, ownerStat, watcherUserStat, desktopUserStat unix.Stat_t
 	err = unix.Fstat(parentFD, &parentStat)
 	_ = unix.Close(parentFD)
-	if err != nil || parentStat.Ino != 0xEFFFFFFD {
-		return fmt.Errorf("M_view owning userns parent ino = %#x (%v), want 0xEFFFFFFD (%s)", parentStat.Ino, err, initUser)
+	if err != nil {
+		return fmt.Errorf("M_view owning userns parent: %w", err)
+	}
+	if parentStat.Ino != 0xEFFFFFFD {
+		return fmt.Errorf("M_view owning userns parent ino = %#x, want 0xEFFFFFFD (%s)", parentStat.Ino, initUser)
 	}
 	if err := unix.Fstat(ownerUserFD, &ownerStat); err != nil {
 		return err
@@ -305,16 +308,23 @@ func checkModuleWatcherSeal() error {
 	}
 	stopAfter := startLockedWorkerThreads(1)
 	defer stopAfter()
-	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
-		return fmt.Errorf("sealed watcher dumpable = %d (%v), want 0", dumpable, err)
+	dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
+	if err != nil {
+		return fmt.Errorf("sealed watcher dumpable: %w", err)
+	}
+	if dumpable != 0 {
+		return fmt.Errorf("sealed watcher dumpable = %d, want 0", dumpable)
 	}
 	if err := scrubSingleMount(probeDir); err != nil {
 		return fmt.Errorf("sealed watcher scrubSingleMount in initial user namespace: %w", err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
-	if err := unix.Statfs(probeDir, &st); err != nil || st.Flags&wantFlags != wantFlags {
-		return fmt.Errorf("sealed watcher statfs flags = %#x (%v), want %#x", st.Flags, err, wantFlags)
+	if err := unix.Statfs(probeDir, &st); err != nil {
+		return fmt.Errorf("sealed watcher statfs: %w", err)
+	}
+	if st.Flags&wantFlags != wantFlags {
+		return fmt.Errorf("sealed watcher statfs flags = %#x, want %#x", st.Flags, wantFlags)
 	}
 	wantUID := fmt.Sprintf("%d %d %d %d", uid, uid, uid, uid)
 	wantGID := fmt.Sprintf("%d %d %d %d", gid, gid, gid, gid)
