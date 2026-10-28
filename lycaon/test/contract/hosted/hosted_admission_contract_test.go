@@ -115,8 +115,11 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	t.Parallel()
 	ci := hostedWorkflowFile(t, "ci")
-	if ci.Permissions["actions"] != "" || ci.Jobs["fast"].Permissions != nil {
+	if ci.Permissions["actions"] != "" {
 		t.Error("pull request CI runs unreviewed code and must not hold actions write")
+	}
+	if want := map[string]string{"contents": "read", "actions": "read"}; !maps.Equal(ci.Jobs["fast"].Permissions, want) {
+		t.Errorf("pull request CI reads its previous run's receipts and needs exactly %v, got %v", want, ci.Jobs["fast"].Permissions)
 	}
 	if want := map[string]string{"contents": "read", "actions": "write", "pull-requests": "read"}; !maps.Equal(ci.Jobs["integration"].Permissions, want) {
 		t.Errorf("merge-group CI needs exactly %v to cancel its own run, got %v", want, ci.Jobs["integration"].Permissions)
