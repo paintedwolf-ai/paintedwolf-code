@@ -36,7 +36,12 @@ func (l *Waits) loopDeps() WaitsDeps {
 	defer l.depsMu.RUnlock()
 	return l.deps
 }
+
+// InterruptSleep ends the session's wait for a turn that supersedes it. A
+// parked program stops at its waiting statement, and the turn receives its
+// result.
 func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
+	l.Subscriptions.interruptParkedProgram(ctx, sessionID, true)
 	if store := l.Subscriptions.durableWaitStore(); store != nil {
 		_ = store.InterruptSession(ctx, sessionID, "interrupted")
 	}
@@ -335,6 +340,12 @@ func (l *Waits) activeSleepMover(sessionID string) SleepMover {
 	}
 	return SleepMoverHost
 }
+func (l *Waits) activeCaller(sessionID string) waitCaller {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.caller
+}
 func (l *Waits) activeUntilComplete(sessionID string) bool {
 	st := l.sleep.state(sessionID)
 	st.mu.Lock()
@@ -371,7 +382,7 @@ func (l *Waits) rearmSleepAfterSkip(ctx context.Context, sessionID string) {
 	l.enterSleep(ctx, sessionID, sleepArm{
 		until: until, untilComplete: l.activeUntilComplete(sessionID), reason: "skip:re-arm",
 		triggers: l.Triggers(sessionID), processHandles: l.ActiveProcessHandles(sessionID),
-		mover: l.activeSleepMover(sessionID),
+		mover: l.activeSleepMover(sessionID), caller: l.activeCaller(sessionID),
 	})
 }
 func (l *Waits) publishWaitLease(ctx context.Context, lease WaitLease) {

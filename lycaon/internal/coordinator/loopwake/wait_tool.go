@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"strings"
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
@@ -12,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // One-second waits support short local readiness checks.
@@ -136,47 +134,22 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 				until = pendingUntil
 			}
 		}
-		// Coordinator waits keep a timer backstop.
-		armedTriggers := triggers
-		if strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
-			// The durable worker queue schedules its own deadline.
-			armedTriggers = removeWaitTrigger(armedTriggers, WaitTriggerTimer)
-		}
-		var leaseID string
-		var lease awaitstore.Lease
-		if deps.Store != nil {
-			lease, err = deps.Store.Arm(ctx, awaitstore.Lease{
-				SessionID: tctx.Identity.SessionID, RootSessionID: rootSessionID(tctx), ProjectID: tctx.Identity.ProjectID,
-				ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, WorkerJobID: tctx.Identity.WorkerJobID,
-				ProfileID: tctx.Identity.Agent, Deadline: until, UntilComplete: request.UntilComplete, Conditions: conditions,
-				LoopbackPorts: append([]uint16(nil), tctx.Local.LoopbackConnectPorts...), Reason: reason,
-			})
-			if err != nil {
-				return "", err
-			}
-			if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
-				// Keep a result that settled this lease during registration.
-				if winner, ok := loop.Deliveries.waitWinner(tctx.Identity.SessionID); ok && winner.LeaseID != lease.ID {
-					loop.Deliveries.waitWinners.CompareAndDelete(strings.TrimSpace(tctx.Identity.SessionID), winner)
-				}
-			}
-			leaseID = lease.ID
-		}
-		loop.Waits.enterSleep(ctx, tctx.Identity.SessionID, sleepArm{
-			until: until, untilComplete: request.UntilComplete, reason: reason,
-			triggers: armedTriggers, processHandles: processHandles, workerHandles: request.WorkerHandles, mover: SleepMoverHost,
+		// A new lease replaces the armed one, so a program parked on it ends first.
+		loop.interruptParkedProgram(ctx, tctx.Identity.SessionID, true)
+		lease, err := loop.park(ctx, tctx, parkRequest{
+			operation: "wait", reason: reason, until: until, untilComplete: request.UntilComplete,
+			conditions: conditions, triggers: triggers, processHandles: processHandles, workerHandles: request.WorkerHandles,
 		})
-		loop.Waits.MarkWaitCalled(tctx.Identity.SessionID)
+		if err != nil {
+			return "", err
+		}
+		leaseID := lease.ID
 		if deps.Store != nil {
 			monitorCtx := deps.RuntimeContext
 			if monitorCtx == nil {
 				monitorCtx = context.Background()
 			}
 			startConditionMonitor(monitorCtx, loop, deps.Store, lease) //nolint:contextcheck // Monitor follows application lifetime.
-		}
-		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.OwnerRef = leaseID
-			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait", ResourceID: leaseID}
 		}
 		result := WaitToolResult{
 			Status: "parked", LeaseID: leaseID, Reason: reason, UntilComplete: request.UntilComplete,
@@ -234,5 +207,3 @@ func prepareWaitRequest(ctx context.Context, loop *WaitSubscriptions, deps WaitT
 	}
 	return request, nil
 }
-
-// RecoverWaitLeases reconstructs timers, subscriptions, and active probes after boot.

@@ -15650,9 +15650,11 @@ components:
           format: date-time
         tool_name:
           type: string
+          description: The running tool, or on awaiting_wake the tool call that parked the session (`wait`, or `command` whose program waits). Absent on a host-armed awaiting_wake lease.
         tool_call_id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
+          description: The call tool_name names. On awaiting_wake it binds the lease to the parked call, whose result carries completion state parked.
         progress:
           x-go-pointer: true
           $ref: '#/components/schemas/ToolProgress'
@@ -15660,7 +15662,7 @@ components:
           type: array
           items:
             type: string
-          description: Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason.
+          description: Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason. A parked command's lease subscribes to program_done, which only the host arms.
         decision_trigger:
           $ref: '#/components/schemas/TurnLoadTrigger'
           description: What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event.
@@ -27526,6 +27528,7 @@ components:
         - operation
         - state
       additionalProperties: false
+      description: 'A call''s lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session''s wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease''s awaiting_wake activity carries the call''s tool_call_id; when that activity closes, the wait has ended and the call''s outcome arrives in a later message.'
       properties:
         operation:
           type: string
@@ -27539,6 +27542,9 @@ components:
         result_handle:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
+        reason:
+          type: string
+          description: 'What a parked call waits on: the wait''s stated reason, or the statement a parked command''s program waits at (`sleep 30`, `wait %1`). Present only with state parked.'
     FileEditReference:
       x-go-generate: true
       type: object
