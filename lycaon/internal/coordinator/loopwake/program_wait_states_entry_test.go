@@ -48,3 +48,22 @@ func TestRealEvaluatorSleepInterruptsAtTheWaitingStatement(t *testing.T) {
 		t.Fatalf("interrupted sleep retained %d timers", clock.Pending())
 	}
 }
+
+func TestRealEvaluatorOutputSubstitutionInterruptsThroughTheLease(t *testing.T) {
+	clock := programtest.NewManualClock()
+	f := newEntryFixture(t, programtest.NewWaitingProgram(clock, programtest.SleepState(600*time.Second)))
+	f.Runtime.Evaluate = commandprogram.Evaluate
+	parked := f.parkCall(t, "printf x > >(sleep 600)")
+	f.loop.Waits.InterruptSleep(t.Context(), f.Session)
+	ended := f.loop.Deliveries.TakeEndedWaits(f.Session)
+	if len(ended) != 1 {
+		t.Fatalf("ended waits %+v", ended)
+	}
+	outcome := decodeProgram(t, ended[0].Report)
+	if outcome.ProgramID != parked.ProgramID || outcome.State != "interrupted" || outcome.Status != 130 {
+		t.Fatalf("interrupted %+v", outcome)
+	}
+	if clock.Pending() != 0 {
+		t.Fatalf("interrupted substitution retained %d timers", clock.Pending())
+	}
+}
