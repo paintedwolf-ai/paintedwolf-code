@@ -2,14 +2,14 @@
 
 import type { MessageContentPart } from "../../../api/types.ts";
 import type { ComposerPendingKind } from "../../composer/composer-attachments.ts";
-import { formatAttachmentBytes } from "../../composer/composer-attachments.ts";
+import { formatAttachmentBytes, isAllowedImageMime } from "../../composer/composer-attachments.ts";
 import { normalizeLineRange } from "../../composer/path-file-ref.ts";
 
 export type TranscriptAttachmentChip = {
   id: string;
   kind: Extract<
     ComposerPendingKind,
-    "text" | "document" | "video" | "path-file" | "path-folder" | "search-hit"
+    "image" | "text" | "document" | "video" | "path-file" | "path-folder" | "external-file" | "external-folder" | "search-hit"
   >;
   /** Chip label (basename or ranged basename). */
   label: string;
@@ -24,6 +24,7 @@ export type TranscriptAttachmentChip = {
   mime?: string;
   blobId?: string;
   byteLength?: number;
+  artifactId?: string;
   /** Search-hit identity. */
   sourceRef?: string;
   hitKind?: string;
@@ -93,8 +94,12 @@ function isDocumentMime(mime: string): boolean {
 
 function retrievalKind(
   part: MessageContentPart,
-): "path-file" | "path-folder" | "search-hit" | null {
+): "path-file" | "path-folder" | "external-file" | "external-folder" | "search-hit" | null {
   switch (part.reference_kind) {
+    case "external_file":
+      return "external-file";
+    case "external_folder":
+      return "external-folder";
     case "path_file":
       return "path-file";
     case "path_folder":
@@ -123,7 +128,7 @@ function chipFromPart(part: MessageContentPart, index: number): TranscriptAttach
     ) {
       return null;
     }
-    const kind = mime.toLowerCase().startsWith("video/") ? "video" : isDocumentMime(mime) ? "document" : "text";
+    const kind = isAllowedImageMime(mime) ? "image" : mime.toLowerCase().startsWith("video/") ? "video" : isDocumentMime(mime) ? "document" : "text";
     return {
       id: `part-${index}`,
       kind,
@@ -132,20 +137,21 @@ function chipFromPart(part: MessageContentPart, index: number): TranscriptAttach
       mime,
       blobId,
       byteLength,
+      artifactId: part.artifact_id,
     };
   }
   if (origin === "retrieval") {
     const kind = retrievalKind(part);
     if (!kind) return null;
     const mime = part.media_type?.trim();
-    if (kind === "path-folder") {
+    if (kind === "path-folder" || kind === "external-folder") {
       const source = part.path?.trim();
       if (!source) return null;
       return {
         id: `part-${index}`,
-        kind: "path-folder",
+        kind,
         label: basename(source),
-        detail: source.includes("/") ? source : "",
+        detail: source.includes("/") || source.includes("\\") ? source : "",
         path: source,
         rootId: part.root_id?.trim() || undefined,
         mime,
@@ -171,9 +177,10 @@ function chipFromPart(part: MessageContentPart, index: number): TranscriptAttach
     const range = normalizeLineRange(part.start_line, part.end_line);
     return {
       id: `part-${index}`,
-      kind: "path-file",
+      kind,
+      artifactId: part.artifact_id,
       label: labelForPath(source, range?.startLine, range?.endLine),
-      detail: source.includes("/") ? source : "",
+      detail: source.includes("/") || source.includes("\\") ? source : "",
       path: source,
       rootId: part.root_id?.trim() || undefined,
       startLine: range?.startLine,

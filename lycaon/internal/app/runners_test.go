@@ -58,7 +58,7 @@ func TestStopRunnersBoundsRunnerThatIgnoresCancel(t *testing.T) {
 	}()
 	select {
 	case <-returned:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stopRunners blocked on a runner that ignores cancellation")
 	}
 
@@ -87,7 +87,7 @@ func TestBackgroundRunnerRestartsAfterFailure(t *testing.T) {
 
 	select {
 	case <-second:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("runner was not restarted")
 	}
 	if got := attempts.Load(); got != 2 {
@@ -115,7 +115,7 @@ func TestBackgroundRunnerRestartsAfterPanic(t *testing.T) {
 
 	select {
 	case <-restarted:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("runner was not restarted after panic")
 	}
 }

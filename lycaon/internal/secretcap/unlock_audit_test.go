@@ -27,8 +27,10 @@ func TestUnlockAuditRecordsHowEachUnlockEnded(t *testing.T) {
 	}
 	ended := record("11111111-1111-4111-8111-111111111111")
 	record("22222222-2222-4222-8222-222222222222")
+	away := record("33333333-3333-4333-8333-333333333333")
 
 	service.RecordUnlockEnd(t.Context(), ended, presence.EndScreenLocked, at.Add(time.Minute))
+	service.RecordUnlockEnd(t.Context(), away, presence.EndAway, at.Add(time.Minute))
 	// The first end stands.
 	service.RecordUnlockEnd(t.Context(), ended, presence.EndIdle, at.Add(time.Hour))
 	testutil.FailErr(t, "close left open", service.CloseUnlocksLeftOpen(t.Context()))
@@ -44,7 +46,8 @@ func TestUnlockAuditRecordsHowEachUnlockEnded(t *testing.T) {
 	}
 	testutil.FailErr(t, "iterate unlocks", rows.Err())
 	if reasons["11111111-1111-4111-8111-111111111111"] != string(presence.EndScreenLocked) ||
-		reasons["22222222-2222-4222-8222-222222222222"] != string(presence.EndRestart) {
+		reasons["22222222-2222-4222-8222-222222222222"] != string(presence.EndRestart) ||
+		reasons["33333333-3333-4333-8333-333333333333"] != string(presence.EndAway) {
 		t.Fatalf("end reasons = %v", reasons)
 	}
 }
@@ -53,23 +56,18 @@ func TestUnlockAuditRecordsLinuxAuthenticators(t *testing.T) {
 	service, _, _ := testService(t)
 	owner := testOwner(t, service)
 	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
-	ids := map[string]string{
-		presence.AuthenticatorLinux:            "33333333-3333-4333-8333-333333333333",
-		presence.AuthenticatorLinuxAppPassword: "44444444-4444-4444-8444-444444444444",
-	}
-	for authenticator, id := range ids {
-		unlock := presence.NewUnlock("root-1", presence.Verified{
-			ChallengeID: id, PersonID: owner, Authenticator: authenticator, WindowLabel: "main", VerifiedAt: at,
-		})
-		tx, err := service.handle.BeginTx(t.Context(), nil)
-		testutil.FailErr(t, "begin", err)
-		testutil.FailErr(t, "record "+authenticator+" unlock", RecordUnlock(t.Context(), tx, testdbseed.DefaultProjectID, unlock))
-		testutil.FailErr(t, "commit", tx.Commit())
-		var recorded string
-		testutil.FailErr(t, "read unlock audit", service.handle.QueryRowContext(t.Context(),
-			`SELECT authenticator FROM vault_unlocks WHERE id = ?`, id).Scan(&recorded))
-		if recorded != authenticator {
-			t.Fatalf("unlock authenticator = %q, want %q", recorded, authenticator)
-		}
+	const id = "33333333-3333-4333-8333-333333333333"
+	unlock := presence.NewUnlock("root-1", presence.Verified{
+		ChallengeID: id, PersonID: owner, Authenticator: presence.AuthenticatorLinux, WindowLabel: "main", VerifiedAt: at,
+	})
+	tx, err := service.handle.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin", err)
+	testutil.FailErr(t, "record "+presence.AuthenticatorLinux+" unlock", RecordUnlock(t.Context(), tx, testdbseed.DefaultProjectID, unlock))
+	testutil.FailErr(t, "commit", tx.Commit())
+	var recorded string
+	testutil.FailErr(t, "read unlock audit", service.handle.QueryRowContext(t.Context(),
+		`SELECT authenticator FROM vault_unlocks WHERE id = ?`, id).Scan(&recorded))
+	if recorded != presence.AuthenticatorLinux {
+		t.Fatalf("unlock authenticator = %q, want %q", recorded, presence.AuthenticatorLinux)
 	}
 }

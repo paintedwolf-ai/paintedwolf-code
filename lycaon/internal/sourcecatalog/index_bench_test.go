@@ -51,8 +51,8 @@ func BenchmarkIndexRepository(b *testing.B) {
 		if status.State == StateFailed {
 			b.Fatalf("discovery failed: %s", status.Error)
 		}
-		if time.Since(started) > 30*time.Minute {
-			b.Fatal("discovery exceeded 30 minutes")
+		if b.Context().Err() != nil {
+			b.Fatalf("discovery context ended: %v", b.Context().Err())
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

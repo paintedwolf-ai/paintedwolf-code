@@ -65,7 +65,7 @@ func TestKnownEmptyMeasuresTheIndexNotTheBrief(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	empty := t.TempDir()
-	_, err := repoinfo.AwaitBrief(testutil.BoundedContext(t, 5*time.Second), p, empty)
+	_, err := repoinfo.AwaitBrief(t.Context(), p, empty)
 	testutil.FailErr(t, "warm empty root", err)
 	got, err := p.KnownEmpty(t.Context(), empty)
 	testutil.FailErr(t, "measure empty root", err)

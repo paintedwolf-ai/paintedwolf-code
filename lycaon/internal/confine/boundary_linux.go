@@ -18,16 +18,43 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
-// probeTimeout bounds the one helper run that establishes availability.
+// probeTimeout bounds one helper run that establishes availability.
 const probeTimeout = 15 * time.Second
 
-var linuxHost struct {
-	once sync.Once
-	caps linuxsandbox.Capabilities
+// capabilityRetryInterval bounds how often an engine re-probes a host whose
+// confinement was unavailable: a probe that timed out under load, or a
+// restriction lifted by installing the package's AppArmor profile, recovers
+// without restarting the engine.
+const capabilityRetryInterval = 30 * time.Second
+
+var linuxHost = capabilityCache{probe: probeCapabilities, now: time.Now}
+
+// capabilityCache keeps an applied boundary for the process's lifetime and an
+// unavailable one only until the retry interval passes.
+type capabilityCache struct {
+	mu       sync.Mutex
+	probe    func() linuxsandbox.Capabilities
+	now      func() time.Time
+	caps     linuxsandbox.Capabilities
+	probed   bool
+	probedAt time.Time
+}
+
+func (c *capabilityCache) get() linuxsandbox.Capabilities {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.probed && (c.caps.Available() || c.now().Sub(c.probedAt) < capabilityRetryInterval) {
+		return c.caps
+	}
+	c.caps = c.probe()
+	c.probed = true
+	c.probedAt = c.now()
+	return c.caps
 }
 
 // Available reports whether confined commands can run: every kernel capability
@@ -38,16 +65,15 @@ func Available() bool { return linuxCapabilities().Available() }
 // why confinement is unavailable.
 func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxCapabilities(), true }
 
-func linuxCapabilities() linuxsandbox.Capabilities {
-	linuxHost.once.Do(func() {
-		caps := linuxsandbox.Facts()
-		if caps.FloorMet() {
-			stderr, err := probeHelper()
-			caps.RecordRun(err, stderr)
-		}
-		linuxHost.caps = caps
-	})
-	return linuxHost.caps
+func linuxCapabilities() linuxsandbox.Capabilities { return linuxHost.get() }
+
+func probeCapabilities() linuxsandbox.Capabilities {
+	caps := linuxsandbox.Facts()
+	if caps.FloorMet() {
+		stderr, err := probeHelper()
+		caps.RecordRun(err, stderr)
+	}
+	return caps
 }
 
 // probeHelper runs the helper once against a plan that only attests, so
@@ -69,6 +95,9 @@ func probeHelper() (string, error) {
 	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
+		return "", err
+	}
+	if err := installbinding.Verify(self); err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
@@ -272,6 +301,11 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		if err != nil {
 			return err
 		}
+		if name := loaderName(m); name != "" && !rule.allow && coveredByList(pc.grants, m.subpath) {
+			// Files named at any depth are also held by name, so one created
+			// after launch cannot bypass the floor.
+			pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
+		}
 		for _, path := range paths {
 			if rule.allow {
 				pc.allowWrite(path)
@@ -313,16 +347,28 @@ func (pc *planCompiler) denyWrite(path string, except []string) {
 	}
 }
 
+// loaderName is the basename a write filter protects at any depth below its
+// root, or empty for any other filter.
+func loaderName(m fsMatch) string {
+	if m.regex == "" || m.subpath == "" {
+		return ""
+	}
+	for _, location := range protectedpath.AgentPolicyLocations() {
+		if location.Name != "" && location.NameRegex() == m.regex {
+			return location.Name
+		}
+	}
+	return ""
+}
+
 // writeMatchPaths lists the paths one write filter names. A basename family
-// below a root is the one structural pattern the plan can express, by naming
-// the files present at launch.
+// below a root is the one structural pattern the plan can express: the files
+// present at launch are masked, and the plan holds the name for the rest.
 func writeMatchPaths(m fsMatch) ([]string, error) {
 	switch {
 	case m.regex != "" && m.subpath != "":
-		for _, location := range protectedpath.AgentPolicyLocations() {
-			if location.Name != "" && location.NameRegex() == m.regex {
-				return namedFilesBelow(m.subpath, location.Name), nil
-			}
+		if name := loaderName(m); name != "" {
+			return namedFilesBelow(m.subpath, name), nil
 		}
 		return nil, &linuxsandbox.Unsupported{Code: linuxsandbox.UnsupportedFilesystemRule, Detail: m.regex}
 	case m.regex != "":

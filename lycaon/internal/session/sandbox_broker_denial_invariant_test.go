@@ -178,7 +178,8 @@ func denialInvariantCases(t *testing.T) []denialInvariantCase {
 // (temporary, cache, and home-relative roots all are); nothing is created there.
 func denialInvariantOutsideWriteRoot(t *testing.T, projectDir string) string {
 	t.Helper()
-	roots := confine.WriteRootsForProject("", []string{projectDir})
+	roots, err := confine.WriteRootsForBoundary("", []string{projectDir}, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	for _, base := range []string{"/opt", "/srv", "/usr/local", "/Users/Shared"} {
 		candidate := filepath.Join(base, "paintedwolf-denial-invariant-probe")
 		if !confine.PathWithinWriteRoots(candidate, roots) {

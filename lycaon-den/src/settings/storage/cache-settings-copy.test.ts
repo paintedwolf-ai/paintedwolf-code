@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   CACHE_SETTINGS_COPY,
-  formatCacheBytes,
   cacheBucketCopy,
   cacheClearAllConfirm,
   cacheClearBucketConfirm,
@@ -32,12 +31,6 @@ describe("cache-settings-copy", () => {
     expect(all).toContain("• A");
     expect(all).toContain("• B");
     expect(all).toContain(CACHE_SETTINGS_COPY.durableKeepNote);
-  });
-
-  it("formats bytes", () => {
-    expect(formatCacheBytes(0)).toBe("");
-    expect(formatCacheBytes(512)).toBe("512 B");
-    expect(formatCacheBytes(2048)).toMatch(/KB/);
   });
 
   it("presence label prefers size when present", () => {

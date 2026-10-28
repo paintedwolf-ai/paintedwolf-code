@@ -8,11 +8,16 @@ from unittest.mock import patch
 import zipfile
 
 from scripts.linux_release.installed_cases.app_api import EngineAPI
-from scripts.linux_release.installed_campaign import command, verify_execution_receipt
+from scripts.linux_release.campaign.guests import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
-from scripts.linux_release.installed_cases.records import expand_physical_transactions, retain
-from scripts.linux_release.installed_execution import case_family, driver_family, execute_case
-from scripts.linux_release.installed_transfer import export, receive
+from scripts.linux_release.installed_cases.records import (
+    MAX_OBSERVATION_BYTES,
+    compact_physical_input,
+    expand_physical_transactions,
+    retain,
+)
+from scripts.linux_release.campaign.execution import case_family, driver_family, execute_case
+from scripts.linux_release.campaign.transfer import export, receive
 
 
 class InstalledHelperTests(unittest.TestCase):
@@ -121,58 +126,66 @@ class InstalledHelperTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     verify_execution_receipt(root, target, "b" * 40, "c" * 40)
 
-    def test_physical_input_transactions_compact_to_linked_stream_preserving_partial_failures(self):
+    def test_retain_compacts_physical_input_into_linked_stream_without_mutating_caller(self):
+        binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
+        lineage = [{"pid": 100 + index, "parent_pid": 99 + index, "start_time_ticks": 1000 + index,
+                    "comm": "painted-wolf", "cmdline": ["/opt/painted-wolf-code/painted-wolf-code"]}
+                   for index in range(6)]
+        focus = {"launch": lineage[0], "entry": lineage[-1], "frame": lineage[1],
+                 "frame_lineage": lineage, "entry_lineage": lineage,
+                 "accessible_chain": [{"bus_name": ":1.42", "path": f"/org/a11y/atspi/accessible/{index}",
+                                       "pid": 105, "role": "panel"} for index in range(8)],
+                 "entry_focused": True, "frame_active": True, "frame_visible": True}
+
+        def make_tx(tx_id: str, operation: str, count: int, completed: bool = True) -> dict:
+            events = [{"request": {"format_version": 1, "transaction_id": tx_id, "operation": operation,
+                                   "ordinal": ordinal, "focus": focus},
+                       "delivery": {"format_version": 1, "transaction_id": tx_id, "operation": operation,
+                                    "ordinal": ordinal, "qmp_ack": {"return": {}}},
+                       "focus_after": focus}
+                      for ordinal in range(count)]
+            return {"format_version": 1, "vm_id": "owned", "transaction_id": tx_id,
+                    "operation": operation, "completed": completed, "events": events, "text_readback": False}
+
+        tx1 = make_tx("1" * 32, "provider-name-v1", 35)
+        tx2 = make_tx("2" * 32, "provider-endpoint-v1-41234", 27)
+        tx3 = make_tx("3" * 32, "provider-fixture-credential-v1", 19)
+        tx4 = make_tx("4" * 32, "reply-fixture-prompt-v1", 55, completed=False)
+        tx5 = make_tx("5" * 32, "session-lock-v1", 2)
+        tx6 = make_tx("6" * 32, "editor-replace-save-v1", 10)
+        fixed_input = [tx1, tx2, tx3, tx4]
+        observations = {
+            "launch": {"fixed_input": fixed_input, "session": {"User": "30005"}},
+            "native_input": tx4,
+            "transitions": [tx5],
+            "lock_transition": tx5,
+            "editor_keyboard": {"physical_vm_keyboard": tx6},
+        }
+        inline_raw = (json.dumps({"format_version": 1, "source_commit": binding["source_commit"],
+                                  "artifact": binding["artifact"], "capability": "session",
+                                  "case": "inhibitor-lifetime", "status": "unverified",
+                                  "observations": observations}, indent=2, sort_keys=True) + "\n").encode()
+        self.assertGreater(len(inline_raw), MAX_OBSERVATION_BYTES)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
-            completed = {
-                "format_version": 1, "vm_id": "owned", "transaction_id": "1" * 32,
-                "operation": "provider-name-v1", "completed": True, "text_readback": False,
-                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 1}, "focus_after": {"ok": True}}],
-            }
-            lock_tx = {
-                "format_version": 1, "vm_id": "owned", "transaction_id": "2" * 32,
-                "operation": "session-lock-v1", "completed": True, "text_readback": False,
-                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 2}, "native_session_after": {"locked": True}}],
-            }
-            partial = {
-                "format_version": 1, "vm_id": "owned", "transaction_id": "3" * 32,
-                "operation": "reply-fixture-prompt-v1", "completed": False, "text_readback": False,
-                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 3}, "focus_after": {"ok": False}}],
-            }
-            observations = {
-                "launch": {"fixed_input": [completed]},
-                "lock_transition": lock_tx,
-                "transitions": [lock_tx],
-                "native_input": partial,
-            }
-            result = retain(binding, "session", "compacted-case", root, "failed", observations)
-            self.assertIn("events", observations["launch"]["fixed_input"][0])
+            result = retain(binding, "session", "inhibitor-lifetime", root, "unverified", observations)
+            self.assertIn("events", fixed_input[0])
             self.assertIn("events", observations["native_input"])
-            leaf = root / "session/compacted-case/execution.json"
-            stream = root / "session/compacted-case/physical-input.bin"
-            self.assertTrue(stream.exists())
+            leaf = root / "session/inhibitor-lifetime/execution.json"
+            stream_path = root / "session/inhibitor-lifetime/physical-input.bin"
+            self.assertTrue(stream_path.is_file())
+            self.assertLess(leaf.stat().st_size, MAX_OBSERVATION_BYTES)
             document = json.loads(leaf.read_text())
-            saved = document["observations"]
-            summary_first = saved["launch"]["fixed_input"][0]
-            summary_lock = saved["lock_transition"]
-            summary_partial = saved["native_input"]
-            self.assertNotIn("events", summary_first)
-            self.assertEqual(summary_first["event_count"], 1)
-            self.assertEqual(summary_first["physical_input_stream"], "physical-input.bin")
-            self.assertEqual(saved["transitions"], [summary_lock])
-            self.assertFalse(summary_partial["completed"])
-            expanded = expand_physical_transactions(leaf, [summary_first, summary_lock, summary_partial])
-            self.assertEqual(expanded, [completed, lock_tx, partial])
-            with self.assertRaises(ValueError):
-                expand_physical_transactions(leaf, [{**summary_first, "transaction_id": "9" * 32}])
-            self.assertEqual(
-                expand_physical_transactions(leaf, [summary_first]),
-                [completed],
-            )
-            tampered = {**summary_first, "events_sha256": "0" * 64}
-            with self.assertRaises(ValueError):
-                expand_physical_transactions(leaf, [tampered, summary_lock, summary_partial])
-            stream.write_bytes(stream.read_bytes() + b" ")
-            with self.assertRaises(ValueError):
-                expand_physical_transactions(leaf, [summary_first, summary_lock, summary_partial])
+            compacted_fixed = document["observations"]["launch"]["fixed_input"]
+            self.assertEqual(len(compacted_fixed), 4)
+            self.assertNotIn("events", compacted_fixed[0])
+            self.assertEqual(compacted_fixed[0]["event_count"], 35)
+            self.assertEqual(compacted_fixed[0]["physical_input_stream"], "physical-input.bin")
+            self.assertEqual(document["observations"]["native_input"], compacted_fixed[3])
+            stream_payload = json.loads(stream_path.read_bytes())
+            self.assertEqual(len(stream_payload["transactions"]), 6)
+            self.assertEqual(expand_physical_transactions(leaf, compacted_fixed), fixed_input)
+            self.assertEqual(expand_physical_transactions(leaf, document["observations"]["transitions"]), [tx5])
+            self.assertEqual(expand_physical_transactions(
+                leaf, [document["observations"]["editor_keyboard"]["physical_vm_keyboard"]]), [tx6])
+            self.assertEqual(result["evidence"][-1]["path"], "session/inhibitor-lifetime/execution.json")

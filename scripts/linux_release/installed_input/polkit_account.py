@@ -24,7 +24,7 @@ class Credential:
         self.attempted = self.prepared = self.claimed = self.closed = False
 
     def _command(self, action, frame=None):
-        from ..installed_campaign import command
+        from ..campaign.guests import command
         if action not in {'prepare', 'disable'}:
             raise ValueError('Polkit QA credential requires its fixed prepare or disable action')
         arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
