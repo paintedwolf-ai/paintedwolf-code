@@ -124,3 +124,32 @@ func TestBoundedPredicateLiteralParserChargesBeforeGrowth(t *testing.T) {
 		t.Fatalf("literal semantics got%v err%v", got, err)
 	}
 }
+
+type predicateMemoryFunc func(context.Context, int64) (func(), error)
+
+func (f predicateMemoryFunc) Reserve(ctx context.Context, n int64) (func(), error) { return f(ctx, n) }
+func TestPredicateRejectsMissingAdmissionLeases(t *testing.T) {
+	for _, failAt := range []int{1, 2, 4} {
+		calls, held := 0, 0
+		memory := predicateMemoryFunc(func(context.Context, int64) (func(), error) {
+			calls++
+			if calls == failAt {
+				return nil, nil
+			}
+			held++
+			return func() { held-- }, nil
+		})
+		_, err := (PredicateRuntime{Memory: memory}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"a", "=", "a"})
+		if err == nil || held != 0 {
+			t.Fatalf("missing lease%d err%v held%d", failAt, err, held)
+		}
+	}
+	memory := predicateMemoryFunc(func(context.Context, int64) (func(), error) { return nil, nil })
+	if _, err := (NativePredicatePatterns{Memory: memory}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: "a"}}); err == nil {
+		t.Fatal("pattern admitted missing lease")
+	}
+	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Second, Reserve: memory.Reserve}
+	if _, err := regexp2.MatchPatternBounded(t.Context(), "a", "a", syntax.POSIX, nil, limits); err == nil {
+		t.Fatal("selected engine admitted missing lease")
+	}
+}
