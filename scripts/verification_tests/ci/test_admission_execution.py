@@ -150,6 +150,21 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(monitor.sample(), {'kind': 'package_rss', 'measured_bytes': 101, 'limit_bytes': 100})
         self.assertEqual(monitor.peak, 101)
 
+    def test_package_memory_ceiling_scales_for_race_builds_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / 'resources.json'
+            policy.write_text(json.dumps({'default': {'rss_mib': 1000}, 'race_scale': 1.5,
+                                          'packages': {'example.com/m/big': {'rss_mib': 2000}}}))
+            with patch.object(resources, 'POLICY', policy):
+                self.assertEqual(resources.budget('example.com/m/a'), 1000 * 1024 * 1024)
+                self.assertEqual(resources.budget('example.com/m/a', race=True), 1500 * 1024 * 1024)
+                self.assertEqual(resources.budget('example.com/m/big', race=True), 3000 * 1024 * 1024)
+            policy.write_text(json.dumps({'default': {'rss_mib': 1000}, 'race_scale': 8, 'packages': {}}))
+            with patch.object(resources, 'POLICY', policy):
+                self.assertEqual(resources.budget('example.com/m/a'), 1000 * 1024 * 1024)
+                with self.assertRaises(ValueError):
+                    resources.budget('example.com/m/a', race=True)
+
     def test_package_memory_guard_sets_a_soft_runtime_limit_below_the_ceiling(self):
         self.assertEqual(resources.runtime_environment({'A': '1'}, 1000), {'A': '1', 'GOMEMLIMIT': '800'})
         self.assertEqual(resources.runtime_environment({'GOMEMLIMIT': '5MiB'}, 1000), {'GOMEMLIMIT': '5MiB'})
