@@ -37,7 +37,7 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	const partial = `{"program_id":"program-1","state":"interrupted","status":130,"stdout":"start\n"}`
 	_, err = loopwake.ProgramParking{Subscriptions: loop.Subscriptions}.ParkProgram(t.Context(),
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-1"}},
-		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Interrupt: func(context.Context) string { return partial }})
+		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Claim: func() bool { return true }, Interrupt: func(context.Context) string { return partial }})
 	testutil.FailErr(t, "park program", err)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "stop waiting")
