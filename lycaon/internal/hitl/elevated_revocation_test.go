@@ -31,14 +31,14 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, timed, database)
 	insertSession(t, database, sessionID)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "make"},
-},
-Scope: hitl.ActionScope{
-SessionID: sessionID,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "make"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: sessionID,
+		},
+	}
 	grant := hitl.ApprovalGrant{ID: "grant_elevated", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowForThisChat,
 		ElevatedEffects: []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}}
 	presentation, reasons := approvalPlanPresentation()
@@ -64,8 +64,10 @@ SessionID: sessionID,
 	case <-ctx.Done():
 		t.Fatal("installation did not begin")
 	}
+	revoking := make(chan struct{})
 	revoked := make(chan error, 1)
 	go func() {
+		close(revoking)
 		release := manager.Authority.LockApprovalAuthority()
 		defer release()
 		found, err := manager.Authority.ForgetChatGrant(ctx, grant.ID)
@@ -74,10 +76,11 @@ SessionID: sessionID,
 		}
 		revoked <- err
 	}()
+	<-revoking
 	select {
 	case err := <-revoked:
 		t.Fatalf("revocation crossed an unsealed installation: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(held.release)
 	testutil.FailErr(t, "resolve approval", <-resolved)

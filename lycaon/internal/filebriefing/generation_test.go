@@ -45,7 +45,7 @@ func TestFileBriefingDeltaEmitterPreservesWhitespaceChunks(t *testing.T) {
 				t.Fatalf("event = %+v", event)
 			}
 			combined += event.Delta
-		case <-time.After(time.Second):
+		case <-t.Context().Done():
 			t.Fatal("timed out waiting for file briefing delta")
 		}
 	}
