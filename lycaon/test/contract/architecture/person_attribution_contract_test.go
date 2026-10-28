@@ -17,13 +17,13 @@ const peoplePkg = "github.com/lycaon/lycaon/internal/people"
 
 // Only admitted authorship may fall back to the host owner.
 var actingFallbacks = map[string]string{
-	"internal/session/store/sql_sessions.go:CreateWithStatus": "a root chat the host opens belongs to the host owner",
-	"internal/session/store/memory.go:CreateWithStatus":       "memory twin of the SQL session store",
-	"internal/session/transcript/user_input.go:PromptAuthor":  "a prompt without an admission receipt is authored by its request's caller",
-	"internal/session/submissions/admission.go:admitPrompt":   "a user prompt admission names its request's caller",
-	"internal/editordoc/authorship.go:personActor":            "editor transitions are authored by their client's person",
-	"internal/sourceledger/recording.go:operationPerson":      "user-origin source operations without an explicit person",
-	"internal/projectsource/source_mutation_store.go:insert":  "user file mutations journal their person",
+	"internal/session/store/sql_sessions.go:CreateWithStatus":    "a root chat the host opens belongs to the host owner",
+	"internal/session/store/memory.go:CreateWithStatus":          "memory twin of the SQL session store",
+	"internal/session/transcript/user_input.go:PromptAuthor":     "a prompt without an admission receipt is authored by its request's caller",
+	"internal/session/submissions/admission.go:admitPrompt":      "a user prompt admission names its request's caller",
+	"internal/editordoc/authorship.go:personActor":               "editor transitions are authored by their client's person",
+	"internal/sourceledger/recording.go:operationPerson":         "user-origin source operations without an explicit person",
+	"internal/projectsource/source_mutation_store.go:insertWith": "user file mutations journal their person",
 }
 
 func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
