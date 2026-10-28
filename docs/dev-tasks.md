@@ -1518,6 +1518,24 @@ A caller-provided accepted JSON receipt is insufficient. The public CLI remains 
 until that controller integration supplies separate `publish-aur` authorization; no
 AUR workflow or external push is invoked by the fixture rehearsal.
 
+A signed distribution document may advertise an AUR recipe only after a separate
+read-only `aur_observation.observe` operation. The protected caller selects the
+channel-specific package and exact Git commit; `ReadOnlyOrigin` accepts only its
+fixed HTTPS AUR origin. It fetches a bounded shallow snapshot, compares the publisher
+plan and every regular recipe blob, re-reads the branch, and repeats complete release
+admission. A saved publication or observation report cannot replace this callback.
+The observer never pushes, executes a PKGBUILD, changes a package source or installs
+trust. Fixture origins are explicitly nonproduction and cannot authorize public facts.
+
+In the AUR document fields, `source_sha256` hashes the canonical recipe-object
+inventory: rows sorted by path, each containing `path`, `sha256` and `size`, encoded
+as JSON with sorted keys, two-space indentation and a final newline.
+`package_sha256` hashes the exact complete `final-artifacts.json` bytes across both
+CPUs; it is not the hash of one package archive. Individual download links retain
+their own archive hashes. The exact Git commit independently pins the complete recipe.
+Stable and Preview select distinct maintained `-bin` and `-preview-bin` origins;
+preparing either recipe does not reserve a name or establish public availability.
+
 For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
 then use `sudo pacman-key --add /path/to/package-key.asc`, inspect
 `sudo pacman-key --finger <full-fingerprint>`, and locally trust that reviewed identity
