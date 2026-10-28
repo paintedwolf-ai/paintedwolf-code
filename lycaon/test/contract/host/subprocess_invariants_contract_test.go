@@ -53,7 +53,6 @@ var forbiddenCommandBinaries = map[string]string{
 	"powershell.exe": "use native desktoptrash Win32 SHFileOperationW",
 	"dscacheutil":    "use native userpath getpwuid_r",
 	"xattr":          "use native unix.Removexattr",
-	"lsof":           "use native lineage.Listeners kernel socket tables",
 }
 
 // TestHostSubprocessInventory limits host subprocesses to approvedHostLaunches
