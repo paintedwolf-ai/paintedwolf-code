@@ -116,7 +116,7 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	stateDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-state-") //nolint:usetesting // Keep state tree outside /tmp so /tmp remains an eligible standard write root under test isolation.
+	stateDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-state-") //nolint:usetesting // /tmp must stay a write root
 	testutil.FailErr(t, "create state fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
 	t.Setenv("HOME", stateDir)
