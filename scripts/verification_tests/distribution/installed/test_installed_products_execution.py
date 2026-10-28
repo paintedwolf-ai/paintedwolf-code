@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from scripts.linux_release.installed_cases import products
 from scripts.linux_release.installed_cases.process import run
-from scripts.linux_release.installed_runtime import file_identity
+from scripts.linux_release.campaign.runtime import file_identity
 
 
 class InstalledProductTests(unittest.TestCase):

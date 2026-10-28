@@ -2,7 +2,6 @@ package credentialstore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,19 +21,13 @@ import (
 const fileMode = 0o600
 
 const (
-	vaultFormat          = 1
-	identityFormat       = 1
-	maxVaultBytes        = 64 << 20
-	maxVaultCiphertext   = maxVaultBytes + (1 << 20)
-	maxUnlockSecretBytes = 16 << 10
+	vaultFormat        = 1
+	identityFormat     = 1
+	maxVaultBytes      = 64 << 20
+	maxVaultCiphertext = maxVaultBytes + (1 << 20)
 )
 
-var (
-	ErrVaultLocked        = errors.New("credential vault is locked")
-	ErrVaultUninitialized = errors.New("credential vault has not been created")
-	ErrVaultUnlockFailed  = errors.New("credential vault password did not unlock the identity")
-	ErrVaultCorrupt       = errors.New("credential vault is damaged")
-)
+var ErrVaultCorrupt = errors.New("credential vault is damaged")
 
 // Snapshot is one namespace's decrypted credential map.
 type Snapshot struct {
@@ -252,7 +245,7 @@ func (v *vaultFile) purge() error {
 		if err := v.provider.Purge(); err != nil {
 			return err
 		}
-		for _, path := range []string{v.path, identityPath(v.path), developmentIdentityPath(v.path)} {
+		for _, path := range []string{v.path, developmentIdentityPath(v.path)} {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
@@ -300,44 +293,4 @@ func cloneValues(values map[string]string) map[string]string {
 		out[id] = secret
 	}
 	return out
-}
-
-var unlockSecret = struct {
-	sync.Mutex
-	value []byte
-}{}
-
-// ReadUnlockFrame reads one password prefixed by its big-endian uint32 length.
-func ReadUnlockFrame(r io.Reader) error {
-	var size [4]byte
-	if _, err := io.ReadFull(r, size[:]); err != nil {
-		return fmt.Errorf("read credential vault password length: %w", err)
-	}
-	n := binary.BigEndian.Uint32(size[:])
-	if n == 0 || n > maxUnlockSecretBytes {
-		return fmt.Errorf("credential vault password length must be between 1 and %d bytes", maxUnlockSecretBytes)
-	}
-	value := make([]byte, n)
-	if _, err := io.ReadFull(r, value); err != nil {
-		return fmt.Errorf("read credential vault password: %w", err)
-	}
-	unlockSecret.Lock()
-	clear(unlockSecret.value)
-	unlockSecret.value = value
-	unlockSecret.Unlock()
-	return nil
-}
-
-func configuredUnlockSecret() []byte {
-	unlockSecret.Lock()
-	defer unlockSecret.Unlock()
-	return append([]byte(nil), unlockSecret.value...)
-}
-
-// ClearUnlockSecret removes the framed password after identity loading.
-func ClearUnlockSecret() {
-	unlockSecret.Lock()
-	clear(unlockSecret.value)
-	unlockSecret.value = nil
-	unlockSecret.Unlock()
 }

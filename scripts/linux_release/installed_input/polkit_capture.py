@@ -140,7 +140,7 @@ def document(checkout, tree):
 
 
 def prepare(actor, target, execution, checkout):
-    from ..installed_campaign import command
+    from ..campaign.guests import command
     protocol.binding(execution)
     if (actor.nonce != execution['execution_nonce']
             or actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}):

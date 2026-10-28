@@ -45,9 +45,7 @@ func (p *itemsIdentityProvider) LoadOrCreate(vaultExists bool) (identityDocument
 		return decodeIdentityDocument(raw)
 	}
 	if !errors.Is(err, errIdentityMissing) {
-		// A locked, unreachable or refusing custodian is not an answer about
-		// the key; only its definite "not found" is.
-		return identityDocument{}, fmt.Errorf("%w: read credential vault identity: %w", ErrCustodianUnavailable, err)
+		return identityDocument{}, identityCustodianError("read", err)
 	}
 	if vaultExists {
 		return identityDocument{}, fmt.Errorf("%w: the %s is missing", ErrIdentityMissing, p.description)
@@ -75,9 +73,23 @@ func (p *itemsIdentityProvider) LoadOrCreate(vaultExists bool) (identityDocument
 func (p *itemsIdentityProvider) Purge() error {
 	err := p.items.remove(p.account)
 	if err != nil && !errors.Is(err, errIdentityMissing) {
-		return fmt.Errorf("%w: delete credential vault identity: %w", ErrCustodianUnavailable, err)
+		return identityCustodianError("delete", err)
 	}
 	return nil
+}
+
+// identityCustodianError preserves a custodian's definite recovery outcome.
+// Only an unclassified failure means custody is temporarily unavailable.
+func identityCustodianError(operation string, err error) error {
+	for _, outcome := range []error{
+		ErrCustodianAbsent, ErrCustodianUnavailable, ErrLauncherRefused,
+		ErrIdentityMissing, ErrVaultCorrupt, ErrCustodianUnsupported,
+	} {
+		if errors.Is(err, outcome) {
+			return fmt.Errorf("%s credential vault identity: %w", operation, err)
+		}
+	}
+	return fmt.Errorf("%w: %s credential vault identity: %w", ErrCustodianUnavailable, operation, err)
 }
 
 // verifyDisposableIdentities proves the custodian keeps accounts apart and

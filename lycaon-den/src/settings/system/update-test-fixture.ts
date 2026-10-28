@@ -1,4 +1,4 @@
-import type { NativeUpdateState, UpdateService } from "./update-service.ts";
+import type { NativeUpdateState, UpdateService, PackageSourceFacts } from "./update-service.ts";
 export const updateFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => ({
   service_instance_id: "native-1", revision: 1, running_version: "1.0.1", channel: "stable", automatic_updates_enabled: true,
   install_source: "direct_download", package: null, capabilities: { can_check: true, can_download: true, can_restart_to_update: false, can_install_automatically: false, blocked_reason: null },
@@ -11,9 +11,14 @@ export const updateServiceFixture = (over: Partial<UpdateService> = {}): UpdateS
   retry: async () => updateFixture(), restart: async () => {}, subscribe: async () => () => {}, ...over,
 });
 export const stagedFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({ offer_confirmed_at: 1800000000, installation: "staged", staged_release_id: "release-1", capabilities: { can_check: true, can_download: false, can_restart_to_update: true, can_install_automatically: true, blocked_reason: null }, ...over });
+export const packageSourceFixture = (over: Partial<PackageSourceFacts> = {}): PackageSourceFacts => ({
+  availability: "not_checked", owner: "system_package_manager", pinned: null, checked_at: null,
+  database_version: null, database_owner: null, architecture: null, candidate: null, held: null, selection_priority: null,
+  cached_only: false, reason: null, ...over,
+});
 export const packageFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({
   install_source: "system_package", running_version: "1.0.2",
-  package: { family: "deb", name: "painted-wolf-code", version: "1.0.2", update_command: "sudo apt update && sudo apt install --only-upgrade painted-wolf-code", source: { availability: "not_checked", owner: "system_package_manager", pinned: null } },
+  package: { family: "deb", name: "painted-wolf-code", version: "1.0.2", update_command: "sudo apt update && sudo apt install --only-upgrade painted-wolf-code", source: packageSourceFixture() },
   capabilities: { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_managed" },
   candidate: { release_id: "release-1", version: "1.1.0", channel: "stable", platform: "linux-x86_64", signing_generation: 1, artifact_url: "", artifact_signature: "", notes: null, rollout_eligibility: "eligible" },
   ...over,
