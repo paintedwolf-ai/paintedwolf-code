@@ -12,24 +12,21 @@ import (
 	"time"
 )
 
-func TestWaitCompletionEndsCycleUsesHostLifecycle(t *testing.T) {
-	parked := &api.ToolCompletion{Operation: "wait", State: "parked"}
+func TestParkedCompletionEndsCycleUsesHostLifecycle(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
-		tool       string
 		completion *api.ToolCompletion
 		want       bool
 	}{
-		{name: "parked wait", tool: "wait", completion: parked, want: true},
-		{name: "case normalized", tool: " WAIT ", completion: parked, want: true},
-		{name: "missing completion", tool: "wait"},
-		{name: "wrong tool", tool: "task", completion: parked},
-		{name: "wrong operation", tool: "wait", completion: &api.ToolCompletion{Operation: "task", State: "parked"}},
-		{name: "satisfied", tool: "wait", completion: &api.ToolCompletion{Operation: "wait", State: "satisfied"}},
+		{name: "parked wait", completion: &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}, want: true},
+		{name: "parked command", completion: &api.ToolCompletion{Operation: "command", State: "parked", ResourceKind: "wait"}, want: true},
+		{name: "missing completion"},
+		{name: "parked elsewhere", completion: &api.ToolCompletion{Operation: "task", State: "parked", ResourceKind: "worker"}},
+		{name: "satisfied", completion: &api.ToolCompletion{Operation: "wait", State: "satisfied", ResourceKind: "wait"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := WaitCompletionEndsCycle(tc.tool, tc.completion); got != tc.want {
-				t.Fatalf("WaitCompletionEndsCycle() = %v want %v", got, tc.want)
+			if got := ParkedCompletionEndsCycle(tc.completion); got != tc.want {
+				t.Fatalf("ParkedCompletionEndsCycle() = %v want %v", got, tc.want)
 			}
 		})
 	}
@@ -75,7 +72,7 @@ func TestRegisterWaitToolParksWithHostCompletion(t *testing.T) {
 	if result.Status != "parked" || result.TimeoutMS != 300_000 {
 		t.Fatalf("result = %#v", result)
 	}
-	if !WaitCompletionEndsCycle("wait", outcome.Completion) {
+	if !ParkedCompletionEndsCycle(outcome.Completion) {
 		t.Fatalf("completion = %#v", outcome.Completion)
 	}
 	if !loop.Waits.IsSleeping("s1") {
@@ -112,7 +109,7 @@ func TestWaitParksEveryPublishedAgentRole(t *testing.T) {
 		if err != nil {
 			t.Fatalf("profile %s wait: %v", profile, err)
 		}
-		if !WaitCompletionEndsCycle("wait", outcome.Completion) || !loop.Waits.IsSleeping(sessionID) {
+		if !ParkedCompletionEndsCycle(outcome.Completion) || !loop.Waits.IsSleeping(sessionID) {
 			t.Fatalf("profile %s did not park", profile)
 		}
 		loop.Waits.InterruptSleep(t.Context(), sessionID)
@@ -193,7 +190,7 @@ func TestWaitResumeUsesExplicitConditions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wait resume with conditions: %v", err)
 	}
-	if !WaitCompletionEndsCycle("wait", outcome.Completion) {
+	if !ParkedCompletionEndsCycle(outcome.Completion) {
 		t.Fatalf("output = %q completion = %#v", out, outcome.Completion)
 	}
 	triggers := waitSubscriptionForTest(loop.Subscriptions, "s1")
@@ -324,7 +321,7 @@ func TestWaitAllWorkersIdleAlreadySatisfied(t *testing.T) {
 	if result.Status != "all_workers_idle" || loop.Waits.IsSleeping("s1") {
 		t.Fatalf("result = %#v sleeping = %v", result, loop.Waits.IsSleeping("s1"))
 	}
-	if WaitCompletionEndsCycle("wait", outcome.Completion) {
+	if ParkedCompletionEndsCycle(outcome.Completion) {
 		t.Fatal("already-satisfied condition must keep the cycle active")
 	}
 }
@@ -345,7 +342,7 @@ func TestWaitTimerOnlyParksWhenCycleIdle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("timer wait: %v", err)
 	}
-	if !WaitCompletionEndsCycle("wait", outcome.Completion) || !loop.Waits.IsSleeping("s1") {
+	if !ParkedCompletionEndsCycle(outcome.Completion) || !loop.Waits.IsSleeping("s1") {
 		t.Fatalf("output = %q completion = %#v sleeping = %v", out, outcome.Completion, loop.Waits.IsSleeping("s1"))
 	}
 }
@@ -368,7 +365,7 @@ func TestWaitParksWhileUserInputPending(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("unmarshal wait result: %v", err)
 	}
-	if result.Status != "parked" || !WaitCompletionEndsCycle("wait", outcome.Completion) || !loop.Waits.IsSleeping("s1") {
+	if result.Status != "parked" || !ParkedCompletionEndsCycle(outcome.Completion) || !loop.Waits.IsSleeping("s1") {
 		t.Fatalf("result = %#v completion = %#v sleeping = %v", result, outcome.Completion, loop.Waits.IsSleeping("s1"))
 	}
 	deadline, err := time.Parse(time.RFC3339, result.WakeAt)

@@ -249,7 +249,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 				history, turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st, out.endTurn)
 				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, err
 			}
-			if out.breakToolLoop || loopwake.WaitCompletionEndsCycle(out.toolName, out.completion) ||
+			if out.breakToolLoop || loopwake.ParkedCompletionEndsCycle(out.completion) ||
 				loopwake.AskUserEndsCycle(out.toolName, out.toolMsg.Content, true) ||
 				native.WorkerToolEndsCycle(out.toolName, out.toolMsg.ToolResult) ||
 				l.Control.hostHITLParked(ctx, sessionID, startHolds) {

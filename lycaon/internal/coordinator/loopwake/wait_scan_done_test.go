@@ -129,7 +129,7 @@ func TestWaitScanDoneArmsSleepWhileScanOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wait(scan_done) with open scan: %v", err)
 	}
-	if !WaitCompletionEndsCycle("wait", invocationOut.Completion) {
+	if !ParkedCompletionEndsCycle(invocationOut.Completion) {
 		t.Fatalf("output = %q", out)
 	}
 	if !loop.Waits.IsSleeping("s1") {
