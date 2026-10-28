@@ -158,6 +158,13 @@ def analysis_set(targets):
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
 
+def scripts_python_in_scope(scope):
+    """Whether changed-scripts coverage will run a Python suite: every suite under a broad scope, else only when scripts Python changed."""
+    if scope is None:
+        return False
+    return bool(scope["full"]) or any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
+
+
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     """A profile's lanes; `platform` keeps only its platform lanes, for a run whose other lanes another gate covers."""
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
@@ -190,9 +197,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            and "browser" in lane.get("arguments", ["browser"]),
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
-                           or ("scripts:coverage:changes" in lane["targets"] and scope is not None
-                               and any(path.startswith("scripts/") and path.endswith(".py")
-                                       for path in scope["paths"])),
+                           or "scripts:coverage:changes" in lane["targets"] and scripts_python_in_scope(scope),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

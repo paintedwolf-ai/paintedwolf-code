@@ -238,6 +238,14 @@ class HostedPlanTests(unittest.TestCase):
                           if row["repository_tools"]], ["ready"])
         scope["paths"] = ["lycaon/internal/settings/settings.go"]
         self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast", scope=scope)["include"]))
+        # A broad scope runs every scripts suite, and may carry no paths at all.
+        for broad in ({"full": True}, {"base": "", "head": "head", "paths": [], "full": True}):
+            for profile in ("fast", "integration"):
+                with self.subTest(profile=profile, scope=broad):
+                    self.assertEqual(
+                        sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"] if row["repository_tools"]),
+                        sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"]
+                               if {"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
 
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.
