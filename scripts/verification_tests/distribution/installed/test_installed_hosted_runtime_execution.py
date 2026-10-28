@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from linux_release.hosted import installed as runtime
 from linux_release.hosted import bootstrap as supervisor
-from linux_release import hosted_installed_plan as plan
+from linux_release.hosted import plan
 
 
 def selected():
@@ -64,7 +64,7 @@ class HostedRuntimeEntryTests(unittest.TestCase):
                 '--facts', str(directory / 'f.json'), '--output', str(directory / 'out')]
 
     def test_retention_fails_the_step_unless_the_campaign_or_diagnosis_is_accepted(self):
-        from linux_release import hosted_installed_diagnostic as diagnostic
+        from linux_release.hosted import diagnostic
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             with patch.object(runtime, 'selection', return_value=selected()), patch.object(runtime, 'read', return_value={}):
