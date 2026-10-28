@@ -11,7 +11,7 @@ import (
 // Options select how hunks find their place.
 type Options struct {
 	// Fuzz is how many context lines at each end of a hunk may be ignored
-	// when no exact match exists (GNU patch -F, default 2; Git uses 0).
+	// when no exact match exists (patch -F, default 2; git apply uses 0).
 	Fuzz int
 }
 
