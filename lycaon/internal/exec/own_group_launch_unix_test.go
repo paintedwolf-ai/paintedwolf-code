@@ -29,8 +29,8 @@ func TestHelperProbeGroupSharesSupervisedSettlement(t *testing.T) {
 	if _, err := StartInOwnGroup(exec.Command("/bin/true")); err == nil {
 		t.Fatal("public group accepted an unprepared command")
 	}
-	testutil.FailErr(t, "settle fixed helper probe", runHelperProbeGroup(exec.Command("/bin/true")))
-	if err := runHelperProbeGroup(exec.Command("/nonexistent/probe")); err == nil {
+	testutil.FailErr(t, "settle fixed helper probe", runHelperProbeGroup(exec.CommandContext(t.Context(), "/bin/true")))
+	if err := runHelperProbeGroup(exec.CommandContext(t.Context(), "/nonexistent/probe")); err == nil {
 		t.Fatal("missing helper probe succeeded")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
