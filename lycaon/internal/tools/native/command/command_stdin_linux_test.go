@@ -45,6 +45,7 @@ func TestNativeCommandByteInputProcess(t *testing.T) {
 
 func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	caps, _ := confine.LinuxCapabilities()
 	if !caps.Available() {
 		t.Fatalf("required Linux confinement unavailable: %+v", caps)
