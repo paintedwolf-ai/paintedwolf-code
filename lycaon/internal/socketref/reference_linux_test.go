@@ -17,7 +17,7 @@ import (
 func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 	for _, mutation := range []string{"rename", "unlink", "replace", "ancestor"} {
 		t.Run(mutation, func(t *testing.T) {
-			root := t.TempDir()
+			root := shortSocketRoot(t)
 			dir := filepath.Join(root, "service")
 			if err := os.Mkdir(dir, 0700); err != nil {
 				t.Fatal(err)
@@ -110,7 +110,7 @@ func TestUnboundBindingDoesNotReopenExistingPath(t *testing.T) {
 }
 
 func TestDuplicateOutlivesClosedOwner(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "socket")
+	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -142,4 +142,14 @@ func TestDuplicateOutlivesClosedOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = accepted.Close()
+}
+
+func shortSocketRoot(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("/tmp", "sr-") //nolint:usetesting // Kernel Unix socket addresses are bounded.
+	if err != nil {
+		t.Fatalf("create socket root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }

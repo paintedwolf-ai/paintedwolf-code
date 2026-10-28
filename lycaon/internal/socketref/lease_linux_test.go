@@ -13,7 +13,7 @@ import (
 )
 
 func TestLeaseTransferAndReleaseAreDeterministic(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "socket")
+	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestLeaseTransferAndReleaseAreDeterministic(t *testing.T) {
 }
 
 func TestLastAuthorityReleaseCannotBeResurrectedDuringConnect(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "socket")
+	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)

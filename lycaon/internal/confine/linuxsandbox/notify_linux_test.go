@@ -20,7 +20,12 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("working directory: %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "socket")
+	root, err := os.MkdirTemp("/tmp", "sn-") //nolint:usetesting // Kernel Unix socket addresses are bounded.
+	if err != nil {
+		t.Fatalf("socket directory: %v", err)
+	}
+	defer os.RemoveAll(root)
+	path := filepath.Join(root, "socket")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)

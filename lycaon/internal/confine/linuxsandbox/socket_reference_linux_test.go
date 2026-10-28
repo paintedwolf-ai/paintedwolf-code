@@ -26,7 +26,9 @@ func referenceListener(t *testing.T, path string, kind int) int {
 func TestSupervisorSocketReferenceSurvivesRetirementAndDescriptorReuse(t *testing.T) {
 	for _, kind := range []int{unix.SOCK_STREAM, unix.SOCK_SEQPACKET} {
 		t.Run(fmt.Sprint(kind), func(t *testing.T) {
-			root := t.TempDir()
+			root, err := os.MkdirTemp("/tmp", "sd-") //nolint:usetesting // Kernel Unix socket addresses are bounded.
+			testutil.FailErr(t, "reference fixture directory", err)
+			defer os.RemoveAll(root)
 			path := filepath.Join(root, "socket")
 			original := referenceListener(t, path, kind)
 			fd, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC, 0)

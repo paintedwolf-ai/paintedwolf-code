@@ -106,9 +106,17 @@ func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 				}
 				completed <- err
 			}()
+			joined := false
+			defer func() {
+				once.Do(func() { close(resume) })
+				if !joined {
+					<-completed
+				}
+			}()
 			select {
 			case <-paused:
 			case err := <-completed:
+				joined = true
 				t.Fatalf("real supervisor did not reach connect pause: %v", err)
 			case <-t.Context().Done():
 				t.Fatal("real supervisor canceled before pause")
@@ -118,7 +126,20 @@ func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 			testutil.FailErr(t, "replacement listener", err)
 			defer decoy.Close()
 			once.Do(func() { close(resume) })
-			testutil.FailErr(t, "real supervised command completion", <-completed)
+			completionErr := <-completed
+			joined = true
+			testutil.FailErr(t, "real supervised command completion", completionErr)
+			originalRaw, err := original.SyscallConn()
+			testutil.FailErr(t, "original descriptor", err)
+			originalReady := 0
+			var originalPollErr error
+			testutil.FailErr(t, "inspect original readiness", originalRaw.Control(func(fd uintptr) {
+				originalReady, originalPollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
+			}))
+			testutil.FailErr(t, "original readiness", originalPollErr)
+			if originalReady != 1 {
+				t.Fatal("actual target did not queue a connection at the retained original")
+			}
 			accepted, err := original.AcceptUnix()
 			testutil.FailErr(t, "original accepts actual target", err)
 			marker := make([]byte, len("approved-original"))

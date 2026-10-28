@@ -29,6 +29,14 @@ func (m *Checkpoints) RestorePending(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	lostByID := make(map[string]bool)
+	for _, row := range rows {
+		lost, err := pendingSocketAuthorityLost(row)
+		if err != nil {
+			return err
+		}
+		lostByID[row.ID] = lost
+	}
 	now := time.Now().UTC()
 	for _, row := range rows {
 		d := m.expiryFor()
@@ -42,11 +50,7 @@ func (m *Checkpoints) RestorePending(ctx context.Context) error {
 			}
 			d = remaining
 		}
-		lost, err := pendingSocketAuthorityLost(row)
-		if err != nil {
-			return err
-		}
-		if lost {
+		if lostByID[row.ID] {
 			if err := m.settlePending(ctx, row.ID, DecisionStatusCanceled,
 				DecisionResult{Approved: false, Comments: "The local-service reference ended. Request the action again for fresh approval."},
 				Resolution{By: authzledger.ResolvedByHostStop}); err != nil {
