@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -40,7 +41,38 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
 	}
 
-	postPromptAndWaitIdle(t, srv, sess.ID, "plan implement leg")
+	initialAssistants := 0
+	waitDeadline := func() (time.Time, bool) {
+		deadline, ok := t.Deadline()
+		if !ok {
+			return time.Time{}, false
+		}
+		return time.Now().Add(time.Until(deadline) / 8), true
+	}
+	for _, msg := range listMessagesHTTP(t, srv, sess.ID) {
+		if msg.Role == wire.MessageRoleAssistant {
+			initialAssistants++
+		}
+	}
+	accepted := acceptPromptHTTP(t, srv, sess.ID, "plan implement leg")
+	deadline, hasDeadline := waitDeadline()
+	for {
+		msgs := listMessagesHTTP(t, srv, sess.ID)
+		seenReceipt, assistants := false, 0
+		for _, msg := range msgs {
+			seenReceipt = seenReceipt || msg.ID == accepted.OperationID && msg.Role == wire.MessageRoleUser
+			if msg.Role == wire.MessageRoleAssistant {
+				assistants++
+			}
+		}
+		if seenReceipt && assistants > initialAssistants && getSessionHTTP(t, srv, sess.ID).Status == wire.SessionStatusIdle {
+			break
+		}
+		if t.Context().Err() != nil || hasDeadline && time.Now().After(deadline) {
+			t.Fatalf("prompt did not complete: receipt=%t assistants=%d initial=%d", seenReceipt, assistants, initialAssistants)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	child, err := mgr.Workers.SpawnChild(ctx, sess.ID, wire.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "spawn child", err)
 	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
@@ -56,11 +88,18 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 	var allowed bool
 	var reason string
-	testutil.WaitFor(t, func() bool {
+	deadline, hasDeadline = waitDeadline()
+	for {
 		var err error
 		allowed, reason, err = mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
-		return err == nil && allowed
-	})
+		if err == nil && allowed {
+			break
+		}
+		if t.Context().Err() != nil || hasDeadline && time.Now().After(deadline) {
+			t.Fatalf("completed leg did not become eligible to wake coordinator: reason=%q error=%v", reason, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
