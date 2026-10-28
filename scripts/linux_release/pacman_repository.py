@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 
 from .openpgp import keyring, run, selection
@@ -58,7 +59,8 @@ def assemble(manifest: dict, inputs: Path, destination: Path, channel: str,
     if not NAME.fullmatch(version):
         raise ValueError("invalid product version")
     rows = manifest.get("packages")
-    if not isinstance(rows, list) or not rows or len({row["file"] for row in rows}) != len(rows):
+    # An empty selection is the signed withdrawal generation: valid databases that offer nothing.
+    if not isinstance(rows, list) or len({row["file"] for row in rows}) != len(rows):
         raise ValueError("pacman generation requires distinct selected packages")
     selected_inputs = []
     for row in rows:
@@ -82,8 +84,14 @@ def assemble(manifest: dict, inputs: Path, destination: Path, channel: str,
         packages.append(target)
     repository = "painted-wolf-code" + ("-preview" if channel == "preview" else "")
     database = destination / (repository + ".db.tar.gz")
-    subprocess.run(["repo-add", "--nocolor", "--include-sigs", str(database),
-                    *map(str, packages)], check=True)
+    if packages:
+        subprocess.run(["repo-add", "--nocolor", "--include-sigs", str(database),
+                        *map(str, packages)], check=True)
+    else:
+        for suffix in ["db", "files"]:
+            with tarfile.open(destination / f"{repository}.{suffix}.tar.gz", "w:gz"):
+                pass
+            (destination / f"{repository}.{suffix}").symlink_to(f"{repository}.{suffix}.tar.gz")
     for suffix in ["db", "files"]:
         archive = destination / f"{repository}.{suffix}.tar.gz"
         signature = archive.with_name(archive.name + ".sig")

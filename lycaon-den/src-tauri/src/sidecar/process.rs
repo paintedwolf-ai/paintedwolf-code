@@ -118,6 +118,10 @@ pub(super) fn spawn_sidecar_process(
     if full_debug_logging_enabled() {
         apply_full_debug_logging_env(&mut cmd);
     }
+    // Under the protected launch every program the engine starts goes through
+    // the broker, so the engine receives it.
+    #[cfg(unix)]
+    crate::protected_launch::hand_broker_to(&mut cmd);
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("spawn {}: {e}", bin.display()))?;
