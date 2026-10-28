@@ -2,15 +2,23 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "verification-contracts",
+  "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Confinement tests cover platform implementations and common capability contracts in the same package. Directory breadth reflects the security matrix; moving tests for a count target would require broader production visibility or obscure platform parity.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 51,
+  "reason": "Retain exactly 67 immediate test files. Shared admission, typed action and native-input contracts stay beside actual kernel, filesystem, socket and helper-boundary fixtures. Main file-mask, private shared-memory and future-path floor cases remain intact alongside portable capture and current-authority cases. Keeping private boundary fixtures here preserves direct control of their real inputs and cleanup without a public test API. Focused admission, vectors and native browser posture checks pass on Darwin; Linux kernel and privileged runtime qualification remains required. Additional membership requires renewed review.",
+  "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
+  "ceiling": 67,
   "boundaries": {
-    "lycaon/internal/confine/host_capability_test.go": "9f759c501a7688005b4069ee5430825d0744ba471ca80eee99121a33bc02bec0",
+    "lycaon/internal/confine/action_launch_test.go": "0a39805d9b791e44e0e4b0f271563f1be06006f503470a273cd050adaeff0bb8",
+    "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
+    "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
+    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
+    "lycaon/internal/confine/boundary_linux_shm_live_test.go": "f9f20c77850bbfa86c205ce0b938711edbec0462776a74861da22a316f3f1924",
+    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
+    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
-    "lycaon/internal/confine/execution_capability_test.go": "7899c0f689c3e6c4433d91e6cc701fc6692789d734a8b80051159771588e802f"
+    "lycaon/internal/confine/process_pins_test.go": "d41d5d9060636d596301787cc0d677fb5c9da681f3dde04117ae4df2306e7be3",
+    "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089"
   },
-  "reviewed_shape": "2da67d87e901c61c2e55707bbeff29af1bac1218ffca918d6a32b92188ab5041"
+  "reviewed_shape": "dbe6f07ec5acff52a46d70831f7b0d8b68b97931153bb2168834fba72a58ed9d"
 }

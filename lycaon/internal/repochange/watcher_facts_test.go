@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,20 +46,20 @@ func TestWatcherOverflowResyncsAndKeepsTheStream(t *testing.T) {
 	go func() { w.loop(t.Context()); close(finished) }()
 	defer func() { close(w.done); <-finished }()
 	platform.errors <- fsnotify.ErrEventOverflow
-	testutil.WaitFor(t, time.Second, func() bool { return resyncs.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return resyncs.Load() == 1 })
 	if !incompleteDuringDelivery.Load() {
 		t.Fatal("coverage claimed completeness while the dropped window was still open")
 	}
 	if EpochCurrent(root, before) {
 		t.Fatal("overflow resync did not advance the worktree epoch")
 	}
-	testutil.WaitFor(t, time.Second, func() bool { return w.coverage().Complete })
+	testutil.WaitFor(t, func() bool { return w.coverage().Complete })
 	coverage := w.coverage()
 	if coverage.Faulted || coverage.Overflows != 1 {
 		t.Fatalf("overflow coverage = %+v, want one closed overflow on a live stream", coverage)
 	}
 	platform.errors <- errors.New("watch stream failed")
-	testutil.WaitFor(t, time.Second, func() bool { return w.coverage().Faulted })
+	testutil.WaitFor(t, func() bool { return w.coverage().Faulted })
 	if w.coverage().Complete {
 		t.Fatal("stream fault retained complete coverage")
 	}

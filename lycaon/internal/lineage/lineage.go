@@ -340,6 +340,38 @@ func Of(pid int) (*Lineage, bool) {
 	return holderOf(pid)
 }
 
+// SessionMembers returns, from one fresh walk, every process descended from a
+// launch the session made, live or retired.
+func SessionMembers(session string) (map[int]struct{}, error) {
+	out := map[int]struct{}{}
+	if !supported || session == "" {
+		return out, nil
+	}
+	if err := scanAll(); err != nil {
+		return nil, err
+	}
+	registry.mu.Lock()
+	candidates := make([]*Lineage, 0, len(registry.live)+len(registry.retired))
+	for _, l := range registry.live {
+		candidates = append(candidates, l)
+	}
+	candidates = append(candidates, registry.retired...)
+	registry.mu.Unlock()
+	for _, l := range candidates {
+		if l.session != session {
+			continue
+		}
+		l.mu.Lock()
+		if !l.released {
+			for _, member := range l.members {
+				out[member] = struct{}{}
+			}
+		}
+		l.mu.Unlock()
+	}
+	return out, nil
+}
+
 // holderOf answers from member sets young enough to trust. An older set can name
 // a pid the kernel has since handed to an unrelated process.
 func holderOf(pid int) (*Lineage, bool) {

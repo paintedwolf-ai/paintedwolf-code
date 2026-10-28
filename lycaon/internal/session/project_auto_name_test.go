@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -45,6 +44,7 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 
 	mgr.Chats.Naming.ProjectFromPrompt(ctx, sess, userText)
 	mgr.Chats.Naming.ProjectFromPrompt(ctx, sess, userText)
+	hub.FlushDebounced()
 
 	got, err := reg.Get(ctx, p.ID)
 	testutil.FailErr(t, "get project", err)
@@ -54,7 +54,6 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	}
 
 	updated := 0
-	deadline := time.After(500 * time.Millisecond)
 	for {
 		select {
 		case envelope := <-eventsCh:
@@ -68,7 +67,7 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 			if ev.Action == api.ProjectEventUpdated {
 				updated++
 			}
-		case <-deadline:
+		default:
 			if updated != 1 {
 				t.Fatalf("project.updated count = %d want 1", updated)
 			}

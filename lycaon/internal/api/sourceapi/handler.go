@@ -3,6 +3,7 @@ package sourceapi
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"github.com/lycaon/lycaon/internal/api/editoradmin"
@@ -149,7 +150,10 @@ type Review struct {
 	ProjectRegistry project.Registry
 	SessionStore    session.Store
 	SourceLedger    *sourceledger.Store
-	responses       *httpio.Responder
+	// ArrivalAnchorTimeBound caps the ancestry checks behind one lineage page;
+	// zero leaves the request context as the only bound.
+	ArrivalAnchorTimeBound time.Duration
+	responses              *httpio.Responder
 }
 
 type Trees struct {
@@ -179,18 +183,20 @@ type Views struct {
 }
 
 type Watch struct {
-	CatalogSnapshot CatalogSnapshotFunc
-	EditorDocuments *editordoc.Service
-	ProjectRegistry project.Registry
-	ScanCadence     *scancadence.Service
-	SourceInventory InventoryService
-	WatchNeedsSeed  func(rootPath string) bool
-	background      *taskgroup.Group
-	responses       *httpio.Responder
-	watches         sourcefeed.WatchLifetime
-	watchWork       workscope.Group
-	sourceWatchJobs map[string]*sourceWatchJob
-	sourceWatchMu   sync.Mutex
+	CatalogSnapshot  CatalogSnapshotFunc
+	EditorDocuments  *editordoc.Service
+	ProjectRegistry  project.Registry
+	ScanCadence      *scancadence.Service
+	SourceInventory  InventoryService
+	WatchNeedsSeed   func(rootPath string) bool
+	background       *taskgroup.Group
+	responses        *httpio.Responder
+	watches          sourcefeed.WatchLifetime
+	watchWork        workscope.Group
+	watchBindingMu   sync.Mutex
+	suspendedWatches map[string]int
+	sourceWatchJobs  map[string]*sourceWatchJob
+	sourceWatchMu    sync.Mutex
 }
 
 type Workspace struct {
@@ -244,7 +250,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, responses: responses}
 	h.Mutations = &Mutations{EditorDocuments: deps.EditorDocuments, FileOperations: deps.FileOperations, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, background: background, operations: operations, responses: responses}
 	h.Presentation = &Presentation{responses: responses}
-	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, responses: responses}
+	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}
 	h.Trees = &Trees{ProjectRegistry: deps.ProjectRegistry, SourceLedger: deps.SourceLedger, background: background, responses: responses, sourceViews: sourceViews}
 	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
