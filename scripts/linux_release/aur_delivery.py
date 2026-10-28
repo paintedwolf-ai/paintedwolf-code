@@ -84,10 +84,46 @@ class RecipePublisher:
             raise ValueError("AUR origin returned an ambiguous branch identity")
         return raw.split("\t")[0]
 
+    def record(self, checkout, commit):
+        return json.loads(self.git("-C", checkout, "show", "-s", "--format=%B", commit, capture=True).stdout)
+
+    def inspect(self):
+        """Read the origin's current recipe record and declarations without changing them."""
+        actual = self.head()
+        if actual is None:
+            return None
+        self.sequence += 1
+        checkout = self.root / ("inspect-" + str(self.sequence))
+        self.git("clone", "--no-hardlinks", self.origin, checkout)
+        if self.git("-C", checkout, "rev-parse", "HEAD", capture=True).stdout.strip() != actual:
+            raise ValueError("AUR origin changed while its current recipe was cloning")
+        return {"commit": actual, "record": self.record(checkout, actual),
+                "srcinfo": self.git("-C", checkout, "show", "HEAD:.SRCINFO", capture=True, binary=True).stdout}
+
     def publish(self, selected: dict, recipe: Path, expected: str | None):
         self.authorize(selected, recipe)
         if selected.get("operation") != "publish-aur":
             raise ValueError("AUR delivery requires its separate explicit operation")
+
+        def admit(previous):
+            if (previous["package"] != selected["package"] or previous["channel"] != selected["channel"]
+                    or compare(parse(selected["version"]), parse(previous["version"])) <= 0):
+                raise ValueError("ordinary AUR delivery must advance the selected package and channel")
+        return self.deliver(selected, recipe, expected, admit)
+
+    def withdraw(self, selected: dict, recipe: Path, expected: str | None):
+        """Replace the halted version's published recipe with its refusing revision; nothing else moves."""
+        self.authorize(selected, recipe)
+        if selected.get("operation") != "withdraw-aur" or expected is None:
+            raise ValueError("AUR withdrawal requires its explicit operation and the withdrawn recipe commit")
+
+        def admit(previous):
+            if previous.get("operation") != "publish-aur" or any(
+                    previous.get(key) != selected[key] for key in ["package", "channel", "version", "source_commit"]):
+                raise ValueError("AUR withdrawal must replace the published recipe of the halted release")
+        return self.deliver(selected, recipe, expected, admit)
+
+    def deliver(self, selected: dict, recipe: Path, expected: str | None, admit):
         objects = recipe_objects(recipe)
         if objects != selected["recipe_objects"] or hashlib.sha256(encoded(objects)).hexdigest() != selected["recipe_sha256"]:
             raise ValueError("AUR recipe changed after delivery selection")
@@ -101,7 +137,7 @@ class RecipePublisher:
             cloned = self.git("-C", checkout, "rev-parse", "HEAD", capture=True).stdout.strip()
             if cloned != actual:
                 raise ValueError("AUR origin changed while its reviewed recipe was cloning")
-            previous = json.loads(self.git("-C", checkout, "show", "-s", "--format=%B", actual, capture=True).stdout)
+            previous = self.record(checkout, actual)
             if {key: value for key, value in previous.items() if key != "previous"} == selected:
                 if expected not in {actual, previous.get("previous")}:
                     raise ValueError("AUR idempotent retry differs from its reviewed predecessor")
@@ -109,9 +145,7 @@ class RecipePublisher:
                 return {**previous, "commit": actual, "availability": "origin-readback"}
             if actual != expected:
                 raise ValueError("AUR recipe origin changed since the reviewed delivery plan")
-            if (previous["package"] != selected["package"] or previous["channel"] != selected["channel"]
-                    or compare(parse(selected["version"]), parse(previous["version"])) <= 0):
-                raise ValueError("ordinary AUR delivery must advance the selected package and channel")
+            admit(previous)
         for name in RECIPE_FILES:
             path = checkout / name
             if path.is_symlink():

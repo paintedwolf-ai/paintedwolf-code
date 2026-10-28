@@ -132,3 +132,51 @@ jobs:
             ${{ runner.temp }}/prepared-halt/
           retention-days: 90
           if-no-files-found: ignore
+
+  withdraw-aur:
+    needs: halt
+    if: ${{ !cancelled() && needs.halt.result == 'success' }}
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: release-aur
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare the recipe owner
+        run: |
+          pacman -Syu --noconfirm --needed base-devel python git openssh sudo
+          useradd --create-home pw-aur
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Advance the halted recipe to its refusing revision
+        env:
+          BAD_VERSION: ${{ inputs.bad_version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          : "${AUR_SSH_PRIVATE_KEY:?missing AUR_SSH_PRIVATE_KEY}"
+          mkdir /tmp/aur-withdrawal
+          chown -R pw-aur:pw-aur "${WORKSPACE}" /tmp/aur-withdrawal
+          sudo -H --preserve-env=PATH,AUR_SSH_PRIVATE_KEY -u pw-aur bash -c '
+            set -euo pipefail
+            keys="$(mktemp -d)"
+            (umask 077; printf "%s\n" "${AUR_SSH_PRIVATE_KEY}" > "${keys}/id" && cp packaging/linux/aur-known-hosts "${keys}/known_hosts")
+            unset AUR_SSH_PRIVATE_KEY
+            flags=()
+            [[ "$1" != true ]] || flags+=(--dry-run)
+            PYTHONPATH=scripts python3 -m scripts.linux_release.aur_withdrawal --bad "$0" \
+              --private-key "${keys}/id" --known-hosts "${keys}/known_hosts" \
+              --output /tmp/aur-withdrawal/halt "${flags[@]}"' "${BAD_VERSION}" "${DRY_RUN}"
+      - name: Retain the AUR withdrawal record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-withdrawal-aur-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/aur-withdrawal
+          retention-days: 90
+          if-no-files-found: ignore

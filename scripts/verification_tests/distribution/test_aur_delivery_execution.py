@@ -2,19 +2,24 @@
 
 import copy
 import hashlib
+import os
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from scripts.linux_release.aur_delivery import FixturePublisher, plan, production_publish, protected_publisher, recipe_objects
+from scripts.linux_release import aur_withdrawal
+from scripts.linux_release.aur_delivery import FixturePublisher, RecipePublisher, plan, production_publish, protected_publisher, recipe_objects
 from scripts.linux_release.aur_delivery_workflow import main, prepare, request, selected_directory, verify_provenance
 from scripts.linux_release.aur_observation import observe
 from scripts.linux_release.aur_origin import FixtureOrigin, ReadOnlyOrigin
 from scripts.linux_release.aur_release_authority import authorize
+from scripts.linux_release.aur_withdrawal import OPERATION, authority, recipe as withdrawal_recipe, srcinfo_fields, withdraw
 from scripts.linux_release.repository_objects import encoded
 from scripts.verification_tests.distribution.pacman_repository_fixtures import PACKAGE, TESTDATA, native_tools, trust
 
@@ -441,6 +446,235 @@ class RealLocalGitTests(unittest.TestCase):
                     observe(selected, recipe_dir, changed, backend=backend,
                             authorize=lambda *_: {"accepted": True})
             self.assertFalse(reader.exists())
+
+
+ROOT = Path(__file__).resolve().parents[3]
+SRCINFO = ("pkgbase = painted-wolf-code-bin\n\tpkgdesc = Painted Wolf Code\n\tpkgver = 1.0.3\n\tpkgrel = 1\n"
+           "\turl = https://paintedwolf.ai\n\tarch = x86_64\n\tarch = aarch64\n\tlicense = MIT\n"
+           "\tsource_x86_64 = https://example.invalid/a.pkg.tar.zst\n\n"
+           "pkgname = painted-wolf-code-bin\n")
+RECORD = {"operation": "publish-aur", "source_commit": SOURCE, "version": "1.0.3", "channel": "stable",
+          "package": "painted-wolf-code-bin", "rehearsal": False}
+
+
+def published(directory: Path, version: str) -> dict:
+    """A published recipe and its delivery plan as the release lane leaves them."""
+    directory.mkdir(parents=True)
+    (directory / "PKGBUILD").write_text(f"pkgname=painted-wolf-code-bin\npkgver={version}\npkgrel=1\n")
+    (directory / ".SRCINFO").write_text(SRCINFO.replace("1.0.3", version))
+    manifest = {"family": "pacman", "source_commit": SOURCE, "version": version, "channel": "stable",
+                "rehearsal": True, "architecture": "x86_64", "inventory_sha256": "b" * 64,
+                "signing_generation": 1, "key_fingerprint": "A" * 40}
+    return plan({**manifest, "package": "painted-wolf-code-bin"}, [manifest], directory, "c" * 64)
+
+
+class WithdrawalRecipeTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+
+    def test_refusing_revision_keeps_identity_and_advances_only_pkgrel(self):
+        selected = withdrawal_recipe(RECORD, SRCINFO.encode(), self.work / "recipe", "d" * 40)
+        pkgbuild = (self.work / "recipe/PKGBUILD").read_text()
+        self.assertIn("pkgname=painted-wolf-code-bin\npkgver=1.0.3\npkgrel=2\n", pkgbuild)
+        self.assertIn("arch=(aarch64 x86_64)\nlicense=(MIT)\n", pkgbuild)
+        self.assertNotIn("source", pkgbuild)
+        self.assertRegex(pkgbuild, r"package\(\) \{\n  error '[^\n]*1\.0\.3 was withdrawn[^\n]*'\n  return 1\n\}\n$")
+        fields = srcinfo_fields((self.work / "recipe/.SRCINFO").read_bytes())
+        self.assertEqual(fields, {"pkgbase": ["painted-wolf-code-bin"], "pkgdesc": ["Painted Wolf Code (withdrawn release)"],
+                                  "pkgver": ["1.0.3"], "pkgrel": ["2"], "url": ["https://paintedwolf.ai"],
+                                  "arch": ["aarch64", "x86_64"], "license": ["MIT"], "options": ["!strip", "!debug"],
+                                  "pkgname": ["painted-wolf-code-bin"]})
+        self.assertEqual({key: selected[key] for key in RECORD if key != "operation"},
+                         {key: RECORD[key] for key in RECORD if key != "operation"})
+        self.assertEqual((selected["operation"], selected["withdrawn_commit"], selected["pkgrel"]), (OPERATION, "d" * 40, 2))
+        self.assertEqual(selected["recipe_objects"], recipe_objects(self.work / "recipe"))
+        self.assertEqual(selected["recipe_sha256"], hashlib.sha256(encoded(selected["recipe_objects"])).hexdigest())
+        epoch = SRCINFO.replace("\tpkgrel = 1\n", "\tpkgrel = 1.2\n\tepoch = 3\n")
+        withdrawal_recipe(RECORD, epoch.encode(), self.work / "epoch", "d" * 40)
+        self.assertIn("pkgrel=2\nepoch=3\n", (self.work / "epoch/PKGBUILD").read_text())
+        self.assertIn("\tpkgrel = 2\n\tepoch = 3\n", (self.work / "epoch/.SRCINFO").read_text())
+
+    def test_makepkg_reads_the_refusing_revision_identically_and_refuses_to_package(self):
+        native_tools("makepkg")
+        if os.geteuid() == 0:
+            self.skipTest("makepkg refuses to run as root")
+        withdrawal_recipe(RECORD, SRCINFO.encode(), self.work / "recipe", "d" * 40)
+        printed = subprocess.check_output(["makepkg", "--printsrcinfo"], cwd=self.work / "recipe")
+        self.assertEqual(srcinfo_fields(printed), srcinfo_fields((self.work / "recipe/.SRCINFO").read_bytes()))
+        built = subprocess.run(["makepkg", "--force", "--nodeps", "--noconfirm"], cwd=self.work / "recipe",
+                               capture_output=True, text=True, timeout=120)
+        self.assertNotEqual(built.returncode, 0)
+        self.assertIn("1.0.3 was withdrawn", built.stdout + built.stderr)
+        self.assertEqual([path.name for path in (self.work / "recipe").glob("*.pkg.tar*")], [])
+
+    def test_foreign_or_malformed_published_declarations_refuse(self):
+        for index, (changed, pattern) in enumerate([
+                (SRCINFO.replace("pkgbase = painted-wolf-code-bin", "pkgbase = painted-wolf-code-preview-bin"), "not the halted"),
+                (SRCINFO.replace("pkgname = painted-wolf-code-bin", "pkgname = other"), "not the halted"),
+                (SRCINFO.replace("\tpkgrel = 1\n", "\tpkgrel = 0\n"), "pkgrel"),
+                (SRCINFO.replace("\tpkgrel = 1\n", ""), "pkgrel"),
+                (SRCINFO.replace("\tpkgver = 1.0.3\n", "\tpkgver = 1.0.3\n\tpkgver = 1.0.4\n"), "pkgver"),
+                (SRCINFO.replace("\tarch = x86_64\n\tarch = aarch64\n", ""), "architecture"),
+                (SRCINFO.replace("\turl = https://paintedwolf.ai\n", "\tURL: nope\n"), "invalid declaration"),
+                (SRCINFO, "not the halted")]):
+            record = {**RECORD, "package": "painted-wolf-code-preview-bin"} if index == 7 else RECORD
+            with self.subTest(index=index), self.assertRaisesRegex(ValueError, pattern):
+                withdrawal_recipe(record, changed.encode(), self.work / str(index), "d" * 40)
+            self.assertFalse((self.work / str(index)).exists())
+
+
+class WithdrawalDeliveryTests(unittest.TestCase):
+    """A real bare Git origin owned by the test receives the refusing revision exactly once."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+        (self.work / "publisher").mkdir()
+        self.publisher = FixturePublisher(self.work / "publisher")
+        self.clones = 0
+
+    def factory(self, root, package, key, hosts, authorize):
+        """The stable package shares the test origin; the preview package owns an empty one."""
+        self.assertEqual((key, hosts), (Path("key"), Path("hosts")))
+        if package == "painted-wolf-code-preview-bin":
+            return FixturePublisher(root)
+
+        def authorized(selected, recipe_dir):
+            FixturePublisher.fixture_authority(selected, recipe_dir)
+            authorize(selected, recipe_dir)
+        return RecipePublisher(root, self.publisher.origin, authorized)
+
+    def shared_factory(self, root, package, key, hosts, authorize):
+        return RecipePublisher(root, self.publisher.origin, FixturePublisher.fixture_authority)
+
+    def withdraw(self, bad, name, **options):
+        return withdraw(bad, self.work / name, Path("key"), Path("hosts"), publisher_factory=self.factory, **options)
+
+    def clone(self):
+        self.clones += 1
+        clone = self.work / ("clone-" + str(self.clones))
+        subprocess.run(["git", "clone", "--quiet", self.publisher.origin, str(clone)], check=True)
+        return clone
+
+    def commits(self):
+        clone = self.clone()
+        return int(subprocess.check_output(["git", "-C", str(clone), "rev-list", "--count", "HEAD"], text=True))
+
+    def test_withdrawal_advances_the_offered_version_once_and_leaves_other_channels(self):
+        selected = published(self.work / "recipe-1.0.3", "1.0.3")
+        first = self.publisher.publish(selected, self.work / "recipe-1.0.3", None)["commit"]
+        result = self.withdraw("1.0.3", "halt")
+        self.assertEqual(result["preview"], {"package": "painted-wolf-code-preview-bin", "availability": "no-recipe",
+                                             "withdrawn": False})
+        stable = result["stable"]
+        self.assertTrue(stable["withdrawn"])
+        self.assertEqual((stable["withdrawn_commit"], stable["previous"], stable["availability"]),
+                         (first, first, "origin-readback"))
+        self.assertNotEqual(stable["commit"], first)
+        clone = self.clone()
+        pkgbuild = (clone / "PKGBUILD").read_text()
+        self.assertIn("pkgver=1.0.3\npkgrel=2\n", pkgbuild)
+        self.assertIn("return 1", pkgbuild)
+        self.assertIn("\tpkgrel = 2\n", (clone / ".SRCINFO").read_text())
+        message = json.loads(subprocess.check_output(["git", "-C", str(clone), "log", "-1", "--format=%B"], text=True))
+        self.assertEqual(message, {key: value for key, value in stable.items()
+                                   if key not in {"commit", "availability", "withdrawn"}})
+        self.assertEqual(self.commits(), 2)
+        # An origin whose record names another package is tampering, not another version.
+        with self.assertRaisesRegex(ValueError, "foreign package"):
+            withdraw("1.0.3", self.work / "foreign", Path("key"), Path("hosts"), publisher_factory=self.shared_factory)
+        again = self.withdraw("1.0.3", "halt-again")
+        self.assertEqual((again["stable"]["commit"], again["stable"]["withdrawn"]), (stable["commit"], True))
+        self.assertEqual(self.commits(), 2)
+        # A withdrawn recipe is never withdrawn again through the publisher either.
+        current = self.publisher.inspect()
+        twice = withdrawal_recipe(current["record"], current["srcinfo"], self.work / "twice", current["commit"])
+        with self.assertRaisesRegex(ValueError, "must replace the published recipe"):
+            self.publisher.withdraw(twice, self.work / "twice", current["commit"])
+        self.assertEqual(self.commits(), 2)
+
+    def test_other_offered_versions_dry_runs_and_changed_revisions_leave_the_origin_unchanged(self):
+        selected = published(self.work / "recipe-1.0.4", "1.0.4")
+        first = self.publisher.publish(selected, self.work / "recipe-1.0.4", None)["commit"]
+        result = self.withdraw("1.0.3", "halt")
+        self.assertEqual(result["stable"], {"package": "painted-wolf-code-bin", "availability": "other-version",
+                                            "withdrawn": False, "offered": "1.0.4"})
+        dry = self.withdraw("1.0.4", "dry", dry_run=True)
+        self.assertEqual((dry["stable"]["availability"], dry["stable"]["withdrawn"], dry["stable"]["pkgrel"]),
+                         ("prepared-only", False, 2))
+        self.assertTrue((self.work / "dry/stable/recipe/PKGBUILD").is_file())
+        self.assertEqual(self.publisher.head(), first)
+        with self.assertRaisesRegex(ValueError, "invalid SemVer"):
+            self.withdraw("not-a-version", "invalid")
+        current = self.publisher.inspect()
+        self.assertEqual(current["commit"], first)
+        revision = withdrawal_recipe(current["record"], current["srcinfo"], self.work / "revision", first)
+        with self.assertRaisesRegex(ValueError, "explicit operation"):
+            self.publisher.withdraw({**revision, "operation": "publish-aur"}, self.work / "revision", first)
+        with self.assertRaisesRegex(ValueError, "explicit operation"):
+            self.publisher.withdraw(revision, self.work / "revision", None)
+        with self.assertRaisesRegex(ValueError, "changed since the reviewed"):
+            self.publisher.withdraw(revision, self.work / "revision", "0" * 40)
+        (self.work / "revision/PKGBUILD").write_text("changed after selection\n")
+        with self.assertRaisesRegex(ValueError, "changed after delivery selection"):
+            self.publisher.withdraw(revision, self.work / "revision", first)
+        self.assertEqual(self.publisher.head(), first)
+        self.assertEqual(self.commits(), 1)
+
+    def test_authority_binds_the_halted_version_channel_package_and_exact_revision(self):
+        revision = withdrawal_recipe({**RECORD, "version": "1.0.4"}, SRCINFO.replace("1.0.3", "1.0.4").encode(),
+                          self.work / "revision", "d" * 40)
+        authorize = authority("1.0.4", "stable", "painted-wolf-code-bin")
+        self.assertIsNone(authorize(revision, self.work / "revision"))
+        for changed in ({"version": "1.0.3"}, {"channel": "preview"}, {"package": "painted-wolf-code-preview-bin"},
+                        {"operation": "publish-aur"}):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, "differs from the halted release"):
+                authorize({**revision, **changed}, self.work / "revision")
+        with self.assertRaisesRegex(ValueError, "differs from its prepared revision"):
+            authorize({**revision, "recipe_sha256": "0" * 64}, self.work / "revision")
+        (self.work / "revision/PKGBUILD").write_text("changed\n")
+        with self.assertRaisesRegex(ValueError, "differs from its prepared revision"):
+            authorize(revision, self.work / "revision")
+
+
+class WithdrawalCommandTests(unittest.TestCase):
+    def test_command_writes_the_withdrawal_record_and_passes_dry_run(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "halt"
+            with patch.object(aur_withdrawal, "withdraw", return_value={"stable": {"withdrawn": False}}) as withdrawn:
+                aur_withdrawal.main(["--bad", "1.0.3", "--private-key", "key", "--known-hosts", "hosts",
+                                     "--output", str(output), "--dry-run"])
+            self.assertEqual(json.loads((output / "withdrawal.json").read_text()), {"stable": {"withdrawn": False}})
+            self.assertEqual(withdrawn.call_args.args, ("1.0.3", output, Path("key"), Path("hosts")))
+            self.assertEqual(withdrawn.call_args.kwargs, {"dry_run": True})
+            with patch.object(aur_withdrawal, "withdraw", side_effect=ValueError("origin changed")) as withdrawn:
+                with self.assertRaises(SystemExit) as refused:
+                    aur_withdrawal.main(["--bad", "1.0.3", "--private-key", "key", "--known-hosts", "hosts",
+                                         "--output", str(output)])
+            self.assertEqual((refused.exception.code, withdrawn.call_args.kwargs), (1, {"dry_run": False}))
+
+
+class HaltSurfaceTests(unittest.TestCase):
+    def test_halt_withdraws_every_delivery_surface_the_release_lane_publishes(self):
+        workflows = ROOT / ".github/workflows"
+        lane = (workflows / "release.yml").read_text() + (workflows / "release-linux-delivery.yml").read_text()
+        halt = (workflows / "release-halt.yml").read_text()
+        surfaces = {"scripts.linux_release.release_repositories publish": "scripts.linux_release.repository_withdrawal apply",
+                    "scripts.nix_cache.release_lane publish": "scripts.nix_cache.release_lane withdraw",
+                    "release:publish:aur-recipe -- publish": "scripts.linux_release.aur_withdrawal --bad"}
+        for publication, withdrawal in surfaces.items():
+            self.assertIn(publication, lane)
+            self.assertIn(withdrawal, halt)
+        writes = set(re.findall(r"scripts\.(?:linux_release|nix_cache)\.[a-z_]+ publish\b|release:publish:[a-z-]+ -- publish\b", lane))
+        self.assertEqual(writes, set(surfaces))
+        # The AUR revision is pushed by the recipe owner from the halt's own protected environment.
+        aur = halt[halt.index("  withdraw-aur:"):]
+        for required in ("environment: release-aur", "needs: halt", "AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}",
+                         "packaging/linux/aur-known-hosts", "--dry-run", "-u pw-aur"):
+            self.assertIn(required, aur)
 
 
 if __name__ == "__main__":
