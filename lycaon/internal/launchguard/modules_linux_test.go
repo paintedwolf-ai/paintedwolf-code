@@ -378,7 +378,10 @@ func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) er
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("post-launch mount was not scrubbed within %s: map=%v statErr=%v flags=%#x", bound, mapErr, statErr, st.Flags)
+			if mapErr == nil {
+				mapErr = errors.New("late module still maps executable")
+			}
+			return fmt.Errorf("post-launch mount was not scrubbed within %s (flags=%#x): %w", bound, st.Flags, errors.Join(mapErr, statErr))
 		}
 		time.Sleep(50 * time.Microsecond)
 	}
