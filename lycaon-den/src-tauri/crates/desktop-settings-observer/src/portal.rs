@@ -1,6 +1,6 @@
 //! The executable reads only fixed desktop preference keys; it accepts no requests.
 use desktop_settings_observer::{Frame, Setting, Status, NAMESPACES};
-use glib::{ToVariant, Variant, VariantTy};
+use glib::{prelude::ToVariant, Variant, VariantTy};
 use std::{
     cell::{Cell, RefCell},
     io::{self, Read},
@@ -16,7 +16,7 @@ const PATH: &str = "/org/freedesktop/portal/desktop";
 const INTERFACE: &str = "org.freedesktop.portal.Settings";
 const TIMEOUT: Duration = Duration::from_millis(1500);
 
-// gio 0.18 exposes the stable GDBus error domain and codes through its FFI.
+// GIO exposes the stable GDBus error domain and codes through its FFI.
 #[derive(Clone, Copy)]
 struct DbCode(i32);
 impl glib::error::ErrorDomain for DbCode {

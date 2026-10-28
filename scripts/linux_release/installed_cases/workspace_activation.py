@@ -7,7 +7,7 @@ from .app import InstalledApp
 from .desktop_ui import DesktopUI, interactive_window
 from .desktop_launch import activate, protected_launcher
 from .process import run
-from .profile_setup import active_session, require_active
+from .profile_setup import active_session, await_session, require_active
 from .provider import MODEL, ProviderFixture
 from .provider_barrier import ResponseBarrier
 from .provider_setup import configure_provider
@@ -55,13 +55,13 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the owned workspace project')
+                observations['opened_session'] = await_session(
+                    app, project, provider['provider_id'], MODEL,
+                    status='idle', reason='workspace-activation-project-session-not-opened')
                 submit_project_turn(app)
                 with DesktopUI(app) as ui:
-                    deadline = time.monotonic() + 30
-                    while active_session(app, project, provider['provider_id'], MODEL) is None:
-                        if time.monotonic() >= deadline:
-                            raise CaseUnavailable('normal-workspace-fixture-did-not-start')
-                        time.sleep(0.05)
+                    await_session(app, project, provider['provider_id'], MODEL,
+                                  reason='normal-workspace-fixture-did-not-start')
                     observations['provider_held_before'] = barrier.await_held()
                     active = require_active(app, project, provider['provider_id'], MODEL)
                     if not any(row['completed'] is False for row in fixture.observations):
@@ -93,7 +93,7 @@ def execute(binding, capability, case, root):
                         observations['provider_cancelled_by_quit'] = barrier.await_peer_cancellation()
                 observations['provider_requests'] = list(fixture.observations)
             streams.update(app.streams())
-    except (OSError, ValueError, TypeError) as error:
+    except Exception as error:
         if barrier is not None:
             observations['provider_response_control'] = barrier.snapshot()
         if app is not None:

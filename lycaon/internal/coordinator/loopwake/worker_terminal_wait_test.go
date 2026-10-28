@@ -74,9 +74,9 @@ func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing
 			loop.Cycles.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
 			loop.Cycles.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
 			if tt.expected {
-				testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
+				testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
 			}
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			if got := deliveries.Load(); (got == 1) != tt.expected || got > 1 {
 				t.Fatalf("deliveries=%d expected=%v", got, tt.expected)
 			}

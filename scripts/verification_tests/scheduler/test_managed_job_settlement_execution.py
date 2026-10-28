@@ -66,7 +66,7 @@ assert sys.path.count(str(namespace))==1
 assert sys.path.count(str(checkout))==1
 import scripts.artifact_paths
 value.validate_checkout()
-from scripts.linux_release.installed_campaign import command
+from scripts.linux_release.campaign.guests import command
 import scripts.harness
 assert callable(command)
 assert scripts.harness.__file__ is None

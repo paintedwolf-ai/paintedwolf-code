@@ -169,16 +169,60 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
                 "steps": observations, "restart_health": restart["health"]}
     finally:
+        finish_case(installation, config, records, evidence, sys.exc_info()[1])
+
+
+def finish_case(installation, config, records, evidence, primary_error):
+    errors = []
+    actions = (
+        ("write startup observation", lambda: (evidence / "startup-observation.json").write_text(
+            json.dumps(installation.last_observation, indent=2) + "\n")),
+        ("retain native crashes", lambda: installation.retain_crashes(evidence) if primary_error else None),
+        ("sample failed startup", lambda: installation.sample_startup(evidence) if primary_error else None),
+        ("stop installation", installation.stop),
+        ("retain installation state", lambda: retain_state(config, records, evidence)),
+    )
+    for label, action in actions:
         try:
-            installation.stop()
-        finally:
-            retain_state(config, records, evidence)
+            action()
+        except Exception as error:
+            errors.append(error)
+            if primary_error is not None:
+                primary_error.add_note(f"{label}: {type(error).__name__}: {error}")
+            print(f"{label}: {type(error).__name__}: {error}", file=sys.stderr)
+    if errors and primary_error is None:
+        raise errors[0]
 
 
 def retain_state(config, records, evidence):
     for name in ("ready.json", "rejected.json", "transaction.json"):
         if (records / name).is_file():
             shutil.copyfile(records / name, evidence / ("final-" + name))
-    for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1"):
+    for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1", "desktop-launch.log"):
         if (config / name).is_file():
             shutil.copyfile(config / name, evidence / name)
+
+
+def probe_committed_recovery(case, plan, root, work, config, evidence):
+    """Diagnose next-launch recovery without changing the failed upgrade result."""
+    transaction = read_json(evidence.parent / case["id"] / "final-transaction.json")
+    if not transaction or transaction.get("phase") != "committed":
+        return {"result": "not_applicable", "reason": "no_committed_transaction"}
+    app = Path(transaction["target"])
+    if app.parent != work.resolve() or app.suffix != ".app" or app.is_symlink() or not app.is_dir():
+        raise ValueError("recovery target differs from the retained rehearsal installation")
+    records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
+    evidence.mkdir()
+    installation = Installation(app, config)
+    try:
+        installation.launch()
+        version = plan["candidate"]["version"]
+        observation = installation.healthy(version)
+        wait_for("next-launch recovery did not confirm the installed candidate",
+                 lambda: confirmed(read_json(records / "transaction.json"), version, app))
+        verify_semantics(config, root / "fixtures" / case["source_version"], observation, evidence)
+        return {"result": "passed", "trigger": "explicit_next_launch", "health": observation["health"]}
+    except Exception as error:
+        return {"result": "failed", "error": str(error)}
+    finally:
+        finish_case(installation, config, records, evidence, sys.exc_info()[1])

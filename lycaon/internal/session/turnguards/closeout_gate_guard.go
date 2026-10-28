@@ -52,7 +52,7 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	leaves := strings.Join(state.OpenLeaves, ", ")
-	_, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
+	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
 		gc.Session.Phase = state.Phase
@@ -62,7 +62,11 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 		return nil
 	})
 	if blocked && !retry {
-		reject = reject.WithCause(guidance.ErrCloseoutStopped)
+		cause := guidance.ErrCloseoutStopped
+		if !invokeAllowed && count == 0 {
+			cause = errors.Join(cause, guidance.ErrCloseoutNeedsRepairTurn)
+		}
+		reject = reject.WithCause(cause)
 	}
 	return reject, blocked
 }

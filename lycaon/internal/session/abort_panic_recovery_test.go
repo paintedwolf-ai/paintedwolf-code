@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -54,7 +53,7 @@ func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 		if err2 == nil {
 			t.Fatal("expected second Abort to also surface the panic")
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("second Abort hung: stop state was not cleared after the first panic")
 	}
 }
