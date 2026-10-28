@@ -266,7 +266,7 @@ function userTurnStartIndex(messages: readonly Message[]): number {
   return 0;
 }
 
-/** Latest in-flight tool in the current user turn (skips orientation-only tools). */
+/** Latest running call in this turn, excluding parked and hidden tools. */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
@@ -397,6 +397,7 @@ function hostActivityCandidate(
     };
   }
   if (activity.kind === "awaiting_wake") {
+    // Only the host arms program_done; it is not a wait-tool condition.
     const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
     const part = command ? toolPartForActivity(activity, messages) : undefined;
     const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
