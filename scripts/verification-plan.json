@@ -350,6 +350,12 @@
     ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
+    ],
+    "userlands:build": [
+      "userlands:build"
+    ],
+    "test:userlands": [
+      "test:userlands"
     ]
   },
   "private": [
@@ -375,6 +381,7 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
+    "userlands:build": "passthrough",
     "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
@@ -700,6 +707,22 @@
         "linux-signing-fixture"
       ],
       "workers": 1
+    },
+    "userlands:build": {
+      "locks": [
+        "reference-userlands"
+      ],
+      "workers": 1
+    },
+    "test:userlands": {
+      "locks": [
+        "go",
+        "reference-userlands"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
     }
   },
   "environment": {
@@ -727,7 +750,10 @@
       "NODE_OPTIONS",
       "NODE_EXTRA_CA_CERTS",
       "SSL_CERT_FILE",
-      "SSL_CERT_DIR"
+      "SSL_CERT_DIR",
+      "DOCKER_HOST",
+      "DOCKER_CONTEXT",
+      "DOCKER_CONFIG"
     ],
     "prefixes": [
       "LC_",
@@ -935,6 +961,20 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "reference-userlands": {
+      "targets": [
+        "test:userlands"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
       "platform": "linux"
     },
     "race": {
