@@ -688,7 +688,7 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full` |
+| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
 | `./task check:coverage` | Go aggregate statement coverage floor |
 | `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
