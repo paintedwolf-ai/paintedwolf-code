@@ -20,7 +20,7 @@ func TestEnvsubstMatchesGNU(t *testing.T) {
 		{"envsubst 'only ${USER2} here'", "$HOST ${USER2}", "$HOST me", 0},
 		{"envsubst '$MISSING'", "[$MISSING]", "[]", 0},
 		{"envsubst 'no vars'", "$HOST", "$HOST", 0},
-		{"envsubst", "a$HOSTb ${HOST}b\n", "a hb\n", 0},
+		{"envsubst", "a$HOSTb ${HOST}b\n", "a h1b\n", 0},
 		{"envsubst", "${HOST", "${HOST", 0},
 		{"envsubst", "end$", "end$", 0},
 		{"envsubst", "", "", 0},
@@ -33,8 +33,9 @@ func TestEnvsubstMatchesGNU(t *testing.T) {
 func TestEnvsubstStreamsLongInputs(t *testing.T) {
 	h := newHarness(t)
 	h.env = []string{"V=value"}
-	input := strings.Repeat("x", 40000) + "$V" + strings.Repeat("y", 40000) + "${V}"
-	h.run("envsubst", input).expectOutput(t, "long input", strings.Repeat("x", 40000)+"value"+strings.Repeat("y", 40000)+"value", 0)
+	input := strings.Repeat("x", 40000) + "$V-" + strings.Repeat("y", 40000) + "${V}"
+	h.run("envsubst", input).expectOutput(t, "long input", strings.Repeat("x", 40000)+"value-"+strings.Repeat("y", 40000)+"value", 0)
+	h.run("envsubst", "$V"+strings.Repeat("y", 40000)).expectOutput(t, "long name", "", 0)
 }
 
 // TestEnvsubstSubstitutesSecretReferencesAsReferences: the frame holds a
