@@ -40,6 +40,9 @@ func redactRequestArguments(ctx context.Context, matcher *secretmatch.Matcher, a
 
 func requestFieldLabel(args map[string]any, path, fallback string) string {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if path == "/host_header" {
+		return "Host"
+	}
 	if len(parts) != 3 || parts[2] != "value" || (parts[0] != "headers" && parts[0] != "form" && parts[0] != "body_form") {
 		return fallback
 	}

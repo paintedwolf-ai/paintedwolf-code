@@ -14,7 +14,8 @@ import (
 // Source screening still sees every literal alongside a reference in those fields.
 func wireProvenance(args map[string]any, resolution *secretcap.Resolution, sending outboundRequest) map[int][]string {
 	protected := map[int][]string{}
-	body := len(sending.headers) + 1
+	host := len(sending.headers) + 1
+	body := host + 1
 	walkRequestValues(args, "", "", func(path, _, value string) string {
 		if !resolution.Binds(path) || !secretmatch.HTTPArgumentConsumed(args, path) {
 			return value
@@ -35,6 +36,8 @@ func wireProvenance(args map[string]any, resolution *secretcap.Resolution, sendi
 					protected[i+1] = append(protected[i+1], header.Value)
 				}
 			}
+		case "host_header":
+			protected[host] = append(protected[host], value)
 		case "body_json":
 			encoded, _ := json.Marshal(value)
 			protected[body] = append(protected[body], string(encoded))
@@ -54,7 +57,7 @@ func wireProvenance(args map[string]any, resolution *secretcap.Resolution, sendi
 }
 
 func requestWire(spec requestSpec, args map[string]any, resolution *secretcap.Resolution) outboundRequest {
-	sending := outboundRequest{url: spec.target.String(), headers: spec.headers, body: spec.body.bytes}
+	sending := outboundRequest{url: spec.target.String(), headers: spec.headers, hostHeader: spec.hostHeader, body: spec.body.bytes}
 	sending.protected = wireProvenance(args, resolution, sending)
 	return sending
 }

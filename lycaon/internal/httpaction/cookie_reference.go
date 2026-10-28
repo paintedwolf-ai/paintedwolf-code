@@ -54,13 +54,10 @@ func resolveCookieReferences(req outboundRequest, jar *secretcap.CookieJar, targ
 			return value
 		})
 	}
-	out := outboundRequest{
-		url:      req.url,
-		headers:  make([]outboundhttp.Header, len(req.headers)),
-		body:     []byte(substitute(string(req.body))),
-		redacted: req.redacted,
-		receipt:  req.receipt,
-	}
+	out := req
+	out.headers = make([]outboundhttp.Header, len(req.headers))
+	out.body = []byte(substitute(string(req.body)))
+
 	for i, header := range req.headers {
 		out.headers[i] = outboundhttp.Header{Name: header.Name, Value: substitute(header.Value)}
 	}
