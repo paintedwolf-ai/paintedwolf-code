@@ -15,6 +15,8 @@ type xargsHandoff struct {
 	next                             chan xargsNext
 	space                            chan struct{}
 	closed                           bool
+	waitingInput                     bool
+	waitingChild                     <-chan struct{}
 	dispatcherUnblock, parserUnblock func()
 }
 
@@ -32,7 +34,9 @@ func (h *xargsHandoff) publish(ctx context.Context, activity *commandprogram.Exe
 		h.mu.Lock()
 		select {
 		case h.next <- item:
-			clearXargsWait(&h.dispatcherUnblock)
+			if h.waitingInput {
+				clearXargsWait(&h.dispatcherUnblock)
+			}
 			clearXargsWait(&h.parserUnblock)
 			h.mu.Unlock()
 			return nil
@@ -57,7 +61,9 @@ func (h *xargsHandoff) publish(ctx context.Context, activity *commandprogram.Exe
 func (h *xargsHandoff) parsed() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	clearXargsWait(&h.dispatcherUnblock)
+	if h.waitingInput {
+		clearXargsWait(&h.dispatcherUnblock)
+	}
 	clearXargsWait(&h.parserUnblock)
 	h.closed = true
 	close(h.next)
@@ -75,7 +81,9 @@ func (h *xargsHandoff) childDone(done chan struct{}) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	close(done)
-	clearXargsWait(&h.dispatcherUnblock)
+	if h.waitingChild == done {
+		clearXargsWait(&h.dispatcherUnblock)
+	}
 }
 func (h *xargsHandoff) block(ctx context.Context, incoming <-chan xargsNext, done <-chan struct{}) (func(), error) {
 	h.mu.Lock()
@@ -93,5 +101,13 @@ func (h *xargsHandoff) block(ctx context.Context, incoming <-chan xargsNext, don
 		return nil, err
 	}
 	h.dispatcherUnblock = unblock
-	return func() { h.mu.Lock(); clearXargsWait(&h.dispatcherUnblock); h.mu.Unlock() }, nil
+	h.waitingInput = incoming != nil
+	h.waitingChild = done
+	return func() {
+		h.mu.Lock()
+		clearXargsWait(&h.dispatcherUnblock)
+		h.waitingInput = false
+		h.waitingChild = nil
+		h.mu.Unlock()
+	}, nil
 }

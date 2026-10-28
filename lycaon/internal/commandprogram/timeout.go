@@ -38,14 +38,14 @@ func ParseDuration(word string) (time.Duration, bool) {
 }
 
 // TimeoutPlan is one bound timeout invocation. A zero Duration or KillAfter
-// disables that timer, as in GNU timeout.
+// disables that timer.
 type TimeoutPlan struct {
 	Duration, KillAfter time.Duration
 	Signal              Signal
 	PreserveStatus      bool
 }
 
-// TimedOutStatus is GNU timeout's status for an expired command.
+// TimedOutStatus reports an expired command.
 const TimedOutStatus = 124
 
 var errTimedOut = errors.New("timeout expired")

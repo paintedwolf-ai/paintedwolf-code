@@ -56,7 +56,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	defer cancel()
 	activities := make([]*ExecutionWait, len(stages))
 	for i := range activities {
-		activities[i] = f.e.waits.start()
+		activities[i], _ = f.wait.Fork()
 	}
 	defer func() {
 		for _, a := range activities {

@@ -163,7 +163,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		run.close(ctx)
 		return f.stateRefusal(s.SyntaxLocation, err)
 	}
-	job.wait = f.e.waits.start()
+	job.wait, _ = f.wait.Fork()
 	job.io.wait = job.wait
 	job.parent, job.loops, job.returnable = run.inv, 0, false
 	statement := s

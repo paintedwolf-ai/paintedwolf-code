@@ -446,3 +446,45 @@ func TestCommandEntryExternalTimeoutParksAndReapsTheChild(t *testing.T) {
 		t.Fatalf("external timeout %+v", outcome)
 	}
 }
+
+func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"pipeline", "HELPER | cat", 7},
+		{"process substitution", "cat <(HELPER)", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newWaitStateFixture(t)
+			body := strings.ReplaceAll(tc.body, "HELPER", f.externalHelper())
+			done := f.start(t, "{ "+body+"; } & wait $!")
+			f.awaitExternal()
+			f.waitTimers(1)
+			f.clock.Advance(10 * time.Second)
+			pending := <-f.parked
+			<-done
+			testutil.FailErr(t, "release background external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+			outcome := decodeWaitOutcome(t, <-pending.settled)
+			if outcome.State != "completed" || outcome.Status != tc.status {
+				t.Fatalf("background frame %+v", outcome)
+			}
+		})
+	}
+}
+
+func TestCommandEntryBoundRefusalKeepsDetachedJobsAlive(t *testing.T) {
+	f := newWaitStateFixture(t)
+	outcome := decodeWaitOutcome(t, f.call(t, "sleep 7200 & wait $!"))
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
+		t.Fatalf("bound refusal %+v", outcome)
+	}
+	if !f.Background.HasRunning(f.Session) || f.clock.Pending() != 1 {
+		t.Fatalf("foreground refusal stopped detached work; timers=%d", f.clock.Pending())
+	}
+	select {
+	case parked := <-f.parked:
+		t.Fatalf("over-bound wait parked %+v", parked.request)
+	default:
+	}
+}
