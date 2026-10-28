@@ -1,0 +1,19 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/exec",
+  "kind": "module",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly 35 immediate source files. Native preparation, broker relay, supervisor registration, process groups, pipelines and PTYs share the existing execution boundary while keeping their descriptor and settlement lifetimes explicit. Fixed confinement probes share private group setup and cleanup; public native starts still require prepared captures. Focused group, immutable-input, cancellation, probe and launch-door contracts support this boundary. Linux protected-launch and privilege fixtures remain in the managed platform campaign. Additional membership requires renewed review.",
+  "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
+  "ceiling": 35,
+  "boundaries": {
+    "lycaon/internal/exec/own_group_launch_unix_test.go": "38f46cac228181bd1ebfcc85e442893de83333b916976fe2cccf884b83948704",
+    "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
+    "lycaon/internal/exec/pipeline_test.go": "a1755106920ac66fbc3e559e6e6eedaf26d97a00d6beb13e18f5fc230be9ec78",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/protected_launch_linux_test.go": "9d342f8f0ce54a66f54271e72ca2265c500553be9d3198ceaa1e18f9da3baa27",
+    "lycaon/internal/exec/pty_test.go": "b449e3f47fbcef83b85a50c31cebe38115e2ee49090d7aa21d51fcf4f2e973e1"
+  },
+  "reviewed_shape": "4c792cdd379cdb22fba5b124d3a3164314711bbcddfcd4c578674d6c1749d460"
+}

@@ -141,6 +141,7 @@ var confinementProducerInventory = map[string]string{
 	"internal/toolexecution/command_operand_expansion.go": "globReadable(confReq) — pre-grant read boundaries for glob expansion",
 	"internal/documentcore/process.go":                    "DefaultConfinement(host MkdirTemp scratch) — native document core: only its own scratch root, network denied, mandatory application",
 	"internal/visualscreen/ocr_tesseract.go":              "DefaultConfinement(host MkdirTemp scratch) — bundled OCR engine: only its own per-image scratch root, network denied, mandatory application",
+	"internal/exec/prepared.go":                           "Confinement{HostExecution: true} — no roots; the explicit host disposition when a launch plan carries no agent boundary, never replacing one it does carry",
 }
 
 // The producer inventory matches the syntax tree.

@@ -1,0 +1,18 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "module",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly 72 immediate source files. Typed requested policy, fail-closed admission, action-bound egress, platform profile transport and captured native inputs remain one confinement boundary. Linux sandbox algorithms stay in the existing child package; executor supervision stays in exec. Main admission and portable input capture share these existing controls without another public authority interface. Focused admission, typed action, input-vector and native browser lifecycle checks pass on Darwin. Linux broker and privileged runtime qualification remains a separate platform obligation. Additional membership requires renewed review.",
+  "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
+  "ceiling": 72,
+  "boundaries": {
+    "lycaon/internal/confine/action_launch_test.go": "0a39805d9b791e44e0e4b0f271563f1be06006f503470a273cd050adaeff0bb8",
+    "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
+    "lycaon/internal/confine/process_pins_test.go": "d41d5d9060636d596301787cc0d677fb5c9da681f3dde04117ae4df2306e7be3",
+    "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089"
+  },
+  "reviewed_shape": "a2f0e1ac222d0655d14435e649f5db3e04f884e83d474e6d36fba15b4adc28c2"
+}
