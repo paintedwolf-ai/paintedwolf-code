@@ -60,6 +60,13 @@ components:
         invocation:
           x-go-pointer: true
           $ref: "#/components/schemas/InvocationReceipt"
+        command_program:
+          x-go-pointer: true
+          $ref: command-programs.yaml#/components/schemas/CommandProgramReceipt
+          description: >-
+            Host portable-program receipt. Its presence excludes legacy stdout
+            fingerprinting; only explicitly confirmed delivered source mappings
+            establish native source observations. Execution pins are not reads.
         tool:
           type: string
           description: Name of the tool that produced this result. Carried on the

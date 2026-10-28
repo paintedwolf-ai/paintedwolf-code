@@ -1274,6 +1274,69 @@ type CodeScanPage struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// CommandExecutionOutput
+type CommandExecutionOutput struct {
+	Stream string `json:"stream"`
+	// Retained output handle owned by the program receipt.
+	Ref       string `json:"ref"`
+	SizeBytes int64  `json:"size_bytes"`
+	// The stream reached its end; false is a retained prefix.
+	Complete bool `json:"complete"`
+	Redacted bool `json:"redacted"`
+	// Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
+	Preview          string `json:"preview"`
+	PreviewTruncated bool   `json:"preview_truncated"`
+}
+
+// CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
+type CommandExecutionReceipt struct {
+	ID        string `json:"id"`
+	ProgramID string `json:"program_id"`
+	// Host syntax node identity within its program.
+	NodeID                          string   `json:"node_id"`
+	ParentExecutionID               string   `json:"parent_execution_id"`
+	Owner                           string   `json:"owner"`
+	Lifecycle                       string   `json:"lifecycle"`
+	DefinitionDigest                string   `json:"definition_digest"`
+	ArgumentsRepresentation         string   `json:"arguments_representation,omitempty"`
+	ArgumentsDigest                 string   `json:"arguments_digest"`
+	ReviewedArgumentsRepresentation string   `json:"reviewed_arguments_representation,omitempty"`
+	ReviewedArgumentsDigest         string   `json:"reviewed_arguments_digest,omitempty"`
+	ReviewedArgumentsRef            string   `json:"reviewed_arguments_ref,omitempty"`
+	NativeCommand                   string   `json:"native_command,omitempty"`
+	EffectMode                      string   `json:"effect_mode,omitempty"`
+	EffectClasses                   []string `json:"effect_classes,omitempty"`
+	ArgumentsRef                    string   `json:"arguments_ref"`
+	// Compact display only. Not authority or replay input.
+	Command string `json:"command"`
+	State   string `json:"state"`
+	// Durable before-owner marker; host loss can precede actual invocation.
+	OwnerStarted bool `json:"owner_started"`
+	// Actual invocation observed by the admission caller. Absence after a start marker is unknown.
+	OwnerInvoked        bool   `json:"owner_invoked"`
+	StatusCode          *int   `json:"status_code,omitempty"`
+	StopCode            string `json:"stop_code,omitempty"`
+	HostStopCode        string `json:"host_stop_code,omitempty"`
+	Complete            bool   `json:"complete"`
+	PublicationEligible bool   `json:"publication_eligible"`
+	OutputPublishable   bool   `json:"output_publishable"`
+	EffectCertainty     string `json:"effect_certainty"`
+	EvidenceKind        string `json:"evidence_kind,omitempty"`
+	EvidenceRef         string `json:"evidence_ref,omitempty"`
+	OwnerRef            string `json:"owner_ref,omitempty"`
+	RecoveryRef         string `json:"recovery_ref,omitempty"`
+	HeldVersionID       string `json:"held_version_id,omitempty"`
+	AcceptedRevision    string `json:"accepted_revision,omitempty"`
+	PublishedRevision   string `json:"published_revision,omitempty"`
+	DetailRef           string `json:"detail_ref"`
+	ApprovalRef         string `json:"approval_ref,omitempty"`
+	// Host background job this child started, for the existing background process views.
+	JobHandle string `json:"job_handle,omitempty"`
+	// Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
+	Outputs          []CommandExecutionOutput `json:"outputs,omitempty"`
+	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
+}
+
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.
 type CommandInvokeContext struct {
 	RootID           string `json:"root_id,omitempty"`
@@ -1317,6 +1380,69 @@ type CommandInvokeResponse struct {
 	// Tool result text for completed MCP tool calls.
 	Output string              `json:"output,omitempty"`
 	Error  *CommandInvokeError `json:"error,omitempty"`
+}
+
+// CommandProgramNode
+type CommandProgramNode struct {
+	// Host syntax node identity within its program.
+	ID string `json:"id"`
+	// Captured syntax unit identity within its program.
+	SourceUnitID string `json:"source_unit_id"`
+	StartByte    int64  `json:"start_byte"`
+	EndByte      int64  `json:"end_byte"`
+	Line         int    `json:"line"`
+	Column       int    `json:"column"`
+	State        string `json:"state"`
+}
+
+// CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
+type CommandProgramProgressReceipt struct {
+	ExecutionID             string `json:"execution_id"`
+	ProgramID               string `json:"program_id"`
+	RootSessionID           string `json:"root_session_id"`
+	State                   string `json:"state"`
+	OwnerInvoked            bool   `json:"owner_invoked"`
+	ArgumentsRepresentation string `json:"arguments_representation,omitempty"`
+	ArgumentsDigest         string `json:"arguments_digest"`
+	ArgumentsRef            string `json:"arguments_ref"`
+	DetailRef               string `json:"detail_ref"`
+}
+
+// CommandProgramReceipt
+type CommandProgramReceipt struct {
+	ID              string     `json:"id"`
+	ParentReceiptID string     `json:"parent_receipt_id"`
+	LanguageVersion int        `json:"language_version"`
+	CatalogDigest   string     `json:"catalog_digest"`
+	SourceDigest    string     `json:"source_digest"`
+	SourceRef       string     `json:"source_ref"`
+	State           string     `json:"state"`
+	StatusCode      *int       `json:"status_code,omitempty"`
+	StopCode        string     `json:"stop_code,omitempty"`
+	DetailRef       string     `json:"detail_ref"`
+	ProgressState   string     `json:"progress_state"`
+	ProgressRef     string     `json:"progress_ref,omitempty"`
+	StartedAt       time.Time  `json:"started_at"`
+	SettledAt       *time.Time `json:"settled_at,omitempty"`
+}
+
+// CommandProgramReceiptPage
+type CommandProgramReceiptPage struct {
+	Program    CommandProgramReceipt          `json:"program"`
+	Progress   *CommandProgramProgressReceipt `json:"progress,omitempty"`
+	Executions []CommandExecutionReceipt      `json:"executions"`
+	// Known static nodes only; never speculative future loop iterations.
+	Nodes             []CommandProgramNode `json:"nodes"`
+	ExecutionsOmitted int                  `json:"executions_omitted"`
+	NodesOmitted      int                  `json:"nodes_omitted"`
+	NextCursor        string               `json:"next_cursor,omitempty"`
+}
+
+// CommandRevisionConflict Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
+type CommandRevisionConflict struct {
+	Path             string `json:"path"`
+	ExpectedRevision string `json:"expected_revision"`
+	ObservedRevision string `json:"observed_revision"`
 }
 
 // CommandUIEffect Closed typed UI effect returned by host-validated presentation actions.
@@ -7954,6 +8080,8 @@ type ToolResult struct {
 	// Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args.
 	DisplaySubject string             `json:"display_subject,omitempty"`
 	Invocation     *InvocationReceipt `json:"invocation,omitempty"`
+	// Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads.
+	CommandProgram *CommandProgramReceipt `json:"command_program,omitempty"`
 	// Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row.
 	Tool string `json:"tool,omitempty"`
 	// ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet.

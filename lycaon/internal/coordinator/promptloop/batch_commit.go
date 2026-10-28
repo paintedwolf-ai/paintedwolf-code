@@ -281,6 +281,11 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 			msg.ToolResult.Content = stamped
 		}
 	}
+	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
+		// Portable source observations come only from confirmed delivered native
+		// mappings. A legacy command fingerprint must not scrape its stdout.
+		return nil
+	}
 	if !eligible {
 		return nil
 	}

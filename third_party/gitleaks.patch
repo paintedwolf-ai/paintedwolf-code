@@ -1,0 +1,718 @@
+--- /dev/null
++++ b/detect/bounded.go
+@@ -0,0 +1,35 @@
++package detect
++
++import (
++	"context"
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
++	"github.com/zricethezav/gitleaks/v8/report"
++)
++
++// DetectBounded preserves DetectContext policy but refuses incomplete resource-limited
++// results. Limits must all be positive. No partial findings are returned on error.
++// Static catalog storage and regexp engine scratch are outside the allocation meter.
++func (d *Detector) DetectBounded(ctx context.Context, fragment Fragment, limits budget.Limits) (findings []report.Finding, err error) {
++	defer func() {
++		if err != nil {
++			findings = nil
++		}
++	}()
++	defer budget.Recover(&err)
++	if ctx == nil {
++		ctx = context.Background()
++	}
++	m := budget.New(ctx, limits)
++	if limits.MaxInputBytes <= 0 || limits.MaxAllocationBytes <= 0 || limits.MaxWork <= 0 || limits.MaxMatches <= 0 || limits.MaxMatches >= int(^uint(0)>>1) {
++		m.Refuse("limits", 1, 0)
++	}
++	if int64(len(fragment.Raw)) > limits.MaxInputBytes {
++		m.Refuse("input_bytes", limits.MaxInputBytes, int64(len(fragment.Raw)))
++	}
++	if int64(len(fragment.Bytes)) > limits.MaxInputBytes {
++		m.Refuse("input_bytes", limits.MaxInputBytes, int64(len(fragment.Bytes)))
++	}
++	findings = d.detectContext(ctx, fragment, m)
++	m.Check()
++	return findings, nil
++}
+--- /dev/null
++++ b/detect/bounded_test.go
+@@ -0,0 +1,155 @@
++package detect
++
++import (
++	"context"
++	"encoding/base64"
++	"encoding/hex"
++	"errors"
++	"github.com/zricethezav/gitleaks/v8/config"
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
++	"github.com/zricethezav/gitleaks/v8/regexp"
++	"reflect"
++	"strings"
++	"testing"
++)
++
++func boundedFixture() *Detector {
++	rule := config.Rule{RuleID: "fixture", Regex: regexp.MustCompile(`(?i)fixture_[a-z0-9]{12}`), Keywords: []string{"fixture"}}
++	d := NewDetector(config.Config{Rules: map[string]config.Rule{"fixture": rule}, Keywords: map[string]struct{}{"fixture": {}, "fix": {}}})
++	d.MaxDecodeDepth = 2
++	return d
++}
++func boundedLimits() budget.Limits {
++	return budget.Limits{MaxInputBytes: 1 << 20, MaxAllocationBytes: 256 << 20, MaxWork: 1 << 30, MaxMatches: 4096}
++}
++func TestBoundedPolicy(t *testing.T) {
++	value := "fixture_123456abcdef"
++	unicode := ""
++	unicodePoints := ""
++	doubleEscapes := ""
++	percent := ""
++	for _, b := range []byte(value) {
++		const digits = "0123456789abcdef"
++		unicode += `\u00` + string(digits[b>>4]) + string(digits[b&15])
++		unicodePoints += "U+00" + string(digits[b>>4]) + string(digits[b&15]) + " "
++		doubleEscapes += `\\u00` + string(digits[b>>4]) + string(digits[b&15])
++		percent += "%" + string(digits[b>>4]) + string(digits[b&15])
++	}
++	for _, raw := range []string{"inert", value, strings.ToUpper(value), hex.EncodeToString([]byte(value)), base64.StdEncoding.EncodeToString([]byte(value)), unicode, unicodePoints, doubleEscapes, percent, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString([]byte(value)))), value + " # gitleaks:allow"} {
++		t.Run(raw, func(t *testing.T) {
++			d := boundedFixture()
++			fragment := Fragment{Raw: raw}
++			want := d.DetectContext(context.Background(), fragment)
++			got, err := d.DetectBounded(context.Background(), fragment, boundedLimits())
++			if err != nil || !reflect.DeepEqual(got, want) {
++				t.Fatalf("bounded differs: got %#v err %v; want %#v", got, err, want)
++			}
++		})
++	}
++}
++func TestBoundedRefusals(t *testing.T) {
++	for _, resource := range []string{"input_bytes", "allocation_bytes", "work", "match_candidates"} {
++		t.Run(resource, func(t *testing.T) {
++			limits := boundedLimits()
++			raw := strings.Repeat("fixture_123456abcdef\n", 20)
++			switch resource {
++			case "input_bytes":
++				limits.MaxInputBytes = 1
++			case "allocation_bytes":
++				limits.MaxAllocationBytes = 1
++			case "work":
++				limits.MaxWork = 1
++			case "match_candidates":
++				limits.MaxMatches = 2
++			}
++			got, err := boundedFixture().DetectBounded(context.Background(), Fragment{Raw: raw}, limits)
++			var limit *budget.Error
++			if !errors.As(err, &limit) || limit.Resource != resource || len(got) != 0 {
++				t.Fatalf("partial or incorrect refusal: %d %v", len(got), err)
++			}
++		})
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	got, err := boundedFixture().DetectBounded(ctx, Fragment{Raw: "fixture_123456abcdef"}, boundedLimits())
++	if !errors.Is(err, context.Canceled) || len(got) != 0 {
++		t.Fatalf("cancel: %d %v", len(got), err)
++	}
++}
++
++func TestBoundedLocationGolden(t *testing.T) {
++	for _, c := range []struct {
++		raw        string
++		start, end int
++		want       Location
++	}{
++		{"abc", 0, 3, Location{startLine: 0, endLine: 0, startColumn: 1, endColumn: 3, startLineIndex: 0, endLineIndex: 3}},
++		{"a\nbc\nz", 2, 4, Location{startLine: 1, endLine: 1, startColumn: 2, endColumn: 3, startLineIndex: 1, endLineIndex: 4}},
++		{"a\nbc\nz", 5, 6, Location{startLine: 2, endLine: 2, startColumn: 2, endColumn: 2, startLineIndex: 0, endLineIndex: 6}},
++	} {
++		if got := locationRaw(c.raw, []int{c.start, c.end}, nil); got != c.want {
++			t.Fatalf("raw location=%+v want %+v", got, c.want)
++		}
++	}
++}
++
++func TestBoundedPolicyGuardsAndRequiredRules(t *testing.T) {
++	for _, mode := range []string{"keyword-case", "rule-allowlist", "global-allowlist", "path", "required"} {
++		t.Run(mode, func(t *testing.T) {
++			d := boundedFixture()
++			rule := d.Config.Rules["fixture"]
++			raw := "fixture_123456abcdef auxiliary_123"
++			fragment := Fragment{Raw: raw, FilePath: "fixture.txt"}
++			allow := &config.Allowlist{Regexes: []*regexp.Regexp{regexp.MustCompile("fixture_")}}
++			if err := allow.Validate(); err != nil {
++				t.Fatal(err)
++			}
++			switch mode {
++			case "keyword-case":
++				d.Config.Keywords = map[string]struct{}{"FIXTURE": {}}
++				d = NewDetector(d.Config)
++			case "rule-allowlist":
++				rule.Allowlists = []*config.Allowlist{allow}
++				d.Config.Rules["fixture"] = rule
++			case "global-allowlist":
++				d.Config.Allowlists = []*config.Allowlist{allow}
++			case "path":
++				rule.Path = regexp.MustCompile(`other\.txt$`)
++				d.Config.Rules["fixture"] = rule
++			case "required":
++				rule.RequiredRules = []*config.Required{{RuleID: "auxiliary"}}
++				d.Config.Rules["fixture"] = rule
++				d.Config.Rules["auxiliary"] = config.Rule{RuleID: "auxiliary", Regex: regexp.MustCompile(`auxiliary_[0-9]+`), SkipReport: true}
++			}
++			got, err := d.DetectBounded(context.Background(), fragment, boundedLimits())
++			want := d.DetectContext(context.Background(), fragment)
++			if err != nil || !reflect.DeepEqual(got, want) {
++				t.Fatalf("policy changed: %v got=%+v want=%+v", err, got, want)
++			}
++		})
++	}
++}
++
++func TestBoundedCancellationCannotCompleteThroughAllowlist(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	d := boundedFixture()
++	d.Config.Path = "fixture.txt"
++	limits := boundedLimits()
++	limits.Reserve = func(int64) error { cancel(); return nil }
++	findings, err := d.DetectBounded(ctx, Fragment{Raw: "fixture_123456abcdef", FilePath: "fixture.txt"}, limits)
++	if !errors.Is(err, context.Canceled) || len(findings) != 0 {
++		t.Fatalf("canceled allowlist short circuit completed: %v %+v", err, findings)
++	}
++}
++
++func TestBoundedUnrelatedPanicPropagates(t *testing.T) {
++	defer func() {
++		if got := recover(); got != "fixture panic" {
++			t.Fatalf("unrelated panic swallowed or replaced: %v", got)
++		}
++	}()
++	limits := boundedLimits()
++	limits.Reserve = func(int64) error { panic("fixture panic") }
++	_, _ = boundedFixture().DetectBounded(context.Background(), Fragment{Raw: "plain"}, limits)
++}
+--- /dev/null
++++ b/detect/budget/budget.go
+@@ -0,0 +1,125 @@
++// Package budget meters the selected bounded detector entry point.
++package budget
++
++import (
++	"context"
++	"fmt"
++)
++
++// Limits bound cumulative allocation reservations and candidate enumeration.
++// These are logical backing-store/work reservations, not a Go heap ceiling.
++type Limits struct {
++	MaxInputBytes, MaxAllocationBytes, MaxWork int64
++	MaxMatches                                 int
++	// Reserve admits each allocation against a caller-owned aggregate pool.
++	Reserve func(int64) error
++	// Release returns only a reserved envelope proven not to have been allocated.
++	Release func(int64)
++}
++
++// Error reports an exhausted resource without treating partial matches as safe.
++type Error struct {
++	Resource          string
++	Maximum, Observed int64
++}
++
++func (e *Error) Error() string {
++	return fmt.Sprintf("%s: requested %d, maximum %d", e.Resource, e.Observed, e.Maximum)
++}
++
++type abort struct{ err error }
++
++// Meter is invocation-local and is never stored on a shared Detector.
++type Meter struct {
++	Context         context.Context
++	Limits          Limits
++	allocated, work int64
++}
++
++func New(ctx context.Context, limits Limits) *Meter { return &Meter{Context: ctx, Limits: limits} }
++
++// Recover converts only this package's private refusal into a terminal error.
++func Recover(err *error) {
++	if v := recover(); v != nil {
++		if a, ok := v.(abort); ok {
++			*err = a.err
++		} else {
++			panic(v)
++		}
++	}
++}
++func (m *Meter) Check() {
++	if m != nil {
++		if err := m.Context.Err(); err != nil {
++			panic(abort{err})
++		}
++	}
++}
++func (m *Meter) Refuse(resource string, maximum, observed int64) {
++	panic(abort{&Error{resource, maximum, observed}})
++}
++
++// Allocate charges before a selected operation may allocate backing storage.
++// Cumulative charging includes overlapping old/new buffers and abandoned results.
++func (m *Meter) Allocate(n int64) {
++	if m == nil {
++		return
++	}
++	m.Check()
++	if n < 0 || n > m.Limits.MaxAllocationBytes-m.allocated {
++		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.allocated+n)
++	}
++	if m.Limits.Reserve != nil {
++		if err := m.Limits.Reserve(n); err != nil {
++			panic(abort{err})
++		}
++	}
++	m.allocated += n
++}
++func (m *Meter) Work(n int64) {
++	if m == nil {
++		return
++	}
++	m.Check()
++	if n < 0 || n > m.Limits.MaxWork-m.work {
++		m.Refuse("work", m.Limits.MaxWork, m.work+n)
++	}
++	m.work += n
++}
++
++// enumeration reserves a sentinel envelope before FindAll, then returns only
++// the unused reservation after the actual result capacity is conservatively
++// charged. Actual backing allocations remain cumulatively charged.
++func (m *Meter) enumeration(inputBytes, width int) (int, func(int)) {
++	if m == nil {
++		return -1, func(int) {}
++	}
++	if width < 256 {
++		width = 256
++	}
++	n := min(m.Limits.MaxMatches+1, inputBytes+1)
++	slots := (m.Limits.MaxAllocationBytes - m.allocated - 512) / int64(width)
++	if slots < 1 {
++		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
++	}
++	n = min(n, int(slots))
++	reservation := 512 + int64(n)*int64(width)
++	m.Work(int64(inputBytes) + int64(n))
++	m.Allocate(reservation)
++	return n, func(actual int) {
++		m.Count(actual)
++		if actual == n && n < inputBytes+1 {
++			m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
++		}
++		unused := int64(n-actual) * int64(width)
++		m.allocated -= unused
++		if m.Limits.Release != nil {
++			m.Limits.Release(unused)
++		}
++	}
++}
++func (m *Meter) Count(n int) {
++	if m != nil && n > m.Limits.MaxMatches {
++		m.Refuse("match_candidates", int64(m.Limits.MaxMatches), int64(n))
++	}
++}
+--- /dev/null
++++ b/detect/budget/indices.go
+@@ -0,0 +1,34 @@
++package budget
++
++import "github.com/zricethezav/gitleaks/v8/regexp"
++
++func (m *Meter) StringIndices(re *regexp.Regexp, value string) [][]int {
++	n, finish := m.enumeration(len(value), 256)
++	out := re.FindAllStringIndex(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) StringSubmatchIndices(re *regexp.Regexp, value string) [][]int {
++	n, finish := m.enumeration(len(value), 256+32*(re.NumSubexp()+1))
++	out := re.FindAllStringSubmatchIndex(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) Strings(re *regexp.Regexp, value string) []string {
++	n, finish := m.enumeration(len(value), 256)
++	out := re.FindAllString(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) StringSubmatches(re *regexp.Regexp, value string) [][]string {
++	n, finish := m.enumeration(len(value), 256+64*(re.NumSubexp()+1))
++	out := re.FindAllStringSubmatch(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) SubmatchIndices(re *regexp.Regexp, value []byte) [][]int {
++	n, finish := m.enumeration(len(value), 256+32*(re.NumSubexp()+1))
++	out := re.FindAllSubmatchIndex(value, n)
++	finish(len(out))
++	return out
++}
+--- a/detect/codec/decoder.go
++++ b/detect/codec/decoder.go
+@@ -4,0 +5 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -11,0 +13 @@
++	meter      *budget.Meter
+@@ -20,0 +23,8 @@
++// NewDecoderWithBudget retains the codec policy with explicit allocation/work admission.
++func NewDecoderWithBudget(meter *budget.Meter) *Decoder {
++	meter.Allocate(128)
++	d := NewDecoder()
++	d.meter = meter
++	return d
++}
++
+@@ -23,0 +34 @@
++	d.meter.Check()
+@@ -26,0 +38 @@
++		d.meter.Allocate(int64(len(data))*4 + 128)
+@@ -49 +61,2 @@
+-	encodingMatches := findEncodingMatches(data)
++	encodingMatches := findEncodingMatchesBudget(data, d.meter)
++	d.meter.Allocate(int64(len(encodingMatches)) * 512)
+@@ -51,0 +65 @@
++		d.meter.Check()
+@@ -56 +70,7 @@
+-			decodedValue = m.encoding.decode(encodedValue)
++			d.meter.Allocate(int64(len(encodedValue))*8 + 128)
++			d.meter.Work(int64(len(encodedValue)))
++			if m.encoding.kind == unicodeKind {
++				decodedValue = decodeUnicodeBudget(encodedValue, d.meter)
++			} else {
++				decodedValue = m.encoding.decode(encodedValue)
++			}
+@@ -66 +86 @@
+-			original:     toOriginal(predecessors, m.startEnd),
++			original:     toOriginalBudget(predecessors, m.startEnd, d.meter),
+@@ -85,0 +106 @@
++				d.meter.Work(1)
+--- a/detect/codec/encodings.go
++++ b/detect/codec/encodings.go
+@@ -4,0 +5 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -120 +121,2 @@
+-func findEncodingMatches(data string) []encodingMatch {
++func findEncodingMatches(data string) []encodingMatch { return findEncodingMatchesBudget(data, nil) }
++func findEncodingMatchesBudget(data string, meter *budget.Meter) []encodingMatch {
+@@ -122 +124,5 @@
+-	for _, matchIndex := range encodingsRe.FindAllStringSubmatchIndex(data, -1) {
++	indices := meter.StringSubmatchIndices(encodingsRe, data)
++	meter.Count(len(indices))
++	meter.Allocate(int64(len(indices)) * 256)
++	for _, matchIndex := range indices {
++		meter.Check()
+--- a/detect/codec/segment.go
++++ b/detect/codec/segment.go
+@@ -4,0 +5 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -102,0 +104,3 @@
++	return AdjustMatchIndexBudget(segments, matchIndex, nil)
++}
++func AdjustMatchIndexBudget(segments []*EncodedSegment, matchIndex []int, meter *budget.Meter) []int {
+@@ -112 +116 @@
+-	adjusted := toOriginal(segments, match)
++	adjusted := toOriginalBudget(segments, match, meter)
+@@ -138,0 +143,4 @@
++	return toOriginalBudget(predecessors, decoded, nil)
++}
++func toOriginalBudget(predecessors []*EncodedSegment, decoded startEnd, meter *budget.Meter) startEnd {
++	meter.Work(1)
+@@ -146,0 +155 @@
++		meter.Work(1)
+@@ -172 +181 @@
+-	return toOriginal(predecessors[0].predecessors, encoded)
++	return toOriginalBudget(predecessors[0].predecessors, encoded, meter)
+--- a/detect/codec/unicode.go
++++ b/detect/codec/unicode.go
+@@ -4,0 +5 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -30,0 +32,6 @@
++	return decodeUnicodeBudget(encodedValue, nil)
++}
++func decodeUnicodeBudget(encodedValue string, meter *budget.Meter) string {
++	meter.Check()
++	meter.Allocate(int64(len(encodedValue))*32 + 128)
++	meter.Work(int64(len(encodedValue)))
+@@ -32 +39 @@
+-	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, -1); len(matches) > 0 {
++	if matches := meter.Strings(unicodeMultiCodePointPat, encodedValue); len(matches) > 0 {
+@@ -33,0 +41 @@
++		meter.Count(len(matches))
+@@ -34,0 +43,3 @@
++			meter.Check()
++			meter.Allocate(int64(len(encodedValue)) * 2)
++			meter.Work(int64(len(encodedValue)))
+@@ -36 +47 @@
+-			decodedSequence := decodeMultiCodePoint(match)
++			decodedSequence := decodeMultiCodePointBudget(match, meter)
+@@ -47 +58 @@
+-	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, -1); len(matches) > 0 {
++	if matches := meter.Strings(unicodeMultiEscapePat, encodedValue); len(matches) > 0 {
+@@ -48,0 +60 @@
++		meter.Count(len(matches))
+@@ -49,0 +62,3 @@
++			meter.Check()
++			meter.Allocate(int64(len(encodedValue)) * 2)
++			meter.Work(int64(len(encodedValue)))
+@@ -51 +66 @@
+-			decodedSequence := decodeMultiEscape(match)
++			decodedSequence := decodeMultiEscapeBudget(match, meter)
+@@ -72 +87 @@
+-		result = decodeIndividualCodePoints(data)
++		result = decodeIndividualCodePointsBudget(data, meter)
+@@ -81 +96 @@
+-			result = decodeIndividualEscapes(result)
++			result = decodeIndividualEscapesBudget(result, meter)
+@@ -83 +98 @@
+-			result = decodeIndividualEscapes(data)
++			result = decodeIndividualEscapesBudget(data, meter)
+@@ -96,0 +112,6 @@
++	return decodeMultiCodePointBudget(sequence, nil)
++}
++func decodeMultiCodePointBudget(sequence string, meter *budget.Meter) string {
++	meter.Check()
++	meter.Allocate(int64(len(sequence))*32 + 128)
++	meter.Work(int64(len(sequence)))
+@@ -110,0 +132 @@
++		meter.Check()
+@@ -139,0 +162,6 @@
++	return decodeMultiEscapeBudget(sequence, nil)
++}
++func decodeMultiEscapeBudget(sequence string, meter *budget.Meter) string {
++	meter.Check()
++	meter.Allocate(int64(len(sequence))*32 + 128)
++	meter.Work(int64(len(sequence)))
+@@ -146 +174,2 @@
+-	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, -1)
++	escapes := meter.StringSubmatches(unicodeEscapePat, sequence)
++	meter.Count(len(escapes))
+@@ -153,0 +183 @@
++		meter.Check()
+@@ -178,0 +209,6 @@
++	return decodeIndividualCodePointsBudget(input, nil)
++}
++func decodeIndividualCodePointsBudget(input []byte, meter *budget.Meter) []byte {
++	meter.Check()
++	meter.Allocate(int64(len(input))*32 + 128)
++	meter.Work(int64(len(input)))
+@@ -180 +216 @@
+-	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, -1)
++	indices := meter.SubmatchIndices(unicodeCodePointPat, input)
+@@ -182,0 +219 @@
++	meter.Count(len(indices))
+@@ -189,0 +227,2 @@
++		meter.Allocate(int64(len(input))*4 + 32)
++		meter.Work(int64(len(input)))
+@@ -225,0 +265,6 @@
++	return decodeIndividualEscapesBudget(input, nil)
++}
++func decodeIndividualEscapesBudget(input []byte, meter *budget.Meter) []byte {
++	meter.Check()
++	meter.Allocate(int64(len(input))*32 + 128)
++	meter.Work(int64(len(input)))
+@@ -227 +272 @@
+-	indices := unicodeEscapePat.FindAllSubmatchIndex(input, -1)
++	indices := meter.SubmatchIndices(unicodeEscapePat, input)
+@@ -229,0 +275 @@
++	meter.Count(len(indices))
+@@ -236,0 +283,2 @@
++		meter.Allocate(int64(len(input))*4 + 32)
++		meter.Work(int64(len(input)))
+--- a/detect/detect.go
++++ b/detect/detect.go
+@@ -13,0 +14 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -276,0 +278,6 @@
++	return d.detectContext(ctx, fragment, nil)
++}
++
++func (d *Detector) detectContext(ctx context.Context, fragment Fragment, meter *budget.Meter) []report.Finding {
++	meter.Check()
++	meter.Allocate(int64(len(fragment.Raw))*4 + 1024 + int64(len(d.Config.Allowlists))*256)
+@@ -311 +318 @@
+-	decoder := codec.NewDecoder()
++	decoder := codec.NewDecoderWithBudget(meter)
+@@ -320,0 +328 @@
++			meter.Allocate(int64(len(currentRaw)) * 4)
+@@ -322,3 +330,14 @@
+-			matches := d.prefilter.MatchString(normalizedRaw)
+-			for _, m := range matches {
+-				keywords[normalizedRaw[m.Pos():int(m.Pos())+len(m.Match())]] = true
++			if meter == nil {
++				matches := d.prefilter.MatchString(normalizedRaw)
++				for _, m := range matches {
++					keywords[normalizedRaw[m.Pos():int(m.Pos())+len(m.Match())]] = true
++				}
++			} else {
++				// Presence, not occurrence enumeration, is the prefilter policy.
++				for key := range d.Config.Keywords {
++					meter.Allocate(int64(len(key)) + 64)
++					meter.Work(int64(len(normalizedRaw)) + int64(len(key)))
++					if strings.Contains(normalizedRaw, key) {
++						keywords[key] = true
++					}
++				}
+@@ -335 +354 @@
+-						findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
++						findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
+@@ -342 +361 @@
+-							findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
++							findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
+@@ -367 +386,3 @@
+-	return filter(findings, d.Redact)
++	meter.Check()
++	meter.Allocate(int64(len(findings)) * 2048)
++	return filterBudget(findings, d.Redact, meter)
+@@ -371,0 +393,6 @@
++	return d.detectRuleBudget(fragment, currentRaw, r, encodedSegments, nil)
++}
++func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, meter *budget.Meter) []report.Finding {
++	meter.Check()
++	meter.Work(int64(len(currentRaw)))
++	meter.Allocate(int64(len(r.Allowlists)) * 256)
+@@ -412,0 +440 @@
++				meter.Allocate(4096)
+@@ -442 +470,2 @@
+-	matches := r.Regex.FindAllStringIndex(currentRaw, -1)
++	matches := meter.StringIndices(r.Regex, currentRaw)
++	meter.Count(len(matches))
+@@ -448 +477,4 @@
+-	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
++	var newlineIndices [][]int
++	if meter == nil {
++		newlineIndices = newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
++	}
+@@ -452 +484,4 @@
+-	for _, matchIndex := range r.Regex.FindAllStringIndex(currentRaw, -1) {
++	for _, matchIndex := range matches {
++		meter.Check()
++		meter.Allocate(4096 + int64(len(r.Tags))*64 + int64(len(encodedSegments))*256 + int64(len(currentRaw))*4)
++		meter.Work(int64(len(fragment.Raw)) + int64(len(currentRaw)))
+@@ -469 +504 @@
+-			matchIndex = codec.AdjustMatchIndex(segments, matchIndex)
++			matchIndex = codec.AdjustMatchIndexBudget(segments, matchIndex, meter)
+@@ -482 +517,6 @@
+-		loc := location(newlineIndices, fragment.Raw, matchIndex)
++		var loc Location
++		if meter == nil {
++			loc = location(newlineIndices, fragment.Raw, matchIndex)
++		} else {
++			loc = locationRaw(fragment.Raw, matchIndex, meter)
++		}
+@@ -522,0 +563 @@
++		meter.Allocate(int64(r.Regex.NumSubexp()+1) * 64)
+@@ -542,0 +584 @@
++		meter.Allocate(int64(len(finding.Secret))*64 + 128)
+@@ -555,0 +598,2 @@
++		// Admit stopword normalization and allowlist result bookkeeping before checks.
++		meter.Allocate(int64(len(d.Config.Allowlists)+len(r.Allowlists)) * (int64(len(finding.Secret))*4 + 256))
+@@ -576 +620 @@
+-	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger)
++	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger, meter)
+@@ -580 +624 @@
+-func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger) []report.Finding {
++func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger, meter *budget.Meter) []report.Finding {
+@@ -586,0 +631 @@
++	meter.Allocate(int64(len(r.RequiredRules)) * 128)
+@@ -601 +646 @@
+-		requiredFindings := d.detectRule(inheritedFragment, currentRaw, rule, encodedSegments)
++		requiredFindings := d.detectRuleBudget(inheritedFragment, currentRaw, rule, encodedSegments, meter)
+@@ -623,0 +669,2 @@
++				meter.Work(1)
++				meter.Allocate(1024)
+@@ -643,0 +691 @@
++			meter.Allocate(int64(len(requiredFindings)) * 4096)
+--- a/detect/location.go
++++ b/detect/location.go
+@@ -1,0 +2,5 @@
++
++import (
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
++	"strings"
++)
+@@ -13,0 +19,38 @@
++	if len(newlineIndices) == 0 {
++		newlineIndices = [][]int{{len(raw), len(raw) + 1}}
++	}
++	at := 0
++	return locationNext(raw, matchIndex, func() (int, bool) {
++		if at == len(newlineIndices) {
++			return 0, false
++		}
++		index := newlineIndices[at][0]
++		at++
++		return index, true
++	})
++}
++
++// locationRaw feeds the unchanged location calculation directly from original
++// bytes, avoiding a whole-file newline index per bounded rule invocation.
++func locationRaw(raw string, matchIndex []int, meter *budget.Meter) Location {
++	at := 0
++	empty := !strings.Contains(raw, "\n")
++	return locationNext(raw, matchIndex, func() (int, bool) {
++		meter.Check()
++		if empty {
++			empty = false
++			at = len(raw)
++			return len(raw), true
++		}
++		next := strings.IndexByte(raw[at:], '\n')
++		if next < 0 {
++			return 0, false
++		}
++		next += at
++		at = next + 1
++		return next, true
++	})
++}
++
++func locationNext(raw string, matchIndex []int, next func() (int, bool)) Location {
++
+@@ -27,7 +70,4 @@
+-	// Fixes: https://github.com/zricethezav/gitleaks/issues/1037
+-	// When a fragment does NOT have any newlines, a default "newline"
+-	// will be counted to make the subsequent location calculation logic work
+-	// for fragments will no newlines.
+-	if len(newlineIndices) == 0 {
+-		newlineIndices = [][]int{
+-			{len(raw), len(raw) + 1},
++	for lineNum := 0; ; lineNum++ {
++		newLineByteIndex, ok := next()
++		if !ok {
++			break
+@@ -35,3 +74,0 @@
+-	}
+-
+-	for lineNum, pair := range newlineIndices {
+@@ -39 +75,0 @@
+-		newLineByteIndex := pair[0]
+@@ -54 +90 @@
+-		prevNewLine = pair[0]
++		prevNewLine = newLineByteIndex
+--- a/detect/utils.go
++++ b/detect/utils.go
+@@ -10,0 +11 @@
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+@@ -137,0 +139,3 @@
++	return filterBudget(findings, redact, nil)
++}
++func filterBudget(findings []report.Finding, redact uint, meter *budget.Meter) []report.Finding {
+@@ -139,0 +144,2 @@
++		meter.Check()
++		meter.Allocate(2048 + int64(len(f.RuleID))*4 + int64(len(f.Match)+len(f.Line)+len(f.Secret))*4)
+@@ -142,0 +149,2 @@
++				meter.Work(int64(len(fPrime.Secret)+len(f.Secret)) + 1)
++				meter.Allocate(int64(len(fPrime.RuleID)) * 4)

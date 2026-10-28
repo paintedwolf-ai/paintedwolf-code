@@ -1,0 +1,1835 @@
+--- a/expand/expand.go
++++ b/expand/expand.go
+@@ -561,16 +561 @@
+-				for i := 0; i < len(s); i++ {
+-					b := s[i]
+-					if b == '\\' && i+1 < len(s) {
+-						switch s[i+1] {
+-						case '"':
+-							if ql != quoteDouble {
+-								break
+-							}
+-							fallthrough
+-						case '\\', '$', '`': // special chars
+-							i++
+-							b = s[i] // write the special char, skipping the backslash
+-						}
+-					}
+-					sb.WriteByte(b)
+-				}
++				literalText(s, ql, func(text string, _ bool) { sb.WriteString(text) })
+@@ -688,15 +673,7 @@
+-			// Escaped characters are quoted, so that they aren't
+-			// treated as metacharacters when globbing.
+-			for {
+-				i := strings.IndexByte(s, '\\')
+-				if i < 0 || i == len(s)-1 {
+-					break // a trailing backslash is kept as-is
+-				}
+-				_, size := utf8.DecodeRuneInString(s[i+1:])
+-				curField = append(curField,
+-					fieldPart{val: s[:i]},
+-					fieldPart{quote: quoteSingle, val: s[i+1 : i+1+size]},
+-				)
+-				s = s[i+1+size:]
+-			}
+-			curField = append(curField, fieldPart{val: s})
++			literalText(s, quoteNone, func(text string, escaped bool) {
++				part := fieldPart{val: text}
++				if escaped {
++					part.quote = quoteSingle
++				}
++				curField = append(curField, part)
++			})
+--- /dev/null
++++ b/expand/literal_text.go
+@@ -0,0 +1,28 @@
++package expand
++
++import "unicode/utf8"
++
++// literalText walks the selected quote-removal rules without allocating one
++// field fragment per escape. The flag identifies text quoted by a backslash.
++func literalText(value string, quote quoteLevel, visit func(string, bool)) {
++	start := 0
++	for i := 0; i+1 < len(value); i++ {
++		if value[i] != '\\' {
++			continue
++		}
++		size := 1
++		if quote == quoteNone {
++			_, size = utf8.DecodeRuneInString(value[i+1:])
++		} else {
++			next := value[i+1]
++			if next != '\\' && next != '$' && next != '`' && !(quote == quoteDouble && next == '"') {
++				continue
++			}
++		}
++		visit(value[start:i], false)
++		visit(value[i+1:i+1+size], true)
++		i += size
++		start = i + 1
++	}
++	visit(value[start:], false)
++}
+--- /dev/null
++++ b/expand/static_literal.go
+@@ -0,0 +1,131 @@
++package expand
++
++import (
++	"fmt"
++	"math"
++	"strings"
++	"unsafe"
++
++	"mvdan.cc/sh/v3/syntax"
++)
++
++type staticPiece struct {
++	text  string
++	quote quoteLevel
++}
++
++type staticFrame struct {
++	parts []syntax.WordPart
++	index int
++	quote quoteLevel
++}
++
++// StaticLiteral removes quotes from a proven static word with no expansion
++// callbacks, environment access, account lookup, field splitting, or globbing.
++// Dynamic syntax and real brace/tilde expansion return static=false. All working
++// storage is admitted against the same pool as parsing and host lowering.
++func StaticLiteral(word *syntax.Word, pool *syntax.AllocationBudget) (value string, static bool, err error) {
++	if pool == nil {
++		return "", false, fmt.Errorf("static literal requires an allocation budget")
++	}
++	if word == nil || len(word.Parts) == 0 {
++		return "", true, nil
++	}
++	if len(word.Parts) > 0 {
++		if first, ok := word.Parts[0].(*syntax.Lit); ok && strings.HasPrefix(first.Value, "~") {
++			return "", false, nil
++		}
++	}
++	pieces, maximum, static, err := staticPieces(word, pool)
++	if err != nil || !static {
++		return "", false, err
++	}
++	braces, err := syntax.ClassifyBraces(word, pool)
++	if err != nil || braces {
++		return "", false, err
++	}
++	if err := pool.ReserveHeap(maximum, word.Pos()); err != nil {
++		return "", false, err
++	}
++	var output strings.Builder
++	output.Grow(int(maximum))
++	for _, piece := range pieces {
++		if piece.quote == quoteSingle {
++			output.WriteString(piece.text)
++			continue
++		}
++		literalText(piece.text, piece.quote, func(text string, _ bool) { output.WriteString(text) })
++	}
++	return output.String(), true, nil
++}
++
++func staticPieces(word *syntax.Word, pool *syntax.AllocationBudget) ([]staticPiece, int64, bool, error) {
++	frames, err := staticAppend(pool, []staticFrame(nil), staticFrame{parts: word.Parts})
++	if err != nil {
++		return nil, 0, false, err
++	}
++	var pieces []staticPiece
++	var maximum int64
++	for len(frames) > 0 {
++		frame := &frames[len(frames)-1]
++		if frame.index == len(frame.parts) {
++			frames = frames[:len(frames)-1]
++			continue
++		}
++		part := frame.parts[frame.index]
++		frame.index++
++		piece := staticPiece{quote: frame.quote}
++		switch part := part.(type) {
++		case *syntax.Lit:
++			piece.text = part.Value
++		case *syntax.SglQuoted:
++			if part.Dollar {
++				return nil, 0, false, nil
++			}
++			piece.text, piece.quote = part.Value, quoteSingle
++		case *syntax.DblQuoted:
++			if part.Dollar {
++				return nil, 0, false, nil
++			}
++			frames, err = staticAppend(pool, frames, staticFrame{parts: part.Parts, quote: quoteDouble})
++			if err != nil {
++				return nil, 0, false, err
++			}
++			continue
++		default:
++			return nil, 0, false, nil
++		}
++		if strings.IndexByte(piece.text, 0) >= 0 {
++			return nil, 0, false, nil
++		}
++		if int64(len(piece.text)) > math.MaxInt64-maximum {
++			return nil, 0, false, pool.ReserveHeap(math.MaxInt64, word.Pos())
++		}
++		maximum += int64(len(piece.text))
++		pieces, err = staticAppend(pool, pieces, piece)
++		if err != nil {
++			return nil, 0, false, err
++		}
++	}
++	return pieces, maximum, true, nil
++}
++
++func staticAppend[T any](pool *syntax.AllocationBudget, dst []T, value T) ([]T, error) {
++	if len(dst) == cap(dst) {
++		if cap(dst) > (math.MaxInt-1)/2 {
++			return nil, pool.ReserveHeap(math.MaxInt64, syntax.Pos{})
++		}
++		capacity := 2*cap(dst) + 1
++		size := int64(unsafe.Sizeof(value))
++		if size > 0 && int64(capacity) > math.MaxInt64/size {
++			return nil, pool.ReserveHeap(math.MaxInt64, syntax.Pos{})
++		}
++		if err := pool.ReserveHeap(int64(capacity)*size, syntax.Pos{}); err != nil {
++			return nil, err
++		}
++		replacement := make([]T, len(dst), capacity)
++		copy(replacement, dst)
++		dst = replacement
++	}
++	return append(dst, value), nil
++}
+--- /dev/null
++++ b/expand/static_literal_test.go
+@@ -0,0 +1,124 @@
++package expand_test
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"mvdan.cc/sh/v3/expand"
++	"mvdan.cc/sh/v3/syntax"
++)
++
++func staticWord(t *testing.T, source string, pool *syntax.AllocationBudget) (*syntax.Word, *syntax.Parser) {
++	t.Helper()
++	parser := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: pool}))
++	file, err := parser.Parse(strings.NewReader(": "+source), "fixture.pw")
++	if err != nil {
++		t.Fatalf("parse fixture: %v", err)
++	}
++	return file.Stmts[0].Cmd.(*syntax.CallExpr).Args[1], parser
++}
++
++func allocationPool(t *testing.T, maximum int64) *syntax.AllocationBudget {
++	t.Helper()
++	pool, err := syntax.NewAllocationBudget(maximum)
++	if err != nil {
++		t.Fatalf("allocate fixture ledger: %v", err)
++	}
++	return pool
++}
++
++func TestStaticLiteralSelectedQuoteRemoval(t *testing.T) {
++	for _, fixture := range []struct {
++		source, value string
++		static        bool
++	}{
++		{`e\val`, "eval", true}, {`'ev'"al"`, "eval", true},
++		{`"e\val"`, `e\val`, true}, {`"e\\val"`, `e\val`, true},
++		{`\世'界'`, "世界", true}, {"e\\\nval", "eval", true},
++		{`"\$name"`, "$name", true}, {`'a\b'`, `a\b`, true},
++		{`''`, "", true}, {`''~`, "~", true}, {`'~user'`, "~user", true},
++		{`~user`, "", false}, {`\~user`, "~user", true},
++		{`\{a,b\}`, "{a,b}", true}, {`"{a,b}"`, "{a,b}", true},
++		{`x{a,b}`, "", false}, {`x{1..3}`, "", false},
++		{`x{a`, "x{a", true}, {`x{1..a}`, "x{1..a}", true},
++		{`$'eval'`, "", false}, {`${name}`, "", false},
++		{`"$name"`, "", false}, {`$(false)`, "", false},
++	} {
++		t.Run(fixture.source, func(t *testing.T) {
++			pool := allocationPool(t, 32<<20)
++			word, _ := staticWord(t, fixture.source, pool)
++			value, static, err := expand.StaticLiteral(word, pool)
++			if err != nil || static != fixture.static || value != fixture.value {
++				t.Fatalf("static literal = %q,%v,%v; want %q,%v", value, static, err, fixture.value, fixture.static)
++			}
++		})
++	}
++}
++
++func TestStaticLiteralEscapesDoNotAmplifyIntoFieldParts(t *testing.T) {
++	pool := allocationPool(t, 32<<20)
++	word, parser := staticWord(t, strings.Repeat(`\x`, (1<<19)-1), pool)
++	parsed := pool.UsedBytes()
++	if parsed != parser.ScratchBytes() {
++		t.Fatalf("parser usage = %d, ledger = %d", parser.ScratchBytes(), parsed)
++	}
++	value, static, err := expand.StaticLiteral(word, pool)
++	if err != nil || !static || value != strings.Repeat("x", (1<<19)-1) {
++		t.Fatalf("large escaped word static=%v error=%v bytes=%d", static, err, len(value))
++	}
++	if extra := pool.UsedBytes() - parsed; extra > 2<<20 {
++		t.Fatalf("quote removal amplified one source word into %d scratch bytes", extra)
++	}
++}
++
++func TestStaticLiteralSharedLedgerAtLimitAndOneByteOver(t *testing.T) {
++	const source = `e\v'a'"l"`
++	run := func(maximum int64) (int64, error) {
++		pool := allocationPool(t, maximum)
++		word, _ := staticWord(t, source, pool)
++		if _, static, err := expand.StaticLiteral(word, pool); err != nil || !static {
++			return pool.UsedBytes(), err
++		}
++		err := pool.ReserveHeap(1<<20, word.Pos()) // caller's host lowering
++		return pool.UsedBytes(), err
++	}
++	maximum, err := run(32 << 20)
++	if err != nil {
++		t.Fatalf("measure shared fixture: %v", err)
++	}
++	if got, err := run(maximum); err != nil || got != maximum {
++		t.Fatalf("at-limit aggregate=%d error=%v", got, err)
++	}
++	_, err = run(maximum - 1)
++	var refusal *syntax.BudgetError
++	if !errors.As(err, &refusal) || refusal.Maximum != maximum-1 || refusal.Observed != maximum {
++		t.Fatalf("over-limit shared lowering error = %v", err)
++	}
++}
++
++func TestStaticLiteralBudgetRejectsMalformedBraceAmplification(t *testing.T) {
++	pool := allocationPool(t, 32<<20)
++	word, _ := staticWord(t, "x"+strings.Repeat("{", (1<<20)-3), pool)
++	_, static, err := expand.StaticLiteral(word, pool)
++	var refusal *syntax.BudgetError
++	if static || !errors.As(err, &refusal) || refusal.Observed <= refusal.Maximum {
++		t.Fatalf("brace amplification static=%v error=%v", static, err)
++	}
++	if pool.UsedBytes() > pool.MaximumBytes() {
++		t.Fatal("refused allocation changed ledger beyond its ceiling")
++	}
++}
++
++func TestStaticLiteralDoesNotBorrowMutableNodeStorage(t *testing.T) {
++	pool := allocationPool(t, 32<<20)
++	word, _ := staticWord(t, `e\val`, pool)
++	value, static, err := expand.StaticLiteral(word, pool)
++	if err != nil || !static {
++		t.Fatalf("capture literal: %v", err)
++	}
++	word.Parts[0].(*syntax.Lit).Value = "changed"
++	if value != "eval" {
++		t.Fatalf("retained literal changed: %q", value)
++	}
++}
+--- /dev/null
++++ b/syntax/allocation_budget.go
+@@ -0,0 +1,58 @@
++package syntax
++
++import (
++	"fmt"
++	"math"
++)
++
++// AllocationBudget is one logical preallocation ledger shared by parsing,
++// static classification, and a caller's lowering. It counts old backing arrays
++// until the unit is discarded, independent of garbage collector timing.
++// It is invocation-local and must not be shared concurrently.
++type AllocationBudget struct {
++	maximum int64
++	used    int64
++}
++
++func NewAllocationBudget(maximum int64) (*AllocationBudget, error) {
++	if maximum <= 0 || maximum > math.MaxInt64-8256 {
++		return nil, fmt.Errorf("allocation budget must be positive")
++	}
++	return &AllocationBudget{maximum: maximum}, nil
++}
++
++func (b *AllocationBudget) UsedBytes() int64    { return b.used }
++func (b *AllocationBudget) MaximumBytes() int64 { return b.maximum }
++
++// ReserveBytes admits storage before allocation. Refusal leaves the ledger
++// unchanged, so a caller cannot hide an earlier unit's retained allocations.
++func (b *AllocationBudget) ReserveBytes(bytes int64, pos Pos) error {
++	observed := int64(math.MaxInt64)
++	if bytes >= 0 && b.used <= math.MaxInt64-bytes {
++		observed = b.used + bytes
++	}
++	if observed > b.maximum {
++		return &BudgetError{"parser_scratch_bytes", b.maximum, observed, pos}
++	}
++	b.used = observed
++	return nil
++}
++
++// ReserveHeap includes rounded payload and allocation bookkeeping, matching
++// the selected parser's accounting. It also bounds pre-GC allocation churn.
++func (b *AllocationBudget) ReserveHeap(bytes int64, pos Pos) error {
++	if bytes < 0 || bytes > math.MaxInt64-8256 {
++		return &BudgetError{"parser_scratch_bytes", b.maximum, math.MaxInt64, pos}
++	}
++	rounded := int64(16)
++	if bytes <= 32768 {
++		for rounded < bytes {
++			rounded *= 2
++		}
++	} else {
++		rounded = (bytes + 8191) / 8192 * 8192
++	}
++	return b.ReserveBytes(rounded+64, pos)
++}
++
++func (b *AllocationBudget) releaseFrame(bytes int64) { b.used -= bytes }
+--- /dev/null
++++ b/syntax/allocation_budget_test.go
+@@ -0,0 +1,74 @@
++package syntax_test
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"mvdan.cc/sh/v3/syntax"
++)
++
++func TestParserLegacyBudgetReusesIndependentReservation(t *testing.T) {
++	parser := syntax.NewParser(syntax.WithBudget(syntax.Budget{MaxBytes: scratchCeiling}))
++	var previous int64
++	for i := 0; i < 3; i++ {
++		if _, err := parser.Parse(strings.NewReader("printf '%s' fixture"), "fixture.pw"); err != nil {
++			t.Fatalf("parse %d: %v", i, err)
++		}
++		used := parser.ScratchBytes()
++		if used <= 0 || (previous != 0 && used != previous) {
++			t.Fatalf("independent parser scratch = %d, previous=%d", used, previous)
++		}
++		previous = used
++	}
++}
++
++func TestClassifyBracesMatchesSelectedExpansionWithoutMutation(t *testing.T) {
++	for _, fixture := range []struct {
++		word string
++		want bool
++	}{
++		{"x{a,b}", true}, {"x{1..3}", true}, {"x{1..a}", false},
++		{"x{1..2..3..4}", false}, {"x{a", false}, {`x\{a,b\}`, false},
++		{`"{a,b}"`, false}, {"x{{a,b}", true},
++	} {
++		pool, err := syntax.NewAllocationBudget(scratchCeiling)
++		if err != nil {
++			t.Fatalf("create ledger: %v", err)
++		}
++		file, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader(": "+fixture.word), "fixture.pw")
++		if err != nil {
++			t.Fatalf("parse %q: %v", fixture.word, err)
++		}
++		word := file.Stmts[0].Cmd.(*syntax.CallExpr).Args[1]
++		var before strings.Builder
++		if err := syntax.NewPrinter().Print(&before, word); err != nil {
++			t.Fatalf("print original word: %v", err)
++		}
++		got, err := syntax.ClassifyBraces(word, pool)
++		if err != nil || got != fixture.want {
++			t.Fatalf("classify %q = %v,%v; want %v", fixture.word, got, err, fixture.want)
++		}
++		var after strings.Builder
++		if err := syntax.NewPrinter().Print(&after, word); err != nil || after.String() != before.String() {
++			t.Fatalf("classification mutated word: %q => %q (%v)", before.String(), after.String(), err)
++		}
++	}
++}
++
++func TestSharedLedgerRefusesBeforeAllocationAndRetainsUsage(t *testing.T) {
++	pool, err := syntax.NewAllocationBudget(160)
++	if err != nil {
++		t.Fatalf("create ledger: %v", err)
++	}
++	if err := pool.ReserveHeap(1, syntax.Pos{}); err != nil { // rounded16+64
++		t.Fatalf("first allocation: %v", err)
++	}
++	if err := pool.ReserveHeap(1, syntax.Pos{}); err != nil {
++		t.Fatalf("at-limit allocation: %v", err)
++	}
++	var refusal *syntax.BudgetError
++	if err := pool.ReserveBytes(1, syntax.Pos{}); !errors.As(err, &refusal) || refusal.Observed != 161 || pool.UsedBytes() != 160 {
++		t.Fatalf("one-byte excess = %v; retained=%d", err, pool.UsedBytes())
++	}
++}
+--- a/syntax/braces.go
++++ b/syntax/braces.go
+@@ -29 +29,3 @@
+-func SplitBraces(word *Word) bool {
++func SplitBraces(word *Word) bool { return splitBraces(word, nil) }
++
++func splitBraces(word *Word, budget *AllocationBudget) bool {
+@@ -37 +39 @@
+-	top := &Word{}
++	top := braceNode(budget, Word{})
+@@ -55 +57 @@
+-		acc.Parts = append(acc.Parts, lit)
++		acc.Parts = braceAppend[WordPart](budget, acc.Parts, lit)
+@@ -61 +63 @@
+-			acc.Parts = append(acc.Parts, wp)
++			acc.Parts = braceAppend[WordPart](budget, acc.Parts, wp)
+@@ -72 +74 @@
+-				addLit(&l2)
++				addLit(braceNode(budget, l2))
+@@ -80,3 +82,3 @@
+-				acc = &Word{}
+-				cur = &BraceExp{Elems: []*Word{acc}}
+-				open = append(open, cur)
++				acc = braceNode(budget, Word{})
++				cur = braceNode(budget, BraceExp{Elems: braceAppend(budget, []*Word(nil), acc)})
++				open = braceAppend(budget, open, cur)
+@@ -93,2 +95,2 @@
+-						merged.Parts = append(merged.Parts, litDots)
+-						merged.Parts = append(merged.Parts, elem.Parts...)
++						merged.Parts = braceAppend[WordPart](budget, merged.Parts, litDots)
++						merged.Parts = braceAppend[WordPart](budget, merged.Parts, elem.Parts...)
+@@ -100,2 +102,2 @@
+-				acc = &Word{}
+-				cur.Elems = append(cur.Elems, acc)
++				acc = braceNode(budget, Word{})
++				cur.Elems = braceAppend(budget, cur.Elems, acc)
+@@ -115,2 +117,2 @@
+-				acc = &Word{}
+-				cur.Elems = append(cur.Elems, acc)
++				acc = braceNode(budget, Word{})
++				cur.Elems = braceAppend(budget, cur.Elems, acc)
+@@ -127 +129 @@
+-					acc.Parts = append(acc.Parts, br.Elems[0].Parts...)
++					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br.Elems[0].Parts...)
+@@ -132 +134 @@
+-					acc.Parts = append(acc.Parts, br)
++					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
+@@ -138 +140 @@
+-					val := elem.Lit()
++					val := braceLiteral(elem, budget)
+@@ -149 +151 @@
+-					val := br.Elems[2].Lit()
++					val := braceLiteral(br.Elems[2], budget)
+@@ -164 +166 @@
+-					acc.Parts = append(acc.Parts, br)
++					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
+@@ -173 +175 @@
+-					acc.Parts = append(acc.Parts, elem.Parts...)
++					acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
+@@ -186 +188 @@
+-			addLit(&left)
++			addLit(braceNode(budget, left))
+@@ -201 +203 @@
+-			acc.Parts = append(acc.Parts, elem.Parts...)
++			acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
+--- /dev/null
++++ b/syntax/braces_budget.go
+@@ -0,0 +1,99 @@
++package syntax
++
++import (
++	"fmt"
++	"math"
++	"unsafe"
++)
++
++// ClassifyBraces reports a real unquoted brace expansion without mutating word.
++// It uses SplitBraces' selected algorithm and charges its temporary allocations
++// before they occur. Malformed braces retain their ordinary literal semantics.
++func ClassifyBraces(word *Word, pool *AllocationBudget) (expanded bool, err error) {
++	if pool == nil {
++		return false, fmt.Errorf("brace classification requires an allocation budget")
++	}
++	if word == nil {
++		return false, nil
++	}
++	defer func() {
++		if value := recover(); value != nil {
++			if abort, ok := value.(budgetAbort); ok {
++				expanded, err = false, abort.err
++				return
++			}
++			panic(value)
++		}
++	}()
++	copy := *word
++	if !splitBraces(&copy, pool) {
++		return false, nil
++	}
++	for _, part := range copy.Parts {
++		if _, ok := part.(*BraceExp); ok {
++			return true, nil
++		}
++	}
++	return false, nil
++}
++
++func braceReserve(pool *AllocationBudget, bytes int64) {
++	if pool != nil {
++		if err := pool.ReserveHeap(bytes, Pos{}); err != nil {
++			panic(budgetAbort{err.(*BudgetError)})
++		}
++	}
++}
++
++func braceNode[T any](pool *AllocationBudget, value T) *T {
++	braceReserve(pool, int64(unsafe.Sizeof(value)))
++	node := new(T)
++	*node = value
++	return node
++}
++
++func braceAppend[T any](pool *AllocationBudget, dst []T, values ...T) []T {
++	if pool == nil {
++		return append(dst, values...)
++	}
++	if len(values) > math.MaxInt-len(dst) {
++		braceReserve(pool, math.MaxInt64)
++	}
++	needed := len(dst) + len(values)
++	if needed > cap(dst) {
++		capacity := needed
++		if cap(dst) <= math.MaxInt/2 && cap(dst)*2 > capacity {
++			capacity = cap(dst) * 2
++		}
++		var value T
++		size := int64(unsafe.Sizeof(value))
++		if size > 0 && int64(capacity) > math.MaxInt64/size {
++			braceReserve(pool, math.MaxInt64)
++		}
++		braceReserve(pool, int64(capacity)*size)
++		replacement := make([]T, len(dst), capacity)
++		copy(replacement, dst)
++		dst = replacement
++	}
++	return append(dst, values...)
++}
++
++func braceLiteral(word *Word, pool *AllocationBudget) string {
++	if pool != nil {
++		// Word.Lit joins literal parts; ParseInt may copy an invalid number into
++		// its typed diagnostic. Bound both existing algorithms before calling.
++		bytes := int64(256)
++		for _, part := range word.Parts {
++			lit, ok := part.(*Lit)
++			if !ok {
++				return ""
++			}
++			if int64(len(lit.Value)) > (math.MaxInt64-bytes-128)/4 {
++				braceReserve(pool, math.MaxInt64)
++			}
++			bytes += 128 + 4*int64(len(lit.Value))
++		}
++		braceReserve(pool, bytes)
++	}
++	return word.Lit()
++}
+--- /dev/null
++++ b/syntax/budget.go
+@@ -0,0 +1,187 @@
++package syntax
++
++import (
++	"fmt"
++	"math"
++	"unicode/utf8"
++	"unsafe"
++)
++
++// Budget bounds scratch allocation and active parser frames during Parse.
++// It does not count final syntax nodes or AST parent-edge depth. Callers must
++// reserve MaxBytes against their aggregate memory budget before constructing
++// the parser, then apply exact selected-tree limits before admitting their plan.
++type Budget struct {
++	MaxBytes int64
++	Pool     *AllocationBudget
++	implicit bool
++}
++
++// WithBudget applies a caller-reserved scratch budget to Parse. Other parsing
++// entry points refuse this option rather than silently running without bounds.
++func WithBudget(budget Budget) ParserOption {
++	return func(p *Parser) { p.budget = budget; p.budgetConfigured = true }
++}
++
++// BudgetError reports a refused reservation, without a partial parsed tree.
++type BudgetError struct {
++	Kind              string
++	Maximum, Observed int64
++	Pos               Pos
++}
++
++func (e *BudgetError) Error() string {
++	return fmt.Sprintf("%s exceeded: maximum %d, requested %d", e.Kind, e.Maximum, e.Observed)
++}
++
++type budgetAbort struct{ err *BudgetError }
++
++// A frame reserves 4 KiB before entering upstream parser/lexer/arithmetic
++// methods. The selected source's fixed locals are smaller than this envelope;
++// variable payloads are independently charged. The envelope includes a next-call
++// prologue before that callee executes its entry guard, register spills and call
++// bookkeeping. This is a byte reservation, not a grammar nesting ceiling.
++const parserFrameBytes int64 = 4096
++
++func (p *Parser) beginBudget() {
++	p.scratchUsed, p.scratchFrames = 0, 0
++	p.budgetActive = p.budgetConfigured
++	if p.budgetActive && p.budget.Pool == nil {
++		p.budget.Pool = &AllocationBudget{maximum: p.budget.MaxBytes}
++		p.budget.implicit = true
++	}
++	p.reserveHeap(int64(unsafe.Sizeof(*p)))
++}
++func (p *Parser) unsupportedBudgetEntry() error {
++	return &BudgetError{Kind: "parser_entry_unsupported", Maximum: p.budget.MaxBytes}
++}
++func (p *Parser) finishBudget(file **File, err *error) {
++	p.budgetActive = false
++	if p.budget.implicit {
++		p.budget.Pool = nil
++		p.budget.implicit = false
++	}
++	if value := recover(); value != nil {
++		if abort, ok := value.(budgetAbort); ok {
++			*file, *err = nil, abort.err
++			p.f, p.litBatch, p.wordBatch, p.litBs = nil, nil, nil, nil
++			return
++		}
++		panic(value)
++	}
++}
++func (p *Parser) reserveScratch(bytes int64) {
++	if !p.budgetActive {
++		return
++	}
++	if err := p.budget.Pool.ReserveBytes(bytes, p.pos); err != nil {
++		panic(budgetAbort{err.(*BudgetError)})
++	}
++	p.scratchUsed += bytes
++}
++func (p *Parser) enterFrame() {
++	if !p.budgetActive {
++		return
++	}
++	p.reserveScratch(parserFrameBytes)
++	p.scratchUsed -= parserFrameBytes
++	p.scratchFrames += parserFrameBytes
++}
++func (p *Parser) leaveFrame() {
++	if p.budgetActive {
++		p.scratchFrames -= parserFrameBytes
++		p.budget.Pool.releaseFrame(parserFrameBytes)
++	}
++}
++
++// Allocations reserve a rounded payload plus object bookkeeping. Old and new
++// backing arrays both remain charged; this also bounds allocator churn before GC.
++func (p *Parser) reserveHeap(bytes int64) {
++	if !p.budgetActive {
++		return
++	}
++	before := p.budget.Pool.UsedBytes()
++	if err := p.budget.Pool.ReserveHeap(bytes, p.pos); err != nil {
++		panic(budgetAbort{err.(*BudgetError)})
++	}
++	p.scratchUsed += p.budget.Pool.UsedBytes() - before
++}
++func budgetNode[T any](p *Parser, value T) *T {
++	p.reserveHeap(int64(unsafe.Sizeof(value)))
++	node := new(T)
++	*node = value
++	return node
++}
++func budgetMake[T any](p *Parser, length, capacity int) []T {
++	var value T
++	size := int64(unsafe.Sizeof(value))
++	if size > 0 && int64(capacity) > math.MaxInt64/size {
++		p.reserveScratch(math.MaxInt64)
++	}
++	p.reserveHeap(int64(capacity) * size)
++	return make([]T, length, capacity)
++}
++func budgetAppend[T any](p *Parser, dst []T, values ...T) []T {
++	if !p.budgetActive {
++		return append(dst, values...)
++	}
++	if len(values) > math.MaxInt-len(dst) {
++		p.reserveScratch(math.MaxInt64)
++	}
++	needed := len(dst) + len(values)
++	if needed > cap(dst) {
++		capacity := needed
++		if cap(dst) <= math.MaxInt/2 && cap(dst)*2 > capacity {
++			capacity = cap(dst) * 2
++		}
++		replacement := budgetMake[T](p, len(dst), capacity)
++		copy(replacement, dst)
++		dst = replacement
++	}
++	return append(dst, values...)
++}
++func budgetAppendString(p *Parser, dst []byte, value string) []byte {
++	if !p.budgetActive {
++		return append(dst, value...)
++	}
++	if len(value) > math.MaxInt-len(dst) {
++		p.reserveScratch(math.MaxInt64)
++	}
++	needed := len(dst) + len(value)
++	if needed > cap(dst) {
++		capacity := needed
++		if cap(dst) <= math.MaxInt/2 && cap(dst)*2 > capacity {
++			capacity = cap(dst) * 2
++		}
++		replacement := budgetMake[byte](p, len(dst), capacity)
++		copy(replacement, dst)
++		dst = replacement
++	}
++	return append(dst, value...)
++}
++func (p *Parser) budgetString(value []byte) string {
++	p.reserveHeap(int64(len(value)))
++	return string(value)
++}
++func (p *Parser) budgetRune(value rune) string {
++	n := utf8.RuneLen(value)
++	if n < 0 {
++		n = 3
++	}
++	p.reserveHeap(int64(n))
++	return string(value)
++}
++func (p *Parser) budgetFormat(format string, args ...any) string {
++	bytes := int64(len(format) + 4096)
++	for _, arg := range args {
++		if value, ok := arg.(string); ok {
++			bytes += int64(len(value)) * 12
++		}
++	}
++	p.reserveHeap(bytes)
++	return fmt.Sprintf(format, args...)
++}
++
++// ScratchBytes reports this parse's cumulative charged heap allocations. Shared
++// pool usage additionally includes caller allocations and subsequent phases.
++func (p *Parser) ScratchBytes() int64 { return p.scratchUsed }
+--- /dev/null
++++ b/syntax/budget_test.go
+@@ -0,0 +1,142 @@
++package syntax_test
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"mvdan.cc/sh/v3/syntax"
++)
++
++const scratchCeiling = 32 << 20
++
++func parseBudget(source string, maximum int64) (*syntax.File, error) {
++	return syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{MaxBytes: maximum})).Parse(strings.NewReader(source), "fixture.pw")
++}
++func requireBudgetRefusal(t *testing.T, source string, maximum int64) {
++	t.Helper()
++	file, err := parseBudget(source, maximum)
++	var refusal *syntax.BudgetError
++	if file != nil || !errors.As(err, &refusal) || refusal.Kind != "parser_scratch_bytes" || refusal.Maximum != maximum || refusal.Observed <= maximum {
++		t.Fatalf("expected typed scratch refusal without tree, got tree=%t error=%v", file != nil, err)
++	}
++}
++func TestBudgetExactReservationBoundary(t *testing.T) {
++	low, high := int64(0), int64(scratchCeiling)
++	for low < high {
++		middle := low + (high-low)/2
++		_, err := parseBudget("printf '%s\\n' value", middle)
++		if err == nil {
++			high = middle
++		} else {
++			low = middle + 1
++		}
++	}
++	if _, err := parseBudget("printf '%s\\n' value", low); err != nil {
++		t.Fatalf("at reservation boundary: %v", err)
++	}
++	requireBudgetRefusal(t, "printf '%s\\n' value", low-1)
++	requireBudgetRefusal(t, "true", 0)
++	requireBudgetRefusal(t, "true", -1)
++}
++func TestBudgetValidSelectedTreeBoundariesRemainAccepted(t *testing.T) {
++	sources := []struct {
++		name, source string
++		nodes, depth int
++	}{
++		{"nodes8192", ": >x;" + strings.Repeat(":;", 2046), 8192, 4},
++		{"depth64", strings.Repeat("( ", 30) + ":" + strings.Repeat(" )", 30), 0, 64},
++		{"source1MiB", "printf '" + strings.Repeat("x", (1<<20)-9) + "'", 0, 4},
++	}
++	for _, fixture := range sources {
++		t.Run(fixture.name, func(t *testing.T) {
++			file, err := parseBudget(fixture.source, scratchCeiling)
++			if err != nil {
++				t.Fatalf("valid selected tree refused: %v", err)
++			}
++			count, depth, maximum := 0, -1, 0
++			syntax.Walk(file, func(node syntax.Node) bool {
++				if node == nil {
++					depth--
++					return true
++				}
++				count++
++				depth++
++				if depth > maximum {
++					maximum = depth
++				}
++				return true
++			})
++			if fixture.nodes > 0 && count != fixture.nodes {
++				t.Fatalf("expected %d nodes, got %d", fixture.nodes, count)
++			}
++			if maximum != fixture.depth {
++				t.Fatalf("expected depth %d, got %d", fixture.depth, maximum)
++			}
++		})
++	}
++}
++func TestBudgetDenseAndMalformedDeepInputRefusesBeforeUnboundedGrowth(t *testing.T) {
++	for _, source := range []string{
++		strings.Repeat("x ", 1<<19),
++		strings.Repeat("(", 20000) + ":" + strings.Repeat(")", 20000),
++		strings.Repeat("(", 20000),
++		"echo $((" + strings.Repeat("(", 20000) + "1",
++		"echo " + strings.Repeat("$(", 10000),
++	} {
++		requireBudgetRefusal(t, source, scratchCeiling)
++	}
++}
++func TestBudgetParserReuseAfterAbortAndOrdinarySyntaxError(t *testing.T) {
++	parser := syntax.NewParser(syntax.WithBudget(syntax.Budget{MaxBytes: scratchCeiling}))
++	file, err := parser.Parse(strings.NewReader(strings.Repeat("(", 20000)), "malformed.pw")
++	var refusal *syntax.BudgetError
++	if file != nil || !errors.As(err, &refusal) {
++		t.Fatalf("deep refusal: %v", err)
++	}
++	if _, err := parser.Parse(strings.NewReader("if"), "bad.pw"); err == nil {
++		t.Fatal("expected ordinary syntax error")
++	}
++	if file, err := parser.Parse(strings.NewReader("printf done"), "good.pw"); err != nil || file == nil {
++		t.Fatalf("reuse after refusal: %v", err)
++	}
++}
++func TestBudgetOnlyParseEntryIsSupported(t *testing.T) {
++	parser := syntax.NewParser(syntax.WithBudget(syntax.Budget{MaxBytes: scratchCeiling}))
++	assert := func(err error) {
++		t.Helper()
++		var refusal *syntax.BudgetError
++		if !errors.As(err, &refusal) || refusal.Kind != "parser_entry_unsupported" {
++			t.Fatalf("expected explicit unsupported entry, got %v", err)
++		}
++	}
++	_, err := parser.Document(strings.NewReader("value"))
++	assert(err)
++	_, err = parser.Arithmetic(strings.NewReader("1+2"))
++	assert(err)
++	for file, err := range parser.StmtsSeq(strings.NewReader("true")) {
++		if file != nil {
++			t.Fatal("unsupported entry yielded a tree")
++		}
++		assert(err)
++	}
++	for word, err := range parser.WordsSeq(strings.NewReader("value")) {
++		if word != nil {
++			t.Fatal("unsupported entry yielded a word")
++		}
++		assert(err)
++	}
++}
++func TestBudgetDoesNotRecoverUnrelatedReaderPanics(t *testing.T) {
++	defer func() {
++		if recover() != "fixture-reader-panic" {
++			t.Fatal("unrelated panic must propagate")
++		}
++	}()
++	parser := syntax.NewParser(syntax.WithBudget(syntax.Budget{MaxBytes: scratchCeiling}))
++	parser.Parse(panicReader{}, "panic.pw")
++}
++
++type panicReader struct{}
++
++func (panicReader) Read([]byte) (int, error) { panic("fixture-reader-panic") }
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -64,0 +65,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -125 +127 @@
+-			p.litBs = append(p.litBs, b)
++			p.litBs = budgetAppend(p, p.litBs, b)
+@@ -140 +142 @@
+-		p.litBs = append(p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
++		p.litBs = budgetAppend(p, p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
+@@ -155,0 +158,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -193,0 +198,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -241,0 +248,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -320 +328 @@
+-					p.litBs = append(p.litBs, '\\', '\n')
++					p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
+@@ -330 +338 @@
+-				*p.curComs = append(*p.curComs, Comment{
++				*p.curComs = budgetAppend(p, *p.curComs, Comment{
+@@ -422,0 +431,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -447,0 +458,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -457,0 +470,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -472,0 +487,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -687,0 +704,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -719,0 +738,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -813,0 +834,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -971,0 +994,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -981 +1005 @@
+-		p.litBs = append(p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
++		p.litBs = budgetAppend(p, p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
+@@ -985,0 +1010,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -987 +1013 @@
+-		s = string(p.litBs)
++		s = p.budgetString(p.litBs)
+@@ -989 +1015 @@
+-		s = string(p.litBs[:len(p.litBs)-p.w])
++		s = p.budgetString(p.litBs[:len(p.litBs)-p.w])
+@@ -995,0 +1022,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1005,2 +1033,3 @@
+-		return ValidName(string(name))
+-	}
++		return ValidName(p.budgetString(name))
++	}
++	p.reserveHeap(int64(len(lit))) // Reserve the helper's possible byte-to-string copy.
+@@ -1036,0 +1066,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1078,0 +1110,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1099,0 +1133,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1167,0 +1203,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1184,0 +1222,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1252,0 +1292,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1275 +1316 @@
+-				p.litBs = append(p.litBs, '\\', '\n')
++				p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
+@@ -1299,0 +1341,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -243 +243 @@
+-func (p *Parser) Parse(r io.Reader, name string) (*File, error) {
++func (p *Parser) Parse(r io.Reader, name string) (file *File, err error) {
+@@ -245 +245,5 @@
+-	p.f = &File{Name: name}
++	defer p.finishBudget(&file, &err)
++	p.beginBudget()
++	p.enterFrame()
++	defer p.leaveFrame()
++	p.f = budgetNode(p, File{Name: name})
+@@ -261,0 +266,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -274,0 +281,5 @@
++	if p.budgetConfigured {
++		return func(yield func(*Stmt, error) bool) { yield(nil, p.unsupportedBudgetEntry()) }
++	}
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -276 +287 @@
+-	p.f = &File{}
++	p.f = budgetNode(p, File{})
+@@ -327,0 +339,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -364,0 +378,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -368 +383 @@
+-			w.accumulated = append(w.accumulated, stmts)
++			w.accumulated = budgetAppend(p, w.accumulated, stmts)
+@@ -397,0 +413,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -418,0 +436,5 @@
++	if p.budgetConfigured {
++		return func(yield func(*Word, error) bool) { yield(nil, p.unsupportedBudgetEntry()) }
++	}
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -420 +442 @@
+-	p.f = &File{}
++	p.f = budgetNode(p, File{})
+@@ -451,0 +474,5 @@
++	if p.budgetConfigured {
++		return nil, p.unsupportedBudgetEntry()
++	}
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -453 +480 @@
+-	p.f = &File{}
++	p.f = budgetNode(p, File{})
+@@ -466,0 +494,5 @@
++	if p.budgetConfigured {
++		return nil, p.unsupportedBudgetEntry()
++	}
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -468 +500 @@
+-	p.f = &File{}
++	p.f = budgetNode(p, File{})
+@@ -480,5 +512,9 @@
+-	src io.Reader
+-	bs  []byte // current chunk of read bytes
+-	bsp uint   // offset within [Parser.bs] for the rune after [Parser.r]
+-	r   rune   // next rune; [runeEOF] when it went past EOF, or we stopped
+-	w   int    // width of [Parser.r]
++	budget                     Budget
++	scratchUsed, scratchFrames int64
++	budgetActive               bool
++	budgetConfigured           bool
++	src                        io.Reader
++	bs                         []byte // current chunk of read bytes
++	bsp                        uint   // offset within [Parser.bs] for the rune after [Parser.r]
++	r                          rune   // next rune; [runeEOF] when it went past EOF, or we stopped
++	w                          int    // width of [Parser.r]
+@@ -555,0 +592,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -586,0 +625,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -600,0 +641,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -602 +644 @@
+-		p.litBatch = make([]Lit, 32)
++		p.litBatch = budgetMake[Lit](p, 32, 32)
+@@ -617,0 +660,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -619 +663 @@
+-		p.wordBatch = make([]wordAlloc, 32)
++		p.wordBatch = budgetMake[wordAlloc](p, 32, 32)
+@@ -628,0 +673,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -630 +676 @@
+-		p.wordBatch = make([]wordAlloc, 32)
++		p.wordBatch = budgetMake[wordAlloc](p, 32, 32)
+@@ -641 +687,3 @@
+-	var alloc struct {
++	p.enterFrame()
++	defer p.leaveFrame()
++	alloc := budgetNode(p, struct {
+@@ -644 +692 @@
+-	}
++	}{})
+@@ -703,0 +752,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -709,0 +760,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -714 +766,3 @@
+-	buf := make([]byte, 0, 4)
++	p.enterFrame()
++	defer p.leaveFrame()
++	buf := budgetMake[byte](p, 0, 4)
+@@ -722,0 +777,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -728 +784 @@
+-					buf = append(buf, wp.Value[i])
++					buf = budgetAppend(p, buf, wp.Value[i])
+@@ -732 +788 @@
+-				buf = append(buf, b)
++				buf = budgetAppend(p, buf, b)
+@@ -736 +792 @@
+-		buf = append(buf, []byte(wp.Value)...)
++		buf = budgetAppendString(p, buf, wp.Value)
+@@ -747,0 +804,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -765 +823 @@
+-		p.hdocStops = append(p.hdocStops, stop)
++		p.hdocStops = budgetAppend(p, p.hdocStops, stop)
+@@ -783,0 +842,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -791,0 +852,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -800,0 +863,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -824,0 +889,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -828,0 +895,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -832,0 +901,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -838,0 +909,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -849,0 +922,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -871 +945 @@
+-			return []*Stmt{{Position: recoveredPos}}, nil
++			return budgetAppend(p, []*Stmt(nil), budgetNode(p, Stmt{Position: recoveredPos})), nil
+@@ -878,0 +953,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -882 +958 @@
+-			return p.wordOne(&Lit{ValuePos: recoveredPos})
++			return p.wordOne(budgetNode(p, Lit{ValuePos: recoveredPos}))
+@@ -889,0 +966,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -900,0 +979,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -904,0 +985,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -908,0 +991,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -919,0 +1004,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1033,0 +1120,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1038,0 +1127 @@
++	p.reserveHeap(1024) // Error boxing and fixed diagnostic record.
+@@ -1042 +1131 @@
+-		Text:       fmt.Sprintf(format, args...),
++		Text:       p.budgetFormat(format, args...),
+@@ -1047,0 +1137,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1051,0 +1143,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1059,0 +1153 @@
++	p.reserveHeap(1024) // Error boxing, fixed record and the bounded language set.
+@@ -1063 +1157 @@
+-		Feature:  fmt.Sprintf(format, a...),
++		Feature:  p.budgetFormat(format, a...),
+@@ -1069,0 +1164,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1118,0 +1215,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1122 +1220 @@
+-		stmts = append(stmts, s)
++		stmts = budgetAppend(p, stmts, s)
+@@ -1152,0 +1251,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1163,0 +1264,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1170,0 +1273,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1179,0 +1284,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1194 +1300 @@
+-		wps = append(wps, n)
++		wps = budgetAppend(p, wps, n)
+@@ -1201,0 +1308,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1207,0 +1316,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1221 +1331 @@
+-			cs := &CmdSubst{
++			cs := budgetNode(p, CmdSubst{
+@@ -1225 +1335 @@
+-			}
++			})
+@@ -1243 +1353 @@
+-		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
++		ar := budgetNode(p, ArithmExp{Left: p.pos, Bracket: left == dollBrack})
+@@ -1283 +1393 @@
+-		ps := &ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos}
++		ps := budgetNode(p, ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos})
+@@ -1291 +1401 @@
+-		sq := &SglQuoted{Left: p.pos, Dollar: p.tok == dollSglQuote}
++		sq := budgetNode(p, SglQuoted{Left: p.pos, Dollar: p.tok == dollSglQuote})
+@@ -1307 +1417 @@
+-				p.litBs = append(p.litBs, '\\', '\n')
++				p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
+@@ -1329 +1439 @@
+-		cs := &CmdSubst{Left: p.pos, Backquotes: true}
++		cs := budgetNode(p, CmdSubst{Left: p.pos, Backquotes: true})
+@@ -1386 +1496 @@
+-		eg := &ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos}
++		eg := budgetNode(p, ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos})
+@@ -1415 +1525,3 @@
+-	cs := &CmdSubst{Left: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	cs := budgetNode(p, CmdSubst{Left: p.pos})
+@@ -1425 +1537,3 @@
+-	alloc := &struct {
++	p.enterFrame()
++	defer p.leaveFrame()
++	alloc := budgetNode(p, struct {
+@@ -1430 +1544 @@
+-	}
++	})
+@@ -1452,0 +1567,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1456 +1572 @@
+-	pe := &ParamExp{
++	pe := budgetNode(p, ParamExp{
+@@ -1459 +1575 @@
+-	}
++	})
+@@ -1586 +1702 @@
+-		pe.Repl = &Replace{All: p.tok == dblSlash}
++		pe.Repl = budgetNode(p, Replace{All: p.tok == dblSlash})
+@@ -1605 +1721 @@
+-					pe.Modifiers = append(pe.Modifiers, p.lit(pos, p.endLit()))
++					pe.Modifiers = budgetAppend(p, pe.Modifiers, p.lit(pos, p.endLit()))
+@@ -1610 +1726 @@
+-					pe.Modifiers = append(pe.Modifiers, p.lit(pos, p.endLit()))
++					pe.Modifiers = budgetAppend(p, pe.Modifiers, p.lit(pos, p.endLit()))
+@@ -1621 +1737 @@
+-		pe.Slice = &Slice{}
++		pe.Slice = budgetNode(p, Slice{})
+@@ -1666 +1782 @@
+-			p.curErr("not a valid parameter expansion operator: %#q", string(tokRune))
++			p.curErr("not a valid parameter expansion operator: %#q", p.budgetRune(tokRune))
+@@ -1681,0 +1798,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1690,0 +1809,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1722,0 +1843,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1744 +1866 @@
+-			pe.NestedParam = &DblQuoted{
++			pe.NestedParam = budgetNode(p, DblQuoted{
+@@ -1747,2 +1869,2 @@
+-				Parts: []WordPart{wp},
+-			}
++				Parts: budgetAppend(p, []WordPart(nil), wp),
++			})
+@@ -1770 +1892 @@
+-		pe.Param = p.lit(pos, string(r))
++		pe.Param = p.lit(pos, p.budgetRune(r))
+@@ -1776 +1898 @@
+-			p.val = string(p.r)
++			p.val = p.budgetRune(p.r)
+@@ -1801,0 +1924,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1823 +1947 @@
+-	return &Expansion{Op: op, Word: p.getWord()}
++	return budgetNode(p, Expansion{Op: op, Word: p.getWord()})
+@@ -1826,0 +1951,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1841 +1967,3 @@
+-	zf := &FlagsArithm{}
++	p.enterFrame()
++	defer p.leaveFrame()
++	zf := budgetNode(p, FlagsArithm{})
+@@ -1869,0 +1998,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1880,0 +2011,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1912,0 +2045,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -1930 +2064,3 @@
+-	as := &Assign{}
++	p.enterFrame()
++	defer p.leaveFrame()
++	as := budgetNode(p, Assign{})
+@@ -1997 +2133 @@
+-		as.Array = &ArrayExpr{Lparen: p.pos}
++		as.Array = budgetNode(p, ArrayExpr{Lparen: p.pos})
+@@ -2006 +2142 @@
+-			ae := &ArrayElem{}
++			ae := budgetNode(p, ArrayElem{})
+@@ -2029 +2165 @@
+-					ae.Comments = append(ae.Comments, c)
++					ae.Comments = budgetAppend(p, ae.Comments, c)
+@@ -2033 +2169 @@
+-			as.Array.Elems = append(as.Array.Elems, ae)
++			as.Array.Elems = budgetAppend(p, as.Array.Elems, ae)
+@@ -2043 +2179 @@
+-			as.Value.Parts = append(as.Value.Parts, w.Parts...)
++			as.Value.Parts = budgetAppend(p, as.Value.Parts, w.Parts...)
+@@ -2049,0 +2186,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2059,0 +2198,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2068 +2208 @@
+-		s.Redirs = append(s.Redirs, r)
++		s.Redirs = budgetAppend(p, s.Redirs, r)
+@@ -2070,2 +2210,2 @@
+-		r = &Redirect{}
+-		s.Redirs = append(s.Redirs, r)
++		r = budgetNode(p, Redirect{})
++		s.Redirs = budgetAppend(p, s.Redirs, r)
+@@ -2089 +2229 @@
+-		p.heredocs = append(p.heredocs, r)
++		p.heredocs = budgetAppend(p, p.heredocs, r)
+@@ -2096 +2236 @@
+-					s.Comments = append(s.Comments, c)
++					s.Comments = budgetAppend(p, s.Comments, c)
+@@ -2110,0 +2251,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2112 +2254 @@
+-	s := &Stmt{Position: pos}
++	s := budgetNode(p, Stmt{Position: pos})
+@@ -2132 +2274 @@
+-		b := &BinaryCmd{
++		b := budgetNode(p, BinaryCmd{
+@@ -2136 +2278 @@
+-		}
++		})
+@@ -2142 +2284 @@
+-				b.Y = &Stmt{Position: recoveredPos}
++				b.Y = budgetNode(p, Stmt{Position: recoveredPos})
+@@ -2148 +2290 @@
+-		s = &Stmt{Position: s.Position}
++		s = budgetNode(p, Stmt{Position: s.Position})
+@@ -2174 +2316 @@
+-			s.Comments = append(s.Comments, c)
++			s.Comments = budgetAppend(p, s.Comments, c)
+@@ -2181,0 +2324,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2195 +2339 @@
+-				s.Cmd = &Block{Lbrace: p.pos, Rbrace: posAddCol(p.pos, 1)}
++				s.Cmd = budgetNode(p, Block{Lbrace: p.pos, Rbrace: posAddCol(p.pos, 1)})
+@@ -2287 +2431 @@
+-				w.Parts = append(w.Parts, p.wordParts(nil)...)
++				w.Parts = budgetAppend(p, w.Parts, p.wordParts(nil)...)
+@@ -2346 +2490 @@
+-		b := &BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s}
++		b := budgetNode(p, BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s})
+@@ -2349 +2493 @@
+-		if b.Y = p.gotStmtPipe(&Stmt{Position: p.pos}, true); b.Y == nil || p.err != nil {
++		if b.Y = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), true); b.Y == nil || p.err != nil {
+@@ -2351 +2495 @@
+-				b.Y = &Stmt{Position: recoveredPos}
++				b.Y = budgetNode(p, Stmt{Position: recoveredPos})
+@@ -2357 +2501 @@
+-		s = &Stmt{Position: s.Position}
++		s = budgetNode(p, Stmt{Position: s.Position})
+@@ -2368 +2512,3 @@
+-	sub := &Subshell{Lparen: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	sub := budgetNode(p, Subshell{Lparen: p.pos})
+@@ -2378 +2524,3 @@
+-	ar := &ArithmCmd{Left: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	ar := budgetNode(p, ArithmCmd{Left: p.pos})
+@@ -2391 +2539,3 @@
+-	b := &Block{Lbrace: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	b := budgetNode(p, Block{Lbrace: p.pos})
+@@ -2405 +2555,3 @@
+-	rootIf := &IfClause{Position: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	rootIf := budgetNode(p, IfClause{Position: p.pos})
+@@ -2412 +2564 @@
+-		elf := &IfClause{Position: p.pos}
++		elf := budgetNode(p, IfClause{Position: p.pos})
+@@ -2425 +2577 @@
+-		els := &IfClause{Position: elsePos}
++		els := budgetNode(p, IfClause{Position: elsePos})
+@@ -2441 +2593,3 @@
+-	wc := &WhileClause{WhilePos: p.pos, Until: until}
++	p.enterFrame()
++	defer p.leaveFrame()
++	wc := budgetNode(p, WhileClause{WhilePos: p.pos, Until: until})
+@@ -2457 +2611,3 @@
+-	fc := &ForClause{ForPos: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	fc := budgetNode(p, ForClause{ForPos: p.pos})
+@@ -2471 +2627 @@
+-	s.Comments = append(s.Comments, p.accComs...)
++	s.Comments = budgetAppend(p, s.Comments, p.accComs...)
+@@ -2478,0 +2635,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2484 +2642 @@
+-		cl := &CStyleLoop{Lparen: p.pos}
++		cl := budgetNode(p, CStyleLoop{Lparen: p.pos})
+@@ -2503 +2661,3 @@
+-	wi := &WordIter{}
++	p.enterFrame()
++	defer p.leaveFrame()
++	wi := budgetNode(p, WordIter{})
+@@ -2518 +2678 @@
+-				wi.Items = append(wi.Items, w)
++				wi.Items = budgetAppend(p, wi.Items, w)
+@@ -2531 +2691,3 @@
+-	fc := &ForClause{ForPos: p.pos, Select: true}
++	p.enterFrame()
++	defer p.leaveFrame()
++	fc := budgetNode(p, ForClause{ForPos: p.pos, Select: true})
+@@ -2541 +2703,3 @@
+-	cc := &CaseClause{Case: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	cc := budgetNode(p, CaseClause{Case: p.pos})
+@@ -2563,0 +2728,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2566 +2732 @@
+-		ci := &CaseItem{}
++		ci := budgetNode(p, CaseItem{})
+@@ -2573 +2739 @@
+-				ci.Patterns = append(ci.Patterns, w)
++				ci.Patterns = budgetAppend(p, ci.Patterns, w)
+@@ -2590 +2756 @@
+-			items = append(items, ci)
++			items = budgetAppend(p, items, ci)
+@@ -2593 +2759 @@
+-		ci.Last = append(ci.Last, p.accComs...)
++		ci.Last = budgetAppend(p, ci.Last, p.accComs...)
+@@ -2617 +2783 @@
+-		ci.Comments = append(ci.Comments, p.accComs[:split]...)
++		ci.Comments = budgetAppend(p, ci.Comments, p.accComs[:split]...)
+@@ -2620 +2786 @@
+-		items = append(items, ci)
++		items = budgetAppend(p, items, ci)
+@@ -2626 +2792,3 @@
+-	tc := &TestClause{Left: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	tc := budgetNode(p, TestClause{Left: p.pos})
+@@ -2640,0 +2809,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2669 +2839 @@
+-	b := &BinaryTest{
++	b := budgetNode(p, BinaryTest{
+@@ -2673 +2843 @@
+-	}
++	})
+@@ -2700,0 +2871,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2718 +2890 @@
+-		u := &UnaryTest{OpPos: p.pos, Op: TsNot}
++		u := budgetNode(p, UnaryTest{OpPos: p.pos, Op: TsNot})
+@@ -2728 +2900 @@
+-		u := &UnaryTest{OpPos: p.pos, Op: UnTestOperator(p.tok)}
++		u := budgetNode(p, UnaryTest{OpPos: p.pos, Op: UnTestOperator(p.tok)})
+@@ -2733 +2905 @@
+-		pe := &ParenTest{Lparen: p.pos}
++		pe := budgetNode(p, ParenTest{Lparen: p.pos})
+@@ -2755 +2927,3 @@
+-	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
++	p.enterFrame()
++	defer p.leaveFrame()
++	ds := budgetNode(p, DeclClause{Variant: p.lit(p.pos, p.val)})
+@@ -2759 +2933 @@
+-			ds.Args = append(ds.Args, p.getAssign(false))
++			ds.Args = budgetAppend(p, ds.Args, p.getAssign(false))
+@@ -2763 +2937 @@
+-			ds.Args = append(ds.Args, &Assign{
++			ds.Args = budgetAppend(p, ds.Args, budgetNode(p, Assign{
+@@ -2766 +2940 @@
+-			})
++			}))
+@@ -2768 +2942 @@
+-			ds.Args = append(ds.Args, &Assign{
++			ds.Args = budgetAppend(p, ds.Args, budgetNode(p, Assign{
+@@ -2771 +2945 @@
+-			})
++			}))
+@@ -2795 +2969,3 @@
+-	tc := &TimeClause{Time: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	tc := budgetNode(p, TimeClause{Time: p.pos})
+@@ -2800 +2976 @@
+-	tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
++	tc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
+@@ -2805 +2981,3 @@
+-	cc := &CoprocClause{Coproc: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	cc := budgetNode(p, CoprocClause{Coproc: p.pos})
+@@ -2808 +2986 @@
+-		cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
++		cc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
+@@ -2813 +2991 @@
+-	cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
++	cc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
+@@ -2820 +2998 @@
+-		cc.Stmt = &Stmt{Position: cc.Name.Pos()}
++		cc.Stmt = budgetNode(p, Stmt{Position: cc.Name.Pos()})
+@@ -2826 +3004 @@
+-			call.Args = append([]*Word{cc.Name}, call.Args...)
++			call.Args = budgetAppend(p, budgetAppend(p, []*Word(nil), cc.Name), call.Args...)
+@@ -2834 +3012,3 @@
+-	lc := &LetClause{Let: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	lc := budgetNode(p, LetClause{Let: p.pos})
+@@ -2842 +3022 @@
+-		lc.Exprs = append(lc.Exprs, x)
++		lc.Exprs = budgetAppend(p, lc.Exprs, x)
+@@ -2851,0 +3032,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2854 +3036 @@
+-	names := make([]*Lit, 0, 1)
++	names := budgetMake[*Lit](p, 0, 1)
+@@ -2856 +3038 @@
+-		names = append(names, p.lit(p.pos, p.val))
++		names = budgetAppend(p, names, p.lit(p.pos, p.val))
+@@ -2880 +3062,3 @@
+-	td := &TestDecl{Position: p.pos}
++	p.enterFrame()
++	defer p.leaveFrame()
++	td := budgetNode(p, TestDecl{Position: p.pos})
+@@ -2891,0 +3076,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2901,0 +3088,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -2907 +3095 @@
+-		ce.Assigns = append(ce.Assigns, p.getAssign(true))
++		ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
+@@ -2917 +3105 @@
+-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
++				ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
+@@ -2931,3 +3119,3 @@
+-				w.Parts = append(w.Parts, p.wordParts(nil)...)
+-			}
+-			ce.Args = append(ce.Args, w)
++				w.Parts = budgetAppend(p, w.Parts, p.wordParts(nil)...)
++			}
++			ce.Args = budgetAppend(p, ce.Args, w)
+@@ -2936 +3124 @@
+-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
++				ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
+@@ -2939 +3127 @@
+-			ce.Args = append(ce.Args, p.wordAnyNumber())
++			ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
+@@ -2948 +3136 @@
+-			ce.Args = append(ce.Args, p.wordAnyNumber())
++			ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
+@@ -2953 +3141 @@
+-				ce.Args = append(ce.Args, p.wordAnyNumber())
++				ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
+@@ -2983 +3171,3 @@
+-	fd := &FuncDecl{
++	p.enterFrame()
++	defer p.leaveFrame()
++	fd := budgetNode(p, FuncDecl{
+@@ -2987 +3177 @@
+-	}
++	})
+--- a/syntax/parser_arithm.go
++++ b/syntax/parser_arithm.go
+@@ -5,0 +6,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -11,0 +14,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -15,0 +20,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -36 +42 @@
+-		return &BinaryArithm{
++		return budgetNode(p, BinaryArithm{
+@@ -41 +47 @@
+-		}
++		})
+@@ -46,0 +53,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -73 +81 @@
+-	return &BinaryArithm{
++	return budgetNode(p, BinaryArithm{
+@@ -77 +85 @@
+-		Y: &BinaryArithm{
++		Y: budgetNode(p, BinaryArithm{
+@@ -82,2 +90,2 @@
+-		},
+-	}
++		}),
++	})
+@@ -86,0 +95,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -90,0 +101,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -94,0 +107,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -98,0 +113,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -102,0 +119,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -106,0 +125,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -110,0 +131,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -114,0 +137,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -118,0 +143,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -122,0 +149,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -126,0 +155,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -144 +174 @@
+-	return &BinaryArithm{
++	return budgetNode(p, BinaryArithm{
+@@ -149 +179 @@
+-	}
++	})
+@@ -152,0 +183,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -159 +191 @@
+-		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
++		ue := budgetNode(p, UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)})
+@@ -169,0 +202,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -173 +207 @@
+-		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
++		ue := budgetNode(p, UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)})
+@@ -185 +219 @@
+-		pe := &ParenArithm{Lparen: p.pos}
++		pe := budgetNode(p, ParenArithm{Lparen: p.pos})
+@@ -203 +237 @@
+-		pe := &ParamExp{Short: true, Param: l}
++		pe := budgetNode(p, ParamExp{Short: true, Param: l})
+@@ -232 +266 @@
+-		u := &UnaryArithm{
++		u := budgetNode(p, UnaryArithm{
+@@ -237 +271 @@
+-		}
++		})
+@@ -246,0 +281,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -257,0 +294,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -266,0 +305,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -292 +332 @@
+-		value = &BinaryArithm{
++		value = budgetNode(p, BinaryArithm{
+@@ -297 +337 @@
+-		}
++		})
+@@ -316,0 +357,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -324,0 +367,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -328,0 +373,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -348,0 +395,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()
+@@ -354,0 +403,2 @@
++	p.enterFrame()
++	defer p.leaveFrame()

@@ -10,6 +10,48 @@ import (
 	"database/sql"
 )
 
+const findSourceDeliveryHandle = `-- name: FindSourceDeliveryHandle :one
+SELECT handle
+FROM evidence_records
+WHERE session_id = ?1
+  AND json_extract(line_ranges, '$.source_delivery.response_id') = ?2
+  AND json_extract(line_ranges, '$.source_delivery.delivery_id') = ?3
+  AND json_extract(line_ranges, '$.source_delivery.source.SHA256') = ?4
+  AND json_extract(line_ranges, '$.source_delivery.source.SourceID') = ?5
+  AND json_extract(line_ranges, '$.source_delivery.source.Revision') = ?6
+  AND json_extract(line_ranges, '$.source_delivery.source_start_byte') = CAST(?7 AS INTEGER)
+  AND json_extract(line_ranges, '$.source_delivery.source_end_byte') = CAST(?8 AS INTEGER)
+`
+
+type FindSourceDeliveryHandleParams struct {
+	SessionID       string `json:"session_id"`
+	ResponseID      string `json:"response_id"`
+	DeliveryID      string `json:"delivery_id"`
+	SourceSha256    string `json:"source_sha256"`
+	SourceID        string `json:"source_id"`
+	SourceRevision  string `json:"source_revision"`
+	SourceStartByte int64  `json:"source_start_byte"`
+	SourceEndByte   int64  `json:"source_end_byte"`
+}
+
+// FindSourceDeliveryHandle returns the record already holding this exact
+// delivered source window, so a confirmed delivery commits once.
+func (q *Queries) FindSourceDeliveryHandle(ctx context.Context, arg FindSourceDeliveryHandleParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, findSourceDeliveryHandle,
+		arg.SessionID,
+		arg.ResponseID,
+		arg.DeliveryID,
+		arg.SourceSha256,
+		arg.SourceID,
+		arg.SourceRevision,
+		arg.SourceStartByte,
+		arg.SourceEndByte,
+	)
+	var handle string
+	err := row.Scan(&handle)
+	return handle, err
+}
+
 const hasUntrustedEvidence = `-- name: HasUntrustedEvidence :one
 SELECT EXISTS (
     SELECT 1 FROM evidence_records

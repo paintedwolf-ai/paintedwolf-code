@@ -566,6 +566,49 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipts/{program_id}:
+    get:
+      tags:
+        - sessions
+      operationId: getCommandProgramReceipt
+      x-multi-stream-list: true
+      summary: Inspect bounded program and host child receipts
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: program_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Durable program facts and one bounded child page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandProgramReceiptPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/sessions/{id}/invocations:
     get:
       tags:
@@ -16414,6 +16457,9 @@ components:
           type: object
           description: Arguments accepted directly by the named tool
           properties:
+            command:
+              type: string
+              description: Complete portable command program for an inspection action
             path:
               type: string
             paths:
@@ -20515,6 +20561,10 @@ components:
         invocation:
           x-go-pointer: true
           $ref: '#/components/schemas/InvocationReceipt'
+        command_program:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramReceipt'
+          description: Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads.
         tool:
           type: string
           description: Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row.
@@ -27265,6 +27315,70 @@ components:
           x-go-pointer: true
           type: string
           format: date-time
+    CommandProgramReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - parent_receipt_id
+        - language_version
+        - catalog_digest
+        - source_digest
+        - source_ref
+        - state
+        - progress_state
+        - detail_ref
+        - started_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_receipt_id:
+          type: string
+          format: uuid
+        language_version:
+          type: integer
+        catalog_digest:
+          type: string
+        source_digest:
+          type: string
+        source_ref:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - rejected
+            - failed
+            - interrupted
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        detail_ref:
+          type: string
+        progress_state:
+          type: string
+          enum:
+            - unchanged
+            - committed
+            - rejected
+            - unknown
+        progress_ref:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        settled_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     ToolResultOutcome:
       type: string
       enum:
@@ -28985,6 +29099,309 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next search page; absent when the search reached the end of the content.
+    CommandProgramProgressReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Existing progress owner's envelope invocation, independent of shell effects.
+      required:
+        - execution_id
+        - program_id
+        - root_session_id
+        - state
+        - owner_invoked
+        - arguments_digest
+        - arguments_ref
+        - detail_ref
+      properties:
+        execution_id:
+          type: string
+          format: uuid
+        program_id:
+          type: string
+          format: uuid
+        root_session_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - running
+            - unchanged
+            - committed
+            - rejected
+            - unknown
+        owner_invoked:
+          type: boolean
+        arguments_representation:
+          type: string
+        arguments_digest:
+          type: string
+        arguments_ref:
+          type: string
+        detail_ref:
+          type: string
+    CommandExecutionOutput:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - stream
+        - ref
+        - size_bytes
+        - complete
+        - redacted
+        - preview
+        - preview_truncated
+      properties:
+        stream:
+          type: string
+          enum:
+            - stdout
+            - stderr
+        ref:
+          type: string
+          description: Retained output handle owned by the program receipt.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        complete:
+          type: boolean
+          description: The stream reached its end; false is a retained prefix.
+        redacted:
+          type: boolean
+        preview:
+          type: string
+          description: Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
+        preview_truncated:
+          type: boolean
+    CommandRevisionConflict:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
+      required:
+        - path
+        - expected_revision
+        - observed_revision
+      properties:
+        path:
+          type: string
+        expected_revision:
+          type: string
+        observed_revision:
+          type: string
+    CommandExecutionReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Host dynamic execution. It has no assistant message or model tool-call identity.
+      required:
+        - id
+        - program_id
+        - node_id
+        - parent_execution_id
+        - owner
+        - lifecycle
+        - definition_digest
+        - arguments_digest
+        - arguments_ref
+        - command
+        - state
+        - owner_started
+        - owner_invoked
+        - effect_certainty
+        - complete
+        - publication_eligible
+        - output_publishable
+        - detail_ref
+      properties:
+        id:
+          type: string
+          format: uuid
+        program_id:
+          type: string
+          format: uuid
+        node_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
+        parent_execution_id:
+          type: string
+          format: uuid
+        owner:
+          type: string
+        lifecycle:
+          type: string
+        definition_digest:
+          type: string
+        arguments_representation:
+          type: string
+        arguments_digest:
+          type: string
+        reviewed_arguments_representation:
+          type: string
+        reviewed_arguments_digest:
+          type: string
+        reviewed_arguments_ref:
+          type: string
+        native_command:
+          type: string
+        effect_mode:
+          type: string
+        effect_classes:
+          type: array
+          items:
+            type: string
+            enum:
+              - read_only
+              - mutation
+              - external_exec
+              - network_egress
+        arguments_ref:
+          type: string
+        command:
+          type: string
+          description: Compact display only. Not authority or replay input.
+        state:
+          type: string
+          enum:
+            - prepared
+            - waiting
+            - running
+            - completed
+            - refused
+            - failed
+            - interrupted
+        owner_started:
+          type: boolean
+          description: Durable before-owner marker; host loss can precede actual invocation.
+        owner_invoked:
+          type: boolean
+          description: Actual invocation observed by the admission caller. Absence after a start marker is unknown.
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        host_stop_code:
+          type: string
+        complete:
+          type: boolean
+        publication_eligible:
+          type: boolean
+        output_publishable:
+          type: boolean
+        effect_certainty:
+          type: string
+          enum:
+            - none
+            - completed
+            - attempted
+            - unknown
+        evidence_kind:
+          type: string
+        evidence_ref:
+          type: string
+        owner_ref:
+          type: string
+        recovery_ref:
+          type: string
+        held_version_id:
+          type: string
+          format: uuid
+        accepted_revision:
+          type: string
+        published_revision:
+          type: string
+        detail_ref:
+          type: string
+        approval_ref:
+          type: string
+        job_handle:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host background job this child started, for the existing background process views.
+        outputs:
+          type: array
+          maxItems: 2
+          description: Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
+          items:
+            $ref: '#/components/schemas/CommandExecutionOutput'
+        revision_conflict:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandRevisionConflict'
+    CommandProgramNode:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source_unit_id
+        - start_byte
+        - end_byte
+        - line
+        - column
+        - state
+      properties:
+        id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
+        source_unit_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Captured syntax unit identity within its program.
+        start_byte:
+          type: integer
+          format: int64
+        end_byte:
+          type: integer
+          format: int64
+        line:
+          type: integer
+        column:
+          type: integer
+        state:
+          type: string
+          enum:
+            - not_started
+            - reached
+            - untaken
+    CommandProgramReceiptPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - program
+        - executions
+        - nodes
+        - executions_omitted
+        - nodes_omitted
+      properties:
+        program:
+          $ref: '#/components/schemas/CommandProgramReceipt'
+        progress:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramProgressReceipt'
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandExecutionReceipt'
+        nodes:
+          type: array
+          description: Known static nodes only; never speculative future loop iterations.
+          items:
+            $ref: '#/components/schemas/CommandProgramNode'
+        executions_omitted:
+          type: integer
+        nodes_omitted:
+          type: integer
+        next_cursor:
+          type: string
     InvocationReceiptList:
       x-go-generate: true
       type: object

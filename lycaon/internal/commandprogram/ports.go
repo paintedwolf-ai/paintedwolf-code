@@ -36,8 +36,16 @@ type CapturedSource struct {
 	Bytes []byte
 }
 
+// SourceCaptureRequest binds source representation and a pre-materialization ceiling.
+// The source implementation must enforce MaximumBytes before reading the full unit.
+type SourceCaptureRequest struct {
+	Path           string
+	MaximumBytes   int64
+	Representation toolcontract.SourceRepresentation
+}
+
 type SourceCapture interface {
-	Capture(context.Context, toolcontract.OperationInvocation, string) (CapturedSource, error)
+	Capture(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error)
 }
 
 // ExternalLauncher must enter the host launch-plan and confinement boundary.
