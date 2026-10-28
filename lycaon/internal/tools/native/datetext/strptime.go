@@ -25,9 +25,6 @@ func ParseFormat(format, text string, base time.Time) (time.Time, string, error)
 			s.hour += 12
 		}
 	}
-	if s.yday > 0 {
-		s.month, s.day = time.January, s.yday
-	}
 	zone := s.loc
 	if s.offset != nil {
 		zone = time.FixedZone("", *s.offset)
@@ -37,13 +34,13 @@ func ParseFormat(format, text string, base time.Time) (time.Time, string, error)
 
 // scan is one strptime run: the remaining text and the fields set so far.
 type scan struct {
-	text                               string
-	loc                                *time.Location
-	year, day, hour, minute, sec, yday int
-	month                              time.Month
-	meridian                           byte
-	offset                             *int
-	epoch                              *time.Time
+	text                         string
+	loc                          *time.Location
+	year, day, hour, minute, sec int
+	month                        time.Month
+	meridian                     byte
+	offset                       *int
+	epoch                        *time.Time
 }
 
 func (s *scan) format(format string) error {
@@ -101,7 +98,9 @@ func (s *scan) conversion(c byte) error {
 	case 'd', 'e':
 		s.day, err = s.number(2, 1, 31)
 	case 'j':
-		s.yday, err = s.number(3, 1, 366)
+		// A day of the year is read and checked but sets no field, so the
+		// month and day come from the base unless the format sets them.
+		_, err = s.number(3, 1, 366)
 	case 'H', 'k':
 		s.hour, err = s.number(2, 0, 23)
 	case 'I', 'l':
