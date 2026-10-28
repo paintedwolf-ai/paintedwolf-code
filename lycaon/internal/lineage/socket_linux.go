@@ -17,17 +17,17 @@ func SocketsOf(pid int) ([]SocketObservation, error) {
 	if !ok {
 		return nil, syscall.ESRCH
 	}
-	sockets, err := procSockets()
+	sockets, err := hostProc.sockets([]Protocol{ProtocolTCP})
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(filepath.Join(procRoot, strconv.Itoa(pid), "fd"))
+	entries, err := os.ReadDir(filepath.Join(hostProc.root, strconv.Itoa(pid), "fd"))
 	if err != nil {
 		return nil, err
 	}
 	inodes := map[uint64]bool{}
 	for _, entry := range entries {
-		target, err := os.Readlink(filepath.Join(procRoot, strconv.Itoa(pid), "fd", entry.Name()))
+		target, err := os.Readlink(filepath.Join(hostProc.root, strconv.Itoa(pid), "fd", entry.Name()))
 		if os.IsNotExist(err) {
 			continue
 		}
