@@ -160,9 +160,6 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 	}
 	defer releaseMetadata()
 	if input.Source != nil {
-		if input.SourceBytes < 0 {
-			return WriteResult{}, errors.New("exact write stream requires a nonnegative length")
-		}
 		if input.SourceBytes > readcaps.MaxMutationBytes {
 			return t.applyPinnedStream(ctx, input, tctx, resolved, revisions)
 		}
