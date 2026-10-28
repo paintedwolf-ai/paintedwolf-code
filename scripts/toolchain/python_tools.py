@@ -40,4 +40,3 @@ def provision(requirements):
             os.replace(staging, target)
             (target / "ready").write_text(requirements.read_text())
     return target
-

@@ -53,4 +53,3 @@ def validate(root=ROOT, binary=None):
     binary = binary or ensure("actionlint")
     return subprocess.run([str(binary), "-shellcheck=", "-pyflakes=", "-ignore", QUEUE_DIAGNOSTIC,
                            *map(str, workflows)], cwd=root, check=False).returncode
-
