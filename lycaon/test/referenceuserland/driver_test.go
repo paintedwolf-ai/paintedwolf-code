@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,6 +48,10 @@ func TestDriverRunsEveryProgramInTheFixedEnvironment(t *testing.T) {
 	}, "\n") + "\n"
 	if result.Status != 0 || string(result.Stdout) != want || len(result.Stderr) != 0 {
 		t.Fatalf("result = %d %q %q, want 0 %q with empty stderr and stdin", result.Status, result.Stdout, result.Stderr, want)
+	}
+	if got := Environment("/bin/bash"); !slices.Contains(got, "HOME=/home/reference") || !slices.Contains(got, "SHELL=/bin/bash") ||
+		!slices.Contains(got, "PWD=/workspace") || len(got) != 10 {
+		t.Fatalf("container environment = %q", got)
 	}
 }
 
