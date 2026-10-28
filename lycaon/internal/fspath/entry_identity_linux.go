@@ -21,11 +21,23 @@ func EntryIdentityAt(parent int, path string) (string, error) {
 	if err != nil && !errors.Is(err, unix.ENOSYS) && !errors.Is(err, unix.EINVAL) {
 		return "", err
 	}
+	return identityWithoutBirthTime(parent, path)
+}
+
+// identityWithoutBirthTime names an entry on a filesystem that reports no
+// birth time.
+func identityWithoutBirthTime(parent int, path string) (string, error) {
 	var legacy unix.Stat_t
 	if err := unix.Fstatat(parent, path, &legacy, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return "", err
 	}
-	// Without birth time, identity uses device and inode; ctime changes on rename.
+	// Without birth time (NFS, older ext4), the filesystem's handle carries the
+	// inode generation, so a reused inode number names a different entry. A
+	// filesystem without handles (some FUSE servers) keeps device and inode;
+	// ctime cannot serve, because it changes on rename.
+	if handle, _, err := unix.NameToHandleAt(parent, path, 0); err == nil {
+		return fmt.Sprintf("%d:%d:h%d:%x", legacy.Dev, legacy.Ino, handle.Type(), handle.Bytes()), nil
+	}
 	return fmt.Sprintf("%d:%d", legacy.Dev, legacy.Ino), nil
 }
 

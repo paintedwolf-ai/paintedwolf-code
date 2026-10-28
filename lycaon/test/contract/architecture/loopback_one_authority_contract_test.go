@@ -13,7 +13,7 @@ import (
 // Loopback decided from a host string has one authority: internal/egress.
 // Deciding it from a resolved netip.Addr is the floor and needs none.
 var loopbackExemptions = map[string]string{
-	"internal/httpclient/proxy.go": "proxy bypass: also treats the RFC 6761 `*.localhost` names as local, which suits " +
+	"internal/hostproxy/policy.go": "proxy bypass: also treats the RFC 6761 `*.localhost` names as local, which suits " +
 		"skipping a proxy and not deciding what to bind",
 	"internal/projectstack/doclinks.go": "broader question: whether a documentation URL is public, covering private, " +
 		"unspecified and link-local ranges too",
