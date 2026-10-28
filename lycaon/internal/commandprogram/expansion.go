@@ -60,10 +60,13 @@ func (e *WordExpander) ExpandFields(ctx context.Context, scope ExpansionScope, w
 		return nil, err
 	}
 	defer run.close()
-	if err := run.word(ctx, word.Parts); err != nil {
-		return nil, err
-	}
-	if err := run.assembly.finish(); err != nil {
+	err = run.braceWords(ctx, word.Parts, func(parts []commandsurface.WordNode) error {
+		if err := run.word(ctx, parts); err != nil {
+			return err
+		}
+		return run.assembly.finish()
+	})
+	if err != nil {
 		return nil, err
 	}
 	return run.fields(ctx)
@@ -115,7 +118,11 @@ func (e *WordExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, 
 }
 
 func (e *WordExpander) ExpandDocument(ctx context.Context, scope ExpansionScope, redirect commandsurface.ProgramRedirect) (string, error) {
-	if redirect.Operator != "<<" && redirect.Operator != "<<-" {
+	switch redirect.Operator {
+	case "<<<":
+		return e.expandHereString(ctx, scope, redirect.Target)
+	case "<<", "<<-":
+	default:
 		return "", invalidValue(redirect.Span, "a here-document redirect")
 	}
 	if redirect.HereDocument == nil {
@@ -132,6 +139,28 @@ func (e *WordExpander) ExpandDocument(ctx context.Context, scope ExpansionScope,
 		return "", err
 	}
 	return run.join(ctx, run.assembly.current, e.limits.documentBytes, "here_document_bytes")
+}
+
+// expandHereString expands a <<< word as one double-quoted argument, without
+// splitting or pathname expansion, and appends LF. The fed bytes, LF included,
+// count against here_document_bytes.
+func (e *WordExpander) expandHereString(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (string, error) {
+	run, err := e.begin(ctx, scope, word, modeScalar)
+	if err != nil {
+		return "", err
+	}
+	defer run.close()
+	if err := run.word(ctx, word.Parts); err != nil {
+		return "", err
+	}
+	value, err := run.join(ctx, run.assembly.current, e.limits.documentBytes, "here_document_bytes")
+	if err != nil {
+		return "", err
+	}
+	if size := int64(len(value)) + 1; size > e.limits.documentBytes {
+		return "", e.limits.exceeded("here_document_bytes", size, word.Span)
+	}
+	return value + "\n", nil
 }
 
 // delimiterQuoted reports any quoting in a here-document delimiter, which makes

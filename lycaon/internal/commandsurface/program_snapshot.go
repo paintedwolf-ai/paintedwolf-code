@@ -124,6 +124,15 @@ func cloneParts(src []WordNode) []WordNode {
 		case ArithmeticPart:
 			p.Expression = cloneArithmetic(p.Expression)
 			out[i] = p
+		case BracePart:
+			if p.Alternatives != nil {
+				p.Alternatives = cloneWords(p.Alternatives)
+			}
+			if p.Sequence != nil {
+				sequence := *p.Sequence
+				p.Sequence = &sequence
+			}
+			out[i] = p
 		case ParameterPart:
 			p.Index = cloneArithmetic(p.Index)
 			if p.Slice != nil {
