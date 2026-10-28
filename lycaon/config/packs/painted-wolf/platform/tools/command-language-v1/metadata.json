@@ -677,7 +677,7 @@
       "aliases": [],
       "family": "metadata",
       "owner": "filesystem",
-      "argv": "diff [-u|-U CONTEXT|-q] [-wbBr] [--] PATH_A PATH_B",
+      "argv": "diff [-u|-U CONTEXT|-q] [-wbBrN] [-x PATTERN ...] [-X FILE] [--strip-trailing-cr] [--] PATH_A PATH_B",
       "forms": [
         {
           "spellings": [
@@ -756,9 +756,56 @@
           "fixture_id": "diff-option-r-recursive",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-N",
+            "--new-file"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-N-newfile",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "diff-option-x-exclude",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.o"
+          ]
+        },
+        {
+          "spellings": [
+            "-X",
+            "--exclude-from"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "diff-option-X-excludefrom",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--strip-trailing-cr"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-striptrailingcr",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. diff [-u|-U CONTEXT|-q] [-wbBr] [--] PATH_A PATH_B",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. diff [-u|-U CONTEXT|-q] [-wbBrN] [-x PATTERN ...] [-X FILE] [--strip-trailing-cr] [--] PATH_A PATH_B",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete equal comparison; publication eligible",
@@ -806,7 +853,7 @@
           }
         }
       },
-      "notes": "Reuse sourceview.UnifiedDiff. Default unified context3; -U bounded by record/stream budgets, not old preview context10. Binary identical=0, different=1 with binary notice; -r byte-sorted tree. Ignore flags compare transformed lines but report original source lines. Input/complete stream limits distinct from preview.",
+      "notes": "Reuse sourceview.UnifiedDiff. Default unified context3; -U bounded by record/stream budgets, not old preview context10. Binary identical=0, different=1 with binary notice; -r byte-sorted tree. Ignore flags compare transformed lines but report original source lines. Input/complete stream limits distinct from preview. -N compares an absent file as empty (epoch timestamp), and under -r an absent directory as empty. -x PATTERN and -X FILE lines skip directory entries whose base names match. --strip-trailing-cr drops CR before each newline on input.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/diff.go",
         "tests": [
@@ -832,7 +879,11 @@
         "diff-option-w-ignoreallspace",
         "diff-option-b-ignorespacechange",
         "diff-option-B-ignoreblanklines",
-        "diff-option-r-recursive"
+        "diff-option-r-recursive",
+        "diff-option-N-newfile",
+        "diff-option-x-exclude",
+        "diff-option-X-excludefrom",
+        "diff-option-striptrailingcr"
       ]
     },
     {

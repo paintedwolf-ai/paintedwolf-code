@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"path"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"mvdan.cc/sh/v3/pattern"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -22,13 +26,20 @@ type diffOptions struct {
 	context                      int
 	brief, allSpace, spaceChange bool
 	blankLines, recursive        bool
-	header                       string
-	maxCells                     int64
+	// newFile compares an absent file as empty (-N).
+	newFile bool
+	// stripCR drops a carriage return before each newline on input.
+	stripCR bool
+	// excludes skips directory entries whose base names match (-x, -X).
+	excludes []*regexp.Regexp
+	header   string
+	maxCells int64
 }
 
 func runDiff(inv *invocation) error {
 	inv.comparison = true
-	opts := diffOptions{context: 3, brief: inv.flag("-q"), allSpace: inv.flag("-w"), spaceChange: inv.flag("-b"), blankLines: inv.flag("-B"), recursive: inv.flag("-r")}
+	opts := diffOptions{context: 3, brief: inv.flag("-q"), allSpace: inv.flag("-w"), spaceChange: inv.flag("-b"), blankLines: inv.flag("-B"),
+		recursive: inv.flag("-r"), newFile: inv.flag("-N"), stripCR: inv.flag("--strip-trailing-cr")}
 	if value, ok := inv.value("-U"); ok {
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {
@@ -36,19 +47,23 @@ func runDiff(inv *invocation) error {
 		}
 		opts.context = n
 	}
+	var err error
+	if opts.excludes, err = inv.diffExcludes(); err != nil {
+		return err
+	}
 	opts.maxCells = inv.owners.limit("evaluation_memory_bytes") / 4
 	opts.header = diffHeader(inv)
 	operands := inv.argv.Operands()
 	if len(operands) != 2 {
 		return inv.usage("diff", "exactly two PATH operands")
 	}
-	left, right, ok, err := inv.diffSides(operands[0], operands[1])
+	left, right, ok, err := inv.diffSides(operands[0], operands[1], opts.newFile)
 	if err != nil || !ok {
 		return err
 	}
 	switch {
-	case left.dir && right.dir:
-		return inv.diffDirectories(left.label, right.label, opts)
+	case left.dir && right.dir, left.dir && right.absent, left.absent && right.dir:
+		return inv.diffDirectories(left, right, opts)
 	case left.dir:
 		left.label = path.Join(left.label, path.Base(right.label))
 		left.dir = false
@@ -59,7 +74,50 @@ func runDiff(inv *invocation) error {
 	return inv.diffFiles(left, right, opts, false)
 }
 
-// diffHeader is "diff" with the option words as given, for tree headers.
+// diffExcludes compiles the -x patterns and the lines of each -X file as
+// base-name globs.
+func (inv *invocation) diffExcludes() ([]*regexp.Regexp, error) {
+	var patterns []string
+	for _, option := range inv.argv.Options("-x") {
+		patterns = append(patterns, option.Values[0].Value)
+	}
+	for _, option := range inv.argv.Options("-X") {
+		in, err := inv.openField(option.Values[0], true)
+		if err != nil || in == nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(string(in.data), "\n") {
+			if line != "" {
+				patterns = append(patterns, line)
+			}
+		}
+	}
+	out := make([]*regexp.Regexp, 0, len(patterns))
+	for _, value := range patterns {
+		expr, err := pattern.Regexp(value, pattern.EntireString)
+		if err == nil {
+			var re *regexp.Regexp
+			if re, err = regexp.Compile("(?s)" + expr); err == nil {
+				out = append(out, re)
+				continue
+			}
+		}
+		return nil, inv.usage(value, "a shell glob for -x")
+	}
+	return out, nil
+}
+
+func (o diffOptions) excluded(name string) bool {
+	for _, re := range o.excludes {
+		if re.MatchString(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// diffHeader is the tree header's command: "diff" with the option words as
+// given, each value word after the option that takes it, shell-quoted.
 func diffHeader(inv *invocation) string {
 	words := []string{"diff"}
 	argv := inv.request.Argv.Values()[1:]
@@ -68,22 +126,27 @@ func diffHeader(inv *invocation) string {
 		if word == "--" {
 			break
 		}
-		if len(word) > 1 && word[0] == '-' {
-			words = append(words, word)
-			if word == "-U" && i+1 < len(argv) {
-				words = append(words, argv[i+1])
-				i++
-			}
+		if len(word) < 2 || word[0] != '-' {
+			continue
+		}
+		words = append(words, shellQuote(word))
+		separate := strings.HasPrefix(word, "--") && slices.Contains([]string{"--exclude", "--exclude-from", "--unified"}, word) ||
+			!strings.HasPrefix(word, "--") && strings.IndexByte("UxX", word[len(word)-1]) >= 0
+		if separate && i+1 < len(argv) {
+			words = append(words, shellQuote(argv[i+1]))
+			i++
 		}
 	}
 	return strings.Join(words, " ")
 }
 
-// diffSide is one compared operand.
+// diffSide is one compared operand. An absent side exists only under -N and
+// compares as an empty file or directory.
 type diffSide struct {
 	field   commandprogram.Field
 	label   string
 	dir     bool
+	absent  bool
 	modTime time.Time
 }
 
@@ -94,21 +157,33 @@ func (s diffSide) operandField() commandprogram.Field {
 	return commandprogram.Field{Value: s.label}
 }
 
-func (inv *invocation) diffSides(left, right commandprogram.Field) (diffSide, diffSide, bool, error) {
-	a, okA, err := inv.diffSide(left)
+// absentSide is the missing counterpart of a path under -N, stamped at the
+// epoch as the unified header shows it.
+func absentSide(label string) diffSide {
+	return diffSide{label: label, absent: true, modTime: time.Unix(0, 0)}
+}
+
+func (inv *invocation) diffSides(left, right commandprogram.Field, newFile bool) (diffSide, diffSide, bool, error) {
+	a, okA, err := inv.diffSide(left, newFile)
 	if err != nil {
 		return a, a, false, err
 	}
-	b, okB, err := inv.diffSide(right)
+	b, okB, err := inv.diffSide(right, newFile)
 	if err != nil {
 		return a, b, false, err
+	}
+	if a.absent && b.absent {
+		inv.fail(2, a.label, "No such file or directory")
+		inv.fail(2, b.label, "No such file or directory")
+		return a, b, false, nil
 	}
 	return a, b, okA && okB, nil
 }
 
 // diffSide classifies an operand by following metadata. An absent path may
-// still be an accepted unsaved document, which the content capture decides.
-func (inv *invocation) diffSide(field commandprogram.Field) (diffSide, bool, error) {
+// still be an accepted unsaved document, which the content capture decides,
+// unless -N makes it an empty side.
+func (inv *invocation) diffSide(field commandprogram.Field, newFile bool) (diffSide, bool, error) {
 	operand := field.Value
 	side := diffSide{field: field, label: operand}
 	if operand == "-" {
@@ -128,6 +203,11 @@ func (inv *invocation) diffSide(field commandprogram.Field) (diffSide, bool, err
 		err = statErr
 	}
 	err = projectpaths.PathOperationError(operand, err)
+	if newFile && errors.Is(err, fs.ErrNotExist) {
+		absent := absentSide(operand)
+		absent.field = field
+		return absent, true, nil
+	}
 	reason, ok := ordinary(err)
 	if !ok {
 		return side, false, err
@@ -140,20 +220,35 @@ func (inv *invocation) diffSide(field commandprogram.Field) (diffSide, bool, err
 	return side, capture, nil
 }
 
+// diffInput is one side's bytes; an absent side is empty.
+func (inv *invocation) diffInput(side diffSide, stripCR bool) ([]byte, bool, error) {
+	if side.absent {
+		return nil, true, nil
+	}
+	in, err := inv.openField(side.operandField(), true)
+	if err != nil || in == nil {
+		return nil, false, err
+	}
+	if stripCR {
+		return bytes.ReplaceAll(in.data, []byte("\r\n"), []byte("\n")), true, nil
+	}
+	return in.data, true, nil
+}
+
 // diffFiles compares two captured files and reports their difference.
 func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bool) error {
-	a, err := inv.openField(left.operandField(), true)
-	if err != nil || a == nil {
+	a, ok, err := inv.diffInput(left, opts.stripCR)
+	if err != nil || !ok {
 		return err
 	}
-	b, err := inv.openField(right.operandField(), true)
-	if err != nil || b == nil {
+	b, ok, err := inv.diffInput(right, opts.stripCR)
+	if err != nil || !ok {
 		return err
 	}
-	if bytes.Equal(a.data, b.data) {
+	if bytes.Equal(a, b) {
 		return nil
 	}
-	if bytes.IndexByte(a.data, 0) >= 0 || bytes.IndexByte(b.data, 0) >= 0 {
+	if bytes.IndexByte(a, 0) >= 0 || bytes.IndexByte(b, 0) >= 0 {
 		inv.status = max(inv.status, 1)
 		return inv.out.text(fmt.Sprintf("Binary files %s and %s differ\n", left.label, right.label))
 	}
@@ -161,7 +256,7 @@ func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bo
 		inv.status = max(inv.status, 1)
 		return inv.out.text(fmt.Sprintf("Files %s and %s differ\n", left.label, right.label))
 	}
-	oldLines, newLines := diffLines(a.data), diffLines(b.data)
+	oldLines, newLines := diffLines(a), diffLines(b)
 	ops, err := sourceview.DiffScript(oldLines, newLines, opts.equal(), opts.maxCells)
 	if errors.Is(err, sourceview.ErrDiffTooLarge) {
 		var capacity *sourceview.DiffLimitError

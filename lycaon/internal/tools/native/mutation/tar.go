@@ -3,7 +3,6 @@ package mutation
 import (
 	"archive/tar"
 	"bytes"
-	"compress/bzip2"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -14,18 +13,25 @@ import (
 	"strings"
 
 	dsbzip2 "github.com/dsnet/compress/bzip2"
+	"github.com/ulikunitz/xz"
+
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
-// sniffFormat detects a tar stream's compression from its magic bytes.
-func sniffFormat(head []byte) string {
-	switch {
-	case bytes.HasPrefix(head, []byte{0x1f, 0x8b}):
-		return "tar.gz"
-	case bytes.HasPrefix(head, []byte("BZh")):
-		return "tar.bz2"
-	}
-	return "tar"
+// tarCodecs maps each compression option to its format.
+var tarCodecs = []struct{ key, format string }{
+	{"-z", "tar.gz"}, {"-j", "tar.bz2"}, {"-J", "tar.xz"}, {"--zstd", "tar.zst"},
+}
+
+// tarRun is one tar invocation's selection: member operands and -T names,
+// and the --exclude, -X and --exclude-vcs patterns.
+type tarRun struct {
+	inv      *invocation
+	archive  string
+	strip    int
+	members  []string
+	excludes memberPatterns
 }
 
 func runTar(inv *invocation) error {
@@ -38,67 +44,150 @@ func runTar(inv *invocation) error {
 	if modes != 1 {
 		return inv.usage(inv.name(), "exactly one of -x, -t or -c")
 	}
-	if inv.flag("-z") && inv.flag("-j") {
-		return inv.usage("-j", "one compression")
-	}
 	archive, ok := inv.value("-f")
 	if !ok || archive == "-" {
 		return inv.usage(inv.name(), "-f ARCHIVE naming a file")
 	}
-	strip := 0
+	r := &tarRun{inv: inv, archive: archive}
 	if value, ok := inv.value("--strip-components"); ok {
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {
 			return inv.usage(value, "a nonnegative component count")
 		}
-		strip = n
+		r.strip = n
+	}
+	if err := r.selection(); err != nil {
+		return err
 	}
 	switch {
 	case inv.flag("-c"):
-		return inv.tarCreate(archive)
+		return r.create()
 	case inv.flag("-t"):
-		return inv.tarList(archive, strip)
+		return r.list()
 	}
-	var format string
-	switch {
-	case inv.flag("-z"):
-		format = "tar.gz"
-	case inv.flag("-j"):
-		format = "tar.bz2"
-	default:
-		data, _, err := inv.readBound(archive, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
+	return r.extract()
+}
+
+// selection reads the member operands, -T lists and exclusion patterns.
+func (r *tarRun) selection() error {
+	inv := r.inv
+	r.members = inv.operands()
+	for _, option := range inv.argv.Options("-T") {
+		names, err := inv.listFile(option.Values[0].Value)
 		if err != nil {
 			return err
 		}
-		format = sniffFormat(data)
+		r.members = append(r.members, names...)
+	}
+	var patterns []string
+	for _, option := range inv.argv.Options("--exclude") {
+		patterns = append(patterns, option.Values[0].Value)
+	}
+	for _, option := range inv.argv.Options("-X") {
+		lines, err := inv.listFile(option.Values[0].Value)
+		if err != nil {
+			return err
+		}
+		patterns = append(patterns, lines...)
+	}
+	excludes, err := inv.memberPatterns("--exclude", patterns)
+	if err != nil {
+		return err
+	}
+	if inv.flag("--exclude-vcs") {
+		vcs, err := inv.memberPatterns("--exclude-vcs", vcsNames)
+		if err != nil {
+			return err
+		}
+		excludes = append(excludes, vcs...)
+	}
+	r.excludes = excludes
+	return nil
+}
+
+// codec is the selected compression; with none, extraction and listing
+// read the archive's magic bytes and -a creation reads the archive suffix.
+func (r *tarRun) codec(head []byte) (string, error) {
+	format := ""
+	for _, codec := range tarCodecs {
+		if r.inv.flag(codec.key) {
+			if format != "" {
+				return "", r.inv.usage(codec.key, "one compression")
+			}
+			format = codec.format
+		}
+	}
+	switch {
+	case format != "":
+		return format, nil
+	case r.inv.flag("-c") && r.inv.flag("-a"):
+		return autoCompression(r.archive), nil
+	case r.inv.flag("-c"):
+		return "tar", nil
+	}
+	return native.SniffArchiveFormat(head), nil
+}
+
+// autoCompression chooses the codec -a selects from the archive suffix.
+func autoCompression(archive string) string {
+	lower := strings.ToLower(archive)
+	for _, suffix := range []struct{ suffix, format string }{
+		{".tar.gz", "tar.gz"}, {".tgz", "tar.gz"}, {".taz", "tar.gz"},
+		{".tar.bz2", "tar.bz2"}, {".tbz", "tar.bz2"}, {".tbz2", "tar.bz2"}, {".tz2", "tar.bz2"},
+		{".tar.xz", "tar.xz"}, {".txz", "tar.xz"},
+		{".tar.zst", "tar.zst"}, {".tzst", "tar.zst"},
+	} {
+		if strings.HasSuffix(lower, suffix.suffix) {
+			return suffix.format
+		}
+	}
+	return "tar"
+}
+
+// selected reports a member the operands name or lie above, that no
+// exclusion matches.
+func (r *tarRun) selected(name string) bool {
+	return selectedMember(name, r.members) && !r.excludes.matchComponents(name)
+}
+
+// extract streams the archive through the shared extraction owner. The
+// archive is read here only to sniff an unnamed compression or to list the
+// names -v and member operands report.
+func (r *tarRun) extract() error {
+	inv := r.inv
+	format, err := r.codec(nil)
+	if err != nil {
+		return err
+	}
+	listNames := inv.flag("-v") || len(r.members) > 0
+	var data []byte
+	if format == "tar" || listNames {
+		if data, _, err = inv.readBound(r.archive, inv.owners.limit("archive_input_bytes"), "archive_input_bytes"); err != nil {
+			return err
+		}
+		if format, err = r.codec(data); err != nil {
+			return err
+		}
 	}
 	dest, err := inv.directory("-C")
 	if err != nil {
 		return err
 	}
-	source, err := inv.bind(archive, false)
+	source, err := inv.bind(r.archive, false)
 	if err != nil {
 		return err
 	}
-	// A named directory selects the entries beneath it, as GNU tar does; the
-	// extract owner matches exact entry names.
-	var names, members []string
-	if inv.flag("-v") || len(inv.operands()) > 0 {
-		if names, err = inv.tarNames(archive, strip); err != nil {
+	var names []string
+	if listNames {
+		if names, err = r.names(data, format); err != nil {
 			return err
 		}
 	}
-	if len(inv.operands()) > 0 {
-		members = make([]string, 0, len(names))
-		for _, name := range names {
-			members = append(members, path.Clean(strings.TrimPrefix(name, "./")))
-		}
-		if len(members) == 0 {
-			inv.fail(inv.operands()[0], "Not found in archive")
-			return nil
-		}
+	if len(r.members) > 0 && len(names) == 0 {
+		inv.fail(r.members[0], "Not found in archive")
+		return nil
 	}
-	result, err := inv.owners.Operations.Extract.Extract(inv.ctx, native.ExtractInput{Archive: source.Resolved.Abs, Dest: dest, Format: format, StripComponents: strip, Members: members, Overwrite: true}, inv.tc)
+	result, err := inv.owners.Operations.Extract.Extract(inv.ctx, native.ExtractInput{Archive: source.Resolved.Abs, Dest: dest, Format: format, StripComponents: r.strip, Select: r.selected, Overwrite: true}, inv.tc)
 	inv.effects += result.Entries
 	if err == nil {
 		for _, name := range names {
@@ -108,67 +197,29 @@ func runTar(inv *invocation) error {
 	return err
 }
 
-// tarNames lists the member names tar -xv reports: the archive's own names
-// of the selected entries that extraction keeps.
-func (inv *invocation) tarNames(archive string, strip int) ([]string, error) {
-	tr, err := inv.tarReader(archive)
-	if err != nil {
-		return nil, err
-	}
+// names lists the member names tar -xv reports: the archive's own names of
+// the selected entries that extraction keeps.
+func (r *tarRun) names(data []byte, format string) ([]string, error) {
 	var names []string
-	maxEntries := inv.owners.limit("archive_extract_entries")
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return names, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		if int64(len(names)) >= maxEntries {
-			return nil, limitRefusal("archive_extract_entries", "entries", maxEntries, int64(len(names))+1)
-		}
-		if _, ok := stripped(hdr.Name, strip); ok && selectedMember(hdr.Name, inv.operands()) {
-			names = append(names, hdr.Name)
-		}
-	}
+	err := r.each(data, format, func(hdr *tar.Header, _ string) error {
+		names = append(names, hdr.Name)
+		return nil
+	})
+	return names, err
 }
 
-// tarReader opens a tar stream with the selected or sniffed compression,
-// bounded by the catalog's expansion ceilings.
-func (inv *invocation) tarReader(archive string) (*tar.Reader, error) {
-	data, _, err := inv.readBound(archive, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
-	if err != nil {
-		return nil, err
-	}
-	var stream io.Reader = bytes.NewReader(data)
-	format := sniffFormat(data)
-	if inv.flag("-z") {
-		format = "tar.gz"
-	} else if inv.flag("-j") {
-		format = "tar.bz2"
-	}
-	switch format {
-	case "tar.gz":
-		gz, err := gzip.NewReader(stream)
-		if err != nil {
-			return nil, err
-		}
-		stream = gz
-	case "tar.bz2":
-		stream = bzip2.NewReader(stream)
-	}
-	return tar.NewReader(&boundedReader{r: stream, maximum: inv.decodeLimit(int64(len(data)))}), nil
-}
-
-func (inv *invocation) tarList(archive string, strip int) error {
-	tr, err := inv.tarReader(archive)
+// each visits every selected entry that survives --strip-components, under
+// the catalog's entry and expansion ceilings.
+func (r *tarRun) each(data []byte, format string, visit func(*tar.Header, string) error) error {
+	inv := r.inv
+	stream, closeStream, err := native.OpenArchiveStream(format, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return err
 	}
+	defer closeStream()
+	tr := tar.NewReader(&boundedReader{r: stream, maximum: inv.decodeLimit(int64(len(data)))})
 	maxEntries := inv.owners.limit("archive_extract_entries")
 	var entries int64
-	width := 19
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -180,18 +231,35 @@ func (inv *invocation) tarList(archive string, strip int) error {
 		if entries++; entries > maxEntries {
 			return limitRefusal("archive_extract_entries", "entries", maxEntries, entries)
 		}
-		name, ok := stripped(hdr.Name, strip)
-		if !ok || !selectedMember(hdr.Name, inv.operands()) {
+		name, ok := stripped(hdr.Name, r.strip)
+		if !ok || !r.selected(hdr.Name) {
 			continue
 		}
+		if err := visit(hdr, name); err != nil {
+			return err
+		}
+	}
+}
+
+func (r *tarRun) list() error {
+	inv := r.inv
+	data, _, err := inv.readBound(r.archive, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
+	if err != nil {
+		return err
+	}
+	format, err := r.codec(data)
+	if err != nil {
+		return err
+	}
+	width := 19
+	return r.each(data, format, func(hdr *tar.Header, name string) error {
 		line := name
 		if inv.flag("-v") {
 			line, width = tarLongListing(hdr, name, width)
 		}
-		if _, err := io.WriteString(inv.stdout, line+"\n"); err != nil {
-			return err
-		}
-	}
+		_, err := io.WriteString(inv.stdout, line+"\n")
+		return err
+	})
 }
 
 // stripped removes --strip-components leading components; an entry with no
@@ -215,7 +283,7 @@ func selectedMember(name string, members []string) bool {
 	}
 	clean := strings.TrimSuffix(strings.TrimPrefix(name, "./"), "/")
 	for _, member := range members {
-		member = strings.TrimSuffix(strings.TrimPrefix(member, "./"), "/")
+		member = strings.TrimSuffix(strings.TrimPrefix(path.Clean(member), "./"), "/")
 		if clean == member || strings.HasPrefix(clean, member+"/") {
 			return true
 		}
@@ -265,29 +333,33 @@ func tarLongListing(hdr *tar.Header, name string, width int) (string, int) {
 	return line, width
 }
 
-func (inv *invocation) tarCreate(archive string) error {
-	if len(inv.operands()) == 0 {
-		return inv.usage(inv.name(), "at least one PATH to archive")
+// create archives the operands and -T names under -C, leaving out excluded
+// entries and everything beneath an excluded directory, and the archive
+// itself.
+func (r *tarRun) create() error {
+	inv := r.inv
+	if len(r.members) == 0 {
+		return inv.usage(inv.name(), "at least one PATH to archive, or -T FILE")
+	}
+	format, err := r.codec(nil)
+	if err != nil {
+		return err
 	}
 	base, err := inv.directory("-C")
 	if err != nil {
 		return err
 	}
-	entries, err := inv.collect(base, inv.operands(), true, inv.createBudget())
+	self, err := inv.bind(r.archive, true)
 	if err != nil {
 		return err
 	}
-	var out bytes.Buffer
-	var sink io.WriteCloser = nopWriteCloser{&out}
-	switch {
-	case inv.flag("-z"):
-		sink = gzip.NewWriter(&out)
-	case inv.flag("-j"):
-		if sink, err = dsbzip2.NewWriter(&out, nil); err != nil {
-			return err
-		}
+	rule := collectRule{recursive: true, exclude: r.excludes.matchComponents, prune: true, archive: self.Resolved.Abs}
+	entries, err := inv.collect(base, r.members, rule, inv.createBudget())
+	if err != nil {
+		return err
 	}
-	tw := tar.NewWriter(sink)
+	var plain bytes.Buffer
+	tw := tar.NewWriter(&plain)
 	for _, entry := range entries {
 		inv.verbose("%s", entry.name)
 		hdr := &tar.Header{Name: entry.name, Mode: int64(entry.mode), Size: int64(len(entry.data)), Typeflag: tar.TypeReg, Format: tar.FormatPAX}
@@ -304,13 +376,43 @@ func (inv *invocation) tarCreate(archive string) error {
 	if err := tw.Close(); err != nil {
 		return err
 	}
-	if err := sink.Close(); err != nil {
+	data, err := compressTar(format, plain.Bytes())
+	if err != nil {
 		return err
 	}
-	_, err = inv.publishCreated(archive, out.Bytes(), false)
+	_, err = inv.publishCreated(r.archive, data, false)
 	return err
 }
 
-type nopWriteCloser struct{ io.Writer }
-
-func (nopWriteCloser) Close() error { return nil }
+// compressTar encodes a complete tar stream: gzip at its default level, the
+// pinned bzip2 writer, xz with an 8 MiB dictionary, or zstd through the
+// host codec.
+func compressTar(format string, plain []byte) ([]byte, error) {
+	var out bytes.Buffer
+	var sink io.WriteCloser
+	var err error
+	switch format {
+	case "tar":
+		return plain, nil
+	case "tar.gz":
+		sink = gzip.NewWriter(&out)
+	case "tar.bz2":
+		sink, err = dsbzip2.NewWriter(&out, nil)
+	case "tar.xz":
+		sink, err = xz.NewWriter(&out)
+	case "tar.zst":
+		return zstdcodec.Compress(bytes.NewReader(plain))
+	default:
+		return nil, fmt.Errorf("unsupported archive format %q", format)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err := sink.Write(plain); err != nil {
+		return nil, err
+	}
+	if err := sink.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
