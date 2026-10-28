@@ -7,8 +7,7 @@ import (
 	"errors"
 )
 
-// Every call crosses to the performer in a fixed binary frame: decoding JSON
-// there was a measurable share of each create's cost.
+// Performer calls use a fixed little-endian header followed by length-prefixed strings.
 //
 //	op u8 | absolute u8 | dirs u8 | reserved u8 | mode u32 | umask u32 |
 //	flags u64 | dev u64 | resolve u64 | notification u64 | caller u64 |

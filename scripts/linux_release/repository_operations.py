@@ -72,7 +72,8 @@ def version_marker(receipt: dict) -> Path:
 
 def retained(store: Path, receipt: dict, operation: str):
     selected = identity(receipt)
-    if (store / "withdrawn" / (selected + ".json")).exists() or (store / version_marker(receipt)).exists():
+    if (store / "withdrawn" / (selected + ".json")).exists() or (
+            receipt["packages"] and (store / version_marker(receipt)).exists()):
         raise ValueError("a withdrawn generation cannot be offered again")
     if operation in {"recover", "withdraw"}:
         path = store / "generations" / selected / "generation.json"

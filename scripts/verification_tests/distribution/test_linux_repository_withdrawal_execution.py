@@ -26,14 +26,83 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def receipt(version: str, family="deb", architecture=None) -> dict:
-    value = {"family": family, "channel": "stable", "version": version, "objects": [
-        {"path": "pool/a/package", "sha256": hashlib.sha256(b"package").hexdigest(), "size": 7}]}
+SOURCE = "a" * 40
+
+
+def receipt(version: str, family="deb", architecture=None, channel="stable", packages=True) -> dict:
+    value = {"family": family, "channel": channel, "version": version, "source_commit": SOURCE,
+             "packages": [{"file": "package", "sha256": "0" * 64}] if packages else [], "objects": [
+                 {"path": "pool/a/package", "sha256": hashlib.sha256(b"package").hexdigest(), "size": 7}]}
     return {**value, "architecture": architecture} if architecture else value
 
 
 def identity(value: dict) -> str:
     return hashlib.sha256(encoded(value)).hexdigest()
+
+
+class LinuxWithdrawalPlanTests(unittest.TestCase):
+    """Every channel publication writes withdraws on halt, with or without an earlier Linux offer."""
+
+    def setUp(self):
+        self.store = {}
+
+    def read(self, key, directory):
+        return self.store.get(key)
+
+    def offer(self, family, channel, architecture, previous=None, version="1.0.2"):
+        """Model what publication writes: the active offer and its retained empty withdrawal generation."""
+        empty = receipt(version, family, architecture, channel, packages=False)
+        self.store[release_repositories.withdrawal_key(empty)] = empty
+        active = {"version": version, "generation": identity(receipt(version, family, architecture, channel)),
+                  "previous": previous, "source_commit": SOURCE, "packages": [{"file": "package"}]}
+        self.store[repository_withdrawal.state_key(family, channel, architecture)] = active
+        return empty, active
+
+    def earlier(self, family, channel, architecture, version="1.0.1"):
+        value = receipt(version, family, architecture, channel)
+        self.store[f"linux/generations/{identity(value)}/generation.json"] = value
+        return value
+
+    def test_first_linux_release_withdraws_to_its_empty_generation_on_every_channel(self):
+        empties = {row: self.offer(*row)[0] for row in repository_withdrawal.CHANNELS}
+        for last_good in [None, "1.0.1"]:
+            with self.subTest(last_good=last_good):
+                rows = prepare("1.0.2", last_good, read=self.read)
+                self.assertEqual([(r["family"], r["channel"], r["architecture"]) for r in rows], repository_withdrawal.CHANNELS)
+                for row in rows:
+                    empty = empties[(row["family"], row["channel"], row["architecture"])]
+                    self.assertEqual((row["receipt"], row["replacement"]), (empty, identity(empty)))
+                    self.assertEqual(row["receipt"]["packages"], [])
+
+    def test_replaced_release_restores_the_named_predecessor_on_every_channel(self):
+        earlier = {}
+        for row in repository_withdrawal.CHANNELS:
+            earlier[row] = self.earlier(*row)
+            self.offer(*row, previous=identity(earlier[row]))
+        rows = prepare("1.0.2", "1.0.1", read=self.read)
+        self.assertEqual(len(rows), len(repository_withdrawal.CHANNELS))
+        for row in rows:
+            self.assertEqual(row["receipt"], earlier[(row["family"], row["channel"], row["architecture"])])
+        with self.assertRaisesRegex(ValueError, "predecessor is not the retained 1.0.0 generation"):
+            prepare("1.0.2", "1.0.0", read=self.read)
+        # Naming no replacement stops discovery with the empty generation instead.
+        self.assertTrue(all(row["receipt"]["packages"] == [] for row in prepare("1.0.2", None, read=self.read)))
+
+    def test_withdrawn_unoffered_and_unretained_channels(self):
+        empty, active = self.offer("deb", "stable", None)
+        self.store[repository_withdrawal.state_key("deb", "stable", None)] = {**active, "packages": []}
+        self.assertEqual(prepare("1.0.2", None, read=self.read), [])
+        self.assertEqual(prepare("1.0.3", None, read=self.read), [])
+        self.store[repository_withdrawal.state_key("deb", "stable", None)] = active
+        del self.store[release_repositories.withdrawal_key(empty)]
+        with self.assertRaisesRegex(ValueError, "no retained withdrawal generation"):
+            prepare("1.0.2", None, read=self.read)
+        self.store[release_repositories.withdrawal_key(empty)] = {**empty, "source_commit": "b" * 40}
+        with self.assertRaisesRegex(ValueError, "no retained withdrawal generation"):
+            prepare("1.0.2", None, read=self.read)
+        self.store[repository_withdrawal.state_key("deb", "stable", None)] = {**active, "previous": "f" * 64}
+        with self.assertRaisesRegex(ValueError, "predecessor is not retained"):
+            prepare("1.0.2", "1.0.1", read=self.read)
 
 
 class LinuxWithdrawalTests(unittest.TestCase):
@@ -52,22 +121,6 @@ class LinuxWithdrawalTests(unittest.TestCase):
 
     def read(self, key, directory):
         return self.store.get(key)
-
-    def test_prepare_selects_only_channels_offering_the_halted_version(self):
-        rows = prepare("1.0.2", "1.0.1", read=self.read)
-        self.assertEqual([(row["family"], row["architecture"]) for row in rows], [("deb", None), ("pacman", "x86_64")])
-        self.assertEqual(rows[0]["replacement"], identity(self.good))
-        self.assertEqual(rows[1]["active"], "c" * 64)
-        self.assertEqual(prepare("1.0.3", None, read=self.read), [])
-
-    def test_prepare_refuses_without_the_exact_retained_predecessor(self):
-        with self.assertRaisesRegex(ValueError, "without a retained last-good"):
-            prepare("1.0.2", None, read=self.read)
-        with self.assertRaisesRegex(ValueError, "predecessor is not the retained"):
-            prepare("1.0.2", "1.0.0", read=self.read)
-        self.store[f"linux/generations/{identity(self.good)}/generation.json"] = {**self.good, "objects": []}
-        with self.assertRaisesRegex(ValueError, "predecessor is not the retained"):
-            prepare("1.0.2", "1.0.1", read=self.read)
 
     def test_apply_withdraws_with_the_prepared_plan_and_reports_every_failure(self):
         rows = prepare("1.0.2", "1.0.1", read=self.read)

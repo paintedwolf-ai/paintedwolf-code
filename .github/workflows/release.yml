@@ -184,7 +184,9 @@ jobs:
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
-    needs: [classify, ship-gates, aggregate-release]
+    # Every Linux generation is assembled before any publication credential is materialized,
+    # so a failed assembly refuses the release here and the lane stays at two runners.
+    needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
@@ -665,8 +667,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Follows the apt and dnf assembly: both read the same collected artifacts, and the
+  # serial order keeps a release run within its declared two runners.
   linux-pacman-repositories:
-    needs: [classify, aggregate-release]
+    needs: [classify, aggregate-release, linux-repositories]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
@@ -967,8 +971,9 @@ jobs:
             --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
             --base-url "${DOWNLOAD_BASE_URL}"
 
+  # Follows the Linux activation so publication holds one runner beside the candidate build.
   update-cask:
-    needs: [classify, publish-immutable]
+    needs: [classify, publish-immutable, publish-linux-repositories]
     runs-on: ubuntu-latest
     environment: release-publication
     steps:

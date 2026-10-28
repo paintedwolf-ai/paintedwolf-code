@@ -54,7 +54,8 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         selected = identity(receipt)
         if current(storage_prefix + "/withdrawn/" + selected + ".json", work) is not None:
             raise ValueError("a withdrawn R2 generation cannot be offered again")
-        if current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
+        # An empty withdrawal generation offers no version, so a retry stays possible.
+        if receipt["packages"] and current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
             raise ValueError("a withdrawn repository version cannot be offered again")
         if operation in {"recover", "withdraw"}:
             retained_key = storage_prefix + "/generations/" + selected + "/generation.json"
