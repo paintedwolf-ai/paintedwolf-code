@@ -955,7 +955,9 @@
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast"
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 120,
       "profiles": [

@@ -1,5 +1,7 @@
 mod app_state;
 pub mod files;
+mod child_credentials;
+mod external_launch;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod linux_desktop;
@@ -18,6 +20,12 @@ mod linux_generation;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
+#[cfg(unix)]
+#[path = "protected_launch.rs"]
+mod protected_launch;
+#[cfg(not(unix))]
+#[path = "protected_launch/none.rs"]
+mod protected_launch;
 mod shell_command;
 mod sidecar;
 #[cfg(test)]
@@ -35,6 +43,12 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Claim the launch selection, broker and lifetime descriptors before threads or children.
+    #[cfg(unix)]
+    if let Err(error) = protected_launch::claim() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
     if let Err(error) = process_protection::harden_release() {
         eprintln!("Could not protect desktop process memory: {error}");
         std::process::exit(1);
@@ -69,10 +83,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init());
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
+    #[cfg(target_os = "linux")]
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     builder
         .plugin(webview_policy::init())
         .manage(SidecarState::new())
@@ -189,7 +205,7 @@ pub fn run() {
         .setup(|app| {
             backup_transfer::journal::cleanup_on_launch();
             app_state::document_outbox::reconcile_windows(app.handle(), None);
-            sidecar::layout::setup_bundled_engine_layout(app.handle());
+            sidecar::layout::setup_bundled_engine_layout(app.handle())?;
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             #[cfg(target_os = "linux")]

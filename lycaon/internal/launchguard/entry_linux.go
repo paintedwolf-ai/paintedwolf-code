@@ -21,13 +21,14 @@ import (
 
 // Descriptors the privileged stage hands the unprivileged entry.
 const (
-	entryImageFD    = 3
-	entrySpecFD     = 4
-	entryOriginFD   = 5
-	entryBrokerFD   = 6
-	entryLifetimeFD = 7
-	maxEntryBytes   = 128 << 10
-	entrySeals      = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
+	entryImageFD       = 3
+	entrySpecFD        = 4
+	entryOriginFD      = 5
+	entryBrokerFD      = 6
+	entryLifetimeFD    = 7
+	protectedLaunchEnv = "PW_PROTECTED_LAUNCH"
+	maxEntryBytes      = 128 << 10
+	entrySeals         = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
 )
 
 // EntrySpec is carried only by a sealed, root-created descriptor. It never
@@ -52,7 +53,7 @@ type EntrySpec struct {
 func EnterDesktop() error {
 	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
 	if seals, err := unix.FcntlInt(entrySpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
-		return errors.New("entry specification is not sealed")
+		return unsealedEntry(entrySpecFD, seals, err)
 	}
 	runtime.LockOSThread()
 	return enterDesktop(
@@ -94,13 +95,13 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 		return err
 	}
 	// Validate caller-owned paths such as HOME only after privilege drop.
-	env := DesktopEnvironment(spec.Environment, spec.UID)
-	// Bootstrap descriptors must not reach the desktop. The broker and the
-	// generation's lifetime lock stay open for it to claim.
+	env := append(DesktopEnvironment(spec.Environment, spec.UID), protectedLaunchEnv+"=1")
+	// The desktop consumes the authenticated selection before starting threads.
+	// Only its sealed frame, broker and generation lifetime lock survive exec.
 	if err := unix.CloseRange(entryImageFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
-	for _, fd := range []int{brokerFD, int(lifetime.Fd())} {
+	for _, fd := range []int{int(frame.Fd()), brokerFD, int(lifetime.Fd())} {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
 			return err
 		}
@@ -162,7 +163,7 @@ func readEntry(file *os.File) (EntrySpec, error) {
 	}
 	seals, err := unix.FcntlInt(file.Fd(), unix.F_GET_SEALS, 0)
 	if err != nil || seals&entrySeals != entrySeals {
-		return EntrySpec{}, errors.New("entry specification is not sealed")
+		return EntrySpec{}, unsealedEntry(file.Fd(), seals, err)
 	}
 	raw, err := io.ReadAll(io.NewSectionReader(file, 0, maxEntryBytes+1))
 	if err != nil {
@@ -172,6 +173,22 @@ func readEntry(file *os.File) (EntrySpec, error) {
 		return EntrySpec{}, errors.New("entry specification exceeds its bound")
 	}
 	return decodeEntry(raw)
+}
+
+// unsealedEntry refuses a descriptor that does not carry the sealed frame and
+// names what sat at that number, so a refusal inside a supervised launch can
+// be traced to the handoff that produced it. The facts are diagnostic only.
+func unsealedEntry(fd uintptr, seals int, err error) error {
+	target, linkErr := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", fd))
+	if linkErr != nil {
+		target = "unreadable link: " + linkErr.Error()
+	}
+	identity := "fstat failed"
+	var info unix.Stat_t
+	if statErr := unix.Fstat(int(fd), &info); statErr == nil {
+		identity = fmt.Sprintf("mode %#o dev %d inode %d size %d", info.Mode, info.Dev, info.Ino, info.Size)
+	}
+	return fmt.Errorf("entry specification is not sealed: descriptor %d is %s (%s) with seals %#x: %w", fd, target, identity, seals, err)
 }
 
 func decodeEntry(raw []byte) (EntrySpec, error) {
