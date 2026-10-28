@@ -1,6 +1,7 @@
 package literal
 
 import (
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -11,18 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// volume is one file system's statistics as statfs reports them. Counts
-// of blocks are in units of blockSize bytes.
-type volume struct {
-	source, target      string
-	blockSize           uint64
-	blocks, free, avail uint64
-	files, freeFiles    uint64
-}
-
-// volumeStats reads the statistics of the volume holding an open file at
-// path.
-type volumeStats func(file *os.File, path string) (volume, error)
+// volumeStats reads the volume holding an open file at path.
+type volumeStats func(file *os.File, path string) (fseffect.Volume, error)
 
 // dfColumn is one df column: its header, minimum width and alignment.
 type dfColumn struct {
@@ -35,24 +26,21 @@ type dfColumn struct {
 // attached folders and session scratch. Every path binds through the read
 // authority first; the volume is read through the bound entry.
 func runDf(inv *invocation) error {
-	if inv.owners.volumes == nil {
-		return platformUnavailable("df", "file system statistics")
-	}
 	operands, defaults := inv.operands(), false
 	if len(operands) == 0 {
 		operands, defaults = inv.dfDefaults(), true
 	}
-	var rows []volume
+	var rows []fseffect.Volume
 	seen := map[string]bool{}
 	for _, operand := range operands {
 		vol, ok, err := inv.volumeOf(operand)
 		if err != nil {
 			return err
 		}
-		if !ok || defaults && seen[vol.target] {
+		if !ok || defaults && seen[vol.Target] {
 			continue
 		}
-		seen[vol.target] = true
+		seen[vol.Target] = true
 		rows = append(rows, vol)
 	}
 	if len(rows) == 0 {
@@ -74,7 +62,7 @@ func (inv *invocation) dfDefaults() []string {
 }
 
 // volumeOf binds one path and reads its volume through the bound entry.
-func (inv *invocation) volumeOf(operand string) (volume, bool, error) {
+func (inv *invocation) volumeOf(operand string) (fseffect.Volume, bool, error) {
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
 	var st fseffect.EntryStat
 	if err == nil {
@@ -92,18 +80,21 @@ func (inv *invocation) volumeOf(operand string) (volume, bool, error) {
 		err = projectpaths.PathOperationError(operand, err)
 		if reason, ok := ordinary(err); ok {
 			inv.fail(1, operand, reason)
-			return volume{}, false, nil
+			return fseffect.Volume{}, false, nil
 		}
-		return volume{}, false, err
+		return fseffect.Volume{}, false, err
 	}
 	defer func() { _ = file.Close() }()
 	vol, err := inv.owners.volumes(file, bound.Resolved.Abs)
+	if errors.Is(err, fseffect.ErrUnsupported) {
+		return vol, false, platformUnavailable("df", "file system statistics")
+	}
 	return vol, err == nil, err
 }
 
 // dfTable lays out the columns: each is as wide as its header, its widest
 // cell and its minimum; Filesystem aligns left, Mounted on is last.
-func dfTable(rows []volume, inodes, human, posix bool) string {
+func dfTable(rows []fseffect.Volume, inodes, human, posix bool) string {
 	columns := []dfColumn{{header: "Filesystem", width: 14, left: true}}
 	switch {
 	case inodes:
@@ -130,7 +121,7 @@ func dfTable(rows []volume, inodes, human, posix bool) string {
 		table[0][i] = column.header
 	}
 	for _, vol := range rows {
-		table = append(table, vol.cells(inodes, human))
+		table = append(table, dfCells(vol, inodes, human))
 	}
 	for _, row := range table {
 		for i, cell := range row {
@@ -158,13 +149,13 @@ func dfTable(rows []volume, inodes, human, posix bool) string {
 	return out.String()
 }
 
-// cells renders one row: block columns in KiB rounded up (or -h sizes),
+// dfCells renders one row: block columns in KiB rounded up (or -h sizes),
 // inode columns as counts, percentages rounded up, unknown ratios as -.
-func (v volume) cells(inodes, human bool) []string {
-	total, used, avail := v.blocks*v.blockSize, (v.blocks-min(v.free, v.blocks))*v.blockSize, v.avail*v.blockSize
+func dfCells(v fseffect.Volume, inodes, human bool) []string {
+	total, used, avail := v.Blocks*v.BlockSize, (v.Blocks-min(v.Free, v.Blocks))*v.BlockSize, v.Available*v.BlockSize
 	render := func(bytes uint64) string { return strconv.FormatUint((bytes+1023)/1024, 10) }
 	if inodes {
-		total, used, avail = v.files, v.files-min(v.freeFiles, v.files), v.freeFiles
+		total, used, avail = v.Files, v.Files-min(v.FreeFiles, v.Files), v.FreeFiles
 		render = func(count uint64) string { return strconv.FormatUint(count, 10) }
 	}
 	if human {
@@ -174,7 +165,7 @@ func (v volume) cells(inodes, human bool) []string {
 	if used+avail > 0 {
 		percent = strconv.FormatFloat(math.Ceil(float64(used)*100/float64(used+avail)), 'f', 0, 64) + "%"
 	}
-	return []string{v.source, render(total), render(used), render(avail), percent, v.target}
+	return []string{v.Source, render(total), render(used), render(avail), percent, v.Target}
 }
 
 // lastOf is whichever of the given option keys appears last in argv.
