@@ -20,6 +20,7 @@ func TestEnsureRecoveryExcludedAppendsOnceAndKeepsMode(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "seed existing exclude", os.WriteFile(exclude, []byte("*.log"), 0o600))
+	testutil.FailErr(t, "narrow exclude mode", os.Chmod(exclude, 0o600))
 	testutil.FailErr(t, "ensure append", gitrepo.EnsureRecoveryExcluded(root))
 	testutil.FailErr(t, "ensure repeat", gitrepo.EnsureRecoveryExcluded(root))
 	data, err = os.ReadFile(exclude)
