@@ -14,7 +14,7 @@ var programReceiptsSQL []byte
 // does not register a new shipped baseline.
 func ProgramReceipts(target Baseline) Step {
 	return Step{ID: "portable-program-receipts", Source: programReceiptsSQL,
-		Checksum: "c18b38d5f7b1fc0d87fed72bfa54514939ce97cb6e8642ad1bdfd40db74c3213",
+		Checksum: "bde8b3115696ead32e21b55f520fff50c94e04da79604a0a71a6e7889370ef40",
 		From:     Baseline{Revision: 7, Shape: "3f850531058aa188145c4ff350d0d68bfa8810d2d3986070b34cd7d549489956"},
 		To:       target, Apply: func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, string(programReceiptsSQL))

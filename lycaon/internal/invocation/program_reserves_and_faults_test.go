@@ -40,8 +40,8 @@ func TestProgramDefinitionsStoredOncePerProgramAcrossLoopExecutions(t *testing.T
 	for _, bound := range []toolcontract.BoundOperation{firstGrep, secondGrep, thirdGrep, firstWrite, secondWrite} {
 		rebound, err := f.recorder.ReadProgramExecutionBinding(t.Context(), f.session, bound.Invocation().Identity.ExecutionID)
 		testutil.FailErr(t, "read execution binding from deduplicated definition", err)
-		if rebound.DefinitionDigest != bound.Definition().Digest() {
-			t.Fatalf("definition digest mismatch: got %s want %s", rebound.DefinitionDigest, bound.Definition().Digest())
+		if rebound.DefinitionDigest != bound.Definition().Digest() || rebound.DefinitionJSON != string(bound.Definition().Serialized()) {
+			t.Fatalf("definition mismatch: got %s (%s) want %s", rebound.DefinitionDigest, rebound.DefinitionJSON, bound.Definition().Digest())
 		}
 	}
 }

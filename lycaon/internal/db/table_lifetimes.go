@@ -113,6 +113,9 @@ var tableLifetimes = map[string]TableLifetime{
 	"source_snapshot_roots":      {Class: LifetimeCache, Reason: "snapshot root references"},
 	"source_snapshot_boundaries": {Class: LifetimeCache, Reason: "snapshot boundary markers"},
 
+	"invocation_program_revision_pins":         cascadeOwnedBy("invocation_program_executions"),
+	"invocation_program_revision_pin_segments": cascadeOwnedBy("invocation_program_executions"),
+
 	"artifact_refs":                  cascadeOwnedBy("artifacts"),
 	"artifacts":                      cascadeOwnedBy("projects"),
 	"assessment_scan_bindings":       cascadeOwnedBy("security_assessments"),
