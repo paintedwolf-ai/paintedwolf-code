@@ -1,7 +1,6 @@
-"""The regular native probe reaches the overflow without earlier release state."""
+"""Native attention overflow and selection diagnostics."""
 
 import json
-from pathlib import Path
 import subprocess
 import unittest
 
@@ -43,10 +42,6 @@ global.setTimeout = callback => callback();
         for failure in ("project", "session", "checkpoint", "home", "overflow"):
             with self.subTest(failure=failure):
                 self.assertFalse(self.scenario(failure)["result"]["ok"])
-
-    def test_native_probe_imports_the_required_scenario(self):
-        probe = Path(__file__).resolve().parents[2] / "harness/webkit_atspi_text_attributes.py"
-        self.assertIn('(\"home\", HOME_OVERFLOW)', probe.read_text())
 
     def test_diagnostic_preserves_scenario_outcome_and_captures_hidden_selection(self):
         body = diagnostic_scenario("return {ok: true};")

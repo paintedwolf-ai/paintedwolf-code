@@ -1,0 +1,115 @@
+"""Campaign selection uses server workflow facts and exact artifact/attempt identities."""
+
+import copy
+import unittest
+
+from linux_release.campaign.provenance import (
+    select_control,
+    select_plan,
+    select_final,
+    select_qualification,
+    verify_producer,
+)
+
+
+class PublicationProvenanceTests(unittest.TestCase):
+    def fixture(self):
+        run = {"id": 123, "repository": {"id": 42, "full_name": "owner/repo"},
+               "head_repository": {"id": 42}, "head_sha": "a" * 40, "run_attempt": 2,
+               "path": ".github/workflows/release.yml", "head_branch": "main",
+               "event": "workflow_dispatch", "status": "completed", "conclusion": "success"}
+        artifact = {"id": 456, "name": "linux-installed-control-inputs", "expired": False,
+                    "size_in_bytes": 100, "digest": "sha256:" + "b" * 64,
+                    "workflow_run": {"id": 123, "repository_id": 42,
+                                     "head_repository_id": 42, "head_sha": "a" * 40}}
+        return run, artifact
+
+    def selection(self, run, rows):
+        calls = []
+        def api(path):
+            calls.append(path)
+            return run if path.endswith("/runs/123") else {"artifacts": rows}
+        return select_control(api, "owner/repo", 42, 123, 456), calls
+
+    def test_selects_exact_server_artifact_then_binds_download_to_source_and_attempt(self):
+        run, artifact = self.fixture()
+        selected, calls = self.selection(run, [artifact])
+        self.assertEqual(selected["artifact_id"], 456)
+        self.assertEqual(selected["artifact_sha256"], "b" * 64)
+        self.assertEqual(len(calls), 2)
+        producer = {"format_version": 1, "repository_id": 42, "run_id": 123, "run_attempt": 2,
+                    "controller_commit": "a" * 40, "source_commit": "c" * 40, "source_tree": "d" * 40}
+        verify_producer(selected, producer, "c" * 40, "d" * 40)
+        for field, value in [("run_attempt", 1), ("source_commit", "e" * 40),
+                             ("source_tree", "e" * 40), ("controller_commit", "e" * 40),
+                             ("format_version", True)]:
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "producer or source"):
+                verify_producer(selected, {**producer, field: value}, "c" * 40, "d" * 40)
+
+    def test_rejects_failed_fork_branch_event_and_workflow_before_artifact_selection(self):
+        run, artifact = self.fixture()
+        for field, value in [("conclusion", "failure"), ("status", "in_progress"),
+                             ("event", "pull_request"), ("head_branch", "feature"),
+                             ("path", ".github/workflows/linux-candidates.yml"),
+                             ("repository", {"id": 41, "full_name": "owner/repo"}),
+                             ("head_repository", {"id": 41}), ("run_attempt", True)]:
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "protected main"):
+                self.selection({**run, field: value}, [artifact])
+
+    def test_rejects_missing_ambiguous_expired_and_mismatched_artifacts(self):
+        run, artifact = self.fixture()
+        for rows in [[], [artifact, artifact], [{**artifact, "expired": True}],
+                     [{**artifact, "digest": None}], [{**artifact, "size_in_bytes": True}],
+                     [{**artifact, "workflow_run": {**artifact["workflow_run"], "head_sha": "e" * 40}}],
+                     [{**artifact, "workflow_run": {**artifact["workflow_run"], "repository_id": 41}}]]:
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                self.selection(run, rows)
+
+    def test_paginates_and_refuses_duplicate_name_on_later_page(self):
+        run, artifact = self.fixture()
+        first = [{"name": "unrelated-" + str(index)} for index in range(99)] + [artifact]
+        def api(path):
+            if path.endswith("/runs/123"):
+                return run
+            return {"artifacts": first if path.endswith("page=1") else [copy.deepcopy(artifact)]}
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            select_control(api, "owner/repo", 42, 123, 456)
+
+    def test_protected_final_and_raw_roles_keep_server_provenance(self):
+        run, original = self.fixture()
+        for selector, name in ((select_final, "linux-final-admission-inputs"),
+                               (select_qualification, "linux-installed-raw-campaign")):
+            artifact = {**original, "name": name}
+            def api(path):
+                return run if path.endswith("/runs/123") else {"artifacts": [artifact]}
+            self.assertEqual(selector(api, "owner/repo", 42, 123)["artifact_id"], 456)
+            run["head_branch"] = "feature"
+            with self.assertRaisesRegex(ValueError, "protected main"):
+                selector(api, "owner/repo", 42, 123)
+            run["head_branch"] = "main"
+
+    def test_control_and_plan_roles_require_the_exact_server_artifact_ids(self):
+        run, final = self.fixture()
+        for selector, name in [(select_control, "linux-installed-control-inputs"),
+                               (select_plan, "linux-installed-qualification-plan")]:
+            artifact = {**final, "name": name}
+            def api(path):
+                return run if path.endswith("/runs/123") else {"artifacts": [artifact]}
+            self.assertEqual(selector(api, "owner/repo", 42, 123, 456)["artifact_id"], 456)
+            for identity in (True, 0, 789):
+                with self.subTest(role=name, identity=identity), self.assertRaises(ValueError):
+                    selector(api, "owner/repo", 42, 123, identity)
+
+
+class DomainArtifactSelectionTests(unittest.TestCase):
+    def test_invalid_domain_binding_cannot_query_artifacts(self):
+        from linux_release.campaign.provenance import artifact_for_run
+        from unittest.mock import Mock
+        api=Mock()
+        for repository,repository_id,run_id,commit,name in [
+                ("owner/repo",True,1,"a"*40,"fixed"),
+                ("owner/repo",1,1,"branch","fixed"),
+                ("owner/repo",1,1,"a"*40,"../untrusted")]:
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                artifact_for_run(api,repository,repository_id,run_id,commit,name)
+        api.assert_not_called()
