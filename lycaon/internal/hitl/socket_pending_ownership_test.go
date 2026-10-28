@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -41,7 +40,7 @@ func TestPendingSocketOwnersCloseAtActualCheckpointTerminalBoundaries(t *testing
 			database := testdbfixture.Open(t, "pending-owner.db")
 			testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, root)
 			ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-			manager := NewCheckpoints(NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+			manager := NewCheckpoints(NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, &fakeAuthzRecorder{})
 			defer func() { testutil.FailErr(t, "stop pending owner", manager.StopExpiryTimers(context.Background())) }()
 			action := ProposedAction{Invocation: ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture"}}, Scope: ActionScope{ProjectID: testdbseed.DefaultProjectID, ProjectDir: root, SessionID: "chat"}, Sockets: ActionSockets{SocketGrants: []confine.SocketGrant{grant}}}
 			_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
