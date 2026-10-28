@@ -1,4 +1,4 @@
-"""Fresh read-only delivery observation after independent installed-release admission."""
+"""Fresh read-only delivery observation after exact-source release admission."""
 from __future__ import annotations
 
 import copy
@@ -21,7 +21,7 @@ def observe(cache: Path, report: dict, *, selection: dict, trust_policy: dict, b
     if getattr(backend, 'public', None) != PUBLIC_CACHE:
         raise ValueError('public cache observation differs from the protected delivery origin')
     if authorize(selection, request, checked, trust_policy=trust_policy) is not True:
-        raise ValueError('public cache observation requires fresh installed-release admission')
+        raise ValueError('public cache observation requires fresh release admission')
     original = record_name(request)
     withdrawn = original + '.withdrawn'
     if backend.read(withdrawn) is not None:
@@ -44,7 +44,7 @@ def observe(cache: Path, report: dict, *, selection: dict, trust_policy: dict, b
     if backend.read(withdrawn) is not None or backend.read(name) != raw:
         raise ValueError('cache release changed or was withdrawn during public observation')
     if authorize(selection, request, checked, trust_policy=trust_policy) is not True:
-        raise ValueError('installed-release admission changed during public cache observation')
+        raise ValueError('release admission changed during public cache observation')
     facts = {'schema_version': 1, 'request': request, 'base_url': PUBLIC_CACHE,
              'closure_sha256': checked['closure_sha256'],
              'objects_sha256': hashlib.sha256(encoded({'objects': checked['objects']})).hexdigest(),

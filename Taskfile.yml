@@ -372,11 +372,6 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
 
-  test:linux:installed:
-    desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
-    cmds:
-      - python3 -m scripts.linux_release.installed_results {{.CLI_ARGS}}
-
   test:confine:linux:
     desc: 'Applied Linux confinement on this architecture: confine live suites, command supervisor, confined pinned browser (--full, linux; optional legs, e.g. -- browser)'
     preconditions:

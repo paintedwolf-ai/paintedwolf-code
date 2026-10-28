@@ -11,7 +11,7 @@ from scripts.linux_release.candidate_repositories import retain
 from scripts.linux_release.native_repositories import assemble
 from scripts.linux_release.openpgp import ephemeral
 from scripts.linux_release.repository_validation import admit
-from scripts.linux_release.signing import digest
+from scripts.linux_release.signing import digest, sign
 from scripts.verification_tests.distribution.native_repository_fixtures import (
     NATIVE, PACKAGE, TESTDATA, inputs, manifest, native_tools)
 
@@ -53,6 +53,13 @@ class NativeRepositoryAssemblyTests(unittest.TestCase):
                 self.assertEqual(package["sha256"] != package["input_sha256"], family == "rpm")
                 self.assertTrue(package["file"].startswith("pool/" + package["sha256"] + "/"))
                 self.assertFalse((directory / ".signing").exists())
+        # A release RPM signed under the selected key enters the pool as the published bytes.
+        signed = self.inputs / NATIVE["rpm"]
+        sign("rpm", signed, signed, self.catalog, self.private, True)
+        receipt, directory = self.assemble("rpm", manifest("rpm", self.inputs), self.work / "signed-generation")
+        admit(receipt, directory, self.catalog, True)
+        [package] = receipt["packages"]
+        self.assertEqual((package["input_sha256"], package["sha256"]), (digest(signed), digest(signed)))
         release = (self.work / "deb-generation/dists/preview/Release").read_text()
         self.assertIn("Acquire-By-Hash: yes", release)
         self.assertEqual(json.loads(self.catalog.read_text())["rehearsal"], True)

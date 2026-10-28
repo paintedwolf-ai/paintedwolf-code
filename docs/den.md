@@ -90,8 +90,9 @@ It combines user capabilities, installation modes, architectures and named
 representative environments. Its expansion in
 [`scripts/linux_release/support_matrix.py`](../scripts/linux_release/support_matrix.py) assigns
 each required row a stable identity, scenarios, implementing issues and required
-execution tier. Qualification and release admission must consume these same rows;
-they must not maintain independent workflow inventories.
+execution tier. Native field qualification consumes these same rows and must not
+maintain an independent workflow inventory. It is milestone evidence; release
+admission is the shared exact-source Qualification record.
 
 Conversation semantics, including provider setup, tool receipts and durable reply
 recovery, are qualified once at 100% scaling for each required environment,

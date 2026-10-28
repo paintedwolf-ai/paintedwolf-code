@@ -66,8 +66,8 @@ jobs:
       - name: Install the pinned Tauri CLI for pointer signing
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
-      - name: Install minisign for cryptographic feed verification
-        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Install feed and repository verification tools
+        run: sudo apt-get update && sudo apt-get install -y minisign gnupg rpm apt-utils createrepo-c libarchive-tools zstd
       - name: Prove all retained feed signing credentials
         run: python3 scripts/feed_signing.py --check-credentials
       - name: Prepare and validate every affected updater feed
@@ -94,9 +94,23 @@ jobs:
         run: |
           python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
             --output "${RUNNER_TEMP}/withdrawal.json"
+      - name: Prepare Linux repository withdrawal
+        id: linux_plan
+        env:
+          BAD_VERSION: ${{ inputs.bad_version }}
+          LAST_GOOD_VERSION: ${{ inputs.last_good_version }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal prepare \
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" --bad "${BAD_VERSION}" \
+            --last-good "${LAST_GOOD_VERSION}" --base-url "${DOWNLOAD_BASE_URL}"
       - name: Halt all affected updater feeds
         if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
         run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"
+      - name: Restore the retained Linux repository generations
+        if: ${{ !cancelled() && !inputs.dry_run && steps.linux_plan.outcome == 'success' }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal apply \
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" --base-url "${DOWNLOAD_BASE_URL}"
       - name: Withdraw package and website discovery
         if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
         run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
@@ -109,6 +123,7 @@ jobs:
             ${{ runner.temp }}/halt-plan.json
             ${{ runner.temp }}/halt-distribution.json
             ${{ runner.temp }}/withdrawal.json
+            ${{ runner.temp }}/linux-withdrawal.json
             ${{ runner.temp }}/prepared-halt/
           retention-days: 90
           if-no-files-found: ignore

@@ -126,8 +126,8 @@ jobs:
           sudo -H --preserve-env=PATH -u pw-aur ./task release:publish:aur-recipe -- prepare \
             --input-root /tmp/aur-inputs --source-commit "$SOURCE_COMMIT" \
             --operation "$OPERATION" --receipt /tmp/aur-output/delivery.json
-          # Public transport remains closed until the controller reevaluates the retained
-          # campaign and files and authorizes publish-aur separately from binary activation.
+          # Public transport stays closed: publish-aur is authorized only by aur_release_authority
+          # against the qualified release, its final files and its published pacman generations.
 
       - name: Retain the prepared recipe and delivery facts
         if: ${{ always() }}

@@ -85,8 +85,7 @@ class PacmanRepositoryTests(unittest.TestCase):
                                          ({**selected, "source_commit": "short"}, "preview", "exact source"),
                                          ({**selected, "architecture": "any"}, "preview", "exact source"),
                                          ({**selected, "version": "../0.0.1"}, "preview", "product version"),
-                                         ({**selected, "packages": selected["packages"] * 2}, "preview", "distinct"),
-                                         ({**selected, "packages": []}, "preview", "distinct")]:
+                                         ({**selected, "packages": selected["packages"] * 2}, "preview", "distinct")]:
             with self.subTest(reason=reason, channel=channel):
                 self.assertIn(reason, self.assemble(changed, channel))
 

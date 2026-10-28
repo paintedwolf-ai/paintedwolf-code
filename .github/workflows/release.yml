@@ -184,7 +184,9 @@ jobs:
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
-    needs: [classify, ship-gates, aggregate-release]
+    # Every Linux generation is assembled before any publication credential is materialized,
+    # so a failed assembly refuses the release here and the lane stays at two runners.
+    needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
@@ -381,7 +383,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
-            rpm rpmlint lintian cpio libarchive-tools
+            rpm rpmlint lintian cpio libarchive-tools gnupg
 
       - name: Import signing certificate and notary key
         if: ${{ matrix.goos == 'darwin' }}
@@ -529,6 +531,18 @@ jobs:
             --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
             --updater-extension "${UPDATER_EXTENSION}" --output "${RUNNER_TEMP}/release"
 
+      - name: Sign Linux packages and rebind their final digests
+        if: ${{ matrix.goos == 'linux' }}
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          PLATFORM: ${{ matrix.updater_key }}
+          ARCH: ${{ matrix.artifact_arch }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_signing --directory "${RUNNER_TEMP}/release" \
+            --platform "${PLATFORM}" --architecture "${ARCH}" --version "${VERSION}" --source-commit "${SOURCE_SHA}"
+
       - name: Upload signed platform result
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -626,6 +640,77 @@ jobs:
           path: public-artifacts/*
           if-no-files-found: error
           retention-days: 14
+
+  # Repository metadata is signed under the same custody as the packages.
+  linux-repositories:
+    needs: [classify, aggregate-release]
+    runs-on: ubuntu-latest
+    environment: release-signing
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Install apt and dnf repository tools
+        run: sudo apt-get update && sudo apt-get install -y gnupg rpm apt-utils createrepo-c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+      - name: Assemble signed apt and dnf generations
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories assemble --family native \
+            --artifacts release-artifacts --version "${VERSION}" --source-commit "${SOURCE_SHA}" \
+            --channel "${CHANNEL}" --output "${RUNNER_TEMP}/linux-native"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-repositories-native
+          path: ${{ runner.temp }}/linux-native
+          if-no-files-found: error
+          retention-days: 90
+
+  # Follows the apt and dnf assembly: both read the same collected artifacts, and the
+  # serial order keeps a release run within its declared two runners.
+  linux-pacman-repositories:
+    needs: [classify, aggregate-release, linux-repositories]
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: release-signing
+    timeout-minutes: 30
+    steps:
+      - name: Install pacman repository tools
+        run: pacman -Syu --noconfirm --needed python git gnupg
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+      - name: Assemble signed pacman generations
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories assemble --family pacman \
+            --artifacts release-artifacts --version "${VERSION}" --source-commit "${SOURCE_SHA}" \
+            --channel "${CHANNEL}" --output "${RUNNER_TEMP}/linux-pacman"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-repositories-pacman
+          path: ${{ runner.temp }}/linux-pacman
+          if-no-files-found: error
+          retention-days: 90
 
   prepare-bundle-upgrade:
     outputs:
@@ -845,8 +930,58 @@ jobs:
             verify_public "upgrade-corpus/${VERSION}/${rel}" "${corpus}"
           done < <(find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f -print0)
 
+  publish-linux-repositories:
+    needs: [classify, ship-gates, publish-immutable, linux-repositories, linux-pacman-repositories]
+    if: ${{ needs.classify.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install repository admission tools
+        run: sudo apt-get update && sudo apt-get install -y gnupg rpm apt-utils createrepo-c libarchive-tools zstd
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repositories-native
+          path: linux-native
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repositories-pacman
+          path: linux-pacman
+      - name: Publish the apt, dnf and pacman generations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories publish \
+            --generations linux-native --generations linux-pacman --artifacts release-artifacts \
+            --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
+            --base-url "${DOWNLOAD_BASE_URL}"
+
+  # Follows the Linux activation so publication holds one runner beside the candidate build.
   update-cask:
-    needs: [classify, publish-immutable]
+    needs: [classify, publish-immutable, publish-linux-repositories]
     runs-on: ubuntu-latest
     environment: release-publication
     steps:
@@ -885,7 +1020,7 @@ jobs:
           git push
 
   notify-website:
-    needs: [classify, publish-immutable, update-cask]
+    needs: [classify, publish-immutable, update-cask, publish-linux-repositories]
     runs-on: ubuntu-latest
     environment: release-publication
     timeout-minutes: 65
