@@ -131,8 +131,8 @@ class ShellInventoryFactsTests(unittest.TestCase):
 
     def banner(self, path='banner', *, matched=True, states=(11, 12, 13, 14)):
         banner = self.node(path, self.app, 1, states=states)
-        self.node(path+'-title', banner, 2, name='public title' if matched else 'private unmatched title')
-        self.node(path+'-body', banner, 2, name='public body' if matched else 'private unmatched body')
+        self.node(path+'_title', banner, 2, name='public title' if matched else 'private unmatched title')
+        self.node(path+'_body', banner, 2, name='public body' if matched else 'private unmatched body')
         return banner
 
     def capture(self):
