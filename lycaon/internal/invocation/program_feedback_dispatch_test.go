@@ -248,7 +248,6 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		t.Fatalf("readonly refusal lost replayability: %s", proj1)
 	}
 
-	// 2. Scope denial (MOVE_PATH_DENIED), 3. Stale destination (TEXT_WRITE_CONFLICT), 4. Deferred domain tool (TOOL_NOT_OFFERED with tool_loadable=true).
 	cases := []struct {
 		op, cmd, code string
 		offered       []string
