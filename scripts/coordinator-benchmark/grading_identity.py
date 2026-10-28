@@ -8,10 +8,11 @@ from snapshot import identity, file_hash
 GRADING_FILES = {'benchmark.json', 'built_runtime.py', 'snapshot.py', 'grading_state.py', 'candidate_process.py', 'execution_evidence.py', 'allowance_evidence.py', 'coordinator_evidence.py', 'fixture_contracts.py', 'fixture-contracts.json', 'sampling.py', 'oracle_process.py', 'focused_outcomes.py', 'focused_evidence.py', 'report.py', 'grade.py', 'outcomes.py', 'candidate_tests.py', 'candidate_cli.py', 'unittest_structure.py', 'worker_evidence.py',
                  'cost_evidence.py', 'verification_evidence.py', 'episode_evidence.py', 'workflow_evidence.py', 'grading_identity.py', 'artifacts.py', 'measurement_cache.py',
                  'ledger.py', 'timestamps.py', 'dispatch_graph.py', 'orchestration_evidence.py', 'decision_evidence.py', 'capability_evidence.py', 'closeout_evidence.py', 'structure.py', 'requirements.txt'}
+GRADING_FILES |= {'portable_command/' + name + '.py' for name in ('__init__', 'contracts', 'artifacts', 'grading', 'live')}
 
 
 def implementation_files(root):
-    return {p.name: file_hash(p) for p in root.iterdir()
+    return {p.relative_to(root).as_posix(): file_hash(p) for p in root.rglob('*')
             if (p.suffix == '.py' and not p.name.startswith('test_')) or p.name in {'benchmark.json', 'fixture-contracts.json', 'fixture-controls.json', 'requirements.txt'}}
 
 
@@ -44,6 +45,7 @@ def retain_grader(run, current, digest):
             staged = pathlib.Path(temporary) / 'grader'
             staged.mkdir()
             for name in sorted(set(implementation_files(current)) | GRADING_FILES):
+                (staged / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(current / name, staged / name)
             if grading_hash(staged) != digest:
                 raise ValueError('grader changed while preserving its source')

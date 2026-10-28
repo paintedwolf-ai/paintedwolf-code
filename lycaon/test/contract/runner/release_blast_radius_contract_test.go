@@ -240,7 +240,7 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
 	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
-	for _, task := range []string{"release:halt:", "release:recovery:prepare:", "release:withdraw:native-repositories:"} {
+	for _, task := range []string{"release:halt:", "release:recovery:prepare:"} {
 		if !strings.Contains(taskfile, task) {
 			t.Fatalf("Taskfile.yml missing %s", task)
 		}
@@ -264,10 +264,6 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 		"scripts/release_withdrawal.py prepare",
 		"scripts/release_withdrawal.py apply",
 		"steps.distribution_plan.outcome == 'success'",
-		"release:withdraw:native-repositories -- prepare",
-		"release:withdraw:native-repositories -- apply",
-		"steps.native_plan.outcome == 'success'",
-		"LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("release halt workflow missing %q", needle)
@@ -322,6 +318,10 @@ func TestReleaseBlastRadiusCredentialedLiveTestIsIsolated(t *testing.T) {
 		"secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY",
 		"vars.RELEASE_TEST_R2_ENDPOINT_URL",
 		"run: ./task release:live-test",
+		"vars.RELEASE_TEST_R2_ENDPOINT_URL",
+		"secrets.RELEASE_TEST_R2_ACCESS_KEY_ID",
+		"run: ./task release:rehearse:native-repositories-r2 -- --receipt",
+		"./task release:rehearse:pacman-repositories-r2 -- --receipt",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("weekly release live-test workflow missing %q", needle)

@@ -55,17 +55,17 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
 			PackageExts: []string{"dmg"}, UpdaterExt: stringPtr("app.tar.gz"),
 		},
-		// Linux installs through the package manager: one .deb and one .rpm per
-		// architecture, and no Tauri updater artifact.
+		// Linux installs through the package manager: one .deb, one .rpm, and one
+		// native pacman package per architecture, and no Tauri updater artifact.
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
@@ -88,9 +88,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
 	for _, needle := range []string{
-		// Native Linux publication collects admitted installed bytes instead of joining the signing matrix.
-		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public" and .goos != "linux")]}' packaging/release-platforms.json)`,
-		`linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)`,
+		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)`,
 		"matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}",
 		"needs: [classify, build-release]",
 		"release-assemble-updater-manifest.py",
@@ -105,20 +103,37 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Linux candidates build both package families natively without publication authority.
-	candidates := extractYAMLJob(workflow, "linux-candidates")
-	for _, needle := range []string{
-		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "./task den:bundle",
-		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90", "Verify the catalog row for this candidate",
-	} {
-		if !strings.Contains(candidates, needle) {
-			t.Fatalf("linux-candidates job is missing %q", needle)
+	// Release and independent candidate runs share one non-publishing build path.
+	call := extractYAMLJob(workflow, "linux-candidates")
+	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
+		if !strings.Contains(call, needle) {
+			t.Fatalf("release candidate caller is missing %q", needle)
 		}
 	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-"} {
+	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
+	for _, needle := range []string{
+		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
+		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
+		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
+		"name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90", "Verify the catalog row for this candidate",
+		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
+		"./task release:candidate:diagnostics --",
+		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
+		"TMPDIR: /tmp",
+	} {
+		if !strings.Contains(candidates, needle) {
+			t.Fatalf("Linux candidate workflow is missing %q", needle)
+		}
+	}
+	// Candidate runs carry no branch-scoped triggers, use one source checkout,
+	// and prepare userns locally without a probe lease.
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
+		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
+		"--package-extensions deb,rpm", "PW_PACKAGE_PROBE_LEASE"} {
 		if strings.Contains(candidates, forbidden) {
-			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
+			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {

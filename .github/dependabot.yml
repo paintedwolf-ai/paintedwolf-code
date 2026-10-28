@@ -7,15 +7,16 @@ updates:
       - "/"
       - "/.github/actions/*"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       github-actions:
         applies-to: version-updates
         patterns:
           - "*"
         update-types:
+          - major
           - minor
           - patch
 
@@ -23,9 +24,9 @@ updates:
     directories:
       - "/lycaon-den"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       bun-dependencies:
         applies-to: version-updates
@@ -46,10 +47,11 @@ updates:
   - package-ecosystem: gomod
     directories:
       - "/lycaon"
+      - "/scripts/commentlint"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       go-dependencies:
         applies-to: version-updates
@@ -62,10 +64,12 @@ updates:
   - package-ecosystem: cargo
     directories:
       - "/lycaon-den/src-tauri"
+      - "/lycaon/internal/decide/native"
+      - "/lycaon/internal/documentcore/native"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       cargo-dependencies:
         applies-to: version-updates
@@ -78,53 +82,4 @@ updates:
       - dependency-name: "ureq"
         update-types:
           - version-update:semver-major
-
-  - package-ecosystem: cargo
-    directories:
-      - "/lycaon/internal/decide/native"
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 3
-    groups:
-      bialy-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: cargo
-    directories:
-      - "/lycaon/internal/documentcore/native"
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 3
-    groups:
-      cargo-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-    ignore:
       - dependency-name: "yrs"
-
-  - package-ecosystem: gomod
-    directories:
-      - "/scripts/commentlint"
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 3
-    groups:
-      go-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
