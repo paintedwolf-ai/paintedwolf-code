@@ -276,13 +276,18 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	})
 	withTestTrustAnchor(t, t.TempDir())
 	testutil.FailErr(t, "initialUserNamespace", initialUserNamespace())
-	caller, err := CaptureCaller()
-	testutil.FailErr(t, "CaptureCaller", err)
+	// The unprivileged test process is its own original caller.
+	groups, err := unix.Getgroups()
+	testutil.FailErr(t, "Getgroups", err)
 	spec := entryFixture()
-	spec.SupervisorPID = os.Getpid()
-	spec.UID = caller.UID
-	spec.GID = caller.GID
-	spec.Groups = caller.Groups
+	// The broker pair's peer is this process, not the supervisor the frame names.
+	spec.SupervisorPID = os.Getppid()
+	spec.UID = uint32(os.Getuid())
+	spec.GID = uint32(os.Getgid())
+	spec.Groups = make([]uint32, len(groups))
+	for i, group := range groups {
+		spec.Groups[i] = uint32(group)
+	}
 	testutil.FailErr(t, "sealBrokerAgentIdentity", sealBrokerAgentIdentity(spec))
 	frame, err := sealEntrySpec(spec)
 	testutil.FailErr(t, "sealEntrySpec", err)
@@ -290,7 +295,7 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	testutil.FailErr(t, "brokerPair", err)
 	defer func() { _ = client.Close() }()
 	if err := runBrokerAgent(frame, server, nil); err == nil {
-		t.Fatal("expected runBrokerAgent to reject non-root peer socket")
+		t.Fatal("expected runBrokerAgent to reject a peer other than the named supervisor")
 	}
 	badFrame, err := os.Open("/dev/null")
 	testutil.FailErr(t, "open /dev/null", err)
