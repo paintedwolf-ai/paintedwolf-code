@@ -21,23 +21,6 @@
     "allow-den-notify-request-permission",
     "allow-den-notify-send",
     "allow-den-notify-cancel-sessions",
-    {
-      "identifier": "shell:allow-open",
-      "allow": [
-        {
-          "url": "https://*"
-        },
-        {
-          "url": "http://*"
-        },
-        {
-          "url": "mailto:*"
-        },
-        {
-          "url": "tel:*"
-        }
-      ]
-    },
     "allow-read-app-state",
     "allow-patch-app-state",
     "allow-document-outbox",
