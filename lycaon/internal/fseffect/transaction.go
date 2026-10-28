@@ -64,7 +64,9 @@ type ReplaceRequest struct {
 // BeforeCommit verifies the selected regular file.
 type RemoveRequest struct {
 	Location
-	BeforeCommit func(Target) error
+	// directoryIdentity is the Windows empty-directory guard.
+	directoryIdentity string
+	BeforeCommit      func(Target) error
 }
 
 // ModeUpdateRequest describes a guarded permission change on one held entry.

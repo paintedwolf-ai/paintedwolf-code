@@ -456,6 +456,14 @@ func Remove(req RemoveRequest) error {
 	if err != nil {
 		return err
 	}
+	if req.directoryIdentity != "" {
+		identity, idErr := fspath.EntryIdentityHandle(handle)
+		info, statErr := (windowsHandleTarget{handle: handle, path: filepath.Join(parent.path, parent.name)}).Lstat()
+		if idErr != nil || statErr != nil || !info.IsDir() || identity != req.directoryIdentity {
+			_ = windows.CloseHandle(handle)
+			return ErrPostcondition
+		}
+	}
 	if req.BeforeCommit != nil {
 		target := windowsHandleTarget{handle: handle, path: filepath.Join(parent.path, parent.name)}
 		info, statErr := target.Lstat()
