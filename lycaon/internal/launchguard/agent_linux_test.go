@@ -332,11 +332,27 @@ func checkModuleWatcherSeal() error {
 	return verifyWatcherThreads(os.Getpid(), wantUID, wantGID, wantGroups)
 }
 
+// childUsernsCaller is the identity the user-namespace probe seals itself to.
+var childUsernsCaller = Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
+
 func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
 	args := []string{"-test.run=^TestChildUserNamespaceMountSetattrRefused$"}
 	// A coverage build reports the child's counters beside the fixture's own.
+	// The child exits sealed to childUsernsCaller without CAP_DAC_OVERRIDE, so
+	// it writes into a directory that identity owns and the fixture moves the
+	// files up afterwards.
+	childCover := ""
 	if coverDir := os.Getenv("GOCOVERDIR"); testing.CoverMode() != "" && coverDir != "" {
-		args = append(args, "-test.gocoverdir="+coverDir)
+		dir, err := os.MkdirTemp(coverDir, "userns-child-")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		if err := os.Chown(dir, int(childUsernsCaller.UID), int(childUsernsCaller.GID)); err != nil {
+			return err
+		}
+		childCover = dir
+		args = append(args, "-test.gocoverdir="+dir)
 	}
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = append(os.Environ(), "PW_WATCHER_CHILD_USERNS_MOUNT="+mountPoint)
@@ -349,6 +365,24 @@ func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("child userns mount_setattr probe failed: %w: %s", err, out)
+	}
+	if childCover == "" {
+		return nil
+	}
+	return collectChildCoverage(childCover)
+}
+
+// collectChildCoverage moves the probe's coverage files into the shared
+// children directory that dir was created under.
+func collectChildCoverage(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := os.Rename(filepath.Join(dir, entry.Name()), filepath.Join(filepath.Dir(dir), entry.Name())); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -372,7 +406,7 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 	if err := watcherUserNamespace(); err != nil {
 		t.Fatalf("watcherUserNamespace in (U_view, M_view): %v", err)
 	}
-	caller := Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
+	caller := childUsernsCaller
 	if err := sealModuleWatcher(caller); err != nil {
 		t.Fatalf("sealModuleWatcher in (U_view, M_view): %v", err)
 	}
