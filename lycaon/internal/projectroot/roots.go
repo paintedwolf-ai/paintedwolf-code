@@ -84,7 +84,7 @@ func ActiveRoot(roots []RootRef, activeRootID string) (RootRef, error) {
 
 // IsUnionDiscoveryPath reports whether find/grep/list_dir should walk every root.
 func IsUnionDiscoveryPath(path string) bool {
-	p := strings.TrimSpace(path)
+	p := path
 	return p == "" || p == "." || p == "./"
 }
 
@@ -96,7 +96,7 @@ func ResolveAbs(roots []RootRef, activeRootID, path string) (abs string, root Ro
 	if strings.ContainsRune(path, 0) {
 		return "", RootRef{}, fmt.Errorf("path contains NUL byte")
 	}
-	raw := strings.TrimSpace(path)
+	raw := path
 	if raw == "" {
 		return "", RootRef{}, ErrNoProjectRoots
 	}

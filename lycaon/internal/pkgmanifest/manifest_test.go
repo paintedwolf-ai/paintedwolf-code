@@ -98,11 +98,13 @@ func TestLoadRefusesTrailingDataAndMissingFiles(t *testing.T) {
 }
 
 func TestLoadReportsAForeignFormatVersion(t *testing.T) {
-	manifestPath, _ := fixture(t, func(m map[string]any) { m["format_version"] = 7 })
-	_, err := pkgmanifest.Load(manifestPath)
-	var unsupported *pkgmanifest.UnsupportedFormatError
-	if !errors.As(err, &unsupported) || unsupported.Found != 7 {
-		t.Fatalf("Load with format_version 7 = %v, want *UnsupportedFormatError{Found: 7}", err)
+	for _, version := range []int{0, 1, 7} {
+		manifestPath, _ := fixture(t, func(m map[string]any) { m["format_version"] = version })
+		_, err := pkgmanifest.Load(manifestPath)
+		var unsupported *pkgmanifest.UnsupportedFormatError
+		if !errors.As(err, &unsupported) || unsupported.Found != version {
+			t.Fatalf("Load with format_version %d = %v, want *UnsupportedFormatError{Found: %d}", version, err, version)
+		}
 	}
 }
 

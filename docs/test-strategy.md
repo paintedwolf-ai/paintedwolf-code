@@ -138,7 +138,7 @@ and import manifests, so a split file never leaves them inspecting an empty entr
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-`check-fast` and `check` run them, and CI runs them in the `limits` lane with
+`check-fast` and `check` run them, and CI runs them in the ready tier and the merge group's `limits` lane with
 the same rules and the same words, so CI says nothing `check-fast` did not.
 
 ### Size budgets
@@ -710,10 +710,10 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
 job, `ready`: it first runs the complete repository contract tree, then compiles
-the host and runs `lint:full`, size budgets, Go changed coverage, comment checks,
+the host and runs `lint:full`, size budgets, Go, Den, and scripts changed coverage, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
-Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests
-and Den changed coverage. Admission uses `test:contract -- ./test/contract/...`
+Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
+Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
 remaining work. Catalog validation accepts
 the complete contract tree or existing contract packages and rejects selectors,
@@ -740,7 +740,7 @@ features, resources, and all test targets. The single admission job provisions
 shell inputs only when Den compilation is selected. This adds real compilation
 cost to affected PRs; it does not claim a full native build is inexpensive.
 
-The merge queue runs changed coverage and the complete affected integration
+The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
 selection. Its `limits` and `lint` lanes start first, and the group stops at its
 first failure. The PR's pass does not replace verification of the landing commit.
 
@@ -1296,7 +1296,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
@@ -1311,9 +1311,12 @@ fifteen minutes.
 
 Linux package construction is a reusable workflow. Release calls consume the
 release class's existing two-runner footprint without entering maintenance.
-Weekly, manual, and ready packaging pull requests share the maintenance class's
-single runner through `linux-candidate-requests.yml`. Its path filter includes
-packaging, native setup, release builders, and toolchain inputs. Pending standalone
+Weekly, manual, and ready packaging pull requests into `main` share the
+maintenance class's single runner through `linux-candidate-requests.yml`. Its
+path filter includes packaging, native setup, release builders, and toolchain
+inputs. A pull request into another branch builds nothing: its head cannot land,
+and each push would hold the shared executor for a full package build while the
+queue coordinator and health report wait behind it. Pending standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 

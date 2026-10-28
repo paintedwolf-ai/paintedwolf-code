@@ -969,7 +969,9 @@
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast"
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1319,6 +1321,8 @@
       "release.yml": 2,
       "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,

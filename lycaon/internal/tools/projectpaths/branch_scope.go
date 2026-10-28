@@ -14,7 +14,7 @@ import (
 )
 
 func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, branch, modelPath string, op sandbox.PathOp) (Resolved, error) {
-	modelPath = strings.TrimSpace(modelPath)
+	// Keep operand bytes; whitespace may name a real entry.
 	if modelPath == "" {
 		return Resolved{}, fmt.Errorf("path required")
 	}
@@ -119,7 +119,7 @@ func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel str
 	if err := branch.ValidateMeta(ctx); err != nil {
 		return err
 	}
-	rel := strings.TrimSpace(scopeRel)
+	rel := scopeRel
 	if rel == "" || rel == "." {
 		return nil
 	}
@@ -130,7 +130,7 @@ func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel str
 }
 
 func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, cwdArg string) (abs, display string, err error) {
-	cwdArg = strings.TrimSpace(cwdArg)
+	// Cwd is an exact operand, not display text.
 	if cwdArg == "" {
 		return branch, ".", nil
 	}

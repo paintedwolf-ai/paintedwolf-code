@@ -317,6 +317,17 @@ pub fn ipc_finish_item_window_drag(
             &app, &target, "leave", &label, &view, position_x, position_y,
         );
     }
+    promote_pending_drag(&app, &drag_window, &view)?;
+    Ok(true)
+}
+
+/// A pending drag window becomes an ordinary item window holding its view.
+pub(super) fn promote_pending_drag(
+    app: &AppHandle,
+    drag_window: &WebviewWindow,
+    view: &ItemWindowView,
+) -> Result<(), String> {
+    let label = drag_window.label().to_string();
     drag_window
         .set_ignore_cursor_events(false)
         .map_err(|err| err.to_string())?;
@@ -337,12 +348,32 @@ pub fn ipc_finish_item_window_drag(
         .lock()
         .map_err(|_| "item window registry lock poisoned".to_string())?
         .insert(label.clone(), view.clone());
-    seed_item_window_presentation(&label, &view)?;
-    emit_item_window_views_changed(&app);
-    emit_workspace_view_presentations_changed(&app);
+    seed_item_window_presentation(&label, view)?;
+    emit_item_window_views_changed(app);
+    emit_workspace_view_presentations_changed(app);
     let _ = drag_window.show();
     let _ = drag_window.set_focus();
-    Ok(true)
+    Ok(())
+}
+
+/// The view a pending drag window was built for, without checking its initiator.
+#[cfg(target_os = "linux")]
+pub(super) fn pending_view(label: &str) -> Option<ItemWindowView> {
+    PENDING_ITEM_WINDOW_DRAGS
+        .lock()
+        .ok()
+        .and_then(|drags| drags.get(label).map(|drag| drag.view.clone()))
+}
+
+/// Closes a pending drag window that will not hold its view.
+#[cfg(target_os = "linux")]
+pub(super) fn close_pending_drag(app: &AppHandle, label: &str) {
+    if let Ok(mut drags) = PENDING_ITEM_WINDOW_DRAGS.lock() {
+        drags.remove(label);
+    }
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.close();
+    }
 }
 
 #[tauri::command(rename = "cancel_item_window_drag")]
