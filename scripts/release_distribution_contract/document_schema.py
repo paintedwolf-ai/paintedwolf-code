@@ -60,7 +60,7 @@ def url(value, origin):
 
 def artifact(row, origin):
     exact(row, ARTIFACT)
-    require(isinstance(row["file"], str) and re.fullmatch(r"[A-Za-z0-9+._-]+", row["file"]),
+    require(isinstance(row["file"], str) and re.fullmatch(r"[A-Za-z0-9+._~-]+", row["file"]),
             "invalid distribution artifact name")
     url(row["url"], origin)
     require(PurePosixPath(urlsplit(row["url"]).path).name == row["file"], "distribution artifact URL name differs")
