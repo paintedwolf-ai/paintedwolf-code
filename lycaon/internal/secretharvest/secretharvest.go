@@ -10,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -46,7 +45,7 @@ func (v Value) Secret() string { return v.secret }
 type Runtime struct {
 	mu sync.RWMutex
 	// Eviction would remove active screening evidence.
-	fileStore    *credentialstore.Store
+	fileStore    fileValueStore
 	byFile       map[fileIdentity]map[string]Value
 	retiredFiles map[string]map[string]Value
 	bySession    map[string]map[string]Value // root session → secret → Value

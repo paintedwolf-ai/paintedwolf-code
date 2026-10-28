@@ -167,7 +167,7 @@ func TestVaultRefusesGrowthBeyondReadableLimit(t *testing.T) {
 	testutil.FailErr(t, "seed vault", store.Set("project", "retained"))
 	before, err := os.ReadFile(path)
 	testutil.FailErr(t, "capture vault", err)
-	if err := store.Set("project", strings.Repeat("x", maxVaultBytes)); err == nil {
+	if err := store.Set("project", strings.Repeat("x", MaxPlaintextBytes)); err == nil {
 		t.Fatal("unreadable vault size was committed")
 	}
 	after, err := os.ReadFile(path)

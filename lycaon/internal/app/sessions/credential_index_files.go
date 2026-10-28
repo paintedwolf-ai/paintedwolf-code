@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,23 @@ import (
 
 const credentialFileBytes = 16 << 20
 
-func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path string) error {
+func (i *credentialIndex) refresh(ctx context.Context, root *credentialRoot, paths []string) error {
+	capture := i.files.harvest.CaptureFiles(root.projectID)
+	staged := *root
+	staged.known = maps.Clone(root.known)
+	for _, path := range paths {
+		if err := i.scan(ctx, &staged, path, capture); err != nil {
+			return err
+		}
+	}
+	if err := capture.Commit(); err != nil {
+		return err
+	}
+	root.known = staged.known
+	return nil
+}
+
+func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path string, capture *secretharvest.FileCapture) error {
 	path = filepath.ToSlash(filepath.Clean(path))
 	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
 		return errors.New("credential index path leaves root")
@@ -63,7 +80,7 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 		if !entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0 || !protectedpath.IsCredentialFile(rel) || repochange.IsPrivatePath(abs) {
 			return nil
 		}
-		if err := i.read(ctx, root, rel); err != nil {
+		if err := i.read(ctx, root, rel, capture); err != nil {
 			return err
 		}
 		seen[rel], root.known[rel] = true, true
@@ -75,7 +92,7 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 	for known := range root.known {
 		inScope := path == "." || known == path || strings.HasPrefix(known, path+"/")
 		if inScope && !seen[known] {
-			if err := i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: known}); err != nil {
+			if err := capture.Observe(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: known}); err != nil {
 				return err
 			}
 			delete(root.known, known)
@@ -84,10 +101,10 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 	return nil
 }
 
-func (i *credentialIndex) read(ctx context.Context, root *credentialRoot, path string) error {
+func (i *credentialIndex) read(ctx context.Context, root *credentialRoot, path string, capture *secretharvest.FileCapture) error {
 	file, err := fseffect.OpenRead(fseffect.Location{Root: root.path, Rel: path})
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return capture.Observe(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path})
 	}
 	if err != nil {
 		return err
@@ -113,10 +130,10 @@ func (i *credentialIndex) read(ctx context.Context, root *credentialRoot, path s
 	if text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(credentialFileBytes)); err == nil {
 		raw = []byte(text)
 	}
-	return i.observe(ctx, root, path, raw)
+	return i.observe(ctx, root, path, raw, capture)
 }
 
-func (i *credentialIndex) observe(ctx context.Context, root *credentialRoot, path string, raw []byte) error {
+func (i *credentialIndex) observe(ctx context.Context, root *credentialRoot, path string, raw []byte, capture *secretharvest.FileCapture) error {
 	held := i.files.managedFingerprints(root.projectID)
 	authored, err := i.files.queries.ListCredentialAuthoredValues(ctx, db.ListCredentialAuthoredValuesParams{ProjectID: root.projectID, RootID: root.id, Path: path})
 	if err != nil {
@@ -125,14 +142,15 @@ func (i *credentialIndex) observe(ctx context.Context, root *credentialRoot, pat
 	for _, fingerprint := range authored {
 		held[secretmatch.SecretFingerprint(fingerprint)] = true
 	}
-	return i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path, Content: raw, Held: func(fp secretmatch.SecretFingerprint) bool { return held[fp] }})
+	return capture.Observe(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path, Content: raw, Held: func(fp secretmatch.SecretFingerprint) bool { return held[fp] }})
 }
 
 func (i *credentialIndex) withdraw(root *credentialRoot) error {
+	capture := i.files.harvest.CaptureFiles(root.projectID)
 	for path := range root.known {
-		if err := i.files.harvest.ObserveFile(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path}); err != nil {
+		if err := capture.Observe(secretharvest.FileContent{ProjectID: root.projectID, RootID: root.id, Path: path}); err != nil {
 			return err
 		}
 	}
-	return nil
+	return capture.Commit()
 }

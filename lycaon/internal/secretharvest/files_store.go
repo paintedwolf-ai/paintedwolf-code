@@ -10,8 +10,14 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 )
+
+type fileValueStore interface {
+	IDs() []string
+	Get(string) (credentialstore.SecretValue, bool)
+	Set(string, string) error
+	Delete(string) error
+}
 
 type storedBinding struct {
 	Name      string `json:"name"`
@@ -24,7 +30,7 @@ type storedProject struct {
 }
 
 // RestoreFiles restores retained bytes; discovery establishes current bindings.
-func (r *Runtime) RestoreFiles(store *credentialstore.Store) error {
+func (r *Runtime) RestoreFiles(store fileValueStore) error {
 	projects := map[string]map[string]Value{}
 	for _, project := range store.IDs() {
 		raw, _ := store.Get(project)
@@ -42,7 +48,9 @@ func (r *Runtime) RestoreFiles(store *credentialstore.Store) error {
 			if binding.Secret == "" || binding.Container == "" {
 				return errors.New("invalid credential-file binding")
 			}
-			values[binding.Secret] = Value{Name: binding.Name, Container: binding.Container, Fingerprint: r.fp.Fingerprint(binding.Secret), RuleID: secretmatch.HarvestRuleID, Title: "A value from " + binding.Container, Source: secretmatch.SourceContainerHarvest, secret: binding.Secret, Retired: true}
+			value := r.fileValue(binding)
+			value.Retired = true
+			values[binding.Secret] = value
 		}
 		projects[project] = values
 	}
@@ -53,16 +61,24 @@ func (r *Runtime) RestoreFiles(store *credentialstore.Store) error {
 	return nil
 }
 
-func (r *Runtime) persistFileLocked(key fileIdentity, current map[string]Value) error {
+func (r *Runtime) persistFilesLocked(project string, files map[fileIdentity]map[string]Value, retired map[string]Value) error {
 	if r.fileStore == nil {
 		return nil
 	}
 	unique := map[string]Value{}
-	for _, value := range r.fileValuesLocked(key.project) {
-		unique[value.secret] = value
+	remember := func(value Value) {
+		prior, ok := unique[value.secret]
+		if !ok || value.Container < prior.Container || value.Container == prior.Container && value.Name < prior.Name {
+			unique[value.secret] = value
+		}
 	}
-	for secret, value := range current {
-		unique[secret] = value
+	for _, value := range retired {
+		remember(value)
+	}
+	for _, values := range files {
+		for _, value := range values {
+			remember(value)
+		}
 	}
 	doc := storedProject{Format: 1, Values: make([]storedBinding, 0, len(unique))}
 	for _, value := range unique {
@@ -73,11 +89,14 @@ func (r *Runtime) persistFileLocked(key fileIdentity, current map[string]Value) 
 	if err != nil {
 		return err
 	}
-	previous, ok := r.fileStore.Get(key.project)
+	previous, ok := r.fileStore.Get(project)
+	if !ok && len(doc.Values) == 0 {
+		return nil
+	}
 	if ok && previous.Value() == string(raw) {
 		return nil
 	}
-	return r.fileStore.Set(key.project, string(raw))
+	return r.fileStore.Set(project, string(raw))
 }
 
 // ForgetProject removes evidence only after explicit project deletion.

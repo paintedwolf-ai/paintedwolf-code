@@ -106,7 +106,7 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 		coverageStale := root.coverageExpired(repochange.Coverage(root.path), time.Now())
 		if !root.ready || coverageStale || !repochange.EpochCurrent(root.path, root.epoch) {
 			epoch := repochange.CurrentEpoch(root.path)
-			if err := i.scan(ctx, root, "."); err != nil {
+			if err := i.refresh(ctx, root, []string{"."}); err != nil {
 				root.ready = false
 				return fmt.Errorf("credential-file index: %w", err)
 			}
@@ -145,11 +145,9 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 			paths = []string{"."}
 			epoch = repochange.CurrentEpoch(root.path)
 		}
-		for _, path := range paths {
-			if err := i.scan(ctx, root, path); err != nil {
-				root.ready = false
-				return err
-			}
+		if err := i.refresh(ctx, root, paths); err != nil {
+			root.ready = false
+			return err
 		}
 		root.ready, root.epoch = true, epoch
 		if len(paths) == 1 && paths[0] == "." {
