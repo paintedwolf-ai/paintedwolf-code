@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/datetext"
 	"mvdan.cc/sh/v3/pattern"
 )
 
@@ -261,8 +262,8 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 	case "-printf":
 		r.actions = true
 		return r.printfPrimary(value)
-	case "-newer":
-		return r.newerTest(value)
+	case "-newer", "-neweraa", "-neweram", "-newerac", "-newerat", "-newerma", "-newermm", "-newermc", "-newermt", "-newerca", "-newercm", "-newercc", "-newerct":
+		return r.newerTest(option.Key, value)
 	case "-prune":
 		return test(func(r *findRun, e entry) (bool, error) {
 			r.pruned = true
@@ -400,7 +401,8 @@ func (r *findRun) depthTest(value string) (*findNode, error) {
 	return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) { return compare(int64(e.depth), n), nil }}, nil
 }
 
-// timeOf selects the timestamp an age primary reads.
+// timeOf selects the timestamp an age or newer primary reads from its key's
+// second byte: a for access, c for change, anything else modification.
 func timeOf(key string) func(fseffect.EntryStat) time.Time {
 	switch key[1] {
 	case 'a':
@@ -411,18 +413,39 @@ func timeOf(key string) func(fseffect.EntryStat) time.Time {
 	return func(st fseffect.EntryStat) time.Time { return st.ModTime }
 }
 
-func (r *findRun) newerTest(value string) (*findNode, error) {
+// newerTest is -newer REF and -newerXY REF: the entry's X time (access,
+// modification or change) is after REF's Y time, or after the date REF when
+// Y is t. -newer is -newermm. Dates read in the program's TZ.
+func (r *findRun) newerTest(key, value string) (*findNode, error) {
 	inv := r.inv
+	entryTime := timeOf("-" + key[6:7])
+	if key == "-newer" {
+		entryTime = timeOf("-m")
+	}
+	if key[len(key)-1] == 't' {
+		reference, err := datetext.Parse(value, r.now, datetext.Zone(inv.request.Environment))
+		if err != nil {
+			inv.fail(false, "I cannot figure out how to interpret '%s' as a date or time", value)
+			return nil, errFindAbort
+		}
+		return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) {
+			return entryTime(e.stat).After(reference), nil
+		}}, nil
+	}
+	referenceTime := timeOf("-m")
+	if key != "-newer" {
+		referenceTime = timeOf("-" + key[7:8])
+	}
 	bound, err := inv.paths.Bind(inv.ctx, value, false)
 	if err == nil && bound.Null {
-		err = inv.usage(value, "a file for -newer")
+		err = inv.usage(value, "a file for "+key)
 	}
 	if err == nil {
 		stat, statErr := bound.Stat(true)
 		if statErr == nil {
-			reference := stat.ModTime
+			reference := referenceTime(stat)
 			return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) {
-				return e.stat.ModTime.After(reference), nil
+				return entryTime(e.stat).After(reference), nil
 			}}, nil
 		}
 		err = statErr

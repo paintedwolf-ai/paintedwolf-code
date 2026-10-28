@@ -82,7 +82,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
 		return nil, err
 	}
-	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, t.boundary)
 	if err != nil {
 		return nil, err
 	}

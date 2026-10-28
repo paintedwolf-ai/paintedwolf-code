@@ -407,6 +407,8 @@ func captureNativePaths(ctx context.Context, p *projectpaths.ProgramPaths, opera
 	return output.Bytes(), err
 }
 
+// An invalid conversion delivers no prefix; a realpath operand that does not
+// resolve is an ordinary status-one failure after the operands that did.
 func TestPathStreamingSeparatesDeliveredPrefixFromCompleteness(t *testing.T) {
 	tc, root := readSessionContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
@@ -416,11 +418,12 @@ func TestPathStreamingSeparatesDeliveredPrefixFromCompleteness(t *testing.T) {
 	if err == nil || output.Len() != 0 || result.PublicationEligible {
 		t.Fatalf("invalid conversion exposed unvalidated prefix: output=%q result=%+v err=%v", output.String(), result, err)
 	}
-	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Argv: pathArgv("realpath", "--", "a.go", "missing")}, commandprogram.Streams{Output: &output})
-	if !errors.Is(err, os.ErrNotExist) || output.String() != filepath.Join(fspath.CanonicalPath(root), "a.go")+"\n" || result.Complete || result.PublicationEligible || result.Terminal != toolcontract.ProducerFailed {
-		t.Fatalf("partial output reported complete: output=%q result=%+v err=%v", output.String(), result, err)
+	var errOutput bytes.Buffer
+	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Argv: pathArgv("realpath", "--", "a.go", "missing/x")}, commandprogram.Streams{Output: &output, Error: &errOutput})
+	if err != nil || output.String() != filepath.Join(fspath.CanonicalPath(root), "a.go")+"\n" || errOutput.String() != "realpath: missing/x: No such file or directory\n" || result.Status != 1 || !result.Complete || result.PublicationEligible {
+		t.Fatalf("operand failure: output=%q stderr=%q result=%+v err=%v", output.String(), errOutput.String(), result, err)
 	}
-	testutil.FailErr(t, "validate incomplete producer", result.Validate())
+	testutil.FailErr(t, "validate ordinary failure", result.Validate())
 }
 
 func pathArgv(name string, args ...string) commandprogram.Fields {

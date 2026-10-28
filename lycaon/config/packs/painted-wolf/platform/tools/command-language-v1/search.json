@@ -1687,6 +1687,150 @@
           "fixture_id": "find-option-false",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-neweraa"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-neweraa",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-neweram"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-neweram",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerac"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerac",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerat"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newerat",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerma"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerma",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermm"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newermm",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermc"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newermc",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermt"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newermt",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerca"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerca",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newercm"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newercm",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newercc"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newercc",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerct"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newerct",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. find [PATH ...] [EXPRESSION]",
@@ -1752,7 +1896,7 @@
           }
         }
       },
-      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent. -iregex is -regex with Unicode simple case folding; -mmin is -mtime in minutes; -perm MODE matches exact octal permission bits, -MODE all of them and /MODE any of them; -user takes a numeric uid (names are not resolved) and refuses where the platform has no POSIX owners; -printf supports %p %f %h %P %s %d %y %m %U %G %T@ %% and the escapes \\n \\t \\0 \\\\, refusing other directives. GNU, BSD and busybox spellings with one meaning are all accepted: BSD's leading -E (extended -regex, already the dialect) and -s (sorted, already the order); -x, -xdev and -mount stay on the starting point's device; -P never follows links (the default), -H follows command-line links and -L/-follow every contained link with loop detection (a followed link is its target, so -type l then matches only unreachable links); -d and -depth visit depth first, and BSD's -depth N is a depth test when a number follows; -amin, -cmin, -atime and -ctime are -mmin/-mtime over access and change times; -uid, -gid and -group take numeric ids; -and, -or, -true and -false; -type also takes p, s, b and c; -size also takes w (2-byte words), G, T and P.",
+      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent. -iregex is -regex with Unicode simple case folding; -mmin is -mtime in minutes; -perm MODE matches exact octal permission bits, -MODE all of them and /MODE any of them; -user takes a numeric uid (names are not resolved) and refuses where the platform has no POSIX owners; -printf supports %p %f %h %P %s %d %y %m %U %G %T@ %% and the escapes \\n \\t \\0 \\\\, refusing other directives. GNU, BSD and busybox spellings with one meaning are all accepted: BSD's leading -E (extended -regex, already the dialect) and -s (sorted, already the order); -x, -xdev and -mount stay on the starting point's device; -P never follows links (the default), -H follows command-line links and -L/-follow every contained link with loop detection (a followed link is its target, so -type l then matches only unreachable links); -d and -depth visit depth first, and BSD's -depth N is a depth test when a number follows; -amin, -cmin, -atime and -ctime are -mmin/-mtime over access and change times; -uid, -gid and -group take numeric ids; -and, -or, -true and -false; -type also takes p, s, b and c; -size also takes w (2-byte words), G, T and P. -newerXY REF is true when the entry's X time (a access, m modification, c change) is strictly later than REF's Y time, or than the date REF when Y is t; dates use the date -d grammar in the program TZ.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -1814,7 +1958,19 @@
         "find-option-gid",
         "find-option-group",
         "find-option-true",
-        "find-option-false"
+        "find-option-false",
+        "find-option-neweraa",
+        "find-option-neweram",
+        "find-option-newerac",
+        "find-option-newerat",
+        "find-option-newerma",
+        "find-option-newermm",
+        "find-option-newermc",
+        "find-option-newermt",
+        "find-option-newerca",
+        "find-option-newercm",
+        "find-option-newercc",
+        "find-option-newerct"
       ]
     },
     {
