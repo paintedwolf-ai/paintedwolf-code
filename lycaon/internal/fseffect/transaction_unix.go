@@ -26,7 +26,7 @@ import (
 type rootCacheEntry struct {
 	rawPath   string
 	canonical string
-	dev       int32
+	dev       uint64
 	ino       uint64
 }
 
@@ -34,9 +34,9 @@ type sharedParentDir struct {
 	rawRoot  string
 	rel      string
 	rootPath string
-	rootDev  int32
+	rootDev  uint64
 	rootIno  uint64
-	dev      int32
+	dev      uint64
 	ino      uint64
 	fd       int
 	refs     atomic.Int32
@@ -59,7 +59,7 @@ var (
 	}
 	parentIDCache struct {
 		mu       sync.RWMutex
-		dev      int32
+		dev      uint64
 		ino      uint64
 		identity string
 	}
@@ -76,15 +76,15 @@ func init() {
 type openedRoot struct {
 	path string
 	fd   int
-	dev  int32
+	dev  uint64
 	ino  uint64
 }
 
 type openedParent struct {
 	rootPath string
-	rootDev  int32
+	rootDev  uint64
 	rootIno  uint64
-	dev      int32
+	dev      uint64
 	ino      uint64
 	fd       int
 	name     string
@@ -130,14 +130,14 @@ func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 				var canonical string
 				for i := range rootCache.entries {
 					e := &rootCache.entries[i]
-					if (e.rawPath == clean || e.canonical == clean) && e.dev == st.Dev && e.ino == st.Ino {
+					if (e.rawPath == clean || e.canonical == clean) && e.dev == deviceID(&st) && e.ino == st.Ino {
 						canonical = e.canonical
 						break
 					}
 				}
 				rootCache.mu.RUnlock()
 				if canonical != "" {
-					return &openedRoot{path: canonical, fd: fd, dev: st.Dev, ino: st.Ino}, nil
+					return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
 				}
 			}
 			_ = unix.Close(fd)
@@ -179,18 +179,18 @@ func walkRootNoFollow(rawPath, canonical string, accessFlags int) (*openedRoot, 
 		stored := false
 		for i := range rootCache.entries {
 			if (rootCache.entries[i].rawPath == rawPath && rootCache.entries[i].canonical == canonical) || rootCache.entries[i].canonical == "" {
-				rootCache.entries[i] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: st.Dev, ino: st.Ino}
+				rootCache.entries[i] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: deviceID(&st), ino: st.Ino}
 				stored = true
 				break
 			}
 		}
 		if !stored {
-			rootCache.entries[rootCache.next] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: st.Dev, ino: st.Ino}
+			rootCache.entries[rootCache.next] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: deviceID(&st), ino: st.Ino}
 			rootCache.next = (rootCache.next + 1) % len(rootCache.entries)
 		}
 		rootCache.mu.Unlock()
 	}
-	return &openedRoot{path: canonical, fd: fd, dev: st.Dev, ino: st.Ino}, nil
+	return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
 }
 
 func (r *openedRoot) close() {
@@ -215,7 +215,7 @@ func openParent(loc Location, create bool, mode os.FileMode) (*openedParent, err
 			d.refs.Add(1)
 			sharedParentCache.mu.RUnlock()
 			var st unix.Stat_t
-			if unix.Fstatat(unix.AT_FDCWD, filepath.Join(d.rootPath, d.rel), &st, unix.AT_SYMLINK_NOFOLLOW) == nil && st.Dev == d.dev && st.Ino == d.ino {
+			if unix.Fstatat(unix.AT_FDCWD, filepath.Join(d.rootPath, d.rel), &st, unix.AT_SYMLINK_NOFOLLOW) == nil && deviceID(&st) == d.dev && st.Ino == d.ino {
 				return &openedParent{
 					rootPath: d.rootPath, rootDev: d.rootDev, rootIno: d.rootIno,
 					dev: d.dev, ino: d.ino, fd: d.fd, name: name, rel: d.rel, shared: d,
@@ -291,7 +291,7 @@ func openParent(loc Location, create bool, mode os.FileMode) (*openedParent, err
 		d := &sharedParentDir{
 			rawRoot: clean.Root, rel: parentRel,
 			rootPath: rootPath, rootDev: rootDev, rootIno: rootIno,
-			dev: st.Dev, ino: st.Ino, fd: currentFD,
+			dev: deviceID(&st), ino: st.Ino, fd: currentFD,
 		}
 		d.refs.Store(2)
 		sharedParentCache.mu.Lock()
@@ -303,7 +303,7 @@ func openParent(loc Location, create bool, mode os.FileMode) (*openedParent, err
 		}
 		return &openedParent{
 			rootPath: rootPath, rootDev: rootDev, rootIno: rootIno,
-			dev: st.Dev, ino: st.Ino, fd: currentFD, name: name, rel: parentRel, shared: d,
+			dev: deviceID(&st), ino: st.Ino, fd: currentFD, name: name, rel: parentRel, shared: d,
 		}, nil
 	}
 	return &openedParent{rootPath: rootPath, rootDev: rootDev, rootIno: rootIno, fd: currentFD, name: name, rel: parentRel}, nil
@@ -555,7 +555,7 @@ func verifyReviewedParent(location Location, held *openedParent) error {
 		if err := unix.Fstatat(unix.AT_FDCWD, targetPath, &after, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 			return fmt.Errorf("reviewed directory changed: %w", err)
 		}
-		if held.dev != after.Dev || held.ino != after.Ino {
+		if held.dev != deviceID(&after) || held.ino != after.Ino {
 			return fmt.Errorf("reviewed directory changed: %s", location.Rel)
 		}
 		return nil
@@ -586,7 +586,7 @@ func parentDirectoryIdentity(parent *openedParent) (string, error) {
 	if parent.ino == 0 {
 		var st unix.Stat_t
 		if unix.Fstat(fd, &st) == nil {
-			parent.dev, parent.ino = st.Dev, st.Ino
+			parent.dev, parent.ino = deviceID(&st), st.Ino
 		}
 	}
 	if parent.ino != 0 {
@@ -871,4 +871,9 @@ func platformTimes(loc Location, access, modify *time.Time) error {
 		return &fs.PathError{Op: "timestamp effect target", Path: parent.name, Err: err}
 	}
 	return nil
+}
+
+// deviceID widens Stat_t.Dev, which is int32 on Darwin and uint64 on Linux.
+func deviceID(st *unix.Stat_t) uint64 {
+	return uint64(st.Dev)
 }
