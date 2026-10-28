@@ -6,13 +6,21 @@ scheduler entry. Canonical job metadata and its inherited lock bind each effect.
 import fcntl
 import json
 import importlib
-from importlib.machinery import FileFinder, PathFinder, SourceFileLoader, SOURCE_SUFFIXES
+from importlib.machinery import (FileFinder, PathFinder, ExtensionFileLoader,
+                                SourceFileLoader, SourcelessFileLoader,
+                                EXTENSION_SUFFIXES, SOURCE_SUFFIXES, BYTECODE_SUFFIXES)
 import math
 import os
 from pathlib import Path
 import re
 import stat
 import sys
+
+
+# Match the import system's precedence before accepting a physical origin.
+FILE_LOADERS = ((ExtensionFileLoader, EXTENSION_SUFFIXES),
+                (SourceFileLoader, SOURCE_SUFFIXES),
+                (SourcelessFileLoader, BYTECODE_SUFFIXES))
 
 
 def _require(value, message):
@@ -159,7 +167,7 @@ class JobSettlement:
                 if name == 'scripts' or (name.startswith('scripts.') and source is None):
                     _require(source is None, 'scripts must remain the reviewed namespace package')
                     physical = module_path(name)
-                    candidate = FileFinder(str(physical.parent), (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
+                    candidate = FileFinder(str(physical.parent), *FILE_LOADERS).find_spec(name)
                     require_package(name, candidate, candidate.submodule_search_locations if candidate else None)
                     require_package(name, getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
                     continue
@@ -181,13 +189,13 @@ class JobSettlement:
             source = self.checkout / relative
             _require(source.resolve(strict=True) == source, 'observation dependency is not physical')
             if source.is_dir():
-                spec = FileFinder(str(source.parent), (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
+                spec = FileFinder(str(source.parent), *FILE_LOADERS).find_spec(name)
                 require_package(name, spec, spec.submodule_search_locations if spec else None)
                 continue
             _require(name not in ancestors or source.name == '__init__.py',
                      'a module ancestor must be a reviewed package')
             search = source.parent.parent if source.name == '__init__.py' else source.parent
-            spec = FileFinder(str(search), (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
+            spec = FileFinder(str(search), *FILE_LOADERS).find_spec(name)
             _require(spec is not None and spec.origin is not None
                      and Path(spec.origin).resolve() == source.resolve(strict=True),
                      'observation dependency differs from the reviewed checkout')
