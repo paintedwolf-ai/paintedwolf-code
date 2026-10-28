@@ -70,7 +70,7 @@ var languageCases = []Case{
 		Description: "If/elif/else with test, [, and [[ string/glob/regex/file predicates.",
 		Commands:    []string{"test", "[", "[["},
 		Program:     `if test -f missing.txt; then printf 'bad\n'; elif [ -f notes.txt ] && [ -d sub ] && [[ "alpha_1" == alpha_* ]] && [[ "beta42" =~ ^beta[0-9]+$ ]]; then printf 'cond-ok\n'; else printf 'else\n'; fi`,
-		References:  allUserlands,
+		References:  bashUserlands,
 	},
 	{
 		ID:          "lang-test-nonempty-file-predicate",

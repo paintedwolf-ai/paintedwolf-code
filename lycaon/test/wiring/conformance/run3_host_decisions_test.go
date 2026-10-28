@@ -42,10 +42,11 @@ func TestRun3EvalSyntaxRefusalPreservesEarlierOutput(t *testing.T) {
 	c := commandconformance.Case{ID: "run3-eval-invalid-source", Program: "printf 'before\\n'; eval 'if'"}
 	runner := newConformanceRunner(t, []commandconformance.Case{c}, gate.PostureLight, true)
 	obs := runner.runCase(t, c)
-	if obs.TopLevelReject != "" || obs.Outcome.Refusal == nil || obs.Outcome.Refusal.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
+	if obs.TopLevelReject != "" || obs.Outcome.Refusal == nil || obs.Outcome.Refusal.Code != "COMMAND_SYNTAX_INVALID" {
 		t.Fatalf("eval source refusal = %+v", obs)
 	}
-	if obs.Outcome.Stdout != "before\n" || obs.Outcome.Status == 0 || obs.Outcome.Stderr == "" {
+	// A shell reports a syntax error with status 2.
+	if obs.Outcome.Stdout != "before\n" || obs.Outcome.Status != 2 || obs.Outcome.Stderr == "" {
 		t.Fatalf("eval refusal lost its earlier result or shell diagnostic: %+v", obs.Outcome)
 	}
 }

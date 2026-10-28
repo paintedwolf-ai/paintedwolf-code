@@ -196,7 +196,7 @@ var utilityCases = []Case{
 		Commands:    []string{"cd", "basename", "dirname", "realpath", "readlink", "native_path", "source"},
 		Forms:       []string{"readlink:-f", "native_path:-0", "cd:-L", "cd:-P", "pwd:-L", "pwd:-P"},
 		Program:     `basename sub/nested/deep.go .go; dirname sub/nested/deep.go; cd sub && test "$(basename "$(pwd)")" = sub && test "$(basename "$(realpath a.txt)")" = a.txt && test "$(basename "$(readlink -f a.txt)")" = a.txt && cd .. && source sub/script.sh`,
-		References:  allUserlands,
+		References:  bashUserlands,
 	},
 	{
 		ID:          "mutation-cp-mv-rm-rmdir-mkdir-touch-tee-mktemp-chmod-chown",

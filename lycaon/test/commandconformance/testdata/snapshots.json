@@ -95,6 +95,20 @@
         "stderr": ""
       }
     },
+    "git-init-forms": {
+      "bsd": {
+        "input": "sha256:58a059b5b1c8fea17a3819636dc8b55f640011895c58ff5eff2f2c5c0631fa76",
+        "status": 0,
+        "stdout": "ref: refs/heads/trunk\nref: refs/heads/trunk\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:58a059b5b1c8fea17a3819636dc8b55f640011895c58ff5eff2f2c5c0631fa76",
+        "status": 0,
+        "stdout": "ref: refs/heads/trunk\nref: refs/heads/trunk\n",
+        "stderr": ""
+      }
+    },
     "git-read-and-mutation-subcommands": {
       "bsd": {
         "input": "sha256:123fbd2ea0882072db98564c44fab73a890dbbd507659c39b23f7588db5e3b4a",
@@ -336,12 +350,6 @@
     "lang-conditionals-and-predicates": {
       "bsd": {
         "input": "sha256:0df2f6f6734d3447cd926c2fe65d39ac887a879ea47531497b9cdb01de9d7b20",
-        "status": 0,
-        "stdout": "cond-ok\n",
-        "stderr": ""
-      },
-      "busybox": {
-        "input": "sha256:a6bdeba47a3227210cc5dbe2532a4012e6bbd31dc7461e3055bf241e450e9021",
         "status": 0,
         "stdout": "cond-ok\n",
         "stderr": ""
@@ -942,12 +950,6 @@
     "paths-cd-basename-dirname-realpath-readlink-source": {
       "bsd": {
         "input": "sha256:b73628cde4abb7a0cdb53d1fb7c5387c6682b6e00b71c763ba24f2e8f39f1307",
-        "status": 0,
-        "stdout": "deep\nsub/nested\nfrom-source:sourced_ok\n",
-        "stderr": ""
-      },
-      "busybox": {
-        "input": "sha256:e0d18dd12b41049cd2b53b5b7c98d56ac11450a19057a55c37a83b0e6e110b90",
         "status": 0,
         "stdout": "deep\nsub/nested\nfrom-source:sourced_ok\n",
         "stderr": ""

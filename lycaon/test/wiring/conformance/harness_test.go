@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -148,7 +148,7 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 		_, err = r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
 		testutil.FailErr(t, "prompt conformance case", err)
 	} else {
-		plans = r.promptAnsweringApprovals(t, sess.ID, c.ID, expectedCards)
+		plans = r.promptAnsweringApprovals(t, projectID, sess.ID, c.ID, expectedCards)
 	}
 
 	obs := runtimeObservation{
@@ -167,45 +167,53 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 	return obs
 }
 
-func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, sessionID, caseID string, expectedCards int) []wire.ApprovalPlan {
+// promptAnsweringApprovals answers each approval card the host announces, in the
+// order it announces them, until the turn ends. The test deadline bounds a turn
+// that never ends.
+func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, sessionID, caseID string, expectedCards int) []wire.ApprovalPlan {
 	t.Helper()
+	stream, unsubscribe, err := r.h.Events.Subscribe(t.Context(), events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to checkpoints", err)
+	defer unsubscribe()
 	done := make(chan error, 1)
 	go func() {
 		_, promptErr := r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sessionID, "run case "+caseID)
 		done <- promptErr
 	}()
-	kind := wire.CheckpointKindToolApproval
 	var plans []wire.ApprovalPlan
-	var runErr error
-	testutil.WaitFor(t, 30*time.Second, func() bool {
+	answered := map[string]bool{}
+	for {
 		select {
-		case runErr = <-done:
-			return true
-		default:
-		}
-		pending, listErr := r.h.Sessions.Checkpoints.ListPending(t.Context(), sessionID, &kind)
-		if listErr != nil || len(pending) == 0 {
-			return false
-		}
-		for _, checkpoint := range pending {
-			if checkpoint.ToolApproval == nil || len(plans) >= expectedCards {
-				t.Fatalf("unexpected approval card: %+v", checkpoint)
+		case promptErr := <-done:
+			testutil.FailErr(t, "prompt conformance case", promptErr)
+			if len(plans) != expectedCards {
+				t.Fatalf("approval cards = %d, want %d: %+v", len(plans), expectedCards, plans)
+			}
+			return plans
+		case env := <-stream:
+			if env.Topic != wire.EventTopicCheckpoint {
+				continue
+			}
+			raw, err := json.Marshal(env.Data)
+			testutil.FailErr(t, "encode checkpoint event", err)
+			var checkpoint wire.CheckpointEvent
+			testutil.FailErr(t, "decode checkpoint event", json.Unmarshal(raw, &checkpoint))
+			if checkpoint.SessionID != sessionID || checkpoint.Status != wire.CheckpointStatusPending || answered[checkpoint.ID] {
+				continue
+			}
+			if checkpoint.Kind != wire.CheckpointKindToolApproval || checkpoint.ToolApproval == nil || len(plans) >= expectedCards {
+				t.Fatalf("unexpected checkpoint: %+v", checkpoint)
 			}
 			plan := checkpoint.ToolApproval.Plan
 			if !slices.ContainsFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID }) {
 				t.Fatalf("recommended option missing from plan: %+v", plan)
 			}
+			answered[checkpoint.ID] = true
 			plans = append(plans, plan)
 			_, resolveErr := r.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(r.h.OwnerCtx(t, t.Context()), sessionID, checkpoint.ID, plan.RecommendedOptionID)
 			testutil.FailErr(t, "answer recommended approval", resolveErr)
 		}
-		return false
-	})
-	testutil.FailErr(t, "prompt conformance case", runErr)
-	if len(plans) != expectedCards {
-		t.Fatalf("approval cards = %d, want %d: %+v", len(plans), expectedCards, plans)
 	}
-	return plans
 }
 
 func (r *conformanceRunner) toolResult(t *testing.T, sessionID, callID string) string {

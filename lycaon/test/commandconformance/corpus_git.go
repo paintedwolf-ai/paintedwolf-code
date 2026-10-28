@@ -20,4 +20,12 @@ var gitCases = []Case{
 		Git:         true,
 		References:  bashUserlands,
 	},
+	{
+		ID:          "git-init-forms",
+		Description: "git init with global options, a quiet initial branch, and a bare repository.",
+		Commands:    []string{"git init", "mkdir", "cat"},
+		Forms:       []string{"git init:-C", "git init:-c", "git init:--no-pager", "git init:-q", "git init:-b", "git init:--bare"},
+		Program:     `mkdir fresh && git --no-pager -C fresh -c init.defaultBranch=other init -q -b trunk && cat fresh/.git/HEAD && git init --bare -q -b trunk bare.git && cat bare.git/HEAD`,
+		References:  bashUserlands,
+	},
 }

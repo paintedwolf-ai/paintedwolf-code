@@ -33,7 +33,9 @@ type Case struct {
 
 var (
 	allUserlands = []referenceuserland.ID{referenceuserland.GNU, referenceuserland.BSD, referenceuserland.BusyBox}
-	// bashUserlands are the references for bash syntax or tools busybox lacks.
+	// bashUserlands are the references for bash grammar, such as [[ ]], source,
+	// PIPESTATUS, globstar, brace expansion and here-strings, and for tools busybox
+	// lacks; busybox runs /bin/sh.
 	bashUserlands = []referenceuserland.ID{referenceuserland.GNU, referenceuserland.BSD}
 	// gnuAndBusyBox are the references for GNU spellings busybox shares.
 	gnuAndBusyBox = []referenceuserland.ID{referenceuserland.GNU, referenceuserland.BusyBox}
