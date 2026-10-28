@@ -117,6 +117,9 @@ def lanes():
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")
+    for name, lane in values.items():
+        if ("check" in lane["profiles"] or "release" in lane["profiles"] and "platform" in lane) and "nightly" not in lane["profiles"]:
+            raise ValueError(f"nightly must include qualification lane {name}")
     return values
 
 
@@ -153,6 +156,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
             continue
         tier = GATE if broad and "platform" not in lane else profile
         if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
+            continue
+        if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
             continue
         count = lane.get("shards", 1)
         for index in range(1, count + 1):

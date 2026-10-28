@@ -1,4 +1,4 @@
-"""Qualification receipts cover affected integration plans through declared timing sources."""
+"""Nightly receipts cover affected integration plans through declared timing sources."""
 import copy
 import json
 from pathlib import Path
@@ -9,11 +9,11 @@ from unittest.mock import patch
 from ci_policy import hosted_plan, hosted_schedule, timings
 
 
-class QualificationHistoryTests(unittest.TestCase):
-    def test_healthy_qualification_stops_history_and_measures_affected_integration(self):
-        qualified = hosted_plan.matrix("check")["include"] + hosted_plan.matrix("release", platform=True)["include"]
+class NightlyHistoryTests(unittest.TestCase):
+    def test_healthy_nightly_stops_history_and_measures_affected_integration(self):
+        qualified = hosted_plan.matrix("nightly")["include"]
         required = {row["timing_row"] for row in qualified}
-        names = [f"receipt-verification-{'release' if row['lane'] in {'webkit-gtk', 'confinement-arm64'} else 'check'}-{index}"
+        names = [f"receipt-verification-nightly-{index}"
                  for index, row in enumerate(qualified)]
 
         def download(repository, run, artifacts, directory):
@@ -42,7 +42,7 @@ class QualificationHistoryTests(unittest.TestCase):
         fallback = hosted_plan.matrix("integration", scope=scope, timings=measured)
         self.assertEqual({row["timing_basis"] for row in fallback["include"]}, {"catalog-budget"})
 
-    def test_timing_sources_require_qualified_covering_stages_and_matching_execution(self):
+    def test_timing_sources_require_nightly_covering_stages_and_matching_execution(self):
         for mutation in ["missing", "unqualified", "chain", "self", "type", "stages", "runner", "setup", "workers", "shards"]:
             with self.subTest(mutation=mutation):
                 lanes = copy.deepcopy(hosted_plan.lanes())

@@ -110,17 +110,43 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux", "nix:check"})
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check",
+                                   "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                   "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
+                                   "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
+                                   "comments:check", "lint:vuln", "test:runner", "den:typecheck", "den:lint",
+                                   "den:test", "den:test:rust", "decide:test"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
                 expected = {name for name, lane in lanes.items() if "nightly" in lane["profiles"]
-                            and lane["suite"] in {"all", suite}}
+                            and (lane["suite"] == suite or lane["suite"] == "all" and "check" not in lane["profiles"])}
                 self.assertEqual(names, expected)
                 self.assertIn("vulnerability-freshness", names)
         for profile, suite in [("unknown", "all"), ("release", "race"), ("nightly", "typo")]:
             with self.assertRaises(ValueError):
                 ci.matrix(profile, suite)
+
+    def test_full_nightly_covers_checks_without_widening_partial_suites(self):
+        common_checks = {"limits", "build", "contracts", "lint", "vulnerabilities", "runner", "frontend", "native"}
+        full = {row["lane"] for row in ci.matrix("nightly", "all")["include"]}
+        self.assertLessEqual(common_checks | {"behavior"}, full)
+        for suite in ("performance", "e2e"):
+            with self.subTest(suite=suite):
+                partial = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
+                self.assertFalse(common_checks & partial)
+                self.assertIn("vulnerability-freshness", partial)
+        behavior = {row["lane"] for row in ci.matrix("nightly", "behavior")["include"]}
+        self.assertIn("behavior", behavior)
+
+    def test_daily_plan_rejects_missing_qualification_coverage(self):
+        for name, lane in ci.lanes().items():
+            if "check" not in lane["profiles"] and not ("release" in lane["profiles"] and "platform" in lane):
+                continue
+            data = copy.deepcopy(planning.catalog())
+            data["ci"][name]["profiles"].remove("nightly")
+            with self.subTest(lane=name), patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                ci.lanes()
 
     def test_host_platform_and_time_budgets_are_explicit(self):
         for profile in ci.PROFILES:

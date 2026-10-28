@@ -111,7 +111,7 @@ def block(identity, rows, observation):
         renewed = sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in findings)
         summary = f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |"
         if len('\n'.join(lines).encode()) + len(summary.encode()) > 40000:
-            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete qualification report.']
+            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete nightly report.']
             break
         lines.append(summary)
         visible.append((name, findings))
@@ -135,10 +135,10 @@ def block(identity, rows, observation):
         lines += notes + ['', '</details>']
         if len('\n'.join(lines).encode()) > 55000:
             del lines[detail_start:]
-            lines += ['', 'Additional module details are in the linked complete qualification report.']
+            lines += ['', 'Additional module details are in the linked complete nightly report.']
             break
     lines += ['', f"[Measured main snapshot and complete report]({observation['run_url']}) at `{observation['source_sha']}`.", '',
-              'The qualification report retains full source membership, exceptions, and review evidence. '
+              'The nightly report retains full source membership, exceptions, and review evidence. '
               'The area fingerprint covers all those facts. This issue closes only when all admitted findings '
               'are removed, below threshold, or retained by valid bounded review.', END]
     return '\n'.join(lines)
