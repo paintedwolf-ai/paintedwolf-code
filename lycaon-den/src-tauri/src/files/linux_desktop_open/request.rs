@@ -17,20 +17,20 @@ const REQUEST_INTERFACE: &str = "org.freedesktop.portal.Request";
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(test)]
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(3);
-type Completion = Arc<Mutex<Option<oneshot::Sender<Result<(), ServiceError>>>>>;
+type Completion = Arc<Mutex<Option<oneshot::Sender<Result<glib::Variant, ServiceError>>>>>;
 
-fn finish(completion: &Completion, result: Result<(), ServiceError>) {
+fn finish(completion: &Completion, result: Result<glib::Variant, ServiceError>) {
     if let Some(sender) = completion.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = sender.send(result);
     }
 }
 
-fn response(parameters: &glib::Variant) -> Result<(), ServiceError> {
+fn response(parameters: &glib::Variant) -> Result<glib::Variant, ServiceError> {
     if parameters.type_().as_str() != "(ua{sv})" {
         return Err(ServiceError::Failed("Invalid portal response".into()));
     }
     match parameters.child_value(0).get::<u32>() {
-        Some(0) => Ok(()),
+        Some(0) => Ok(parameters.child_value(1)),
         Some(1) => Err(ServiceError::Cancelled),
         Some(2) => Err(ServiceError::Failed(
             "The portal could not complete the request".into(),
@@ -62,14 +62,14 @@ pub(super) fn run(
     bus: &gio::DBusConnection,
     invoke: impl FnOnce(&str, glib::Variant) -> Result<glib::Variant, ServiceError>,
 ) -> Result<(), ServiceError> {
-    run_with_timeout(bus, RESPONSE_TIMEOUT, invoke)
+    run_with_timeout(bus, RESPONSE_TIMEOUT, invoke).map(|_| ())
 }
 
-fn run_with_timeout(
+pub(in crate::files) fn run_with_timeout(
     bus: &gio::DBusConnection,
     timeout: Duration,
     invoke: impl FnOnce(&str, glib::Variant) -> Result<glib::Variant, ServiceError>,
-) -> Result<(), ServiceError> {
+) -> Result<glib::Variant, ServiceError> {
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {

@@ -5,11 +5,18 @@ name: Platform verification
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
+    inputs:
+      source-sha:
+        description: Exact source commit; blank uses the calling workflow commit
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 env:
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
   # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
@@ -29,6 +36,8 @@ jobs:
       PW_TEST_HOST: dedicated
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha || github.sha }}
 
       - uses: ./.github/actions/setup-verification
 
@@ -71,8 +80,10 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha || github.sha }}
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -85,6 +96,8 @@ jobs:
       - uses: ./.github/actions/setup-bialy
 
       - uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-document-core
 
       - name: Fetch pinned git engine
         run: ./task gitengine:fetch

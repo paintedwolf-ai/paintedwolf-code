@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import time
 
-from .. import scripts_module
+from scripts.harness import atspi_client
+
 from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
@@ -47,12 +48,12 @@ def owned_process(pid: int, app) -> bool:
 
 
 def accessibility_bus(session):
-    return scripts_module('harness.atspi_client').session_bus(session_environment(session))
+    return atspi_client.session_bus(session_environment(session))
 
 
 def load_api():
     try:
-        scripts_module('harness.atspi_client').load_atspi(1000, 5000)
+        atspi_client.load_atspi(1000, 5000)
         import pyatspi
         return pyatspi
     except (ImportError, AttributeError):

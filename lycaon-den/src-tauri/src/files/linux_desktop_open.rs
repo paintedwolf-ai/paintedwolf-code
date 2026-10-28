@@ -15,7 +15,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::{gdk, gio};
 
-mod request;
+pub(super) mod request;
 use request::{portal_open_fd, portal_open_uri};
 
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
@@ -46,7 +46,7 @@ const UNAVAILABLE_ERRORS: [&str; 8] = [
 
 /// Why a desktop service did not complete a request.
 #[derive(Debug, PartialEq, Eq)]
-enum ServiceError {
+pub(super) enum ServiceError {
     /// No service answered the request; another path may handle it.
     Unavailable,
     /// The person cancelled the accepted request.
@@ -64,7 +64,7 @@ impl ServiceError {
         }
     }
 
-    fn from_call(error: &glib::Error) -> Self {
+    pub(super) fn from_call(error: &glib::Error) -> Self {
         let name = remote_error_name(error);
         if name.is_none() && error.matches(gio::IOErrorEnum::TimedOut) {
             return Self::Unavailable;

@@ -94,7 +94,7 @@ func TestDeltaAddsNewDirectoriesAndDropsVanishedOnes(t *testing.T) {
 	}
 }
 
-func TestIgnoreFileChangeForcesASurvey(t *testing.T) {
+func TestRootIgnoreFileChangeForcesASurvey(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
 	coverRoot(t, root)

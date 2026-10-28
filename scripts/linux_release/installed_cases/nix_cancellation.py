@@ -14,7 +14,7 @@ from .nix_fixture import load, observe, realized
 from .provider import ProviderFixture
 from .records import CaseUnavailable
 from .workflow import ToolTurn, accepted
-from ..installed_runtime import nix_command
+from ..campaign.runtime import nix_command
 
 
 def stopped(process: dict, before: dict, after: dict) -> bool:
