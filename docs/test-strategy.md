@@ -1296,7 +1296,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
