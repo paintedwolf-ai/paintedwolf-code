@@ -77,6 +77,13 @@ def validate_release_catalog(raw: bytes) -> dict[str, dict]:
     return platforms
 
 
+def detached_signatures(row: dict) -> list[str]:
+    """Linux packages other than RPM carry a detached OpenPGP signature; RPM embeds its own."""
+    if row.get("goos") != "linux":
+        return []
+    return [extension for extension in row["package_extensions"] if extension != "rpm"]
+
+
 def public_updaters(platforms: dict[str, dict]) -> dict[str, dict]:
     return {key: row for key, row in platforms.items()
             if row["publication"] == "public" and row["updater_extension"] is not None}

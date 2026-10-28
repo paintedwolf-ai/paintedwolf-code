@@ -7,6 +7,9 @@ on:
 
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    # Only a head that can land builds candidates: a pull request into another
+    # branch would hold the shared maintenance executor for an hour per push.
+    branches: [main]
     paths:
       - '.github/workflows/linux-candidates.yml'
       - '.github/workflows/linux-candidate-requests.yml'
