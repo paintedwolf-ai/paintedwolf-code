@@ -37,6 +37,9 @@ func (r *fileMutation) move() error {
 		if directory {
 			target = path.Join(destination, path.Base(source))
 		}
+		if has(r.p.Argv, "-n") {
+			fmt.Fprintf(r.out, "Checking rename of '%s' to '%s'\n", source, target)
+		}
 		plan, err := r.planMove(source, target)
 		if err != nil {
 			return err
@@ -52,9 +55,6 @@ func (r *fileMutation) move() error {
 		plans = append(plans, plan)
 	}
 	for _, plan := range plans {
-		if has(r.p.Argv, "-n") {
-			fmt.Fprintf(r.out, "Checking rename of '%s' to '%s'\n", plan.from, plan.to)
-		}
 		if plan.problem != "" {
 			if !has(r.p.Argv, "-k") {
 				r.fail(128, "fatal: %s, source=%s, destination=%s", plan.problem, plan.from, plan.to)
@@ -65,12 +65,15 @@ func (r *fileMutation) move() error {
 			fmt.Fprintf(r.out, "Renaming %s to %s\n", plan.from, plan.to)
 			continue
 		}
+		if _, err := os.Lstat(entryAbs(r.repo.Root, plan.to)); err == nil {
+			fmt.Fprintf(r.stderr, "warning: overwriting '%s'\n", plan.to)
+		}
 		result, err := r.p.filesystem.Operations.Move.Move(r.ctx, native.MoveInput{Memory: r.p.filesystem.Revisions.Memory, Pairs: []native.FilePair{{From: entryAbs(r.repo.Root, plan.from), To: entryAbs(r.repo.Root, plan.to)}}, Directories: true}, r.reviewContext(plan.expected, nil))
 		r.effects = r.effects || len(result.Moved) > 0 || len(result.DestinationCopied) > 0
 		if err != nil {
 			return err
 		}
-		if err := r.stage(plan.entries, plan.expected); err != nil {
+		if err := r.stage(plan.entries, plan.expected, nil); err != nil {
 			return err
 		}
 		if r.status != 0 {
@@ -130,7 +133,7 @@ func (r *fileMutation) planMove(source, target string) (trackedMove, error) {
 		if entry.mode != "100644" && entry.mode != "100755" && entry.mode != "120000" {
 			return plan, unsupportedFileForm(r.p, entry.path, "regular files or symbolic links")
 		}
-		content, err := entryContent(r.ctx, r.p, r.repo.Root, entry)
+		content, err := r.plannedContent(entry)
 		if err != nil {
 			return plan, err
 		}

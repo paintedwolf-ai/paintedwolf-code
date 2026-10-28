@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
@@ -20,7 +21,7 @@ func (r *fileMutation) remove() error {
 		matched := false
 		for _, entry := range r.index {
 			if entry.path == operand || matchesDirPrefix(entry.path, operand) || wildmatch(operand, entry.path) {
-				if entry.mode == "160000" {
+				if entry.mode == "160000" || entry.unmerged != "" {
 					return unsupportedFileForm(r.p, entry.path, "ordinary tracked files")
 				}
 				if entry.path != operand && matchesDirPrefix(entry.path, operand) && !has(r.p.Argv, "-r") {
@@ -44,31 +45,24 @@ func (r *fileMutation) remove() error {
 			expected[entry.path] = entry
 		}
 	}
-	check := func() error {
-		if has(r.p.Argv, "-f") {
-			return nil
-		}
-		for _, entry := range entries {
-			problem, err := r.removable(entry)
-			if err != nil {
-				return err
-			}
-			if problem != "" {
-				return fmt.Errorf("selected file changed before removal: %s", entry.path)
-			}
-		}
-		return nil
-	}
 	if !has(r.p.Argv, "-f") {
+		problems := map[string][]string{}
 		for _, entry := range entries {
 			problem, err := r.removable(entry)
 			if err != nil {
 				return err
 			}
 			if problem != "" {
-				r.removeDiagnostic(problem, entry.path)
-				return nil
+				problems[problem] = append(problems[problem], entry.path)
 			}
+		}
+		for _, problem := range []string{"both", "staged", "local"} {
+			if len(problems[problem]) > 0 {
+				r.removeDiagnostic(problem, problems[problem])
+			}
+		}
+		if r.status != 0 {
+			return nil
 		}
 	}
 	if has(r.p.Argv, "-n") {
@@ -87,7 +81,19 @@ func (r *fileMutation) remove() error {
 			} else if err != nil {
 				return err
 			}
-			result, err := r.p.filesystem.Operations.Delete.Delete(r.ctx, native.DeleteInput{Memory: r.p.filesystem.Revisions.Memory, Paths: []string{abs}, FilesOnly: true}, r.reviewContext(expected, check))
+			result, err := r.p.filesystem.Operations.Delete.Delete(r.ctx, native.DeleteInput{Memory: r.p.filesystem.Revisions.Memory, Paths: []string{abs}, FilesOnly: true}, r.reviewContext(map[string]trackedEntry{entry.path: entry}, func() error {
+				if has(r.p.Argv, "-f") {
+					return nil
+				}
+				problem, err := r.removable(entry)
+				if err != nil {
+					return err
+				}
+				if problem != "" {
+					return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": entry.path}}
+				}
+				return nil
+			}))
 			r.effects = r.effects || len(result.Deleted) > 0
 			if err != nil {
 				return err
@@ -98,7 +104,21 @@ func (r *fileMutation) remove() error {
 	for _, entry := range entries {
 		changes = append(changes, git.IndexEntry{Path: entry.path, Remove: true})
 	}
-	if err := r.stage(changes, expected); err != nil {
+	if err := r.stage(changes, expected, func() error {
+		if !has(r.p.Argv, "--cached") || has(r.p.Argv, "-f") {
+			return nil
+		}
+		for _, entry := range entries {
+			problem, err := r.removable(entry)
+			if err != nil {
+				return err
+			}
+			if problem != "" {
+				return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": entry.path}}
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	if r.status == 0 && !has(r.p.Argv, "-q") {
@@ -119,6 +139,9 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 	abs := entryAbs(r.repo.Root, entry.path)
 	info, err := os.Lstat(abs)
 	missing := os.IsNotExist(err)
+	if missing && !has(r.p.Argv, "--cached") {
+		return "", nil
+	}
 	workMatches := false
 	if err == nil {
 		var saved []byte
@@ -147,19 +170,22 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 	if has(r.p.Argv, "--cached") && workMatches {
 		return "", nil
 	}
+	head, err := git.ResolveOptionalObject(r.ctx, r.repo.Root, "HEAD^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if head == "" {
+		if workMatches {
+			return "staged", nil
+		}
+		return "both", nil
+	}
 	var output bytes.Buffer
-	diagnostics, code, err := (git.CommandReader{}).ReadCommand(r.ctx, r.repo.Root, []string{"ls-tree", "-z", "HEAD", "--", ":(literal)" + entry.path}, nil, &output)
+	diagnostics, code, err := (git.CommandReader{}).ReadCommand(r.ctx, r.repo.Root, []string{"ls-tree", "-z", head, "--", ":(literal)" + entry.path}, nil, &output)
 	if err != nil {
 		return "", err
 	}
 	if code != 0 {
-		// An unborn repository has no HEAD content to preserve.
-		if strings.TrimSpace(output.String()) == "" {
-			if workMatches && !has(r.p.Argv, "--cached") {
-				return "staged", nil
-			}
-			return "both", nil
-		}
 		return "", fmt.Errorf("read HEAD entry: %s", diagnostics)
 	}
 	meta, _, _ := strings.Cut(output.String(), "\t")
@@ -180,7 +206,7 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 	return "local", nil
 }
 
-func (r *fileMutation) removeDiagnostic(problem, name string) {
+func (r *fileMutation) removeDiagnostic(problem string, names []string) {
 	reason := "local modifications"
 	suffix := "(use --cached to keep the file, or -f to force removal)"
 	if problem == "staged" {
@@ -190,5 +216,9 @@ func (r *fileMutation) removeDiagnostic(problem, name string) {
 		reason = "staged content different from both the\nfile and the HEAD"
 		suffix = "(use -f to force removal)"
 	}
-	r.fail(1, "error: the following file has %s:\n    %s\n%s", reason, name, suffix)
+	subject := "file has"
+	if len(names) > 1 {
+		subject = "files have"
+	}
+	r.fail(1, "error: the following %s %s:\n    %s\n%s", subject, reason, strings.Join(names, "\n    "), suffix)
 }

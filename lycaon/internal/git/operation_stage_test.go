@@ -98,7 +98,7 @@ func TestStageRefusesInvalidRequests(t *testing.T) {
 	dir := stageFixture(t)
 	for name, entries := range map[string][]IndexEntry{
 		"empty":     nil,
-		"mode":      {{Path: "a.txt", Mode: "120000", Content: []byte("x")}},
+		"mode":      {{Path: "a.txt", Mode: "160000", Content: []byte("x")}},
 		"duplicate": {{Path: "a.txt", Mode: "100644"}, {Path: "a.txt", Remove: true}},
 		"escape":    {{Path: "../out.txt", Mode: "100644"}},
 		"absolute":  {{Path: filepath.Join(dir, "a.txt"), Mode: "100644"}},
@@ -121,5 +121,17 @@ func TestMergeFileMarksConflictsWithLabels(t *testing.T) {
 	testutil.FailErr(t, "clean merge", err)
 	if conflicts != 0 || string(merged) != "A\nb\nC\n" {
 		t.Fatalf("clean merge %d: %q", conflicts, merged)
+	}
+}
+
+func TestStagePreservesSymbolicLinkIndexMode(t *testing.T) {
+	dir := stageFixture(t)
+	result, err := NewManager().Operate(t.Context(), dir, OperationRequest{Kind: "stage", Entries: []IndexEntry{{Path: "link", Mode: "120000", Content: []byte("a.txt")}}})
+	testutil.FailErr(t, "stage symbolic link", err)
+	if result.Status != "completed" || !strings.HasPrefix(gittest.Run(t, dir, "ls-files", "--stage", "--", "link"), "120000 ") || gittest.Run(t, dir, "show", ":link") != "a.txt" {
+		t.Fatalf("stage symbolic link %+v", result)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "link")); !os.IsNotExist(err) {
+		t.Fatal("index operation created a saved link")
 	}
 }

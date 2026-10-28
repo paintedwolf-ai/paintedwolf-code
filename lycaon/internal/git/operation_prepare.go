@@ -411,7 +411,7 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 		}
 	}
 	for path, expected := range p.nestedHeads {
-		actual, err := optionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
+		actual, err := ResolveOptionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
 		if err != nil || actual != expected {
 			return operationRefusal("repository_changed_during_review", path)
 		}

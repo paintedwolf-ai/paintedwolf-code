@@ -15,16 +15,19 @@ import (
 )
 
 type fileMutation struct {
-	ctx     context.Context
-	p       Prepared
-	tc      tools.ToolContext
-	dir     string
-	repo    gitrepo.Repo
-	out     *meteredOutput
-	stderr  io.Writer
-	index   []trackedEntry
-	status  int
-	effects bool
+	ctx          context.Context
+	p            Prepared
+	tc           tools.ToolContext
+	dir          string
+	repo         gitrepo.Repo
+	out          *meteredOutput
+	stderr       io.Writer
+	index        []trackedEntry
+	status       int
+	effects      bool
+	releases     []func()
+	indexUnknown bool
+	indexChanged bool
 }
 
 func removeOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
@@ -45,8 +48,16 @@ func runFileMutation(ctx context.Context, p Prepared, tc tools.ToolContext, dir 
 		return settleMutationError(unsupportedFileForm(p, p.command.spec.Name, "shared filesystem operations"), toolcontract.NoEffect)
 	}
 	r := &fileMutation{ctx: ctx, p: p, tc: tc, dir: dir, repo: repo, out: out, stderr: stderr}
+	defer func() {
+		for _, release := range r.releases {
+			release()
+		}
+	}()
 	var err error
-	r.index, err = trackedEntries(ctx, p, repo.Root)
+	operands, err := fileOperands(ctx, p, dir, repo.Root)
+	if err == nil {
+		r.index, err = trackedEntries(ctx, p, repo.Root, operands, p.command.spec.Name == "git mv")
+	}
 	if err == nil {
 		if p.command.spec.Name == "git rm" {
 			err = r.remove()
@@ -55,8 +66,11 @@ func runFileMutation(ctx context.Context, p Prepared, tc tools.ToolContext, dir 
 		}
 	}
 	certainty := toolcontract.NoEffect
-	if r.effects {
+	if r.effects || r.indexChanged {
 		certainty = toolcontract.EffectCompleted
+	}
+	if r.indexUnknown {
+		certainty = toolcontract.EffectUnknown
 	}
 	if err == nil {
 		err = out.err
@@ -78,7 +92,11 @@ func (r *fileMutation) reviewContext(expected map[string]trackedEntry, check fun
 	tc := r.tc
 	tc.Files.FileChangeReview = func(ctx context.Context, changes []tools.FileChange) error {
 		verify := func() error {
-			current, err := trackedEntries(ctx, r.p, r.repo.Root)
+			paths := make([]string, 0, len(expected))
+			for path := range expected {
+				paths = append(paths, path)
+			}
+			current, err := trackedEntries(ctx, r.p, r.repo.Root, paths, true)
 			if err != nil {
 				return err
 			}
@@ -88,7 +106,7 @@ func (r *fileMutation) reviewContext(expected map[string]trackedEntry, check fun
 			}
 			for path, entry := range expected {
 				got := byPath[path]
-				if got.mode != entry.mode || got.oid != entry.oid {
+				if got.mode != entry.mode || got.oid != entry.oid || got.unmerged != entry.unmerged {
 					return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": path}}
 				}
 			}
@@ -108,7 +126,7 @@ func (r *fileMutation) reviewContext(expected map[string]trackedEntry, check fun
 	return tc
 }
 
-func (r *fileMutation) stage(entries []git.IndexEntry, expected map[string]trackedEntry) error {
+func (r *fileMutation) stage(entries []git.IndexEntry, expected map[string]trackedEntry, check func() error) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -116,8 +134,15 @@ func (r *fileMutation) stage(entries []git.IndexEntry, expected map[string]track
 	for i, entry := range entries {
 		paths[i] = entry.Path
 	}
-	result, err := (native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary}).Operate(r.ctx, r.reviewContext(expected, nil), git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
-	r.effects = r.effects || result.Attempted
+	result, err := (native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary}).Operate(r.ctx, r.reviewContext(expected, check), git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
+	if result.Attempted && !result.AfterObserved {
+		r.indexUnknown = true
+	}
+	changed := result.Attempted && result.AfterObserved && result.Before.Index != result.After.Index
+	r.indexChanged = r.indexChanged || changed
+	if changed {
+		recordStaged(r.p.owners, r.tc.ChatSessionID(), r.repo.Root, paths)
+	}
 	if err != nil {
 		return err
 	}

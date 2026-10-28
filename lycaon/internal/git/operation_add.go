@@ -37,7 +37,7 @@ func (p *preparedOperation) copyNestedRepo(ctx context.Context, root, scratch, p
 	if !ok || nested.Root != source {
 		return operationRefusal("unsupported_file_kind", clean)
 	}
-	head, err := optionalObject(ctx, source, "HEAD^{commit}")
+	head, err := ResolveOptionalObject(ctx, source, "HEAD^{commit}")
 	if err != nil {
 		return err
 	}
