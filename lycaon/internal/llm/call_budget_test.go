@@ -14,29 +14,24 @@ import (
 // deadlineProbeProvider records the deadline the request was actually sent with.
 type deadlineProbeProvider struct {
 	namedStubProvider
-	remaining   time.Duration
+	deadline    time.Time
 	hadDeadline bool
 }
 
 func (p *deadlineProbeProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	if deadline, ok := ctx.Deadline(); ok {
-		p.hadDeadline = true
-		p.remaining = time.Until(deadline)
-	}
+	p.deadline, p.hadDeadline = ctx.Deadline()
 	return p.namedStubProvider.Complete(ctx, req)
 }
 
 // holdingScreen stands in for a credential card nobody has answered yet.
 type holdingScreen struct {
-	hold time.Duration
-	err  error
+	check func(context.Context)
+	err   error
 }
 
 func (s holdingScreen) Screen(ctx context.Context, _ ScreenDestination, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
-	select {
-	case <-time.After(s.hold):
-	case <-ctx.Done():
-		return modelcall.CompletionRequest{}, ctx.Err()
+	if s.check != nil {
+		s.check(ctx)
 	}
 	return req, s.err
 }
@@ -47,23 +42,34 @@ func TestCallBudgetStartsAfterScreening(t *testing.T) {
 	probe := &deadlineProbeProvider{namedStubProvider: namedStubProvider{id: "lite", content: "ok"}}
 	reg := newEmptyRegistry()
 	testutil.FailErr(t, "Register", reg.Register(probe))
-	reg.SetOutboundSecretScreen(holdingScreen{hold: 2 * budget})
+	budgeted := NewCallBudget(budget)
+	var screened bool
+	reg.SetOutboundSecretScreen(holdingScreen{check: func(ctx context.Context) {
+		screened = true
+		if !budgeted.started.IsZero() {
+			t.Fatal("budget started during screening")
+		}
+		if _, hasDeadline := ctx.Deadline(); hasDeadline {
+			t.Fatal("screening received a budget deadline")
+		}
+	}})
 
 	p, err := reg.Get("lite")
 	testutil.FailErr(t, "Get", err)
-	budgeted := NewCallBudget(budget)
-	start := time.Now()
 	_, err = p.Complete(WithCallBudget(context.Background(), budgeted), modelcall.CompletionRequest{Model: "lite-model"})
 	testutil.FailErr(t, "Complete", err)
 
-	if held := time.Since(start); held < 2*budget {
-		t.Fatalf("screen hold = %v, want the full %v hold", held, 2*budget)
+	if !screened {
+		t.Fatal("screen hold did not complete before provider call")
+	}
+	if budgeted.started.IsZero() {
+		t.Fatal("budget never started")
 	}
 	if !probe.hadDeadline {
 		t.Fatal("provider received no deadline: the budget never started")
 	}
-	if probe.remaining < budget/2 {
-		t.Fatalf("remaining budget at send = %v, want close to %v", probe.remaining, budget)
+	if !probe.deadline.Equal(budgeted.started.Add(budget)) {
+		t.Fatalf("deadline at send = %v, want %v", probe.deadline, budgeted.started.Add(budget))
 	}
 	if budgeted.Expired() {
 		t.Fatal("budget reported expired for a call that completed inside it")
