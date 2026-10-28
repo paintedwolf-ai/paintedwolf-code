@@ -1,4 +1,4 @@
-//! Shared format-1 and format-2 Linux package and Nix generation manifest reader.
+//! Linux package and Nix generation manifest validation.
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -10,10 +10,6 @@ pub(crate) const FORMAT_VERSION: u32 = 2;
 pub(crate) const PACKAGE_NAME: &str = "painted-wolf-code";
 pub(crate) const MANIFEST_LIMIT: u64 = 4 << 20;
 
-fn some_payload<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<PayloadEntry>>, D::Error> {
-    Vec::<PayloadEntry>::deserialize(d).map(Some)
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Manifest {
@@ -23,8 +19,7 @@ pub(crate) struct Manifest {
     pub(crate) architecture: String,
     pub(crate) install_root: PathBuf,
     pub(crate) executables: Vec<Executable>,
-    #[serde(default, deserialize_with = "some_payload")]
-    pub(crate) payload: Option<Vec<PayloadEntry>>,
+    pub(crate) payload: Vec<PayloadEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -105,7 +100,7 @@ impl Manifest {
     }
 
     pub(crate) fn validate(&self, root: &Path) -> Result<(), String> {
-        if !matches!(self.format_version, 1 | FORMAT_VERSION)
+        if self.format_version != FORMAT_VERSION
             || self.package != PACKAGE_NAME
             || self.version.is_empty()
             || !matches!(self.architecture.as_str(), "x86_64" | "aarch64")
@@ -114,7 +109,7 @@ impl Manifest {
             || self.executables.is_empty()
             || self.executables.len() > 8192
         {
-            return Err("manifest header does not match format 1 or 2".into());
+            return Err("manifest header does not match format 2".into());
         }
         let mut seen_execs = BTreeSet::new();
         for exe in &self.executables {
@@ -122,11 +117,7 @@ impl Manifest {
                 return Err("manifest executable entry is invalid".into());
             }
         }
-        match (self.format_version, self.payload.as_deref()) {
-            (1, None) => Ok(()),
-            (FORMAT_VERSION, Some(payload)) => self.validate_payload(payload),
-            _ => Err("manifest version and payload do not match format 1 or 2".into()),
-        }
+        self.validate_payload(&self.payload)
     }
 
     fn validate_payload(&self, payload: &[PayloadEntry]) -> Result<(), String> {
@@ -291,3 +282,7 @@ pub(crate) fn fixture_json(
         "architecture": architecture, "install_root": root, "executables": exec_rows, "payload": payload
     })
 }
+
+#[cfg(test)]
+#[path = "manifest_producer_tests.rs"]
+mod producer_contract_tests;

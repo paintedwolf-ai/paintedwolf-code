@@ -28,7 +28,7 @@ func (t *ProcessTools) List(ctx context.Context, args map[string]any, tc tools.T
 	pid := toolkit.ClampIntArg(args, "pid", 0, 0, 1<<30)
 	after := toolkit.ClampIntArg(args, "after_pid", 0, 0, 1<<30)
 	limit := toolkit.ClampIntArg(args, "limit", 100, 1, 500)
-	snapshot, err := t.Service.List(ctx, processTaskSession(tc), pid, after, limit)
+	snapshot, err := t.Service.List(ctx, processSession(tc), pid, after, limit)
 	if err != nil {
 		return "", processError(err)
 	}
@@ -59,7 +59,7 @@ func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools
 	processes := make([]hostprocess.Process, 0, len(refs))
 	seen := map[int]bool{}
 	for _, ref := range refs {
-		process, err := t.Service.Resolve(processTaskSession(tc), ref)
+		process, err := t.Service.Resolve(processSession(tc), ref)
 		if err != nil {
 			return "", processError(err)
 		}
@@ -74,7 +74,7 @@ func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools
 	}
 	results := make([]map[string]any, 0, len(processes))
 	for _, process := range processes {
-		err := t.Service.Signal(ctx, process, signal)
+		err := t.Service.Signal(ctx, processSession(tc), process, signal)
 		row := map[string]any{"pid": process.PID, "instance": process.Instance, "signal": signal, "delivered": err == nil}
 		if err != nil {
 			row["error"] = err.Error()
@@ -94,12 +94,14 @@ func processError(err error) error {
 	if errors.Is(err, hostprocess.ErrUnsupported) {
 		code = "PROCESS_UNSUPPORTED"
 	}
+	if errors.Is(err, hostprocess.ErrNotOwned) {
+		code = "PROCESS_NOT_OWNED"
+	}
 	return safecmd.Reject(code, map[string]any{"reason": fmt.Sprint(err)})
 }
 
-func processTaskSession(tc tools.ToolContext) string {
-	if root := strings.TrimSpace(tc.Identity.ParentSessionID); root != "" {
-		return root
-	}
+// processSession is the session whose launches bound its process authority:
+// the identity each confined launch records on its lineage.
+func processSession(tc tools.ToolContext) string {
 	return strings.TrimSpace(tc.Identity.SessionID)
 }

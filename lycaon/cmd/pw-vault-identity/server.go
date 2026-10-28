@@ -20,7 +20,10 @@ type Peer struct {
 	PID int
 }
 
-const requestDeadline = 30 * time.Second
+const (
+	requestDeadline = 30 * time.Second
+	maxConnections  = 32
+)
 
 // Server answers identity requests for verified engines.
 type Server struct {
@@ -55,19 +58,29 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		}
 		_ = listener.Close()
 	}()
+	slots := make(chan struct{}, maxConnections)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			stopped := ctx.Err() != nil || isIdleClosed(idle)
+			cancel()
 			s.wg.Wait()
-			if ctx.Err() != nil || isIdleClosed(idle) {
+			if stopped {
 				return nil
 			}
 			return err
+		}
+		select {
+		case slots <- struct{}{}:
+		default:
+			_ = conn.Close()
+			continue
 		}
 		s.active.Add(1)
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
+			defer func() { <-slots }()
 			defer s.active.Add(-1)
 			s.serveConn(ctx, conn)
 		}()
@@ -114,6 +127,7 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	stopClosing := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stopClosing()
+	_ = conn.SetDeadline(time.Now().Add(requestDeadline))
 	peer, err := s.PeerOf(conn)
 	if err != nil {
 		s.Log.WarnContext(ctx, "vault identity peer credentials unavailable", "error", err)
@@ -229,6 +243,8 @@ func (s *Server) handle(caller connection, req vaultidentity.Request) vaultident
 		return vaultidentity.Response{Status: vaultidentity.StatusNotFound, LauncherPID: ok.LauncherPID}
 	case errors.Is(err, errExists):
 		return vaultidentity.Response{Status: vaultidentity.StatusExists, LauncherPID: ok.LauncherPID}
+	case errors.Is(err, errStoredIdentityCorrupt):
+		return vaultidentity.Response{Status: vaultidentity.StatusCorrupt, Message: "the stored identity is damaged"}
 	default:
 		s.Log.Error("vault identity store failed", "op", req.Op, "uid", caller.peer.UID, "error", err)
 		return vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store", Message: "the identity store failed"}

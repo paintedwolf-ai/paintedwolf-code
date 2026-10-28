@@ -160,11 +160,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
-			VerifyRequired:        frame.RequiresEvidence("verify"),
-			VerifyCommand:         implState.VerifyCommand,
-		},
+		implState.VerifyCommand,
 		surfaceVars,
 	); err != nil {
 		return "", false

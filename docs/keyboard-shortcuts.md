@@ -44,7 +44,7 @@ The Files gutter has one Tab entry. On a line-facts handle, Up and Down move bet
 
 ## Platform bindings
 
-Bindings declare separate macOS, Windows, and Linux defaults because modifier conventions and reserved operating-system chords differ. The contribution frame exposes the resolved default for the running platform.
+Bindings declare separate macOS, Windows, and Linux defaults because modifier conventions and reserved operating-system chords differ. The contribution frame exposes the resolved default for the running platform. Linux uses Ctrl+A for editor select-all, Ctrl+Shift+PageUp/PageDown to move file tabs, and Shift+F5 to stop a turn; the desktop and native emoji chooser keep their reserved chords.
 
 Documentation does not repeat the chord table. The effective catalog and **Settings → Keyboard shortcuts** are authoritative because extensions, conditions, and user remapping change what is active. When UI copy needs to show a chord, it asks the shortcut registry for the current display binding; it never hardcodes `Mod+…` text beside a command.
 
@@ -64,7 +64,7 @@ Explicit shortcut overrides take precedence over the editing style, which then h
 
 Tab normally indents. Editor settings can make it move focus instead; Escape followed by Tab provides a temporary exit. Next region and Previous region move between app regions, including the file tree, tabs, editor, chat, and composer, and remain available while editing. Entering a region lands on its first target by priority: the current chat row in the sidebar, the editor or file tree in a stage (never its title-bar controls or a hidden surface), and the composer in chat. Clicking into the transcript leaves focus there, so Page Up, Page Down, and Space scroll it. File tabs can be reordered by command within their pinned or unpinned group. Typing a filename prefix in the tree searches its expanded rows, including virtualized rows.
 
-Chat message navigation follows logical messages across virtual windows and older transcript pages. Arrow keys on a focused message move between messages; Escape returns to the composer. Message actions have one Tab stop and use Left/Right to select an action. Queue editing and removal restore focus to a surviving queue control or the composer.
+Chat message navigation follows logical messages across virtual windows and older transcript pages. After a message-navigation command, arrow keys on the focused message move between messages; Escape returns to the composer. Clicking, touching, using the wheel, or using reading keys such as Page Up returns the transcript to normal scrolling, including Up and Down. Message actions have one Tab stop and use Left/Right to select an action. Queue editing and removal restore focus to a surviving queue control or the composer.
 
 The status bar reserves space for cursor position, file format, unsaved changes, modal state, and exceptional conditions. Normal editing and brief preserving or synchronizing transitions stay silent. Wrap stays in the status bar with the same neutral text color in both states; its pressed state remains accessible. Word wrap and line-number controls are also available in the View menu, Crossbar, and Settings.
 
@@ -72,7 +72,7 @@ The status bar reserves space for cursor position, file format, unsaved changes,
 
 Modified single chords are a scarce, contested resource, and the largest family competing for them (go to chat, go to files, go to each project context) is also the one where a mnemonic matters most. A **sequence** spends one chord to buy a namespace: a leader chord, then one bare key.
 
-A declaration spells the second step relative to the leader (`bindings: ["Leader C"]`), never as a literal prefix, because the leader is itself a rebindable entry: `nav.leader`, defaulting to `Mod+;`, with its own **Leader key** row in Settings. Roughly a fifth of the stock keybindings are declared this way. Resolution substitutes the current leader into every such declaration, so rebinding the leader moves the whole namespace at once and rewrites any sequence overrides hanging off the old one.
+A declaration spells the second step relative to the leader (`bindings: ["Leader C"]`), never as a literal prefix, because the leader is itself a rebindable entry: `nav.leader`, defaulting to `Mod+;` on macOS/Windows and `Mod+Shift+;` on Linux, with its own **Leader key** row in Settings. Roughly a fifth of the stock keybindings are declared this way. Resolution substitutes the current leader into every such declaration, so rebinding the leader moves the whole namespace at once and rewrites any sequence overrides hanging off the old one.
 
 What the dispatcher enforces:
 
