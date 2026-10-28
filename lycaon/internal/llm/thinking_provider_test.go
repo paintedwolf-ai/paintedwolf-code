@@ -149,6 +149,9 @@ func TestOfflineRenderUsesServingThinkingPolicy(t *testing.T) {
         thinking: {state: supported, efforts: [low]}
 `+MinimalShipHTTPRetryYAML)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "create render registry", err)
 	// A teacher's prepared native override must not cross the serving boundary.
 	req := modelcall.CompletionRequest{Think: modelcall.ThinkHigh, ThinkingOverride: &modelcall.ThinkingOverride{Mode: "fixed", Effort: "high"}}

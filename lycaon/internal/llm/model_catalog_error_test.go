@@ -27,6 +27,9 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
     models: []
 `+MinimalShipHTTPRetryYAML)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "create registry", err)
 	service := &Service{Catalog: catalog, Registry: registry}
 	ref := ModelRef{ProviderID: "cloud", Model: "candidate"}

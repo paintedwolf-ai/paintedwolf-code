@@ -62,6 +62,9 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
 	registry, err := llm.NewRegistry(t.Context(), catalog, creds)
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "llm.NewRegistry failed", err)
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(tmp, "model-policy.yaml"))
 	testutil.FailErr(t, "llm.NewPolicyStoreAt failed", err)
@@ -140,6 +143,9 @@ agent_pool:
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(tmp, "providers.local.yaml"))
 	testutil.FailErr(t, "llm.NewProviderCatalogAt failed", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "llm.NewRegistry failed", err)
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(tmp, "global-policy.yaml"))
 	testutil.FailErr(t, "llm.NewPolicyStoreAt failed", err)

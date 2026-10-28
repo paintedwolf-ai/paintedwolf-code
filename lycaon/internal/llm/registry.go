@@ -223,7 +223,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	screen := r.outboundSecretScreen
 	r.screenMu.RUnlock()
 	if screen == nil {
-		return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}}
+		screen = unwiredSecretScreen{}
 	}
 	destination := ScreenDestination{ID: p.ID()}
 	if hasEntry {

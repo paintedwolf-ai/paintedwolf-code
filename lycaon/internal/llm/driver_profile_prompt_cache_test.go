@@ -129,6 +129,9 @@ func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 				mustTestProviderCatalog(t, entry),
 				providercredentials.NewAt(t.TempDir()+"/credential-vault.age"),
 			)
+			if err == nil {
+				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+			}
 			if err != nil {
 				testutil.FailErr(t, "new registry", err)
 			}
