@@ -3,6 +3,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import subprocess
 import tempfile
@@ -25,27 +26,28 @@ class JobSettlementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary).resolve();lock=directory/'completion.lock';lock.touch(mode=0o600)
             value.directory=lambda job:directory
-            real_path=Path
-            birth={'pid':121,'parent_pid':120,'start_time_ticks':7}
-            class ProcPath:
-                def __init__(self,text):self.text=text
-                def stat(self):return SimpleNamespace(st_uid=os.getuid())
-                def iterdir(self):
-                    return [SimpleNamespace(stat=lambda:lock.stat())] if self.text=='/proc/121/fd' else []
-            path=lambda text:ProcPath(text) if str(text).startswith('/proc/') else real_path(text)
+            birth={'pid':121,'parent_pid':120,'start_time_ticks':7,'uid':os.getuid(),'owner_identity':'exact-birth'}
+            observer=SimpleNamespace(birth=Mock(return_value=birth), files=Mock(
+                side_effect=lambda pid, limit:[(lock.stat().st_dev,lock.stat().st_ino)] if pid==121 else []))
+            value.observer=observer
             own={'kind':'invocation','pid':121,'owner_identity':'exact-birth','ticket':'1-'+'a'*32}
             foreign={**own,'pid':122,'ticket':'2-'+'b'*32,'source':'/fixed/source'}
-            with patch.object(module,'Path',side_effect=path), \
-                    patch.object(value,'_observers',return_value=(lambda pid:birth,lambda pid:'exact-birth')):
-                selected=value.invocation({}, {'runs':[foreign,own]})
-                self.assertEqual(selected['entry'],own)
-                self.assertEqual(selected['completion_lock']['inode'],lock.stat().st_ino)
-                self.assertIsNone(value.invocation({}, {'runs':[foreign]}))
-                with self.assertRaises(ValueError):
-                    value.invocation({}, {'runs':[{**own,'owner_identity':'replaced'}]})
-            with patch.object(module,'Path',side_effect=path), \
-                    patch.object(value,'_observers',return_value=(lambda pid:birth,lambda pid:None)):
+            selected=value.invocation({}, {'runs':[foreign,own]})
+            self.assertEqual(selected['entry'],own)
+            self.assertEqual(selected['completion_lock']['inode'],lock.stat().st_ino)
+            self.assertIsNone(value.invocation({}, {'runs':[foreign]}))
+            with self.assertRaises(ValueError):
+                value.invocation({}, {'runs':[{**own,'owner_identity':'replaced'}]})
+            for changed in ({**birth,'owner_identity':None},{**birth,'uid':os.getuid()+1}):
+                observer.birth.return_value=changed
                 self.assertIsNone(value.invocation({}, {'runs':[own]}))
+            observer.birth.side_effect=[birth,{**birth,'start_time_ticks':8}]
+            with self.assertRaisesRegex(ValueError,'changed process identity'):
+                value.invocation({}, {'runs':[own]})
+            observer.birth.side_effect=None;observer.birth.return_value=birth
+            observer.files.return_value=[(0,0)]*1025;observer.files.side_effect=None
+            with self.assertRaisesRegex(ValueError,'exceeds bound'):
+                value.invocation({}, {'runs':[own]})
 
     def test_actual_repository_namespace_and_repeated_validation_preserve_one_physical_location(self):
         checkout=Path(__file__).resolve().parents[3]
@@ -71,7 +73,8 @@ import scripts.harness
 assert callable(command)
 assert scripts.harness.__file__ is None
 assert list(scripts.harness.__path__)==[str(namespace/'harness')]
-value.validate_checkout()
+value.validate_checkout({'scripts.linux_release.campaign.guests':'scripts/linux_release/campaign/guests.py',
+                         'scripts.harness':'scripts/harness'})
 value.validate_checkout()
 """
         result=subprocess.run([sys.executable,'-I','-B','-c',script,str(checkout)],
@@ -105,7 +108,7 @@ value.validate_checkout()
                     {'scripts.harness':SimpleNamespace(__file__=None,
                         __spec__=SimpleNamespace(origin=None,submodule_search_locations=['/foreign/scripts/harness']),
                         __path__=[str(namespace/'harness')])},
-                    {'scripts.artifact_paths':SimpleNamespace(__file__=str(namespace/'verification_health.py'))}]
+                    {'scripts.artifact_paths':SimpleNamespace(__file__=str(namespace/'verification_resources.py'))}]
         for cached in candidates:
             with self.subTest(cached=list(cached)):
                 original=[str(value.checkout)]
@@ -130,6 +133,38 @@ value.validate_checkout()
             self.assertEqual(value.completed(job),result)
             (directory/'result.json').write_text(json.dumps({**result,'job_id':'d'*32}))
             with self.assertRaises(ValueError):value.completed(job)
+
+    def test_callers_validate_their_own_graph_without_importing_or_mutating_paths_on_refusal(self):
+        source=Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout=Path(temporary).resolve();namespace=checkout/'scripts';namespace.mkdir()
+            (namespace/'verification_process').mkdir()
+            for relative in ('artifact_paths.py','verification_process/__init__.py'):
+                shutil.copyfile(source/'scripts'/relative,namespace/relative)
+            caller=namespace/'caller';caller.mkdir()
+            (caller/'module.py').write_text('raise AssertionError("validation must not import")')
+            other=namespace/'other.py';other.write_text('raise AssertionError("foreign module")')
+            value,_=self.fixture();value.checkout=checkout
+            declaration={'scripts.caller':'scripts/caller','scripts.caller.module':'scripts/caller/module.py'}
+            original=[str(checkout)]
+            state=SimpleNamespace(modules={},path=list(original))
+            with patch.object(module,'sys',state):
+                value.validate_checkout(declaration)
+                self.assertEqual(state.path[:2],[str(namespace),str(checkout)])
+            for wrong in ([],False,{'module':'../other.py'}, {'scripts.artifact_paths':'scripts/other.py'}):
+                state=SimpleNamespace(modules={},path=list(original))
+                with self.subTest(wrong=wrong),patch.object(module,'sys',state):
+                    with self.assertRaises(ValueError):value.validate_checkout(wrong)
+                    self.assertEqual(state.path,original)
+            state=SimpleNamespace(modules={'scripts.caller.module':SimpleNamespace(__file__=str(other))},path=list(original))
+            with patch.object(module,'sys',state):
+                with self.assertRaises(ValueError):value.validate_checkout(declaration)
+                self.assertEqual(state.path,original)
+            (caller/'module.py').unlink();(caller/'module.py').symlink_to(other)
+            state=SimpleNamespace(modules={},path=list(original))
+            with patch.object(module,'sys',state):
+                with self.assertRaises(ValueError):value.validate_checkout(declaration)
+                self.assertEqual(state.path,original)
 
     def test_completion_races_never_cancel_an_unrelated_invocation(self):
         for when in ('before-status','after-status','during-cancel'):

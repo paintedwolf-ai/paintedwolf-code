@@ -14,7 +14,8 @@ import verification_advisories as advisories
 from verification_history import estimate, read_history
 from verification_plan import compatibility, outcome_exit
 from verification_resources import blocked_reason, foreground_git_environment, order_of
-from verification_health import annotate, identity, owner_identity, report
+from verification_process import identity, owner_identity
+from verification_process.health import annotate, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
 

@@ -19,7 +19,8 @@ from verification_advisories import admission_notice
 from verification_history import record_duration
 from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment,
                                     foreground_git_environment, order_of, worker_budget)
-from verification_health import identity, owner_identity, report, SAMPLE_SECONDS
+from verification_process import identity, owner_identity
+from verification_process.health import report, SAMPLE_SECONDS
 
 if os.name == "nt":
     import msvcrt

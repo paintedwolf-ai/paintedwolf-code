@@ -20,7 +20,8 @@ execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
 import verification_execute as execute
 import verification_plan as planning
-import verification_health as health
+from verification_process import health
+import verification_process as observation
 
 
 def process(pid, parent=1, cpu="0:00.00", identity="Sun Sep 13 10:00:00 2026", state="S"):
@@ -134,7 +135,7 @@ class HealthTests(unittest.TestCase):
             waiting = {**self.entry, "ticket": "waiting", "state": "queued"}
             status = {"runs": [], "operations": [self.entry, waiting]}
             queue.status.return_value = status
-            with patch.object(health, "process_snapshot", return_value=self.processes), \
+            with patch.object(observation, "process_snapshot", return_value=self.processes), \
                     patch.object(health.time, "clock_gettime") as clock:
                 for now in range(0, health.QUIET_SECONDS + 1, health.SAMPLE_SECONDS):
                     clock.return_value = now
@@ -154,19 +155,20 @@ class HealthTests(unittest.TestCase):
             queue.locked.side_effect = contextlib.nullcontext
             status = {"runs": [self.entry], "operations": []}
             before = time.clock_gettime(time.CLOCK_MONOTONIC)
-            with patch.object(health, "process_snapshot", return_value=self.processes):
+            with patch.object(observation, "process_snapshot", return_value=self.processes):
                 health.annotate(queue, status)
             path = queue.root / "health.json"
             first = json.loads(path.read_text())[self.entry["ticket"]]
             command = f'''import contextlib, json
 from pathlib import Path
 from types import SimpleNamespace
-import verification_health as health
+from verification_process import health
+import verification_process as observation
 queue = SimpleNamespace(root=Path({temporary!r}), locked=contextlib.nullcontext)
-health.process_snapshot = lambda: {self.processes!r}
+observation.process_snapshot = lambda: {self.processes!r}
 health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
 '''
-            subprocess.run([sys.executable, "-c", command], cwd=Path(health.__file__).parent,
+            subprocess.run([sys.executable, "-c", command], cwd=Path(health.__file__).parents[1],
                            check=True, capture_output=True, timeout=5)
             second = json.loads(path.read_text())[self.entry["ticket"]]
             after = time.clock_gettime(time.CLOCK_MONOTONIC)
@@ -177,7 +179,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
 
     def test_unavailable_telemetry_reports_unknown(self):
         status = {"runs": [self.entry], "operations": []}
-        with patch.object(health, "process_snapshot", side_effect=OSError("unavailable")):
+        with patch.object(observation, "process_snapshot", side_effect=OSError("unavailable")):
             health.annotate(Mock(), status)
         self.assertEqual(self.entry["health"]["state"], "unknown")
         self.assertEqual(self.entry["state"], "running")
@@ -186,16 +188,16 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
     def test_process_sampler_handles_macos_and_linux_cpu_formats(self):
         output = " 10 1 Sun Sep 13 10:00:00 2026 Ss 391:01.96\n20 10 Sun Sep 13 10:00:01 2026 S 1-02:03:04\n"
         with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, output)):
-            records = health.process_snapshot()
+            records = observation.process_snapshot()
         self.assertEqual(records[10]["cpu"], "391:01.96")
         self.assertEqual(records[20]["parent"], 10)
         self.assertEqual(records[20]["identity"], "Sun Sep 13 10:00:01 2026")
 
     @unittest.skipIf(os.name == "nt", "POSIX process sampling")
     def test_live_process_creation_identity_matches_its_snapshot(self):
-        identity = health.identity(os.getpid())
+        identity = observation.identity(os.getpid())
         self.assertIsNotNone(identity)
-        self.assertEqual(health.ownership(os.getpid(), identity, health.process_snapshot()), "present")
+        self.assertEqual(observation.ownership(os.getpid(), identity, observation.process_snapshot()), "present")
 
     @unittest.skipIf(os.name == "nt", "POSIX process sampling")
     def test_declared_progress_signal_keeps_zero_cpu_daemon_job_active_until_signal_stops(self):
@@ -233,7 +235,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         run_entry["child_pid"]: process(
                             run_entry["child_pid"], run_entry["pid"], identity=run_entry["child_identity"]),
                     }
-                    with patch.object(health, "process_snapshot", return_value=snapshot), \
+                    with patch.object(observation, "process_snapshot", return_value=snapshot), \
                             patch.object(health.time, "clock_gettime") as clock:
                         for step, now in enumerate(range(0, health.QUIET_SECONDS * 2 + 1, health.SAMPLE_SECONDS)):
                             progress.write_text(f"step-{step}\n")
@@ -289,7 +291,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         run_entry["child_pid"]: process(
                             run_entry["child_pid"], run_entry["pid"], identity=run_entry["child_identity"]),
                     }
-                    with patch.object(health, "process_snapshot", return_value=snapshot), \
+                    with patch.object(observation, "process_snapshot", return_value=snapshot), \
                             patch.object(health.time, "clock_gettime") as clock:
                         for step, now in enumerate(range(0, health.QUIET_SECONDS + 1, health.SAMPLE_SECONDS)):
                             fake_progress.write_text(f"ignored-{step}\n")
