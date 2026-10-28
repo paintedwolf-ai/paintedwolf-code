@@ -11,7 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -20,7 +22,10 @@ import (
 // program's interrupted result, ahead of the user's message.
 func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	registry := tools.NewStubRegistry()
+	mgr := NewHost(memory, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
+	oartest.InstallCloseoutPolicy(t, mgr)
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	database := testdbfixture.Open(t, "waits.db")
