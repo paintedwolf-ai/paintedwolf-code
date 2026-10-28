@@ -17,6 +17,7 @@ type trackedMove struct {
 	expected  map[string]trackedEntry
 	problem   string
 	overwrite bool
+	moves     []native.FilePair
 }
 
 func (r *fileMutation) move() error {
@@ -28,6 +29,11 @@ func (r *fileMutation) move() error {
 	sources := operands[:len(operands)-1]
 	info, statErr := os.Stat(entryAbs(r.repo.Root, destination))
 	directory := statErr == nil && info.IsDir()
+	rawDestination := r.p.Argv.Operands()[len(operands)-1].Value
+	if !directory && len(sources) == 1 && strings.HasSuffix(rawDestination, "/") {
+		r.fail(128, "fatal: destination directory does not exist, source=%s, destination=%s", sources[0], rawDestination)
+		return nil
+	}
 	if len(sources) > 1 && !directory {
 		r.fail(128, "fatal: destination '%s' is not a directory", destination)
 		return nil
@@ -54,6 +60,11 @@ func (r *fileMutation) move() error {
 			r.fail(128, "fatal: %s, source=%s, destination=%s", plan.problem, source, target)
 			return nil
 		}
+		if has(r.p.Argv, "-n") {
+			for _, pair := range plan.moves[1:] {
+				fmt.Fprintf(r.out, "Checking rename of '%s' to '%s'\n", pair.From, pair.To)
+			}
+		}
 		plans = append(plans, plan)
 	}
 	for _, plan := range plans {
@@ -64,7 +75,9 @@ func (r *fileMutation) move() error {
 			continue
 		}
 		if has(r.p.Argv, "-n") {
-			fmt.Fprintf(r.out, "Renaming %s to %s\n", plan.from, plan.to)
+			for _, pair := range plan.moves {
+				fmt.Fprintf(r.out, "Renaming %s to %s\n", pair.From, pair.To)
+			}
 			continue
 		}
 		if _, err := os.Lstat(entryAbs(r.repo.Root, plan.to)); err == nil {
@@ -94,14 +107,16 @@ func (r *fileMutation) move() error {
 			return nil
 		}
 		if has(r.p.Argv, "-v") {
-			fmt.Fprintf(r.out, "Renaming %s to %s\n", plan.from, plan.to)
+			for _, pair := range plan.moves {
+				fmt.Fprintf(r.out, "Renaming %s to %s\n", pair.From, pair.To)
+			}
 		}
 	}
 	return nil
 }
 
 func (r *fileMutation) planMove(source, target string) (trackedMove, error) {
-	plan := trackedMove{from: source, to: target, expected: map[string]trackedEntry{}}
+	plan := trackedMove{from: source, to: target, expected: map[string]trackedEntry{}, moves: []native.FilePair{{From: source, To: target}}}
 	if source == "." || target == "." || source == target || strings.HasPrefix(target, source+"/") {
 		plan.problem = "can not move directory into itself"
 		return plan, nil
@@ -149,6 +164,9 @@ func (r *fileMutation) planMove(source, target string) (trackedMove, error) {
 			return plan, unsupportedFileForm(r.p, entry.path, "regular files or symbolic links")
 		}
 		name := target + strings.TrimPrefix(entry.path, source)
+		if info.IsDir() {
+			plan.moves = append(plan.moves, native.FilePair{From: entry.path, To: name})
+		}
 		plan.expected[entry.path] = entry
 		plan.expected[name] = tracked[name]
 		plan.entries = append(plan.entries, git.IndexEntry{Path: entry.path, Remove: true})

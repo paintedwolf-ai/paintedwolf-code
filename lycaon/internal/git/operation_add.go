@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
