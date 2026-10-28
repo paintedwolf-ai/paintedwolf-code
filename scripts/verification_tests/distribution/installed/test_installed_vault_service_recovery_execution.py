@@ -157,7 +157,7 @@ class VaultServiceRecoveryTests(unittest.TestCase):
 
     def test_unknown_case_or_inputs_never_reach_profile_or_root_phases(self):
         from linux_release.installed_cases import vault_service_recovery as case
-        from linux_release import installed_execution
+        from linux_release.campaign import execution as installed_execution
         self.assertEqual(installed_execution.case_family('vault', 'service-unavailable-retry', 'deb'),
                          'vault_service_recovery')
         with patch.object(case, 'protected_launcher') as launch:
