@@ -48,6 +48,13 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 	if !whole {
 		violations = append(violations, "no scope runs ./internal/confine/... unfiltered")
 	}
+	launch := false
+	for _, scope := range linuxConfineScopes(t, root) {
+		launch = launch || scope.coversPackage("./internal/launchguard") && scope.Run == nil
+	}
+	if !launch {
+		violations = append(violations, "no scope runs the protected launch suite (./internal/launchguard/...) unfiltered")
+	}
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
 }
 
@@ -99,12 +106,15 @@ func TestLinuxConfineScopeRequiresAppliedHelperAndBrowserAdmissionFixtures(t *te
 	contractcheck.FailViolations(t, "required applied Linux helper/browser fixtures missing from native qualification", missing)
 }
 
-// Every leg the script accepts runs by default, so no qualification hides
-// behind an argument or environment no lane supplies.
+// Every leg the script accepts runs by default except launch-desktop, which
+// requires an explicit staged desktop artifact and is verified by
+// TestRealDesktopSelectionRefusesMissingArtifactWithoutRunningTheGoLeg.
 func TestLinuxConfineScriptHasNoOptInLegs(t *testing.T) {
 	t.Parallel()
 	script := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), linuxConfineScript)
-	defaults := map[string]bool{}
+	defaults := map[string]bool{
+		"launch-desktop": true,
+	}
 	var legs []string
 	for _, line := range strings.Split(script, "\n") {
 		if names, ok := strings.CutPrefix(line, "LEGS=("); ok && !strings.HasPrefix(names, `"`) {
