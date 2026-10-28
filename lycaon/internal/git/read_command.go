@@ -32,6 +32,13 @@ func (m *Manager) ReadCommand(ctx context.Context, dir string, args, config []st
 	if len(args) == 0 || !readCommands[args[0]] {
 		return nil, -1, fmt.Errorf("git: %q is not a read command", firstArg(args))
 	}
+	if args[0] == "config" {
+		local, err := configReadArgv(args)
+		if err != nil {
+			return nil, -1, err
+		}
+		args = local
+	}
 	opts := hermeticOpts(ReadCommandTimeout)
 	opts.ExtraConfig = append([]string{"color.ui=false"}, config...)
 	return gitexec.RunTo(ctx, dir, args, opts, stdout)

@@ -78,11 +78,6 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 	if err := formatPlaceholders(spec, bound); err != nil {
 		return nil, err
 	}
-	if spec.Name == "git config" {
-		// Repository configuration only: the hermetic invocation's own
-		// overrides are not the user's configuration.
-		c.args = append([]string{"config", "--local"}, c.args[1:]...)
-	}
 	return c, nil
 }
 
