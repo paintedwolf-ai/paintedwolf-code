@@ -81,7 +81,7 @@ func seedNativeAuthorityMainData(t *testing.T, source *sql.DB) map[string]string
 }
 
 func TestNativeAuthorityUpgradesFrozenReleaseStores(t *testing.T) {
-	for _, version := range []string{"1.0.0", "1.0.1"} {
+	for _, version := range []string{"1.0.0", "1.0.1", "1.0.2"} {
 		t.Run(version, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", version, "store.db"))
 			testutil.FailErr(t, "read immutable released store", err)
