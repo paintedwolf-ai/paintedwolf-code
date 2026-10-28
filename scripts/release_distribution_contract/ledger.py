@@ -17,6 +17,12 @@ def require_publishable(version, *, read=None):
         raise ValueError('a withdrawn release cannot be published again')
 
 
+def is_marker(value, version):
+    return (isinstance(value, dict) and set(value) == {'version', 'withdrawn'}
+            and isinstance(value['version'], str) and value['version'] == version
+            and value['withdrawn'] is True)
+
+
 def prepare(versions, *, read=None):
     from release_distribution import read_storage
     read = read or read_storage
@@ -27,7 +33,7 @@ def prepare(versions, *, read=None):
     rows = []
     for version in versions:
         current = read(f'release-metadata/{version}/withdrawn.json')
-        require(current is None or current == {'version': version, 'withdrawn': True},
+        require(current is None or is_marker(current, version),
                 'withdrawal record has unexpected content')
         rows.append({'version': version, 'action': 'withdraw' if current is None else 'keep'})
     return rows
@@ -46,8 +52,7 @@ def validate(rows, versions, *, read=None):
         parse(version)
         seen.add(version)
         current[version] = read(f'release-metadata/{version}/withdrawn.json')
-        marker = {'version': version, 'withdrawn': True}
-        require(current[version] == marker or current[version] is None and row['action'] == 'withdraw',
+        require(is_marker(current[version], version) or current[version] is None and row['action'] == 'withdraw',
                 'negative ledger changed after preparation')
     require(seen == set(versions), 'negative ledger preparation omits a selected halted version')
     return current

@@ -68,6 +68,49 @@ class ReleaseControlTests(unittest.TestCase):
             ledger.require_publishable('1.2.3')
             self.assertEqual(ledger.prepare(['1.2.3']), [{'version': '1.2.3', 'action': 'withdraw'}])
 
+    def test_unknown_marker_objects_refuse_real_read_preparation_and_complete_barrier(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from urllib.parse import parse_qs, urlsplit
+        from scripts.release_distribution_contract import halt_effects
+        versions = ['1.2.3', '1.2.4']
+        selected = halt_distribution('1.2.4', None, channels=())
+        selected['bad_versions'] = versions
+        env = {'CLOUDFLARE_ACCOUNT_ID': 'account', 'R2_BUCKET': 'bucket', 'CLOUDFLARE_API_TOKEN': 'fixture',
+               'RELEASE_R2_TRANSPORT': ''}
+        cases = [{'version': '1.2.4', 'withdrawn': value} for value in (1, 0, 1.0, False, 'true')]
+        cases.extend([{}, {'version': '1.2.4', 'withdrawn': True, 'extra': None},
+                      {'version': True, 'withdrawn': True}, {'version': '1.2.3', 'withdrawn': True}])
+        for marker in cases:
+            raw = json.dumps(marker).encode()
+            key = 'release-metadata/1.2.4/withdrawn.json'
+            def listing(url, token):
+                prefix = parse_qs(urlsplit(url).query)['prefix'][0]
+                return b'', {'success': True, 'result': [{'key': key, 'etag': hashlib.md5(raw).hexdigest()}] if prefix == key else []}
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as temporary, \
+                 patch.dict(distribution.os.environ, env), patch.object(distribution, 'storage_json', side_effect=listing), \
+                 patch.object(distribution, 'storage_bytes', return_value=raw), patch.object(ledger.subprocess, 'run') as effect:
+                root = Path(temporary)
+                (root / halt_effects.FILES['selection']).write_text(json.dumps(selected))
+                outcomes = {owner: 'skipped' for owner in halt_effects.FILES}
+                outcomes['selection'] = 'success'
+                try:
+                    ledger.prepare(versions)
+                except ValueError as error:
+                    outcomes['ledger'] = 'failure'
+                    (root / 'halt-ledger-refusal.log').write_text(str(error))
+                else:
+                    self.fail('unknown marker passed real authenticated ledger preparation')
+                evidence = halt_effects.admit(root, outcomes)
+                self.assertFalse(evidence['complete'])
+                self.assertEqual(evidence['effects']['ledger']['actions'][0]['action'], 'refuse')
+                self.assertIn('unexpected content', evidence['effects']['ledger']['actions'][0]['diagnostic'])
+                with self.assertRaisesRegex(ValueError, 'changed after preparation'):
+                    ledger.record([{'version': versions[0], 'action': 'withdraw'},
+                                   {'version': versions[1], 'action': 'keep'}], versions)
+                effect.assert_not_called()
+
     def test_authenticated_storage_preserves_the_signed_bytes(self):
         import hashlib
         raw = b'{ "version": "1.0.0" }\n'
