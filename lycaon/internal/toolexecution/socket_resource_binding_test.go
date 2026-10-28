@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/socketref"
@@ -60,7 +61,7 @@ func TestHostResourceSocketCoverageFollowsRealBindingAtCapabilitiesOwner(t *test
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
 	executor.Approvals.SetAuthzRecorder(recorder)
 	review := &resourceSocketReview{runtime: runtime}
-	executor.Approvals.SetCheckpointManager(ctx, review, coveringHostResourceGate{})
+	executor.Approvals.SetCheckpointManager(ctx, review, resourceSocketGate{})
 	defer confine.SetEgressResolver(nil)
 	tc := httpRequestSocketContext(t, root)
 	tc.Host.RealizationSockets = []string{path}
@@ -129,4 +130,11 @@ func assertSocketLedgerSource(t *testing.T, records []authzledger.CapabilityReco
 		}
 	}
 	t.Fatalf("ledger lacks %s", action)
+}
+
+type resourceSocketGate struct{ coveringHostResourceGate }
+
+func (resourceSocketGate) Evaluate(context.Context, hitl.ProposedAction) (*hitl.ApprovalResult, error) {
+	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+	return &hitl.ApprovalResult{Decision: decision}, nil
 }

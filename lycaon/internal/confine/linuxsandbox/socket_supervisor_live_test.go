@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -154,17 +155,18 @@ func approveSupervisorSocket(t *testing.T, ctx context.Context, workspace, path 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(filepath.Dir(path), "approvals.yaml"))
 	testutil.FailErr(t, "supervisor approval store", err)
 	t.Cleanup(store.Close)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
-	deps := apitestdeps.Deps{Database: database, Checkpoints: checkpoints, ApprovalGate: gate, Settings: &settings.Service{Approvals: store}}
+	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	deps := apitestdeps.Deps{Database: database, Checkpoints: checkpoints, ApprovalGate: approvalGate, Settings: &settings.Service{Approvals: store}}
 	apitestdeps.Fill(t, &deps)
-	handler := capabilityadmin.New(&httpio.Responder{}, capabilityadmin.Deps{Checkpoints: checkpoints, Gate: gate, Settings: deps.Settings, Store: deps.Store, Projects: deps.Projects, Authority: capabilityadmin.Authority{ApprovalDecisions: deps.ApprovalDecisions, Sockets: runtime}})
+	handler := capabilityadmin.New(&httpio.Responder{}, capabilityadmin.Deps{Checkpoints: checkpoints, Gate: approvalGate, Settings: deps.Settings, Store: deps.Store, Projects: deps.Projects, Authority: capabilityadmin.Authority{ApprovalDecisions: deps.ApprovalDecisions, Sockets: runtime}})
 	checkpoints.Authority.SetApprovalAuthorityInstaller(handler.Installation)
 	grant, err := confine.ResolveSocketRequest(path)
 	testutil.FailErr(t, "resolve approval target", err)
 	grant, err = confine.CaptureSocketGrant(ctx, grant)
 	testutil.FailErr(t, "capture actual approval target", err)
 	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture-client"}}, Scope: hitl.ActionScope{SessionID: "root-1", RootSessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ProjectDir: workspace}, Sockets: hitl.ActionSockets{SocketGrants: []confine.SocketGrant{grant}}}
-	request := hitl.CheckpointRequest{SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call", Kind: wire.CheckpointKindToolApproval, ProposedAction: &action, SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding}}, EffectiveAuthority: hitl.SocketAuthorityOutsideSandboxDaemon}, GrantOffers: capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})}
+	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+	request := hitl.CheckpointRequest{Decision: decision, SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call", Kind: wire.CheckpointKindToolApproval, ProposedAction: &action, SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding}}, EffectiveAuthority: hitl.SocketAuthorityOutsideSandboxDaemon}, GrantOffers: capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})}
 	pending, err := checkpoints.RequestCheckpoint(ctx, request)
 	testutil.FailErr(t, "persist real socket approval", err)
 	_, err = checkpoints.Authority.ResolveApprovalOption(human, "root-1", pending.CheckpointID, "approve_socket_set_once")

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -57,9 +58,10 @@ func TestUnixSocketPendingRestartWithdrawsStaleCardAndFreshApprovalExecutes(t *t
 		testutil.FailErr(t, "restart resolved label", err)
 		return confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved, Binding: owner.Binding()}, owner
 	}
+	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
 	request := func(grant confine.SocketGrant) (hitl.CheckpointRequest, hitl.ProposedAction) {
 		action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "http_request", Args: map[string]any{"url": "http://service.invalid/", "unix_socket": path}}, Scope: hitl.ActionScope{ProjectID: testdbseed.DefaultProjectID, ProjectDir: workspace, SessionID: "root-1", RootSessionID: "root-1"}, Sockets: hitl.ActionSockets{SocketGrants: []confine.SocketGrant{grant}}}
-		return hitl.CheckpointRequest{SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call", Kind: wire.CheckpointKindToolApproval, ProposedAction: &action, CoalesceChat: "root-1", CoalesceGrantKey: "same-service", SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding}}, EffectiveAuthority: hitl.SocketAuthorityOutsideSandboxDaemon}, GrantOffers: capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})}, action
+		return hitl.CheckpointRequest{Decision: decision, SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call", Kind: wire.CheckpointKindToolApproval, ProposedAction: &action, CoalesceChat: "root-1", CoalesceGrantKey: "same-service", SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding}}, EffectiveAuthority: hitl.SocketAuthorityOutsideSandboxDaemon}, GrantOffers: capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})}, action
 	}
 	oldGrant, oldOwner := capture()
 	old := newManager()
