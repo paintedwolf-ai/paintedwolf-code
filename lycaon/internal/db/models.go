@@ -773,6 +773,7 @@ type InvocationProgramOutputs struct {
 	Reference         string         `json:"reference"`
 	RetentionClaimID  string         `json:"retention_claim_id"`
 	InitiatingClaimID string         `json:"initiating_claim_id"`
+	BlobID            string         `json:"blob_id"`
 	BlobJson          string         `json:"blob_json"`
 	Complete          int64          `json:"complete"`
 	Redacted          int64          `json:"redacted"`
