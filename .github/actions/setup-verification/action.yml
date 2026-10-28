@@ -20,6 +20,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  userlands:
+    description: Provision the verified reference userland images before a lane runs test:userlands
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -200,6 +203,10 @@ runs:
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Set up reference userland images
+      if: inputs.userlands == 'true'
+      uses: ./.github/actions/setup-reference-userlands
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'
