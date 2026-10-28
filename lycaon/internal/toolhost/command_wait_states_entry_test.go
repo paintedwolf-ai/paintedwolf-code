@@ -30,6 +30,9 @@ type waitStatePark struct {
 }
 
 func (p waitStateParking) ParkProgram(_ context.Context, _ tools.ToolContext, request tools.ProgramPark) (tools.ParkedProgram, error) {
+	if request.Claim == nil || !request.Claim() {
+		return nil, tools.ErrWaitEnded
+	}
 	parked := &waitStatePark{request: request, settled: make(chan string, 1)}
 	p.parked <- parked
 	return parked, nil
