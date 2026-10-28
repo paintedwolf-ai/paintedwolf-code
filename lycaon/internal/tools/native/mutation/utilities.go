@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"crypto/rand"
+	"errors"
 	"io"
 	"os"
 	"path"
