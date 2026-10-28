@@ -148,15 +148,9 @@ func rebuildLinkTable(ctx context.Context, tx *sql.Tx, table string) error {
 		return err
 	}
 	temporary := table + "_link_rebuild"
-	for _, statement := range []string{
-		"CREATE TABLE " + temporary + " " + tail,
-		"INSERT INTO " + temporary + " SELECT * FROM " + table,
-		"DROP TABLE " + table,
-		"ALTER TABLE " + temporary + " RENAME TO " + table,
-	} {
-		if _, err := tx.ExecContext(ctx, statement); err != nil {
-			return err
-		}
+	statement := fmt.Sprintf(string(linkTableRebuildSQL), temporary, table, tail)
+	if _, err := tx.ExecContext(ctx, statement); err != nil {
+		return err
 	}
 	for _, definition := range definitions {
 		if _, err := tx.ExecContext(ctx, definition); err != nil {
