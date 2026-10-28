@@ -1314,9 +1314,10 @@ release class's existing two-runner footprint without entering maintenance.
 Weekly, manual, and ready packaging pull requests into `main` share the
 maintenance class's single runner through `linux-candidate-requests.yml`. Its
 path filter includes packaging, native setup, release builders, and toolchain
-inputs. A pull request into another branch builds nothing: its head cannot land,
-and each push would hold the shared executor for a full package build while the
-queue coordinator and health report wait behind it. Pending standalone
+inputs. Queue entry compares these inputs between the retained candidate source
+and the current merge source; changed or uncertain inputs build again. The
+read-only selection job and native builds run in turn. Pull requests into another
+branch build only by explicit dispatch. Pending standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 
