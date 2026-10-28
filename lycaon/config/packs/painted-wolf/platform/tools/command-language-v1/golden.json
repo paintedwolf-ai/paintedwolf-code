@@ -1926,7 +1926,7 @@
     },
     {
       "id": "predicate-ere-scalar-collation",
-      "program": "[[ \u00e9 =~ [[.\u00e9.]] ]]",
+      "program": "[[ é =~ [[.é.]] ]]",
       "setup": {
         "files": {},
         "host_facts": {},
