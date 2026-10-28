@@ -560,11 +560,23 @@
       "emit": "guard:command_composition_redirect",
       "summary": "One command operand cannot be used as supplied."
     },
+    "COMMAND_OPTION_UNSUPPORTED": {
+      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "An option is unsupported for native {{ paintedwolf.command }}."
+    },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
+    },
+    "COMMAND_PLATFORM_UNAVAILABLE": {
+      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "This native command operation is unavailable on the current platform."
     },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",
