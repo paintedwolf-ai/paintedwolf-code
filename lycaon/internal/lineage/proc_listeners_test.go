@@ -75,6 +75,7 @@ func procFixture(t *testing.T) string {
 		procRow{local: "0.0.0.0:5353", remote: "0.0.0.0:0", state: "07", uid: 1000, inode: 105},
 		procRow{local: "10.0.0.2:41001", remote: "10.0.0.1:53", state: "01", uid: 1000, inode: 106},
 	)
+	writeProcTable(t, root, "udp6")
 	holdSockets(t, root, 300, 100)
 	holdSockets(t, root, 301, 101)
 	holdSockets(t, root, 400, 102, 104)
