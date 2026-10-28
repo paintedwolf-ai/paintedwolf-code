@@ -2,12 +2,12 @@ name: Cache release build
 description: Reuse shared Go builds and release-mode Tauri builds warmed on main
 inputs:
   save:
-    description: Save the caches after the job (main only); tag releases restore without saving
+    description: Publish prepared caches on main; other calls restore without saving
     default: 'false'
 outputs:
   cache-hit:
     description: Whether the exact key for the current toolchains and dependency locks was restored
-    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+    value: ${{ steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -20,25 +20,29 @@ runs:
           printf 'build_key=release-build-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${DEVELOPER_DIR:-}"
         } >> "${GITHUB_OUTPUT}"
 
-    # Go compiler entries validate their inputs across verification and release.
-    # Restore the shared main cache rather than retaining a second Go payload.
-    - uses: ./.github/actions/cache-go
-
-    - uses: ./.github/actions/cache-notices-tools
-
-    # Keys follow the toolchains and dependency locks, so main saves once per
-    # change instead of once per commit; a release recompiles its own crate.
-    # Saving starts clean so superseded dependencies do not accumulate.
-    # Compiler caches are content-checked, so a tag release may
-    # start from an older entry.
+    # Cargo validates compiler inputs restored from an earlier lockfile generation.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      id: save
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: budget
+      uses: ./.github/actions/cache-budget
       with:
         path: |
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
         key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      id: save
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          lycaon-den/src-tauri/target
+          !lycaon-den/src-tauri/target/*/release/bundle
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: ./.github/actions/cache-budget
+      with:
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+        record: ${{ steps.budget.outputs.record }}
+
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

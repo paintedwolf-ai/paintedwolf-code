@@ -153,8 +153,8 @@ def diagnostic_main(arguments: list[str]) -> int:
     """A partial artifact can prove diagnostic startup, never campaign admission."""
     import argparse
     import stat
-    from ..installed_execution import current_tree, execute_case, read
-    from ..installed_runtime import bind
+    from ..campaign.execution import current_tree, execute_case, read
+    from ..campaign.runtime import bind
     from .native_workflows import prepare_install
     parser = argparse.ArgumentParser(description=diagnostic_main.__doc__)
     parser.add_argument('--candidate-inputs', type=Path, required=True)

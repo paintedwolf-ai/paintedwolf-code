@@ -9,8 +9,8 @@ from pathlib import Path
 
 from ..installed_storage import resolve as storage_for_launch
 
-from ..installed_environment import package_inventory, package_inventory_arguments
-from ..installed_runtime import bind
+from ..campaign.environment import package_inventory, package_inventory_arguments
+from ..campaign.runtime import bind
 from .native_workflows import PACKAGE, native_lock, prepare_install, query
 from .package_native import command, current_package, operations
 from .package_payload import inspect
@@ -170,7 +170,7 @@ def bootstrap(final, source, artifact_id, packages: Path, install: Path, output:
 
 
 def verify(root: Path, execution: dict, artifact: dict) -> dict:
-    from ..installed_execution import read
+    from ..campaign.execution import read
     from ..installed_evidence import object_fields, retained_file
     from .desktop import observed_journal
     report = object_fields(read(root / 'bootstrap.json'), {'format_version', 'execution', 'status',
@@ -220,7 +220,7 @@ def verify(root: Path, execution: dict, artifact: dict) -> dict:
 
 
 def main(arguments):
-    from ..installed_execution import read, current_tree
+    from ..campaign.execution import read, current_tree
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--final-artifacts', type=Path, required=True)
     parser.add_argument('--execution-request', type=Path, required=True)

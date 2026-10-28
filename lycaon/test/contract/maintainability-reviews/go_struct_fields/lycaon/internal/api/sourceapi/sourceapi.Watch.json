@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/sourceapi/sourceapi.Watch",
+  "kind": "runtime_service",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Watch binding, inventory scheduling, and callback lifetime share the host watch lifecycle. Suspension adds admission fencing at that boundary, with no new external dependency. Retain 16 methods and 14 fields; further growth requires renewed review. Replacement bindings share the callback drain, including canceled removal retries. The final rebind emits a full-root resync after releasing removal admission; focused source-watch and composed removal contracts verify that missed edits invalidate the previous epoch. The measured size remains unchanged. The structural signature now includes the repochange import used for full-root invalidation; that notification remains part of the existing watch lifecycle, not another state owner.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/internal/api/sourceapi/source_watch_suspension_test.go": "d53aff101dd692305a14cc16251884087d3dca1abc2328e734d032be89253c0b",
+    "lycaon/internal/sourcefeed/watch_drain_test.go": "1be370587fb4205cb14e1e8775e67d922b93111cee0e8125304bedcc8f4d6d1c"
+  },
+  "reviewed_shape": "055ead2f468860b1f986cae5ab13dbd98dbde661b9f94ccec9771bec51015c3f"
+}
