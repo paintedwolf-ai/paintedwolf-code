@@ -8,6 +8,7 @@ export const UPDATE_ERROR_MESSAGES = {
   candidate_changed: "The available update changed. Review it before installing.",
   package_managed: "Your package manager manages this installation. Use its upgrade command to update.",
   unpackaged_installation: "This copy was not installed from a package, so no update command is available. Install the .deb or .rpm package to receive update notices.",
+  package_ownership_unknown: "The app could not confirm which package owns this installation, so it shows no package update command. Wait for any package operation to finish, then check again.",
   install_source_unavailable: "The app could not verify how it was installed. Reinstall it using the same method, then try again.",
   preferences_unavailable: "Update preferences could not be read or saved. Check storage permissions and available space, then try again.",
   journal_unavailable: "Update recovery information could not be read or saved. Check storage permissions and available space. Technical details may identify a record that needs recovery.",

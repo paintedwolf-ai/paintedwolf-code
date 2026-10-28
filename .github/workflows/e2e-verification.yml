@@ -3,6 +3,10 @@ name: End-to-end verification
 on:
   workflow_call:
     inputs:
+      source-sha:
+        description: Exact source commit; blank uses the calling workflow commit
+        type: string
+        default: ''
       web-parallel:
         description: Web shards that run at once, beside the desktop job; the caller's runner budget sets it
         required: true
@@ -16,18 +20,20 @@ env:
 
 jobs:
   playwright-web:
-    name: playwright-web (${{ matrix.shard }}/3)
+    name: playwright-web (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.web-parallel }}
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha || github.sha }}
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -43,8 +49,23 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
-      # Browser system packages come from the distribution mirror, whose speed
-      # varies by minutes; this step's time stays out of the test budget.
+      - name: Use canonical Ubuntu archives for browser packages
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          paths = [Path("/etc/apt/sources.list"), Path("/etc/apt/apt-mirrors.txt")]
+          paths += list(Path("/etc/apt/sources.list.d").glob("*.sources"))
+          paths += list(Path("/etc/apt/sources.list.d").glob("*.list"))
+          for path in paths:
+              if path.is_file():
+                  text = path.read_text()
+                  replacement = text.replace("http://azure.archive.ubuntu.com/ubuntu", "https://archive.ubuntu.com/ubuntu")
+                  if replacement != text:
+                      path.write_text(replacement)
+          PYTHON
+
       - name: Install Playwright browsers
         working-directory: lycaon-den
         timeout-minutes: 20
@@ -70,12 +91,12 @@ jobs:
           fi
 
       - name: Playwright web E2E (Tier B)
-        timeout-minutes: 40
+        timeout-minutes: 60
         env:
           # Keep traces and reports on disk so the failure-upload step below
           # can capture them; the cleanup trap otherwise deletes them.
           LYCAON_E2E_KEEP_ARTIFACTS: "1"
-          LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/3
+          LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/2
           LYCAON_E2E_PLAYWRIGHT_READY: "1"
         run: ./task e2e:den
 
@@ -104,6 +125,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
         with:

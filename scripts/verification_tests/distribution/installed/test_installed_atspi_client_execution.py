@@ -5,16 +5,10 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-import linux_release
 from linux_release.installed_cases import desktop_ui as ui
 
 
 class AtspiClientTests(unittest.TestCase):
-    def test_sibling_script_packages_resolve_from_this_runner_root(self):
-        self.assertEqual(linux_release.SCRIPTS_PACKAGE, '')
-        client = linux_release.scripts_module('harness.atspi_client')
-        self.assertEqual(client.__name__, 'harness.atspi_client')
-
     def test_session_bus_points_at_the_graphical_session_and_restores(self):
         session = {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'XDG_RUNTIME_DIR': '/run/user/1000'}
         with patch.dict(os.environ, {'XDG_RUNTIME_DIR': '/run/user/0'}, clear=False), \

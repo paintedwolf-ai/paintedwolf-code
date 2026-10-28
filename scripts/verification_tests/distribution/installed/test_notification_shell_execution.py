@@ -58,7 +58,7 @@ class NotificationShellTests(unittest.TestCase):
                 shell.installed_gnome, 'owner', return_value=authority) as owner, patch.object(
                 shell, 'process_identity', side_effect=processes.__getitem__), patch.object(
                 shell.notification_geometry, 'mapping', return_value=mapping), patch.object(
-                shell, 'scripts_module', return_value=SimpleNamespace(session_bus=lambda _: nullcontext())), patch.object(
+                shell, 'atspi_client', SimpleNamespace(session_bus=lambda _: nullcontext())), patch.object(
                 shell, 'load_api'), patch.object(shell, 'capture_target', return_value=before['target']):
             result = shell.observe(*(before[key] for key in ('surface', 'service', 'shell', 'delivery')),
                 deadline=time.monotonic() + 10)
