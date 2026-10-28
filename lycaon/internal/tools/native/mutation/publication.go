@@ -3,6 +3,9 @@ package mutation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -10,8 +13,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // Publication is one program's redirect owner: commandprogram.OutputPublication
@@ -28,6 +33,7 @@ type Publication struct {
 var (
 	_ commandprogram.OutputPublication = (*Publication)(nil)
 	_ commandprogram.InputRedirection  = (*Publication)(nil)
+	_ commandprogram.SourceCapture     = (*Publication)(nil)
 )
 
 // Open captures one output destination. The null device is a typed sink that
@@ -35,12 +41,12 @@ var (
 func (p *Publication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
 	if err != nil {
-		return nil, err
+		return nil, wrapPathError(destination.Redirect.Operator, err)
 	}
 	if bound.Null {
 		return &nullStage{}, nil
 	}
-	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, nil, bound.Resolved.Abs)
+	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +59,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, false)
 	if err != nil {
-		return nil, err
+		return nil, wrapPathError("<", err)
 	}
 	if bound.Null {
 		return commandprogram.NullInput(), nil
@@ -62,10 +68,73 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if err != nil {
 		return nil, err
 	}
-	if err := p.Owners.Pins.RecordRevisionPins(ctx, destination.Invocation.Identity.ExecutionID, 0, []toolcontract.ExecutionRevision{source.Revision}); err != nil {
+	if err := p.Owners.Pins.AppendRevisionPin(ctx, destination.Invocation.Identity.ExecutionID, source.Revision); err != nil {
 		return nil, err
 	}
 	return io.NopCloser(strings.NewReader(source.Content)), nil
+}
+
+// Capture pins one source script from its accepted document or published disk.
+func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInvocation, request commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
+	bound, err := p.Program.Paths.Bind(ctx, request.Path, false)
+	if err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	if bound.Null {
+		sum := sha256.Sum256(nil)
+		return commandprogram.CapturedSource{
+			Pin: toolcontract.SourcePin{
+				SourceID:       "/dev/null",
+				Revision:       "null",
+				Representation: request.Representation,
+				SHA256:         hex.EncodeToString(sum[:]),
+			},
+		}, nil
+	}
+	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
+	if err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	if err := p.Owners.Pins.AppendRevisionPin(ctx, inv.Identity.ExecutionID, source.Revision); err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	data := []byte(source.Content)
+	sum := sha256.Sum256(data)
+	rev := hex.EncodeToString(sum[:])
+	switch {
+	case source.Revision.DocumentID != "":
+		rev = "document:" + source.Revision.DocumentID + "@" + strconv.FormatInt(source.Revision.DocumentRevision, 10)
+	case source.Revision.ContentSHA256 != "":
+		rev = "sha256:" + source.Revision.ContentSHA256
+	case source.Revision.DiskSHA256 != "":
+		rev = "disk:" + source.Revision.DiskSHA256
+	}
+	return commandprogram.CapturedSource{
+		Pin: toolcontract.SourcePin{
+			SourceID:       bound.Resolved.DisplayPath,
+			Revision:       rev,
+			Representation: request.Representation,
+			SHA256:         hex.EncodeToString(sum[:]),
+			StartByte:      0,
+			EndByte:        int64(len(data)),
+		},
+		Bytes: data,
+	}, nil
+}
+
+func wrapPathError(command string, err error) error {
+	var pathErr *projectpaths.PathError
+	if errors.As(err, &pathErr) && toolrejection.AsToolReject(err) == nil {
+		reason := pathErr.Error()
+		if pathErr.Cause != nil {
+			reason = pathErr.Cause.Error()
+		}
+		return errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: map[string]any{
+			"command": command, "path": pathErr.Operand, "reason": reason,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
+		}})
+	}
+	return err
 }
 
 // pinnedTarget is a destination captured before any bytes are prepared for it.
@@ -75,25 +144,26 @@ type pinnedTarget struct {
 	append bool
 }
 
-// captureDestination pins abs and records the pin after prior's pins.
-func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, executionID string, prior []toolcontract.ExecutionRevision, abs string) (pinnedTarget, error) {
+// captureDestination pins abs and appends the pin at the execution's next
+// position, whatever its other owners captured before it.
+func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, executionID string, abs string) (pinnedTarget, error) {
 	pin, err := o.Revisions.CaptureDestination(ctx, tc, abs)
 	if err != nil {
 		return pinnedTarget{}, err
 	}
-	if err := o.Pins.RecordRevisionPins(ctx, executionID, len(prior), []toolcontract.ExecutionRevision{pin}); err != nil {
+	if err := o.Pins.AppendRevisionPin(ctx, executionID, pin); err != nil {
 		return pinnedTarget{}, err
 	}
 	return pinnedTarget{abs: abs, pin: pin}, nil
 }
 
-// publish lands content at the captured revision through the shared write
-// operation and tracks it on the program's publication barrier. A moved
+// publish lands content byte for byte at the captured revision through the
+// shared write operation and tracks it on the program's publication barrier. A moved
 // destination is COMMAND_REVISION_CONFLICT; nothing is refreshed or retried.
-func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content string) (native.WriteResult, error) {
+func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Content: content, Append: appendBytes,
+	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
 		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
 	if err != nil {
 		return result, err
@@ -134,7 +204,7 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 		return commandprogram.OutputPublished{}, io.ErrClosedPipe
 	}
 	s.settled = true
-	content := s.buffer.String()
+	content := bytes.Clone(s.buffer.Bytes())
 	s.buffer.Reset()
 	s.mu.Unlock()
 	result, err := s.owners.publish(ctx, s.tools, s.barrier, s.target, content)

@@ -136,7 +136,7 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 			return err
 		}
 		var current toolcontract.ExecutionRevision
-		if pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
+		if pin.Role == toolcontract.SourceRevision && pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
 			current, err = recaptureBytes(ctx, tctx, resolved)
 		} else {
 			_, current, err = captureRevision(ctx, tctx, resolved, pin.Role)
@@ -162,6 +162,9 @@ func captureRevision(ctx context.Context, tctx tools.ToolContext, resolved proje
 		tool, access = "write", sourceview.AccessMutate
 	}
 	st, err := sourceview.LoadText(ctx, tool, access, tctx, resolved)
+	if role == toolcontract.DestinationRevision && rawDestination(err) {
+		return captureRawRevision(resolved, revision)
+	}
 	if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
 		if role == toolcontract.SourceRevision {
 			return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
@@ -208,4 +211,53 @@ func pinnedAbs(tctx tools.ToolContext, pin toolcontract.ExecutionRevision) (stri
 func sameLocation(resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision) bool {
 	root, rel := revisionLocation(resolved)
 	return root == pin.RootID && rel == pin.Path
+}
+
+// rawDestination reports a destination that has no editable text view: binary
+// bytes or a file above the text door. Its revision is its exact disk bytes.
+func rawDestination(err error) bool {
+	reject := toolrejection.AsToolReject(err)
+	return reject != nil && (reject.Code == "READ_BINARY_DENIED" || reject.Code == "EDIT_FILE_TOO_LARGE")
+}
+
+func captureRawRevision(resolved projectpaths.Resolved, revision toolcontract.ExecutionRevision) (sourceview.Text, toolcontract.ExecutionRevision, error) {
+	f, err := fseffect.OpenRead(resolved.EffectLocation())
+	if err != nil {
+		return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	size, err := io.Copy(h, f)
+	if err != nil {
+		return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.OriginalEncodedBytes
+	revision.DiskSHA256, revision.ContentSHA256, revision.ContentBytes = digest, digest, size
+	return sourceview.Text{}, revision, revision.Validate()
+}
+
+// captureDestinationBytes captures a destination for an exact write and
+// returns its current raw bytes, which an append stages ahead of the output.
+func captureDestinationBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (sourceview.Text, toolcontract.ExecutionRevision, []byte, error) {
+	st, revision, err := captureRevision(ctx, tctx, resolved, toolcontract.DestinationRevision)
+	if err != nil || revision.Mode == toolcontract.AbsentRevision || st.Editor != nil {
+		return st, revision, nil, err
+	}
+	if st.Disk != nil {
+		return st, revision, st.Disk.RawBytes(), nil
+	}
+	f, err := fseffect.OpenRead(resolved.EffectLocation())
+	if err != nil {
+		return st, revision, nil, err
+	}
+	defer func() { _ = f.Close() }()
+	raw, err := io.ReadAll(f)
+	if err != nil {
+		return st, revision, nil, err
+	}
+	if textfile.SHA256(raw) != revision.DiskSHA256 {
+		return st, revision, nil, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision}
+	}
+	return st, revision, raw, nil
 }

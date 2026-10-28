@@ -20,20 +20,24 @@ import (
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). pins hold ordinals first,
-// first+1, ... in capture order.
+// (invocation.SQLRecorder.AppendRevisionPin). Each capture appends at the
+// execution's next position, so redirects and the utility's own captures in
+// one execution never contend for an ordinal.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, first int, pins []toolcontract.ExecutionRevision) error
+	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
 
 // Operations are the shared typed mutation owners the utilities call.
 type Operations struct {
-	Write  *native.WriteTool
-	Delete *native.DeleteTool
-	Move   *native.MoveTool
-	Copy   *native.CopyTool
-	Mkdir  *native.MkdirTool
-	Chmod  *native.ChmodTool
+	Write   *native.WriteTool
+	Delete  *native.DeleteTool
+	Move    *native.MoveTool
+	Copy    *native.CopyTool
+	Mkdir   *native.MkdirTool
+	Chmod   *native.ChmodTool
+	Chown   *native.ChownTool
+	Times   *native.TimesTool
+	Extract *native.ExtractArchiveTool
 }
 
 // Owners holds the operations behind every mutation utility. One value serves
@@ -52,7 +56,9 @@ type utility func(*invocation) error
 
 var utilities = map[string]utility{
 	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "mkdir": runMkdir,
-	"touch": runTouch, "chmod": runChmod, "tee": runTee, "mktemp": runMktemp,
+	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
+	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
+	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite,
 }
 
 // createOperations names the owner of utilities whose catalog entry has no
@@ -62,7 +68,8 @@ var createOperations = map[string]string{"touch": "write", "mktemp": "write"}
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations Operations) (*Owners, error) {
-	if operations.Write == nil || operations.Delete == nil || operations.Move == nil || operations.Copy == nil || operations.Mkdir == nil || operations.Chmod == nil || pins == nil {
+	if operations.Write == nil || operations.Delete == nil || operations.Move == nil || operations.Copy == nil || operations.Mkdir == nil ||
+		operations.Chmod == nil || operations.Chown == nil || operations.Times == nil || operations.Extract == nil || pins == nil {
 		return nil, errors.New("mutation owners require every shared operation and a pin recorder")
 	}
 	catalog, err := toolcontract.LanguageV1()
