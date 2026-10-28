@@ -30,6 +30,8 @@ def leaf_tree(directory: Path, identifier: str, campaign: dict):
                         ('variant.json', {'variant': 1}), ('execution.json', {'execution': 1})]:
         (leaf / name).write_text(json.dumps(value))
     (directory / identifier / 'execution-request.json').write_text(json.dumps({'request': 1}))
+    (directory / identifier / 'managed-execution.json').write_text(
+        json.dumps({'format_version': 1, 'execution': {'request': 1}, 'exit_code': 0}))
     return leaf
 
 
@@ -98,11 +100,22 @@ class RunGuestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.run_guest(directory / 'again', target(adapter=adapter), lease_ssh={'host': '10.0.0.9', 'port': 22, 'user': 'tester'})
 
-    def test_a_managed_execution_that_fails_before_retention_is_refused(self):
+    def test_a_nonzero_wrapper_status_is_retained_and_an_invalid_one_is_refused_before_export(self):
         with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaises(ValueError):
-                self.run_guest(Path(temporary), target(), returncode=2)
-            self.assertFalse((Path(temporary) / 'guest' / 'leaf.zip').exists())
+            directory = Path(temporary)
+            leaf, _, mocks = self.run_guest(directory, target(), returncode=2)
+            self.assertEqual(leaf, directory / 'guest' / 'leaf')
+            managed = json.loads((directory / 'guest' / 'managed-execution.json').read_text())
+            request = json.loads((directory / 'guest' / 'execution-request.json').read_text())
+            self.assertEqual(managed, {'format_version': 1, 'execution': request, 'exit_code': 2})
+            self.assertEqual((directory / 'guest' / 'leaf.zip').read_bytes(), b'archive')
+            mocks['verify'].assert_called_once()
+            for invalid in (256, -256, True, None):
+                (directory / str(invalid)).mkdir()
+                with self.subTest(returncode=invalid), self.assertRaisesRegex(ValueError, 'invalid exit status'):
+                    self.run_guest(directory / str(invalid), target(), returncode=invalid)
+                self.assertFalse((directory / str(invalid) / 'guest' / 'managed-execution.json').exists())
+                self.assertFalse((directory / str(invalid) / 'guest' / 'leaf.zip').exists())
 
 
 class ReceiptTests(unittest.TestCase):
@@ -194,9 +207,10 @@ class ExecuteTests(unittest.TestCase):
             evidence = campaign['results'][0]['cases'][0]['evidence']
             self.assertEqual([record['path'] for record in evidence],
                              ['guest/cases/record.json', 'guest/environment-facts.json', 'guest/variant.json',
-                              'guest/execution.json', 'guest/execution-request.json'])
+                              'guest/execution.json', 'guest/execution-request.json', 'guest/managed-execution.json'])
             self.assertEqual(aggregated, [{'fedora-rpm': [('floor-scale-100', campaign['results'][0])]}])
-            for name in ('cases/record.json', 'environment-facts.json', 'variant.json', 'execution.json', 'execution-request.json'):
+            for name in ('cases/record.json', 'environment-facts.json', 'variant.json', 'execution.json',
+                         'execution-request.json', 'managed-execution.json'):
                 self.assertTrue((output / 'evidence' / 'guest' / name).is_file(), name)
             self.assertEqual(json.loads((output / 'admission.json').read_text()), {'accepted': True})
             self.assertEqual(json.loads((output / 'driver-registry.json').read_text())['installations'], {'rpm': {'format_version': 1, 'cases': []}})
