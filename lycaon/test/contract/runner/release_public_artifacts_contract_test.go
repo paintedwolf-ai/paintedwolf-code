@@ -5,10 +5,63 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
+
+func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
+	t.Parallel()
+	workflow := parseLane(t, ".github/workflows/release.yml")
+	if _, duplicate := workflow.Jobs["linux-candidates"]; duplicate {
+		t.Fatal("public Linux release must build one package set")
+	}
+	native := workflow.Jobs["linux-repositories"]
+	if native.Environment != "release-signing" {
+		t.Fatal("repository setup must use signing custody")
+	}
+	assembled, uploaded := false, false
+	for _, step := range native.Steps {
+		if strings.Contains(step.Run, "scripts.linux_release.release_repository_setup") {
+			if step.Env["LINUX_PACKAGE_SIGNING_KEY"] != "${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}" {
+				t.Fatal("setup assembly must use the selected package signing key")
+			}
+			assembled = true
+		}
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") && step.With["name"] == "linux-repository-setup" {
+			if !assembled || !strings.Contains(step.With["path"], "linux-setup/*") {
+				t.Fatal("setup upload must follow independent admission and contain its curated assets")
+			}
+			uploaded = true
+		}
+	}
+	if !assembled || !uploaded || !workflow.ancestors("publication-credentials")["linux-repositories"] {
+		t.Fatal("setup packages must be assembled and admitted before publication credentials")
+	}
+	for _, name := range []string{"publish-immutable", "publish-github-release"} {
+		job := workflow.Jobs[name]
+		if !workflow.ancestors(name)["publication-credentials"] {
+			t.Errorf("%s bypasses shared publication admission", name)
+		}
+		downloaded := false
+		for _, step := range job.Steps {
+			if strings.HasPrefix(step.Uses, "actions/download-artifact@") && step.With["name"] == "linux-repository-setup" {
+				downloaded = step.With["path"] == "release-artifacts"
+			}
+		}
+		loops := 1
+		if name == "publish-immutable" {
+			loops = 2
+		}
+		if !downloaded || strings.Count(job.text(), "for artifact in release-artifacts/*; do") != loops {
+			t.Errorf("%s must deposit or compare every curated setup asset", name)
+		}
+	}
+	if !strings.Contains(workflow.Jobs["publish-github-release"].text(), `gh release create "v${VERSION}" release-artifacts/*`) {
+		t.Fatal("the trailing mirror must include every curated setup asset")
+	}
+}
 
 func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
