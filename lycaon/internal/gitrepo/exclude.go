@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 const recoveryExcludePattern = ".paintedwolf/recovery/"
@@ -39,9 +41,6 @@ func ensureExcludePattern(excludeFile, pattern string) error {
 			return nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(excludeFile), 0o755); err != nil {
-		return err
-	}
 	var out strings.Builder
 	out.Write(raw)
 	if len(raw) > 0 && raw[len(raw)-1] != '\n' {
@@ -49,5 +48,12 @@ func ensureExcludePattern(excludeFile, pattern string) error {
 	}
 	out.WriteString(pattern)
 	out.WriteByte('\n')
-	return os.WriteFile(excludeFile, []byte(out.String()), 0o644)
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location:     fseffect.PathLocation(excludeFile),
+		Source:       strings.NewReader(out.String()),
+		Mode:         0o644,
+		PreserveMode: true,
+		DirMode:      0o755,
+	})
+	return err
 }
