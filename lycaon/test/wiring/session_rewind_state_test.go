@@ -52,6 +52,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 	}
 
 	seqBefore := implementBatchSeq(t, h, ctx, sess.ID)
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
 	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[1], rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchors[1])); err != nil {
 		testutil.FailErr(t, "rewind to the second ask", err)
@@ -95,6 +96,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	msgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
 	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchors[0])); err != nil {
 		testutil.FailErr(t, "rewind to the first ask", err)
@@ -167,6 +169,9 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	if len(h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID)) == 0 {
 		t.Fatal("touch-ledger setup failed")
 	}
+	// The prompt's follow-up loop wake takes the turn lock after Prompt returns;
+	// the preview's idle gate must see it released.
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
 	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchor, rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchor)); err != nil {
 		testutil.FailErr(t, "rewind past the dispatch", err)
