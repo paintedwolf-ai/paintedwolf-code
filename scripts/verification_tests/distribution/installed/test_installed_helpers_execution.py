@@ -16,8 +16,8 @@ from scripts.linux_release.installed_cases.records import (
     expand_physical_transactions,
     retain,
 )
-from scripts.linux_release.installed_execution import case_family, driver_family, execute_case
-from scripts.linux_release.installed_transfer import export, receive
+from scripts.linux_release.campaign.execution import case_family, driver_family, execute_case
+from scripts.linux_release.campaign.transfer import export, receive
 
 
 class InstalledHelperTests(unittest.TestCase):
