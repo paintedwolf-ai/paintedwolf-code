@@ -105,7 +105,7 @@ func (c *programCompiler) validateArithmeticExpr(expr syntax.ArithmExpr, allowMu
 	}
 	switch v := expr.(type) {
 	case *syntax.Word:
-		c.markBraceFree(v)
+		c.markBraces(false, v)
 		if allowMutation {
 			for _, node := range v.Parts {
 				part, ok := node.(*syntax.ParamExp)

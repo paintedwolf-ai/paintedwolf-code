@@ -8,31 +8,44 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Brace expansion applies to command words, for-loop items and array elements,
-// before any other expansion. Assignment values, here-string words, parameter
-// operator words, test operands, case words and arithmetic keep braces literal.
-
-// markBraceFree records a word that keeps its braces literal.
-func (c *programCompiler) markBraceFree(word *syntax.Word) {
-	if word == nil || !c.reserveHeap(256, word) {
-		return
-	}
-	if c.braceFree == nil {
-		c.braceFree = make(map[*syntax.Word]bool)
-	}
-	c.braceFree[word] = true
+// braceContexts records which parsed words expand braces. Brace expansion
+// applies to command words, for-loop items and array elements, before any
+// other expansion; assignment values, here-string words, parameter operator
+// words, test operands, case words and arithmetic keep braces literal. Each
+// field word is split and admitted once.
+type braceContexts struct {
+	literal, fields map[*syntax.Word]bool
+	split           map[*syntax.Word]*syntax.Word
+	// nodes counts the split nodes lowering adds to the host plan.
+	nodes int64
 }
 
-// markFieldWords records words whose unquoted braces expand into fields.
-func (c *programCompiler) markFieldWords(words []*syntax.Word) {
-	if len(words) == 0 || !c.reserveHeap(int64(len(words))*256, words[0]) {
-		return
+func (b *braceContexts) mark(word *syntax.Word, fields bool) {
+	target := &b.literal
+	if fields {
+		target = &b.fields
 	}
-	if c.fieldWords == nil {
-		c.fieldWords = make(map[*syntax.Word]bool)
+	if *target == nil {
+		*target = make(map[*syntax.Word]bool)
 	}
+	(*target)[word] = true
+}
+
+func (b *braceContexts) record(word, split *syntax.Word) {
+	if b.split == nil {
+		b.split = make(map[*syntax.Word]*syntax.Word)
+	}
+	b.split[word] = split
+}
+
+// markBraces records words that expand braces into fields, or that keep them
+// literal.
+func (c *programCompiler) markBraces(fields bool, words ...*syntax.Word) {
 	for _, word := range words {
-		c.fieldWords[word] = true
+		if word == nil || !c.reserveHeap(256, word) {
+			continue
+		}
+		c.braces.mark(word, fields)
 	}
 }
 
@@ -42,7 +55,7 @@ const braceRangeForms = "{a,b}, {x..y} or {x..y..step} with both endpoints integ
 // sequences and total field count before any field is produced. It returns nil
 // when the word has no brace expansion.
 func (c *programCompiler) splitBraces(w *syntax.Word) *syntax.Word {
-	if split, seen := c.braces[w]; seen || c.err != nil {
+	if split, seen := c.braces.split[w]; seen || c.err != nil {
 		return split
 	}
 	split, err := syntax.SplitBracesBounded(w, c.pool)
@@ -57,60 +70,68 @@ func (c *programCompiler) splitBraces(w *syntax.Word) *syntax.Word {
 	if !c.reserveHeap(256, w) {
 		return nil
 	}
-	if c.braces == nil {
-		c.braces = make(map[*syntax.Word]*syntax.Word)
+	c.braces.record(w, split)
+	if split == nil || !c.reserveHeap(braceLiteralBytes(split.Parts), w) {
+		return split
 	}
-	c.braces[w] = split
-	if split != nil {
-		c.limit(w, "expanded_fields", c.braceFields(w, split.Parts))
+	count, nodes, zeroStep := braceFields(split.Parts, languageLimit(c.catalog, "expanded_fields")+1)
+	c.braces.nodes += nodes
+	if zeroStep {
+		c.unsupported(w, "a brace sequence step other than 0")
 	}
+	c.limit(w, "expanded_fields", count)
 	return split
 }
 
-// braceFields counts the words a split word expands to, saturating one past
-// the expanded_fields bound, and counts the split nodes lowering adds.
-func (c *programCompiler) braceFields(w *syntax.Word, parts []syntax.WordPart) int64 {
-	ceiling := languageLimit(c.catalog, "expanded_fields") + 1
-	total := int64(1)
+// braceFields counts the words split parts expand to, saturating at ceiling,
+// and the nodes lowering adds. zeroStep reports a {x..y..0} sequence.
+func braceFields(parts []syntax.WordPart, ceiling int64) (count, nodes int64, zeroStep bool) {
+	count = 1
 	for _, part := range parts {
-		c.braceNodes++
+		nodes++
 		brace, ok := part.(*syntax.BraceExp)
-		if !ok || c.err != nil {
+		if !ok {
 			continue
 		}
-		var count int64
+		var alternatives int64
 		if brace.Sequence {
-			if !c.reserveHeap(braceLiteralBytes(brace), w) {
-				return ceiling
-			}
 			sequence := decodeBraceSequence(brace)
-			if sequence.Step == 0 {
-				c.unsupported(w, "a brace sequence step other than 0")
-				return ceiling
-			}
-			count = int64(min(sequence.Count(), uint64(ceiling)))
+			zeroStep = zeroStep || sequence.Step == 0
+			alternatives = int64(min(sequence.Count(), uint64(ceiling)))
 		} else {
 			for _, elem := range brace.Elems {
-				c.braceNodes++
-				count = min(count+c.braceFields(w, elem.Parts), ceiling)
+				words, elemNodes, elemZero := braceFields(elem.Parts, ceiling)
+				alternatives = min(alternatives+words, ceiling)
+				nodes += elemNodes + 1
+				zeroStep = zeroStep || elemZero
 			}
 		}
-		if total > ceiling/count {
-			total = ceiling
+		if count > ceiling/alternatives {
+			count = ceiling
 		} else {
-			total = min(total*count, ceiling)
+			count = min(count*alternatives, ceiling)
 		}
 	}
-	return total
+	return count, nodes, zeroStep
 }
 
-// braceLiteralBytes bounds joining a sequence's literal elements.
-func braceLiteralBytes(brace *syntax.BraceExp) int64 {
+// braceLiteralBytes bounds joining every sequence's literal elements.
+func braceLiteralBytes(parts []syntax.WordPart) int64 {
 	bytes := int64(256)
-	for _, elem := range brace.Elems {
-		for _, part := range elem.Parts {
-			if lit, ok := part.(*syntax.Lit); ok {
-				bytes += 128 + 4*int64(len(lit.Value))
+	for _, part := range parts {
+		brace, ok := part.(*syntax.BraceExp)
+		if !ok {
+			continue
+		}
+		for _, elem := range brace.Elems {
+			if !brace.Sequence {
+				bytes += braceLiteralBytes(elem.Parts)
+				continue
+			}
+			for _, elemPart := range elem.Parts {
+				if lit, ok := elemPart.(*syntax.Lit); ok {
+					bytes += 128 + 4*int64(len(lit.Value))
+				}
 			}
 		}
 	}
