@@ -283,14 +283,14 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	prepareReq := request
-	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(prepareReq.Environment) > 0 {
-		filtered := make([]string, 0, len(prepareReq.Environment))
-		for _, entry := range prepareReq.Environment {
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(request.Environment) > 0 {
+		var explicit []string
+		for _, entry := range request.Environment {
 			if !slices.Contains(d.run.baseEnv, entry) {
-				filtered = append(filtered, entry)
+				explicit = append(explicit, entry)
 			}
 		}
-		prepareReq.Environment = filtered
+		prepareReq.Environment = explicit
 	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
@@ -600,9 +600,7 @@ func ownerFailure(err error) toolcontract.ProducerResult {
 	return result
 }
 
-// commandIndex maps every catalog name and alias to its specification.
-// catalogCommand finds any catalog command by its full name, including
-// multi-word subcommand forms the dispatch index leaves out.
+// catalogCommand resolves an exact catalog name without accepting aliases.
 func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecification, bool) {
 	for _, spec := range r.catalog.Commands {
 		if spec.Name == name {
@@ -612,6 +610,7 @@ func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecificat
 	return toolcontract.CommandSpecification{}, false
 }
 
+// commandIndex maps catalog names and single-word aliases.
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {

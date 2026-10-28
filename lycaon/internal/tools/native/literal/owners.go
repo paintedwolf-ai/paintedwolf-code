@@ -36,7 +36,7 @@ type Owners struct {
 	// StreamBytes bounds one invocation's stdout; zero selects stream_bytes.
 	StreamBytes int64
 
-	accounts   accounts
+	accounts   *accounts
 	catalog    toolcontract.LanguageCatalog
 	specs      map[string]toolcontract.CommandSpecification
 	ops        map[string]string
@@ -59,7 +59,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
+	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, accounts: &accounts{}, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
 	if o.signatures, err = decodeSignatures(catalog.Contracts["signatures"]); err != nil {
 		return nil, err
 	}
@@ -86,15 +86,12 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	return o, nil
 }
 
-// ForProgram binds the program memory while giving it a fresh account cache.
+// ForProgram binds memory for one program while retaining the shared account
+// lookup cache and its lock alongside the immutable catalog and operations.
 func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
-	revisions := o.Revisions
-	revisions.Memory = memory
-	return &Owners{
-		Revisions: revisions, Pins: o.Pins, Domain: o.Domain,
-		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes,
-		catalog: o.catalog, specs: o.specs, ops: o.ops, signatures: o.signatures,
-	}
+	program := *o
+	program.Revisions.Memory = memory
+	return &program
 }
 
 // Operation returns the catalog operation identity that owns a command.

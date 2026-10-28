@@ -24,7 +24,16 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 		}
 		out, err := formatter.Format(rejection.Code, rejection.Data)
 		contractcheck.FailErr(t, "render syntax feedback", err)
-		for _, want := range []string{"Code: " + rejection.Code, "earlier parent effects"} {
+		wantFacts := []string{"Code: " + rejection.Code}
+		if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
+			if rejection.Data["limit_id"] != "program_bytes" || rejection.Data["resource_unit"] != "bytes" {
+				t.Fatalf("resource feedback lacks typed limit facts: %+v", rejection.Data)
+			}
+			wantFacts = append(wantFacts, "Earlier completed changes remain in effect")
+		} else {
+			wantFacts = append(wantFacts, "earlier parent effects")
+		}
+		for _, want := range wantFacts {
 			if !strings.Contains(strings.ToLower(out), strings.ToLower(want)) {
 				t.Fatalf("feedback missing %q: %s", want, out)
 			}
