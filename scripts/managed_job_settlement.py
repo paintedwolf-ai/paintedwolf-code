@@ -22,11 +22,12 @@ def _require(value, message):
 
 class JobSettlement:
 
-    def __init__(self, *, checkout, arguments, save, command):
+    def __init__(self, *, checkout, arguments, save, command, observer=None):
         self.checkout = Path(checkout)
         self.arguments = list(arguments)
         self.save = save
         self.command = command
+        self.observer = observer
 
     def directory(self, job):
         self.validate_checkout()
@@ -97,17 +98,21 @@ class JobSettlement:
         finally:
             os.close(fd)
 
-    def validate_checkout(self):
+    def validate_checkout(self, modules=None):
         _require(self.checkout.is_absolute() and self.checkout.resolve(strict=True) == self.checkout,
                  'process observation requires the physical reviewed checkout')
+        _require(modules is None or isinstance(modules, dict), 'caller dependencies require a module map')
         expected = {
             'scripts.artifact_paths': 'scripts/artifact_paths.py',
-            'scripts.linux_release': 'scripts/linux_release/__init__.py',
-            'scripts.linux_release.installed_cases': 'scripts/linux_release/installed_cases/__init__.py',
-            'scripts.linux_release.installed_cases.records': 'scripts/linux_release/installed_cases/records.py',
-            'scripts.linux_release.installed_process': 'scripts/linux_release/installed_process.py',
-            'verification_health': 'scripts/verification_health.py',
+            'verification_process': 'scripts/verification_process/__init__.py',
         }
+        for name, relative in (modules or {}).items():
+            _require(isinstance(name, str) and re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*(?:\.[a-zA-Z_][a-zA-Z_0-9]*)*', name)
+                     and isinstance(relative, str) and not Path(relative).is_absolute()
+                     and '..' not in Path(relative).parts
+                     and (name not in expected or expected[name] == relative),
+                     'caller dependency declaration differs from its physical checkout')
+            expected[name] = relative
         namespace = self.checkout / 'scripts'
         namespace_search = [str(namespace), str(self.checkout),
                   *[entry for entry in sys.path if entry not in {str(namespace), str(self.checkout)}]]
@@ -145,6 +150,11 @@ class JobSettlement:
                              'cached observation dependency has the wrong concrete origin')
         for name, relative in expected.items():
             source = self.checkout / relative
+            _require(source.resolve(strict=True) == source, 'observation dependency is not physical')
+            if source.is_dir():
+                spec = PathFinder.find_spec(name, [str(source.parent)])
+                require_namespace(name, spec, spec.submodule_search_locations if spec else None)
+                continue
             search = source.parent.parent if source.name == '__init__.py' else source.parent
             spec = PathFinder.find_spec(name, [str(search)])
             _require(spec is not None and spec.origin is not None
@@ -152,14 +162,17 @@ class JobSettlement:
                      'observation dependency differs from the reviewed checkout')
         sys.path[:] = namespace_search
 
-    def _observers(self):
+    def _observer(self):
+        if self.observer is not None:
+            return self.observer
         self.validate_checkout()
-        process = importlib.import_module('scripts.linux_release.installed_process')
-        health = importlib.import_module('verification_health')
-        return process.process_identity, health.identity
+        process = importlib.import_module('verification_process')
+        self.validate_checkout(process.dependencies())
+        self.observer = process.observer()
+        return self.observer
 
     def invocation(self, job, status):
-        process_identity, identity = self._observers()
+        observer = self._observer()
         directory = self.directory(job)
         lock_path = directory / 'completion.lock'
         lock_fd = os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW)
@@ -179,27 +192,19 @@ class JobSettlement:
             if type(pid) is not int or pid <= 1:
                 continue
             try:
-                before = process_identity(pid)
-                if Path('/proc/' + str(pid)).stat().st_uid != os.getuid():
+                before = observer.birth(pid)
+                if before['uid'] != os.getuid():
                     continue
-                descriptors = list(Path('/proc/' + str(pid) + '/fd').iterdir())
+                descriptors = observer.files(pid, 1024)
                 _require(len(descriptors) <= 1024, 'scheduler process descriptor inventory exceeds bound')
-                inherited = False
-                for descriptor in descriptors:
-                    try:
-                        info = descriptor.stat()
-                    except FileNotFoundError:
-                        continue
-                    if (info.st_dev, info.st_ino) == (lock.st_dev, lock.st_ino):
-                        inherited = True
-                if not inherited:
+                if (lock.st_dev, lock.st_ino) not in descriptors:
                     continue
-                observed_identity = identity(pid)
+                observed_identity = before['owner_identity']
                 if observed_identity is None:
                     continue
                 _require(
                     row.get('owner_identity') is not None
-                    and observed_identity == row['owner_identity'] and process_identity(pid) == before,
+                    and observed_identity == row['owner_identity'] and observer.birth(pid) == before,
                     'own invocation changed process identity')
                 _require(isinstance(row.get('ticket'), str) and re.fullmatch('[0-9]+-[a-f0-9]{32}', row['ticket']), 'own invocation ticket differs')
                 matches.append({'entry': row, 'process': before, 'completion_lock': {'device': lock.st_dev, 'inode': lock.st_ino}})

@@ -1,13 +1,12 @@
 """Advisory process health from ownership and activity samples."""
 
-from functools import lru_cache
-import os
 from pathlib import Path
 import subprocess
 import sys
 import time
 
 import verification_advisories as advisories
+import verification_process as process
 from verification_state import read_state, write_json
 
 SAMPLE_SECONDS = 30
@@ -16,62 +15,8 @@ MAX_SAMPLE_GAP = 90
 NOTICE_STATES = {"supervision_lost", "supervisor_stopped", "suspected_stall"}
 
 
-def process_snapshot(pid=None):
-    if os.name == "nt":
-        raise OSError("Process activity sampling is unavailable on this platform")
-    selection = ["-p", str(pid)] if pid is not None else ["-ax"]
-    result = subprocess.run(["ps", *selection, "-o", "pid=,ppid=,lstart=,stat=,time="],
-                            capture_output=True, text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
-    if result.returncode != 0:
-        raise OSError("Process activity sampling failed")
-    records = {}
-    for line in result.stdout.splitlines():
-        fields = line.split()
-        if len(fields) != 9:
-            raise ValueError("Incomplete process activity sample")
-        number, parent = map(int, fields[:2])
-        records[number] = {"pid": number, "parent": parent, "identity": " ".join(fields[2:7]),
-                           "state": fields[7], "cpu": fields[8]}
-    return records
-
-
-def identity(pid):
-    try:
-        return process_snapshot(pid)[pid]["identity"]
-    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
-        return None
-
-
-@lru_cache(maxsize=8)
-def owner_identity(pid):
-    return identity(pid)
-
-
-def ownership(pid, expected, processes):
-    record = processes.get(pid)
-    if record is None or record["state"].startswith("Z"):
-        return "exited"
-    if expected is None:
-        return "unknown"
-    return "present" if record["identity"] == expected else "replaced"
-
-
-def descendants(pid, processes):
-    found = {pid} if pid in processes else set()
-    children = {}
-    for number, record in processes.items():
-        children.setdefault(record["parent"], []).append(number)
-    pending = list(found)
-    while pending:
-        for child in children.get(pending.pop(), []):
-            if child not in found:
-                found.add(child)
-                pending.append(child)
-    return [processes[number] for number in sorted(found)]
-
-
 def assess(entry, processes, previous, now):
-    owner = ownership(entry.get("pid"), entry.get("owner_identity"), processes)
+    owner = process.ownership(entry.get("pid"), entry.get("owner_identity"), processes)
     health = {"state": "observing", "owner": owner, "action": "none"}
     if owner in {"exited", "replaced"}:
         health.update(state="supervision_lost",
@@ -86,12 +31,12 @@ def assess(entry, processes, previous, now):
     if entry.get("kind") == "batch" and entry.get("phase") == "execution":
         health.update(state="supervised", reason="Activity is assessed separately for each operation")
         return health, {}
-    child = ownership(entry.get("child_pid"), entry.get("child_identity"), processes)
+    child = process.ownership(entry.get("child_pid"), entry.get("child_identity"), processes)
     health["child"] = child
     if child != "present":
         health.update(state="unknown", reason="No matching live command identity in this sample")
         return health, {}
-    tree = descendants(entry["child_pid"], processes)
+    tree = process.descendants(entry["child_pid"], processes)
     fingerprint = [[p["pid"], p["identity"], p["cpu"]] for p in tree]
     outputs = []
     try:
@@ -129,7 +74,7 @@ def annotate(queue, status):
     if not monitored:
         return status
     try:
-        processes = process_snapshot()
+        processes = process.process_snapshot()
         # Observers share the system clock.
         now = time.clock_gettime(time.CLOCK_MONOTONIC)
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
