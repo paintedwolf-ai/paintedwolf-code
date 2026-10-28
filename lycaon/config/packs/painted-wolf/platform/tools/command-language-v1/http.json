@@ -486,9 +486,10 @@
         "6": "DNS",
         "7": "connect",
         "28": "timeout",
-        "35": "TLS handshake or verification",
         "58": "client certificate, key or passphrase unusable",
-        "77": "--cacert or --capath bundle unusable"
+        "77": "--cacert or --capath bundle unusable",
+        "56": "receive failure, including a peer's TLS alert such as a refused client certificate",
+        "60": "peer certificate not verified by the system roots or the --cacert/--capath bundle"
       },
       "effects": [
         {
