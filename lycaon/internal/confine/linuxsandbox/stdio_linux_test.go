@@ -190,11 +190,11 @@ func TestStandardStreamsReportInitializationAndCopyFailures(t *testing.T) {
 
 func TestCopyStreamKeepsPartialReadsAndReportsShortWrites(t *testing.T) {
 	var out bytes.Buffer
-	testutil.FailErr(t, "copy bounded bytes", copyStream(&out, bytes.NewBufferString("all bytes"), make([]byte, 3)))
+	testutil.FailErr(t, "copy bounded bytes", copyStream(&out, bytes.NewBufferString("all bytes"), make([]byte, 3), func() bool { return false }))
 	if out.String() != "all bytes" {
 		t.Fatal("copy lost a partial block")
 	}
-	if err := copyStream(zeroStreamWriter{}, bytes.NewBufferString("x"), make([]byte, 1)); !errors.Is(err, io.ErrShortWrite) {
+	if err := copyStream(zeroStreamWriter{}, bytes.NewBufferString("x"), make([]byte, 1), func() bool { return false }); !errors.Is(err, io.ErrShortWrite) {
 		t.Fatalf("short write=%v", err)
 	}
 }
@@ -217,4 +217,30 @@ func TestStandardStreamsRefuseAmbiguousOutputsWithoutKernelComparison(t *testing
 	})
 	testutil.FailErr(t, "prepare ordinary distinct output files", err)
 	testutil.FailErr(t, "settle distinct outputs", streams.finish())
+}
+
+func TestStandardStreamsDrainQueuedBytesWithoutWaitingForAnotherWriter(t *testing.T) {
+	output := streamFile(t, "")
+	streams, err := newStandardStreams([3]*os.File{nil, output, output}, sameOpenFile)
+	testutil.FailErr(t, "prepare retained-writer fixture", err)
+	fd, err := unix.FcntlInt(streams.files[1].Fd(), unix.F_DUPFD_CLOEXEC, 3)
+	testutil.FailErr(t, "retain another output writer", err)
+	other := os.NewFile(uintptr(fd), "retained-writer")
+	defer other.Close()
+	for _, chunk := range []struct {
+		stream int
+		text   string
+	}{{1, "queued-one"}, {2, "queued-two"}} {
+		_, err = streams.files[chunk.stream].WriteString(chunk.text)
+		testutil.FailErr(t, "queue target output", err)
+	}
+	testutil.FailErr(t, "settle output with another writer still open", streams.finish())
+	data, err := os.ReadFile(output.Name())
+	testutil.FailErr(t, "read all settled target output", err)
+	if string(data) != "queued-onequeued-two" {
+		t.Fatalf("settlement lost queued target bytes: %q", data)
+	}
+	if _, err := other.WriteString("after-settlement"); !errors.Is(err, unix.EPIPE) {
+		t.Fatalf("retained writer still reaches output after settlement: %v", err)
+	}
 }

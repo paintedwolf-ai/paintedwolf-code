@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -38,6 +40,8 @@ type standardBridge struct {
 type standardStreams struct {
 	files   [3]*os.File
 	bridges []*standardBridge
+	settled sync.Once
+	result  error
 }
 
 // handoverStandardStreams owns regular-file copies until the helper has reaped
@@ -161,18 +165,23 @@ func (b *standardBridge) copy() {
 	}
 	// The fixed copy block and kernel pipe bound memory and read-ahead.
 	buffer := make([]byte, 32*1024)
-	err := copyStream(to, from, buffer)
-	if b.stream == 0 && b.stopping.Load() && (errors.Is(err, os.ErrClosed) || errors.Is(err, unix.EPIPE)) {
+	err := copyStream(to, from, buffer, b.stopping.Load)
+	if b.stopping.Load() && (errors.Is(err, os.ErrClosed) || errors.Is(err, unix.EPIPE) || errors.Is(err, os.ErrDeadlineExceeded)) {
 		err = nil
 	}
 	if err != nil {
 		b.err = &StreamError{b.stream, "copy", err}
 	}
-	_ = b.copyEnd.Close()
+	if b.stream == 0 || err != nil {
+		_ = b.copyEnd.Close()
+	}
 }
 
-func copyStream(to io.Writer, from io.Reader, buffer []byte) error {
+func copyStream(to io.Writer, from io.Reader, buffer []byte, stopped func() bool) error {
 	for {
+		if stopped() {
+			return nil
+		}
 		n, readErr := from.Read(buffer)
 		for written := 0; written < n; {
 			count, err := to.Write(buffer[written:n])
@@ -194,23 +203,53 @@ func copyStream(to io.Writer, from io.Reader, buffer []byte) error {
 }
 
 func (s *standardStreams) finish() error {
-	// Closing our child ends lets output drain to EOF. Input may be blocked on
-	// an early-exiting target, so cancel its producer before joining it.
+	s.settled.Do(func() { s.result = s.settle() })
+	return s.result
+}
+
+func (s *standardStreams) settle() error {
+	var result error
+	// A recipient outside the process tree may retain a writer. End copying at
+	// target settlement, then drain only the bytes already queued in each pipe.
 	for _, b := range s.bridges {
+		b.stopping.Store(true)
 		if b.stream == 0 {
-			b.stopping.Store(true)
 			_ = b.original.Close()
 			_ = b.copyEnd.Close()
+		} else {
+			select {
+			case <-b.done:
+			default:
+				if err := b.copyEnd.SetReadDeadline(time.Now()); err != nil {
+					result = errors.Join(result, &StreamError{b.stream, "stop output read", err})
+					_ = b.copyEnd.Close()
+				}
+			}
 		}
 		_ = b.child.Close()
 	}
-	var result error
 	for _, b := range s.bridges {
 		<-b.done
-		result = errors.Join(result, b.err)
+		result = errors.Join(b.err, result)
+		if b.stream != 0 && b.err == nil {
+			if err := b.drainQueued(); err != nil {
+				result = errors.Join(result, &StreamError{b.stream, "drain output", err})
+			}
+		}
 		b.close()
 	}
 	return result
+}
+
+func (b *standardBridge) drainQueued() error {
+	if err := b.copyEnd.SetReadDeadline(time.Time{}); err != nil {
+		return err
+	}
+	queued, err := unix.IoctlGetInt(int(b.copyEnd.Fd()), unix.TIOCINQ)
+	if err != nil {
+		return err
+	}
+	return copyStream(b.original, io.LimitReader(b.copyEnd, int64(queued)), make([]byte, 32*1024), func() bool { return false })
 }
 
 func (b *standardBridge) close() { _ = b.child.Close(); _ = b.copyEnd.Close(); _ = b.original.Close() }

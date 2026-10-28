@@ -38,6 +38,13 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// Snapshot standard streams before another launch resource can reuse a closed slot.
+	cmd := exec.CommandContext(context.Background(), self, args...)
+	settleStreams, err := handoverStandardStreams(cmd)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { err = errors.Join(err, settleStreams()) }()
 	read, write, err := os.Pipe()
 	if err != nil {
 		return 0, 0, fmt.Errorf("plan pipe: %w", err)
@@ -63,17 +70,6 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	}
 	sup := newSupervisor(control, network, lines)
 	defer sup.close()
-	// The inner helper ends with this process, by its parent-death signal.
-	cmd := exec.CommandContext(context.Background(), self, args...)
-	settleStreams, err := handoverStandardStreams(cmd)
-	if err != nil {
-		_ = read.Close()
-		_ = write.Close()
-		_ = reportWrite.Close()
-		_ = controlChild.Close()
-		return 0, 0, err
-	}
-	defer func() { err = errors.Join(err, settleStreams()) }()
 	// A nil marker leaves its descriptor closed in the child.
 	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}
 	cmd.SysProcAttr = namespaceAttr()

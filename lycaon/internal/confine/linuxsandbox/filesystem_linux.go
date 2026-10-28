@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -33,6 +34,11 @@ const (
 
 // applyFilesystem expresses the plan's masks and restorations as mounts.
 func applyFilesystem(fs Filesystem) error {
+	cwd, err := unix.Open(".", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return mountFailure("retain working directory", err)
+	}
+	defer func() { _ = unix.Close(cwd) }()
 	var ops []mountOp
 	defer func() {
 		for _, op := range ops {
@@ -136,6 +142,31 @@ func applyFilesystem(fs Filesystem) error {
 				return mountFailure(op.path, err)
 			}
 		}
+	}
+	return restoreWorkingDirectory(cwd)
+}
+
+// A retained cwd still names the old mount after an allow-back covers its
+// path. Re-enter the identical directory through the completed private view.
+func restoreWorkingDirectory(held int) error {
+	name, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(held))
+	if err != nil {
+		return mountFailure("resolve working directory", err)
+	}
+	fd, err := unix.Open(name, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return mountFailure("reopen working directory", err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	var before, after unix.Stat_t
+	if err := errors.Join(unix.Fstat(held, &before), unix.Fstat(fd, &after)); err != nil {
+		return mountFailure("inspect working directory", err)
+	}
+	if before.Dev != after.Dev || before.Ino != after.Ino {
+		return mountFailure("restore working directory", errors.New("working directory object changed"))
+	}
+	if err := unix.Fchdir(fd); err != nil {
+		return mountFailure("enter working directory", err)
 	}
 	return nil
 }
