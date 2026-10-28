@@ -36,6 +36,8 @@ func TestLinuxMetadataProbeProcess(t *testing.T) {
 func metadataOperation(op, path string) error {
 	times := []unix.Timespec{{Sec: 123456789}, {Sec: 123456789}}
 	switch op {
+	case "fchmod-stdin":
+		return unix.Fchmod(0, 0o640)
 	case "restricted-mount":
 		var st unix.Statfs_t
 		if err := unix.Statfs(path, &st); err != nil {

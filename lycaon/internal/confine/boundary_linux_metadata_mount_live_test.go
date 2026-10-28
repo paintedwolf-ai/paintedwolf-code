@@ -22,7 +22,7 @@ func TestLinuxMetadataPreservesReadOnlySourceMount(t *testing.T) {
 		testutil.FailErr(t, "isolate source mount propagation", unix.Mount("", "/", "", unix.MS_PRIVATE|unix.MS_REC, ""))
 		testutil.FailErr(t, "bind source read-only fixture", unix.Mount(root, root, "", unix.MS_BIND, ""))
 		testutil.FailErr(t, "seal source fixture mount", unix.MountSetattr(unix.AT_FDCWD, root, 0, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY | unix.MOUNT_ATTR_NOEXEC | unix.MOUNT_ATTR_NOSUID | unix.MOUNT_ATTR_NODEV}))
-		got := runMetadata(t, denyConfinement(root), []string{"restricted-mount " + filepath.Join(root, "file"), "chmod " + filepath.Join(root, "file"), "fchmodat-empty " + filepath.Join(root, "file")})
+		got := runMetadata(t, denyConfinement(root), []string{"restricted-mount " + filepath.Join(root, "file"), "chmod " + filepath.Join(root, "file"), "fchmodat-empty " + filepath.Join(root, "file")}, nil)
 		if got["restricted-mount "+filepath.Join(root, "file")] != "ok" {
 			t.Fatalf("child lost source mount restrictions: %v", got)
 		}
@@ -48,7 +48,7 @@ func TestLinuxMetadataPreservesReadOnlySourceMount(t *testing.T) {
 	cmd.Env = append(os.Environ(), metadataReadOnlySourceEnv+"="+root)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
-		GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}, GidMappingsEnableSetgroups: false}
+		GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}, GidMappingsEnableSetgroups: false, AmbientCaps: []uintptr{unix.CAP_SYS_ADMIN}}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("source mount fixture failed: %v\n%s", err, out)

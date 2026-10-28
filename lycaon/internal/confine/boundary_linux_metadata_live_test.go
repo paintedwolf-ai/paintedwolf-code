@@ -28,7 +28,7 @@ func seedMetadataFile(t *testing.T, path string) {
 	}
 }
 
-func runMetadata(t *testing.T, c confine.Confinement, script []string) map[string]string {
+func runMetadata(t *testing.T, c confine.Confinement, script []string, input *os.File) map[string]string {
 	t.Helper()
 	self := requireLinuxSandbox(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -36,6 +36,7 @@ func runMetadata(t *testing.T, c confine.Confinement, script []string) map[strin
 	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{"-test.run=^TestLinuxMetadataProbeProcess$"}, c)
 	testutil.FailErr(t, "prepare metadata command", err)
 	defer cleanup()
+	cmd.Stdin = input
 	cmd.Env = append(os.Environ(), metadataScriptEnv+"="+strings.Join(script, "\n"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -64,7 +65,7 @@ func TestLinuxMetadataOutsideWriteRootsIsReadOnly(t *testing.T) {
 	for _, op := range metadataOperations {
 		script = append(script, op+" "+outsideFile, op+" "+insideFile)
 	}
-	got := runMetadata(t, denyConfinement(root), script)
+	got := runMetadata(t, denyConfinement(root), script, nil)
 	for _, op := range metadataOperations {
 		for _, tc := range []struct{ path, want string }{{outsideFile, "EROFS"}, {insideFile, "ok"}} {
 			if value := got[op+" "+tc.path]; value != tc.want {
@@ -127,7 +128,7 @@ func TestLinuxMetadataFollowsTargetsAndExactWriteGrants(t *testing.T) {
 			script = append(script, op+" "+p)
 		}
 	}
-	got := runMetadata(t, c, script)
+	got := runMetadata(t, c, script, nil)
 	for _, line := range script {
 		want := "EROFS"
 		if strings.HasSuffix(line, " "+inward) || strings.HasSuffix(line, " "+exact) {
@@ -137,7 +138,7 @@ func TestLinuxMetadataFollowsTargetsAndExactWriteGrants(t *testing.T) {
 			t.Errorf("%s = %q, want %s", line, got[line], want)
 		}
 	}
-	got = runMetadata(t, c, []string{"lchown " + outward, "lutimensat " + outward, "lchown " + inward, "lutimensat " + inward})
+	got = runMetadata(t, c, []string{"lchown " + outward, "lutimensat " + outward, "lchown " + inward, "lutimensat " + inward}, nil)
 	for line, value := range got {
 		want := "EROFS"
 		if strings.HasSuffix(line, " "+outward) {
@@ -165,7 +166,7 @@ func TestLinuxReadRestorationDoesNotGrantMetadataWrites(t *testing.T) {
 	for _, op := range []string{"chmod", "fchmodat-empty", "utimensat-empty", "setxattr", "setflags"} {
 		script = append(script, op+" "+readable, op+" "+scratchFile)
 	}
-	got := runMetadata(t, c, script)
+	got := runMetadata(t, c, script, nil)
 	for _, line := range script {
 		want := "EROFS"
 		if strings.HasSuffix(line, " "+scratchFile) {
@@ -174,5 +175,20 @@ func TestLinuxReadRestorationDoesNotGrantMetadataWrites(t *testing.T) {
 		if got[line] != want {
 			t.Errorf("%s = %q, want %s", line, got[line], want)
 		}
+	}
+}
+
+func TestLinuxInheritedInputMetadata(t *testing.T) {
+	requireLinuxSandbox(t)
+	outside := filepath.Join(outsideTemporaryWriteRoots(t), "input")
+	seedMetadataFile(t, outside)
+	input, err := os.Open(outside)
+	testutil.FailErr(t, "open read-only input stream", err)
+	defer func() { _ = input.Close() }()
+	got := runMetadata(t, denyConfinement(t.TempDir()), []string{"fchmod-stdin input"}, input)
+	st, err := os.Stat(outside)
+	testutil.FailErr(t, "inspect inherited input", err)
+	if got["fchmod-stdin input"] != "EROFS" || st.Mode().Perm() != 0o644 {
+		t.Fatalf("inherited O_RDONLY input metadata: result=%s mode=%#o, want EROFS and unchanged0644", got["fchmod-stdin input"], st.Mode().Perm())
 	}
 }

@@ -90,7 +90,7 @@ func TestFilesystemMountOrderingPreservesExactAllowBacks(t *testing.T) {
 	cmd.Env = append(os.Environ(), "PW_METADATA_MOUNT_PLAN="+string(raw), "PW_METADATA_ALLOW_BACKS="+strings.Join(paths, "\n"))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
-		GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}, GidMappingsEnableSetgroups: false}
+		GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}, GidMappingsEnableSetgroups: false, AmbientCaps: []uintptr{unix.CAP_SYS_ADMIN}}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("mount fixture failed: %v\n%s", err, out)
 	}
