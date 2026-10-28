@@ -14,10 +14,16 @@ const procSubstPrefix = "/dev/fd/"
 
 type procSubstPipeWriter struct {
 	pipe *BytePipe
+	wait *ExecutionWait
 }
 
 func (w procSubstPipeWriter) Write(p []byte) (int, error) {
-	return w.pipe.Write(p)
+	return w.pipe.write(p, w.wait)
+}
+
+func (w procSubstPipeWriter) WithActivity(activity *ExecutionWait) io.Writer {
+	w.wait = activity
+	return w
 }
 
 func (w procSubstPipeWriter) Close() error {
@@ -40,6 +46,10 @@ func (o *procSubstStagedOutput) Write(p []byte) (int, error) {
 	return o.writer.Write(p)
 }
 
+func (o *procSubstStagedOutput) WithActivity(activity *ExecutionWait) io.Writer {
+	return (Streams{Output: o.writer}).WithActivity(activity).Output
+}
+
 func (o *procSubstStagedOutput) closeOnce() error {
 	o.mu.Lock()
 	if o.closed {
@@ -60,15 +70,17 @@ func (o *procSubstStagedOutput) Abandon(context.Context) error {
 }
 
 type procSubstEntry struct {
-	part   commandsurface.SubstitutionPart
-	fd     int
-	path   string
-	pipe   *BytePipe
-	run    *childRun
-	frame  *frame
-	cancel context.CancelFunc
-	done   chan struct{}
-	err    error
+	part         commandsurface.SubstitutionPart
+	fd           int
+	path         string
+	pipe         *BytePipe
+	run          *childRun
+	frame        *frame
+	cancel       context.CancelFunc
+	done         chan struct{}
+	err          error
+	completionMu sync.Mutex
+	unblock      func()
 }
 
 type procSubstScope struct {
@@ -162,8 +174,8 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 		f.procSubst.add(entry)
 	}
 	go func() {
-		defer close(entry.done)
 		defer g.wait.finish()
+		defer entry.complete()
 		defer release()
 		defer cancel()
 		_, runErr := g.statements(subCtx, part.Statements)
@@ -193,8 +205,11 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	if f.procSubst == nil {
 		_ = pipe.CloseConsumer()
 		_ = pipe.CloseProducer(nil)
-		<-entry.done
+		waitErr := entry.wait(ctx, f.wait)
 		e.releaseProcSubstFD(fd)
+		if waitErr != nil {
+			return nil, waitErr
+		}
 		return subst, entry.settle(ctx, f)
 	}
 	return subst, nil
@@ -228,8 +243,11 @@ func (s *procSubstScope) finish(ctx context.Context, f *frame, stmtErr error) er
 	}
 	var firstErr error
 	for _, entry := range entries {
-		<-entry.done
+		waitErr := entry.wait(ctx, f.wait)
 		f.e.releaseProcSubstFD(entry.fd)
+		if waitErr != nil && firstErr == nil {
+			firstErr = waitErr
+		}
 		if err := entry.settle(ctx, f); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -380,4 +398,35 @@ func (a assignment) apply(ctx context.Context, vars *Variables) error {
 	default:
 		return vars.AssignScalar(ctx, a.name, a.value, a.appendMode)
 	}
+}
+
+func (entry *procSubstEntry) complete() {
+	entry.completionMu.Lock()
+	defer entry.completionMu.Unlock()
+	if entry.unblock != nil {
+		entry.unblock()
+		entry.unblock = nil
+	}
+	close(entry.done)
+}
+
+func (entry *procSubstEntry) wait(ctx context.Context, activity *ExecutionWait) error {
+	entry.completionMu.Lock()
+	select {
+	case <-entry.done:
+		entry.completionMu.Unlock()
+		return nil
+	default:
+	}
+	unblock, err := activity.Block(ctx, WaitState{})
+	if err != nil {
+		entry.completionMu.Unlock()
+		entry.cancel()
+		<-entry.done
+		return err
+	}
+	entry.unblock = unblock
+	entry.completionMu.Unlock()
+	<-entry.done
+	return nil
 }
