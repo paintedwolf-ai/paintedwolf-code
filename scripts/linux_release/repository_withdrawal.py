@@ -18,6 +18,9 @@ from .release_repositories import STORAGE_PREFIX, withdrawal_key
 from .repository_objects import encoded
 from .signing import CATALOG
 
+# Every channel a halt can withdraw, including architectures a later catalog may retire.
+# test_halt_withdrawal_covers_every_published_repository_channel keeps this table a superset
+# of what publication derives from the catalog.
 CHANNELS = [(family, channel, architecture) for channel in ["stable", "preview"]
             for family, architecture in [("deb", None), ("rpm", None), ("pacman", "x86_64"), ("pacman", "aarch64")]]
 
