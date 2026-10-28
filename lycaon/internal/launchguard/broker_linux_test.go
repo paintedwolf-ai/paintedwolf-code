@@ -3,9 +3,11 @@
 package launchguard
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -347,3 +349,68 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	}
 }
 
+func TestClosingBrokerAgentWaitsOnlyForAttachedCalls(t *testing.T) {
+	agent := &brokerAgent{closing: true, calls: map[int]*brokerCall{
+		1: {pid: 10, detach: true},
+		2: {pid: 11},
+	}}
+	if agent.shouldExit(false) {
+		t.Fatal("closing agent exited while an attached call is running")
+	}
+	agent.calls[2].detach = true
+	if !agent.shouldExit(false) {
+		t.Fatal("closing agent waited on detached calls")
+	}
+}
+
+func TestStandardStreamReplacementsReportOneLineEach(t *testing.T) {
+	saved, err := unix.Dup(2)
+	testutil.FailErr(t, "save stderr", err)
+	read, write, err := os.Pipe()
+	testutil.FailErr(t, "pipe", err)
+	testutil.FailErr(t, "redirect stderr", unix.Dup3(int(write.Fd()), 2, 0))
+	reportStandardStreamReplacements([]standardStreamReplacement{
+		{Event: "protected_standard_stream_replaced", Descriptor: 0, FileType: unix.S_IFREG},
+		{Event: "protected_standard_stream_replaced", Descriptor: 2, FileType: unix.S_IFDIR},
+	})
+	testutil.FailErr(t, "restore stderr", unix.Dup3(saved, 2, 0))
+	_ = unix.Close(saved)
+	_ = write.Close()
+	raw, err := io.ReadAll(read)
+	_ = read.Close()
+	testutil.FailErr(t, "read report", err)
+	want := fmt.Sprintf("{\"event\":\"protected_standard_stream_replaced\",\"fd\":0,\"file_type\":%d}\n{\"event\":\"protected_standard_stream_replaced\",\"fd\":2,\"file_type\":%d}\n", unix.S_IFREG, unix.S_IFDIR)
+	if string(raw) != want {
+		t.Fatalf("report = %q, want %q", raw, want)
+	}
+}
+
+func TestBindGenerationRefusesAWritableGeneration(t *testing.T) {
+	base := t.TempDir()
+	withTestTrustAnchor(t, base)
+	writable := filepath.Join(base, "generation")
+	testutil.FailErr(t, "mkdir generation", os.Mkdir(writable, 0o755))
+	testutil.FailErr(t, "loosen generation", os.Chmod(writable, 0o777))
+	generation, err := os.Open(writable)
+	testutil.FailErr(t, "open generation", err)
+	defer func() { _ = generation.Close() }()
+	if mounted, err := bindGeneration(GenerationPolicy{}, generation, nil); err == nil {
+		_ = mounted.Close()
+		t.Fatal("bound a world-writable generation")
+	}
+}
+
+func TestEntryFrameAndTrustedPathRefuseMismatchedObjects(t *testing.T) {
+	if frame, err := sealEntrySpec(EntrySpec{Version: 2}); err == nil {
+		_ = frame.Close()
+		t.Fatal("sealed an entry specification its reader refuses")
+	}
+	base := t.TempDir()
+	withTestTrustAnchor(t, base)
+	directory := filepath.Join(base, "directory")
+	testutil.FailErr(t, "mkdir", os.Mkdir(directory, 0o755))
+	if file, err := openRootControlled(directory, false); err == nil {
+		_ = file.Close()
+		t.Fatal("opened a directory where a regular file is required")
+	}
+}
