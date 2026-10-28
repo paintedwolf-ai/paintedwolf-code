@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"golang.org/x/sys/unix"
@@ -24,7 +25,8 @@ type mountOp struct {
 type opKind int
 
 const (
-	opHidden opKind = iota
+	opWritable opKind = iota
+	opHidden
 	opReadOnly
 	opRestored
 )
@@ -34,7 +36,7 @@ func applyFilesystem(fs Filesystem) error {
 	var ops []mountOp
 	defer func() {
 		for _, op := range ops {
-			if op.kind == opRestored {
+			if op.kind == opRestored || op.kind == opWritable {
 				_ = unix.Close(op.clone)
 			}
 		}
@@ -51,7 +53,11 @@ func applyFilesystem(fs Filesystem) error {
 			if err != nil {
 				return mountFailure("clone "+p, err)
 			}
-			ops = append(ops, mountOp{path: p, kind: opRestored, clone: fd})
+			kind := opWritable
+			if slices.Contains(fs.Restored, p) {
+				kind = opRestored
+			}
+			ops = append(ops, mountOp{path: p, kind: kind, clone: fd})
 			seen[p] = true
 			if p != "/dev" && !metadataWritable(fs, p) {
 				if err := setTreeReadOnly(fd); err != nil {
@@ -70,7 +76,9 @@ func applyFilesystem(fs Filesystem) error {
 			ops = append(ops, mountOp{path: p, kind: opReadOnly})
 		}
 	}
-	sort.SliceStable(ops, func(i, j int) bool { return ops[i].path < ops[j].path })
+	sort.SliceStable(ops, func(i, j int) bool {
+		return ops[i].path < ops[j].path || (ops[i].path == ops[j].path && ops[i].kind < ops[j].kind)
+	})
 	var hiddenFiles *hiddenFileMask
 	for _, op := range ops {
 		if op.kind == opHidden && !isDir(op.path) {
@@ -106,7 +114,7 @@ func applyFilesystem(fs Filesystem) error {
 			}
 		case opReadOnly:
 			err = bindReadOnly(op.path)
-		case opRestored:
+		case opRestored, opWritable:
 			err = restore(op.clone, op.path)
 		}
 		if err != nil {
@@ -123,7 +131,7 @@ func applyFilesystem(fs Filesystem) error {
 	// Hidden directories become read-only only after anything restored beneath
 	// them has its mountpoint.
 	for _, op := range ops {
-		if op.kind == opHidden && isDir(op.path) {
+		if op.kind == opHidden && !slices.Contains(fs.Restored, op.path) && isDir(op.path) {
 			if err := setReadOnlyAt(op.path); err != nil {
 				return mountFailure(op.path, err)
 			}
@@ -153,7 +161,7 @@ func metadataWritable(fs Filesystem, path string) bool {
 			}
 		}
 	}
-	return grant >= 0 && grant >= mask
+	return grant > mask || (grant >= 0 && grant == mask && slices.Contains(fs.Restored, path[:grant]))
 }
 
 func mountFailure(what string, err error) error {

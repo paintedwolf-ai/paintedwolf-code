@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-var metadataOperations = []string{"chmod", "fchmodat", "fchmod", "fchmodat-empty", "chown", "lchown", "fchownat", "fchown", "fchownat-empty", "utimes", "utimensat", "lutimensat", "futimes", "utimensat-empty", "setxattr", "lsetxattr", "fsetxattr", "removexattr", "lremovexattr", "fremovexattr", "setflags"}
+var metadataOperations = []string{"chmod", "fchmodat", "fchmod", "openat2-fchmod", "open-create-fchmod", "fchmodat-empty", "chown", "lchown", "fchownat", "fchown", "fchownat-empty", "utimes", "utimensat", "lutimensat", "futimes", "utimensat-empty", "setxattr", "lsetxattr", "fsetxattr", "removexattr", "lremovexattr", "fremovexattr", "setflags"}
 
 func seedMetadataFile(t *testing.T, path string) {
 	t.Helper()
@@ -117,6 +117,7 @@ func TestLinuxMetadataFollowsTargetsAndExactWriteGrants(t *testing.T) {
 	testutil.FailErr(t, "create inward symlink", os.Symlink(allowed, inward))
 	c := denyConfinement(root)
 	c.ReadRoots = []string{mask}
+	c.Roots = append(c.Roots, mask)
 	grants, err := confine.ValidatePolicyWriteGrants([]confine.ProtectedPathGrant{confine.NewProtectedPathGrant(exact)}, []string{root})
 	testutil.FailErr(t, "validate exact metadata grant", err)
 	c.PolicyWriteGrants = grants

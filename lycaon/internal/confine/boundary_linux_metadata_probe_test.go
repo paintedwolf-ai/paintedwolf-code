@@ -36,6 +36,16 @@ func TestLinuxMetadataProbeProcess(t *testing.T) {
 func metadataOperation(op, path string) error {
 	times := []unix.Timespec{{Sec: 123456789}, {Sec: 123456789}}
 	switch op {
+	case "restricted-mount":
+		var st unix.Statfs_t
+		if err := unix.Statfs(path, &st); err != nil {
+			return err
+		}
+		want := int64(unix.ST_RDONLY | unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV)
+		if st.Flags&want != want {
+			return fmt.Errorf("source mount restrictions missing: %x", st.Flags)
+		}
+		return nil
 	case "chmod":
 		return unix.Chmod(path, 0o640)
 	case "fchmodat":
@@ -65,13 +75,22 @@ func metadataOperation(op, path string) error {
 	if strings.HasSuffix(op, "-empty") {
 		flags = unix.O_PATH | unix.O_CLOEXEC
 	}
-	fd, err := unix.Open(path, flags, 0)
+	var fd int
+	var err error
+	switch op {
+	case "openat2-fchmod":
+		fd, err = unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: uint64(flags)})
+	case "open-create-fchmod":
+		fd, err = unix.Open(path, flags|unix.O_CREAT, 0o644)
+	default:
+		fd, err = unix.Open(path, flags, 0)
+	}
 	if err != nil {
 		return err
 	}
 	defer func() { _ = unix.Close(fd) }()
 	switch op {
-	case "fchmod":
+	case "fchmod", "openat2-fchmod", "open-create-fchmod":
 		return unix.Fchmod(fd, 0o640)
 	case "fchmodat-empty":
 		return unix.Fchmodat(fd, "", 0o640, unix.AT_EMPTY_PATH)
