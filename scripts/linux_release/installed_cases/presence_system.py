@@ -10,7 +10,7 @@ from .polkit_attempt import attempt_rows
 from .presence_confirmation import await_confirmation, confirmation_rows
 from .profile_observer import _database, identifier, rows
 from .records import CaseFailed, CaseUnavailable
-from ..installed_environment import graphical_session
+from ..campaign.environment import graphical_session
 from ..installed_input.polkit_client import NativePolkitControl
 from ..installed_input.presence_fixture import NAME
 from ..installed_process import engine_image

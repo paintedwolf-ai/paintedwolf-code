@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 from scripts.linux_release.installed_process import engine_image
 from scripts.linux_release.installed_cases.app import InstalledApp
 from scripts.linux_release.installed_cases.records import CaseUnavailable, CaseFailed
-from scripts.linux_release.installed_environment import graphical_session
+from scripts.linux_release.campaign.environment import graphical_session
 from scripts.linux_release.installed_gnome import owner as gnome_owner
 
 
@@ -40,9 +40,9 @@ class InstalledAppTests(unittest.TestCase):
     def test_empty_logind_desktop_requires_actual_typed_compositor_owner(self):
         listing = {"exit_code": 0, "stdout": "1 1000 tester seat0\n"}
         details = {"exit_code": 0, "stdout": "User=1000\nActive=yes\nRemote=no\nType=wayland\nDesktop=\n"}
-        with patch("scripts.linux_release.installed_environment.os.getuid", return_value=1000), patch(
-                "scripts.linux_release.installed_environment.query", side_effect=[listing, details]), patch(
-                "scripts.linux_release.installed_environment.installed_gnome.owner", return_value={"pid": 2000}) as owner:
+        with patch("scripts.linux_release.campaign.environment.os.getuid", return_value=1000), patch(
+                "scripts.linux_release.campaign.environment.query", side_effect=[listing, details]), patch(
+                "scripts.linux_release.campaign.environment.installed_gnome.owner", return_value={"pid": 2000}) as owner:
             value = graphical_session()
             self.assertEqual(value["Desktop"], "GNOME")
             self.assertEqual(value["DesktopOwner"], {"pid": 2000})

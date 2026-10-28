@@ -2,6 +2,7 @@ package confine_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -23,14 +24,12 @@ func TestDefaultConfinementValidatesGrantedWriteRoots(t *testing.T) {
 		t.Fatal("a plain attached root must confine")
 	}
 
-	// Home grants retain hard-deny protections for stores and the control plane.
+	// A reviewed ancestor cannot move the host state tree.
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "home dir", err)
-	if _, on := confine.DefaultConfinement(confine.Request{
-		Roots:             []string{"/proj"},
-		GrantedWriteRoots: []string{home},
-	}); !on {
-		t.Fatal("a granted write root equal to $HOME must confine, not refuse")
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
+	if _, on := confine.DefaultConfinement(confine.Request{Roots: []string{"/proj"}, GrantedWriteRoots: []string{home}}); on {
+		t.Fatal("state ancestor grant admitted")
 	}
 
 	if _, on := confine.DefaultConfinement(confine.Request{

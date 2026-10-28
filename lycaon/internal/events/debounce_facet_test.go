@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,9 +28,9 @@ func TestSettingsAreasDoNotCoalesce(t *testing.T) {
 			t.Fatalf("publish %s: %v", area, err)
 		}
 	}
+	hub.FlushDebounced()
 
 	seen := map[api.SettingsArea]bool{}
-	deadline := time.After(2 * time.Second)
 	for len(seen) < 2 {
 		select {
 		case env := <-ch:
@@ -40,7 +39,7 @@ func TestSettingsAreasDoNotCoalesce(t *testing.T) {
 				t.Fatalf("decode: %v", err)
 			}
 			seen[ev.Area] = true
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("only saw %v; a settings area was coalesced away", seen)
 		}
 	}
@@ -65,16 +64,17 @@ func TestSameSettingsAreaStillCoalesces(t *testing.T) {
 			t.Fatalf("publish: %v", err)
 		}
 	}
+	hub.FlushDebounced()
 
 	select {
 	case <-ch:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("no settings event delivered")
 	}
 	select {
 	case env := <-ch:
 		t.Fatalf("repeated writes to one area should coalesce, got a second delivery: %+v", env)
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 }
 
@@ -98,16 +98,17 @@ func TestSourceChangedCoalescesPerPath(t *testing.T) {
 			t.Fatalf("publish: %v", err)
 		}
 	}
+	hub.FlushDebounced()
 
 	select {
 	case <-ch:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("no source_changed event delivered")
 	}
 	select {
 	case env := <-ch:
 		t.Fatalf("50 writes to one path should coalesce, got a second delivery: %+v", env)
-	case <-time.After(400 * time.Millisecond):
+	default:
 	}
 }
 
@@ -130,9 +131,9 @@ func TestSourceChangedKeepsDistinctPaths(t *testing.T) {
 			t.Fatalf("publish %s: %v", p, err)
 		}
 	}
+	hub.FlushDebounced()
 
 	seen := map[string]bool{}
-	deadline := time.After(2 * time.Second)
 	for len(seen) < len(paths) {
 		select {
 		case env := <-ch:
@@ -144,7 +145,7 @@ func TestSourceChangedKeepsDistinctPaths(t *testing.T) {
 				t.Fatalf("changes = %d, want 1", len(ev.Changes))
 			}
 			seen[ev.Changes[0].Path] = true
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("only saw %v; a distinct file was coalesced away", seen)
 		}
 	}

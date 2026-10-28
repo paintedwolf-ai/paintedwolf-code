@@ -1,10 +1,16 @@
-//! The step-away monitor against private buses: one dbus-daemon stands in
-//! for the system bus with a fixture logind, another for the session bus
-//! with a fixture screen saver.
+//! The step-away monitor against private buses and an in-test compositor:
+//! one dbus-daemon stands in for the system bus with a fixture logind,
+//! another for the session bus with a fixture screen saver and GNOME idle
+//! monitor, and a minimal Wayland compositor serves the idle notifier.
+
+mod compositor;
+
+use compositor::Compositor;
 
 use super::*;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -16,6 +22,7 @@ use gtk::glib::variant::ObjectPath;
 use gtk::glib::ToVariant;
 
 mod buses;
+mod idle_coverage;
 
 use buses::*;
 
@@ -28,7 +35,8 @@ struct Harness {
 }
 
 impl Harness {
-    fn new(system: &Daemon, desktop: &Daemon) -> Self {
+    fn new(fixture: &Fixture) -> Self {
+        let (system, desktop) = (&fixture.system, &fixture.desktop);
         let context = glib::MainContext::new();
         let locks = Rc::new(RefCell::new(Vec::new()));
         let recorded = locks.clone();
@@ -36,6 +44,10 @@ impl Harness {
             BusAddresses {
                 system: system.address(),
                 session: Ok(desktop.address()),
+            },
+            DisplayTargets {
+                wayland: Some(fixture.wayland.clone()),
+                x11: fixture.x11.clone(),
             },
             context.clone(),
             Box::new(move |reason| recorded.borrow_mut().push(reason)),
@@ -89,6 +101,9 @@ struct Fixture {
     facts: Arc<Mutex<Facts>>,
     logind: Option<Service>,
     screensaver: Option<Service>,
+    wayland: PathBuf,
+    compositor: Option<Compositor>,
+    x11: Option<String>,
 }
 
 impl Fixture {
@@ -98,12 +113,17 @@ impl Fixture {
         let facts = Arc::new(Mutex::new(facts));
         let logind = Some(Service::logind(&system, facts.clone()));
         let screensaver = screensaver.then(|| Service::screensaver(&desktop, facts.clone()));
+        let wayland = system.root.join("wayland-0");
+        let compositor = Some(Compositor::start(&wayland, Some(2)));
         Self {
             system,
             desktop,
             facts,
             logind,
             screensaver,
+            wayland,
+            compositor,
+            x11: None,
         }
     }
 
@@ -115,7 +135,7 @@ impl Fixture {
 #[test]
 fn an_active_unlocked_session_confirms_and_reports_its_sources() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let status = h.monitor.status();
@@ -126,8 +146,7 @@ fn an_active_unlocked_session_confirms_and_reports_its_sources() {
         let session = status.session.as_ref().expect("fixture session read");
         assert!(session.active && !session.locked && !session.can_lock);
         assert_eq!(status.screensaver_locked, Some(false));
-        assert!(status.logind_owner.as_deref().is_some_and(|o| o.starts_with(':')));
-        assert!(status.screensaver_owner.as_deref().is_some_and(|o| o.starts_with(':')));
+        assert_eq!(status.mode, StepAwayMode::LockObserved);
         assert!(h.allowed());
         assert!(h.locks().is_empty());
     });
@@ -146,7 +165,7 @@ fn an_initially_locked_or_inactive_session_locks_and_cannot_confirm() {
         },
     ] {
         let fixture = Fixture::new(facts, false);
-        let harness = Harness::new(&fixture.system, &fixture.desktop);
+        let harness = Harness::new(&fixture);
         harness.run(|h| {
             h.monitor.refresh();
             assert!(!h.allowed());
@@ -164,7 +183,7 @@ fn another_users_session_cannot_confirm() {
         },
         true,
     );
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert_eq!(
@@ -178,7 +197,7 @@ fn another_users_session_cannot_confirm() {
 #[test]
 fn lock_and_unlock_signals_follow_the_session() {
     let fixture = Fixture::new(Facts::default(), false);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert!(h.allowed());
@@ -204,7 +223,7 @@ fn lock_and_unlock_signals_follow_the_session() {
 #[test]
 fn locked_hint_and_activity_changes_lock() {
     let fixture = Fixture::new(Facts::default(), false);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let changed = properties_changed(&[("LockedHint", true.to_variant())]);
@@ -241,7 +260,7 @@ fn locked_hint_and_activity_changes_lock() {
 #[test]
 fn a_changed_session_identity_is_stale_until_reread() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let changed = properties_changed(&[(
@@ -264,7 +283,7 @@ fn a_changed_session_identity_is_stale_until_reread() {
 #[test]
 fn sleep_locks_and_a_wake_rereads_before_confirming() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         fixture
@@ -291,7 +310,7 @@ fn sleep_locks_and_a_wake_rereads_before_confirming() {
 #[test]
 fn the_screen_saver_locks_when_it_activates() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let service = fixture.screensaver.as_ref().unwrap();
@@ -316,15 +335,12 @@ fn the_screen_saver_locks_when_it_activates() {
 #[test]
 fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
-        let initial_owner = h.monitor.status().logind_owner.clone();
-        assert!(initial_owner.as_deref().is_some_and(|o| o.starts_with(':')));
         fixture.logind().release(session::NAME);
         h.pump_until("owner loss", |h| !h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
-        assert_eq!(h.monitor.status().logind_owner, None);
         assert_eq!(
             h.monitor.status().session_error,
             Some(session::SessionUnavailable::Unreadable)
@@ -338,16 +354,13 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
             h.monitor.tick();
             h.allowed()
         });
-        let recovered_owner = h.monitor.status().logind_owner;
-        assert!(recovered_owner.as_deref().is_some_and(|o| o.starts_with(':')));
-        assert_ne!(recovered_owner, initial_owner);
     });
 }
 
 #[test]
 fn a_closed_system_bus_locks_and_reconnects_when_it_returns() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert!(h.allowed());
@@ -373,7 +386,7 @@ fn a_closed_system_bus_locks_and_reconnects_when_it_returns() {
 #[test]
 fn a_closed_session_bus_drops_the_screen_saver_source() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         fixture.screensaver = None;

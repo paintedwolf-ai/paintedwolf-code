@@ -29,8 +29,7 @@ func fixtureBus(t *testing.T) string {
 		t.Fatalf("start isolated bus: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
