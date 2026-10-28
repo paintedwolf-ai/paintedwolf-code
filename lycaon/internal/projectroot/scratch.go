@@ -12,7 +12,7 @@ import (
 // that folder ("" for the folder itself). The label compares case-insensitively.
 // The returned path is not checked for escape; ScratchPath does that.
 func ScratchAddress(raw string) (rel string, ok bool) {
-	rest, found := strings.CutPrefix(strings.TrimSpace(raw), "@")
+	rest, found := strings.CutPrefix(raw, "@")
 	if !found {
 		return "", false
 	}

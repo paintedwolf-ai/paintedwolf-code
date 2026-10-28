@@ -41,7 +41,7 @@ func (r Resolved) EffectLocation() fseffect.Location {
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
 func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
-	abs := strings.TrimSpace(modelPath)
+	abs := modelPath
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
 	}
@@ -110,7 +110,7 @@ func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved
 	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
-	rel := strings.TrimSpace(resolved.ScopeRel)
+	rel := resolved.ScopeRel
 	if rel == "" {
 		return
 	}
@@ -182,7 +182,16 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		return Resolved{}, reject
 	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
+		resolved, err := resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
+		if err == nil {
+			return resolved, nil
+		}
+		if op == sandbox.PathOpRead {
+			if granted, ok := resolveGranted(tctx, modelPath, op); ok {
+				return granted, nil
+			}
+		}
+		return Resolved{}, err
 	}
 	if len(tctx.Source.Roots) == 0 {
 		return Resolved{}, noRootsReject()
@@ -207,15 +216,15 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		switch op {
 		case sandbox.PathOpRead:
 			if err := b.AssertReadScope(ctx, root.Path, scopeRel, tctx.ProfileID()); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		case sandbox.PathOpWrite:
 			if err := b.AssertPathAllowed(ctx, root.Path, scopeRel, sandbox.PathOpWrite); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		default:
 			if err := b.AssertPathAllowed(ctx, root.Path, scopeRel, op); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		}
 	}
@@ -273,8 +282,7 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 }
 
 func mapResolveErr(err error, modelPath string) error {
-	var scope *sandbox.ScopeError
-	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
+	if errors.Is(err, sandbox.ErrPathEscape) {
 		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
 	}
 	switch {
@@ -353,7 +361,7 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if reject := tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)); reject != nil {
 		return "", "", reject
 	}
-	cwdClean := strings.TrimSpace(cwdArg)
+	cwdClean := cwdArg
 	if _, scratch := scratchRel(tctx, cwdClean); scratch {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
@@ -474,7 +482,7 @@ func scratchRel(tctx tools.ToolContext, path string) (string, bool) {
 // scratchRelOfAbs returns an absolute path's place inside the scratch folder,
 // comparing canonical forms so an alias of the folder still resolves there.
 func scratchRelOfAbs(dir, raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
+	// Operand whitespace is filename data.
 	if dir == "" || !filepath.IsAbs(raw) {
 		return "", false
 	}

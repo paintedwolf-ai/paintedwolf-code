@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/installbinding"
 )
 
 // PipelineWaitDelay bounds output draining after a command leader exits.
@@ -57,11 +59,21 @@ type PipelineResult struct {
 }
 
 func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts) (*exec.Cmd, func(), error) {
+	// Installed helpers and the engine's own sandbox wrapper must come from the
+	// installation this engine started from.
+	if filepath.IsAbs(name) {
+		if err := installbinding.Verify(name); err != nil {
+			return nil, nil, err
+		}
+	}
 	confinement := opts.Launch.Confinement
 	if confinement != nil && confine.Available() {
 		self, err := os.Executable()
 		if err != nil {
 			return nil, nil, fmt.Errorf("locate self for sandbox: %w", err)
+		}
+		if err := installbinding.Verify(self); err != nil {
+			return nil, nil, err
 		}
 		confined, cleanup, err := confine.Command(ctx, self, name, args, *confinement)
 		if err != nil {
@@ -143,6 +155,10 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 		return nil, nil, err
 	}
 	if err := configureCmdEnv(cmd, opts); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if err := relayThroughBroker(cmd); err != nil {
 		cleanup()
 		return nil, nil, err
 	}
@@ -370,7 +386,7 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(wired []wiredStage) error {
+func startWiredStages(wired []wiredStage, started func(pid int)) error {
 	for i := range wired {
 		if err := wired[i].cmd.Start(); err != nil {
 			killWired(wired[:i])
@@ -387,6 +403,9 @@ func startWiredStages(wired []wiredStage) error {
 			reapWired(wired[:i+1])
 			releaseWired(wired[:i+1])
 			return err
+		}
+		if started != nil {
+			started(wired[i].cmd.Process.Pid)
 		}
 	}
 	// Parent pipe handles must close after every stage starts.

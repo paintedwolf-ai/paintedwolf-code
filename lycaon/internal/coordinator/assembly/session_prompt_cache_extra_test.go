@@ -2,16 +2,19 @@ package assembly
 
 import (
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSessionPromptCacheStableHit(t *testing.T) {
 	var cache SessionPromptCache
-	history := []api.Message{{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Hi"}}
-	profile := surface.ResolveTurnProfile(api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild}, history)
-	key := sessionPromptCacheKey(profile, "agents/coordinator-core.md", "", "/tmp", "build", "abc", 1, "prompt-revision")
+	in := standingPromptInputs{
+		PromptRevision: "prompt-revision",
+		Profile:        standingProfileInputs{SurfaceID: "implement_routing"},
+		RootCount:      1,
+	}
+	key, err := in.cacheKey()
+	if err != nil {
+		t.Fatalf("cacheKey: %v", err)
+	}
 	cache.StoreStable("s1", key, "cached prompt")
 	got, ok := cache.LoadStable("s1", key)
 	if !ok || got != "cached prompt" {
@@ -20,7 +23,12 @@ func TestSessionPromptCacheStableHit(t *testing.T) {
 	if _, ok := cache.LoadStable("s1", key+"x"); ok {
 		t.Fatal("expected miss on key change")
 	}
-	changedRevision := sessionPromptCacheKey(profile, "agents/coordinator-core.md", "", "/tmp", "build", "abc", 1, "next-prompt-revision")
+	in2 := in
+	in2.PromptRevision = "next-prompt-revision"
+	changedRevision, err := in2.cacheKey()
+	if err != nil {
+		t.Fatalf("cacheKey changed: %v", err)
+	}
 	if changedRevision == key {
 		t.Fatal("prompt source revision must participate in stable cache identity")
 	}

@@ -63,8 +63,15 @@ func lexicalRelUnder(root, target string) (string, bool) {
 
 // relUnderRoot maps a canonical in-root target to a relative path.
 func relUnderRoot(root, target string) (string, bool) {
-	if rel, ok := lexicalRelUnder(root, target); ok {
-		return rel, true
+	prefix := root + string(filepath.Separator)
+	if root == string(filepath.Separator) {
+		prefix = root
+	}
+	if strings.HasPrefix(target, prefix) {
+		return target[len(prefix):], true
+	}
+	if target == root {
+		return ".", true
 	}
 	resolved, err := filepath.EvalSymlinks(target)
 	if err != nil {
