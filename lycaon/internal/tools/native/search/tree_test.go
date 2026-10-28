@@ -14,8 +14,7 @@ import (
 )
 
 // treeFiles is a small project with an ignored log, a hidden file, an empty
-// directory and a link. Expected bytes were observed from tree 2.3.2 in a
-// UTF-8 locale over the same tree.
+// directory and a link.
 var treeFiles = map[string]string{
 	"a/b/c/": "", "a/b/g.log": "y\n", "a/f.txt": "x\n", "d/": "", "top.go": "z\n", ".hidden": "h\n", ".gitignore": "*.log\n",
 }
@@ -27,7 +26,7 @@ func treeHarness(t *testing.T) *harness {
 	return h
 }
 
-func TestTreeMatchesTreeTwo(t *testing.T) {
+func TestTreeFormsProduceExactBytes(t *testing.T) {
 	h := treeHarness(t)
 	v := "│   "
 	for _, c := range []struct {
@@ -130,7 +129,7 @@ func TestTreeMarksUnreadableDirectories(t *testing.T) {
 }
 
 // TestTreeDifferentialAgainstInstalledTree compares the forms above with an
-// installed tree 2.x in a UTF-8 locale, where one is present.
+// installed reference in a UTF-8 locale, where one is present.
 func TestTreeDifferentialAgainstInstalledTree(t *testing.T) {
 	binary, err := exec.LookPath("tree")
 	if err != nil {

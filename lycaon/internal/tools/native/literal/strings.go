@@ -7,9 +7,9 @@ import (
 	"strconv"
 )
 
-// stringsRun is GNU strings over one pinned input: runs of at least min
-// printable bytes, each written verbatim (and mapped to its capture) on its
-// own line. A run is held only until it reaches min; longer runs stream.
+// stringsRun scans one pinned input for runs of at least min printable
+// bytes, each written verbatim (and mapped to its capture) on its own line.
+// A run is held only until it reaches min; longer runs stream.
 type stringsRun struct {
 	inv      *invocation
 	in       *input
@@ -160,8 +160,8 @@ func (r *stringsRun) end() error {
 	return r.inv.out.text("\n")
 }
 
-// binutilsFailure is GNU strings' own wording for unreadable operands.
-func binutilsFailure(operand, reason string) string {
+// stringsFailure is strings' wording for unreadable operands.
+func stringsFailure(operand, reason string) string {
 	switch reason {
 	case "No such file or directory":
 		return fmt.Sprintf("'%s': No such file", operand)

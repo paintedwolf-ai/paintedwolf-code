@@ -12,7 +12,7 @@ import (
 
 // statVolume reads the volume holding an open file. Linux statfs carries no
 // names, so the mount comes from /proc/self/mountinfo: the deepest mount
-// point above path on the file's device, as GNU df chooses it.
+// point above path on the file's device.
 func statVolume(file *os.File, path string) (volume, error) {
 	var st unix.Statfs_t
 	if err := unix.Fstatfs(int(file.Fd()), &st); err != nil {

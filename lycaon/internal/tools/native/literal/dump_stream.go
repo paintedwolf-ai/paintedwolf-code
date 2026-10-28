@@ -78,7 +78,7 @@ func (s *operandSequence) Read(p []byte) (int, error) {
 	}
 }
 
-// byteMultipliers are the size suffixes GNU od and cmp accept: b is a
+// byteMultipliers are the size suffixes od and cmp accept: b is a
 // 512-byte block, single letters and iB forms are powers of 1024, B forms
 // powers of 1000.
 var byteMultipliers = map[string]uint64{
@@ -88,8 +88,8 @@ var byteMultipliers = map[string]uint64{
 	"T": 1 << 40, "TiB": 1 << 40, "TB": 1000 * 1000 * 1000 * 1000,
 }
 
-// byteCount parses a nonnegative count as GNU's xstrtoumax does: 0x
-// hexadecimal, leading-zero octal or decimal, then an optional multiplier.
+// byteCount parses a nonnegative count: 0x hexadecimal, leading-zero octal
+// or decimal, then an optional multiplier.
 func byteCount(value string) (int64, bool) {
 	if strings.ContainsAny(value, "_oO") || strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") {
 		return 0, false

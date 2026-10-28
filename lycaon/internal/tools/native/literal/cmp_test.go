@@ -7,8 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// cmpFiles are the comparison fixtures. Expected bytes were observed from
-// GNU diffutils 3.12 cmp over the same files.
+// cmpFiles are the comparison fixtures.
 var cmpFiles = map[string]string{
 	"a": "abc\ndef\nghi", "b": "abX\ndEf\n", "c": "abc\ndef\nghi", "e": "",
 	"x": "a\x01\x80\xff", "y": "a\x02\x81\x7f",
@@ -16,7 +15,7 @@ var cmpFiles = map[string]string{
 	"z1": strings.Repeat("\x00", 2000), "z3": "x" + strings.Repeat("\x00", 1999),
 }
 
-func TestCmpMatchesGNU(t *testing.T) {
+func TestCmpFormsProduceExactBytes(t *testing.T) {
 	h := newHarness(t, cmpFiles)
 	eofB := "cmp: EOF on 'b' after byte 8\n"
 	for _, c := range []formCase{
@@ -64,7 +63,7 @@ func TestCmpMatchesGNU(t *testing.T) {
 }
 
 // TestCmpDifferencesArePublishableComparisons: a complete status-one cmp
-// is a comparison result, like diff's, so a redirect may publish it.
+// is a comparison result, so a redirect may publish it.
 func TestCmpDifferencesArePublishableComparisons(t *testing.T) {
 	h := newHarness(t, cmpFiles)
 	r := h.exec("", "cmp", "a", "b")
@@ -87,7 +86,7 @@ func TestCmpRefusesInvalidForms(t *testing.T) {
 	}
 }
 
-func TestByteCountsAcceptGNUSuffixes(t *testing.T) {
+func TestByteCountsAcceptSizeSuffixes(t *testing.T) {
 	for value, want := range map[string]int64{"0": 0, "17": 17, "0x10": 16, "010": 8, "0xb": 11, "2b": 1024, "1k": 1024, "1K": 1024, "1KiB": 1024, "1kB": 1000, "1M": 1 << 20, "1MB": 1000000, "1G": 1 << 30, "1GB": 1000000000, "1T": 1 << 40, "1TB": 1000000000000} {
 		if got, ok := byteCount(value); !ok || got != want {
 			t.Errorf("byteCount(%q) = %d, %v; want %d", value, got, ok, want)

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// dfRow lays out one row with GNU df's column rules for these fixtures:
+// dfRow lays out one row with df's column rules for these fixtures:
 // Filesystem left in 14, the numeric columns right-aligned, Mounted on last.
 func dfRow(widths [4]int, cells ...string) string {
 	return fmt.Sprintf("%-14s %*s %*s %*s %*s %s\n", cells[0], widths[0], cells[1], widths[1], cells[2], widths[2], cells[3], widths[3], cells[4], cells[5])
@@ -28,7 +28,7 @@ func scratchVolume(scratch string) volumeStats {
 	}
 }
 
-func TestDfMatchesGNULayout(t *testing.T) {
+func TestDfLayoutProducesExactBytes(t *testing.T) {
 	h := newHarness(t, map[string]string{"input": "alpha\n", "dir/": ""})
 	scratch, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve scratch", err)

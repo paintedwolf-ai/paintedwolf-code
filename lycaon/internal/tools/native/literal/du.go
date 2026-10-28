@@ -26,9 +26,9 @@ type duWalk struct {
 	device  uint64
 }
 
-// runDu reports GNU du's disk usage over each operand's tree, walked through
-// the same bounded held-root directory reads as ls -R. A walk over
-// traversal_visits refuses rather than report a short total.
+// runDu reports disk usage over each operand's tree, walked through the same
+// bounded held-root directory reads as ls -R. A walk over traversal_visits
+// refuses rather than report a short total.
 func runDu(inv *invocation) error {
 	opts, err := duSelections(inv)
 	if err != nil {
@@ -99,7 +99,7 @@ func duSelections(inv *invocation) (duOptions, error) {
 
 // entry sizes one entry and, for a directory, everything below it, then
 // prints it when its depth and kind are selected. Directories print after
-// their contents, as GNU du's post-order walk does.
+// their contents.
 func (w *duWalk) entry(display string, bound projectpaths.BoundPath, st fseffect.EntryStat, depth int64) (int64, error) {
 	if !w.opts.apparent && !st.POSIX {
 		return 0, platformUnavailable("du", "POSIX allocation metadata")
@@ -114,7 +114,7 @@ func (w *duWalk) entry(display string, bound projectpaths.BoundPath, st fseffect
 	}
 	size := st.Blocks * 512
 	if w.opts.apparent {
-		// GNU du 9 counts a directory's own apparent size as zero.
+		// A directory's own apparent size counts as zero.
 		size = 0
 		if !dir {
 			size = st.Size
@@ -145,7 +145,7 @@ func (w *duWalk) entry(display string, bound projectpaths.BoundPath, st fseffect
 	return size, nil
 }
 
-// format renders a byte total in the selected unit, rounding up as GNU does.
+// format renders a byte total in the selected unit, rounding up.
 func (w *duWalk) format(size int64) string {
 	switch w.opts.unit {
 	case "h":

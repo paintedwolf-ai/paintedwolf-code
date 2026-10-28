@@ -92,7 +92,7 @@ func (inv *invocation) fail(status int, operand, reason string) {
 	case operand == "":
 		_, _ = fmt.Fprintf(inv.stderr, "%s: %s\n", inv.name(), reason)
 	case inv.name() == "strings":
-		_, _ = fmt.Fprintf(inv.stderr, "strings: %s\n", binutilsFailure(operand, reason))
+		_, _ = fmt.Fprintf(inv.stderr, "strings: %s\n", stringsFailure(operand, reason))
 	case failureForms[inv.name()] != "":
 		_, _ = fmt.Fprintf(inv.stderr, "%s: "+failureForms[inv.name()]+"\n", inv.name(), operand, reason)
 	default:

@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// treeRun is one tree invocation: tree 2.x's listing over the search walk,
-// with the read boundary, visit budget and (with --gitignore) the project
-// ignore owner applied to every directory it reads.
+// treeRun is one tree invocation: a listing over the search walk, with the
+// read boundary, visit budget and (with --gitignore) the project ignore
+// owner applied to every directory it reads.
 type treeRun struct {
 	inv                 *invocation
 	walker              *walker

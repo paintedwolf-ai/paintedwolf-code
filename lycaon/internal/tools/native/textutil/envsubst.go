@@ -15,8 +15,8 @@ type envsubstReference struct {
 	name, spelling string
 }
 
-// runEnvsubst is GNU envsubst: standard input to standard output with $NAME
-// and ${NAME} replaced from the statement's exported environment. Values are
+// runEnvsubst copies standard input to standard output with $NAME and
+// ${NAME} replaced from the statement's exported environment. Values are
 // the frame's own text, so a managed secret reference stays a reference.
 func runEnvsubst(inv *invocation) error {
 	operands := inv.operands()
@@ -86,7 +86,7 @@ func runEnvsubst(inv *invocation) error {
 }
 
 // readReference reads what follows a $: a name or a braced name. The
-// spelling excludes the $; a reference GNU would not substitute has no name
+// spelling excludes the $; a reference that is not substituted has no name
 // and is copied as spelled.
 func readReference(reader *bufio.Reader, maximum int64) (envsubstReference, error) {
 	var spelling strings.Builder

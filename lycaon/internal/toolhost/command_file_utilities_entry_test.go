@@ -78,9 +78,9 @@ func TestCommandFileUtilityGoldenProgramsRunThroughTheEntry(t *testing.T) {
 	}
 }
 
-// gnuHuman is GNU's -h rendering, written out here so the entry test does
+// humanUnits is the -h rendering, written out here so the entry test does
 // not borrow the implementation it checks.
-func gnuHuman(n int64) string {
+func humanUnits(n int64) string {
 	if n < 1024 {
 		return strconv.FormatInt(n, 10)
 	}
@@ -104,9 +104,9 @@ func gnuHuman(n int64) string {
 	return fmt.Sprintf("%d%c", whole, units[unit])
 }
 
-// TestCommandDuSummarizesAFolderLikeGNU: du -sh . is the allocated-block sum
+// TestCommandDuSummarizesAFolder: du -sh . is the allocated-block sum
 // of the folder and --apparent-size is its files' byte sum.
-func TestCommandDuSummarizesAFolderLikeGNU(t *testing.T) {
+func TestCommandDuSummarizesAFolder(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	root := filepath.Join(env.Dir, "proj")
 	for name, content := range map[string]string{"a.txt": "alpha\n", "src/main.go": strings.Repeat("package main\n", 2000), "src/lib/x.go": "package lib\n", "empty/": ""} {
@@ -136,14 +136,14 @@ func TestCommandDuSummarizesAFolderLikeGNU(t *testing.T) {
 	out, err := env.Call(t, t.Context(), `cd proj && du -sh . && du -s --apparent-size --bytes . && du -s --apparent-size .`)
 	testutil.FailErr(t, "du", err)
 	result := decodePipeOutcome(t, out)
-	want := gnuHuman(blocks) + "\t.\n" + strconv.FormatInt(bytes, 10) + "\t.\n" + strconv.FormatInt((bytes+1023)/1024, 10) + "\t.\n"
+	want := humanUnits(blocks) + "\t.\n" + strconv.FormatInt(bytes, 10) + "\t.\n" + strconv.FormatInt((bytes+1023)/1024, 10) + "\t.\n"
 	if result.Refusal != nil || result.Status != 0 || result.Stdout != want {
 		t.Fatalf("du outcome %+v, want stdout %q", result, want)
 	}
 }
 
 // TestCommandDfReportsScratchInodes: df -i @scratch reports the scratch
-// volume's inode totals in GNU's columns.
+// volume's inode totals.
 func TestCommandDfReportsScratchInodes(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	out, err := env.Call(t, t.Context(), `df -i @scratch`)
