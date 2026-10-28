@@ -418,11 +418,12 @@ func timeOf(key string) func(fseffect.EntryStat) time.Time {
 // Y is t. -newer is -newermm. Dates read in the program's TZ.
 func (r *findRun) newerTest(key, value string) (*findNode, error) {
 	inv := r.inv
-	entryTime := timeOf("-" + key[6:7])
+	primary := key
 	if key == "-newer" {
-		entryTime = timeOf("-m")
+		key = "-newermm"
 	}
-	if key[len(key)-1] == 't' {
+	entryTime := timeOf("-" + key[6:7])
+	if key[7] == 't' {
 		reference, err := datetext.Parse(value, r.now, datetext.Zone(inv.request.Environment))
 		if err != nil {
 			inv.fail(false, "I cannot figure out how to interpret '%s' as a date or time", value)
@@ -432,13 +433,10 @@ func (r *findRun) newerTest(key, value string) (*findNode, error) {
 			return entryTime(e.stat).After(reference), nil
 		}}, nil
 	}
-	referenceTime := timeOf("-m")
-	if key != "-newer" {
-		referenceTime = timeOf("-" + key[7:8])
-	}
+	referenceTime := timeOf("-" + key[7:8])
 	bound, err := inv.paths.Bind(inv.ctx, value, false)
 	if err == nil && bound.Null {
-		err = inv.usage(value, "a file for "+key)
+		err = inv.usage(value, "a file for "+primary)
 	}
 	if err == nil {
 		stat, statErr := bound.Stat(true)
