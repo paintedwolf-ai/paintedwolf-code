@@ -555,9 +555,7 @@ func ownerFailure(err error) toolcontract.ProducerResult {
 	return result
 }
 
-// commandIndex maps every catalog name and alias to its specification.
-// catalogCommand finds any catalog command by its full name, including
-// multi-word subcommand forms the dispatch index leaves out.
+// catalogCommand resolves an exact catalog name without accepting aliases.
 func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecification, bool) {
 	for _, spec := range r.catalog.Commands {
 		if spec.Name == name {
@@ -567,6 +565,7 @@ func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecificat
 	return toolcontract.CommandSpecification{}, false
 }
 
+// commandIndex maps catalog names and single-word aliases.
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {
