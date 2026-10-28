@@ -147,7 +147,7 @@ func retainedColumns(table string, columns []string) []string {
 	return out
 }
 
-// sqliteShadowTables are FTS5 storage internals owned by their virtual table.
+// sqliteShadowTable identifies FTS5 storage internals owned by their virtual table.
 func sqliteShadowTable(table string) bool {
 	for _, suffix := range []string{"_fts_data", "_fts_idx", "_fts_docsize", "_fts_config", "_fts_content"} {
 		if strings.HasSuffix(table, suffix) {
