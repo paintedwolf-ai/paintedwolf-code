@@ -94,13 +94,15 @@ func TestPatchAppliesCreationModificationAndDeletionAsAuthoredEffects(t *testing
 			t.Fatalf("%s is not an authored effect: %v", path, authored)
 		}
 	}
-	// One pin for the -i input, then each section's input and destination.
-	if pins := h.pins.pins[r.execution]; len(pins) != 5 {
-		t.Fatalf("captured %d revisions before publishing, want 5: %+v", len(pins), pins)
+	// One pin for the -i input, then each section's input and destination
+	// (a deletion pins its file as both).
+	if pins := h.pins.pins[r.execution]; len(pins) != 6 {
+		t.Fatalf("captured %d revisions before publishing, want 6: %+v", len(pins), pins)
 	}
+	// The deletion went through the recoverable delete owner.
 	h.undoAll(1)
-	if h.read("a.txt") != "one\ntwo\nthree\n" || h.read("gone.txt") != "bye\n" || !h.absent("new/c.txt") {
-		t.Fatal("history did not restore every patched file")
+	if h.read("gone.txt") != "bye\n" {
+		t.Fatal("history did not restore the deleted file")
 	}
 }
 

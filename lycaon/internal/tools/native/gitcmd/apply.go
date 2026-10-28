@@ -7,6 +7,7 @@ import (
 	"io"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -35,7 +36,6 @@ type applySection struct {
 	oldRel, newRel   string
 	target           mutation.PatchTarget
 	before           []byte
-	exists           bool
 	change           mutation.PatchResult
 	// stages records a three-way conflict: base, ours and theirs.
 	stages   *[3][]byte
@@ -51,7 +51,6 @@ type applyRun struct {
 	stderr   io.Writer
 	dir      string
 	repo     gitrepo.Repo
-	inRepo   bool
 	cached   bool
 	index    bool
 	threeWay bool
@@ -97,13 +96,11 @@ func (r *applyRun) apply(stdin io.Reader) error {
 		return err
 	}
 	r.dir = dir
-	r.repo, r.inRepo = gitrepo.Discover(dir)
 	if r.cached || r.index {
 		if _, r.repo, status, err = resolveCommandRepo(r.ctx, r.p, r.stderr, true); err != nil || status != 0 {
 			r.status = status
 			return err
 		}
-		r.inRepo = true
 	}
 	inputs, err := r.inputs(stdin)
 	if err != nil {
@@ -147,7 +144,7 @@ func (r *applyRun) inputs(stdin io.Reader) ([]applyInput, error) {
 	if len(operands) == 0 {
 		operands = []string{"-"}
 	}
-	execution := r.p.request.Invocation.Identity.ExecutionID
+	execution := r.p.execution
 	inputs := make([]applyInput, 0, len(operands))
 	for _, operand := range operands {
 		if operand == "-" {
@@ -250,6 +247,10 @@ func (r *applyRun) parse(inputs []applyInput) ([]*applySection, error) {
 				sections = append(sections, section)
 			}
 		}
+	}
+	if has(r.p.Argv, "-R") {
+		// Undoing a series undoes its last change first, as Git orders it.
+		slices.Reverse(sections)
 	}
 	return sections, nil
 }
