@@ -378,7 +378,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
 	var operationDef toolcontract.OperationDefinition
-	if definition, ok := d.run.registry.Definition(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
+	if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
 		operationDef = offeredProgramDefinition(tool, definition.Operation)
 	} else if tool == spec.Name {
 		var err error

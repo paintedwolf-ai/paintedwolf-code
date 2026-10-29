@@ -231,7 +231,7 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 		if tool == "" || t.registry == nil {
 			return false
 		}
-		_, ok := t.registry.Definition(tool)
+		_, ok := t.registry.Operation(tool)
 		return ok
 	}
 	var identities []string

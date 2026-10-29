@@ -17,7 +17,7 @@ import (
 // beginOutput records the actual redirect, not a fabricated utility invocation.
 // Its owner admission waits for the staged bytes; its original pin never refreshes.
 func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, path string) (tools.CommandOutputWrite, error) {
-	definition, ok := d.run.registry.Definition("write")
+	definition, ok := d.run.registry.Operation("write")
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
 	}
