@@ -29,7 +29,7 @@ func TestCommandEntryBraceExpansionReachesTheFilesystemOwner(t *testing.T) {
 			t.Fatalf("mkdir did not create %s: %v", name, statErr)
 		}
 	}
-	if executions := f.Executions(t); executions["command-host:mkdir"] != "completed;" {
+	if executions := f.Executions(t); executions["mkdir"] != "completed;" {
 		t.Fatalf("mkdir did not settle through its owner: %v", executions)
 	}
 }

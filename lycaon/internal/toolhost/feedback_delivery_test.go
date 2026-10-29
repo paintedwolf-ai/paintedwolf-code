@@ -85,6 +85,7 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 						}
 					} else {
 						cancel()
+						<-ctx.Done()
 					}
 					return result, err
 				}
