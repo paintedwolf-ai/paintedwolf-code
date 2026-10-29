@@ -18,6 +18,7 @@ var engineStdoutOwners = []string{
 	filepath.Join("internal", "logscli"),
 	filepath.Join("internal", "promptattach", "docext"),
 	filepath.Join("internal", "sshproxy"),
+	filepath.Join("internal", "launchguard"),
 }
 
 // The shell closes stdout after startup; later writes can terminate the engine.

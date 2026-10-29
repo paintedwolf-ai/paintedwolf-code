@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
@@ -82,7 +81,7 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	}()
 	select {
 	case <-walkStarted:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("catalog walk never started")
 	}
 	// The walk is blocked; the root must already be observed.
@@ -93,7 +92,7 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	close(release)
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("ensureSourceWatch did not return after the walk released")
 	}
 }

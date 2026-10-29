@@ -325,6 +325,7 @@ type OutputPublished struct {
 }
 
 // CapturedSource is an execution input, not model-observation evidence.
+// LoadSourceUnit bytes require a live parsed-program or execution-snapshot lease.
 type CapturedSource struct {
 	Pin   toolcontract.SourcePin
 	Bytes []byte

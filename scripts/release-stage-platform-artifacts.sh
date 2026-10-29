@@ -47,8 +47,8 @@ PACKAGE_EXTENSION="${PACKAGE_EXTENSION_LIST[0]}"
 case "${GOOS}" in
   linux)
     # Linux installs through the package manager: two package families, no updater artifact.
-    [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm" && -z "${UPDATER_EXTENSION}" ]] || {
-      echo "error: Linux stages exactly deb,rpm with no updater artifact" >&2
+    [[ ( "${PACKAGE_EXTENSIONS}" == "deb,rpm" || "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ) && -z "${UPDATER_EXTENSION}" ]] || {
+      echo "error: Linux stages deb,rpm and optional native pacman with no updater artifact" >&2
       exit 2
     }
     ;;
@@ -220,11 +220,14 @@ case "${GOOS}" in
       GIT_ENGINE="$(readlink -f "${GIT_ENGINE_LINK}")"
       assert_native_arch "${label} bundled Git" "${GIT_ENGINE}"
       assert_native_arch "${label} bundled Git LFS" "${GIT_LFS}"
-      while IFS= read -r -d '' payload; do
-        if [[ "$(file -b "${payload}")" == *"ELF"* ]]; then
-          assert_native_arch "packaged native payload" "${payload}"
-        fi
-      done < <(find "${tree}" -type f -print0)
+      # Every packaged native payload must match the target ELF machine and the glibc/libstdc++ floor.
+      (cd "${ROOT}" && python3 -m scripts.linux_release.abi_audit \
+        --tree "${tree}" --architecture "${ARCH}" \
+        --floors "${ROOT}/lycaon/internal/platformfloor/linux_floor.txt" \
+        --output "${EXTRACT}/linux-abi-${label#.}.json") || {
+        echo "error: ${PLATFORM} ${label} packaged native payload fails the ELF architecture and ABI audit" >&2
+        exit 1
+      }
       # Nothing the package installs may be writable by other users or carry setuid bits.
       [[ -z "$(find "${tree}" -type f \( -perm -o+w -o -perm -4000 -o -perm -2000 \) -print -quit)" ]] || {
         echo "error: ${PLATFORM} ${label} installs world-writable or setuid files" >&2
@@ -314,9 +317,25 @@ case "${GOOS}" in
     # Both families install the same tree apart from the fragments only one ships.
     python3 "${ROOT}/scripts/linux-package-assemble.py" compare --root "${ROOT}" --deb-tree "${DEB_TREE}" --rpm-tree "${RPM_TREE}"
     ENGINE="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw"
-    LYCAON_DOCUMENT_CORE_BINARY="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw-document-core" \
-      LYCAON_ENGINE_ROOT="${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}" diagnostics document-core
+    PROBE_ARGS=(--tree "${DEB_TREE}")
+    if [[ -n "${PW_PACKAGE_PROBE_LEASE:-}" ]]; then
+      PROBE_ARGS+=(--lease "${PW_PACKAGE_PROBE_LEASE}")
+    fi
+    PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.package_probe "${PROBE_ARGS[@]}"
     OPENGREP="$(verify_opengrep "${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}")"
+    if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
+      PACMAN_PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path '*/release/bundle/pacman/*.pkg.tar.zst' -print -quit)"
+      [[ -n "${PACMAN_PACKAGE}" ]] || { echo "error: missing native pacman package" >&2; exit 1; }
+      PACMAN_TREE="${EXTRACT}/pacman"
+      PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.arch_stage --package "${PACMAN_PACKAGE}" \
+        --destination "${PACMAN_TREE}" --root "${ROOT}" --architecture "${ARCH}" --version "${VERSION}"
+      audit_linux_tree ".pkg.tar.zst" "${PACMAN_TREE}"
+      PACMAN_RECEIPT="$(dirname "${PACMAN_PACKAGE}")/pacman-candidate.json"
+      [[ -f "${PACMAN_RECEIPT}" ]] || { echo "error: pacman candidate has no producer receipt" >&2; exit 1; }
+      jq -e --arg sha "$(sha256_hex "${PACMAN_PACKAGE}")" --arg arch "${ARCH}" --arg version "${VERSION}" --arg source "$(git -C "${ROOT}" rev-parse HEAD)" \
+        '.source_commit == $source and .format_version == 1 and .family == "pacman" and .sha256 == $sha and .architecture == $arch and .version == $version and .published == false' \
+        "${PACMAN_RECEIPT}" >/dev/null
+    fi
     PACKAGE="${DEB_PACKAGE}"
     RPM_OUTPUT="${RPM_PACKAGE}"
     ;;
@@ -441,6 +460,10 @@ fi
 
 mkdir -p "${OUTPUT}/opengrep"
 OUTPUT="$(cd "${OUTPUT}" && pwd)"
+if [[ "${GOOS}" == linux ]]; then
+  mkdir -p "${OUTPUT}/linux-abi"
+  cp "${EXTRACT}"/linux-abi-*.json "${OUTPUT}/linux-abi/"
+fi
 STEM="painted-wolf-code_v${VERSION}_${PLATFORM}"
 OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --offline)"
 (
@@ -459,6 +482,13 @@ stage_package() {
 stage_package "${PACKAGE}" "${PACKAGE_EXTENSION}"
 if [[ "${GOOS}" == linux ]]; then
   stage_package "${RPM_OUTPUT}" "rpm"
+  if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
+    stage_package "${PACMAN_PACKAGE}" "pkg.tar.zst"
+    jq --arg file "${STEM}.pkg.tar.zst" '.file = $file' "${PACMAN_RECEIPT}" > "${OUTPUT}/${STEM}.pacman-candidate.json"
+    PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.candidate_inventory --directory "${OUTPUT}" \
+      --platform "${PLATFORM}" --architecture "${ARCH}" --version "${VERSION}" \
+      --source-commit "$(git -C "${ROOT}" rev-parse HEAD)"
+  fi
   # Package-managed platforms publish no updater artifact and no feed fragment.
   exit 0
 fi

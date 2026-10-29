@@ -190,6 +190,20 @@ func TestProductionSQLUsesContextAPIs(t *testing.T) {
 			default:
 				return true
 			}
+			// syscall.Exec replaces the process image; it is not a SQL call.
+			if receiver, ok := sel.X.(*ast.Ident); ok {
+				for _, imp := range f.Imports {
+					if imp.Path.Value == `"syscall"` {
+						name := "syscall"
+						if imp.Name != nil {
+							name = imp.Name.Name
+						}
+						if receiver.Name == name {
+							return true
+						}
+					}
+				}
+			}
 			// DB exec/query pass a SQL string literal first; domain methods like
 			// coord.Query(ctx, …) and url.Query() do not, so they don't match.
 			if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {

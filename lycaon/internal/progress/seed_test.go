@@ -4,7 +4,7 @@ import "testing"
 
 func TestSeedChecklistAppendsValidPendingRows(t *testing.T) {
 	content := SeedChecklist("", []string{"leg-1 Auth", "  leg-2   Parser  ", ""})
-	if code, _, ok := ValidateAuthorProgress(content); !ok {
+	if code, _, ok := ValidateAuthorProgress("", content); !ok {
 		t.Fatalf("seeded checklist invalid: %s", code)
 	}
 	if _, pending, _ := CloseCounts(content); pending != 2 {

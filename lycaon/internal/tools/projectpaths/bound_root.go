@@ -47,12 +47,9 @@ func PathOperationError(operand string, err error) error {
 	if errors.Is(err, fseffect.ErrUnsupported) {
 		return &PathError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Operand: operand, Cause: err}
 	}
-	if errors.Is(err, fseffect.ErrSymlink) {
-		return errors.Join(err, mapResolveErr(errors.Join(sandbox.ErrPathEscape, err), operand))
-	}
 	var scope *sandbox.ScopeError
-	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
-		return errors.Join(err, mapResolveErr(err, operand))
+	if errors.Is(err, fseffect.ErrSymlink) || errors.Is(err, sandbox.ErrPathEscape) || errors.As(err, &scope) {
+		return errors.Join(err, &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": operand, "reason": err.Error()}})
 	}
 	return err
 }

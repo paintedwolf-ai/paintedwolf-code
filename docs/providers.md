@@ -316,7 +316,7 @@ Families disagree about what omitting the control means, so two flags carry that
 
 #### Named effort mapping
 
-`providers.local.yaml` can map the host's low, medium, and high intent to a provider's named protocol values. Family rules use `effort_levels`; a specific provider's model uses `reasoning_effort_levels` to override the family mapping. All three values are required. Values are protocol tokens of lowercase letters, digits, underscores, or hyphens, up to 32 characters.
+`providers.local.yaml` can map the host's low, medium, and high intent to a provider's named protocol values. Family rules use `effort_levels`; a specific provider's model uses `reasoning_effort_levels` to override the family mapping. All three values are required. An optional `off` value declares the endpoint’s explicit disable token, for example `off: none` for llama.cpp. This permits a fixed `enabled: false` policy when the model also declares `thinking: {state: supported, can_disable: true}`. Omit `off` when the endpoint does not support disabling reasoning. Values are protocol tokens of lowercase letters, digits, underscores, or hyphens, up to 32 characters.
 
 ```yaml
 model_thinking:
@@ -448,7 +448,7 @@ latency alone.
 
 ### Prose-only requests
 
-A request can forbid tool use while keeping its tool definitions: a coordinator's final closeout turn, or a report-document repair that asks for one fence. Transports validate tool-call history against the declared tools, so dropping them would break a conversation that already used tools. Each adapter maps the restriction onto its own control: OpenAI-compatible endpoints receive `tool_choice: "none"`, Anthropic `tool_choice: {"type": "none"}`, and Vertex express `functionCallingConfig.mode: NONE`. Ollama has no such control and renders tool history without definitions, so its request omits them. Bedrock Converse has neither a no-call choice nor tolerance for tool history without its tool configuration; its requests keep the tools, and the host refuses any call such a turn returns. A worker's final turn is not prose-only: it offers only its completion tool.
+A coordinator's final closeout turn forbids tool use while keeping its tool definitions. Closeout repairs on earlier turns keep the surface callable so the coordinator can resume work. Transports validate tool-call history against the declared tools, so dropping them would break a conversation that already used tools. Each adapter maps the restriction onto its own control: hosted OpenAI-compatible endpoints receive `tool_choice: "none"`, Anthropic `tool_choice: {"type": "none"}`, and Vertex express `functionCallingConfig.mode: NONE`. Ollama and local OpenAI-compatible inference servers omit the definitions instead: Ollama renders tool history without them, and a local chat template would otherwise render tool-call instructions the server will not parse. Bedrock Converse has neither a no-call choice nor tolerance for tool history without its tool configuration; its requests keep the tools, and the host refuses any call such a turn returns. A worker's final turn is not prose-only: it offers only its completion tool.
 
 ### Fallback tool-call grammar
 
@@ -637,6 +637,20 @@ The budget is a hard host envelope around each attempt. The default (2 minutes) 
 Exhausting the envelope means the model was too slow for that service class, not that its endpoint is down: it records an unknown or incomplete usage receipt but does not open the lite-slot circuit. Neither does an attempt its caller ended, whether by canceling or by its own shorter deadline: that measures the caller's patience, not the endpoint. The circuit reads the same typed transport faults the [capacity gate](#capacity-and-concurrency) cools on, which the transport classifies from delivery state with caller cancellation outranking it. A model refusal, an unreachable endpoint, a silent one (delivered, no response within the header bound), and an overloaded one (still at capacity after its retries) open the cooling circuit, and the notice names which it saw. Every adapter, local or hosted, reports through that classification. A provider-reported output limit is distinct: partial usage is booked, the structured result is rejected, and the calling feature may retry with less input.
 
 Background compaction never spends the coordinator as a fallback. A failed attempt leaves canonical history and any prior valid compaction view unchanged; a later turn retries. Prompt fitting, authorization, and store recovery never depend on a successful utility completion.
+
+## Tool schema projection
+
+The full tool schema governs execution. Provider schemas are derived generation
+guidance: they preserve supported local constraints without changing the catalog
+or excluding arguments the full schema accepts. Function roots remain objects.
+Nested required fields name properties declared on that same node; cross-field
+conditions remain in host validation.
+
+Self-contained type unions survive. An unrepresentable alternative removes the
+whole union, while an unrepresentable intersection member can be omitted. An
+exclusive union survives only when its branches are unchanged: widening branches
+could create overlaps that reject valid arguments. Projection never invents a
+property type to replace an omitted condition.
 
 ## Feature projection
 
