@@ -2,8 +2,11 @@ package gitcmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
@@ -98,6 +101,9 @@ func (r *fileMutation) remove() error {
 			if err != nil {
 				return err
 			}
+		}
+		if err := r.pruneEmptyParents(entries); err != nil {
+			return err
 		}
 	}
 	var changes []git.IndexEntry
@@ -224,4 +230,43 @@ func (r *fileMutation) removeDiagnostic(problem string, names []string) {
 		subject = "files have"
 	}
 	r.fail(1, "error: the following %s %s:\n    %s\n%s", subject, reason, strings.Join(names, "\n    "), suffix)
+}
+
+// Git removes the directories a removal leaves empty, keeping the repository
+// root and the working directory. Each one goes through the same recoverable
+// delete as the files, deepest first so a parent is checked after its children.
+func (r *fileMutation) pruneEmptyParents(entries []trackedEntry) error {
+	root, cwd := filepath.Clean(r.repo.Root), filepath.Clean(r.dir)
+	candidates := map[string]bool{}
+	for _, entry := range entries {
+		for dir := filepath.Dir(entryAbs(root, entry.path)); dir != root && dir != cwd && strings.HasPrefix(dir, root+string(filepath.Separator)); dir = filepath.Dir(dir) {
+			candidates[dir] = true
+		}
+	}
+	dirs := make([]string, 0, len(candidates))
+	for dir := range candidates {
+		dirs = append(dirs, dir)
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		if len(dirs[i]) != len(dirs[j]) {
+			return len(dirs[i]) > len(dirs[j])
+		}
+		return dirs[i] < dirs[j]
+	})
+	for _, dir := range dirs {
+		children, err := os.ReadDir(dir)
+		if err != nil || len(children) > 0 {
+			continue
+		}
+		result, err := r.p.filesystem.Operations.Delete.Delete(r.ctx, native.DeleteInput{Memory: r.p.filesystem.Revisions.Memory, Paths: []string{dir}}, r.reviewContext(nil, nil))
+		r.effects = r.effects || len(result.Deleted) > 0
+		var reject *toolrejection.ToolReject
+		if errors.As(err, &reject) && (reject.Code == "DELETE_NOT_EMPTY" || reject.Code == "DELETE_NOT_FOUND") {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
