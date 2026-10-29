@@ -40,7 +40,7 @@ type selection struct {
 	noIgnore     bool
 	unrestricted int
 	hidden       bool
-	scopes       map[string]*sourcescope.Scope
+	ignores      ignoreScopes
 	err          error
 }
 
@@ -51,7 +51,7 @@ type rgGlob struct {
 }
 
 func newSelection(inv *invocation, rg bool) selection {
-	s := selection{inv: inv, rg: rg, scopes: map[string]*sourcescope.Scope{}}
+	s := selection{inv: inv, rg: rg, ignores: ignoreScopes{}}
 	for _, item := range inv.argv.Items {
 		if item.Option == nil || len(item.Option.Values) == 0 && item.Option.Key != "-u" {
 			continue
@@ -73,12 +73,9 @@ func newSelection(inv *invocation, rg bool) selection {
 }
 
 func (s *selection) compile(glob string, mode pattern.Mode) *regexp.Regexp {
-	expr, err := pattern.Regexp(glob, pattern.EntireString|mode)
+	re, err := globRegexp(glob, mode)
 	if err == nil {
-		var re *regexp.Regexp
-		if re, err = regexp.Compile(expr); err == nil {
-			return re
-		}
+		return re
 	}
 	if s.err == nil {
 		s.err = s.inv.usage(glob, "a valid shell glob")
@@ -176,7 +173,7 @@ func (s *selection) admit(e entry) (bool, error) {
 	if !s.rg {
 		return true, nil
 	}
-	if s.unrestricted == 0 && !s.noIgnore && !s.ignoreAdmits(e) {
+	if s.unrestricted == 0 && !s.noIgnore && !s.ignores.admit(e) {
 		return false, nil
 	}
 	return s.rgGlobsAdmit(e), nil
@@ -215,16 +212,28 @@ func (s *selection) rgGlobsAdmit(e entry) bool {
 	return len(s.types) == 0 || slices.ContainsFunc(s.types, matches)
 }
 
-// ignoreAdmits applies the project ignore owner below the entry's root.
-func (s *selection) ignoreAdmits(e entry) bool {
+// globRegexp compiles one whole-string shell glob.
+func globRegexp(glob string, mode pattern.Mode) (*regexp.Regexp, error) {
+	expr, err := pattern.Regexp(glob, pattern.EntireString|mode)
+	if err != nil {
+		return nil, err
+	}
+	return regexp.Compile(expr)
+}
+
+// ignoreScopes applies the project ignore owner below each walked root, the
+// view rg and tree --gitignore share with the source catalog.
+type ignoreScopes map[string]*sourcescope.Scope
+
+func (s ignoreScopes) admit(e entry) bool {
 	root := e.bound.Resolved.Root.Path
 	if root == "" || e.bound.Resolved.External {
 		return true
 	}
-	scope, ok := s.scopes[root]
+	scope, ok := s[root]
 	if !ok {
 		scope = sourcescope.New(root, sourcescope.Options{Plane: sourcescope.Plane{IgnoreFiles: true}})
-		s.scopes[root] = scope
+		s[root] = scope
 	}
 	return scope.AdmitPath(e.bound.Resolved.ScopeRel, e.dir())
 }
