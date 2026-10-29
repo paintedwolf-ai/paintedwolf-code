@@ -93,6 +93,7 @@ func NewGuardContext() *GuardContext {
 		Access:     AccessFacts{PathOutsideScopeByTool: map[string]bool{}},
 		Source:     SourceFacts{SourceIncludes: map[string]bool{}},
 		RejectData: map[string]map[string]any{},
+		Published:  map[string]any{"paintedwolf.native_operation": ""},
 		lazy: providerState{
 			providers:      map[string]FactProvider{},
 			computed:       map[string]bool{},

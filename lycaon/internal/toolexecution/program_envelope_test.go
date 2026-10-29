@@ -33,7 +33,7 @@ func (f progressStartFunc) BeforeProgressOwner(ctx context.Context, id toolcontr
 
 func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *testing.T) {
 	parent, tc := frameFixture(t)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "freeze frame", err)
 	t.Cleanup(frame.Close)
 	schema, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
@@ -48,13 +48,13 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 	owner := progress.NewMemoryStore()
 	proof := &envelopeIdentityFixture{catalog: parent.CatalogDigest}
 	update := &ProgramProgressUpdate{ExecutionID: "progress-execution", Arguments: map[string]any{"content": "- [ ] Create fixture"}}
-	admission := &stageAdmissionFixture{}
+	admission := stageMemory(t, 64<<20)
 	malformed := errors.New("sealed syntax refused")
 	proof.err = malformed
 	if _, err := executor.PrepareProgramEnvelope(t.Context(), frame, proof, update, admission, tc); !errors.Is(err, malformed) {
 		t.Fatalf("syntax failure lost: %v", err)
 	}
-	if owner.Get(t.Context(), parent.SessionID) != "" || admission.held != 0 {
+	if owner.Get(t.Context(), parent.SessionID) != "" || admission.InUse().State != 0 {
 		t.Fatal("rejected syntax committed progress or retained state")
 	}
 	proof.err = nil
@@ -87,7 +87,7 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 		t.Fatal("automatically replayed progress effect")
 	}
 	prepared.Close()
-	if admission.held != 0 {
+	if admission.InUse().State != 0 {
 		t.Fatal("review snapshot lease leaked")
 	}
 	// A later program rejection does not roll back this separately committed owner.

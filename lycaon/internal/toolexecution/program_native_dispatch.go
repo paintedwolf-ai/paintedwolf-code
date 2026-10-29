@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -45,24 +46,27 @@ type NativeEffectStart interface {
 // mutation, external launch or egress. Embedded programs are classified here.
 type PreparedNativeEffect struct {
 	Operation   toolcontract.BoundOperation
-	InvokeOwner func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)
+	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 }
 
 // NativeEffect binds one reached operation to its immutable review projection.
 // PrepareReviewed decodes actual reviewed/resolved values into the existing typed
-// operation. It must not reuse the adapter's stale pre-review input.
+// operation. It must not reuse the adapter's stale pre-review input. Streams are
+// handed to the owner only once admission has reached it.
 type NativeEffect struct {
 	Inspection      toolcontract.OperationInspectionProjector
 	Operation       toolcontract.BoundOperation
 	Stage           toolcontract.ExecutionStage
 	Arguments       map[string]any
+	Argv            *commandprogram.ArgvReview
+	Streams         commandprogram.Streams
 	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
 }
 
 // InvokeNative is reached-effect admission, not an interpreter or JSON tool call.
 // The introducing entry validates the complete syntax/progress envelope first.
 // A held review keeps the same child identity; a fresh invocation uses a new one.
-func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission ProgramStateAdmission, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
 	end, err := frame.beginUse()
 	if err != nil {
 		return result, err
@@ -99,7 +103,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
-	arguments, err := prepareNativeArguments(ctx, admission, effect.Arguments)
+	values := effect.Arguments
+	if effect.Argv != nil {
+		values = effect.Argv.Arguments()
+	}
+	arguments, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {
 		return result, err
 	}
@@ -117,21 +125,19 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx, admission, effect.Inspection)
 	defer tc.Invocation.NativeReview.Close()
 	ctx = invocationContext(ctx, tc)
+	ctx, observation, releaseObservation, err := prepareProgramPolicyObservation(ctx, frame, admission, tc, &bound)
+	if err != nil {
+		return result, err
+	}
+	defer releaseObservation()
 	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
 		return result, err
 	}
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(arguments.values, tc.Host.SessionScratchDir); reject != nil {
-		return result, reject
-	}
-	var schema map[string]any
-	if err = json.Unmarshal(facts.Arguments, &schema); err != nil {
+	if err = validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
 		return result, err
-	}
-	if reject := tools.ValidateCallArguments(facts.Identity, arguments.values, schema, tc); reject != nil {
-		return result, reject
 	}
 	if err = validateNativeSecretSlots(facts.Contract, arguments.values); err != nil {
 		return result, err
@@ -161,7 +167,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	canonical = reviewedArguments.values
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
-	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
+	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
 	if err != nil {
 		return result, err
 	}
@@ -186,7 +192,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	ownerStarted, result.OwnerInvoked = true, true
-	result.Producer, err = prepared.InvokeOwner(ctx, tc)
+	result.Producer, err = prepared.InvokeOwner(ctx, tc, effect.Streams)
 	err = toolsecrets.ReferenceEchoesInError(tc.Effects.Secrets, err)
 	if invalid := result.Producer.Validate(); invalid != nil {
 		return result, errors.Join(err, invalid)
@@ -261,4 +267,27 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 		return err
 	}
 	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
+}
+
+// validateNativeArguments checks a legacy structured value against its tool
+// schema. A catalog-bound form was already validated by the argv binder, so
+// its review record is not forced into that schema.
+func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandprogram.ArgvReview, values map[string]any, tc tools.ToolContext) error {
+	if argv != nil {
+		if argv.OperationID != facts.Identity {
+			return fmt.Errorf("argv review names a different operation")
+		}
+		return nil
+	}
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+		return reject
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(facts.Arguments, &schema); err != nil {
+		return err
+	}
+	if reject := tools.ValidateCallArguments(facts.Identity, values, schema, tc); reject != nil {
+		return reject
+	}
+	return nil
 }

@@ -38,7 +38,9 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	return root, nil
 }
 
-func pathOperationError(operand string, err error) error {
+// PathOperationError joins a confinement failure with its public rejection;
+// ordinary filesystem errors pass through unchanged.
+func PathOperationError(operand string, err error) error {
 	var reject *toolrejection.ToolReject
 	var pathErr *PathError
 	if errors.As(err, &reject) || errors.As(err, &pathErr) {
@@ -47,12 +49,9 @@ func pathOperationError(operand string, err error) error {
 	if errors.Is(err, fseffect.ErrUnsupported) {
 		return &PathError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Operand: operand, Cause: err}
 	}
-	if errors.Is(err, fseffect.ErrSymlink) {
-		return errors.Join(err, mapResolveErr(errors.Join(sandbox.ErrPathEscape, err), operand))
-	}
 	var scope *sandbox.ScopeError
-	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
-		return errors.Join(err, mapResolveErr(err, operand))
+	if errors.Is(err, fseffect.ErrSymlink) || errors.Is(err, sandbox.ErrPathEscape) || errors.As(err, &scope) {
+		return errors.Join(err, &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": operand, "reason": err.Error()}})
 	}
 	return err
 }
@@ -67,7 +66,7 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	}
 	root, err := fseffect.OpenMetadataRoot(p.Resolved.Root.Path)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	held, err := root.OpenExact(".", true)
@@ -87,12 +86,12 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	}
 	file, err := root.OpenExact(p.exactRelative, directory)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			_ = file.Close()
-			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil

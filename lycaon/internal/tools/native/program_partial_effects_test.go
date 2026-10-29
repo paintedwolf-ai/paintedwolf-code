@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -86,13 +87,13 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	parentReceipt, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: "p1", SessionID: "s1", ToolCallID: "actual-model-call", ToolName: "command", Args: map[string]any{"script": source}, Contract: commandContract})
 	testutil.FailErr(t, "begin actual model call", err)
 	programID, rootID := uuid.NewString(), uuid.NewString()
-	start := invocation.ProgramStart{
-		Version:       invocation.ProgramVersion{ProgramID: programID, ParentReceiptID: parentReceipt.ID, RootExecutionID: rootID, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"},
+	start := toolcontract.ProgramStart{
+		Version:       toolcontract.ProgramVersion{ProgramID: programID, ParentReceiptID: parentReceipt.ID, RootExecutionID: rootID, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"},
 		PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true,
-		Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:exact-program"}},
+		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:exact-program"}},
 	}
 	for _, id := range []string{"write-node", "http-node", "untaken-node"} {
-		start.Nodes = append(start.Nodes, invocation.ProgramNode{ID: id, SourceUnitID: "submitted", Span: spans[id]})
+		start.Nodes = append(start.Nodes, toolcontract.ProgramNode{ID: id, SourceUnitID: "submitted", Span: spans[id]})
 	}
 	testutil.FailErr(t, "attach validated program", recorder.BeginProgram(t.Context(), start))
 
@@ -126,7 +127,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	writeDefinition, httpDefinition := definitionFor("write"), definitionFor("http_request")
 	scope := toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"}
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: programID, NodeID: "submitted", ExecutionID: rootID}, ActorID: "fixture-person", SessionID: "s1", Scope: scope, SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	frameMemory := &programDoorMemory{}
+	frameMemory := programDoorMemory(t)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": source}}, frameMemory)
 	testutil.FailErr(t, "capture actual tree", err)
 	t.Cleanup(frame.Close)
@@ -136,7 +137,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
 	retention := &retainedReviewInputs{}
 	observer := invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}
-	memory := &programDoorMemory{}
+	memory := programDoorMemory(t)
 
 	prepare := func(definition toolcontract.OperationDefinition, node, command, canonical string, args map[string]any) toolcontract.BoundOperation {
 		child := parent
@@ -145,7 +146,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), memory, args)
 		testutil.FailErr(t, "freeze expanded arguments", err)
 		defer releaseExpanded()
-		testutil.FailErr(t, "prepare dynamic child", recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: parentReceipt.ID, Invocation: child, Definition: definition, ArgumentsReference: "output:expanded-" + node, ExpandedInputs: expanded, Canonical: canonical}))
+		testutil.FailErr(t, "prepare dynamic child", recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: parentReceipt.ID, Invocation: child, Definition: definition, ArgumentsReference: "output:expanded-" + node, ExpandedInputs: expanded, Canonical: canonical}))
 		var mode string
 		for _, c := range definition.Facts().Commands {
 			if c.Name == command {
@@ -171,7 +172,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 			return toolexecution.PreparedNativeEffect{}, err
 		}
 		content := []byte(args["content"].(string))
-		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext) (toolcontract.ProducerResult, error) {
+		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			target, err := operand.MutationTarget()
 			if err != nil {
 				return toolcontract.ProducerResult{}, err
@@ -187,14 +188,14 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	}
 	written, err := executor.InvokeNative(t.Context(), frame, surface, memory, programDoorProgress{owner}, observer, writeEffect, tc)
 	testutil.FailErr(t, "invoke actual mutation door", err)
-	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
+	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
 
 	httpArgs := map[string]any{"url": server.URL, "method": "POST"}
 	attempt := prepare(httpDefinition, "http-node", "curl", "curl "+server.URL, httpArgs)
 	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
 	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		target := args["url"].(string)
-		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext) (toolcontract.ProducerResult, error) {
+		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
 				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
 			// A request that left the host has an unknown remote outcome.
@@ -233,7 +234,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if late.err == nil || !late.result.OwnerInvoked || late.result.Producer.EffectCertainty != toolcontract.EffectUnknown {
 		t.Fatalf("lost attempt claimed a known outcome: %+v %v", late.result, late.err)
 	}
-	if err := recorder.SettleChild(t.Context(), attempt.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: late.result.Producer, OwnerInvoked: true, DetailReference: "output:late-result"}); err == nil {
+	if err := recorder.SettleChild(t.Context(), attempt.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: late.result.Producer, OwnerInvoked: true, DetailReference: "output:late-result"}); err == nil {
 		t.Fatal("late owner result rewrote reconciled host-loss facts")
 	}
 	if again, err := recorder.InterruptPrograms(t.Context(), "s1", "output:second-recovery"); err != nil || again != 0 {
@@ -268,7 +269,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
 		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
 	}
-	if requests.Load() != 1 || retention.calls != 2 || memory.held != 0 {
-		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.held)
+	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
+		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
 	}
 }

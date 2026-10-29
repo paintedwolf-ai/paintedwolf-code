@@ -3,10 +3,11 @@ id: LIST_DIR_CURSOR_STALE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - list_dir
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   profiles:
   - tool

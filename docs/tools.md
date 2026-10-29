@@ -107,9 +107,9 @@ because the new parser accepts a form, or remove a recognizer while one of these
 consumers still uses it. Their replacement and obsolete-path cleanup accompany
 the introducing runtime integration.
 
-The syntax adapter reserves parser scratch before parsing and meters the selected
-upstream parser's allocations and recursive frames. Brace classification and
-static quote removal share that allocation pool; admission never invokes general
+The syntax adapter charges parser scratch to the enclosing program before each
+allocation and meters the selected upstream parser's allocations and recursive
+frames. Brace classification and static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
 allocation; temporary parser wrappers remain scratch. This clarifies the
@@ -118,9 +118,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `NewProgramParser` with working and retained
-state admission. Retained source/plan storage is charged to `program_state_bytes`
-before host-plan insertion; closing parser scratch does not release that state.
+materialization. Execution constructs `NewProgramParser` before capture and
+admits an initial working chunk; parser growth uses that same incremental
+account up to `evaluation_memory_bytes`. Capture and its byte-copy overlap
+reserve bounded `program_state_bytes` capacity before materialization. Successful
+lowering transfers the captured bytes into the retained plan/snapshot envelope;
+closing parser scratch does not release that state.
+
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
@@ -131,7 +135,6 @@ progress update to this unit without treating an inspection copy or a caller's
 boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
-
 
 ### Complete byte streams
 
@@ -774,7 +777,7 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P08 binds production admission.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P09 binds production admission. P08 supplies the shared status/control and complete-producer publication decision; P16 supplies staged destination publication.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 

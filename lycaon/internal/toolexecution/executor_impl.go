@@ -59,7 +59,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		return "", err
 	}
 	canonicalArgs := args
-	ctx, executionArgs, err := e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc)
+	ctx, executionArgs, err := e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc, nil)
 	if err != nil {
 		return "", err
 	}

@@ -31,15 +31,23 @@ type ProgramInputCapture struct {
 // raw keys/string bytes using the actual bounded capture owner; its lease must
 // remain held through lossless encoding and card/event publication.
 func (p ProgramInputCapture) ProjectOperationInputs(ctx context.Context, state toolcontract.ReviewStateAdmission, arguments map[string]any) (map[string]any, func(), error) {
-	projected, _, release, err := p.project(ctx, state, arguments)
+	projected, _, release, err := p.project(ctx, state, "operation.arguments", arguments)
 	return projected, release, err
 }
 
-func (p ProgramInputCapture) project(ctx context.Context, state toolcontract.ReviewStateAdmission, arguments map[string]any) (map[string]any, captureprojection.Metadata, func(), error) {
+// ProjectOperationDiagnostic screens an owner rejection's diagnostic data with
+// the same bounded capture before model-visible feedback. The exact value stays
+// in the host-only diagnostic inspection domain.
+func (p ProgramInputCapture) ProjectOperationDiagnostic(ctx context.Context, state toolcontract.ReviewStateAdmission, data map[string]any) (map[string]any, func(), error) {
+	projected, _, release, err := p.project(ctx, state, "operation.diagnostic", data)
+	return projected, release, err
+}
+
+func (p ProgramInputCapture) project(ctx context.Context, state toolcontract.ReviewStateAdmission, label string, arguments map[string]any) (map[string]any, captureprojection.Metadata, func(), error) {
 	if p.Projector == nil || state == nil || p.Scope.RootSessionID == "" || p.Scope.SessionID == "" || p.ProgramID == "" {
 		return nil, captureprojection.Metadata{}, nil, fmt.Errorf("native inspection requires actual scoped bounded capture")
 	}
-	projected, metadata, release, err := p.Projector.Value(ctx, p.Scope, "operation.arguments", arguments, captureprojection.ValueOptions{State: state, Stream: p.Screening, MaximumNodes: p.MaximumNodes, MaximumDepth: p.MaximumDepth})
+	projected, metadata, release, err := p.Projector.Value(ctx, p.Scope, label, arguments, captureprojection.ValueOptions{State: state, Stream: p.Screening, MaximumNodes: p.MaximumNodes, MaximumDepth: p.MaximumDepth})
 	if err != nil {
 		return nil, captureprojection.Metadata{}, nil, err
 	}
@@ -87,7 +95,7 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		return "", err
 	}
 	defer releaseArguments()
-	projected, metadata, releaseProjection, err := p.project(ctx, p.State, arguments)
+	projected, metadata, releaseProjection, err := p.project(ctx, p.State, "operation.arguments", arguments)
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +161,7 @@ var _ ReviewedProgressInputRetention = ProgramInputCapture{}
 
 // PrepareChild atomically attaches the actual screened expanded-input body and
 // the new dynamic receipt. The caller supplies no placeholder body reference.
-func (p ProgramInputCapture) PrepareChild(ctx context.Context, in ChildStart) (string, error) {
+func (p ProgramInputCapture) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) (string, error) {
 	invocation := in.Invocation
 	if err := invocation.Validate(); err != nil {
 		return "", err

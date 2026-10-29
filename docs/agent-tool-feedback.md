@@ -32,6 +32,37 @@ program output are unaffected. Exact replacement calls require representable
 paths and known output bytes; uncertain quoting, expansion, or output options
 retain recovery guidance without synthesized file content.
 
+## Native command failure attribution
+
+A reached native operation retains the actual `command` model call and its
+submitted argument object. `paintedwolf.native_operation` identifies the bound
+operation separately; operation inputs never replace `tool_args`.
+`paintedwolf.operation` is that bound operation beneath `command`, otherwise
+the actual tool. An operation-specific unit selects it
+(`selector: {paintedwolf.operation: [chmod]}`) so one rule serves the
+structured call and the native child without impersonating either; command
+text and rejection data cannot set it. A unit keeps a `tool` selector for a
+native operation only when the native grammar cannot produce its occurrence,
+and `TestBundledPolicyDispositionsForNativeOperations` records each such
+exception.
+Owner rejection codes and finer source coordinates survive supplementation;
+the enclosing command stage has separate `operation_source_*` coordinates.
+
+After receipt settlement, feedback reads binding and effect facts from one
+admitted database snapshot. It preserves completed and uncertain effects,
+executed reads, not-started and untaken work, progress settlement, evidence and
+recovery references, and exact child versus model identities. Whole oversized
+records are omitted with counts and durable references. Display compaction
+cannot turn uncertainty into success or authorize replay. A failed program is
+replayable only when its actual recorder proves zero execution and no effects;
+a successful last pipeline stage cannot erase an earlier producer failure.
+External stderr cannot select native rejection policy.
+
+These feedback ports do not by themselves establish connected runtime or
+installed-platform qualification. The command entry must settle the real
+operation, preserve its leases through delivery, and compose this observation
+with current capability and recovery admission.
+
 ## Internal tool-step notes
 
 Assistant text accompanying native tool calls is an internal working note, hidden
@@ -482,3 +513,19 @@ Rejected source mutations remain in these observations even when their handler
 started. The summary distinguishes rejection after invocation from a call that
 never executed; it does not infer whether a file exists, remains unchanged, or
 has partial effects. This distinction applies across supported languages.
+
+## Command operation feedback
+
+Command feedback retains the actual outer model call and distinct host execution
+identities. Ordinary status, complete output, publication eligibility and owner
+effects are independent observations. A successful final stage does not erase an
+earlier failed producer, and an unknown remote outcome does not permit replay.
+
+The invocation recorder supplies bounded program facts for feedback: completed
+and uncertain effects, executed children and reads, known static nodes not started
+or untaken, retained detail and progress references. Static node counts do not
+predict future loop iterations. Omitted details remain explicitly omitted. A
+reference identifies complete retained data; presentation never trims it into a
+different action or evidence identity. Whole-program resubmission requires the
+recorder's exact-source zero-execution proof and fresh admission. A completed
+progress update remains separate from shell-program effects.

@@ -61,7 +61,7 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 		RootSessionID: f.session,
 		Scope:         toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope},
 	}
-	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"content": "- [ ] reserve"})
+	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"content": "- [ ] reserve"})
 	testutil.FailErr(t, "freeze progress review", err)
 	defer releaseProgress()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
@@ -77,7 +77,7 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	def, err := toolcontract.ToolOperation("grep", json.RawMessage(`{"type":"object"}`), contract)
 	testutil.FailErr(t, "freeze extra child definition", err)
 	extraIn := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: uuid.NewString(), ParentExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze extra child inputs", err)
 	defer releaseExpanded()
 	if err := f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: extraIn, Definition: def, ArgumentsReference: "output:extra", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
@@ -166,7 +166,7 @@ func TestProgramChildAndSettlementLedgerFaultsRollBackCleanly(t *testing.T) {
 	def, err := toolcontract.ToolOperation("grep", json.RawMessage(`{"type":"object"}`), contract)
 	testutil.FailErr(t, "freeze grep definition", err)
 	in := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: uuid.NewString(), ParentExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze expanded inputs", err)
 	defer releaseExpanded()
 	if err := f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: def, ArgumentsReference: "output:fault", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {

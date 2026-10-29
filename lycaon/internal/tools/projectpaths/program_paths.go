@@ -68,17 +68,17 @@ func (p BoundPath) Open() (*os.File, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			file.Close()
-			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil
@@ -92,10 +92,11 @@ type ProgramPaths struct {
 	cwd           BoundPath
 	initial       BoundPath
 	initialInfo   os.FileInfo
-	forms         map[string]string
+	specs         map[string]toolcontract.CommandSpecification
 	cwdInfo       os.FileInfo
 	argumentLimit int64
 	outputLimit   int64
+	rootParents   map[string]struct{}
 }
 
 // NewProgramPaths binds the invocation directory through current path authority.
@@ -105,9 +106,9 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, forms: map[string]string{}}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}, rootParents: rootParentChains(actionRootPaths(tc))}
 	for _, command := range catalog.Commands {
-		p.forms[command.Name] = command.Argv
+		p.specs[command.Name] = command
 	}
 	for _, limit := range catalog.Language.Limits {
 		if limit.ID == "argument_bytes" {

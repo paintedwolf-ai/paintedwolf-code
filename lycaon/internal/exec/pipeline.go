@@ -25,6 +25,9 @@ type StageRun struct {
 	// Failed reports a status that fails the stage's group: non-zero, except
 	// SIGPIPE ending a stage whose reader finished first.
 	Failed bool
+	// expectedConsumerClosure is an executor-classified pipe settlement fact,
+	// separate from raw signal status and owner/publication outcomes.
+	expectedConsumerClosure bool
 	// Skipped means the preceding group's exit status did not satisfy the connector.
 	Skipped bool
 	// Connector is empty for the first stage and defaults to a pipe for subsequent stages.
@@ -38,6 +41,10 @@ func (s StageRun) ExitStatus() int {
 	}
 	return *s.ExitCode
 }
+
+// ExpectedConsumerClosure reports the executor's classified upstream closure.
+// It does not erase the raw exit status or authorize file publication.
+func (s StageRun) ExpectedConsumerClosure() bool { return s.expectedConsumerClosure }
 
 // PipelineResult is the outcome of RunPipeline.
 type PipelineResult struct {
