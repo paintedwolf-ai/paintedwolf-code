@@ -260,21 +260,13 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		pendingKickIDs = turn.PendingKickIDs
 	}
 
-	posture := string(sess.Posture)
-	settingsFP := "default"
-	if deps.Limits != nil {
-		settingsFP = deps.Limits(ctx, sess).SettingsFingerprint()
-	}
-	if surfaceFP, ok := vars["prompt_surface_fingerprint"].(string); ok && strings.TrimSpace(surfaceFP) != "" {
-		settingsFP += ";surface=" + surfaceFP
-	}
 	pe, promptRevision, err := prompt.projectPromptsSnapshot(ctx, sess)
 	if err != nil {
 		return nil, err
 	}
 	var rendered string
 	if coordinatorSurface {
-		rendered, err = prompt.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, templateRef, posture, settingsFP, turn, vars)
+		rendered, err = prompt.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, turn, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -331,6 +323,8 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	if boardBlock != "" {
 		out = append(out, api.Message{Role: api.MessageRoleSystem, Content: boardBlock})
 	}
+
+	out = contextAssembler.appendExecutionState(ctx, sess, coordinatorSurface, frame, history, turn, out)
 
 	markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
 

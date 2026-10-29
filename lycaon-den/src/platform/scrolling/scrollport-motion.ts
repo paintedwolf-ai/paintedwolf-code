@@ -1,4 +1,8 @@
-import { animateScrollportReveal, type ScrollportRevealOptions } from "./scrollport-reveal.ts";
+import {
+  animateScrollportReveal,
+  scrollportRevealDelta,
+  type ScrollportRevealOptions,
+} from "./scrollport-reveal.ts";
 import { prefersReducedMotion } from "../interaction/reduced-motion.ts";
 import { observeScrollportOffset } from "./scrollport-offset.ts";
 import { ScrollportPressAnchor, type DeclaredHeightChange } from "./scrollport-press-anchor.ts";
@@ -310,24 +314,21 @@ class ScrollportMotion {
     element: Element,
     opts?: { block?: ScrollLogicalPosition; glide?: boolean },
   ): void {
-    const viewportRect = this.viewport.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    const block = opts?.block ?? "nearest";
-    let delta = 0;
-    if (block === "center") {
-      delta =
-        elementRect.top -
-        viewportRect.top -
-        (viewportRect.height - elementRect.height) / 2;
-    } else if (block === "end") {
-      delta = elementRect.bottom - viewportRect.bottom;
-    } else if (block === "start") {
-      delta = elementRect.top - viewportRect.top;
-    } else if (elementRect.top < viewportRect.top) {
-      delta = elementRect.top - viewportRect.top;
-    } else if (elementRect.bottom > viewportRect.bottom) {
-      delta = elementRect.bottom - viewportRect.bottom;
-    }
+    const { top, bottom } = element.getBoundingClientRect();
+    this.revealSpan(top, bottom, opts);
+  }
+
+  /** Reveals the vertical span between two client coordinates. */
+  revealSpan(
+    top: number,
+    bottom: number,
+    opts?: { block?: ScrollLogicalPosition; glide?: boolean },
+  ): void {
+    const delta = scrollportRevealDelta(
+      this.viewport.getBoundingClientRect(),
+      { top, bottom },
+      opts?.block,
+    );
     if (Math.abs(delta) < SCROLL_EPSILON_PX) return;
     this.cancelApplicationMotion();
     if (opts?.glide) void this.revealOffset(this.viewport.scrollTop + delta);

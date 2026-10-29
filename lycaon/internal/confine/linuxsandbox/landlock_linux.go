@@ -49,22 +49,26 @@ type landlockRule struct {
 }
 
 // landlockRules derives the ruleset from the plan: everything readable and
-// executable, write grants read-write, and the curated /dev usable.
-func landlockRules(fs Filesystem, abi int) []landlockRule {
+// executable except where an absent read-denied path would appear, write
+// grants read-write, and the curated /dev usable.
+func landlockRules(fs Filesystem, abi int) ([]landlockRule, error) {
 	handled := handledAccesses(abi)
-	rules := []landlockRule{
-		{path: "/", access: landlockReadExecute},
+	rules, err := readRules(fs)
+	if err != nil {
+		return nil, err
+	}
+	rules = append(rules, []landlockRule{
 		{path: "/dev", access: (unix.LANDLOCK_ACCESS_FS_READ_FILE | unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
 			unix.LANDLOCK_ACCESS_FS_READ_DIR | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV) & handled},
 		{path: "/dev/shm", access: handled},
-	}
+	}...)
 	for _, root := range fs.WriteRoots {
 		rules = append(rules, landlockRule{path: root, access: handled})
 	}
 	for _, file := range fs.WriteFiles {
 		rules = append(rules, landlockRule{path: file, access: landlockFileAccesses & handled})
 	}
-	return rules
+	return rules, nil
 }
 
 // applyLandlock restricts the calling thread with the plan's rules. Paths that
@@ -77,7 +81,11 @@ func applyLandlock(fs Filesystem, abi int) error {
 		return fmt.Errorf("landlock ruleset: %w", err)
 	}
 	defer func() { _ = unix.Close(ruleset) }()
-	for _, rule := range landlockRules(fs, abi) {
+	rules, err := landlockRules(fs, abi)
+	if err != nil {
+		return err
+	}
+	for _, rule := range rules {
 		fd, err := unix.Open(rule.path, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -144,7 +152,7 @@ func fdIsDir(fd int) bool {
 type landlockProbe struct{ fd int }
 
 func newLandlockProbe() (landlockProbe, error) {
-	fd, err := newTmpfs("0700")
+	fd, err := newTmpfs("0700", maskTmpfsSize)
 	if err != nil {
 		return landlockProbe{fd: -1}, err
 	}

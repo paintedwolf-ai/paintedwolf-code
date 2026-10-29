@@ -1,6 +1,7 @@
 package openaicompat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -177,7 +178,7 @@ func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, s
 	if stream {
 		wire.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
 	}
-	if len(req.Tools) > 0 {
+	if len(req.Tools) > 0 && (req.ToolsCallable() || !p.profile.OmitToolsWhenNotCallable) {
 		wire.Tools = ProjectTools(req.Tools)
 		if !req.ToolsCallable() {
 			wire.ToolChoice = toolChoiceNone
@@ -514,4 +515,10 @@ func streamToolIndex(acc map[int]*providerwire.StreamTool, call toolCallWire) (i
 
 func (p *Provider) Prepare(req modelcall.CompletionRequest, stream bool) ([]byte, error) {
 	return encodeChatCompletionRequest(req, p, stream, controlOpts{})
+}
+
+// RenderRequest serializes req exactly as this adapter dispatches a stream,
+// without contacting the provider.
+func (p *Provider) RenderRequest(_ context.Context, req modelcall.CompletionRequest) ([]byte, error) {
+	return encodeChatCompletionRequest(req, p, true, controlOpts{})
 }

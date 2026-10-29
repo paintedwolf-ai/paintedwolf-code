@@ -75,6 +75,7 @@ func poisonNixCallerConfiguration(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/private-caller-agent")
 }
 
+//nolint:misspell // Nix config option name is substituters.
 func TestNixRegistrarClosesCallerConfigurationBeforeExecution(t *testing.T) {
 	poisonNixCallerConfiguration(t)
 	root := t.TempDir()

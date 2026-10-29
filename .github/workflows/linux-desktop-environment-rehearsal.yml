@@ -1,0 +1,46 @@
+name: Linux desktop environment rehearsal
+# Prepares and measures the hosted Ubuntu graphical account the installed
+# rehearsal uses, without installing the application.
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Native hosted CPU architecture
+        type: choice
+        options: [arm64, amd64]
+        default: arm64
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'paintedwolf-ai/paintedwolf-code'
+    runs-on: ${{ inputs.architecture == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare the disposable graphical account
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime desktop \
+            --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/paintedwolf-desktop/facts.json"
+      - name: Retain startup diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/paintedwolf-desktop"
+          sudo journalctl --boot --no-pager --output=json -u gdm3 -n 500 > "$RUNNER_TEMP/paintedwolf-desktop/gdm.jsonl"
+          sudo loginctl list-sessions --no-legend --no-pager > "$RUNNER_TEMP/paintedwolf-desktop/sessions.txt"
+          sudo journalctl --boot --no-pager --output=json _COMM=gnome-shell -n 200 > "$RUNNER_TEMP/paintedwolf-desktop/gnome.jsonl"
+      - name: Retain measured environment facts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-environment-${{ inputs.architecture }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/paintedwolf-desktop/*
+          if-no-files-found: warn

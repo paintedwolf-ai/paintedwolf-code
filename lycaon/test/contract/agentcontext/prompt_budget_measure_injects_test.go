@@ -52,6 +52,18 @@ func measureCoordinatorInjectBlock(
 	t.Helper()
 	ctx := context.Background()
 	switch spec.ID {
+	case "turn_state":
+		block, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-inject-test", inject.TurnStateInjectInput{
+			ProgressMissing:          true,
+			ProfileHasUpdateProgress: true,
+			VerifyRequired:           true,
+			PendingOverlayJobs:       []string{"job-overlay-1", "job-overlay-2"},
+			PartialWorkerJobs:        []string{"job-partial-1"},
+		})
+		contractcheck.FailErr(t, "RenderTurnStateBlock", err)
+		return block
+	case "execution_state":
+		return measureExecutionStateBlock(ctx, renderer)
 	case "tool_procedures", "worker_tool_procedures":
 		host, profile := promptunit.HostCoordinator, "coordinator"
 		if spec.ID == "worker_tool_procedures" {

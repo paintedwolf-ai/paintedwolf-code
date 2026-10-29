@@ -69,6 +69,9 @@ describe("composition keys", () => {
       key: "Enter", code: "Enter", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, keyCode: 229,
     });
     expect(result.handled).toBe(false);
+    const local = evt({ key: ",", code: "Comma", ctrlKey: true });
+    expect(shortcutCommandMatchesEvent(stockId("settings-open"), { ...local, keyCode: 229 })).toBe(false);
+    expect(shortcutCommandMatchesEvent(stockId("settings-open"), local)).toBe(true);
     expect(handler).not.toHaveBeenCalled();
     release();
   });
@@ -755,7 +758,7 @@ describe("attachDispatcher", () => {
 
     const press = (init: KeyboardEventInit) =>
       row.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
-    press({ key: ";", code: "Semicolon", ctrlKey: true });
+    press({ key: ";", code: "Semicolon", ctrlKey: true, shiftKey: true });
     press({ key: "c", code: "KeyC" });
     expect(goChat).toHaveBeenCalledOnce();
     expect(typeahead).not.toHaveBeenCalled();

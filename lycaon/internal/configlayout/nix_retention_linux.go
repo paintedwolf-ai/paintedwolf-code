@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,7 +33,7 @@ func RetainRunningNix(ctx context.Context) (*NixRetention, error) {
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil || !filepath.IsAbs(cache) {
-		return nil, errors.New("Nix retention cache directory unavailable")
+		return nil, errors.New("nix retention cache directory unavailable")
 	}
 	return retainNix(ctx, layout, filepath.Join(cache, "paintedwolf", "nix-running"), registrar)
 }
@@ -46,8 +46,8 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 	if err := unix.Lstat(directory, &st); err != nil {
 		return nil, err
 	}
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR || st.Uid != uint32(os.Getuid()) || st.Mode&0o077 != 0 {
-		return nil, errors.New("Nix retention directory must be private and owned by this user")
+	if st.Mode&unix.S_IFMT != unix.S_IFDIR || st.Uid != uint32(os.Getuid()) || st.Mode&0o077 != 0 { // #nosec G115 -- POSIX uid is non-negative and fits in uint32
+		return nil, errors.New("nix retention directory must be private and owned by this user")
 	}
 	registry, err := lockNixRegistry(directory)
 	if err != nil {
@@ -67,10 +67,11 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 	}
 	link := filepath.Join(directory, "session-"+hex.EncodeToString(nonce))
 	lockPath := link + ".lock"
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	fd, err := unix.Open(lockPath, unix.O_CREAT|unix.O_EXCL|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, err
 	}
+	file := os.NewFile(uintptr(fd), lockPath)
 	if err := unix.Flock(int(file.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil {
 		_ = file.Close()
 		_ = os.Remove(lockPath)
@@ -101,10 +102,19 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 		release()
 		return nil, err
 	}
-	defer os.RemoveAll(config)
-	command := exec.CommandContext(operation, layout.NixStore, "--store", registrar.storeURI,
-		"--add-root", link, "--indirect", "--realise", layout.Output) // #nosec G204 -- exact package-owned Nix executable; no PATH lookup
-	command.Env = registrar.environment(config, directory)
+	defer func() { _ = os.RemoveAll(config) }()
+	command, cleanup, err := execpkg.PrepareCommand(operation, layout.NixStore, []string{
+		"--store", registrar.storeURI,
+		"--add-root", link, "--indirect", "--realise", layout.Output,
+	}, execpkg.ExecOpts{
+		Launch: execpkg.HostLaunch("nix_generation_retention"),
+		Env:    registrar.environment(config, directory),
+	})
+	if err != nil {
+		release()
+		return nil, err
+	}
+	defer cleanup()
 	command.Stdin = nil
 	var diagnostic boundedNixOutput
 	command.Stdout, command.Stderr = &diagnostic, &diagnostic
@@ -115,7 +125,7 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 	target, err := os.Readlink(link)
 	if err != nil || target != layout.Output {
 		release()
-		return nil, errors.New("Nix did not register the running generation root")
+		return nil, errors.New("nix did not register the running generation root")
 	}
 	return &NixRetention{LockPath: lockPath, lock: file, release: release}, nil
 }
@@ -128,9 +138,9 @@ func lockNixRegistry(directory string) (*os.File, error) {
 	}
 	file := os.NewFile(uintptr(fd), path)
 	var st unix.Stat_t
-	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Uid != uint32(os.Getuid()) || st.Mode&0o077 != 0 || st.Nlink != 1 {
+	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Uid != uint32(os.Getuid()) || st.Mode&0o077 != 0 || st.Nlink != 1 { // #nosec G115 -- POSIX uid is non-negative and fits in uint32
 		_ = file.Close()
-		return nil, errors.New("Nix root registry lock is not a private owned file")
+		return nil, errors.New("nix root registry lock is not a private owned file")
 	}
 	if err := unix.Flock(fd, unix.LOCK_EX); err != nil {
 		_ = file.Close()
@@ -159,7 +169,8 @@ func pruneNixRoots(directory string) error {
 		}
 		file := os.NewFile(uintptr(fd), path)
 		var st unix.Stat_t
-		if unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uint32(os.Getuid()) && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
+		uid := uint32(os.Getuid()) // #nosec G115 -- POSIX uid is non-negative and fits in uint32
+		if unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uid && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
 			link := strings.TrimSuffix(path, ".lock")
 			if removeNixLink(link) == nil {
 				_ = os.Remove(path)
@@ -179,7 +190,7 @@ func removeNixLink(path string) error {
 		return err
 	}
 	if st.Mode()&os.ModeSymlink == 0 {
-		return errors.New("Nix root path is not an owned symlink")
+		return errors.New("nix root path is not an owned symlink")
 	}
 	return os.Remove(path)
 }

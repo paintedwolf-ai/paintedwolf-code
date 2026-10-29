@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -15,10 +16,12 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/installbinding"
+	"github.com/lycaon/lycaon/internal/nativeproxy"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
@@ -69,8 +72,12 @@ func run(ctx context.Context, args []string) error {
 		return runNixRetainer(ctx, retention.LockPath, os.Stdin, os.Stdout)
 	}
 	kind, verb, rest := classifyArgs(args)
-	if kind == dispatchOpen {
+	switch kind {
+	case dispatchOpen:
 		return runOpen(ctx, rest)
+	case dispatchVersion:
+		return printVersion(os.Stdout, rest)
+	case dispatchVerb:
 	}
 	switch verb {
 	case "serve":
@@ -105,7 +112,12 @@ func run(ctx context.Context, args []string) error {
 		if len(rest) < 1 || rest[0] != "engines" {
 			return fmt.Errorf("usage: pw scan engines {list|check|validate} [--project DIR]")
 		}
-		return runScanEngines(rest[1:])
+		return runScanEngines(ctx, rest[1:])
+	case "internal-system-proxy":
+		if len(rest) != 0 {
+			return errors.New("native proxy helper accepts its request on stdin")
+		}
+		return nativeproxy.Serve(os.Stdin, os.Stdout)
 	case "internal-scan-worker":
 		return scanworker.Serve(ctx, os.Stdin, os.Stdout)
 	case "workflow":
@@ -149,6 +161,15 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
+	if err := httpclient.PinSystemTrust(); err != nil {
+		return fmt.Errorf("load system trust: %w", err)
+	}
+	// Shipped helpers must come from the installation this engine started from.
+	binding, err := installbinding.CaptureRunning()
+	if err != nil {
+		return fmt.Errorf("bind the running installation: %w", err)
+	}
+	installbinding.Install(binding)
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context
@@ -162,10 +183,8 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.Startup = startup
 	}
 	cfg.DBPath = dbPath
-	if strings.TrimSpace(os.Getenv(credentialstore.UnlockStdinEnv)) != "" {
-		if err := credentialstore.ReadUnlockFrame(os.Stdin); err != nil {
-			return err
-		}
+	if err := readStartupAPIToken(os.Stdin, &cfg); err != nil {
+		return err
 	}
 	if strings.TrimSpace(os.Getenv(startupprotocol.ControlStdinEnv)) != "" {
 		go func() {
@@ -177,7 +196,6 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.ConfigRoot = root
 	}
 	serveApp, err := app.Build(ctx, cfg)
-	credentialstore.ClearUnlockSecret()
 	if ctx.Err() != nil {
 		// Shutdown was requested during startup, which is not a startup failure.
 		if serveApp != nil {
@@ -193,6 +211,18 @@ func runServe(signals context.Context, dbPath string) error {
 	}
 	defer func() { _ = serveApp.Close() }() //nolint:contextcheck // shutdown runs after the serve context ends
 	return serveApp.Run(ctx)
+}
+
+func readStartupAPIToken(r io.Reader, cfg *configuration.Config) error {
+	if strings.TrimSpace(os.Getenv(startupprotocol.APITokenStdinEnv)) == "" {
+		return nil
+	}
+	token, err := startupprotocol.ReadAPITokenFrame(r)
+	if err != nil {
+		return err
+	}
+	cfg.APIToken = token
+	return nil
 }
 
 // startReaper keeps the engine's children from outliving it; without the

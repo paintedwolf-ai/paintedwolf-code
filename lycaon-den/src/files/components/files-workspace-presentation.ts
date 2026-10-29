@@ -11,6 +11,7 @@ import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
 import { filesPaneKey, parseFilesPaneKey } from "./files-pane-key.ts";
 import { selectedFileVersion } from "../history/files-version-selection.ts";
 import { createFilesWorkspace } from "../source/files-workspace.ts";
+import { WORKSPACE_PROJECT_MUTATION_WAITING } from "../source/files-workspace-fault.ts";
 import type { FilesScope } from "./files-scope.ts";
 
 type WorkspacePresentation = Pick<ReturnType<typeof createFilesWorkspace>,
@@ -41,7 +42,11 @@ export function createFilesWorkspacePresentation(options: WorkspacePresentation)
       title: "Editor sync is unavailable",
       suggestedAction: "Files keep retrying on their own; if it persists, check the connection to the host.",
     },
-    workspaceError,
+    // A lifecycle wait is the host's own transition, not an editor sync failure.
+    () => {
+      const retrying = workspaceError();
+      return retrying === WORKSPACE_PROJECT_MUTATION_WAITING ? null : retrying;
+    },
     () => projectId,
   );
   const holdHint = () => holdNotice()?.message;

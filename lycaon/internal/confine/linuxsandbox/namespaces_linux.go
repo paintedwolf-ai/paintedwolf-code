@@ -13,12 +13,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Inside reports whether this process already runs in the namespaces the plan
-// expects: its user namespace differs from the host's.
+// Inside reports whether this process is the helper the outer helper
+// relaunched: the first process of the fresh PID namespace, whose user
+// namespace also differs from the engine's. The outer helper is never PID 1,
+// and its own user namespace need not be the engine's: under the protected
+// launch the broker starts it outside the engine's namespace.
 func Inside(plan Plan) bool {
 	host := plan.Attest.HostNamespaces[NamespaceUser]
 	own, err := os.Readlink("/proc/self/ns/" + NamespaceUser)
-	return err == nil && host != "" && own != host
+	return os.Getpid() == 1 && err == nil && host != "" && own != host
 }
 
 // mountProc gives the new PID namespace its own process table first, so any
@@ -81,10 +84,20 @@ func applyFilesystem(fs Filesystem) error {
 		ops = append(ops, mountOp{path: p, kind: opRestored, clone: fd})
 	}
 	sort.SliceStable(ops, func(i, j int) bool { return ops[i].path < ops[j].path })
-	hiddenFile := -1
+	var hiddenFiles *hiddenFileMask
+	for _, op := range ops {
+		if op.kind == opHidden && !isDir(op.path) {
+			var err error
+			hiddenFiles, err = newHiddenFileMask()
+			if err != nil {
+				return mountFailure("prepare private file mask", err)
+			}
+			break
+		}
+	}
 	defer func() {
-		if hiddenFile >= 0 {
-			_ = unix.Close(hiddenFile)
+		if hiddenFiles != nil {
+			_ = hiddenFiles.close()
 		}
 	}()
 	for _, op := range ops {
@@ -94,12 +107,10 @@ func applyFilesystem(fs Filesystem) error {
 			if isDir(op.path) {
 				err = hideDirectory(op.path)
 			} else {
-				if hiddenFile < 0 {
-					hiddenFile, err = newTmpfs("0755")
+				if hiddenFiles == nil {
+					return mountFailure(op.path, errors.New("filesystem entry changed kind during setup"))
 				}
-				if err == nil {
-					err = hideFile(hiddenFile, op.path)
-				}
+				err = hiddenFiles.hide(op.path)
 			}
 		case opReadOnly:
 			err = bindReadOnly(op.path)
@@ -109,6 +120,13 @@ func applyFilesystem(fs Filesystem) error {
 		}
 		if err != nil {
 			return mountFailure(op.path, err)
+		}
+	}
+	if hiddenFiles != nil {
+		err := hiddenFiles.close()
+		hiddenFiles = nil
+		if err != nil {
+			return mountFailure("close private file-mask descriptor", err)
 		}
 	}
 	// Hidden directories become read-only only after anything restored beneath
@@ -131,33 +149,12 @@ func mountFailure(what string, err error) error {
 // writable only until anything restored beneath it has its mountpoint; the
 // final read-only pass seals it.
 func hideDirectory(path string) error {
-	fd, err := newTmpfs("0755")
+	fd, err := newTmpfs("0755", maskTmpfsSize)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = unix.Close(fd) }()
 	return unix.MoveMount(fd, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
-}
-
-// hideFile replaces a file with an empty, unreadable file from the shared tmpfs.
-func hideFile(tmpfs int, path string) error {
-	name := "hidden"
-	fd, err := unix.Openat(tmpfs, name, unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0)
-	if err != nil && !errors.Is(err, unix.EEXIST) {
-		return err
-	}
-	if err == nil {
-		_ = unix.Close(fd)
-	}
-	clone, err := unix.OpenTree(tmpfs, name, unix.OPEN_TREE_CLONE|unix.O_CLOEXEC)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = unix.Close(clone) }()
-	if err := unix.MountSetattr(clone, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY}); err != nil {
-		return err
-	}
-	return unix.MoveMount(clone, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
 }
 
 // bindReadOnly covers a path with a read-only copy of itself.
@@ -213,108 +210,10 @@ func cloneTree(path string) (int, error) {
 	return unix.OpenTree(unix.AT_FDCWD, path, unix.OPEN_TREE_CLONE|unix.AT_RECURSIVE|unix.O_CLOEXEC)
 }
 
-// newTmpfs creates an unattached tmpfs with the given root mode.
-func newTmpfs(mode string) (int, error) {
-	fs, err := unix.Fsopen("tmpfs", unix.FSOPEN_CLOEXEC)
-	if err != nil {
-		return -1, err
-	}
-	defer func() { _ = unix.Close(fs) }()
-	for key, value := range map[string]string{"mode": mode, "size": "1m"} {
-		if err := unix.FsconfigSetString(fs, key, value); err != nil {
-			return -1, err
-		}
-	}
-	if err := unix.FsconfigCreate(fs); err != nil {
-		return -1, err
-	}
-	return unix.Fsmount(fs, unix.FSMOUNT_CLOEXEC, unix.MOUNT_ATTR_NOSUID|unix.MOUNT_ATTR_NODEV)
-}
-
 // setReadOnlyAt makes the top mount at path read-only without touching mounts
 // beneath it.
 func setReadOnlyAt(path string) error {
 	return unix.MountSetattr(unix.AT_FDCWD, path, 0, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY})
-}
-
-// devNodes are the host device nodes a confined process may use.
-var devNodes = []string{"null", "zero", "full", "random", "urandom", "tty"}
-
-// mountDev replaces /dev with a curated set: the standard character devices,
-// the host's pseudo-terminals so inherited terminals keep their names, a fresh
-// shared-memory tmpfs, and the descriptor links. Raw disks and other devices
-// are absent rather than denied.
-func mountDev() error {
-	clones := map[string]int{}
-	defer func() {
-		for _, fd := range clones {
-			_ = unix.Close(fd)
-		}
-	}()
-	for _, name := range devNodes {
-		fd, err := unix.OpenTree(unix.AT_FDCWD, "/dev/"+name, unix.OPEN_TREE_CLONE|unix.O_CLOEXEC)
-		if err != nil {
-			return mountFailure("/dev/"+name, err)
-		}
-		clones[name] = fd
-	}
-	if fd, err := cloneTree("/dev/pts"); err == nil {
-		clones["pts"] = fd
-	}
-	ptmxLink, _ := os.Readlink("/dev/ptmx")
-	if ptmxLink == "" {
-		if fd, err := unix.OpenTree(unix.AT_FDCWD, "/dev/ptmx", unix.OPEN_TREE_CLONE|unix.O_CLOEXEC); err == nil {
-			clones["ptmx"] = fd
-		}
-	}
-	dev, err := newTmpfs("0755")
-	if err != nil {
-		return mountFailure("/dev", err)
-	}
-	defer func() { _ = unix.Close(dev) }()
-	if err := unix.MoveMount(dev, "", unix.AT_FDCWD, "/dev", unix.MOVE_MOUNT_F_EMPTY_PATH); err != nil {
-		return mountFailure("/dev", err)
-	}
-	for name, fd := range clones {
-		target := "/dev/" + name
-		if name == "pts" {
-			if err := os.Mkdir(target, 0o755); err != nil {
-				return mountFailure(target, err)
-			}
-		} else {
-			if err := createPlaceholder(target, 0o666); err != nil {
-				return mountFailure(target, err)
-			}
-		}
-		if err := unix.MoveMount(fd, "", unix.AT_FDCWD, target, unix.MOVE_MOUNT_F_EMPTY_PATH); err != nil {
-			return mountFailure(target, err)
-		}
-	}
-	if ptmxLink != "" {
-		if err := os.Symlink(ptmxLink, "/dev/ptmx"); err != nil {
-			return mountFailure("/dev/ptmx", err)
-		}
-	}
-	for link, target := range map[string]string{"fd": "/proc/self/fd", "stdin": "/proc/self/fd/0", "stdout": "/proc/self/fd/1", "stderr": "/proc/self/fd/2"} {
-		if err := os.Symlink(target, "/dev/"+link); err != nil {
-			return mountFailure("/dev/"+link, err)
-		}
-	}
-	if err := os.Mkdir("/dev/shm", 0o1777); err != nil {
-		return mountFailure("/dev/shm", err)
-	}
-	shm, err := newTmpfs("1777")
-	if err != nil {
-		return mountFailure("/dev/shm", err)
-	}
-	defer func() { _ = unix.Close(shm) }()
-	if err := unix.MoveMount(shm, "", unix.AT_FDCWD, "/dev/shm", unix.MOVE_MOUNT_F_EMPTY_PATH); err != nil {
-		return mountFailure("/dev/shm", err)
-	}
-	if err := setReadOnlyAt("/dev"); err != nil {
-		return mountFailure("/dev", err)
-	}
-	return nil
 }
 
 // loopbackUp brings the namespace's loopback interface up; nothing else exists.

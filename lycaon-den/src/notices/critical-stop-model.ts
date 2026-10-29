@@ -8,6 +8,7 @@ import type { EngineState } from "../platform/connection/engine-supervision.ts";
 import { isBackendReachable } from "../platform/connection/sidecar-status.ts";
 import type { SidecarStatus } from "../store/app-state-model.ts";
 import { CLIENT_NOTICES, type ClientNoticeCopy } from "./client-notices.generated.ts";
+import { formatBytes } from "../format/format-bytes.ts";
 
 export type CriticalStopRecovery =
   | "quit_desktop"
@@ -17,8 +18,7 @@ export type CriticalStopRecovery =
   | "restore_backup"
   | "finish_restore"
   | "finish_fresh_start"
-  | "unlock_credential_vault"
-  | "create_credential_vault"
+  | "retry_upgrade"
   | "reset_credential_vault";
 
 export type CriticalStopSpec = {
@@ -30,6 +30,11 @@ export type CriticalStopSpec = {
   /** Copy shown after a failed recovery attempt. */
   retryFailed?: string;
   recovery: CriticalStopRecovery;
+  /**
+   * A destructive reset the person may choose instead of the recovery, when
+   * the vault's key is confirmed gone rather than merely unreachable.
+   */
+  resettable?: boolean;
   /** Host stop-screen report, when the readiness read reached us. */
   catastrophicDetail?: CatastrophicDetail;
   /** Selectable host failure evidence. */
@@ -54,10 +59,8 @@ export function criticalStopRecoveryLabel(
       return "Finish restore";
     case "finish_fresh_start":
       return "Finish starting fresh";
-    case "unlock_credential_vault":
-      return "Unlock vault";
-    case "create_credential_vault":
-      return "Create vault";
+    case "retry_upgrade":
+      return "Try again";
     case "reset_credential_vault":
       return "Reset vault…";
   }
@@ -89,25 +92,21 @@ const NAMED_START_FAILURES: Record<
     code: STARTUP_CANCELLED_STOP_CODE,
     copy: CLIENT_NOTICES.startup_cancelled,
   },
-  credential_vault_locked: {
-    code: "credential_vault_locked",
-    copy: CLIENT_NOTICES.credential_vault_locked,
+  credential_vault_custodian_absent: {
+    code: "credential_vault_custodian_absent",
+    copy: CLIENT_NOTICES.credential_vault_custodian_absent,
   },
-  credential_vault_uninitialized: {
-    code: "credential_vault_uninitialized",
-    copy: CLIENT_NOTICES.credential_vault_uninitialized,
-  },
-  credential_vault_unlock_failed: {
-    code: "credential_vault_unlock_failed",
-    copy: CLIENT_NOTICES.credential_vault_unlock_failed,
-  },
-  desktop_restart_required: {
-    code: "desktop_restart_required",
-    copy: CLIENT_NOTICES.desktop_restart_required,
+  installation_unverified: {
+    code: "installation_unverified",
+    copy: CLIENT_NOTICES.installation_unverified,
   },
   credential_vault_custodian_unavailable: {
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,
+  },
+  desktop_restart_required: {
+    code: "desktop_restart_required",
+    copy: CLIENT_NOTICES.desktop_restart_required,
   },
   credential_vault_launcher_refused: {
     code: "credential_vault_launcher_refused",
@@ -131,20 +130,20 @@ function offlineCriticalStop(
   const copy = named?.copy ?? CLIENT_NOTICES.offline;
   const recovery: CriticalStopRecovery = startFailure === "desktop_restart_required"
     ? "quit_desktop"
-    : startFailure === "credential_vault_uninitialized"
-    ? "create_credential_vault"
-    : startFailure === "credential_vault_locked" ||
-        startFailure === "credential_vault_unlock_failed"
-      ? "unlock_credential_vault"
-      : startFailure === "credential_vault_corrupt"
-        ? "reset_credential_vault"
-        : "reconnect";
+    : startFailure === "credential_vault_corrupt"
+    ? "reset_credential_vault"
+    : "reconnect";
   return {
     code: named?.code ?? OFFLINE_STOP_CODE,
     title: copy.title,
     message: copy.message,
     retryFailed: copy.suggestedAction,
     recovery,
+    // A missing key permits explicit recovery; an unavailable custodian
+    // preserves ciphertext while the person repairs the service.
+    ...(startFailure === "credential_vault_identity_missing"
+      ? { resettable: true }
+      : {}),
     // Known startup failures already have actionable catalog copy.
     diagnostic:
       startFailure === "store_locked" ||
@@ -224,9 +223,31 @@ function storeIncompatibleCopy(
     : CLIENT_NOTICES.store_incompatible_integrity_no_snapshot;
 }
 
+// Operational failures offer retry without implying that history is damaged.
+function storageUnavailableCriticalStop(health: HealthResponse): CriticalStopSpec {
+  const copy = health.recovery_reason === "storage_unavailable"
+    ? CLIENT_NOTICES.store_storage_unavailable
+    : health.recovery_space_needed_bytes === undefined
+      ? CLIENT_NOTICES.store_storage_full
+      : CLIENT_NOTICES.store_insufficient_space;
+  return {
+    code: STORE_INCOMPATIBLE_STOP_CODE,
+    title: copy.title,
+    message: copy.message
+      .replace("{needed}", formatBytes(health.recovery_space_needed_bytes))
+      .replace("{available}", formatBytes(health.recovery_space_available_bytes) || "0 B"),
+    retryFailed: copy.suggestedAction,
+    recovery: "retry_upgrade",
+    diagnostic: health.recovery_detail?.trim() || undefined,
+  };
+}
+
 export function storeIncompatibleCriticalStop(
   health: HealthResponse,
 ): CriticalStopSpec {
+  if (health.recovery_reason === "insufficient_space" || health.recovery_reason === "storage_unavailable") {
+    return storageUnavailableCriticalStop(health);
+  }
   const at = health.recovery_snapshot_at?.trim();
   const time = at ? formatRecoverySnapshotAt(at) : undefined;
   const hasSnapshot = health.recovery_snapshot_available === true && Boolean(at);

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -22,9 +21,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/debugretention"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/pkg/api"
 	_ "modernc.org/sqlite"
 )
@@ -70,6 +69,12 @@ func run(ctx context.Context, cfg runConfig) (result report, resultErr error) {
 		defer func() {
 			if err := os.RemoveAll(state.scratch); resultErr == nil && err != nil {
 				resultErr = fmt.Errorf("remove performance scratch directory: %w", err)
+			}
+			// The disposable account had no release configuration before this run.
+			if cfg.installed {
+				if err := os.RemoveAll(state.configDir); resultErr == nil && err != nil {
+					resultErr = fmt.Errorf("remove the run's release configuration: %w", err)
+				}
 			}
 		}()
 	}
@@ -125,9 +130,16 @@ func newRunState(cfg runConfig) (*runState, error) {
 		_ = os.RemoveAll(scratch)
 		return nil, fmt.Errorf("performance capture path is not registered")
 	}
+	configDir := filepath.Join(scratch, "config")
+	if cfg.installed {
+		if configDir, err = installedConfigRoot(); err != nil {
+			_ = os.RemoveAll(scratch)
+			return nil, err
+		}
+	}
 	state := &runState{
 		cfg: cfg, started: time.Now(), scratch: scratch,
-		configDir: filepath.Join(scratch, "config"), projectDir: filepath.Join(scratch, "project"),
+		configDir: configDir, projectDir: filepath.Join(scratch, "project"),
 		perfPath:   filepath.Join(scratch, performanceFile.Name),
 		stderrPath: filepath.Join(scratch, "sidecar.stderr.log"),
 		metrics:    newMeasurements(),
@@ -147,6 +159,21 @@ func newRunState(cfg runConfig) (*runState, error) {
 		return nil, err
 	}
 	return state, nil
+}
+
+// installedConfigRoot is the release configuration an installed engine uses, which must
+// not exist yet: release builds ignore configuration overrides, so the run owns the
+// account's real configuration and removes it afterwards.
+func installedConfigRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	root := filepath.Join(home, ".config", configdir.DirNameProd)
+	if _, err := os.Lstat(root); !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("installed mode needs a disposable account without %s", root)
+	}
+	return root, nil
 }
 
 func (s *runState) startSidecar(ctx context.Context) error {
@@ -172,12 +199,14 @@ func (s *runState) startSidecar(ctx context.Context) error {
 	s.process.Env = append(os.Environ(),
 		"LYCAON_ADDR="+addr,
 		"LYCAON_API_TOKEN="+token,
-		"LYCAON_CONFIG_DIR="+s.configDir,
-		"LYCAON_LLM_MOCK=1",
 		"LYCAON_PERF_DEBUG=1",
 		"LYCAON_PERF_DEBUG_FILE="+s.perfPath,
 		"LYCAON_LOG_LEVEL=info",
 	)
+	// A release engine ignores both, so an installed run sets neither.
+	if !s.cfg.installed {
+		s.process.Env = append(s.process.Env, "LYCAON_CONFIG_DIR="+s.configDir, "LYCAON_LLM_MOCK=1")
+	}
 	s.process.Stdout, s.process.Stderr = stdout, stderr
 	start := time.Now()
 	if err := s.process.Start(); err != nil {
@@ -229,6 +258,9 @@ func (s *runState) runWorkload(ctx context.Context) error {
 	monitor, err := s.client.startEventMonitor(eventCtx, s.project.ID, "")
 	if err != nil {
 		return err
+	}
+	if s.cfg.installed {
+		return s.runInstalledWorkload(ctx, monitor, stopEvents)
 	}
 	if err := s.runPromptScenario(ctx, -1, false); err != nil {
 		stopEvents()
@@ -296,6 +328,21 @@ func (s *runState) runWorkload(ctx context.Context) error {
 		return monitorErr
 	}
 	return nil
+}
+
+// runInstalledWorkload measures the release-valid scenarios: without a mock provider an
+// installed engine takes no prompt turns.
+func (s *runState) runInstalledWorkload(ctx context.Context, monitor *eventMonitor, stopEvents context.CancelFunc) error {
+	s.resources.markBaseline(ctx)
+	s.workloadBaseline = time.Now()
+	err := s.runQueryScenarios(ctx)
+	stopEvents()
+	<-monitor.done
+	if err != nil {
+		return err
+	}
+	_, err = s.addEventMonitor(monitor)
+	return err
 }
 
 func (s *runState) addEventMonitor(monitor *eventMonitor) (string, error) {
@@ -511,98 +558,18 @@ func (s *runState) stopSidecar() (resultErr error) {
 	}
 }
 
-// meanWaitMS is the average time one blocked connection request waited. The
-// pool's wait totals are cumulative, so their ratio does not grow with run length.
-func meanWaitMS(gauges map[string]int64, pool string) float64 {
-	count := gauges[pool+"_wait_count"]
-	if count == 0 {
-		return 0
-	}
-	return float64(gauges[pool+"_wait_ns"]) / float64(count) / 1e6
-}
-
-func (s *runState) collectInternalPerformance(resources *resourceSummary) error {
-	if s.workloadBaseline.IsZero() || !s.workloadEnd.After(s.workloadBaseline) {
-		return fmt.Errorf("performance capture requires a completed workload interval")
-	}
-	file, err := os.Open(s.perfPath)
-	if err != nil {
-		return fmt.Errorf("open performance capture: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-	scanner := bufio.NewScanner(file)
-	var firstRuntime, lastRuntime *observability.RuntimeSample
-	var firstRuntimeTime, lastRuntimeTime time.Time
-	hasRuntime := false
-	for scanner.Scan() {
-		var record observability.PerformanceRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return fmt.Errorf("decode performance record: %w", err)
-		}
-		if record.Kind == "operation" {
-			s.metrics.add("internal."+record.Operation, float64(record.DurationUS)/1000)
-		}
-		if record.Kind == "capture" && record.Runtime != nil {
-			s.correctness.PerfRecordsDropped += record.Runtime.RecordsDropped
-		}
-		if record.Kind != "runtime" {
-			continue
-		}
-		if record.Time.IsZero() || record.Runtime == nil || record.Runtime.HeapAllocBytes == 0 || record.Runtime.Goroutines <= 0 {
-			return fmt.Errorf("performance capture has incomplete runtime measurement")
-		}
-		for _, name := range []string{
-			"db_reader_wait_ns", "db_writer_wait_ns", "db_reader_wait_count", "db_writer_wait_count",
-			"db_reader_open", "db_reader_in_use", "db_writer_open", "db_writer_in_use",
-		} {
-			if value, ok := record.Runtime.Gauges[name]; !ok || value < 0 {
-				return fmt.Errorf("performance capture has missing or invalid %s measurement", name)
-			}
-		}
-		copy := *record.Runtime
-		hasRuntime = true
-		if !record.Time.Before(s.workloadBaseline) && !record.Time.After(s.workloadEnd) {
-			if firstRuntime == nil {
-				firstRuntime = &copy
-				firstRuntimeTime = record.Time
-			}
-			lastRuntime = &copy
-			lastRuntimeTime = record.Time
-		}
-		resources.PeakHeapBytes = max(resources.PeakHeapBytes, copy.HeapAllocBytes)
-		resources.PeakGoroutines = max(resources.PeakGoroutines, copy.Goroutines)
-		resources.DBReaderMeanWaitMS = max(resources.DBReaderMeanWaitMS, meanWaitMS(copy.Gauges, "db_reader"))
-		resources.DBWriterMeanWaitMS = max(resources.DBWriterMeanWaitMS, meanWaitMS(copy.Gauges, "db_writer"))
-		resources.PeakDBReaderOpen = max(resources.PeakDBReaderOpen, int(copy.Gauges["db_reader_open"]))
-		resources.PeakDBReaderInUse = max(resources.PeakDBReaderInUse, int(copy.Gauges["db_reader_in_use"]))
-		resources.PeakDBWriterOpen = max(resources.PeakDBWriterOpen, int(copy.Gauges["db_writer_open"]))
-		resources.PeakDBWriterInUse = max(resources.PeakDBWriterInUse, int(copy.Gauges["db_writer_in_use"]))
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read performance capture: %w", err)
-	}
-	if !hasRuntime {
-		return fmt.Errorf("performance capture has no runtime samples")
-	}
-	if firstRuntime == nil || lastRuntime == nil || !lastRuntimeTime.After(firstRuntimeTime) {
-		if s.cfg.soak > 0 {
-			return fmt.Errorf("performance capture needs distinct pre-shutdown workload runtime samples for soak growth")
-		}
-		return nil
-	}
-	resources.HeapGrowthBytes = uint64Delta(lastRuntime.HeapAllocBytes, firstRuntime.HeapAllocBytes)
-	resources.GoroutineGrowth = lastRuntime.Goroutines - firstRuntime.Goroutines
-	return nil
-}
-
 func (s *runState) buildReport(resources resourceSummary) (report, error) {
 	var limits budgets
 	if err := json.Unmarshal(budgetJSON, &limits); err != nil {
 		return report{}, err
 	}
+	mode, prompts := "sidecar", s.cfg.prompts
+	if s.cfg.installed {
+		mode, prompts = "installed", 0
+	}
 	value := report{
-		Version: 1, StartedAt: s.started.UTC(), DurationMS: elapsedMS(s.started),
-		Scale: s.cfg.scale, Fixture: s.fixture, Iterations: s.cfg.iterations, Prompts: s.cfg.prompts,
+		Version: 1, Mode: mode, StartedAt: s.started.UTC(), DurationMS: elapsedMS(s.started),
+		Scale: s.cfg.scale, Fixture: s.fixture, Iterations: s.cfg.iterations, Prompts: prompts,
 		SoakSeconds: s.cfg.soak.Seconds(), Metrics: summarizeMeasurements(s.metrics), Resources: resources,
 		Correctness: s.correctness, Budgets: limits,
 	}
@@ -620,6 +587,10 @@ func evaluateBudgets(value report) []string {
 		metric, ok := value.Metrics[name]
 		if !ok {
 			if name == "restart.ready" && value.SoakSeconds == 0 {
+				continue
+			}
+			// An installed engine has no mock provider, so prompts are another run's scope.
+			if value.Mode == "installed" && strings.HasPrefix(name, "prompt.") {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf("%s was not measured", name))
@@ -655,7 +626,8 @@ func evaluateBudgets(value report) []string {
 			violations = append(violations, fmt.Sprintf("%s %.0f > %.0f", name, observed, limit))
 		}
 	}
-	if value.Correctness.EventCount == 0 {
+	// Installed runs take no prompt turns, which are what the event stream carries.
+	if value.Correctness.EventCount == 0 && value.Mode != "installed" {
 		violations = append(violations, "event stream delivered no events")
 	}
 	if value.Correctness.DuplicateEventIDs > 0 {

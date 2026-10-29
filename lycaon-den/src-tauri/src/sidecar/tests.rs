@@ -396,21 +396,46 @@ fn stop_sidecar_clears_cached_token() {
 }
 
 #[test]
-fn vault_password_frame_is_length_prefixed_and_exact() {
-    let mut frame = Vec::new();
-    write_vault_password(&mut frame, "correct horse battery staple".as_bytes())
-        .expect("write password frame");
-    assert_eq!(
-        &frame[..4],
-        &("correct horse battery staple".len() as u32).to_be_bytes()
+fn engine_command_keeps_the_api_token_out_of_the_environment() {
+    let cmd = engine_command(
+        Path::new("/opt/painted-wolf-code/bin/pw"),
+        "presence-key",
+        Path::new("/tmp/config"),
     );
-    assert_eq!(&frame[4..], b"correct horse battery staple");
+    let envs: Vec<(String, Option<String>)> = cmd
+        .get_envs()
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().into_owned(),
+                v.map(|v| v.to_string_lossy().into_owned()),
+            )
+        })
+        .collect();
+    // Removed explicitly, so an inherited value cannot reach the engine either.
+    assert!(envs.contains(&("LYCAON_API_TOKEN".to_string(), None)));
+    assert!(envs.contains(&(
+        "LYCAON_API_TOKEN_STDIN".to_string(),
+        Some("1".to_string())
+    )));
 }
 
 #[test]
-fn vault_password_frame_rejects_empty_and_oversized_values() {
-    assert!(write_vault_password(Vec::new(), b"").is_err());
-    assert!(write_vault_password(Vec::new(), &vec![b'x'; VAULT_PASSWORD_MAX_BYTES + 1]).is_err());
+fn api_token_frame_leaves_the_control_stream_available() {
+    let mut stream = Vec::new();
+    write_api_token(&mut stream, "abc-DEF_123").expect("write token frame");
+    stream.extend_from_slice(b"shutdown\n");
+    assert_eq!(&stream[..4], &11u32.to_be_bytes());
+    assert_eq!(&stream[4..15], b"abc-DEF_123");
+    assert_eq!(&stream[15..], b"shutdown\n");
+}
+
+#[test]
+fn api_token_frame_rejects_tokens_the_engine_refuses() {
+    assert!(write_api_token(Vec::new(), "").is_err());
+    assert!(write_api_token(Vec::new(), "has space").is_err());
+    assert!(write_api_token(Vec::new(), "line\n").is_err());
+    assert!(write_api_token(Vec::new(), &"x".repeat(API_TOKEN_MAX_BYTES + 1)).is_err());
+    assert!(write_api_token(Vec::new(), &"x".repeat(API_TOKEN_MAX_BYTES)).is_ok());
 }
 
 #[cfg(unix)]
@@ -754,6 +779,10 @@ fn custody_failures_keep_distinct_startup_tags() {
         (
             SidecarStartError::CredentialVaultCustodianUnavailable("preserved".into()),
             "credential_vault_custodian_unavailable",
+        ),
+        (
+            SidecarStartError::CredentialVaultCustodianAbsent("preserved".into()),
+            "credential_vault_custodian_absent",
         ),
         (
             SidecarStartError::CredentialVaultLauncherRefused("preserved".into()),

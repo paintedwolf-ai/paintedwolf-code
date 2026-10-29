@@ -62,6 +62,7 @@ func Ollama() Profile {
 
 func Fireworks() Profile {
 	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
 	profile.Discovery = DiscoveryFireworks
 	// Fireworks tool messages accept image parts.
 	profile.ToolResultImages = ToolResultImagesInline
@@ -148,12 +149,16 @@ func Litellm() Profile {
 }
 
 func LocalInference(profile Profile) Profile {
+	if profile.ReasoningWire == "" {
+		profile.ReasoningWire = ReasoningWireContent
+	}
 	profile.SystemPreambleOnly = true
 	profile.StreamResponseHeaderTimeout = LocalInferenceStreamResponseHeaderTimeout
 	profile.CompleteResponseHeaderTimeout = LocalInferenceCompleteResponseHeaderTimeout
 	profile.UtilityCallTimeout = LocalInferenceUtilityCallTimeout
 	profile.BackgroundUtilityCallTimeout = LocalInferenceBackgroundUtilityCallTimeout
 	profile.UtilitySingleFlight = true
+	profile.OmitToolsWhenNotCallable = true
 	return profile
 }
 

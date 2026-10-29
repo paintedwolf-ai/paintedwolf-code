@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image"
 	"io"
 	"os"
 	"strings"
@@ -59,7 +58,7 @@ func (t *tesseractOCR) RecognizeText(ctx context.Context, _ string, raw []byte) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrOCRUnavailable, err)
 	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	img, err := decodeRaster(raw)
 	if err != nil {
 		return nil, fmt.Errorf("decode raster: %w", err)
 	}
@@ -90,6 +89,9 @@ const tesseractOrientationMargin = "1"
 // 1) turns rotated captures before reading and reports boxes in the raster's
 // own coordinates; only the tsv renderer writes to stdout.
 func runTesseract(ctx context.Context, req tesseractRequest) (tesseractResult, error) {
+	if req.Engine.LanguageArgument == "" {
+		return tesseractResult{}, fmt.Errorf("OCR engine has no verified recognition language profile")
+	}
 	scratch, err := os.MkdirTemp("", "pw-ocr-")
 	if err != nil {
 		return tesseractResult{}, fmt.Errorf("scratch: %w", err)
@@ -99,7 +101,7 @@ func runTesseract(ctx context.Context, req tesseractRequest) (tesseractResult, e
 	if err := confine.RequireApplied(applied); err != nil {
 		return tesseractResult{}, err
 	}
-	args := []string{"stdin", "stdout", "--psm", "1", "-l", "eng", "-c", "min_orientation_margin=" + tesseractOrientationMargin, "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"}
+	args := []string{"stdin", "stdout", "--psm", "1", "-l", req.Engine.LanguageArgument, "-c", "min_orientation_margin=" + tesseractOrientationMargin, "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"}
 	stdout, stderr, code, err := execpkg.RunSeparate(ctx, req.Engine.Binary, args, execpkg.ExecOpts{
 		Launch:         execpkg.OCREngineLaunch(box).WithReducedEnvironment(),
 		Dir:            scratch,
