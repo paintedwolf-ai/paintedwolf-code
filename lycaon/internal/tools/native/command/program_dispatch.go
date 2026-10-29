@@ -144,19 +144,25 @@ func (d *ProgramDispatcher) firstRejection() *nativeRejection {
 	return d.shared.rejected
 }
 
-func (d *ProgramDispatcher) markStopWritten() {
+// claimStopLine reports whether this caller writes the program's resource
+// stop line; a stop is written once, by whichever statement reports it first.
+func (d *ProgramDispatcher) claimStopLine() bool {
 	if d.shared == nil {
-		return
+		return true
 	}
 	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	claimed := !d.shared.stopWritten
 	d.shared.stopWritten = true
-	d.shared.mu.Unlock()
+	return claimed
 }
 
-func (d *ProgramDispatcher) stopWritten() bool {
-	d.shared.mu.Lock()
-	defer d.shared.mu.Unlock()
-	return d.shared.stopWritten
+// writeStatementRefusal writes a refused statement's shell-voice line.
+func (d *ProgramDispatcher) writeStatementRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, reject *toolrejection.ToolReject) {
+	if programResourceRefusal(reject) && !d.claimStopLine() {
+		return
+	}
+	writeRejectRefusal(streams, command, request, reject)
 }
 
 var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
@@ -379,7 +385,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!native.OwnerInvoked || native.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			writeRejectRefusal(streams, spec.Name, request, reject)
+			d.writeStatementRefusal(streams, spec.Name, request, reject)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -417,7 +423,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 	}
 	rejection := argvRejection(spec, cause)
 	reject := toolrejection.AsToolReject(rejection)
-	writeRejectRefusal(streams, spec.Name, request, reject)
+	d.writeStatementRefusal(streams, spec.Name, request, reject)
 	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
@@ -465,7 +471,7 @@ func prepareChildFailure(streams commandprogram.Streams, command string, request
 		span := request.Invocation.Span
 		reject.Data["source_start_byte"], reject.Data["source_end_byte"] = span.StartByte, span.EndByte
 		reject.Data["source_line"], reject.Data["source_column"] = span.Line, span.Column
-		writeRejectRefusal(streams, command, request, reject)
+		d.writeStatementRefusal(streams, command, request, reject)
 		return refusedResult(reject.Code), cause
 	}
 	return refusedResult("COMMAND_OPERAND_INVALID"), cause
