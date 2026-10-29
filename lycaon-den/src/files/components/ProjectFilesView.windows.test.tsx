@@ -9,7 +9,7 @@ import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { fileBufferKey } from "./project-files-model.ts";
 import { resetAppStateSnapshotForTests, setAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 
-const { fileTabDragListeners } = filesViewTestFakes();
+const { fileTabDragListeners, fileTabTransfer } = filesViewTestFakes();
 
 describe("ProjectFilesView stage chrome", () => {
   beforeEach(resetProjectFilesViewTest);
@@ -190,8 +190,9 @@ describe("ProjectFilesView stage chrome", () => {
       rootId: "r1",
       path: "src/incoming.ts",
       title: "incoming.ts",
-      positionX: window.screenX,
-      positionY: window.screenY,
+      positionX: 0,
+      positionY: 0,
+      transfer: false,
     };
 
     for (const listener of fileTabDragListeners) {
@@ -309,5 +310,97 @@ describe("ProjectFilesView stage chrome", () => {
 
     await waitFor(() => expect(onOpenInNewWindow).toHaveBeenCalledOnce());
     expect(projectFilesState(PROJECT).byKey[buffer.key]).toBeDefined();
+  });
+  it("carries a pulled-off tab with a native transfer and moves it out only when the shell commits", async () => {
+    resetProjectFilesForTests();
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    const buffer = loadedBuffer({ path: "src/transferred.ts" });
+    const onFileTabMovedOut = vi.fn();
+    const fileTabWindowDrag = {
+      begin: vi.fn(async () => "file:unused:1"),
+      move: vi.fn(async () => true),
+      finish: vi.fn(async () => true),
+      cancel: vi.fn(async () => true),
+      transfer: vi.fn(async () => "token-1"),
+    };
+    render(() => (
+      <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} fileTabWindowDrag={fileTabWindowDrag} onFileTabMovedOut={onFileTabMovedOut} />
+    ));
+    await waitForFilesStageReady();
+    await waitFor(() => expect(fileTabTransfer.listeners.size).toBe(1));
+    const tab = screen.getByTestId("files-tab").closest(".den-files-tab")!;
+    tab.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 40, clientY: 4, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 45, clientY: 60 }));
+
+    await waitFor(() => expect(fileTabTransfer.ready).toHaveBeenCalledWith("token-1"));
+    expect(fileTabWindowDrag.transfer).toHaveBeenCalledWith(buffer.key);
+    expect(fileTabWindowDrag.begin).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("files-tab-pull-preview")).toBeNull();
+    expect(projectFilesState(PROJECT).byKey[buffer.key]).toBeDefined();
+
+    for (const listener of fileTabTransfer.listeners) listener({ token: "other", outcome: "committed" });
+    expect(projectFilesState(PROJECT).byKey[buffer.key]).toBeDefined();
+    for (const listener of fileTabTransfer.listeners) listener({ token: "token-1", outcome: "committed" });
+    await waitFor(() => {
+      expect(projectFilesState(PROJECT).byKey[buffer.key]).toBeUndefined();
+      expect(onFileTabMovedOut).toHaveBeenCalledWith(buffer.key);
+    });
+  });
+
+  it("keeps the tab when a native transfer is cancelled, even before its token arrives", async () => {
+    resetProjectFilesForTests();
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    const buffer = loadedBuffer({ path: "src/kept.ts" });
+    let resolveToken!: (token: string) => void;
+    const fileTabWindowDrag = {
+      begin: vi.fn(async () => "file:unused:1"),
+      move: vi.fn(async () => true),
+      finish: vi.fn(async () => true),
+      cancel: vi.fn(async () => true),
+      transfer: vi.fn(() => new Promise<string>((resolve) => { resolveToken = resolve; })),
+    };
+    render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} fileTabWindowDrag={fileTabWindowDrag} />);
+    await waitForFilesStageReady();
+    await waitFor(() => expect(fileTabTransfer.listeners.size).toBe(1));
+    const tab = screen.getByTestId("files-tab").closest(".den-files-tab")!;
+    tab.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 40, clientY: 4, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 45, clientY: 60 }));
+    await waitFor(() => expect(fileTabWindowDrag.transfer).toHaveBeenCalled());
+
+    for (const listener of fileTabTransfer.listeners) listener({ token: "token-2", outcome: "cancelled" });
+    resolveToken("token-2");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fileTabTransfer.ready).not.toHaveBeenCalled();
+    expect(projectFilesState(PROJECT).byKey[buffer.key]).toBeDefined();
+  });
+
+  it("commits a delivered tab it opens and returns one it cannot open", async () => {
+    resetProjectFilesForTests();
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    loadedBuffer({ path: "src/existing.ts" });
+    render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} />);
+    await waitFor(() => expect(fileTabDragListeners.size).toBe(1));
+    const delivery = {
+      phase: "drop",
+      dragLabel: "token-3",
+      projectId: PROJECT,
+      rootId: "r1",
+      path: "src/delivered.ts",
+      title: "delivered.ts",
+      positionX: 0,
+      positionY: 0,
+      transfer: true,
+    };
+    for (const listener of fileTabDragListeners) listener(delivery);
+    await waitFor(() => expect(fileTabTransfer.commit).toHaveBeenCalledWith("token-3"));
+    expect(projectFilesState(PROJECT).byKey[fileBufferKey("r1", "src/delivered.ts")]).toBeDefined();
+
+    for (const listener of fileTabDragListeners) listener({ ...delivery, dragLabel: "token-4", rootId: "missing-root" });
+    await waitFor(() => expect(fileTabTransfer.giveBack).toHaveBeenCalledWith("token-4"));
+    expect(fileTabTransfer.commit).not.toHaveBeenCalledWith("token-4");
   });
 });

@@ -46,7 +46,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_OPERAND_INVALID")), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true)
@@ -54,7 +54,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_EXEC_DENIED"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
 	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
@@ -74,7 +74,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_EXEC_DENIED"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
 	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
 	if err != nil {
@@ -91,7 +91,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 			_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 			return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 		}
-		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
 	select {
 	case <-async.Done():
@@ -234,6 +234,13 @@ func nonNilWriter(w io.Writer) io.Writer {
 		return io.Discard
 	}
 	return w
+}
+
+func externalLaunchFailure(err error, fallback toolcontract.ProducerResult) toolcontract.ProducerResult {
+	if rejection := toolrejection.AsToolReject(err); rejection != nil {
+		return refusedResult(rejection.Code)
+	}
+	return fallback
 }
 
 func refusedResult(code string) toolcontract.ProducerResult {

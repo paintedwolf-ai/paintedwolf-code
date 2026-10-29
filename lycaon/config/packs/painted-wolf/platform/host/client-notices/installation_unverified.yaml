@@ -1,0 +1,12 @@
+# The package database did not confirm who owns this Linux installation, so
+# the shell could not check for a package replacement before starting the engine.
+scope: app
+title: Installation check unfinished
+message: >-
+  Painted Wolf Code could not confirm which package owns this installation, so
+  it did not start the engine. Your saved credentials are preserved.
+suggested_action: Wait for any package operation to finish, then try again.
+scenarios:
+  - id: default
+    expect_contains:
+      - could not confirm which package owns this installation

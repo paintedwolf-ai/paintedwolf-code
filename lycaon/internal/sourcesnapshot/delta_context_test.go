@@ -41,7 +41,7 @@ func TestSharedSnapshotSurvivesItsFirstConsumersCancellation(t *testing.T) {
 	case <-started:
 	case err := <-ownerDone:
 		t.Fatalf("initial capture ended before survey: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("initial capture did not begin surveying")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -91,7 +91,7 @@ func TestCanceledDeltaAdmissionRequiresResurvey(t *testing.T) {
 			root := t.TempDir()
 			coverRoot(t, root)
 			tracker := newDeltaTracker()
-			tracker.coveredBy(root, "previous", "scope", tracker.sequence(), true)
+			tracker.coveredBy(root, "previous", nil, "scope", tracker.sequence(), true)
 			prior := tracker.begin(root, "scope")
 			if prior.covered != "previous" {
 				t.Fatal("fixture cannot reuse its covered snapshot")
@@ -114,7 +114,7 @@ func TestCanceledDeltaAdmissionRequiresResurvey(t *testing.T) {
 				Kind: repochange.WorktreeChanged, ProjectDir: root, Paths: []string{"main.go"},
 			})
 			// A publication already in progress must not erase the resurvey request.
-			tracker.coveredBy(root, "concurrent", "scope", prior.upTo, true)
+			tracker.coveredBy(root, "concurrent", nil, "scope", prior.upTo, true)
 			next := tracker.begin(root, "scope")
 			if timing == "not canceled" {
 				if next.covered != "concurrent" {

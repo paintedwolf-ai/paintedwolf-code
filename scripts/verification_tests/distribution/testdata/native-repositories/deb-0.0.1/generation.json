@@ -1,0 +1,74 @@
+{
+  "channel": "preview",
+  "family": "deb",
+  "format_version": 1,
+  "inventory_sha256": "5073c8faab453ebb7387b02d1ebf48ffc8336807694366fded77db2d7c39ff28",
+  "key_fingerprint": "39E50CFFA6F3583069BB7D2647800F99D2F031C5",
+  "objects": [
+    {
+      "path": "dists/preview/InRelease",
+      "sha256": "ec51b877e447aa30f738d8527b180039d5e1a7f6736de5b7062c2aca77843c68",
+      "size": 1764
+    },
+    {
+      "path": "dists/preview/Release",
+      "sha256": "a4f0322efa0d45202e07bef35e08998ab1bc2c1c13e43f41a9053f262fdd2144",
+      "size": 1056
+    },
+    {
+      "path": "dists/preview/Release.gpg",
+      "sha256": "4329281f14ec42dcf1e0cb74243353e20154c2f3aaa4aa5e6e3f07a496440c84",
+      "size": 659
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/Packages",
+      "sha256": "723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95",
+      "size": 618
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/Packages.gz",
+      "sha256": "ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53",
+      "size": 392
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/by-hash/SHA256/723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95",
+      "sha256": "723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95",
+      "size": 618
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/by-hash/SHA256/ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53",
+      "sha256": "ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53",
+      "size": 392
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/by-hash/SHA512/150982cedc45ba0f7ab48e6bca8c7baea627ff152ecb25db3da0ff4bbe2a053084ec4c574c17c363a71b575ad226c54087485ea670098c141bf3c3a27669aac5",
+      "sha256": "ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53",
+      "size": 392
+    },
+    {
+      "path": "dists/preview/main/binary-amd64/by-hash/SHA512/39f4229c85ec9c70f856727f9e86ff3113a2f574ad771c3b1d6962016a5a42d9cb6fb1393f72b88952129c7a652f32b981018ffe7d164ea630448d9f7f1bd932",
+      "sha256": "723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95",
+      "size": 618
+    },
+    {
+      "path": "pool/960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a/paintedwolf-repository-fixture_0.0.1-1_amd64.deb",
+      "sha256": "960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a",
+      "size": 586
+    }
+  ],
+  "packages": [
+    {
+      "architecture": "amd64",
+      "file": "pool/960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a/paintedwolf-repository-fixture_0.0.1-1_amd64.deb",
+      "input_sha256": "960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a",
+      "native_version": "0.0.1-1",
+      "sha256": "960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a"
+    }
+  ],
+  "publication_order": "content-before-signed-metadata",
+  "reader_consistency": "apt-inrelease-by-hash",
+  "rehearsal": true,
+  "signing_generation": 1,
+  "source_commit": "ffffffffffffffffffffffffffffffffffffffff",
+  "version": "0.0.1"
+}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // ProgramSnapshotLease owns one detached execution snapshot's accounting.
@@ -21,7 +19,7 @@ func (s *ProgramSnapshotLease) Close() error {
 	return nil
 }
 
-func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, memory *toolcontract.ProgramMemory) (*ProgramSnapshotLease, error) {
+func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, memory ProgramStateAdmission) (*ProgramSnapshotLease, error) {
 	if ctx == nil || memory == nil {
 		return nil, fmt.Errorf("execution snapshot requires context and state admission")
 	}
@@ -37,6 +35,9 @@ func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, memory *toolcont
 	release, err := memory.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return nil, err
+	}
+	if release == nil {
+		return nil, fmt.Errorf("snapshot state admission returned no release")
 	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()

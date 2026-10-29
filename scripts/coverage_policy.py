@@ -46,6 +46,18 @@ def changed(language):
     return floor
 
 
+def python_suites():
+    """The Python suites that measure scripts: a discovery start directory, a file pattern, and optional requirements."""
+    value = policy().get("python", {}).get("suites")
+    if not isinstance(value, dict) or not value:
+        raise ValueError("python.suites must declare at least one suite")
+    for name, suite in value.items():
+        if (not isinstance(suite, dict) or not {"start", "pattern"} <= set(suite) <= {"start", "pattern", "requirements"}
+                or not all(isinstance(item, str) and item for item in suite.values())):
+            raise ValueError(f"python suite {name} needs a start directory, a pattern, and optionally a requirements file")
+    return value
+
+
 def main(arguments):
     try:
         if len(arguments) == 2 and arguments[0] == "get":

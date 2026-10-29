@@ -696,6 +696,15 @@ print('fixture '+name, flush=True)'''))
         self.collect(self.start("lint"))
         self.assertEqual([r["name"] for r in self.records()], ["build", "lint"])
 
+    def test_sequential_batches_reuse_first_snapshot_slot_after_cleanup(self):
+        self.queue.resume()
+        self.collect(self.start("build"))
+        self.collect(self.start("lint"))
+        slots = [Path(record["cwd"]).name for record in self.records()]
+        self.assertEqual(len(slots), 2)
+        self.assertEqual(slots[0], slots[1])
+        self.assertTrue(slots[0].endswith("-0"), slots)
+
     def test_retention_prunes_completed_artifacts_and_source_refs_together(self):
         self.queue.resume()
         for _ in range(3):
