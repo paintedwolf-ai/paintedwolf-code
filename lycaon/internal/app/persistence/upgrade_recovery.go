@@ -22,15 +22,15 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source db.UpgradeSource, plan migrations.Plan) error {
 			var sourcePath string
-			if err := source.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&sourcePath); err != nil {
+			if err := source.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&sourcePath); err != nil {
 				return err
 			}
-			previous, _, err := db.ReadAppVersion(ctx, source)
+			previous, _, err := db.ReadAppVersion(ctx, source.DB)
 			if err != nil {
 				return err
 			}
 			return backup.CaptureUpgradeRecovery(ctx, backup.CreateOpts{ConfigDir: filepath.Dir(path), DBPath: sourcePath,
-				SQLDB: source, SharedOriginal: source.SharedOriginal, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
+				SQLDB: source.DB, SharedOriginal: source.SharedOriginal, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
 		},
 		Progress: func(phase migrations.Phase) {
 			b.logger.InfoContext(ctx, "store upgrade", "phase", phase)
