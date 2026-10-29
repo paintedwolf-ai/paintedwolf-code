@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock
 
 from harness.seed_project import ensure_project
+from harness.test_sidecar_stop import DevelopmentStopTests
 from harness.test_supervise import HarnessSignalTest, HarnessSupervisorTest
 
 
