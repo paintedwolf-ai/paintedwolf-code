@@ -252,12 +252,22 @@ func declaredFileWrites(action hitl.ProposedAction) (write, declared bool) {
 // declaredFileTargets returns every declared path crossing.
 func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*gate.FileTarget {
 	write, declared := declaredFileWrites(action)
+	if action.Invocation.NativePathTargets != nil {
+		declared = true
+	}
 	if !declared {
 		return nil
 	}
 	var targets []*gate.FileTarget
 	roots := workspaceRoots(action)
-	for _, raw := range action.Invocation.Files {
+	paths := action.Invocation.Files
+	if action.Invocation.NativePathTargets != nil {
+		paths = make([]string, len(action.Invocation.NativePathTargets))
+		for i, target := range action.Invocation.NativePathTargets {
+			paths[i] = target.Path
+		}
+	}
+	for i, raw := range paths {
 		path := strings.TrimSpace(raw)
 		// Worker-branch paths are an OAR reject.
 		if path == "" || enginepaths.IsWorkerBranchPath(path) {
@@ -265,7 +275,11 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		}
 		mode := gate.ModeRead
 		catalogMode := sensitivepath.ModeRead
-		if write {
+		pathWrite := write
+		if action.Invocation.NativePathTargets != nil {
+			pathWrite = action.Invocation.NativePathTargets[i].Write
+		}
+		if pathWrite {
 			mode, catalogMode = gate.ModeWrite, sensitivepath.ModeWrite
 		}
 		target := &gate.FileTarget{

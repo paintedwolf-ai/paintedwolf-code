@@ -338,6 +338,33 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 	return ""
 }
 
+// offeredProgramDefinition is the definition a program offers, and its children
+// are validated against, for one registry tool. The write door keeps its own
+// definition, shared by redirects and native writers, so its progress rule
+// applies to every program write.
+func offeredProgramDefinition(tool string, definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
+	if tool == "write" {
+		return definition
+	}
+	return programOperationDefinition(definition)
+}
+
+func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
+	facts := definition.Facts()
+	// A command child retains its structured owner's identity, while the
+	// enclosing command may request file authority for that child's paths.
+	// These two capabilities are carried only on this program definition.
+	facts.Contract.Capabilities |= toolcontract.CapabilityReadPath | toolcontract.CapabilityWriteRoot
+	if facts.ProgressGate != toolcontract.ProgressNotRequired {
+		facts.ProgressGate = toolcontract.ProgressNotRequired
+	}
+	updated, err := toolcontract.NewOperationDefinition(facts)
+	if err != nil {
+		return definition
+	}
+	return updated
+}
+
 func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {
 	requiresBound := false
 	for _, effect := range spec.Effects {

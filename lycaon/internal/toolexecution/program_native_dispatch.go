@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -47,6 +47,10 @@ type NativeEffectStart interface {
 type PreparedNativeEffect struct {
 	Operation   toolcontract.BoundOperation
 	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	// DisclosedArgv is the one concrete source-disclosure transition. The
+	// source was admitted for reading; newly parsed path targets still require
+	// their own boundary before this owner can run.
+	DisclosedArgv *commandprogram.ArgvReview
 }
 
 // NativeEffect binds one reached operation to its immutable review projection.
@@ -186,6 +190,60 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	prepared, err := effect.PrepareReviewed(ctx, resolved, tc)
 	if err != nil {
 		return result, err
+	}
+	if disclosed := prepared.DisclosedArgv; disclosed != nil {
+		if prepared.InvokeOwner != nil || prepared.Operation.Definition().Digest() != definition.Digest() || prepared.Operation.Invocation() != invocation || prepared.Operation.Command() != bound.Command() {
+			return result, fmt.Errorf("native source disclosure changed operation attribution")
+		}
+		if err := surface.ValidateOperation(prepared.Operation); err != nil {
+			return result, err
+		}
+		bound = prepared.Operation
+		tc.Invocation.NativeOperation = &bound
+		expanded := make(map[string]any, len(effect.Arguments)+len(disclosed.Arguments()))
+		for key, value := range effect.Arguments {
+			expanded[key] = value
+		}
+		for key, value := range disclosed.Arguments() {
+			expanded[key] = value
+		}
+		nextArguments, prepErr := prepareNativeArguments(ctx, admission, expanded)
+		if prepErr != nil {
+			return result, prepErr
+		}
+		defer nextArguments.close()
+		if err := validateNativeArguments(facts, disclosed, nextArguments.values, tc); err != nil {
+			return result, err
+		}
+		canonical, tc, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
+		if err != nil {
+			return result, err
+		}
+		nextReviewedArguments, nextReviewed, reviewErr := admitReviewedOperationInputs(ctx, admission, canonical)
+		if reviewErr != nil {
+			return result, reviewErr
+		}
+		defer nextReviewedArguments.close()
+		prior, priorErr := tc.Invocation.NativeInputs.Reviewed()
+		if priorErr != nil {
+			return result, priorErr
+		}
+		if prior != nextReviewed {
+			return result, fmt.Errorf("disclosed native inputs changed after approval boundary")
+		}
+		canonical = nextReviewedArguments.values
+		tc.Invocation.ArgsDigest = nextReviewed.ArgumentsDigest()
+		ctx, resolved, err = e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
+		if err != nil {
+			return result, err
+		}
+		prepared, err = effect.PrepareReviewed(ctx, resolved, tc)
+		if err != nil {
+			return result, err
+		}
+		if prepared.DisclosedArgv != nil {
+			return result, fmt.Errorf("native source disclosure repeated after approval")
+		}
 	}
 	if prepared.InvokeOwner == nil || prepared.Operation.Definition().Digest() != definition.Digest() || prepared.Operation.Invocation() != invocation || prepared.Operation.Command() != bound.Command() {
 		return result, fmt.Errorf("reviewed native binding changed operation attribution")

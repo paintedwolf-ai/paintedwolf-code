@@ -149,7 +149,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 			mode = "query"
 		}
 	}
-	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = queryPathTargets(bound, program.Paths)
+	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

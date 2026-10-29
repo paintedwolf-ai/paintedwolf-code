@@ -101,6 +101,13 @@ type ArgvReview struct {
 	Command     string           `json:"command"`
 	Options     []ReviewedOption `json:"options"`
 	Operands    []string         `json:"operands"`
+	PathTargets []PathTarget     `json:"path_targets,omitempty"`
+}
+
+// PathTarget is a bound native file operand and its exact access direction.
+type PathTarget struct {
+	Path  string `json:"path"`
+	Write bool   `json:"write"`
 }
 
 type ReviewedOption struct {
@@ -138,7 +145,21 @@ func (r ArgvReview) Arguments() map[string]any {
 	for i, operand := range r.Operands {
 		operands[i] = operand
 	}
-	return map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	if r.PathTargets != nil {
+		// Grouped by direction, each target is one captured value, so a command
+		// at the operand limit stays within the input capture's node bound.
+		reads, writes := []any{}, []any{}
+		for _, target := range r.PathTargets {
+			if target.Write {
+				writes = append(writes, target.Path)
+			} else {
+				reads = append(reads, target.Path)
+			}
+		}
+		result["path_targets"] = map[string]any{"read": reads, "write": writes}
+	}
+	return result
 }
 
 // ArgvError carries an existing public rejection code and the exact word span.
