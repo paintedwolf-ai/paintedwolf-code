@@ -688,7 +688,7 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full` |
+| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
 | `./task check:coverage` | Go aggregate statement coverage floor |
 | `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
@@ -1296,7 +1296,8 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
@@ -1316,7 +1317,8 @@ maintenance class's single runner through `linux-candidate-requests.yml`. Its
 path filter includes packaging, native setup, release builders, and toolchain
 inputs. A pull request into another branch builds nothing: its head cannot land,
 and each push would hold the shared executor for a full package build while the
-queue coordinator and health report wait behind it. Pending standalone
+health report waits behind it. Queue batching serializes independently so maintenance
+cannot replace its pending reconciliation. Pending standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 
@@ -1325,9 +1327,9 @@ the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
 footprint is small and each pull request's is a single bounded job. Nothing reorders or preempts runs.
 
-At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 + 1 = 11 runners and
-the merge queue 8, leaving one runner outside those classes. Ready PR jobs share
-that remaining capacity and may wait during bursts. Full lint before admission
+At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 + 1 + 1 = 12 runners and
+the merge queue 8, filling the 20-runner budget. Ready PR jobs may queue behind
+that peak. Full lint before admission
 uses more PR time but prevents deterministic analyzer failures from occupying
 speculative integration groups. Caps do not establish queue latency guarantees.
 On macOS, qualification, warming, and nightly hold one runner each and a release
