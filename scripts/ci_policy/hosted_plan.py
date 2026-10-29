@@ -24,6 +24,8 @@ CONTAINER_TARGET = "den:webkit:atspi"
 BROWSER_TARGET = "test:confine:linux"
 # Drives the native repository tools against committed distribution fixtures.
 REPOSITORY_TOOLS_TARGET = "test:runner"
+# Runs the reference userland images, which an offline lane must find already built and verified.
+USERLANDS_TARGET = "test:userlands"
 
 
 def lanes():
@@ -166,6 +168,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
+                           "userlands": USERLANDS_TARGET in lane["targets"],
                            "linux_launch": bool({"test:full", "test:confine:linux", "coverage:changes"} & set(lane["targets"])),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
                            "nix": any(target.startswith("nix:") for target in lane["targets"])

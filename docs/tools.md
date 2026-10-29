@@ -927,18 +927,29 @@ The registry publishes one immutable operation declaration with the existing sch
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
 Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
+---
 
-### Command schema and guidance
+## Portable command cutover inventory
 
-`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 80 retained domain tools, six structured tools also available as command forms, and 32 routine-schema replacements. `process_list` and `process_signal` are in the last group for session job commands, while their separate host-process capabilities remain structured and approval-gated.
 
-The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 
-| Surface | Source |
+| Area | Current path and cutover decision |
 |---|---|
-| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
-| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
-| Per-call guidance | `platform/shared/partials/command-surface.md` |
-| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+| Native utilities | `internal/toolhost/command_programs.go` composes literal, mutation, query, search, text, host-environment, Git, and HTTP operations. The catalog accepts common GNU and BSD spellings. Unsupported syntax is a typed admission refusal; utility option and input errors use native status and stderr. |
+| External programs | The command program's process launcher applies the configured confinement and capability decisions at launch. A utility gap that falls through to an installed binary records `native_gap` for repair in the corresponding utility branch. |
+| Results and receipts | Invocation records identify program and child executions, source pins, delivered ranges, effects, completeness, and host-stop facts. An incomplete result cannot become successful evidence merely because one child exited zero. |
+| Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
+| Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
+| Routine tools | `command` is on the routine floor. Some older schemas are still loadable by exact name, and some remain on specialized floors. P29 removes those routine offers while retaining named compatibility and history decoding for durable public names. The six dual-surface edit and analysis tools and domain tools keep their structured contracts. |
 
-OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
+### Source-index behavior
+
+A ready index accelerates the parts of a query it can prove current. The native `grep` and `rg` paths consult exact-revision Bloom filters per walked file; uncovered, changed, out-of-scope, still-indexing, symlink, and otherwise undecidable files are read live. The source-index coverage change in #1466 makes native survey and listing combine indexed covered entries with live directory reconciliation, including additions and deletions. `find` currently walks and stats live entries because its expression and traversal semantics require current filesystem facts beyond the safe index projection. Native search tests and #1466 exercise mixed indexed and live scopes through direct tools and the `command` entry. An index miss is never evidence that a live area is empty.
+
+### Qualification and default cutover
+
+The focused implementation receipts belong to their exact PR trees. The isolated run-3 report is historical diagnostic evidence: it identified the state-retention, refusal, native-form, Git, guidance, and approval gaps addressed by the subsequent PRs. The conformance corpus in #1238 and workflow evidence in #1229 must be reviewed on their final trees. The final merge-only composition still needs its exact-tree checks and an isolated live GLM Flash run with current prompts and recommended approval options. Until those results exist, this inventory records implementation and focused evidence, not final milestone qualification.
+
+P29 can make `command` the default after the dependent PRs are ready and the rebuilt composition demonstrates the complete command path: natural bash, native utilities, confined external programs, accurate results and receipts, designed approvals, shell-voice OAR, partial-index/live reconciliation, workflow behavior, and the final conformance corpus. The remaining platform limit is Windows-host qualification; shared code keeps Windows-capable seams. No release is part of this cutover.

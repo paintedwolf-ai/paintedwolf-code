@@ -1,0 +1,142 @@
+{
+  "userlands": {
+    "bsd": {
+      "containerfile": "bsd.Containerfile",
+      "shell": "/bin/bash",
+      "base": "docker.io/library/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31",
+      "snapshot": "20261027T000000Z",
+      "packages": {
+        "bash": "5.2.37-2+b10",
+        "bzip2": "1.0.8-6",
+        "curl": "8.14.1-2+deb13u7",
+        "file": "1:5.46-5",
+        "git": "1:2.47.3-0+deb13u1",
+        "jq": "1.7.1-6+deb13u4",
+        "libacl1": "2.3.2-2+b1",
+        "libarchive-tools": "3.7.4-4+deb13u1",
+        "libbz2-1.0": "1.0.8-6",
+        "libedit2": "3.1-20250104-1",
+        "liblzma5": "5.8.1-1+deb13u2",
+        "libssl3t64": "3.5.7-1~deb13u3",
+        "libtinfo6": "6.5+20250216-2",
+        "libzstd1": "1.5.7+dfsg-1",
+        "lsof": "4.99.4+dfsg-2",
+        "perl": "5.40.1-6+deb13u1",
+        "ripgrep": "14.1.1-1+b4",
+        "unzip": "6.0-29+deb13u1",
+        "xxd": "2:9.1.1230-2",
+        "xz-utils": "5.8.1-1+deb13u2",
+        "yq": "3.4.3-2",
+        "zip": "3.0-15+deb13u1",
+        "zlib1g": "1:1.3.dfsg+really1.3.1-1+b1"
+      },
+      "build_packages": {
+        "byacc": "1:2.0.20241231-1",
+        "ca-certificates": "20250419+deb13u1",
+        "curl": "8.14.1-2+deb13u7",
+        "flex": "2.6.4-8.2+b4",
+        "g++": "4:14.2.0-1",
+        "gcc": "4:14.2.0-1",
+        "libacl1-dev": "2.3.2-2+b1",
+        "libbz2-dev": "1.0.8-6",
+        "libc6-dev": "2.41-12+deb13u4",
+        "libedit-dev": "3.1-20250104-1",
+        "liblzma-dev": "5.8.1-1+deb13u2",
+        "libncurses-dev": "6.5+20250216-2",
+        "libssl-dev": "3.5.7-1~deb13u3",
+        "libzstd-dev": "1.5.7+dfsg-1",
+        "make": "4.4.1-2",
+        "meson": "1.7.0-1",
+        "ninja-build": "1.12.1-1+b1",
+        "pkgconf": "1.8.1-4",
+        "zlib1g-dev": "1:1.3.dfsg+really1.3.1-1+b1"
+      },
+      "architecture_versions": {
+        "amd64": {
+          "ninja-build": "1.12.1-1"
+        }
+      },
+      "replaced": [
+        "tar",
+        "mawk",
+        "gzip",
+        "diffutils",
+        "sed",
+        "grep",
+        "findutils",
+        "coreutils"
+      ],
+      "sources": {
+        "chimerautils": {
+          "version": "15.1.2",
+          "url": "https://github.com/chimera-linux/chimerautils/archive/refs/tags/v15.1.2.tar.gz",
+          "sha256": "b03e279e0e291968852094ec2946329ac450c863eda909bed0b8a2e1baf884fe"
+        },
+        "libxo": {
+          "version": "2.3.0",
+          "url": "https://github.com/Juniper/libxo/releases/download/2.3.0/libxo-2.3.0.tar.gz",
+          "sha256": "f688acfbad07ba14826871437b0431bc0425d5732457013af5aff07236810f65"
+        }
+      },
+      "trees": {
+        "amd64": "sha256:38cb4f78da5f3cb78a7d5473e922acc6c4fa5a807265ec3f1e8ad0bb44547a6c",
+        "arm64": "sha256:a665dff635d609ad530d2ac2070ff18e62ec56bb5c240ae2fdbdbd00469adddc"
+      }
+    },
+    "busybox": {
+      "containerfile": "busybox.Containerfile",
+      "shell": "/bin/sh",
+      "base": "docker.io/library/busybox:1.37.0-musl@sha256:5cec3fc171c87218698e85a52af7087de727372aae264a787b8112901a5b0092",
+      "trees": {
+        "amd64": "sha256:1e6f0b85f4e3899ef0cee41bc617820b35bbe072b0c4f6cdb3294b78a8999a2a",
+        "arm64": "sha256:ca221f0ba70e8ae33e5ef44820dc4958faf4fc5e086770de2e975b939ef3ddfc"
+      }
+    },
+    "gnu": {
+      "containerfile": "gnu.Containerfile",
+      "shell": "/bin/bash",
+      "base": "docker.io/library/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31",
+      "snapshot": "20261027T000000Z",
+      "packages": {
+        "bash": "5.2.37-2+b10",
+        "bsdextrautils": "2.41.5-0+deb13u1",
+        "bzip2": "1.0.8-6",
+        "coreutils": "9.7-3",
+        "curl": "8.14.1-2+deb13u7",
+        "debianutils": "5.23.2",
+        "diffutils": "1:3.10-4",
+        "file": "1:5.46-5",
+        "findutils": "4.10.0-3",
+        "gawk": "1:5.2.1-2+b2",
+        "git": "1:2.47.3-0+deb13u1",
+        "grep": "3.11-4+b1",
+        "gzip": "1.13-1+deb13u1",
+        "hostname": "3.25",
+        "jq": "1.7.1-6+deb13u4",
+        "lsof": "4.99.4+dfsg-2",
+        "patch": "2.8-2",
+        "perl": "5.40.1-6+deb13u1",
+        "procps": "2:4.0.4-9",
+        "ripgrep": "14.1.1-1+b4",
+        "sed": "4.9-2+deb13u1",
+        "tar": "1.35+dfsg-3.1",
+        "unzip": "6.0-29+deb13u1",
+        "util-linux": "2.41.5-0+deb13u1",
+        "xxd": "2:9.1.1230-2",
+        "xz-utils": "5.8.1-1+deb13u2",
+        "yq": "3.4.3-2",
+        "zip": "3.0-15+deb13u1"
+      },
+      "architecture_versions": {
+        "amd64": {
+          "gawk": "1:5.2.1-2+b1",
+          "grep": "3.11-4"
+        }
+      },
+      "trees": {
+        "amd64": "sha256:de29b8b650c044a87eee50743e9bd30512d49257a614a80c184d9bc676efc7bb",
+        "arm64": "sha256:845c85a1c2b74fa0e6afa071c90cf4172ff529609e70b3b39442e600e07d830f"
+      }
+    }
+  }
+}
