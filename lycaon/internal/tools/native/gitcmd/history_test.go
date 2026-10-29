@@ -1,7 +1,6 @@
 package gitcmd
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -221,8 +220,7 @@ func TestGrepFindsLinesOnlyAtTheRevision(t *testing.T) {
 		t.Fatalf("perl grep %q", r.stdout)
 	}
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 8}
-	r = h.exec("git", "grep", "entry", "HEAD")
-	if r.err == nil || !bytes.Contains([]byte(r.err.Error()), []byte("COMMAND_LIMIT_EXCEEDED")) {
-		r.refused(t, "bounded grep", "COMMAND_LIMIT_EXCEEDED")
+	for _, words := range [][]string{{"git", "grep", "entry", "HEAD"}, {"git", "grep", "entry"}} {
+		h.exec(words...).refused(t, strings.Join(words, " "), "COMMAND_LIMIT_EXCEEDED")
 	}
 }
