@@ -1,5 +1,7 @@
 mod app_state;
 pub mod files;
+mod child_credentials;
+mod external_launch;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod linux_desktop;
@@ -14,15 +16,23 @@ mod detect_editors;
 mod http_transport;
 mod installation_mode;
 mod linux_install;
+mod linux_generation;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
+#[cfg(unix)]
+#[path = "protected_launch.rs"]
+mod protected_launch;
+#[cfg(not(unix))]
+#[path = "protected_launch/none.rs"]
+mod protected_launch;
 mod shell_command;
 mod sidecar;
 #[cfg(test)]
 mod test_support;
 pub mod update_service;
 mod diagnostic_log;
+mod process_protection;
 mod vault_lock;
 pub mod webkit_features;
 mod webview_policy;
@@ -33,7 +43,24 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    harden_process();
+    // Claim the launch selection, broker and lifetime descriptors before threads or children.
+    #[cfg(unix)]
+    if let Err(error) = protected_launch::claim() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+    if let Err(error) = process_protection::harden_release() {
+        eprintln!("Could not protect desktop process memory: {error}");
+        std::process::exit(1);
+    }
+    let _generation_root = match linux_generation::retain() {
+        Ok(root) => root,
+        Err(error) => {
+            rfd::MessageDialog::new().set_title("Package resources unavailable")
+                .set_description(error).set_level(rfd::MessageLevel::Error).show();
+            return;
+        }
+    };
     let context = tauri::generate_context!();
     // GTK 3 names the Wayland toplevel and the X11 window class after the program
     // name, which must be the identifier the desktop entry is named after.
@@ -56,10 +83,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init());
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
+    #[cfg(target_os = "linux")]
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     builder
         .plugin(webview_policy::init())
         .manage(SidecarState::new())
@@ -92,6 +121,7 @@ pub fn run() {
             windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
+            clipboard::read_clipboard_image,
             clipboard::write_clipboard_text,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,
@@ -125,6 +155,16 @@ pub fn run() {
             windows::item_windows::drag::ipc_discard_pending_item_window_drags,
             windows::item_windows::drag::ipc_update_file_tab_drop_target,
             windows::item_windows::drag::ipc_clear_file_tab_drop_target,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_begin_native_file_tab_drag,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_ready_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_abandon_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_commit_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_return_file_tab_transfer,
             windows::item_windows::ipc_list_item_window_views,
             windows::item_windows::presentation::ipc_list_workspace_view_presentations,
             windows::item_windows::presentation::ipc_set_workspace_view_contexts,
@@ -142,7 +182,6 @@ pub fn run() {
             sidecar::commands::ipc_restart_sidecar,
             sidecar::commands::ipc_reset_credential_vault,
             sidecar::custody::ipc_vault_custody,
-            sidecar::custody::ipc_move_vault_custody,
             sidecar::commands::ipc_cancel_sidecar_start,
             sidecar::commands::ipc_attach_existing_daemon,
             sidecar::commands::ipc_sidecar_info,
@@ -151,9 +190,11 @@ pub fn run() {
             presence::ipc_resolve_checkpoint_with_presence,
             windows::window_appearance::den_reveal_window,
             windows::window_appearance::den_set_window_bounds,
+            windows::workspace_lifecycle::den_window_close_disposition,
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
             app_menu::request_quit,
+            vault_lock::vault_lock_status,
             windows::linux_decorations::linux_decoration_layout,
             windows::linux_titlebar::linux_titlebar_action,
             windows::linux_frame::linux_window_frame,
@@ -164,10 +205,15 @@ pub fn run() {
         .setup(|app| {
             backup_transfer::journal::cleanup_on_launch();
             app_state::document_outbox::reconcile_windows(app.handle(), None);
-            sidecar::layout::setup_bundled_engine_layout(app.handle());
+            sidecar::layout::setup_bundled_engine_layout(app.handle())?;
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
+            #[cfg(target_os = "linux")]
+            if let Some(main) = app.get_webview_window("main") {
+                windows::item_windows::native_drag::install(&main);
+            }
             windows::window_appearance::setup(app.handle());
+            windows::workspace_lifecycle::setup(app.handle());
             clipboard::setup();
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
@@ -187,7 +233,7 @@ pub fn run() {
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, code, .. } => {
                 if app_exit::allow_exit(app, code) {
-                    windows::window_appearance::prepare_to_quit();
+                    windows::workspace_lifecycle::prepare_to_quit();
                 } else {
                     api.prevent_exit();
                 }
@@ -196,7 +242,12 @@ pub fn run() {
             RunEvent::Reopen {
                 has_visible_windows: false,
                 ..
-            } => windows::window_appearance::restore_main_workspace(app),
+            } => windows::workspace_lifecycle::restore_main_workspace(app),
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Destroyed,
+                ..
+            } => windows::workspace_lifecycle::window_destroyed(app, &label),
             RunEvent::Exit => {
                 #[cfg(target_os = "linux")]
                 windows::linux_desktop_settings::portal::shutdown(app);
@@ -214,20 +265,6 @@ pub fn run() {
         });
 }
 
-
-/// The shell holds the vault password and the presence signing key, so on
-/// Linux it is non-dumpable: no same-user process can ptrace it or read its
-/// memory through the process filesystem. Debug builds stay debuggable.
-fn harden_process() {
-    #[cfg(all(target_os = "linux", not(debug_assertions)))]
-    {
-        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
-        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
-        if status != 0 {
-            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
-        }
-    }
-}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

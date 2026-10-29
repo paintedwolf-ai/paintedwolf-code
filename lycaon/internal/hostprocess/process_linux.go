@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 func listPIDs() ([]int, error) {
@@ -36,29 +38,18 @@ func inspect(pid int) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	start, end := bytes.IndexByte(raw, '('), bytes.LastIndexByte(raw, ')')
-	if start < 0 || end < start {
+	record, err := osprocess.ParseLinuxStat(raw)
+	if err != nil || record.PID != pid {
 		return Process{}, ErrStale
-	}
-	fields := strings.Fields(string(raw[end+1:]))
-	if len(fields) < 20 {
-		return Process{}, ErrStale
-	}
-	parent, err := strconv.Atoi(fields[1])
-	if err != nil {
-		return Process{}, err
 	}
 	var stat unix.Stat_t
 	if err := unix.Stat(path, &stat); err != nil {
 		return Process{}, err
 	}
 	executable, _ := os.Readlink(path + "/exe")
-	started, err := strconv.ParseUint(fields[19], 10, 64)
-	if err != nil {
-		return Process{}, err
-	}
-	stats := linuxProcessStats(fields, started)
-	return Process{StartOrder: started, PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19], Stats: stats}, nil
+	fields := strings.Fields(string(raw[bytes.LastIndexByte(raw, ')')+1:]))
+	stats := linuxProcessStats(fields, record.StartTime)
+	return Process{StartOrder: record.StartTime, PID: pid, ParentPID: record.ParentPID, UID: stat.Uid, Name: record.Command, Executable: executable, Instance: strconv.FormatUint(record.StartTime, 10), Stats: stats}, nil
 }
 
 var linuxBootTime = sync.OnceValue(func() time.Time {
@@ -125,10 +116,19 @@ func PhysicalMemoryBytes() uint64 {
 	return 0
 }
 
-func signalInstance(process Process, name string) error {
-	signal, ok := map[string]unix.Signal{"TERM": unix.SIGTERM, "KILL": unix.SIGKILL, "INT": unix.SIGINT, "HUP": unix.SIGHUP, "STOP": unix.SIGSTOP, "CONT": unix.SIGCONT, "USR1": unix.SIGUSR1, "USR2": unix.SIGUSR2}[name]
+func nativeSignal(kind signalKind) (unix.Signal, bool) {
+	signal, ok := map[signalKind]unix.Signal{
+		signalTerminate: unix.SIGTERM, signalKill: unix.SIGKILL, signalInterrupt: unix.SIGINT,
+		signalHangup: unix.SIGHUP, signalStop: unix.SIGSTOP, signalContinue: unix.SIGCONT,
+		signalUser1: unix.SIGUSR1, signalUser2: unix.SIGUSR2,
+	}[kind]
+	return signal, ok
+}
+
+func signalInstance(process Process, kind signalKind) error {
+	signal, ok := nativeSignal(kind)
 	if !ok {
-		return fmt.Errorf("unsupported signal %q", name)
+		return ErrUnsupported
 	}
 	fd, err := unix.PidfdOpen(process.PID, 0)
 	if err != nil {

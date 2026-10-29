@@ -423,6 +423,9 @@ var osInterceptedChords = map[string][]string{
 		// Workspace switching, the window menu, and the window manager's move,
 		// resize, and maximize gestures.
 		"Mod+Alt+ArrowUp", "Mod+Alt+ArrowDown", "Mod+Alt+ArrowLeft", "Mod+Alt+ArrowRight",
+		"Mod+Alt+Shift+ArrowUp", "Mod+Alt+Shift+ArrowDown", "Mod+Alt+Shift+ArrowLeft", "Mod+Alt+Shift+ArrowRight",
+		// KDE attention activation and GTK's native emoji chooser.
+		"Mod+Alt+A", "Mod+.", "Mod+;",
 		"Alt+Space", "Alt+F1", "Alt+F2", "Alt+F7", "Alt+F8", "Alt+F10",
 	},
 }
