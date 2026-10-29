@@ -267,7 +267,11 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	}
 
 	close(blocker.release)
-	testutil.Receive(t, "finish naming", namingFinished)
+	select {
+	case <-namingFinished:
+	case <-t.Context().Done():
+		t.Fatal("naming work did not finish after provider release")
+	}
 
 	got, err = mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after name", err)
