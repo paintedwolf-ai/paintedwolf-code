@@ -85,11 +85,13 @@ func startTestBrokerAgent(t *testing.T) (*brokerAgent, *os.File, <-chan struct{}
 		close(done)
 	}()
 	t.Cleanup(func() {
+		// Closing the client ends the receive loop, which closes the server
+		// itself; closing it here would race the loop's descriptor reads.
 		_ = client.Close()
-		_ = server.Close()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
+			_ = server.Close()
 		}
 	})
 	return agent, client, done
