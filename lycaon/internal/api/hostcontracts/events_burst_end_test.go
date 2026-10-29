@@ -59,8 +59,7 @@ func TestEventStreamEndsBurstWithComment(t *testing.T) {
 
 	var lines []string
 	sawEvent := false
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	for {
 		line, err := reader.ReadString('\n')
 		testutil.FailErr(t, "read stream failed", err)
 		lines = append(lines, line)
@@ -74,5 +73,4 @@ func TestEventStreamEndsBurstWithComment(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("no burst-end comment followed the event: %q", lines)
 }

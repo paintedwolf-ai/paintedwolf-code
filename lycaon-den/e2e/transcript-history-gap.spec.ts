@@ -1,4 +1,4 @@
-import { expect, type Page, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   apiSeedSessionTranscript,
   apiUploadAttachment,
@@ -9,8 +9,117 @@ import {
   transcriptMessages,
 } from "./helpers.ts";
 
+
 const SCROLLER = ".den-chat-stream";
 const ROWS = 900;
+
+async function visibleTranscriptSteps(page: Page): Promise<number[]> {
+  return scroller(page).evaluate((host) => {
+    const view = host.getBoundingClientRect();
+    return [...host.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]")]
+      .map((row) => ({ box: row.getBoundingClientRect(), text: row.textContent ?? "" }))
+      .filter(({ box }) => box.bottom > view.top && box.top < view.bottom)
+      .sort((a, b) => a.box.top - b.box.top)
+      .map(({ text }) => Number(text.match(/Step (\d+)\./)?.[1] ?? Number.NaN))
+      .filter(Number.isFinite);
+  });
+}
+
+function expectContiguousSteps(steps: readonly number[]) {
+  expect(steps.length, "the transcript viewport contains readable rows").toBeGreaterThan(0);
+  for (let i = 1; i < steps.length; i++) {
+    expect(steps[i], `visible rows ${steps.join(",")}`).toBe((steps[i - 1] ?? 0) + 1);
+  }
+}
+
+async function wheelTranscript(page: Page, deltaY: number) {
+  // The runner deadline also catches a blocked renderer event loop.
+  await test.step(`Wheel transcript by ${deltaY}px`, async () => {
+    const host = scroller(page);
+    const box = await host.boundingBox();
+    if (!box) throw new Error("chat scroller is missing");
+    const observation = await host.evaluateHandle((element) => {
+      let frame = 0;
+      let timer: ReturnType<typeof setTimeout>;
+      let previous = "";
+      let stable = 0;
+      const cleanup = () => {
+        clearTimeout(timer);
+        cancelAnimationFrame(frame);
+        element.removeEventListener("wheel", start, true);
+      };
+      let start = () => {};
+      const settled = new Promise<void>((resolve, reject) => {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("Transcript did not settle after its wheel gesture"));
+        }, 5_000);
+        start = () => {
+          const sample = () => {
+            const rows = element.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]");
+            const first = rows.item(0);
+            const last = rows.item(rows.length - 1);
+            const signature = [element.scrollTop, element.scrollHeight,
+              first?.dataset.msgId, first?.getBoundingClientRect().top,
+              last?.dataset.msgId, last?.getBoundingClientRect().bottom].join(":");
+            stable = signature === previous ? stable + 1 : 0;
+            previous = signature;
+            if (stable >= 3) {
+              cleanup();
+              resolve();
+            } else {
+              frame = requestAnimationFrame(sample);
+            }
+          };
+          frame = requestAnimationFrame(sample);
+        };
+        element.addEventListener("wheel", start, { capture: true, once: true });
+      });
+      return { settled, cleanup };
+    });
+    try {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel(0, deltaY);
+      await observation.evaluate(async (state) => state.settled);
+    } finally {
+      await observation.evaluate((state) => state.cleanup());
+      await observation.dispose();
+    }
+  }, { timeout: 7_000 });
+}
+
+async function readTranscriptBackTo(page: Page, step: number) {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    await wheelTranscript(page, -3_000);
+    // Backward seeks can enter unloaded history before its page arrives.
+    let steps: number[] = [];
+    await expect.poll(async () => {
+      steps = await visibleTranscriptSteps(page);
+      return steps.length;
+    }, { timeout: 10_000, intervals: [16, 32, 64] }).toBeGreaterThan(0);
+    expectContiguousSteps(steps);
+    if (Math.min(...steps) <= step) return;
+  }
+  throw new Error(`Transcript did not reach history row ${step}`);
+}
+
+async function readTranscriptForward(page: Page, until: (steps: readonly number[]) => boolean | Promise<boolean>) {
+  const deadline = Date.now() + 180_000;
+  let previous = await visibleTranscriptSteps(page);
+  expectContiguousSteps(previous);
+  while (Date.now() < deadline) {
+    await wheelTranscript(page, 500);
+    const steps = await visibleTranscriptSteps(page);
+    expectContiguousSteps(steps);
+    // Every newly presented screen must overlap the reader's previous position.
+    expect(Math.min(...steps), "reading forward cannot skip unseen rows").toBeLessThanOrEqual(Math.max(...previous) + 1);
+    previous = steps;
+    if (await until(steps)) return;
+  }
+  throw new Error("Transcript did not reach the requested reading position");
+}
+
 
 function steps(count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -71,21 +180,6 @@ function onePagePdf(): Buffer {
 
 const scroller = (page: Page) => liveChatStage(page).locator(SCROLLER);
 
-/** Step numbers of the rows the scrollport shows, in order. */
-async function visibleSteps(page: Page): Promise<number[]> {
-  return scroller(page).evaluate((host) => {
-    const view = host.getBoundingClientRect();
-    return [...host.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]")]
-      .filter((row) => {
-        const box = row.getBoundingClientRect();
-        return box.bottom > view.top && box.top < view.bottom;
-      })
-      .map((row) => Number(row.textContent?.match(/Step (\d+)\./)?.[1] ?? Number.NaN))
-      .filter((step) => Number.isFinite(step))
-      .sort((a, b) => a - b);
-  });
-}
-
 /** The first row under the scrollport top and where it sits. */
 async function readingRow(page: Page): Promise<{ key: string; top: number }> {
   return scroller(page).evaluate((host) => {
@@ -105,41 +199,6 @@ async function rowTop(page: Page, key: string): Promise<number | undefined> {
   }, key);
 }
 
-async function wheel(page: Page, deltaY: number) {
-  const box = await scroller(page).boundingBox();
-  if (!box) throw new Error("chat scroller is missing");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.wheel(0, deltaY);
-  await page.waitForTimeout(120);
-}
-
-function expectContiguous(steps: readonly number[]) {
-  for (let i = 1; i < steps.length; i++) expect(steps[i], `rows ${steps.join(",")}`).toBe((steps[i - 1] ?? 0) + 1);
-}
-
-/** Wheel into history until the scrollport shows rows at or before `step`. */
-async function readBackTo(page: Page, step: number) {
-  await expect(async () => {
-    await wheel(page, -3_000);
-    expect(Math.min(...(await visibleSteps(page)))).toBeLessThanOrEqual(step);
-  }).toPass({ timeout: 120_000 });
-}
-
-/** Wheel down, proving each screen continues the one before it. */
-async function readForward(page: Page, until: () => Promise<boolean>) {
-  let previous = await visibleSteps(page);
-  await expect(async () => {
-    await wheel(page, 500);
-    const steps = await visibleSteps(page);
-    expectContiguous(steps);
-    // Reading down never skips a row the reader has not seen.
-    expect(Math.min(...steps)).toBeLessThanOrEqual(Math.max(...previous) + 1);
-    previous = steps;
-    const done = await until();
-    expect(done).toBe(true);
-  }).toPass({ timeout: 180_000 });
-}
-
 modelIndependentWebE2e("reading down from deep history reaches the live tail without skipping rows", async ({ page }) => {
   modelIndependentWebE2e.setTimeout(600_000);
   await bootstrapChatSession(page);
@@ -151,8 +210,8 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
   await expect(liveChatStage(page).getByText(`Step ${ROWS}.`, { exact: true })).toBeVisible({ timeout: 30_000 });
 
   // Six hundred rows fit resident at once; reading back seven hundred fifty cuts history off from the tail.
-  await readBackTo(page, 150);
-  expectContiguous(await visibleSteps(page));
+  await readTranscriptBackTo(page, 150);
+  expectContiguousSteps(await visibleTranscriptSteps(page));
 
   // Hold the page that leads back toward the tail to inspect the end of presented history.
   const newerPage = (url: URL) =>
@@ -165,7 +224,7 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
     await new Promise<void>((release) => { releaseHeld = release; });
     await route.continue();
   });
-  await readForward(page, async () => held);
+  await readTranscriptForward(page, () => held);
   // The end of history before the gap is not the latest message.
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   const before = await readingRow(page);
@@ -178,16 +237,16 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
   expect(Math.abs((after ?? 0) - before.top)).toBeLessThanOrEqual(2);
   await page.unroute(newerPage);
 
-  await readForward(page, async () => (await visibleSteps(page)).includes(ROWS));
-  expectContiguous(await visibleSteps(page));
+  await readTranscriptForward(page, (steps) => steps.includes(ROWS));
+  expectContiguousSteps(await visibleTranscriptSteps(page));
 
   // Jumping to latest from deep history drops the cut-off pages and lands on the tail.
-  await readBackTo(page, 150);
+  await readTranscriptBackTo(page, 150);
   await page.getByTestId("stream-scroll-jump").click();
   await expect(liveChatStage(page).getByText(`Step ${ROWS}.`, { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "true");
-  const tail = await visibleSteps(page);
-  expectContiguous(tail);
+  const tail = await visibleTranscriptSteps(page);
+  expectContiguousSteps(tail);
   expect(Math.max(...tail)).toBe(ROWS);
 });
 
@@ -232,8 +291,8 @@ modelIndependentWebE2e("PDF chips predict visible geometry and preserve cold-cac
     expect(Math.abs(geometry.estimate - geometry.rendered)).toBeLessThan(Math.max(12, geometry.rendered * 0.25));
   }
 
-  await readBackTo(page, 150);
-  await readForward(page, async () => (await visibleSteps(page)).includes(ROWS));
+  await readTranscriptBackTo(page, 150);
+  await readTranscriptForward(page, (steps) => steps.includes(ROWS));
   await expect(row).toBeVisible();
 });
 
@@ -285,7 +344,7 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
   await expect(async () => {
-    if (!(await spanRow.isVisible())) await wheel(page, -1_500);
+    if (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
     expect(olderHeld).toBe(true);
     await expect(spanRow).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 60_000 });

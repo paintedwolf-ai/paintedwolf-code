@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createNoticeStore,
   publishNotice,
+  withdrawNotice,
   registerNoticePublisher,
 } from "./notice-store.ts";
 import {
@@ -277,4 +278,14 @@ describe("client notice dismissal", () => {
     store.dismissScope(APP_SCOPE);
     expect(onDismiss).toHaveBeenCalledTimes(2);
   });
+});
+
+it("withdraws a published condition through the existing notice store", () => {
+  const store = createNoticeStore();
+  registerNoticePublisher(store);
+  publishNotice({ code: "project_removal_running", title: "Deleting project", message: "Deleting chats" });
+  expect(selectAppNotices(store.index())).toHaveLength(1);
+  withdrawNotice("project_removal_running");
+  expect(selectAppNotices(store.index())).toHaveLength(0);
+  registerNoticePublisher(null);
 });

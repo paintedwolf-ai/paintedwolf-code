@@ -33,6 +33,10 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 		}
 		result, err := prepared.Apply(ctx, store, root)
 		if err != nil {
+			var rejected *progress.AuthorUpdateRejection
+			if errors.As(err, &rejected) {
+				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
+			}
 			return "", err
 		}
 		status := "unchanged"

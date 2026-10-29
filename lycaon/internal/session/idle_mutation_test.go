@@ -3,7 +3,6 @@ package session
 import (
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestTryIdleMutationSerializesWithSessionLock(t *testing.T) {
@@ -28,18 +27,21 @@ func TestTryIdleMutationSerializesWithSessionLock(t *testing.T) {
 	}()
 	select {
 	case <-held:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("sessionLock waiter did not start")
+	}
+	if m.Runner.Execution.Prompt.Acquire("sess-1").TryLock() {
+		t.Fatal("sessionLock must be held while idle mutation holds the lock")
 	}
 	select {
 	case <-released:
 		t.Fatal("sessionLock must block while idle mutation holds the lock")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	unlock()
 	select {
 	case <-released:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("sessionLock did not acquire after idle mutation release")
 	}
 }
@@ -61,7 +63,9 @@ func TestTryIdleMutationSameMutexAsPrompt(t *testing.T) {
 		defer lock.Unlock()
 	}()
 	<-blocked
-	time.Sleep(20 * time.Millisecond)
+	if m.Runner.Execution.Prompt.Acquire("sess-1").TryLock() {
+		t.Fatal("expected prompt lock to be held")
+	}
 	unlock()
 	wg.Wait()
 }
