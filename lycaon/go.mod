@@ -24,7 +24,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/vt v0.1.0
 	github.com/creack/pty v1.1.24
-	github.com/dlclark/regexp2/v2 v2.5.1
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
 	github.com/fatih/semgroup v1.3.0
 	github.com/flosch/pongo2/v6 v6.1.0
@@ -149,6 +148,7 @@ require (
 	github.com/diskfs/go-diskfs v1.7.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
+	github.com/dlclark/regexp2/v2 v2.5.1 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
@@ -332,6 +332,5 @@ replace github.com/benhoyt/goawk => ../third_party/goawk
 replace github.com/itchyny/gojq => ../third_party/gojq
 
 replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
-
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
 replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2

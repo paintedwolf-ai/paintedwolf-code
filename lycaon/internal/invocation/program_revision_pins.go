@@ -98,7 +98,7 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 	if r == nil || r.database == nil {
 		return fmt.Errorf("invocation recorder is not configured")
 	}
-	if executionID == "" || len(pins) == 0 || first < 0 {
+	if executionID == "" || len(pins) == 0 {
 		return fmt.Errorf("revision pins require an execution, a first ordinal and at least one capture")
 	}
 	for _, pin := range pins {

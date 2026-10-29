@@ -33,18 +33,26 @@ func TestCancelledCommandPipeHelper(t *testing.T) {
 	}
 }
 
-// Cancelling a program whose external child left a detached holder of its
-// output pipe still settles promptly and promotes nothing to background work.
 func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 	binary, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
-	f := newProgramFixture(t)
-	pidFile := filepath.Join(f.Dir, "holder.pid")
+	root := t.TempDir()
+	pidFile := filepath.Join(root, "holder.pid")
+	tool, registry := newCommandTool(t)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		testutil.FailErr(t, "close command registry", registry.Lifecycle.Close(ctx))
+	})
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		_, runErr := f.call(t, ctx, "COMMAND_PIPE_FIXTURE_ROLE=leader COMMAND_PIPE_FIXTURE_PID="+strconv.Quote(pidFile)+" external -- "+strconv.Quote(binary)+" -test.run=TestCancelledCommandPipeHelper")
+		_, runErr := tool.Run(ctx, map[string]any{
+			"command": strconv.Quote(binary) + " -test.run=TestCancelledCommandPipeHelper",
+			"wait_ms": float64(10000),
+			"env":     map[string]any{"COMMAND_PIPE_FIXTURE_ROLE": "leader", "COMMAND_PIPE_FIXTURE_PID": pidFile},
+		}, commandToolContext(root, "pipe-cancel", ""))
 		result <- runErr
 	}()
 	var pid int
@@ -71,7 +79,7 @@ func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("cancelled command did not settle")
 	}
-	if jobs := f.Background.ActiveJobs(f.Session); len(jobs) != 0 {
+	if jobs := registry.ActiveJobs("pipe-cancel"); len(jobs) != 0 {
 		t.Fatalf("cancelled leader promoted as background work: %+v", jobs)
 	}
 }

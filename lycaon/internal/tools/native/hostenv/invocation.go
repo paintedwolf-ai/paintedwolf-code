@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // invocation is one utility run: bound argv, buffered output and status.
@@ -18,7 +17,6 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	nested  commandprogram.NestedCommand
-	bound   NativeBindings
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
@@ -40,7 +38,7 @@ func (inv *invocation) operands() commandprogram.Fields { return inv.argv.Operan
 // line appends one stdout line under stream_bytes; nothing is truncated.
 func (inv *invocation) line(text string) error {
 	if observed := int64(inv.out.Len() + len(text) + 1); observed > inv.owners.stream {
-		return nativeutility.LimitExceeded("stream_bytes", inv.owners.stream, observed)
+		return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "stream_bytes", "maximum": inv.owners.stream, "observed": observed})
 	}
 	inv.out.WriteString(text)
 	inv.out.WriteByte('\n')
@@ -55,7 +53,10 @@ func (inv *invocation) fail(format string, args ...any) {
 
 // usage refuses a form the catalog admits syntactically but whose operands are invalid.
 func (inv *invocation) usage(word commandprogram.Field, expected string) error {
-	return nativeutility.Usage(inv.spec, word, expected)
+	return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{
+		"command": inv.spec.Name, "word": word.Value, "expected": expected, "expected_form": inv.spec.Argv,
+		"source_start_byte": word.Span.StartByte, "source_end_byte": word.Span.EndByte, "source_line": word.Span.Line, "source_column": word.Span.Column,
+	})
 }
 
 // unavailable refuses a host fact this platform does not expose; nothing is

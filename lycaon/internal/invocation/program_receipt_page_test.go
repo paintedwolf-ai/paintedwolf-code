@@ -35,11 +35,11 @@ func conflictedWrite(t *testing.T, f programReceiptFixture) (string, string) {
 	write := f.childFor(t, "write")
 	background := f.child(t)
 	refused := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: "TEXT_WRITE_CONFLICT", EffectCertainty: toolcontract.NoEffect}
-	conflict := &toolcontract.RevisionConflict{Path: "src/report.txt", ExpectedRevision: "rev:3", ObservedRevision: "rev:5"}
-	testutil.FailErr(t, "settle stale destination", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: refused, DetailReference: "output:conflict", AcceptedRevision: "editor:4", Conflict: conflict}))
+	conflict := &invocation.RevisionConflict{Path: "src/report.txt", ExpectedRevision: "rev:3", ObservedRevision: "rev:5"}
+	testutil.FailErr(t, "settle stale destination", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: refused, DetailReference: "output:conflict", AcceptedRevision: "editor:4", Conflict: conflict}))
 	completed := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}
 	f.start(t, background)
-	testutil.FailErr(t, "settle background starter", f.recorder.SettleChild(t.Context(), background.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:job", JobHandle: "job:watch-7"}))
+	testutil.FailErr(t, "settle background starter", f.recorder.SettleChild(t.Context(), background.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:job", JobHandle: "job:watch-7"}))
 	return write.Invocation().Identity.ExecutionID, background.Invocation().Identity.ExecutionID
 }
 
@@ -82,10 +82,10 @@ func TestChildSettlementRefusesMalformedJobsAndConflicts(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	child := f.childFor(t, "write")
 	refused := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: "TEXT_WRITE_CONFLICT", EffectCertainty: toolcontract.NoEffect}
-	for name, settlement := range map[string]toolcontract.ProgramChildSettlement{
-		"same revisions":   {Conflict: &toolcontract.RevisionConflict{Path: "a", ExpectedRevision: "r1", ObservedRevision: "r1"}},
-		"missing path":     {Conflict: &toolcontract.RevisionConflict{ExpectedRevision: "r1", ObservedRevision: "r2"}},
-		"oversized":        {Conflict: &toolcontract.RevisionConflict{Path: strings.Repeat("p", 5000), ExpectedRevision: "r1", ObservedRevision: "r2"}},
+	for name, settlement := range map[string]invocation.ChildSettlement{
+		"same revisions":   {Conflict: &invocation.RevisionConflict{Path: "a", ExpectedRevision: "r1", ObservedRevision: "r1"}},
+		"missing path":     {Conflict: &invocation.RevisionConflict{ExpectedRevision: "r1", ObservedRevision: "r2"}},
+		"oversized":        {Conflict: &invocation.RevisionConflict{Path: strings.Repeat("p", 5000), ExpectedRevision: "r1", ObservedRevision: "r2"}},
 		"job prose":        {JobHandle: "started a job"},
 		"oversized handle": {JobHandle: strings.Repeat("j", 300)},
 	} {

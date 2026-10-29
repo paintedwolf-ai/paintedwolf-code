@@ -31,7 +31,7 @@ func (d discovery) found() bool { return d.native || d.keyword || d.path != "" }
 // selection: the same final PATH, launch directory and not-found result. A
 // native name is looked up only when every binding is requested (type -a).
 func (inv *invocation) discover(name string, every bool) (discovery, error) {
-	d := discovery{name: name, native: inv.owners.natives[name] && inv.bound != nil && inv.bound.NativeBound(name), keyword: keywords[name]}
+	d := discovery{name: name, native: inv.owners.natives[name], keyword: keywords[name]}
 	if d.keyword || (d.native && !every) {
 		return d, nil
 	}

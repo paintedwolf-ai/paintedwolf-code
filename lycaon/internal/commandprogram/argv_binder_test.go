@@ -147,7 +147,7 @@ func TestCatalogBinderOptionGrammar(t *testing.T) {
 		{name: "bsd in-place empty suffix", command: "sed", argv: []string{"sed", "-i", "", "-e", "s/a/b/", "f"}, want: []string{"-i[]", "-e[s/a/b/]", "=f"}},
 		{name: "gnu in-place leaves script", command: "sed", argv: []string{"sed", "-i", "s/a/b/", "f"}, want: []string{"-i[]", "=s/a/b/", "=f"}},
 		{name: "in-place in cluster", command: "sed", argv: []string{"sed", "-ni", "", "p", "f"}, want: []string{"-n[]", "-i[]", "=p", "=f"}},
-		{name: "gnu attached backup suffix", command: "sed", argv: []string{"sed", "-i.bak", "p"}, want: []string{"-i[.bak]", "=p"}},
+		{name: "backup suffix unsupported", command: "sed", argv: []string{"sed", "-i.bak", "p"}, code: argvOptionUnsupported},
 		{name: "extended alias", command: "sed", argv: []string{"sed", "-r", "p"}, want: []string{"-E[]", "=p"}},
 		{name: "optional attached long value", command: "git status", argv: []string{"git", "status", "--porcelain=v1"}, want: []string{"--porcelain[v1]"}},
 		{name: "optional value never takes next word", command: "git status", argv: []string{"git", "status", "--porcelain", "v1"}, want: []string{"--porcelain[]", "=v1"}},

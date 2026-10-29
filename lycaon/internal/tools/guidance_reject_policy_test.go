@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func TestApprovalPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
+func TestGuidanceRejectPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
@@ -24,7 +24,7 @@ func TestApprovalPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 		},
 	}))
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	wrapped := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	wrapped := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 
 	ctx := context.Background()
 	eval := platform.PolicyContext{
@@ -44,12 +44,12 @@ func TestApprovalPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 	}
 }
 
-func TestApprovalPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
+func TestGuidanceRejectPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	wrapped := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	wrapped := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 
 	ctx := context.Background()
 	eval := platform.PolicyContext{
@@ -68,12 +68,12 @@ func TestApprovalPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
 	}
 }
 
-func TestApprovalPolicyListIncludesDeleteOnExecutor(t *testing.T) {
+func TestGuidanceRejectPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	policy := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 	reg := tools.NewDefaultRegistry()
 	for _, name := range []string{"chmod", "delete", "write"} {
 		n := name

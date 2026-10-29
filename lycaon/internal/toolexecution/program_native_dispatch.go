@@ -93,7 +93,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err = surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !nativeCommandPrefix(bound.Command(), effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
@@ -232,16 +232,6 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 		result.Terminal = toolcontract.ProducerInterrupted
 	}
 	return result
-}
-
-// stageMatchesCommand checks the stage against its catalog command. A confined
-// external launch runs the launched program's own argv, so its stage starts
-// with that program rather than the external selector.
-func stageMatchesCommand(command string, argv []string) bool {
-	if command == "external" {
-		return len(argv) > 0 && argv[0] != ""
-	}
-	return nativeCommandPrefix(command, argv)
 }
 
 // Command prefixes come from the immutable catalog, never parsed command prose.

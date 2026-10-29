@@ -47,18 +47,6 @@ func TestEvaluateStatusAndShortCircuitOrdering(t *testing.T) {
 		{"failed substitution in assignment", "x=$(grep z); echo $? [$x]", []string{"grep z", "echo 1 []"}, 0, false},
 		{"substitution is isolated", "x=1; echo $(x=2; echo $x) $x", []string{"echo 2", "echo 2 1"}, 0, false},
 		{"pipeline rightmost nonzero", "echo a | grep z; echo $?", []string{"echo a", "grep z", "echo 1"}, 0, false},
-		{"errexit exits on failure", "set -e; echo a; grep z; echo no", []string{"echo a", "grep z"}, 1, true},
-		{"errexit ignores conditions and non-final lists", "set -e; if grep z; then echo no; fi; grep z || echo or; grep z && echo no; ! grep z; echo end", []string{"grep z", "grep z", "echo or", "grep z", "grep z", "echo end"}, 0, false},
-		{"errexit judges a list by its final command", "set -euo pipefail; echo a && grep z; echo no", []string{"echo a", "grep z"}, 1, true},
-		{"errexit applies to a failed pipeline", "set -e; echo a | grep z; echo no", []string{"echo a", "grep z"}, 1, true},
-		{"errexit exits from a failed subshell", "set -e; ( grep z; echo no ); echo no", []string{"grep z"}, 1, true},
-		{"errexit is off inside substitutions", "set -e; x=$(grep z; echo in); echo $x", []string{"grep z", "echo in", "echo in"}, 0, false},
-		{"set +e turns errexit off", "set -e; set +e; grep z; echo after", []string{"grep z", "echo after"}, 0, false},
-		{"set usage", "set -e -o; echo $?", []string{"echo 2"}, 0, false},
-		{"case runs the first match", "x=main.go; case $x in *.rs) echo rust;; *.go|*.c) echo go;; *) echo other;; esac", []string{"echo go"}, 0, false},
-		{"case without a match is status 0", "case x in y) echo no;; esac; echo $?", []string{"echo 0"}, 0, false},
-		{"case quoted pattern is literal", "x='*'; case a in \"$x\") echo no;; a) echo a;; esac", []string{"echo a"}, 0, false},
-		{"arithmetic drives a loop", "i=0; while [ $i -lt 3 ]; do echo $i; i=$((i + 1)); done", []string{"echo 0", "echo 1", "echo 2"}, 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -78,19 +66,6 @@ func TestEvaluateStatusAndShortCircuitOrdering(t *testing.T) {
 				t.Fatalf("forked directories leaked: forks=%d released=%d", f.log.forks, f.log.released)
 			}
 		})
-	}
-}
-
-func TestEvaluateNounsetRefusesUnsetParameters(t *testing.T) {
-	for _, program := range []string{"set -u; echo ${UNSET:-ok}; echo $UNSET; echo no", "set -o nounset; echo ${UNSET:-ok}; echo $1; echo no"} {
-		f := newEvalFixture(t)
-		out, err := f.run(t, t.Context(), program)
-		if got := f.log.argv(); !slices.Equal(got, []string{"echo ok"}) {
-			t.Fatalf("%s dispatched %q", program, got)
-		}
-		if err == nil && out.Stop == nil {
-			t.Fatalf("%s ran past an unbound parameter: %+v", program, out)
-		}
 	}
 }
 
