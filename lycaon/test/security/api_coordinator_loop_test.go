@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -228,24 +229,9 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 			facts.RunID, facts.RunStatus, facts.RunPhase = run.ID, &run.Status, run.CurrentPhase
 		}
 	}
-	rows, err := h.DB.QueryContext(ctx, `SELECT id, workflow_id, status, current_phase, parent_run_id, completed_at
-		FROM workflow_runs WHERE session_id = ? ORDER BY created_at, id`, sessionID)
+	runs, err := readCoordinatorWakeRuns(ctx, h.DB, sessionID)
 	if readOK("runs", err) {
-		facts.Runs = []coordinatorWakeRun{}
-		for rows.Next() {
-			var entry coordinatorWakeRun
-			var parent, completed sql.NullString
-			if err := rows.Scan(&entry.ID, &entry.WorkflowID, &entry.Status, &entry.CurrentPhase, &parent, &completed); err != nil {
-				facts.ReadErrors["runs"] = err.Error()
-				break
-			}
-			entry.ParentRunID, entry.CompletedAt = parent.String, completed.String
-			facts.Runs = append(facts.Runs, entry)
-		}
-		if err := rows.Err(); err != nil {
-			facts.ReadErrors["runs"] = err.Error()
-		}
-		_ = rows.Close()
+		facts.Runs = runs
 	}
 	awaiting, err := h.Workflows.Manager.Policy.HumanApprovalAwaiting(ctx, sessionID)
 	if readOK("human_approval", err) {
@@ -273,6 +259,26 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 		}
 	}
 	return facts
+}
+
+func readCoordinatorWakeRuns(ctx context.Context, handle db.ReadHandle, sessionID string) ([]coordinatorWakeRun, error) {
+	rows, err := handle.QueryContext(ctx, `SELECT id, workflow_id, status, current_phase, parent_run_id, completed_at
+		FROM workflow_runs WHERE session_id = ? ORDER BY created_at, id`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	runs := []coordinatorWakeRun{}
+	for rows.Next() {
+		var entry coordinatorWakeRun
+		var parent, completed sql.NullString
+		if err := rows.Scan(&entry.ID, &entry.WorkflowID, &entry.Status, &entry.CurrentPhase, &parent, &completed); err != nil {
+			return nil, err
+		}
+		entry.ParentRunID, entry.CompletedAt = parent.String, completed.String
+		runs = append(runs, entry)
+	}
+	return runs, rows.Err()
 }
 
 func TestCoordinatorWakeFacts(t *testing.T) {
