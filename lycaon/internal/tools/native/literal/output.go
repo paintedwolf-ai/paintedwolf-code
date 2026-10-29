@@ -30,7 +30,7 @@ func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 }
 
 func (o *output) Write(p []byte) (int, error) {
-	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
+	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
 }
 
 func (o *output) text(s string) error {

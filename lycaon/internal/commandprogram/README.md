@@ -106,14 +106,14 @@ unit and runs it in the current frame; its pin is recorded in the outcome.
 
 Before the first statement, preflight refuses reserved function names and any
 construct whose owner port is absent, with `COMMAND_SYNTAX_UNSUPPORTED`. Every
-reached statement is one `statement_visits` unit, each `while` test and `for`
-item one `loop_iterations` unit, and function, source and substitution nesting
-are bounded by depth ceilings. Operations, in-process native builtins, function
-calls, substitutions, redirections, source units, isolated groups, pipelines
-and jobs are child executions: each charges `child_executions` and holds the
-catalog's per-execution trace settlement reservation until it settles.
-Evaluator bookkeeping (assignments, declarations, branch and loop results) is
-not a child execution. Frames keep their variables in `Variables`; a function's
+reached statement and redirection is one `statement_visits` unit, each `while`
+test and `for` item one `loop_iterations` unit, and function, source and
+substitution nesting are bounded by depth ceilings. Real command and process
+dispatches count against `child_executions`, while AST frames, in-process
+evaluator builtins and redirects count against `statement_visits`. Recorded
+executions hold the catalog's per-execution trace settlement reservation until
+they settle. Evaluator bookkeeping (assignments, declarations, branch and loop
+results) is not a child execution. Frames keep their variables in `Variables`; a function's
 `NAME=value` prefixes overlay its frame without mutating the caller. Child receipts belong to the
 dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the

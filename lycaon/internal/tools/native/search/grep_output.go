@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
+	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -15,21 +17,68 @@ import (
 // errBinaryStop ends one binary file's output after its notice.
 var errBinaryStop = errors.New("binary file matched")
 
-// searchContent selects records of one input and prints them in GNU form:
+type nullTrackingReader struct {
+	r         io.Reader
+	offset    int
+	firstNull *int
+}
+
+func (n *nullTrackingReader) Read(p []byte) (int, error) {
+	read, err := n.r.Read(p)
+	if read > 0 && *n.firstNull < 0 {
+		if idx := bytes.IndexByte(p[:read], 0); idx >= 0 {
+			*n.firstNull = n.offset + idx
+		}
+	}
+	n.offset += read
+	return read, err
+}
+
+// searchContent selects records of one in-memory input.
+func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
+	return r.searchStream(label, bytes.NewReader(content), 0, len(content), bytes.IndexByte(content, 0), pin, names)
+}
+
+// searchNoMatch emits the zero-match file outcome when the index prunes a file.
+func (r *grepRun) searchNoMatch(label string, names bool) error {
+	switch r.mode {
+	case modeCount:
+		if r.rg {
+			return nil
+		}
+		if names {
+			return r.inv.out.text(label, r.nameEnd(":"), "0\n")
+		}
+		return r.inv.out.text("0\n")
+	case modeFilesWithout:
+		return r.inv.out.text(label, r.nameEnd("\n"))
+	default:
+		return nil
+	}
+}
+
+// searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
 // output line becomes one "grep: PATH: binary file matches" notice on stderr
 // (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
-func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
+func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	inv := r.inv
 	if r.json != nil {
+		content, err := inv.readAll(reader)
+		if err != nil {
+			return err
+		}
 		return r.jsonContent(label, content)
 	}
-	inv := r.inv
-	r.numberWidth = len(strconv.Itoa(len(content)))
-	binary := !r.scan.NullData && r.binaryMode != "text" && bytes.IndexByte(content, 0) >= 0
-	if binary && r.binaryMode == "without-match" {
-		content, binary = nil, false
+	if r.binaryMode == "without-match" && firstNull >= 0 {
+		reader = bytes.NewReader(nil)
+		firstNull = -1
+	}
+	r.numberWidth = len(strconv.Itoa(totalBytes))
+	if !r.scan.NullData && firstNull < 0 {
+		reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
 	}
 	listing := r.mode != modeLines
 	separator := false
@@ -42,7 +91,10 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	if listing {
 		scan.Before, scan.After = 0, 0
 	}
-	n, err := textsearch.ScanLines(inv.ctx, content, r.matcher, scan, func(line textsearch.Line) error {
+	onExceed := func(maximum, observed int64) error {
+		return tools.CommandLimitExceeded("stream_throughput_bytes", maximum, observed)
+	}
+	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
 			r.selected = true
@@ -53,12 +105,13 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 		if listing {
 			return nil
 		}
-		record := content[line.Start:line.End]
+		record := line.Text
+		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
 		if binary || (r.binaryMode != "text" && line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}
-			if err := r.binaryNotice(label, names, line, content); err != nil {
+			if err := r.binaryNotice(label, names, line, firstNull); err != nil {
 				return err
 			}
 			return errBinaryStop
@@ -84,6 +137,8 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 		return err
 	}
 	switch r.mode {
+	case modeLines, modeQuiet, modeFileList:
+		return nil
 	case modeCount:
 		if r.rg && n == 0 {
 			return nil
@@ -104,12 +159,12 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	return nil
 }
 
-func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, content []byte) error {
+func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, firstNull int) error {
 	if !r.rg {
 		r.inv.warn(false, "%s: binary file matches", label)
 		return nil
 	}
-	offset := bytes.IndexByte(content, 0)
+	offset := firstNull
 	if offset < 0 {
 		offset = line.Start
 	}
@@ -170,6 +225,17 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 // writeRecord prints one output record; text copied from a pinned capture
 // at offset is mapped back to it.
 func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
+	if r.inv.out.mappings == nil || pin == nil {
+		term := byte('\n')
+		if r.scan.NullData {
+			term = 0
+		}
+		r.inv.out.scratch = append(r.inv.out.scratch[:0], prefix...)
+		r.inv.out.scratch = append(r.inv.out.scratch, text...)
+		r.inv.out.scratch = append(r.inv.out.scratch, term)
+		_, err := r.inv.out.Write(r.inv.out.scratch)
+		return err
+	}
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}
@@ -234,7 +300,7 @@ func replacementGroup(s string) (int, int, bool) {
 		return -1, 1, false
 	}
 	braced := strings.HasPrefix(s, "{")
-	body := s
+	var body string
 	if braced {
 		end := strings.IndexByte(s, '}')
 		if end < 0 {

@@ -13,16 +13,16 @@ func optionDiagnostic(source, word string) ProgramDiagnostic {
 }
 
 func TestProgramDiagnosticFeedbackCarriesSpanAndCatalogHelp(t *testing.T) {
-	d := optionDiagnostic("grep --bogus x", "--bogus")
+	d := optionDiagnostic("grep --sparkle x", "--sparkle")
 	facts, err := d.Feedback()
 	if err != nil {
 		t.Fatal(err)
 	}
 	options, _ := facts["supported_options"].([]string)
-	if facts["diagnostic_stage"] != "option" || facts["command"] != "grep" || facts["diagnostic_word"] != "--bogus" || facts["source_start_byte"] != 5 || facts["source_end_byte"] != 12 || facts["diagnostic_pre_evaluation"] != false {
+	if facts["diagnostic_stage"] != "option" || facts["command"] != "grep" || facts["diagnostic_word"] != "--sparkle" || facts["source_start_byte"] != 5 || facts["source_end_byte"] != 14 || facts["diagnostic_pre_evaluation"] != false {
 		t.Fatalf("option feedback = %+v", facts)
 	}
-	if !strings.HasPrefix(facts["expected_form"].(string), "grep [OPTIONS]") || !slices.Contains(options, "--recursive") || slices.Contains(options, "--bogus") {
+	if !strings.HasPrefix(facts["expected_form"].(string), "grep [OPTIONS]") || !slices.Contains(options, "--recursive") || slices.Contains(options, "--sparkle") {
 		t.Fatalf("catalog help = %v %v", facts["expected_form"], options)
 	}
 	syntax := ProgramDiagnostic{Stage: SyntaxDiagnosticStage, Code: "COMMAND_SYNTAX_INVALID", Expected: "closing quote", SourceUnitID: "submitted", Span: SourceSpan{StartByte: 4, EndByte: 9, Line: 1, Column: 5}, Limit: "source_bytes", Unit: "bytes", Maximum: 8, Observed: 9}

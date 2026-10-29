@@ -165,6 +165,22 @@ func TestUpdateModeAppliesThroughHeldParent(t *testing.T) {
 	}
 }
 
+func TestUpdateModeAppliesToDirectoryThroughHeldParent(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "copied")
+	testutil.FailErr(t, "seed directory", os.Mkdir(target, 0o755))
+	_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
+		Location: fseffect.Location{Root: root, Rel: "copied"},
+		Update:   func(os.FileMode) os.FileMode { return 0o700 },
+	})
+	testutil.FailErr(t, "update directory mode", err)
+	info, err := os.Stat(target)
+	testutil.FailErr(t, "stat directory", err)
+	if !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Fatalf("directory mode = %v, want 0700", info.Mode())
+	}
+}
+
 func TestUpdateModeGuardsTheHeldFile(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "locked.txt")
@@ -470,5 +486,20 @@ func TestOpenReadAcceptsCapabilityRoot(t *testing.T) {
 	testutil.FailErr(t, "stat capability root", err)
 	if !info.IsDir() {
 		t.Fatalf("capability root mode = %v", info.Mode())
+	}
+}
+
+func TestMkdirAllCountsOnlyObservedCreations(t *testing.T) {
+	root := t.TempDir()
+	loc := fseffect.Location{Root: root, Rel: "a/b"}
+	count, err := fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "create nested directories", err)
+	if count != 2 {
+		t.Fatalf("created=%d want=2", count)
+	}
+	count, err = fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "reuse directories", err)
+	if count != 0 {
+		t.Fatalf("existing directories counted as effects: %d", count)
 	}
 }

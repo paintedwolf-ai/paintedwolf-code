@@ -2,6 +2,7 @@ package literal
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"path"
 	"slices"
 
@@ -26,7 +27,7 @@ func (inv *invocation) diffDirectories(left, right string, opts diffOptions) err
 	for _, name := range names {
 		inv.diffVisits++
 		if visits > 0 && inv.diffVisits > visits {
-			return limitExceeded("traversal_visits", visits, inv.diffVisits)
+			return tools.CommandLimitExceeded("traversal_visits", visits, inv.diffVisits)
 		}
 		a, b := path.Join(left, name), path.Join(right, name)
 		inLeft, inRight := slices.Contains(leftNames, name), slices.Contains(rightNames, name)

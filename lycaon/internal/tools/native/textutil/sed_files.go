@@ -1,7 +1,6 @@
 package textutil
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -23,7 +22,7 @@ func (r *sedRun) openWrites() (map[string]io.Writer, error) {
 			return nil, err
 		}
 		r.stages[name] = stage
-		writers[name] = nativeutility.NewOutput(r.inv.ctx, stage, r.inv.limit("stream_bytes"))
+		writers[name] = nativeutility.NewOutput(r.inv.ctx, stage, "stream_bytes", r.inv.limit("stream_bytes"))
 	}
 	return writers, nil
 }
@@ -32,40 +31,10 @@ func (r *sedRun) openWrites() (map[string]io.Writer, error) {
 func (r *sedRun) settleWrites(err error) error {
 	for _, name := range r.program.WriteFiles() {
 		if stage, ok := r.stages[name]; ok {
-			err = settleStage(r.inv.ctx, stage, err)
+			err = r.inv.settleStage(stage, err)
 		}
 	}
 	return err
-}
-
-// readFiles captures each r and R file once, pinned like any input; a file
-// that is missing or unreadable reads as nothing, as in GNU sed.
-func (r *sedRun) readFiles() (map[string][]byte, error) {
-	files := map[string][]byte{}
-	if len(r.program.ReadFiles()) == 0 {
-		return files, nil
-	}
-	paths, err := newPaths(r.inv)
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range r.program.ReadFiles() {
-		word := commandprogram.Field{Value: name, Span: r.word.Span}
-		reader, _, err := r.inv.capture(paths, word)
-		if err != nil {
-			if _, ok := ordinary(err); ok {
-				continue
-			}
-			return nil, pathRejection(err, word)
-		}
-		content, err := io.ReadAll(reader)
-		_ = reader.Close()
-		if err != nil {
-			return nil, err
-		}
-		files[name] = content
-	}
-	return files, nil
 }
 
 // inPlace edits each file separately: line numbers, $ and ranges restart per
@@ -108,34 +77,47 @@ func (r *sedRun) inPlace(files commandprogram.Fields, suffix string) error {
 	return nil
 }
 
-func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, stage commandprogram.StagedOutput, suffix string) (bool, error) {
+func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, stage commandprogram.StagedOutput, suffix string) (quit bool, finalErr error) {
 	inv := r.inv
-	defer reader.Close()
-	var backup commandprogram.StagedOutput
+	originalReader := reader
+	defer func() {
+		if closeErr := originalReader.Close(); closeErr != nil {
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
+	var backup *sedBackup
 	var err error
 	if suffix != "" {
-		var original []byte
-		if original, err = io.ReadAll(reader); err == nil {
-			err = inv.reserve(int64(len(original)))
+		backup, err = r.prepareBackup(operand, reader, suffix)
+		if backup != nil {
+			defer func() {
+				if closeErr := backup.Close(); closeErr != nil {
+					if finalErr == nil {
+						finalErr = closeErr
+					} else {
+						finalErr = errors.Join(finalErr, closeErr)
+					}
+				}
+			}()
+			reader = backup.replay
 		}
-		if err == nil {
-			backup, err = inv.openDestination(commandprogram.Field{Value: backupName(operand.Value, suffix), Span: operand.Span})
-		}
-		if err == nil {
-			_, err = nativeutility.NewOutput(inv.ctx, backup, inv.limit("stream_bytes")).Write(original)
-		}
-		reader = io.NopCloser(bytes.NewReader(original))
 	}
-	quit := false
+	quit = false
 	if err == nil {
-		out := nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))
-		quit, err = r.machine.Stream(r.input([]source{{name: operand.Value, reader: reader}}), out)
+		out := nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
+		input := r.input([]source{{name: operand.Value, reader: reader}})
+		quit, err = r.machine.Stream(input, out)
+		input.Close()
 		err = r.failure(err)
 	}
-	if backup != nil {
-		err = settleStage(inv.ctx, backup, err)
+	if backup != nil && backup.stage != nil {
+		err = inv.settleStage(backup.stage, err)
 	}
-	return quit, settleStage(inv.ctx, stage, err)
+	return quit, inv.settleStage(stage, err)
 }
 
 // backupName follows GNU sed: SUFFIX is appended, or each * in it is the
@@ -181,13 +163,26 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		}
 		text, terminated, err := s.records.nextTerminated()
 		if errors.Is(err, io.EOF) {
+			_ = s.sources[0].reader.Close()
+			s.records.Close()
 			s.records, s.sources = nil, s.sources[1:]
 			continue
 		}
 		if err != nil {
 			return sedscript.Record{}, err
 		}
-		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name}, nil
+		record := sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name, Offset: s.records.offset}
+		if operand, ok := s.sources[0].reader.(*operandReader); ok {
+			record.Pin = operand.pin
+		}
+		return record, nil
 	}
 	return sedscript.Record{}, io.EOF
+}
+
+func (s *sedInput) Close() {
+	if s.records != nil {
+		s.records.Close()
+		s.records = nil
+	}
 }

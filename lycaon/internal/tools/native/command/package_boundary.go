@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/fspath"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -22,7 +22,7 @@ func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *con
 	}
 	launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, lease, commandEgressIdentity(tctx, subject, commandLine))
 	if tctx.Files.PackageExecution != nil {
-		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
+		launch = launch.WithExtraEnv(packageExecutionCacheEnv()...)
 	}
 	return launch
 }

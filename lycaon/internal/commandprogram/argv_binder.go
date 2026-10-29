@@ -1,16 +1,115 @@
 package commandprogram
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+// FieldPart is a contiguous span of an expanded Field. Literal spans leave
+// Substitution nil; process-substitution spans carry the Substitution handle
+// that produced Value.
+type FieldPart struct {
+	Value        string
+	Substitution *ProcessSubstitution
+}
+
 // Field is one expanded argv word with the span of the source word it came from.
+// Substitution is set when the field (or sliced option value) is a single
+// process substitution; parts holds the span decomposition when one or more
+// process substitutions are embedded in a larger word (such as --file=<(...)).
 type Field struct {
-	Value string
-	Span  toolcontract.SourceSpan
+	Value        string
+	Span         toolcontract.SourceSpan
+	Substitution *ProcessSubstitution
+	parts        *[]FieldPart
+}
+
+// NewFieldWithParts constructs a Field from contiguous literal and
+// process-substitution spans.
+func NewFieldWithParts(value string, span toolcontract.SourceSpan, parts []FieldPart) Field {
+	var coalesced []FieldPart
+	hasSubst := false
+	for _, part := range parts {
+		if part.Value == "" && part.Substitution == nil {
+			continue
+		}
+		if part.Substitution != nil {
+			hasSubst = true
+			coalesced = append(coalesced, part)
+			continue
+		}
+		if len(coalesced) > 0 && coalesced[len(coalesced)-1].Substitution == nil {
+			coalesced[len(coalesced)-1].Value += part.Value
+			continue
+		}
+		coalesced = append(coalesced, FieldPart{Value: part.Value})
+	}
+	if !hasSubst {
+		return Field{Value: value, Span: span}
+	}
+	if len(coalesced) == 1 && coalesced[0].Substitution != nil && coalesced[0].Value == value {
+		return Field{Value: value, Span: span, Substitution: coalesced[0].Substitution}
+	}
+	return Field{Value: value, Span: span, parts: &coalesced}
+}
+
+// ProcessSubstitution returns the substitution stream when this Field is a
+// single process-substitution operand or option value.
+func (f Field) ProcessSubstitution() *ProcessSubstitution {
+	if f.Substitution != nil {
+		return f.Substitution
+	}
+	if f.parts != nil && len(*f.parts) == 1 && (*f.parts)[0].Substitution != nil {
+		return (*f.parts)[0].Substitution
+	}
+	return nil
+}
+
+// Parts returns the contiguous literal and process-substitution spans of f,
+// or nil when f contains no process substitutions.
+func (f Field) Parts() []FieldPart {
+	if f.parts != nil {
+		return *f.parts
+	}
+	if f.Substitution != nil {
+		return []FieldPart{{Value: f.Value, Substitution: f.Substitution}}
+	}
+	return nil
+}
+
+// SliceFrom returns the suffix of f starting at byte offset, preserving any
+// process-substitution attachments in the suffix.
+func (f Field) SliceFrom(offset int) Field {
+	if offset <= 0 {
+		return f
+	}
+	if offset >= len(f.Value) {
+		return Field{Value: "", Span: f.Span}
+	}
+	suffix := f.Value[offset:]
+	parts := f.Parts()
+	if len(parts) == 0 {
+		return Field{Value: suffix, Span: f.Span}
+	}
+	remaining := offset
+	var sliced []FieldPart
+	for _, part := range parts {
+		if remaining >= len(part.Value) {
+			remaining -= len(part.Value)
+			continue
+		}
+		if remaining > 0 {
+			sliced = append(sliced, FieldPart{Value: part.Value[remaining:]})
+			remaining = 0
+			continue
+		}
+		sliced = append(sliced, part)
+	}
+	return NewFieldWithParts(suffix, f.Span, sliced)
 }
 
 // Fields is an ordered argv. Values never reparse or rejoin the words.
@@ -54,6 +153,7 @@ type BoundArgv struct {
 	Command      string
 	Items        []BoundItem
 	EndOfOptions bool
+	Help         bool
 }
 
 func (b BoundArgv) Operands() Fields {
@@ -330,13 +430,16 @@ func (b *argvBinding) psOptions() error {
 				ch := suffix[i]
 				flag := "-" + suffix[i:i+1]
 				switch ch {
-				case 'e', 'f', 'a', 'u', 'x', 'l':
+				case 'e', 'A', 'f', 'a', 'u', 'x', 'l':
+					if ch == 'A' {
+						flag = "-e"
+					}
 					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
 				case 'o', 'p':
 					rest := suffix[i+1:]
 					var val Field
 					if rest != "" {
-						val = Field{Value: rest, Span: word.Span}
+						val = word.SliceFrom(i + 2)
 					} else {
 						if b.index >= len(b.argv) {
 							return b.fail(argvOperandInvalid, word, "value for "+flag)
@@ -364,26 +467,34 @@ func optionWord(word string) bool { return len(word) > 1 && word[0] == '-' }
 func (b *argvBinding) option(word Field, scope string) error {
 	b.index++
 	if form, ok := b.exact(word.Value, scope); ok {
-		return b.consume(form, word.Value, word, "", false)
+		if word.Value == "--help" && b.spec.Name != "external" {
+			b.bound.Help = true
+		}
+		return b.consume(form, word.Value, word, Field{}, false)
+	}
+	if word.Value == "--help" && b.spec.Name != "external" {
+		b.bound.Help = true
+		b.record(toolcontract.OptionForm{Spellings: []string{"--help"}, Scope: scope, ValueRole: "boolean"}, "--help", word, nil, "")
+		return nil
 	}
 	if strings.HasPrefix(word.Value, "--") {
-		name, value, attached := strings.Cut(word.Value, "=")
+		name, _, attached := strings.Cut(word.Value, "=")
 		form, ok := b.exact(name, scope)
 		if !ok || !attached {
 			return b.fail(argvOptionUnsupported, word, "catalogued option")
 		}
-		return b.consume(form, name, word, value, true)
+		return b.consume(form, name, word, word.SliceFrom(len(name)+1), true)
 	}
 	suffix := word.Value[1:]
 	if form, ok := b.shorthand(scope, "numeric"); ok && decimal(suffix) {
-		return b.shorthandValue(form, word, suffix)
+		return b.shorthandValue(form, word, word.SliceFrom(1))
 	}
 	if b.wholeWordPrimaries(scope) {
 		return b.fail(argvOptionUnsupported, word, "catalogued primary")
 	}
 	if _, ok := b.exact("-"+suffix[:1], scope); !ok {
 		if form, ok := b.shorthand(scope, "word"); ok {
-			return b.shorthandValue(form, word, suffix)
+			return b.shorthandValue(form, word, word.SliceFrom(1))
 		}
 		return b.fail(argvOptionUnsupported, word, "catalogued option")
 	}
@@ -398,7 +509,7 @@ func (b *argvBinding) option(word Field, scope string) error {
 			continue
 		}
 		rest := suffix[i+1:]
-		return b.consume(form, spelling, word, rest, rest != "")
+		return b.consume(form, spelling, word, word.SliceFrom(i+2), rest != "")
 	}
 	return nil
 }
@@ -446,23 +557,23 @@ func (b *argvBinding) shorthand(scope, kind string) (toolcontract.OptionForm, bo
 	return toolcontract.OptionForm{}, false
 }
 
-func (b *argvBinding) shorthandValue(form toolcontract.OptionForm, word Field, value string) error {
-	b.record(form, word.Value, word, Fields{{Value: value, Span: word.Span}}, "")
+func (b *argvBinding) shorthandValue(form toolcontract.OptionForm, word Field, value Field) error {
+	b.record(form, word.Value, word, Fields{value}, "")
 	return nil
 }
 
 // consume takes the form's values. attached reports an inline value: the
 // remaining short-cluster suffix or a long option's "=value".
-func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
-	switch {
-	case form.Arity == 0:
+func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, word Field, value Field, attached bool) error {
+	switch form.Arity {
+	case 0:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "no value for "+spelling)
 		}
 		b.record(form, spelling, word, nil, "")
-	case form.Arity == -1:
+	case -1:
 		return b.optional(form, spelling, word, value, attached)
-	case form.Arity == -2:
+	case -2:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "separate words for "+spelling)
 		}
@@ -473,7 +584,7 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 			if form.Arity != 1 || (!strings.HasPrefix(spelling, "--") && len(spelling) != 2) {
 				return b.fail(argvOperandInvalid, word, "separate value words for "+spelling)
 			}
-			values = append(values, Field{Value: value, Span: word.Span})
+			values = append(values, value)
 		}
 		for len(values) < form.Arity {
 			if b.index >= len(b.argv) {
@@ -491,18 +602,18 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 // attached value (--porcelain=v1), or, for optional-attached-or-empty, also
 // a following empty word (GNU sed -i.bak, or BSD sed -i followed by an empty
 // argument).
-func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
+func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value Field, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
 		var values Fields
 		if attached {
-			values = Fields{{Value: value, Span: word.Span}}
+			values = Fields{value}
 		}
 		b.record(form, spelling, word, values, "")
 	case "optional-attached-or-empty":
 		values := Fields{}
 		if attached {
-			values = append(values, Field{Value: value, Span: word.Span})
+			values = append(values, value)
 		} else if b.index < len(b.argv) && b.argv[b.index].Value == "" {
 			values = append(values, b.argv[b.index])
 			b.index++
@@ -553,4 +664,27 @@ func decimal(value string) bool {
 		}
 	}
 	return true
+}
+
+// WriteCatalogHelp writes a catalog command's help to out and returns a completed read-only result.
+func WriteCatalogHelp(spec toolcontract.CommandSpecification, out io.Writer) (toolcontract.ProducerResult, error) {
+	if out != nil {
+		if _, err := io.WriteString(out, spec.Help()+"\n"); err != nil {
+			return ownerResult(err), err
+		}
+	}
+	return ordinaryResult(0), nil
+}
+
+type helpDispatcher struct {
+	spec toolcontract.CommandSpecification
+}
+
+func (h helpDispatcher) Invoke(_ context.Context, _ OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	return WriteCatalogHelp(h.spec, streams.Output)
+}
+
+// HelpDispatcher returns an in-process dispatcher that writes spec's catalog help.
+func HelpDispatcher(spec toolcontract.CommandSpecification) OperationDispatcher {
+	return helpDispatcher{spec: spec}
 }

@@ -8,7 +8,6 @@ import (
 	"regexp/syntax"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/dlclark/regexp2/v2"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -44,14 +43,6 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 		return false, err
 	}
 	limits := predicatePatternLimits()
-	callerContext := ctx
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(limits["regex_cpu_ms"])*time.Millisecond)
-	defer cancel()
-	defer func() {
-		if err != nil && callerContext.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-			err = &PredicateLimitError{"regex_cpu_ms", limits["regex_cpu_ms"], limits["regex_cpu_ms"] + 1}
-		}
-	}()
 	var raw int64
 	for i, fragment := range value {
 		if err := ctx.Err(); err != nil {
@@ -77,7 +68,7 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	// Lexical normalization is bounded by the submitted512-byte pattern and
 	// reserves old/new string/tag capacities before building intermediary data.
 	// The selected parser, writer and VM share the remaining dynamic admission.
-	lexicalBytes := 1024 + (raw+1)*(raw+1)*8
+	lexicalBytes := patternLexicalBytes(raw)
 	if p.Memory != nil {
 		release, err := p.Memory.Reserve(ctx, lexicalBytes)
 		if err == nil && release == nil {
@@ -126,24 +117,17 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	if p.Memory != nil {
 		reserve = p.Memory.Reserve
 	}
-	matched, err = regexp2.MatchPatternBounded(ctx, expression, input, flags, transform, regexp2.SyntaxBudget{MaxBytes: limits["evaluation_memory_bytes"] - lexicalBytes, MaxSteps: limits["regex_work_steps"], Timeout: time.Duration(limits["regex_cpu_ms"]) * time.Millisecond, Reserve: reserve})
+	matched, err = regexp2.MatchPatternBounded(ctx, expression, input, flags, transform, regexp2.SyntaxBudget{MaxBytes: limits["evaluation_memory_bytes"] - lexicalBytes, MaxSteps: limits["regex_work_steps"], Reserve: reserve})
 	var stopped *regexp2.SyntaxBudgetError
 	if errors.As(err, &stopped) {
 		resource := "evaluation_memory_bytes"
 		if stopped.Resource == "steps" {
 			resource = "regex_work_steps"
 		}
-		if stopped.Resource == "time" {
-			resource = "regex_cpu_ms"
-		}
 		maximum, observed := stopped.Maximum, stopped.Observed
 		if stopped.Resource == "bytes" {
 			maximum += lexicalBytes
 			observed += lexicalBytes
-		}
-		if stopped.Resource == "time" {
-			maximum /= int64(time.Millisecond)
-			observed = (observed + int64(time.Millisecond) - 1) / int64(time.Millisecond)
 		}
 		return false, &PredicateLimitError{resource, maximum, observed}
 	}

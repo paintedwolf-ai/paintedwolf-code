@@ -36,7 +36,7 @@ func TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments(t *testing
 	arguments[0] = "changed"
 	var output bytes.Buffer
 	cmd.Stdout = &output
-	testutil.FailErr(t, "run immutable selected invocation", RunPrepared(cmd))
+	testutil.FailErr(t, "run immutable selected invocation", RunPrepared(t.Context(), cmd))
 	if output.String() != "selected\nliteral value\ncaptured\n" {
 		t.Fatalf("selection or frozen vectors changed: %q", output.String())
 	}
@@ -60,7 +60,7 @@ func TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart(t *testing
 			case "cwd":
 				cmd.Dir = t.TempDir()
 			}
-			if err := StartPrepared(cmd); !errors.Is(err, confine.ErrLaunchIdentityChanged) || cmd.Process != nil {
+			if err := StartPrepared(t.Context(), cmd); !errors.Is(err, confine.ErrLaunchIdentityChanged) || cmd.Process != nil {
 				t.Fatal("changed input reached native start")
 			}
 		})
@@ -79,7 +79,7 @@ func TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority(t *test
 	testutil.FailErr(t, "prepare handoff fixture", err)
 	defer cleanup()
 	registered := false
-	err = StartPreparedWith(cmd, cmd.Start, func(pid int) func() {
+	err = StartPreparedWith(t.Context(), cmd, cmd.Start, func(pid int) func() {
 		if _, err := os.Stat(effect); !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("payload ran before owner registration")
 		}
@@ -108,7 +108,7 @@ func TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload(t *test
 			defer cleanup()
 			fault := errors.New("synthetic native transport failure")
 			released := 0
-			err = StartPreparedWith(cmd, func() error {
+			err = StartPreparedWith(t.Context(), cmd, func() error {
 				if err := cmd.Start(); err != nil {
 					return err
 				}
@@ -151,7 +151,7 @@ func TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd(t *testing.T) {
 			defer cleanup()
 			var output bytes.Buffer
 			cmd.Stdout = &output
-			testutil.FailErr(t, "run child-selected PATH entry", RunPrepared(cmd))
+			testutil.FailErr(t, "run child-selected PATH entry", RunPrepared(t.Context(), cmd))
 			expected := "bin/portable-child-path-fixture"
 			if pathValue[0] == ':' {
 				expected = "portable-child-path-fixture"
@@ -196,7 +196,7 @@ func TestAgentPreparedLaunchCurrentActionRefusalNeverReleasesPayload(t *testing.
 			cmd, cleanup, err := PrepareCommand(t.Context(), entry, nil, ExecOpts{Launch: plan, Dir: root})
 			testutil.FailErr(t, "capture actual admitted action", err)
 			defer cleanup()
-			err = StartPreparedWith(cmd, cmd.Start, func(pid int) func() {
+			err = StartPreparedWith(t.Context(), cmd, cmd.Start, func(pid int) func() {
 				switch change {
 				case "raw command":
 					identity.CommandLine = "\xfe"
@@ -238,12 +238,12 @@ func TestAgentPreparedLaunchPreservesExecuteOnlyNativeBinary(t *testing.T) {
 	defer lease.Close(context.Background())
 	plan := AgentLaunch(LaunchAgentCommand, "synthetic execute-only action", boundary)
 	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
-	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"-test.run=^TestExecuteOnlyNativePayload$", "literal value"}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin", "PW_EXECUTE_ONLY_NATIVE_PAYLOAD=1"}})
+	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"-test.run=^TestExecuteOnlyNativePayload$", "literal value"}, ExecOpts{Launch: plan, Dir: root, InlineEnv: map[string]string{"PW_EXECUTE_ONLY_NATIVE_PAYLOAD": "1"}})
 	testutil.FailErr(t, "capture without source read", err)
 	defer cleanup()
 	var output bytes.Buffer
 	cmd.Stdout = &output
-	testutil.FailErr(t, "run execute-only native image", RunPrepared(cmd))
+	testutil.FailErr(t, "run execute-only native image", RunPrepared(t.Context(), cmd))
 	if output.String() != "literal value\n" {
 		t.Fatal("execute-only invocation changed")
 	}
@@ -261,7 +261,7 @@ func TestPreparedLaunchPreservesRelativeScriptKernelFilename(t *testing.T) {
 			defer cleanup()
 			var output bytes.Buffer
 			cmd.Stdout = &output
-			testutil.FailErr(t, "run literal script filename", RunPrepared(cmd))
+			testutil.FailErr(t, "run literal script filename", RunPrepared(t.Context(), cmd))
 			if output.String() != nativePath {
 				t.Fatalf("kernel script spelling changed: %q", output.String())
 			}
@@ -297,7 +297,7 @@ func TestPreparedStrictBoundaryNeverFallsBackToHostExecution(t *testing.T) {
 		defer cleanup()
 	}
 	if err == nil {
-		err = RunPrepared(cmd)
+		err = RunPrepared(t.Context(), cmd)
 	}
 	if err == nil {
 		t.Fatal("strict boundary rejection reported native success")

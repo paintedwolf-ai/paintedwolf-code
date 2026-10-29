@@ -129,12 +129,6 @@ func (e *Executor) validateInvocation(
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}
-	if reject := e.exactCommandReplacementReject(ctx, qualifiedName, profileID, args, *tc); reject != nil {
-		return reject
-	}
-	if reject := commandFileWriteReject(ctx, e, qualifiedName, profileID, args, tc); reject != nil {
-		return reject
-	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
@@ -163,7 +157,7 @@ func (e *Executor) validateInvocation(
 	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
 		return reject
 	}
-	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
+	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 }
 
 // definitionFor reads the registry snapshot dispatch will run.

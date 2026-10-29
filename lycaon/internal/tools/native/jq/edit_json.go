@@ -1,7 +1,6 @@
 package jq
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,43 +22,39 @@ type jsonEdit struct {
 }
 
 func parseJSONEdit(text string) (*jsonEdit, error) {
-	dec := json.NewDecoder(strings.NewReader(text))
-	var raws []json.RawMessage
+	source := strings.TrimSpace(text)
+	dec := json.NewDecoder(strings.NewReader(source))
+	dec.UseNumber()
+	edit := &jsonEdit{order: newKeyOrder(), trailing: strings.HasSuffix(text, "\n")}
+	multiline := false
 	for {
-		var raw json.RawMessage
-		if err := dec.Decode(&raw); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, err
+		start := int(dec.InputOffset())
+		token, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
 		}
-		raws = append(raws, raw)
-	}
-	if len(raws) == 0 {
-		return nil, errors.New("no JSON value in document")
-	}
-	edit := &jsonEdit{order: newKeyOrder(), trailing: strings.HasSuffix(text, "\n"), lines: len(raws) > 1}
-	for _, raw := range raws {
-		vdec := json.NewDecoder(bytes.NewReader(raw))
-		vdec.UseNumber()
-		v, err := parseJSONValue(vdec, rootPos, 0, edit.order)
 		if err != nil {
 			return nil, err
 		}
-		edit.docs = append(edit.docs, v)
-		if bytes.ContainsRune(raw, '\n') {
-			edit.lines = false
+		value, err := parseJSONToken(dec, token, rootPos, 0, edit.order)
+		if err != nil {
+			return nil, err
 		}
+		raw := strings.TrimSpace(source[start:int(dec.InputOffset())])
+		if len(edit.docs) == 0 {
+			edit.indent = jsonIndentUnit(raw)
+		}
+		multiline = multiline || strings.ContainsRune(raw, '\n')
+		edit.docs = append(edit.docs, value)
 	}
-	edit.indent = jsonIndentUnit(raws[0])
+	if len(edit.docs) == 0 {
+		return nil, errors.New("no JSON value in document")
+	}
+	edit.lines = len(edit.docs) > 1 && !multiline
 	return edit, nil
 }
 
-func parseJSONValue(dec *json.Decoder, pos string, depth int, order *keyOrder) (any, error) {
-	tok, err := dec.Token()
-	if err != nil {
-		return nil, err
-	}
+func parseJSONToken(dec *json.Decoder, tok json.Token, pos string, depth int, order *keyOrder) (any, error) {
 	delim, ok := tok.(json.Delim)
 	if !ok {
 		return tok, nil
@@ -77,32 +72,40 @@ func parseJSONValue(dec *json.Decoder, pos string, depth int, order *keyOrder) (
 			}
 			key, _ := keyTok.(string)
 			order.note(pos, key)
-			v, err := parseJSONValue(dec, childPos(pos, key), depth+1, order)
+			token, err := dec.Token()
+			if err != nil {
+				return nil, err
+			}
+			v, err := parseJSONToken(dec, token, childPos(pos, key), depth+1, order)
 			if err != nil {
 				return nil, err
 			}
 			obj[key] = v
 		}
-		_, err = dec.Token()
+		_, err := dec.Token()
 		return obj, err
 	case '[':
 		arr := []any{}
 		for dec.More() {
-			v, err := parseJSONValue(dec, elemPos(pos), depth+1, order)
+			token, err := dec.Token()
+			if err != nil {
+				return nil, err
+			}
+			v, err := parseJSONToken(dec, token, elemPos(pos), depth+1, order)
 			if err != nil {
 				return nil, err
 			}
 			arr = append(arr, v)
 		}
-		_, err = dec.Token()
+		_, err := dec.Token()
 		return arr, err
 	}
 	return nil, fmt.Errorf("unexpected delimiter %q", delim)
 }
 
 // jsonIndentUnit reads the indentation of the first nested line.
-func jsonIndentUnit(raw []byte) string {
-	nl := bytes.IndexByte(raw, '\n')
+func jsonIndentUnit(raw string) string {
+	nl := strings.IndexByte(raw, '\n')
 	if nl < 0 {
 		return ""
 	}

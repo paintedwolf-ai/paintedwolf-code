@@ -3,9 +3,13 @@
 package hostprocess
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 
@@ -41,7 +45,7 @@ func inspect(pid int) (Process, error) {
 		return Process{}, err
 	}
 	executable, _ := os.Readlink(path + "/exe")
-	return Process{PID: pid, ParentPID: record.ParentPID, UID: stat.Uid, Name: record.Command, Executable: executable, Instance: strconv.FormatUint(record.StartTime, 10)}, nil
+	return Process{StartOrder: record.StartTime, PID: pid, ParentPID: record.ParentPID, UID: stat.Uid, Name: record.Command, Executable: executable, Instance: strconv.FormatUint(record.StartTime, 10)}, nil
 }
 
 func nativeSignal(kind signalKind) (unix.Signal, bool) {
@@ -71,4 +75,26 @@ func signalInstance(process Process, kind signalKind) error {
 		return ErrStale
 	}
 	return unix.PidfdSendSignal(fd, signal, nil, 0)
+}
+
+func readCommandLine(pid int) string {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil || len(raw) == 0 {
+		return ""
+	}
+	raw = bytes.TrimRight(raw, "\x00")
+	if len(raw) == 0 {
+		return ""
+	}
+	parts := bytes.Split(raw, []byte{0})
+	args := make([]string, 0, len(parts))
+	for _, p := range parts {
+		args = append(args, string(p))
+	}
+	return strings.Join(args, " ")
+}
+
+func processExistsFallback(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }

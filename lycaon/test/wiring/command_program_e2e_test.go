@@ -33,7 +33,16 @@ type commandProgramSession struct {
 	session string
 }
 
+// newCommandProgramSession is an implementer session with a recorded progress
+// checklist, so project writes pass the progress gate.
 func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
+	t.Helper()
+	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	return s
+}
+
+func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
@@ -453,25 +462,53 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 	}
 }
 
-func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
-	s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
-	state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
-	testutil.FailErr(t, "progress state", err)
-	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
-		t.Fatal("expected root session to start without progress")
+// Redirects and tee publish through the same write door, so both stop at the
+// progress gate before touching the project and both publish once a checklist
+// is recorded.
+func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
+	for _, c := range []struct{ name, program, target, stop string }{
+		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "Stop: redirect > (redirected.txt) at 1:21"},
+		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "Stop: tee"},
+	} {
+		t.Run(c.name+" without progress", func(t *testing.T) {
+			s := newCommandProgramSessionWithoutProgress(t, c.program, "")
+			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
+			testutil.FailErr(t, "progress state", err)
+			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+				t.Fatal("expected root session to start without progress")
+			}
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			result := s.result(t)
+			for _, want := range []string{`"stop_code": "PROGRESS_MISSING"`, `"completed_effects": 0`, c.stop} {
+				if !strings.Contains(result, want) {
+					t.Fatalf("missing %q in result: %s", want, result)
+				}
+			}
+			if state := s.programState(t); state != "rejected" {
+				t.Fatalf("program state = %q, want rejected", state)
+			}
+			if _, err := os.Stat(filepath.Join(s.dir, c.target)); !os.IsNotExist(err) {
+				t.Fatalf("%s was written without progress: %v", c.target, err)
+			}
+		})
 	}
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
-	if strings.Contains(result, "PROGRESS_MISSING") {
-		t.Fatalf("unexpected PROGRESS_MISSING: %s", result)
-	}
-	redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
-	testutil.FailErr(t, "read redirected.txt", err)
-	teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
-	testutil.FailErr(t, "read teed.txt", err)
-	if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
-		t.Fatalf("redirected=%q teed=%q", redirected, teed)
-	}
+	t.Run("with progress", func(t *testing.T) {
+		s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
+		testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+		if result := s.result(t); strings.Contains(result, "PROGRESS_MISSING") || !strings.Contains(result, `"completed_effects": 2`) {
+			t.Fatalf("redirect and tee did not both publish: %s", result)
+		}
+		if state := s.programState(t); state != "completed" {
+			t.Fatalf("program state = %q, want completed", state)
+		}
+		redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
+		testutil.FailErr(t, "read redirected.txt", err)
+		teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
+		testutil.FailErr(t, "read teed.txt", err)
+		if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
+			t.Fatalf("redirected=%q teed=%q", redirected, teed)
+		}
+	})
 }
 
 func TestCommandProgramKillSignalStatusAndJobReferences(t *testing.T) {

@@ -18,10 +18,11 @@ func TestDiscoveryReportsNativeKeywordAndLaunchSelection(t *testing.T) {
 		source, stdout, stderr string
 		status                 int
 	}{
-		{"which -- cat pwtool", "cat: native\n" + tool + "\n", "", 0},
-		{"which git jq", "git: native\njq: native\n", "", 0},
+		{"which -- cat pwtool", "cat\n" + tool + "\n", "", 0},
+		{"which git", "git\n", "", 0},
+		{"which jq", "jq\n", "", 0},
 		{"which missing plain if", "", "", 1},
-		{"command -v cat pwtool if", "cat\n" + tool + "\nif\n", "", 0},
+		{"command -v cat git pwtool jq if", "cat\ngit\n" + tool + "\njq\nif\n", "", 0},
 		{"command -v -- missing", "", "", 1},
 		{"command -V cat pwtool if missing", "cat is a native built-in\npwtool is " + tool + "\nif is a shell keyword\n", "command: missing: not found\n", 1},
 		{"type cat git", "cat is a native built-in\ngit is a native built-in\n", "", 0},
@@ -67,7 +68,9 @@ func TestDiscoveryRefusesUnsupportedForms(t *testing.T) {
 	}
 	h.run("command cat").expectRefusal(t, "command without -v", "COMMAND_OPERAND_INVALID")
 	h.cwd = "missing-directory"
-	h.run("which cat").expectOutput(t, "native which needs no lookup", "cat: native\n", "", 0)
+	h.run("type cat").expectOutput(t, "native type needs no lookup", "cat is a native built-in\n", "", 0)
+	h.run("which cat").expectOutput(t, "native which needs no lookup", "cat\n", "", 0)
+	h.run("type -a cat").expectRefusal(t, "type -a cat without a launch directory", "CWD_NOT_DIRECTORY")
 	h.run("which pwtool").expectRefusal(t, "which without a launch directory", "CWD_NOT_DIRECTORY")
 }
 

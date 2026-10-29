@@ -3,12 +3,10 @@ package budget
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 type Limits struct {
 	MaxBytes, MaxSteps int64
-	Timeout            time.Duration
 	Reserve            func(context.Context, int64) (func(), error)
 }
 type Error struct {
@@ -25,12 +23,11 @@ type Meter struct {
 	ctx          context.Context
 	limits       Limits
 	bytes, steps int64
-	deadline     time.Time
 	releases     []func()
 }
 
 func New(ctx context.Context, limits Limits) *Meter {
-	if ctx == nil || limits.MaxBytes < 1 || limits.MaxSteps < 1 || limits.Timeout <= 0 {
+	if ctx == nil || limits.MaxBytes < 1 || limits.MaxSteps < 1 {
 		panic(Abort{fmt.Errorf("bounded regex requires context and positive limits")})
 	}
 	if limits.MaxBytes < 512 {
@@ -47,7 +44,7 @@ func New(ctx context.Context, limits Limits) *Meter {
 			panic(Abort{err})
 		}
 	}
-	m := &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout), bytes: 512}
+	m := &Meter{ctx: ctx, limits: limits, bytes: 512}
 	if release != nil {
 		m.releases = []func(){release}
 	}
@@ -59,9 +56,6 @@ func (m *Meter) Check() {
 	}
 	if err := m.ctx.Err(); err != nil {
 		panic(Abort{err})
-	}
-	if !time.Now().Before(m.deadline) {
-		panic(Abort{&Error{"time", m.limits.Timeout.Nanoseconds(), m.limits.Timeout.Nanoseconds() + 1}})
 	}
 }
 func (m *Meter) Step(n int64) {

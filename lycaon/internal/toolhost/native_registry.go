@@ -105,6 +105,10 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		}
 	}
 
+	if commandTool != nil {
+		read.OutputViews = commandTool.Programs
+	}
+
 	if err := registerGitStatusTool(reg, deps); err != nil {
 		return nil, nil, err
 	}

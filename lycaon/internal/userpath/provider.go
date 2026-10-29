@@ -18,7 +18,7 @@ type Provider struct {
 	lookupEnv    func(string) (string, bool)
 	environ      func() []string
 	stat         func(string) (fs.FileInfo, error)
-	run          func(*osexec.Cmd) error
+	run          func(context.Context, *osexec.Cmd) error
 	accountShell func(context.Context) (string, error)
 }
 

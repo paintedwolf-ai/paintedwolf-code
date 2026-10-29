@@ -161,12 +161,11 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 		if kind == "stopped" {
 			limit = 1
 		}
-		condition, err := executionProjectionCondition(kind)
-		if err != nil {
+		if err := validateExecutionProjectionKind(kind); err != nil {
 			return 0, err
 		}
-		query := `SELECT COALESCE(sum(bytes),0) FROM (SELECT ` + sqlByteSum(columns) + ` AS bytes FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND ` + condition + ` ORDER BY e.ordinal DESC LIMIT ?)`
-		if err = add(query, program, limit); err != nil {
+		query := `SELECT COALESCE(sum(bytes),0) FROM (SELECT ` + sqlByteSum(columns) + ` AS bytes FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND ` + executionProjectionSelection + ` ORDER BY e.ordinal DESC LIMIT ?)`
+		if err := add(query, program, kind, kind, kind, limit); err != nil {
 			return 0, err
 		}
 	}

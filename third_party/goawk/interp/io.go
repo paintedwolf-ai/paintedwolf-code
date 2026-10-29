@@ -319,6 +319,7 @@ func (p *interp) newScanner(input io.Reader, buffer []byte) *bufio.Scanner {
 			comment:       p.csvInputConfig.Comment,
 			header:        p.csvInputConfig.Header,
 			fields:        &p.fields,
+			backing:       &p.fieldBacking,
 			setFieldNames: p.setFieldNames,
 		}
 		scanner.Split(splitter.scan)
@@ -336,7 +337,7 @@ func (p *interp) newScanner(input io.Reader, buffer []byte) *bufio.Scanner {
 		splitter := regexSplitter{re: &p.recordSepRegex, terminator: &p.recordTerminator}
 		scanner.Split(splitter.scan)
 	}
-	scanner.Buffer(buffer, maxRecordLength)
+	scanner.Buffer(buffer, p.maxInputRecord+2)
 	return scanner
 }
 
@@ -488,6 +489,7 @@ type csvSplitter struct {
 	noBOMCheck   bool
 
 	fields        *[]string
+	backing       *string
 	setFieldNames func(names []string)
 	rowNum        int
 }
@@ -662,6 +664,9 @@ parseField:
 	// Normal row, set fields and return a line (token).
 	s.rowNum++
 	*s.fields = fields
+	if s.backing != nil {
+		*s.backing = strBuf
+	}
 	token = origData[skip:advance]
 	token = token[:len(token)-lenNewline(token)]
 	if tokenHasCR {
@@ -730,6 +735,9 @@ func (p *interp) splitOnFieldSepRegex(fields []string, line string) []string {
 // Ensure that the current line is parsed into fields, splitting it
 // into fields if it hasn't been already
 func (p *interp) ensureFields() {
+	if !p.haveFields && p.inputMode == DefaultMode {
+		p.fieldBacking = p.line
+	}
 	if p.haveFields {
 		return
 	}
@@ -746,6 +754,7 @@ func (p *interp) ensureFields() {
 				sepLen:    utf8.RuneLen(p.csvInputConfig.Separator),
 				comment:   p.csvInputConfig.Comment,
 				fields:    &p.fields,
+				backing:   &p.fieldBacking,
 			}
 			scanner.Split(splitter.scan)
 			if !scanner.Scan() {
@@ -761,7 +770,10 @@ func (p *interp) ensureFields() {
 		// 1-char FS is handled as plain split (not regex)
 		p.fields = strings.Split(p.line, p.savedFieldSep)
 	default:
-		// Split on FS as a regex
+		// Split on FS as a regex. Drop obsolete backing references before reuse.
+		for i := range p.fields {
+			p.fields[i] = ""
+		}
 		p.fields = p.splitOnFieldSepRegex(p.fields[:0], p.line)
 	}
 
@@ -861,10 +873,16 @@ func (p *interp) nextLine() (string, error) {
 		}
 		p.recordTerminator = p.recordSep // will be overridden if RS is "" or multiple chars
 		if p.scanner.Scan() {
+			if len(p.scanner.Bytes()) > p.maxInputRecord {
+				return "", &RecordLimitError{Maximum: p.maxInputRecord, Observed: len(p.scanner.Bytes())}
+			}
 			// We scanned some input, break and return it
 			break
 		}
 		err := p.scanner.Err()
+		if err == bufio.ErrTooLong {
+			return "", &RecordLimitError{Maximum: p.maxInputRecord, Observed: p.maxInputRecord + 1}
+		}
 		if err != nil {
 			return "", fmt.Errorf("error reading from input: %s", err)
 		}

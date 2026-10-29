@@ -29,10 +29,10 @@ func TestGeneratorsGolden(t *testing.T) {
 
 func TestYesStopsAtTheStreamCeiling(t *testing.T) {
 	h := newHarness(t)
-	h.owners.limits["stream_bytes"] = 1 << 16
+	h.owners.limits["stream_throughput_bytes"] = 1 << 16
 	r := h.run("yes a b", "")
 	reject := r.expectRefusal(t, "unbounded yes", "COMMAND_LIMIT_EXCEEDED")
-	if reject.Data["limit_id"] != "stream_bytes" || !strings.HasPrefix(r.stdout, "a b\na b\n") {
+	if reject.Data["limit_id"] != "stream_throughput_bytes" || !strings.HasPrefix(r.stdout, "a b\na b\n") {
 		t.Fatalf("yes: %+v %q", reject.Data, r.stdout[:min(len(r.stdout), 16)])
 	}
 }

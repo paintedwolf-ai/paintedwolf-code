@@ -3,7 +3,6 @@ package jq
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -25,7 +25,7 @@ func TestJqDecompressesBlobstoreManagedSpill(t *testing.T) {
 	body := `{"name":"lycaon","version":3}`
 
 	store := blobstore.Store{Root: host}
-	blob, err := store.PutAt(tooloutput.ToolOutputSpillDir+"/spill.json", strings.NewReader(body), bytebound.Materialization(1<<20))
+	blob, err := store.PutAt(t.Context(), tooloutput.ToolOutputSpillDir+"/spill.json", strings.NewReader(body), bytebound.Materialization(1<<20))
 	testutil.FailErr(t, "spill via blobstore", err)
 
 	raw, err := os.ReadFile(filepath.Join(host, filepath.FromSlash(blob.Rel)))
@@ -63,7 +63,7 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 	dir, host := t.TempDir(), t.TempDir()
 	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)) + `"}`
 	store := blobstore.Store{Root: host}
-	blob, err := store.PutAt(tooloutput.ToolOutputSpillDir+"/oversized.json", strings.NewReader(body), bytebound.Materialization(len(body)+1))
+	blob, err := store.PutAt(t.Context(), tooloutput.ToolOutputSpillDir+"/oversized.json", strings.NewReader(body), bytebound.Materialization(len(body)+1))
 	testutil.FailErr(t, "write compressed oversized input", err)
 	ctx := testCtx(dir)
 	ctx.Host.HostDataDir = host
@@ -78,8 +78,8 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 
 func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 	dir, host := t.TempDir(), t.TempDir()
-	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)) + `original tail"}`
-	spill := tooloutput.SpillWholeToolOutput(host, tooloutput.Screened(body), 0)
+	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)-(1<<20)) + `original tail"}`
+	spill := tooloutput.SpillWholeToolOutput(t.Context(), host, tooloutput.Screened(body), 0)
 	if spill.SpillPath == "" {
 		t.Fatal("failed to retain large structured observation")
 	}
@@ -96,9 +96,9 @@ func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 		}
 	}
 	writeJSONFile(t, dir, "ordinary.json", body)
-	_, err := tool.Run(t.Context(), map[string]any{"path": "ordinary.json", "query": ".value[-13:]"}, ctx)
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "JQ_INPUT_TOO_LARGE" || reject.Data["max_bytes"] != safecmd.JQCaps().InputBytes {
-		t.Fatalf("spill allowance leaked into project query: %v", err)
+	out, err := tool.Run(t.Context(), map[string]any{"path": "ordinary.json", "query": ".value[-13:]"}, ctx)
+	testutil.FailErr(t, "slice ordinary input within shared input bound", err)
+	if values := parseResponse(t, out).Values; len(values) != 1 || string(values[0]) != `"original tail"` {
+		t.Fatalf("ordinary input lost retained substring: %s", out)
 	}
 }

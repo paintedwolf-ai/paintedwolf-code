@@ -204,7 +204,7 @@ func (t *ExtractArchiveTool) prepareDest(ctx context.Context, tctx tools.ToolCon
 	info, err := os.Lstat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := mkdirAgentPath(ctx, tctx, resolvedMutationTarget(resolved), 0o755); err != nil {
+			if _, err := mkdirAgentPath(ctx, tctx, resolvedMutationTarget(resolved), 0o755); err != nil {
 				return projectpaths.Resolved{}, "", fmt.Errorf("extract dest %s: %w", relPath, err)
 			}
 			return resolved, relSlash, nil

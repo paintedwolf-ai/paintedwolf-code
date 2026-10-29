@@ -94,7 +94,7 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
-	if request.Argv[0].Value != "curl" || program.Paths == nil || program.Barrier == nil {
+	if request.Argv[0].Value != "curl" || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a curl invocation", request.Argv[0].Value)
 	}
 	if request.OperationID != "curl" && request.OperationID != o.operation {

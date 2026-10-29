@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -306,19 +305,6 @@ func TestNativeMkdirFileExistsStructuredRejectE2E(t *testing.T) {
 	assertStructuredRejectCode(t, err, "MKDIR_FILE_EXISTS")
 }
 
-func TestNativeCommandCpHabitRedirectMatcher(t *testing.T) {
-	t.Parallel()
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "cp src.txt dst.txt"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "copy"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_COPY_NATIVE")
-}
-
 func TestNativeChownForeignUIDStructuredRejectE2E(t *testing.T) {
 	if os.Getuid() == 65534 {
 		t.Skip("effective uid is nobody")
@@ -357,39 +343,6 @@ func TestNativeChownGitPathStructuredRejectE2E(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "GIT_INTERNALS_WRITE_DENIED")
-}
-
-func TestNativeCommandChownExactRedirect(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("chown is unavailable on Windows")
-	}
-	account, err := user.Current()
-	testutil.FailErr(t, "resolve current account", err)
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err = exec.Invoke(context.Background(), "command", map[string]any{"command": "chown " + account.Uid + ":" + account.Gid + " scripts/run.sh"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "chown"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_CHOWN_NATIVE")
-}
-
-func TestNativeCommandFindHabitRedirectE2E(t *testing.T) {
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{
-		"command": "find . -name '*.go'",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"find"}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "USE_FIND_NOT_COMMAND") {
-		t.Fatalf("err = %v want USE_FIND_NOT_COMMAND redirect", err)
-	}
 }
 
 func TestNativeReadRejectsDirectoryE2E(t *testing.T) {

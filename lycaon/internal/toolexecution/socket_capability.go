@@ -224,6 +224,7 @@ func socketCapabilityProposedAction(
 			SessionID:          tc.Identity.SessionID,
 			RootSessionID:      chatSession,
 			SessionScratchRoot: tc.Host.SessionScratchDir,
+			SessionOutputRoot:  tc.Host.SessionOutputDir,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants: append([]confine.SocketGrant(nil), merged...),

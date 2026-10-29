@@ -6,9 +6,8 @@
 // Dialects and engines:
 //   - Fixed: exact bytes, leftmost then longest across patterns.
 //   - Basic and Extended: GNU BRE and ERE with POSIX leftmost-longest
-//     matching. Patterns the standard Go tree spells run on Go's linear
-//     engine in longest mode; back references and GNU word assertions run
-//     on the bounded backtracking engine, exploring every path per start.
+//     matching on the bounded VM, including back references and GNU word
+//     assertions, exploring every path per start.
 //   - Perl: the bounded pcre-common-v1 grammar on the bounded backtracking
 //     engine with leftmost-first matching. It is never RE2.
 //   - RE2: Go RE2 syntax and leftmost-first semantics (rg's default).
@@ -16,7 +15,7 @@
 // Character policy: patterns and records are UTF-8 scalars (an invalid byte
 // is one U+FFFD scalar); \w, \s, \b and GNU \< \> use fixed ASCII classes;
 // -i is Unicode simple case folding. Every record search is metered against
-// the catalog's regex_work_steps and regex_cpu_ms.
+// the catalog's regex_work_steps and allocation limits, with caller cancellation.
 package textsearch
 
 import (
@@ -24,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -65,14 +63,13 @@ type Spec struct {
 type Limits struct {
 	PatternBytes int64
 	WorkSteps    int64
-	CPU          time.Duration
 	MemoryBytes  int64
 	InputBytes   int64
 }
 
 // CatalogLimits reads the frozen language catalog's regex ceilings.
 func CatalogLimits() (Limits, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return Limits{}, err
 	}
@@ -82,10 +79,10 @@ func CatalogLimits() (Limits, error) {
 	}
 	l := Limits{
 		PatternBytes: values["regex_pattern_bytes"], WorkSteps: values["regex_work_steps"],
-		CPU: time.Duration(values["regex_cpu_ms"]) * time.Millisecond, MemoryBytes: values["evaluation_memory_bytes"],
-		InputBytes: values["regex_input_bytes"],
+		MemoryBytes: values["evaluation_memory_bytes"],
+		InputBytes:  values["regex_input_bytes"],
 	}
-	if l.PatternBytes <= 0 || l.WorkSteps <= 0 || l.CPU <= 0 || l.MemoryBytes <= 0 || l.InputBytes <= 0 {
+	if l.PatternBytes <= 0 || l.WorkSteps <= 0 || l.MemoryBytes <= 0 || l.InputBytes <= 0 {
 		return Limits{}, errors.New("regex limits missing from the language catalog")
 	}
 	return l, nil
@@ -183,8 +180,8 @@ func requirement(e engine, patterns []string, spec Spec) litprefilter.Requiremen
 			}
 		}
 		return litprefilter.AnyOf(patterns...)
-	case goEngine:
-		return litprefilter.Extract(e.re.String(), false)
+	case vmEngine:
+		return e.required
 	}
 	return litprefilter.Requirement{}
 }

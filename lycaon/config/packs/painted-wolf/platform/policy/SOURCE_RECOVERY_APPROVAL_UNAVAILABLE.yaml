@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SOURCE_RECOVERY_APPROVAL_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+selector:
+  paintedwolf.operation: [delete]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE"
+effect: block
+copy:
+  what: Deleting {{ paintedwolf.path }} without recovery needs approval.
+  cause: Approval is unavailable for this call.
+  fix: Ask the person to delete the item or enable approvals.
+  instead: Do not discard the source through another command without recovery approval.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: approval is required before deleting without recovery
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: delete
+    path: build
+  expect_contains:
+  - 'Code: SOURCE_RECOVERY_APPROVAL_UNAVAILABLE'
+  - 'Deleting build without recovery needs approval.'
+  - 'Do not discard the source through another command without recovery approval.'
