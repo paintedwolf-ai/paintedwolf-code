@@ -40,10 +40,13 @@ func TestRetainedStorageCapsAmplifiedRechunkedRows(t *testing.T) {
 	reader, err := openReader(t.Context(), path)
 	testutil.FailErr(t, "open amplified target", err)
 	defer reader.Close()
-	var after, files int
+	var after, files, amplified int
 	testutil.FailErr(t, "count rechunked rows", reader.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM source_manifest_entries").Scan(&after))
 	testutil.FailErr(t, "count preserved snapshot files", reader.QueryRowContext(t.Context(), "SELECT SUM(file_count) FROM source_snapshots WHERE id LIKE 'amplified-%'").Scan(&files))
-	if after != 325 || files != 325 || after <= before {
-		t.Fatalf("amplification lost files: original=%d target=%d snapshots=%d", before, after, files)
+	testutil.FailErr(t, "count amplified manifest rows", reader.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_snapshot_roots r
+ JOIN source_manifest_layout l ON l.manifest_id=r.manifest_id
+ JOIN source_manifest_entries e ON e.chunk_id=l.chunk_id WHERE r.snapshot_id LIKE 'amplified-%'`).Scan(&amplified))
+	if amplified != 325 || files != 325 || after <= before {
+		t.Fatalf("amplification lost files: original=%d target=%d amplified=%d snapshots=%d", before, after, amplified, files)
 	}
 }
