@@ -20,11 +20,11 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	}
 	file, err := root.OpenExact(".")
 	if err != nil {
-		root.Close()
+		_ = root.Close()
 		return nil, err
 	}
 	info, err := file.Stat()
-	file.Close()
+	_ = file.Close()
 	if err == nil && !os.SameFile(info, p.rootInfo) {
 		err = invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
 	}
@@ -32,7 +32,7 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 		err = p.Validate()
 	}
 	if err != nil {
-		root.Close()
+		_ = root.Close()
 		return nil, err
 	}
 	return root, nil

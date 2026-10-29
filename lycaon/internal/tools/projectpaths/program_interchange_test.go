@@ -5,7 +5,6 @@ package projectpaths_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/commandprogram"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -154,9 +154,8 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 }
 
 func TestLiteralTemporaryAbsolutePathIsNotRemapped(t *testing.T) {
-	temporary, err := os.MkdirTemp("/tmp", "portable-path-fixture-")
-	testutil.FailErr(t, "create literal temporary fixture", err)
-	t.Cleanup(func() { _ = os.RemoveAll(temporary) })
+	t.Setenv("TMPDIR", "/tmp")
+	temporary := t.TempDir()
 	tc, _, _ := scratchToolContext(t)
 	tc.Source.Roots[0].Path = temporary
 	operand := temporary + "/literal"
