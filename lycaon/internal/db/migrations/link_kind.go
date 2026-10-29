@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-// Revision 8 is unreleased. Its source tables gain a link entry and state
-// while preserving every earlier row, index, trigger and foreign key.
+// migrateLinkKind rebuilds the four source tables with link entries admitted.
 func migrateLinkKind(ctx context.Context, tx *sql.Tx) error {
 	triggers, err := suspendLinkTableTriggers(ctx, tx)
 	if err != nil {
@@ -112,17 +111,17 @@ func rebuildLinkTable(ctx context.Context, tx *sql.Tx, table string) error {
 	switch table {
 	case "source_files", "source_effects":
 		if strings.Count(tail, "entry_kind IN ('file', 'directory')") != 1 {
-			return fmt.Errorf("source entry kind differs from revision-5 shape")
+			return fmt.Errorf("source entry kind differs from revision 10 shape")
 		}
 		tail = strings.Replace(tail, "entry_kind IN ('file', 'directory')", "entry_kind IN ('file', 'directory', 'link')", 1)
 	case "source_versions", "source_head_entries":
 		if strings.Count(tail, "state IN ('content', 'directory', 'absent', 'unresolved')") != 1 {
-			return fmt.Errorf("source state differs from revision-5 shape")
+			return fmt.Errorf("source state differs from revision 10 shape")
 		}
 		tail = strings.Replace(tail, "state IN ('content', 'directory', 'absent', 'unresolved')", "state IN ('content', 'directory', 'link', 'absent', 'unresolved')", 1)
 		if table == "source_versions" {
 			if strings.Count(tail, "state = 'content' AND") != 1 {
-				return fmt.Errorf("source content constraint differs from revision-5 shape")
+				return fmt.Errorf("source content constraint differs from revision 10 shape")
 			}
 			tail = strings.Replace(tail, "state = 'content' AND", "state IN ('content', 'link') AND", 1)
 		}
