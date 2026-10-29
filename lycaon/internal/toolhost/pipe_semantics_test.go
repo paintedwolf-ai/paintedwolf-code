@@ -75,8 +75,13 @@ func decodePipeOutcome(t *testing.T, out string) command.ProgramOutcome {
 	return outcome
 }
 
+// A native name answers as native even with an installed program of the same
+// name on the launch PATH.
 func TestProgramDiscoveryReportsWiredNativeUtilities(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
+	bin := t.TempDir()
+	testutil.FailErr(t, "install jq", os.WriteFile(filepath.Join(bin, "jq"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	env.Configure = func(tc *tools.ToolContext) { tc.Host.HostResourcePathExtra = []string{bin} }
 	for source, want := range map[string]string{
 		"which jq":      "jq: native\n",
 		"type jq":       "jq is a native built-in\n",
