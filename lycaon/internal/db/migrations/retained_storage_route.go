@@ -41,8 +41,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 					return false
 				}
 			case "source-manifest-layout":
-				// The reviewed64-row VALUES writer streams with no ephemeral
-				// tree; reads, sorts, target rows and chunk identities are unchanged.
+				// The reviewed 64-row VALUES input streams through the unchanged
+				// fixed CHECK set; reads, sorts, rows and identities are unchanged.
 				if step.Checksum != "046635199cf698cecc77b7f59fe03b92a9874b1b1789025472f44e0af6b8931e" {
 					return false
 				}

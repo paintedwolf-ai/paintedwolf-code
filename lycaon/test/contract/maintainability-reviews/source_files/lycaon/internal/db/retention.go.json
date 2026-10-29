@@ -4,11 +4,13 @@
   "kind": "algorithm",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain the existing 487-line maintenance policy at a 490-line ceiling. This change acquires one background turn around the existing pass without moving transaction, retention, or FTS authority. Audit coordination is in maintenance_admission.go; unrelated table-selection and rollup code is unchanged. Retention and continuous-write maintenance tests passed in the combined source. The capacity-failure regression verifies the same audit authority completes with a conservative fallback; no new subsystem, save gate, or retained ceiling is introduced.",
-  "reviewed_commit": "938578fd9ee0bf26659f9c393da43eeafef76299",
+  "reason": "Retain the measured 488-line maintenance policy under its unchanged 490-line ceiling. RunRetention owns the classification before any purge: pending integrity permits only safe incremental vacuum, while destructive retention and FTS work wait. The existing transaction, batch and table-selection authority stays here; audit wait/signal coordination is in the lifecycle owner. Joined contracts prove no pending purge, available resource reclamation, cancellation custody and resumption after successful verification. Further growth beyond the ceiling renews review.",
+  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
   "ceiling": 490,
   "boundaries": {
     "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
+    "lycaon/internal/db/integrity_lifecycle_test.go": "9177cc3d12f03cc01407ce594dae743d5ef4a24b93e480962e4c44e8ed465285",
+    "lycaon/internal/db/integrity_retention_test.go": "7d45d4b54139f2409cabee012fdc0c3f785e55c088fd14e9d6bb167c4a1fdfb3",
     "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca"
   }
 }
