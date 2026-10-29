@@ -305,7 +305,7 @@ class HostedExecutionTests(unittest.TestCase):
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
 
-    def test_full_qualification_budgets_receive_push_change_base(self):
+    def test_full_limits_lane_receives_structured_change_base(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict('os.environ', PW_CI_AFFECTED='0'), \
