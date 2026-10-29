@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -344,9 +345,14 @@ func probeNestedSingleTree(directory string, pins *fixtureLifecyclePins) (proof 
 	cmd.ExtraFiles = []*os.File{user, mount}
 	cmd.Env = []string{"PATH=/usr/bin:/bin", fixtureModeEnv + "=mount-nested-probe", fixtureDirEnv + "=" + directory}
 	cmd.WaitDelay = time.Second
-	output, err := cmd.CombinedOutput()
+	var diagnostics bytes.Buffer
+	cmd.Stderr = &diagnostics
+	output, err := cmd.Output()
 	if err != nil {
-		return proof, fmt.Errorf("actual SINGLE probe: %w: %s", err, output)
+		return proof, fmt.Errorf("actual SINGLE probe: %w: stdout=%s stderr=%s", err, output, diagnostics.Bytes())
+	}
+	if diagnostics.Len() != 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "PW_NESTED_PROBE_STDERR01 %s\n", diagnostics.Bytes())
 	}
 	if err := json.Unmarshal(output, &proof); err != nil {
 		return proof, err
