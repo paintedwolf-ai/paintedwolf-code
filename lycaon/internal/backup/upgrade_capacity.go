@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/localdata"
 )
 
@@ -18,6 +19,9 @@ import (
 // needs the recovery point: a clone diverges only by what the upgrade writes
 // and the log it folds in, while a copy costs the whole store.
 func preflightUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan, capture bool) error {
+	if plan.CopyPlan() != nil {
+		return preflightRetainedUpgrade(ctx, opts, plan, capture)
+	}
 	available, known, err := availableUpgradeBytes(opts.ConfigDir)
 	if err != nil {
 		return fmt.Errorf("inspect upgrade disk space: %w", err)
@@ -53,7 +57,7 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan
 		if err != nil {
 			return err
 		}
-		cloned, err := recoveryCloneAvailable(opts.ConfigDir)
+		cloned, err := fileclone.SupportedAt(opts.ConfigDir)
 		if err != nil {
 			return err
 		}
@@ -133,7 +137,7 @@ func preflightRestore(ctx context.Context, opts StageOpts, manifest Manifest, lo
 			sourceDatabase = uint64(entry.Size)
 		}
 	}
-	cloned, err := recoveryCloneAvailable(opts.ConfigDir)
+	cloned, err := fileclone.SupportedAt(opts.ConfigDir)
 	if err != nil {
 		return err
 	}
@@ -228,4 +232,39 @@ func recoveryPayloadEstimate(ctx context.Context, root string, databaseBytes uin
 	}
 	total, err := sumSpace(total, metadata)
 	return total, metadata, err
+}
+
+// The retained replacement has no live writers. Its actual SQLite allocation
+// is capped after capture, with separate rollback and clone reservations.
+func preflightRetainedUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan, capture bool) error {
+	available, known, err := availableUpgradeBytes(opts.ConfigDir)
+	if err != nil || !known {
+		return err
+	}
+	storage, err := db.InspectUpgradeStorage(ctx, opts.SQLDB, opts.DBPath, false)
+	if err != nil {
+		return err
+	}
+	needed, err := storage.RequiredBytes(plan.ScratchBytes())
+	if err != nil {
+		return err
+	}
+	if capture {
+		links, err := recoveryBodyLinksAvailable(opts.ConfigDir)
+		if err != nil {
+			return err
+		}
+		payload, _, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, storage.Pages*storage.PageBytes, links)
+		if err != nil {
+			return err
+		}
+		if storage.CloneBytes != 0 {
+			payload -= storage.Pages * storage.PageBytes
+		}
+		needed, err = sumSpace(needed, payload)
+		if err != nil {
+			return err
+		}
+	}
+	return requireUpgradeSpace(needed, available)
 }
