@@ -90,7 +90,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	}
 	// The screened save is a file tool's transport.
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
-		if err := tc.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		if err := tc.Effects.Secrets.Precheck(ctx, nil); err != nil {
 			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.HeldHandOffReject(string(secretmatch.SurfaceFile), err))
 		}
 	}

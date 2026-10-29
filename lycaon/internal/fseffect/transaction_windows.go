@@ -336,6 +336,7 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return result, fmt.Errorf("commit replacement: %w", err)
 	}
 	committed = true
+	result.Committed = true
 	if err := injectAt(inject, stageRenamed); err != nil {
 		return result, err
 	}

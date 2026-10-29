@@ -52,10 +52,7 @@ func (r *Resolution) Redacted(included func(string) bool) {
 	}
 }
 
-// HandOff marks delivery to an executor or transport, not remote success.
-// Every consumer calls it immediately before its transport, which makes it
-// the vault's way out: a person-held value leaves only under a reviewed
-// release while its chat is unlocked, and each use extends the unlock.
+// HandOff records transport dispatch under the active release and unlock.
 func (r *Resolution) HandOff(ctx context.Context, included func(string) bool) error {
 	if r == nil {
 		return nil

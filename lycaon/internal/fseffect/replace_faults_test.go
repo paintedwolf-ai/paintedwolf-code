@@ -29,7 +29,7 @@ func TestReplaceFaultMatrixNeverLeavesPartialDestination(t *testing.T) {
 			target := filepath.Join(dir, "document.txt")
 			before, after := []byte("before\n"), []byte("after\r\n世界🐺")
 			testutil.FailErr(t, "seed destination", os.WriteFile(target, before, 0o644))
-			_, err := replace(ReplaceRequest{
+			result, err := replace(ReplaceRequest{
 				Location: PathLocation(target),
 				Source:   bytes.NewReader(after),
 				Mode:     0o644,
@@ -41,6 +41,9 @@ func TestReplaceFaultMatrixNeverLeavesPartialDestination(t *testing.T) {
 			})
 			if err == nil {
 				t.Fatal("injected fault unexpectedly succeeded")
+			}
+			if result.Committed != failure.Committed {
+				t.Fatalf("committed = %v, want %v", result.Committed, failure.Committed)
 			}
 			got, readErr := os.ReadFile(target)
 			testutil.FailErr(t, "read destination after fault", readErr)
