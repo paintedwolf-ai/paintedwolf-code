@@ -27,6 +27,7 @@ class AnalysisSetupTests(unittest.TestCase):
             scripts = root / "scripts/ci_policy"
             scripts.mkdir(parents=True)
             shutil.copyfile(ROOT / "scripts/ci_policy/provision.sh", scripts / "provision.sh")
+            shutil.copyfile(ROOT / "scripts/ci_policy/go_retry.py", scripts / "go_retry.py")
             for name in ("lycaon", "scripts/commentlint", "tools"):
                 (root / name).mkdir(parents=True)
             go = root / "tools/go"
