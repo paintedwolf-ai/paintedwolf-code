@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 
 from artifact_paths import bin_dir
+from ci_policy.go_retry import run_go
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = {
@@ -61,7 +62,7 @@ def ensure(name, root=ROOT, directory=None, compiler=None):
     print(f"Installing {name} {version} with {compiler}", flush=True)
     with tempfile.TemporaryDirectory(prefix=f".{name}-", dir=directory) as temporary:
         env = {**os.environ, "GOTOOLCHAIN": compiler, "GOBIN": temporary}
-        subprocess.run(["go", "install", f"{package}@{version}"], cwd=root / "lycaon", env=env, check=True)
+        run_go(["go", "install", f"{package}@{version}"], cwd=root / "lycaon", env=env)
         built = Path(temporary) / name
         if not matches(built, module, version, compiler):
             raise ValueError(f"{name} did not produce the declared module version and toolchain")

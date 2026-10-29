@@ -7,8 +7,8 @@ case "${1:-verification}" in
   *) echo "error: unknown CI input profile: $1" >&2; exit 2 ;;
 esac
 [[ $# -le 1 ]] || { echo "error: expected one CI input profile" >&2; exit 2; }
-(cd "$ROOT/lycaon" && go mod download)
-(cd "$ROOT/scripts/commentlint" && go mod download)
+python3 "$ROOT/scripts/ci_policy/go_retry.py" "$ROOT/lycaon"
+python3 "$ROOT/scripts/ci_policy/go_retry.py" "$ROOT/scripts/commentlint"
 [[ "${1:-verification}" != analysis ]] || exit 0
 # Lanes cannot reach the module proxy, so pinned tools are built here, not by `go run`.
 python3 "$ROOT/scripts/analysis_tools.py" ensure sqlc

@@ -122,4 +122,6 @@ class GoCachePayloadTests(unittest.TestCase):
         self.assertEqual(len(payloads), 3)
         self.assertTrue(all(path.strip() == "${{ steps.paths.outputs.gocache }}" for path in payloads))
         provision = (root / "scripts/ci_policy/provision.sh").read_text()
-        self.assertIn('go mod download', provision)
+        self.assertIn('go_retry.py" "$ROOT/lycaon"', provision)
+        retry = (root / "scripts/ci_policy/go_retry.py").read_text()
+        self.assertIn('["go", "mod", "download"]', retry)
