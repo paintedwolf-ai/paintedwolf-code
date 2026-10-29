@@ -31,7 +31,7 @@ func TestRequestPlanningPreservesFrozenThinkingBudget(t *testing.T) {
 	capture := &budgetThinkingProvider{}
 	model := modelinfo.Entry{ID: "m", MaxTokens: 16384, ContextLength: 32768, ThinkStyle: "budget_tokens",
 		Thinking: &modelinfo.ThinkingCapabilities{State: "supported", Budget: &modelinfo.ThinkingBudgetRange{Min: 1024}}}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	reg.discovery = discovery.NewCache(nil)
 	reg.discovery.Put(discoveryCacheKey("p", capture.Profile(), "", ""), []modelinfo.Entry{{ID: "m", Untyped: true}}, nil)
 	reg.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{
@@ -72,7 +72,7 @@ func (p *thinkingCaptureProvider) Stream(_ context.Context, req modelcall.Comple
 func TestRegistryThinkingBoundaryCompleteStreamAndApplication(t *testing.T) {
 	capture := &thinkingCaptureProvider{}
 	model := modelinfo.Entry{ID: "m", ThinkStyle: "effort_levels", Thinking: &modelinfo.ThinkingCapabilities{State: "supported", Efforts: []string{"high"}}}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	reg.discovery = discovery.NewCache(nil)
 	reg.discovery.Put(discoveryCacheKey("p", capture.Profile(), "", ""), []modelinfo.Entry{{ID: "m", Untyped: true}}, nil)
 	snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{
@@ -115,7 +115,7 @@ func TestRegistryThinkingBoundaryCompleteStreamAndApplication(t *testing.T) {
 
 func TestRegistryRejectsStaleThinkingBeforeSending(t *testing.T) {
 	capture := &thinkingCaptureProvider{}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	reg.discovery = discovery.NewCache(nil)
 	snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{Providers: map[string]modelcall.Provider{"p": capture}})
 	reg.snapshot.Store(snapshot)

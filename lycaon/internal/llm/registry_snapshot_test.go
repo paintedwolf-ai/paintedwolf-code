@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegistrySnapshotRejectsStaleConnectivityPublication(t *testing.T) {
-	registry := newEmptyRegistry()
+	registry := newTestRegistry()
 	oldProvider := openaicompat.New("provider", "https://old.example/v1", "old-key", []modelinfo.Entry{{ID: "old"}})
 	oldSnapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{
 		Providers:        map[string]modelcall.Provider{"provider": oldProvider},
