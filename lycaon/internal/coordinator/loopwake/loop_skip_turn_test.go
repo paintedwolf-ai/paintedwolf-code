@@ -74,7 +74,7 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 on skip turn", prompts.Load())
 	}
@@ -131,5 +131,5 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 }

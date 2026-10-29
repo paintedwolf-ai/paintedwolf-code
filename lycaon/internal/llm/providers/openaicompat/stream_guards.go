@@ -18,7 +18,7 @@ func (p *Provider) streamAttempt(ctx context.Context, req modelcall.CompletionRe
 }
 
 func (p *Provider) openStreamBody(ctx context.Context, req modelcall.CompletionRequest, body []byte, opts controlOpts) (<-chan modelcall.StreamChunk, error) {
-	req.ControlCapture.Record(body)
+	req.ControlCapture.RecordDispatch(req, body)
 	resp, err := p.postChatWithHTTPRetry(ctx, p.ResolveModel(req), body, p.streamClient, p.promptCacheRequestHeaders(req)) //nolint:bodyclose // Stream consumers close the body.
 	if err != nil {
 		if retryCh, retryErr, ok := p.retryStreamAfterFormattedError(ctx, req, opts, err); ok {

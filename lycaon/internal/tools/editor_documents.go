@@ -29,10 +29,8 @@ type EditorDocumentText struct {
 	SHA256 string
 	// BaseSHA256 is the published file the document sits on; empty when absent.
 	BaseSHA256 string
-	// Encoding and EOL are the recorded representation a save writes.
-	Encoding, EOL string
-	Dirty         bool
-	Diverged      bool
+	Dirty      bool
+	Diverged   bool
 	// Absent says the path has no file on disk; the document holds a draft
 	// for it, and a write recreates the file.
 	Absent bool

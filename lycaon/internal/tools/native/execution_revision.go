@@ -135,12 +135,7 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 		if err != nil {
 			return err
 		}
-		var current toolcontract.ExecutionRevision
-		if pin.Role == toolcontract.SourceRevision && pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
-			current, err = recaptureBytes(ctx, tctx, resolved)
-		} else {
-			_, current, err = captureRevision(ctx, tctx, resolved, pin.Role)
-		}
+		_, current, err := captureRevision(ctx, tctx, resolved, pin.Role)
 		if errors.Is(err, fs.ErrNotExist) || toolrejection.AsToolReject(err) != nil {
 			return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: pin, Cause: err}
 		}

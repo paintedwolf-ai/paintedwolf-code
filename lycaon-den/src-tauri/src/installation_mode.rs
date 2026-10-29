@@ -10,7 +10,13 @@ pub(crate) const LINUX_PACKAGE_ROOT: &str = "/opt/painted-wolf-code";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum InstallationMode {
     /// A distribution package installed the application and its entry points.
-    Package { root: PathBuf },
+    Package {
+        root: PathBuf,
+    },
+    Nix {
+        root: PathBuf,
+        output: PathBuf,
+    },
     /// A signed application bundle the person placed themselves.
     Bundle,
     /// A build run from a development or scratch location.
@@ -19,6 +25,12 @@ pub(crate) enum InstallationMode {
 
 impl InstallationMode {
     pub(crate) fn current() -> Self {
+        if let Ok(Some(generation)) = crate::linux_generation::running() {
+            return Self::Nix {
+                root: generation.root.clone(),
+                output: generation.output.clone(),
+            };
+        }
         match std::env::current_exe() {
             Ok(executable) => classify(&executable, std::env::consts::OS),
             Err(_) => Self::Developer,
@@ -28,6 +40,7 @@ impl InstallationMode {
     pub(crate) fn label(&self) -> &'static str {
         match self {
             Self::Package { .. } => "package",
+            Self::Nix { .. } => "nix",
             Self::Bundle => "bundle",
             Self::Developer => "developer",
         }
@@ -59,12 +72,29 @@ mod tests {
 
     #[test]
     fn package_root_identifies_linux_package_installations() {
-        let mode = classify(Path::new("/opt/painted-wolf-code/bin/painted-wolf-code"), "linux");
-        assert_eq!(mode, InstallationMode::Package { root: PathBuf::from(LINUX_PACKAGE_ROOT) });
+        let mode = classify(
+            Path::new("/opt/painted-wolf-code/bin/painted-wolf-code"),
+            "linux",
+        );
+        assert_eq!(
+            mode,
+            InstallationMode::Package {
+                root: PathBuf::from(LINUX_PACKAGE_ROOT)
+            }
+        );
         assert_eq!(mode.label(), "package");
-        assert_eq!(classify(Path::new("/opt/painted-wolf-code-dev/bin/app"), "linux"), InstallationMode::Developer);
-        assert_eq!(classify(Path::new("/home/me/src/target/debug/app"), "linux"), InstallationMode::Developer);
-        assert_eq!(classify(Path::new("/opt/painted-wolf-code/bin/app"), "macos"), InstallationMode::Developer);
+        assert_eq!(
+            classify(Path::new("/opt/painted-wolf-code-dev/bin/app"), "linux"),
+            InstallationMode::Developer
+        );
+        assert_eq!(
+            classify(Path::new("/home/me/src/target/debug/app"), "linux"),
+            InstallationMode::Developer
+        );
+        assert_eq!(
+            classify(Path::new("/opt/painted-wolf-code/bin/app"), "macos"),
+            InstallationMode::Developer
+        );
     }
 
     #[test]
@@ -72,7 +102,10 @@ mod tests {
         let bundle = Path::new("/Applications/Painted Wolf Code.app/Contents/MacOS/app");
         assert_eq!(classify(bundle, "macos"), InstallationMode::Bundle);
         assert_eq!(classify(bundle, "linux"), InstallationMode::Developer);
-        assert_eq!(classify(Path::new("/Users/me/target/debug/app"), "macos"), InstallationMode::Developer);
+        assert_eq!(
+            classify(Path::new("/Users/me/target/debug/app"), "macos"),
+            InstallationMode::Developer
+        );
     }
 
     #[cfg(unix)]

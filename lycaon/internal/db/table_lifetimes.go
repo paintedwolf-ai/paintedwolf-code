@@ -99,6 +99,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"history_pruned_bodies":      {Class: LifetimeCache, Reason: "pruned transcript bodies"},
 	"source_manifest_staging":    {Class: LifetimeCache, Reason: "in-flight source manifest staging"},
 	"source_manifest_chunks":     {Class: LifetimeCache, Reason: "source manifest chunks"},
+	"source_manifests":           {Class: LifetimeCache, Reason: "source tree manifests"},
 	"source_snapshots":           {Class: LifetimeCache, Reason: "re-computable source tree snapshots"},
 	"source_blob_objects":        {Class: LifetimeCache, Reason: "content-addressed blob metadata"},
 	"session_spend_warnings":     {Class: LifetimeCache, Reason: "spend warning deduplication"},
@@ -111,7 +112,6 @@ var tableLifetimes = map[string]TableLifetime{
 	"source_snapshot_heads":      {Class: LifetimeCache, Reason: "snapshot head pointers"},
 	"source_snapshot_roots":      {Class: LifetimeCache, Reason: "snapshot root references"},
 	"source_snapshot_boundaries": {Class: LifetimeCache, Reason: "snapshot boundary markers"},
-	"source_snapshot_chunks":     {Class: LifetimeCache, Reason: "snapshot chunk references"},
 
 	"invocation_program_revision_pins":         cascadeOwnedBy("invocation_program_executions"),
 	"invocation_program_revision_pin_segments": cascadeOwnedBy("invocation_program_executions"),
@@ -190,6 +190,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"source_files":                   cascadeOwnedBy("projects"),
 	"source_history_entries":         cascadeOwnedBy("projects"),
 	"source_manifest_entries":        cascadeOwnedBy("source_manifest_chunks"),
+	"source_manifest_layout":         cascadeOwnedBy("source_manifests"),
 	"source_operations":              cascadeOwnedBy("projects"),
 	"source_recovery_entries":        cascadeOwnedBy("projects"),
 	"source_recovery_objects":        cascadeOwnedBy("projects"),
