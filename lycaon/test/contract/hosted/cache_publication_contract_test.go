@@ -30,7 +30,7 @@ func TestPreparedCachesPublishBeforeLintDiagnostics(t *testing.T) {
 		}
 		if step.Name == "Record lint diagnostics" {
 			recorded = true
-			if !step.Continue || step.If != "runner.os == 'Linux'" || step.Run != "./task lint:full" {
+			if !step.Continue || !strings.Contains(step.If, "steps.state.outputs.maintenance == 'true'") || !strings.Contains(step.If, "runner.os == 'Linux'") || step.Run != "./task lint:full" {
 				t.Error("lint diagnostics must remain optional and Linux-only")
 			}
 			for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {

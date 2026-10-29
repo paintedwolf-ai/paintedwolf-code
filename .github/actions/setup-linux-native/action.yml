@@ -4,6 +4,10 @@ inputs:
   save:
     description: Publish prepared package archives from trusted main
     default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact signed archive plan was cached
+    value: ${{ steps.cache.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -17,6 +21,15 @@ runs:
       with:
         path: ${{ steps.packages.outputs.archives }}/*.deb
         key: ${{ steps.packages.outputs.key }}
+
+    - name: Report native archive lookup
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        result=miss
+        [[ "$CACHE_HIT" != true ]] || result='exact hit'
+        printf '\nNative package archives: %s.\n' "$result" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Install resolved native packages
       shell: bash

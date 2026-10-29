@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "ci-throughput",
   "disposition": "retain",
-  "reason": "The 42 modules own hosted verification planning, execution, recovery, and observation. Immutable release-source binding is distinct from daily nightly observation; source and attempt receipts preserve publication authority. Queue batching remains a separate subpackage. Retain this bounded directory without adding a second scheduler or policy state owner.",
+  "reason": "The 42 modules own hosted verification planning, execution, recovery, and observation. Immutable release-source binding is distinct from daily nightly observation; source and attempt receipts preserve publication authority. Stateless compiler payload preparation and native SDK lookup aggregation share the existing cache boundary. Queue batching remains a separate subpackage. Retain this bounded directory without adding a second scheduler or policy state owner.",
   "reviewed_commit": "aa55057184bf6cc384acf61d2793e5ae18ed8269",
   "ceiling": 42,
   "reviewed_shape": "7af8e6b50b9a976b2a06a7727bba3d38222a2b3f149ff241368267c85056ad1e",
@@ -16,6 +16,9 @@
     "scripts/verification_tests/ci/test_budget_reconciliation_execution.py": "a72289d85d8e8c6260eb663b6214dc1a166d7d05b2c523fbbe73015fe5c6143b",
     "scripts/verification_tests/ci/test_nightly_history_execution.py": "29b2ce9727ccbfb49c212bf0e4832f2f7af0febde3528b38f9a6613b7bf94cfa",
     "scripts/verification_tests/ci/test_retry_evidence_execution.py": "0f65e345aae47f2afb2f338c2ec164e352f323024216a02d0144ddf338f00d5b",
-    "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc"
+    "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc",
+    "scripts/verification_tests/ci/test_cache_payload_execution.py": "06b161615190d65a8fcfc6a38deda03da9756f63d33721e7e6f352ba767596ab",
+    "lycaon/test/contract/hosted/hosted_cache_contract_test.go": "1121f8a392057d883923f9678277acf905e3dcae400e0b3abae73c3b1bd6a815",
+    "lycaon/test/contract/hosted/cache_publication_contract_test.go": "326de5c13f3ce9c86e012ab1275515d29f3a5e2d4d5826126cda1d83d2381e9d"
   }
 }

@@ -1,9 +1,16 @@
 name: Cache notices tools
 description: Restore the pinned go-licenses and cargo-about builds that main warms
 inputs:
+  lookup-only:
+    description: Check the exact native cache identity without restoring payloads
+    default: 'false'
   save:
     description: Publish prepared tools (main only); the default restores without saving
     default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact pinned tool cache exists
+    value: ${{ steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -11,17 +18,16 @@ runs:
       id: paths
       shell: bash
       run: printf 'bin=%s\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
-
-    # The notices script reuses any installed tool, so only its exact pins restore.
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/cargo-about
           ${{ steps.paths.outputs.bin }}/go-licenses
         key: notices-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh', 'rust-toolchain.toml', 'lycaon/go.mod') }}
-    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/cargo-about

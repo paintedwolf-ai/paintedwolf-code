@@ -1,10 +1,16 @@
 name: Set up maintained OpenGrep
 description: Download or restore the pinned, verified engine release
 inputs:
+  lookup-only:
+    description: Check the pinned native cache identity without resolving the engine
+    default: 'false'
   save:
     description: Save a downloaded release (main only); every other run restores without saving
     default: 'false'
 outputs:
+  cache-hit:
+    description: Whether the exact pinned engine cache exists
+    value: ${{ steps.cache.outputs.cache-hit }}
   artifact-directory:
     description: Absolute directory containing the verified maintained artifact
     value: ${{ steps.resolve.outputs.artifact-directory }}
@@ -32,9 +38,11 @@ runs:
       with:
         path: ${{ steps.identity.outputs.cache-directory }}
         key: ${{ steps.identity.outputs.cache-key }}
+        lookup-only: ${{ inputs.lookup-only == 'true' }}
 
     - name: Resolve and verify pinned release
       id: resolve
+      if: inputs.lookup-only != 'true'
       shell: bash
       run: |
         set -euo pipefail
@@ -43,7 +51,7 @@ runs:
         printf 'artifact-directory=%s\n' "${ARTIFACT_DIR}" >> "${GITHUB_OUTPUT}"
 
     - name: Cache verified release
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.lookup-only != 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.identity.outputs.cache-directory }}

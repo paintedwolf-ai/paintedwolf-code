@@ -59,7 +59,7 @@ func TestLinuxNativeSetupRestoresExactArchivesBeforeInstallation(t *testing.T) {
 	contractcheck.FailErr(t, "decode shared setup", yaml.Unmarshal([]byte(data), &action))
 	for _, step := range action.Runs.Steps {
 		if step.Uses == "./.github/actions/setup-linux-native" &&
-			step.If == "runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')" && step.With["save"] == "${{ inputs.save-caches }}" {
+			step.If == "inputs.lookup-only != 'true' && (runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true'))" && step.With["save"] == "${{ inputs.save-caches }}" {
 			return
 		}
 	}
