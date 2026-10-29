@@ -191,7 +191,13 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 		}
 		var current toolcontract.ExecutionRevision
 		if pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
-			current, err = e.recaptureBytes(ctx, tctx, resolved)
+			var linked bool
+			if pin.Role == toolcontract.DestinationRevision && resolved.Root.Path != "" {
+				current, linked, err = linkRevision(resolved, toolcontract.ExecutionRevision{Role: pin.Role, Basis: pin.Basis, RootID: pin.RootID, Path: pin.Path})
+			}
+			if err == nil && !linked {
+				current, err = e.recaptureBytes(ctx, tctx, resolved)
+			}
 		} else if pin.Role == toolcontract.SourceRevision {
 			current, err = e.recaptureSource(ctx, tctx, resolved)
 		} else {
@@ -216,9 +222,11 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 
 func unsavedDraftConflict(resolved projectpaths.Resolved, doc tools.EditorDocumentState) *ExecutionRevisionConflict {
 	root, rel := revisionLocation(resolved)
+
 	pinned := toolcontract.ExecutionRevision{Role: toolcontract.DestinationRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, DiskSHA256: doc.BaseSHA256, ContentSHA256: doc.BaseSHA256}
 	if doc.Absent || doc.BaseSHA256 == "" {
 		pinned.Mode = toolcontract.AbsentRevision
+
 	}
 	current := toolcontract.ExecutionRevision{Role: toolcontract.DestinationRevision, Mode: toolcontract.AcceptedDocumentRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, DocumentID: doc.ID, DocumentRevision: doc.Revision, DiskSHA256: doc.BaseSHA256, ContentSHA256: ""}
 	return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: pinned, Current: current, UnsavedDraft: true}
@@ -233,6 +241,11 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 	}
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: toolcontract.DestinationRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel}
+	if resolved.Root.Path != "" {
+		if link, linked, err := linkRevision(resolved, revision); err != nil || linked {
+			return sourceview.Text{}, link, err
+		}
+	}
 	st, err := sourceview.LoadText(ctx, "write", sourceview.AccessMutate, tctx, resolved)
 	if rawDestination(err) {
 		return captureRawRevision(resolved, revision)
@@ -256,6 +269,32 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 		revision.DiskSHA256 = st.Disk.RawSHA256()
 	}
 	return st, revision, revision.Validate()
+}
+
+func linkRevision(resolved projectpaths.Resolved, revision toolcontract.ExecutionRevision) (toolcontract.ExecutionRevision, bool, error) {
+	root, err := os.OpenRoot(resolved.Root.Path)
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	defer root.Close()
+	info, err := root.Lstat(filepath.FromSlash(resolved.ScopeRel))
+	if errors.Is(err, os.ErrNotExist) {
+		return toolcontract.ExecutionRevision{}, false, nil
+	}
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return toolcontract.ExecutionRevision{}, false, nil
+	}
+	target, err := root.Readlink(filepath.FromSlash(resolved.ScopeRel))
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	digest := textfile.SHA256([]byte(target))
+	revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.OriginalEncodedBytes
+	revision.DiskSHA256, revision.ContentSHA256, revision.ContentBytes = digest, digest, int64(len(target))
+	return revision, true, revision.Validate()
 }
 
 // revisionLocation names a path by its attached root, or absolutely when it

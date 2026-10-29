@@ -324,7 +324,13 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		}
 		afterSize = parent.ByteSize
 	}
+
+	if state == "content" && in.EntryKind == EntryKindLink {
+		state = "link"
+	}
+
 	afterVersionID, err := s.insertVersionWithCache(ctx, q, versionSpec{
+
 		FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 		ParentVersionID:      parentVersionID,
 		DerivedFromVersionID: in.DerivedFromVersionID, OperationID: operationID,

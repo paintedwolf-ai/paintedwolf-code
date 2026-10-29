@@ -2801,7 +2801,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Replace routine schema with staged command redirects and tee",
-      "behavior_change_or_retention": "Program redirects (>, >>, tee, cat <<'EOF' > file) and sed -i use captured execution revisions with Yrs CRDT sync, syntax guards, heredoc receipt compaction, and recovery; retire standalone write from default offers",
+      "behavior_change_or_retention": "Program redirects (>, >>, tee, cat <<'EOF' > file) and sed -i use captured execution revisions with Yrs CRDT sync, syntax guards, heredoc receipt compaction, and recovery; retire standalone write from default offers; ln -s creates confined, recorded symbolic links and hard links are refused",
       "existing_semantic_difference": "Prior read, shared-document edits, content review, syntax guards, attributed publication",
       "implementing_issues": [
         "P03",
@@ -2810,11 +2810,13 @@
         "P16",
         "P23",
         "P32",
-        "P33"
+        "P33",
+        "P27"
       ],
       "existing_rejection_code": "USE_WRITE_NATIVE",
       "command_forms": [
-        "tee"
+        "tee",
+        "ln"
       ]
     }
   ]

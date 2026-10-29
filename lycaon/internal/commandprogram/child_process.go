@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // ChildProcess is what the program asks of an external child launched for
@@ -15,7 +13,7 @@ import (
 // account an enclosing time reads. Prefix commands pass it to their inner
 // command unchanged; native owners never launch with it.
 type ChildProcess struct {
-	Limits       []confine.ResourceLimit
+	Limits       []ResourceLimit
 	IgnoreHangup bool
 	Signals      *SignalRelay
 	Times        *ProcessTimes

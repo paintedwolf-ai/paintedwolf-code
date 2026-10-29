@@ -122,7 +122,9 @@ func TestAgentRemovalOfALinkKeepsItsTarget(t *testing.T) {
 	refuseTrash(t, service)
 	testutil.FailErr(t, "seed target", os.WriteFile(filepath.Join(root, "target.txt"), []byte("target"), 0o600))
 	testutil.FailErr(t, "seed link", os.Symlink("target.txt", filepath.Join(root, "link")))
-	id, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "link", ""))
+
+	id, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "link", textfile.SHA256([]byte("target.txt"))))
+
 	testutil.FailErr(t, "remove link", err)
 	assertSourceHistoryFile(t, root, "target.txt", "target")
 	undoHistoryHead(t, service, p, id)

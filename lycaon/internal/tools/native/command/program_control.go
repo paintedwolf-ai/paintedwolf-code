@@ -107,7 +107,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
-		return prepareChildFailure(streams, spec.Name, request, err)
+		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
@@ -126,11 +126,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!result.OwnerInvoked || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeLimitRefusal(streams, spec.Name, reject)
-			} else {
-				writeRejectRefusal(streams, spec.Name, runErr)
-			}
+			d.writeStatementRefusal(streams, spec.Name, runErr)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -170,6 +166,12 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	reject := toolrejection.AsToolReject(report.Cause)
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
+	}
+	if programResourceRefusal(reject) {
+		if d.claimStopLine() {
+			writeLimitRefusal(w, report.Operation, report.Operand, reject)
+		}
+		return
 	}
 	var policyCopy map[string]string
 	if refusal, ok := guidance.RefusalFromError(report.Cause); ok {

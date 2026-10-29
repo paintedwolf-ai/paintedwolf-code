@@ -65,9 +65,24 @@ type ReplaceRequest struct {
 type RemoveRequest struct {
 	Location
 	BeforeCommit func(Target) error
+	// LinkSHA256 pins the text of a symbolic link removed as an entry.
+	LinkSHA256 string
 }
 
+// LinkRequest publishes a symbolic link as an entry. Target is stored exactly
+// as supplied; callers must admit its resolved address before publication.
+type LinkRequest struct {
+	Location
+	Target       string
+	Replace      bool
+	BeforeCommit func(Target) error
+}
+
+// Link creates or atomically replaces a symbolic link through a held parent.
+func Link(req LinkRequest) error { return platformLink(req) }
+
 // ModeUpdateRequest describes a guarded permission change on one held entry.
+
 type ModeUpdateRequest struct {
 	Location
 	Update       func(os.FileMode) os.FileMode

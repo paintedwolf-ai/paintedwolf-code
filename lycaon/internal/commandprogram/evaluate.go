@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -41,9 +40,8 @@ type EvaluationPorts struct {
 	ScratchDir string
 	// Clock times time reports; nil is the system clock.
 	Clock Clock
-	// ResourceLimits reads the host's limit for a resource ulimit reports;
-	// nil reads this process's own.
-	ResourceLimits func(resource string) (confine.ResourceLimit, error)
+	// ResourceLimits is the host's resource-limit owner; nil provides none.
+	ResourceLimits ResourceLimits
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host

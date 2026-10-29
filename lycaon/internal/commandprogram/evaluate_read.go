@@ -80,7 +80,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		}
 		ifs, set := f.Variable("IFS")
 		if !set {
-			ifs = " \t\n"
+			ifs = defaultIFS
 		}
 		values := splitReadFields(record, escaped, len(names), !hasTargets && raw, ifs)
 		for i, name := range names {

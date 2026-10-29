@@ -2,9 +2,20 @@
 
 package confine
 
-import "math"
+import (
+	"fmt"
+	"slices"
+)
 
-// ReadResourceLimit reports no per-process limit: Windows has no rlimits.
+// ReadResourceLimit reports ErrLimitUnsupported: Windows has no per-process
+// resource limits.
 func ReadResourceLimit(resource string) (ResourceLimit, error) {
-	return ResourceLimit{Resource: resource, Soft: math.MaxUint64, Hard: math.MaxUint64}, nil
+	if !slices.Contains(limitResources(), resource) {
+		return ResourceLimit{}, fmt.Errorf("unknown resource %q", resource)
+	}
+	return ResourceLimit{}, ErrLimitUnsupported
 }
+
+// declaredResourceLimits: Windows has no per-process resource limits, so every
+// resource is unsupported.
+func declaredResourceLimits() map[string]LimitCapability { return map[string]LimitCapability{} }
