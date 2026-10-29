@@ -22,6 +22,8 @@ func main() {
 	flag.DurationVar(&cfg.soak, "soak", 0, "repeat mixed work for this duration")
 	flag.BoolVar(&cfg.enforce, "enforce", false, "fail when a performance budget is exceeded")
 	flag.BoolVar(&cfg.keep, "keep", false, "keep the scratch run directory")
+	flag.BoolVar(&cfg.installed, "installed", false,
+		"drive an installed release engine in a disposable account whose release configuration does not exist yet")
 	flag.Parse()
 
 	if cfg.binary == "" {
@@ -30,6 +32,10 @@ func main() {
 	}
 	if cfg.output == "" {
 		cfg.output = fmt.Sprintf("sidecar-perf-%s.json", time.Now().UTC().Format("20060102T150405Z"))
+	}
+	if cfg.installed && cfg.soak > 0 {
+		fmt.Fprintln(os.Stderr, "lycaon-perf: --installed measures release-valid scenarios; --soak needs the mock provider")
+		os.Exit(2)
 	}
 	if cfg.iterations < 1 || cfg.prompts < 1 || cfg.soak < 0 {
 		fmt.Fprintln(os.Stderr, "lycaon-perf: --iterations and --prompts must be positive; --soak cannot be negative")

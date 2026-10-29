@@ -42,7 +42,7 @@ func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 		t.Fatal("read missing from tools/schemas")
 	}
 	full := tools.ToolMeta{Name: "read", Description: meta.Description, ArgsSchema: meta.ArgsSchema}
-	trimmed := tools.TrimCoordinatorToolMeta(full)
+	trimmed := tools.ProjectProviderToolMeta(full)
 	if err := tools.ValidateProviderArgsSchema(trimmed); err != nil {
 		contractcheck.FailErr(t, "validate trimmed coordinator read schema", err)
 	}
@@ -66,7 +66,7 @@ func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 				catalogRoots[name] = append(catalogRoots[name], key)
 			}
 		}
-		trimmed := tools.TrimCoordinatorToolMeta(tools.ToolMeta{
+		trimmed := tools.ProjectProviderToolMeta(tools.ToolMeta{
 			Name:        name,
 			Description: yamlMeta.Description,
 			ArgsSchema:  yamlMeta.ArgsSchema,
@@ -88,7 +88,7 @@ func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 	if !ok {
 		t.Fatal("command missing from tools/schemas")
 	}
-	trimmedCommand := tools.TrimCoordinatorToolMeta(tools.ToolMeta{
+	trimmedCommand := tools.ProjectProviderToolMeta(tools.ToolMeta{
 		Name: "command", Description: command.Description, ArgsSchema: command.ArgsSchema,
 	})
 	directIP := nestedSchema(t, trimmedCommand.ArgsSchema, "properties", "capability_request", "properties", "direct_ip")

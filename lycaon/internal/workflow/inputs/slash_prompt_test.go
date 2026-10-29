@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/workflow"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
@@ -121,7 +120,6 @@ func TestHumanStartLeasesStartingWorkflowActivity(t *testing.T) {
 	}
 
 	var edges []api.ActivityEvent
-	deadline := time.After(2 * time.Second)
 	for len(edges) < 2 {
 		select {
 		case envelope := <-stream:
@@ -133,7 +131,7 @@ func TestHumanStartLeasesStartingWorkflowActivity(t *testing.T) {
 			if event.Kind == api.ActivityKindStartingWorkflow {
 				edges = append(edges, event)
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("timeout: %d starting_workflow edges, want 2", len(edges))
 		}
 	}

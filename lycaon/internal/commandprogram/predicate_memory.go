@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type predicateQuota struct {
 	ctx           context.Context
-	port          *toolcontract.ProgramMemory
+	port          PredicateMemory
 	maximum, used int64
 	releases      []func()
 }
@@ -23,6 +21,9 @@ func (r PredicateRuntime) withQuota(ctx context.Context) (PredicateRuntime, erro
 	if r.Memory != nil {
 		var err error
 		release, err = r.Memory.Reserve(ctx, 512)
+		if err == nil && release == nil {
+			err = errors.New("predicate memory admission returned no lease")
+		}
 		if err != nil {
 			return r, err
 		}
@@ -43,6 +44,9 @@ func (q *predicateQuota) alloc(n int64) error {
 	}
 	if q.port != nil {
 		release, err := q.port.Reserve(q.ctx, n)
+		if err == nil && release == nil {
+			err = errors.New("predicate memory admission returned no lease")
+		}
 		if err != nil {
 			return err
 		}

@@ -22,7 +22,7 @@ func (e *SourceIntegrityError) Error() string {
 // LoadSourceUnit captures through the source owner when the source statement is
 // reached, verifies exact bytes, and validates the entire captured syntax unit.
 // It performs no dispatch, aggregate settlement or replay of the parent program.
-func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolcontract.OperationInvocation, path string, memory *toolcontract.ProgramMemory) (*commandsurface.ParsedProgram, CapturedSource, error) {
+func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolcontract.OperationInvocation, path string, memory commandsurface.ProgramMemoryAdmission) (*commandsurface.ParsedProgram, CapturedSource, error) {
 	if invocation.Kind != toolcontract.ProgramChildInvocation {
 		return nil, CapturedSource{}, fmt.Errorf("source unit requires a program-child invocation")
 	}
@@ -32,10 +32,21 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	if capture == nil {
 		return nil, CapturedSource{}, fmt.Errorf("source capture binding unavailable")
 	}
-	if memory == nil {
-		return nil, CapturedSource{}, fmt.Errorf("source unit requires program memory admission")
+	parser, err := commandsurface.NewProgramParser(ctx, memory)
+	if err != nil {
+		return nil, CapturedSource{}, err
 	}
+	defer parser.Close()
 	maximum := commandsurface.SyntaxUnitByteLimit(true)
+	releaseCapture, err := memory.ReserveProgramState(ctx, 2*maximum)
+	if err != nil {
+		return nil, CapturedSource{}, err
+	}
+	if releaseCapture == nil {
+		return nil, CapturedSource{}, fmt.Errorf("source capture admission returned no release")
+	}
+	// This covers the producer buffer and clone until the parsed state lease exists.
+	defer releaseCapture()
 	source, err := capture.Capture(ctx, invocation, SourceCaptureRequest{Path: path, MaximumBytes: maximum, Representation: toolcontract.UTF8SourceBytes})
 	if err != nil {
 		return nil, CapturedSource{}, err
@@ -46,15 +57,15 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	source.Bytes = bytes.Clone(source.Bytes)
 	pin := source.Pin
 	if pin.Representation != toolcontract.UTF8SourceBytes {
-		return nil, source, &commandsurface.SyntaxDiagnostic{Code: "COMMAND_OPERAND_INVALID", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, Expected: "source scripts captured as UTF-8 without BOM"}
+		return nil, CapturedSource{Pin: source.Pin}, &commandsurface.SyntaxDiagnostic{Code: "COMMAND_OPERAND_INVALID", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, Expected: "source scripts captured as UTF-8 without BOM"}
 	}
 	sum := sha256.Sum256(source.Bytes)
 	if pin.SourceID == "" || pin.Revision == "" || pin.StartByte != 0 || pin.EndByte != int64(len(source.Bytes)) || pin.SHA256 != hex.EncodeToString(sum[:]) {
 		return nil, CapturedSource{}, &SourceIntegrityError{SourceID: pin.SourceID}
 	}
-	parsed, err := commandsurface.ParseAdmitted(ctx, memory, source.Bytes, commandsurface.ParseOptions{SourceName: pin.SourceID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: invocation.CatalogDigest})
+	parsed, err := parser.Parse(source.Bytes, commandsurface.ParseOptions{SourceName: pin.SourceID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: invocation.CatalogDigest})
 	if err != nil {
-		return nil, source, err
+		return nil, CapturedSource{Pin: source.Pin}, err
 	}
 	return parsed, source, nil
 }
