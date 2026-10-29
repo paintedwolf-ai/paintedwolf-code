@@ -136,8 +136,8 @@ func fixtureSendWithCoverage(send func(int, []byte, []byte, unix.Sockaddr, int) 
 `
 
 func prepareLaunchCoverage(directory, uidText, gidText string) error {
-	uid, err := strconv.Atoi(uidText)
-	if err != nil || uid <= 0 {
+	uid, err := strconv.ParseUint(uidText, 10, 32)
+	if err != nil || uid == 0 {
 		return fmt.Errorf("invalid fixture coverage caller")
 	}
 	gid, err := strconv.Atoi(gidText)
@@ -145,29 +145,30 @@ func prepareLaunchCoverage(directory, uidText, gidText string) error {
 		return fmt.Errorf("invalid fixture coverage group")
 	}
 	collector := filepath.Join(directory, "coverage")
+	// #nosec G301 -- only the fixture caller and initial root group can enter this data collector.
 	if err := os.Mkdir(collector, 0o770); err != nil {
 		return err
 	}
 	// Initial U_view startup has group 0 but no DAC authority over the host
 	// filesystem; after its seal the same runtime has the caller's UID.
-	if err := os.Chown(collector, uid, 0); err != nil {
+	if err := os.Chown(collector, int(uid), 0); err != nil {
 		return err
 	}
-	return os.Chmod(collector, 0o770)
+	return os.Chmod(collector, 0o770) // #nosec G302 -- fixture directory access spans its real credential transition.
 }
 
 // Root-created counter files can inherit the launch's private umask. Expose
 // only single-link runtime files in this fixture collector after settlement.
 func makeLaunchCoverageReadable(directory, uidText string) error {
-	uid, err := strconv.Atoi(uidText)
-	if err != nil || uid <= 0 {
+	uid, err := strconv.ParseUint(uidText, 10, 32)
+	if err != nil || uid == 0 {
 		return fmt.Errorf("invalid fixture coverage caller")
 	}
 	fd, err := unix.Open(filepath.Join(directory, "coverage"), unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	var collector unix.Stat_t
 	if err := unix.Fstat(fd, &collector); err != nil || collector.Uid != uint32(uid) || collector.Gid != 0 || collector.Mode&0o777 != 0o770 {
 		return fmt.Errorf("native fixture collector custody changed")

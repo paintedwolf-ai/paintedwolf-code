@@ -20,6 +20,10 @@ func captureFixtureOrdinaryBroker() (lifecycleRole, error) {
 	if err != nil || bootstrap <= 1 {
 		return lifecycleRole{}, errors.New("invalid owned fixture bootstrap")
 	}
+	uid, err := strconv.ParseUint(os.Getenv(fixtureUIDEnv), 10, 32)
+	if err != nil || uid == 0 {
+		return lifecycleRole{}, errors.New("invalid owned fixture caller")
+	}
 	generation, err := CaptureGeneration()
 	if err != nil {
 		return lifecycleRole{}, err
@@ -40,18 +44,24 @@ func captureFixtureOrdinaryBroker() (lifecycleRole, error) {
 			return lifecycleRole{}, err
 		}
 		matched, err := matchFixtureMountRole(directory, bootstrap, BrokerAgentArgument, generation.Entry)
-		_ = unix.Close(directory)
 		if err != nil {
+			_ = unix.Close(directory)
 			return lifecycleRole{}, err
 		}
 		if matched {
 			birth, err := lifecycleBirth(pid)
 			if err != nil || birth.Parent != bootstrap {
+				_ = unix.Close(directory)
 				return lifecycleRole{}, errors.New("ordinary broker birth changed")
+			}
+			if err := verifyFixtureBirth(directory, pid, birth.Start, uint32(uid)); err != nil {
+				_ = unix.Close(directory)
+				return lifecycleRole{}, err
 			}
 			birth.Role = "broker"
 			selected = append(selected, birth)
 		}
+		_ = unix.Close(directory)
 	}
 	if len(selected) != 1 {
 		return lifecycleRole{}, errors.New("owned bootstrap does not have one selected ordinary broker")

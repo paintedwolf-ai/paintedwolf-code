@@ -113,10 +113,25 @@ func checkPrivateMountPipeline(directory, uidText, gidText string) error {
 	if err := expectMountViewReady(int(view.health.Fd()), uint64(len(prepared.plan.initial))+3); err != nil {
 		return err
 	}
+	var retired []unix.PollFd
+	for _, role := range view.pidfds {
+		pin, err := unix.Dup(int(role.Fd()))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(pin) }()
+		// #nosec G115 -- duplicated descriptors are bounded by the process limit.
+		retired = append(retired, unix.PollFd{Fd: int32(pin), Events: unix.POLLIN})
+	}
 	view.abort()
 	settled = true
-	if view.watcher.ProcessState == nil || view.intake.ProcessState == nil {
-		return errors.New("private mount roles did not settle after their lifetime ended")
+	if _, err := unix.Poll(retired, 0); err != nil {
+		return err
+	}
+	for _, role := range retired {
+		if role.Revents&unix.POLLIN == 0 || role.Revents&(unix.POLLERR|unix.POLLNVAL) != 0 {
+			return errors.New("private mount roles did not settle after their lifetime ended")
+		}
 	}
 	return nil
 }
