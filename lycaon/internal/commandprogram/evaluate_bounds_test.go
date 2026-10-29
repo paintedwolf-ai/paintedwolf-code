@@ -53,7 +53,7 @@ func TestPipelineKeepsEveryProducerOutcome(t *testing.T) {
 
 func TestPipelineExternalClosureIsNotNativeClosure(t *testing.T) {
 	f := newEvalFixture(t)
-	out, err := f.run(t, t.Context(), "yes | head -n 1")
+	out, err := f.run(t, t.Context(), "external -- yes | head -n 1")
 	if err != nil {
 		t.Fatal(err)
 	}
