@@ -2,10 +2,10 @@ package mutation
 
 import (
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -28,7 +28,7 @@ func runEdit(inv *invocation) error {
 		return inv.usage(inv.name(), "--new-string TEXT")
 	}
 	if oldString == newString {
-		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"reason": "old_string and new_string must differ"}}
+		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"detail": "old_string and new_string must differ", "conflict": true}}
 	}
 	bound, err := inv.bind(path, true)
 	if err != nil {
@@ -163,20 +163,11 @@ func runCodeRewrite(inv *invocation) error {
 			return inv.usage(path, "a file path, or pass --recursive for a directory")
 		}
 		targets = nil
-		if walkErr := filepath.WalkDir(bound.Resolved.Abs, func(entry string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		if walkErr := sandbox.SurveyWalk(inv.ctx, bound.Resolved.Abs, sandbox.SurveyOptions{}, func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+			if entry.DirEntry.Type().IsRegular() && native.SupportsRewriteLanguage(entry.Abs) {
+				targets = append(targets, entry.Abs)
 			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.Type().IsRegular() && native.SupportsRewriteLanguage(entry) {
-				targets = append(targets, entry)
-			}
-			return nil
+			return sandbox.SurveyContinue, nil
 		}); walkErr != nil {
 			return walkErr
 		}

@@ -210,8 +210,16 @@ A decision that arrives after its deadline is worth less than the fallback,
 which costs nothing. So the engine serves only on a device fast enough for
 turn decisions, and otherwise does not serve at all. At its first launch on a
 machine it runs a reference batch on every device it can reach (MLX on Apple
-silicon, each Vulkan GPU, the CPU) and keeps the fastest one within
-`engine.reference_ms` in `decisions.yaml`. Each measurement runs in a child
+silicon, each hardware Vulkan GPU, and on macOS the CPU) and keeps the fastest
+one within `engine.reference_ms` in `decisions.yaml`.
+
+On Linux the engine runs on a GPU only. Vulkan's own device facts decide which
+devices exist: a hardware GPU is a candidate, and software rasterizers such as
+lavapipe and the processor are not. A machine with no such GPU never measures
+anything: the engine exits with its no-GPU status, the host reports `no_gpu`
+through the `decision_engine` preflight probe, and the app says the model needs
+a graphics card with Vulkan support. The 1000 ms reference budget applies to
+that Vulkan path, as it does to MLX on macOS. Each measurement runs in a child
 process (`bialy probe`), so a graphics driver that crashes costs its device,
 not the engine; a launch that dies loading its chosen device is remembered,
 and the next launch measures again without it. The device's kind decides
@@ -225,10 +233,10 @@ after waiting for it.
 The verdict and the compiled GPU kernels persist under the device
 configuration's `cache/decide/`, keyed by the engine build, the checkpoint,
 the requirement and the hardware, so later launches load the chosen device
-directly; a new GPU, driver target or app version measures again. Where no
-device qualifies, the engine exits with a dedicated status, the host reports
-`no_capable_device` through the `decision_engine` preflight probe, and every
-decision falls back without waiting. `LYCAON_DECIDE_DEVICE` pins a device for
+directly; a new GPU, driver target or app version measures again. Where a
+device exists but none qualifies, the engine exits with a dedicated status, the
+host reports `no_capable_device` through the `decision_engine` preflight probe,
+and every decision falls back without waiting, as it does for `no_gpu`. `LYCAON_DECIDE_DEVICE` pins a device for
 development, whatever its speed.
 
 Bialy retains the `pw-decide-row/1`, `pw-decide-head/1`, and

@@ -3,7 +3,9 @@ package session
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/attention"
 	"github.com/lycaon/lycaon/internal/events"
@@ -31,6 +33,9 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 	child, err := mem.CreateChild(ctx, doomed, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
+	archived, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	testutil.FailErr(t, "create archived session", err)
+	testutil.FailErr(t, "archive session", mem.UpdateSession(ctx, archived.ID, func(s *api.Session) { now := time.Now(); s.ArchivedAt = &now }))
 	hub := events.NewMemoryHub()
 	src := &attention.Source{Sessions: mem}
 	pub := &events.Publisher{Hub: hub, Attention: src}
@@ -43,7 +48,14 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 		t.Fatal("errored session must appear on attention before project delete")
 	}
 
-	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, p.ID))
+	var progress [][2]int
+	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, p.ID, func(done, total int) { progress = append(progress, [2]int{done, total}) }))
+	if !reflect.DeepEqual(progress, [][2]int{{0, 3}, {1, 3}, {2, 3}, {3, 3}}) {
+		t.Fatalf("chat progress = %v", progress)
+	}
+	if _, err := mem.Get(ctx, archived.ID); !errors.Is(err, store.ErrSessionNotFound) {
+		t.Fatalf("archived chat survived: %v", err)
+	}
 
 	if _, err := mem.Get(ctx, doomed.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("doomed session still present: %v", err)
@@ -81,7 +93,7 @@ func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 	if err := mgr.Chats.Delete(ctx, sess.ID); !errors.Is(err, chats.ErrSessionWorktreeBound) {
 		t.Fatalf("DeleteSession = %v, want chats.ErrSessionWorktreeBound", err)
 	}
-	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, "p1"))
+	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, "p1", nil))
 	if _, err := mem.Get(ctx, sess.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("worktree-bound session survived project retire: %v", err)
 	}

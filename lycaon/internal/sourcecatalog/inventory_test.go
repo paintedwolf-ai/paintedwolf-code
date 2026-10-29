@@ -65,7 +65,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 	defer cancel()
 	finished := make(chan error, 1)
 	go func() { finished <- walk.publish(ctx) }()
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		store.mu.Lock()
 		defer store.mu.Unlock()
 		return store.status.State == StateReady && !store.status.Complete
@@ -118,7 +118,7 @@ func TestInventoryCompletesWhileSearchWriterIsOccupied(t *testing.T) {
 
 func waitInventoryExtent(t *testing.T, catalog *Catalog, root Root, want int64) {
 	t.Helper()
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 		if err != nil {
 			return false
@@ -176,6 +176,6 @@ func TestInitialInventoryFailureSettlesWaitersAndRecovers(t *testing.T) {
 		t.Fatalf("initial inventory must settle with its failure, got %v (context %v)", err, ctx.Err())
 	}
 	testutil.FailErr(t, "restore root", os.Rename(moved, root.Path))
-	testutil.WaitFor(t, 5*time.Second, func() bool { return store.awaitInitialInventory(ctx) == nil })
+	testutil.WaitFor(t, func() bool { return store.awaitInitialInventory(ctx) == nil })
 	waitInventoryExtent(t, catalog, root, 2)
 }

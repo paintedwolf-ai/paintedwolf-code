@@ -182,7 +182,7 @@
           }
         }
       },
-      "notes": "GNU sed with BSD spellings that do not collide; sed.json defines the grammar. -i edits each file in place through staged pinned publication, with an attached backup suffix (-i.bak, GNU) or a following empty word (BSD -i ''); a suffix containing * names the backup with the file name substituted. -s and -i number lines per file. -z separates records with NUL. w FILE and s///w FILE publish through the same owner. Default BRE, -E/-r ERE, on the shared POSIX engine. BSD -i SUFFIX (a separate word that is not a valid script, followed by the script) and -I SUFFIX are accepted too; -u is accepted (output is never held back).",
+      "notes": "Sed supports the GNU grammar and noncolliding BSD spellings; sed.json defines the grammar. -i edits each file in place through staged pinned publication, with an attached backup suffix (-i.bak, GNU) or a following empty word (BSD -i ''); a suffix containing * names the backup with the file name substituted. -s and -i number lines per file. -z separates records with NUL. w FILE and s///w FILE publish through the same owner. Default BRE, -E/-r ERE, on the shared POSIX engine. BSD -i SUFFIX (a separate word that is not a valid script, followed by the script) and -I SUFFIX are accepted too; -u is accepted (output is never held back).",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
