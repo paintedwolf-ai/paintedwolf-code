@@ -163,6 +163,25 @@ class LinuxWithdrawalPlanTests(unittest.TestCase):
             self.assertFalse(output.exists())
         self.assertEqual(self.store, snapshot)
 
+    def test_only_re_signed_copies_of_one_apt_generation_share_a_version(self):
+        release = lambda value: [{"path": "dists/stable/" + name, "sha256": value * 64, "size": 1}
+                                 for name in ("Release", "InRelease", "Release.gpg")]
+        original = self.earlier("deb", "stable", None)
+        original = {**original, "objects": original["objects"] + release("1")}
+        resigned = {**original, "objects": original["objects"][:1] + release("2")}
+        for value in (original, resigned):
+            self.store[f"linux/generations/{identity(value)}/generation.json"] = value
+        self.offer("deb", "stable", None)
+        plan = halt_distribution("2.0.2", "2.0.1", channels=("stable",))
+        enumerate_all = lambda prefix: generation_prefixes(self.store)
+        [row] = [row for row in prepare(plan, read=self.read, enumerate_prefixes=enumerate_all) if row["action"] == "withdraw"]
+        self.assertEqual(row["replacement"], min(identity(original), identity(resigned)))
+        other = {**original, "objects": [{**original["objects"][0], "sha256": "3" * 64}] + release("1")}
+        self.store[f"linux/generations/{identity(other)}/generation.json"] = other
+        with self.assertRaises(repository_withdrawal.MissingRetainedGeneration) as failure:
+            prepare(plan, read=self.read, enumerate_prefixes=enumerate_all)
+        self.assertEqual(failure.exception.reason["code"], "NATIVE_REPLACEMENT_AMBIGUOUS")
+
     def test_retained_generation_tamper_and_unknown_plan_refuse_before_mutation(self):
         earlier = self.earlier("deb", "stable", None)
         self.offer("deb", "stable", None)

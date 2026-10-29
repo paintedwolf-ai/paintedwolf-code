@@ -147,6 +147,15 @@ class NativeRepositoryAssemblyTests(unittest.TestCase):
                              origin.objects[f"{PREFIX}/generations/{published['1.2.2']['generation']}/dists/preview/main/binary-amd64/{name}"])
         self.assertTrue(all(row["action"] == "keep" for row in repository_withdrawal.prepare(
             halt_distribution("1.2.3", "1.2.2", channels=("preview",)), base_url=ORIGIN, transport=origin, **options)))
+        # A later halt selecting 1.2.2 again finds the original and its re-signed copy: one apt restore.
+        receipt, directory = self.assemble("deb", manifest("deb", self.inputs, version="1.2.4"), self.work / "1.2.4")
+        publish_r2(receipt, directory, self.catalog, PREFIX, ORIGIN, restore["replacement"], True, transport=origin)
+        rows = repository_withdrawal.prepare(halt_distribution("1.2.4", "1.2.2", channels=("preview",)),
+                                             base_url=ORIGIN, transport=origin, **options)
+        [again] = [row for row in rows if row["action"] == "withdraw"]
+        self.assertEqual(again["receipt"]["version"], "1.2.2")
+        self.assertIn(again["replacement"], {restore["replacement"], restore["restores"]})
+        self.assertTrue(again["resign"])
 
     def test_signed_generations_admit_and_retain_post_signing_package_identity(self):
         for family in ["deb", "rpm"]:

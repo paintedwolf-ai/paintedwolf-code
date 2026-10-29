@@ -100,6 +100,9 @@ def prepare(distribution: dict, *, read=current, enumerate_prefixes=None, rehear
                              and receipt["channel"] == channel and receipt.get("architecture") == architecture
                              and receipt["rehearsal"] is rehearsal and receipt["packages"]]
                 matches = [receipt for receipt in available if receipt["version"] == good]
+                if family == "deb" and len(matches) > 1 and all(restores_same(matches[0], other) for other in matches[1:]):
+                    # Earlier halts re-signed this apt generation; every copy holds the same indexes and packages.
+                    matches = [min(matches, key=lambda receipt: hashlib.sha256(encoded(receipt)).hexdigest())]
                 if len(matches) != 1:
                     raise MissingRetainedGeneration(family, channel, architecture, good,
                         {receipt["version"] for receipt in available},
@@ -120,6 +123,14 @@ def prepare(distribution: dict, *, read=current, enumerate_prefixes=None, rehear
                          "active": active["generation"], "replacement": hashlib.sha256(encoded(receipt)).hexdigest(),
                          "receipt": receipt, "resign": family == "deb" and bool(receipt["packages"])})
     return rows + kept
+
+
+def restores_same(retained: dict, other: dict) -> bool:
+    try:
+        native_repositories.same_restore(retained, other)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
 
 
 def retained_path(directory: Path, item: dict) -> Path:
