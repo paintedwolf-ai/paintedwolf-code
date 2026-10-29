@@ -118,7 +118,7 @@ class ManualDriverTests(unittest.TestCase):
     def test_approval_wait_and_abort_are_session_scoped(self):
         driver, first, _, output = self.fixture()
         driver.client.pending.side_effect = [{"pending": False}, first]
-        driver.client.request.side_effect = [{"status": "waiting"}]
+        driver.client.request.side_effect = [{"status": "busy"}]
         self.assertEqual(driver.next_request(), first)
         self.assertIn("approval", output[0])
         driver, _, _, _ = self.fixture()

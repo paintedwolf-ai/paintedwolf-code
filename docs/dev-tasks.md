@@ -331,7 +331,7 @@ The authenticated non-LLM `/harness/*` fixture controls are available in every h
 For direct command testing without a model, start `LYCAON_LLM_MANUAL=1 ./task den:harness`, then run this in another terminal using the sidecar URL printed by the harness:
 
 ```bash
-python3 scripts/harness/manual.py --url http://127.0.0.1:<sidecar-port>
+python3 scripts/harness/manual.py --url 'http://127.0.0.1:<sidecar-port>'
 ```
 
 The terminal creates a disposable draft project and build session. Open that project and chat in the harness Den window to answer approvals and questions. Each entered program becomes an assistant `command` call through the ordinary model boundary, with the real offered tools, prompt, executor, progress gates, approvals and feedback. Nothing executes in the terminal's shell. The transcript remains available in Den. The driver restores auto-reply and waits for the turn to settle between inputs, so thinking time does not consume a pending completion's timeout.

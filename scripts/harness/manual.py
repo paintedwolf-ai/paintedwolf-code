@@ -30,7 +30,7 @@ class Client:
             with urllib.request.urlopen(req, timeout=40) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"{req.method} {path}: HTTP {error.code}: {error.read().decode(errors='replace')}") from error
+            raise RuntimeError(f"{req.get_method()} {path}: HTTP {error.code}: {error.read().decode(errors='replace')}") from error
 
     def pending(self, session, wait=30000):
         query = urllib.parse.urlencode({"session_id": session, "wait": wait})
@@ -130,7 +130,7 @@ def repl(driver, read=input):
     while True:
         try:
             line = read("command> ")
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             return
         if not line.strip():
             continue
