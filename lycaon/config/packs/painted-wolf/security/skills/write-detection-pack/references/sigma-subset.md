@@ -147,21 +147,7 @@ A match may ask (command) or hold CONNECT (egress). It never auto-allows and nev
 
 Every path rehearses the same thing: each rule's positive cases must match through the production tool or egress adapter, and each negative must stay silent against **every** rule in the pack.
 
-For a pack in the repository's security catalog:
-
-```bash
-./task test:digest -- ./internal/detectionpack/...
-```
-
-That digest discovers the shipped catalog; it does not validate a folder elsewhere on disk.
-
-For a pack shipped inside an extension pack (`host/detection-packs/<pack_id>/`):
-
-```bash
-pw extensions validate
-```
-
-It compiles the whole catalog graph and rehearses every declared case, failing on a positive that did not match or a negative that did. Distribution is then ordinary extension distribution — install, version ranges, update, suites — and Settings lists the pack as **From an extension**, attributed to the pack id, with its own toggle.
+Run the validation for the pack's location (SKILL.md step 5). The repository digest discovers only the shipped catalog. `pw extensions validate` compiles the whole catalog graph and fails on a positive that did not match or a negative that did; Settings then lists the pack as **From an extension**, attributed to its pack id, with its own toggle.
 
 For a device folder, Settings → Approvals → Detections → **Add pack…** performs the supported dry-run preview before confirmation. Inspect rules found, inactive/unsupported reasons, ignored files, and any rehearsal line. Confirmation copies an allowlisted set (`pack.yaml`, `rules/*.yml`, `fixtures.yaml`) into `{configdir}/detection-packs/<pack_id>/`; symlinks and other files are skipped. Iterate by editing that copy or re-importing with replace.
 
