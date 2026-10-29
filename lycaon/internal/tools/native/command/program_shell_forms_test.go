@@ -99,3 +99,46 @@ func TestProgramEntryPipeStatusReportsClosedProducer(t *testing.T) {
 		t.Fatalf("pipeline status outcome: %+v", got)
 	}
 }
+
+func TestProgramEntryDefaultIFSAndScopedPrefix(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `printf 'a,b\n' | { IFS=, read -r x y; printf '%s/%s\n' "$x" "$y"; printf 'ifs:%s\n' "${#IFS}"; }; printf '[%s]\n' "$IFS"`)
+	testutil.FailErr(t, "read with a prefix IFS", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 0 || got.Stdout != "a/b\nifs:3\n[ \t\n]\n" {
+		t.Fatalf("default IFS outcome: %+v", got)
+	}
+}
+
+func TestProgramEntryEvalSyntaxRefusalWritesShellLine(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `printf 'before\n'; eval 'if'`)
+	testutil.FailErr(t, "run invalid eval source", err)
+	got := decodeOutcome(t, out)
+	const stderr = "eval: line 1: The complete submitted or captured syntax unit is malformed or has an unsupported source encoding [COMMAND_SYNTAX_INVALID]\n"
+	if got.Refusal == nil || got.Refusal.Code != "COMMAND_SYNTAX_INVALID" || got.Status != 2 || got.Stdout != "before\n" || got.Stderr != stderr {
+		t.Fatalf("eval refusal outcome: %+v, want stderr %q", got, stderr)
+	}
+}
+
+func TestProgramEntryKilledJobsSettleTheProgram(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `sleep 30 & p=$!; kill "$p"; wait "$p"; printf 'pid:%s\n' "$?"; sleep 30 & kill %1; wait %1; printf 'job:%s\n' "$?"`)
+	testutil.FailErr(t, "kill and wait jobs", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 0 || got.Stdout != "pid:143\njob:143\n" || got.State != "completed" {
+		t.Fatalf("killed jobs outcome: %+v", got)
+	}
+}
+
+// A native producer ended by its reader settles as SIGPIPE in PIPESTATUS, and
+// the pipeline itself succeeds.
+func TestProgramEntryPsClosedByItsReaderSucceeds(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `ps aux | true; printf '%s %s\n' "$?" "${PIPESTATUS[*]}"`)
+	testutil.FailErr(t, "run ps into a closed reader", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 0 || got.Stdout != "0 141 0\n" {
+		t.Fatalf("closed ps pipeline outcome: %+v", got)
+	}
+}
