@@ -156,7 +156,7 @@ func (g *gitGrep) operands(dir string) ([]grepSource, []string, int, error) {
 	var paths []string
 	for _, word := range before {
 		if len(paths) == 0 {
-			tree, err := git.ResolveOptionalObject(g.ctx, g.root, word+"^{tree}")
+			tree, err := resolveTree(g.ctx, g.root, word)
 			if err != nil {
 				return nil, nil, 0, err
 			}
@@ -295,7 +295,7 @@ func (g *gitGrep) match(source grepSource, rel string, content []byte) error {
 	name := source.label + g.display(source, rel)
 	binary := bytes.IndexByte(content[:min(len(content), 8000)], 0) >= 0
 	count := 0
-	_, err := textsearch.ScanReader(g.ctx, bytes.NewReader(content), int64(len(content)), nil, g.matcher, textsearch.ScanOptions{Invert: g.invert}, func(line textsearch.Line) error {
+	_, err := textsearch.ScanReader(g.ctx, bytes.NewReader(content), int64(len(content)), nil, g.matcher, textsearch.ScanOptions{Invert: g.invert, MaxSelected: -1}, func(line textsearch.Line) error {
 		if line.Kind != textsearch.SelectedLine {
 			return nil
 		}
@@ -354,6 +354,18 @@ func (g *gitGrep) display(source grepSource, rel string) string {
 		return up + rel
 	}
 	return up + strings.TrimPrefix(rel, base+"/")
+}
+
+// resolveTree peels a revision to its tree; REV:PATH already names one.
+func resolveTree(ctx context.Context, root, word string) (string, error) {
+	if !strings.Contains(word, ":") {
+		return git.ResolveOptionalObject(ctx, root, word+"^{tree}")
+	}
+	oid, err := git.ResolveOptionalObject(ctx, root, word)
+	if err != nil || oid == "" {
+		return "", err
+	}
+	return git.ResolveOptionalObject(ctx, root, oid+"^{tree}")
 }
 
 func grepBudget(err error) error {
