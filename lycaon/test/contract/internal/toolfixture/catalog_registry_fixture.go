@@ -197,8 +197,8 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	if err := native.RegisterSecretCapabilityTools(rt.Registry, secretcap.NewWithStore(sqlDB, secretValues, nil)); err != nil {
 		contractcheck.FailErr(t, "native.RegisterSecretCapabilityTools failed", err)
 	}
-	if err := httpaction.Register(rt.Registry, httpaction.Deps{Boundary: rt.Boundary}); err != nil {
-		contractcheck.FailErr(t, "httpaction.Register failed", err)
+	if err := rt.RegisterHTTP(httpaction.Deps{Boundary: rt.Boundary}); err != nil {
+		contractcheck.FailErr(t, "bind HTTP owner", err)
 	}
 
 	agents := orchestration.NewMemoryAgentRegistry()

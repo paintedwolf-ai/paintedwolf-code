@@ -9,8 +9,8 @@ hosts: [coordinator, worker]
 ---
 #### HTTP requests
 
-On surfaces that permit network egress, run `curl` in `command` with an explicit URL, method, headers and body. Use `-d` for request data, `--data-binary @path` for exact file bytes, and `-F` for multipart fields. `curl --help` describes the supported native forms. Protected references remain protected through the shared HTTP authority; never print credentials to construct a request.
+For permitted network egress, run native `curl` in `command` with explicit URL, method, headers and body: `-d` for data, `--data-binary @path` for exact file bytes, `-F` for multipart. `curl --help` lists native forms. Keep protected credential references opaque.
 
-Use `-o path` to save a response and `-D path` for headers. `-L` follows reviewed redirects; each destination remains subject to egress authorization. Set `--max-time` when the exchange needs a deadline. Loopback connections need `capability_request.loopback_connect` with the exact ports on the command call.
+`-o path` saves the body; `-D path` saves headers. `-L` follows reviewed redirects, authorizing each destination. `--max-time` sets a deadline. Loopback requires `capability_request.loopback_connect` with exact ports on the call.{% if profile_has_wait %} Use `wait` with `http_ready`/`port_ready` for readiness.{% endif %}
 
-For runnable local services, exercise changed endpoints and inspect the responses. Hermetic tests remain standard when no live server runs.
+Exercise changed local endpoints and inspect responses; hermetic tests remain standard when no live service runs.
