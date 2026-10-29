@@ -185,6 +185,7 @@ func TestGrepMatchesBundledGit(t *testing.T) {
 		{"", "git grep -q entry HEAD"},
 		{"", "git grep absent-pattern HEAD"},
 		{"", "git grep entry no-such-revision"},
+		{"", "git grep -- entry"},
 		{"src", "git grep -n entry HEAD"},
 		{"src", "git grep -n entry HEAD -- ../docs"},
 		{"src", "git grep -n entry"},
