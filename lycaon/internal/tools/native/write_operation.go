@@ -34,6 +34,9 @@ type WriteInput struct {
 	// Source borrows an exact raw stream for this call; SourceBytes is its length.
 	Source      io.Reader
 	SourceBytes int64
+	// Mode is the permission an exact pinned write gives a file it creates;
+	// zero uses the ordinary write mode. A replaced file keeps its own.
+	Mode os.FileMode
 }
 
 type WriteAdmission uint8
