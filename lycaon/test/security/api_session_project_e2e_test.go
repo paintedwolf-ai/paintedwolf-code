@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -62,8 +61,6 @@ func TestNoFolderSessionCreateAndAutoName(t *testing.T) {
 
 func waitForNamingEvents(t *testing.T, events <-chan wire.EventEnvelope, projectID, sessionID string) {
 	t.Helper()
-	timer := time.NewTimer(testutil.Timeout(3 * time.Second))
-	defer timer.Stop()
 	var projectNamed, sessionNamed bool
 	for !projectNamed || !sessionNamed {
 		select {
@@ -86,7 +83,7 @@ func waitForNamingEvents(t *testing.T, events <-chan wire.EventEnvelope, project
 				}
 			default:
 			}
-		case <-timer.C:
+		case <-t.Context().Done():
 			t.Fatalf("naming events incomplete: project=%t session=%t", projectNamed, sessionNamed)
 		}
 	}

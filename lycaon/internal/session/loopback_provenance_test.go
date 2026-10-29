@@ -26,12 +26,13 @@ import (
 // provenanceFixture is a host whose socket table, launch lineage, and
 // container engine the test states outright.
 type provenanceFixture struct {
-	atStart    []socketListener
-	startErr   error
-	now        []socketListener
-	nowErr     error
-	sessions   map[int]string
-	containers []dockerContainerInfo
+	atStart        []socketListener
+	startErr       error
+	now            []socketListener
+	nowErr         error
+	sessions       map[int]string
+	containers     []dockerContainerInfo
+	nativeObserver nativeListenerObserver
 }
 
 func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProvenance {
@@ -50,6 +51,7 @@ func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProven
 			return s, ok
 		},
 		func(context.Context) []dockerContainerInfo { return f.containers },
+		f.nativeObserver,
 	)
 }
 
@@ -286,7 +288,7 @@ func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
 		t.Fatalf("helper never reported its port: %v", lines.Err())
 	}
 
-	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil)
+	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil, lineage.ObserveSessionListener)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port)); !owned {

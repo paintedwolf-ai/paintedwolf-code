@@ -1,14 +1,15 @@
 package llm
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -75,6 +76,71 @@ func TestRegistryKeyResolutionStoredOnly(t *testing.T) {
 	}
 	if got := registry.resolveAPIKey(entry); got != "stored-key" {
 		t.Fatalf("resolveAPIKey = %q, want stored-key", got)
+	}
+}
+
+// A collection renders teacher requests through the student's configured
+// serving provider; both local serving kinds must give the student the same
+// conversation, and a hosted kind keeps its own layout.
+func TestRegistryRendersRequestsThroughTheConfiguredServingProvider(t *testing.T) {
+	entry := func(id, kind, extra, model string) string {
+		return "  - id: " + id + "\n    kind: " + kind + "\n" + extra + "    base_url: http://127.0.0.1:9/v1\n    api_key_env: \"\"\n    models:\n      - " + model + "\n" + MinimalShipHTTPRetryYAML
+	}
+	shipYAML := "providers:\n" +
+		entry("student-ollama", "ollama", "", "{id: student-e4b, context_length: 32768}") +
+		entry("student-local", "openai-compatible", "    reasoning_wire: reasoning_content\n", "{id: student-e4b, context_length: 32768}") +
+		entry("student-tiny", "ollama", "", "{id: student-e4b, context_length: 64}") +
+		entry("hosted", "fireworks", "", "{id: teacher}")
+	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	testutil.FailErr(t, "NewRegistry failed", err)
+	req := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "host guidance"},
+		{Role: api.MessageRoleUser, Content: "read a.go"},
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read", Args: map[string]any{"path": "a.go"}}}},
+		{Role: api.MessageRoleTool, Content: "package a", ToolResult: &api.ToolResult{Content: "package a", Tool: "read", ToolCallID: "c1"}},
+		{Role: api.MessageRoleSystem, Content: "host note after the tool"},
+	}}
+	type turn struct{ Role, Content string }
+	render := func(provider string) (string, []turn) {
+		t.Helper()
+		kind, body, err := registry.RenderRequest(t.Context(), provider, "student-e4b", req)
+		testutil.FailErr(t, "render "+provider, err)
+		var wire struct {
+			Model    string `json:"model"`
+			Messages []turn `json:"messages"`
+		}
+		testutil.FailErr(t, "decode "+provider, json.Unmarshal(body, &wire))
+		if wire.Model != "student-e4b" {
+			t.Fatalf("%s model = %q", provider, wire.Model)
+		}
+		return kind, wire.Messages
+	}
+	systems := func(turns []turn) int {
+		n := 0
+		for _, m := range turns {
+			if m.Role == "system" {
+				n++
+			}
+		}
+		return n
+	}
+	ollamaKind, ollama := render("student-ollama")
+	_, local := render("student-local")
+	if ollamaKind != "ollama" || systems(ollama) != 1 || systems(local) != 1 {
+		t.Fatalf("local serving keeps one leading system slot: ollama=%v local=%v", ollama, local)
+	}
+	if !slices.Equal(ollama, local) {
+		t.Fatalf("local serving kinds disagree on the conversation:\nollama=%v\nlocal=%v", ollama, local)
+	}
+	if _, hosted := render("hosted"); systems(hosted) != 2 {
+		t.Fatalf("hosted layout keeps the later host note: %v", hosted)
+	}
+	if _, _, err := registry.RenderRequest(t.Context(), "student-tiny", "student-e4b", req); err == nil {
+		t.Fatal("a request over the declared window must not render")
+	}
+	if _, _, err := registry.RenderRequest(t.Context(), "absent", "m", req); err == nil {
+		t.Fatal("an unconfigured provider must not render")
 	}
 }
 
@@ -321,7 +387,7 @@ func TestRegistryListCacheReadDuringCredentialRebuildDoesNotPinStaleList(t *test
 	go func() { reloadDone <- registry.ReloadProviderMutation(t.Context(), "test-provider") }()
 	select {
 	case <-discoveryStarted:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("credential rebuild never reached discovery")
 	}
 	_ = registry.ListCached(t.Context())

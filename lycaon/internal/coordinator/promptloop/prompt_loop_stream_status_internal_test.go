@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/events"
@@ -54,7 +53,7 @@ func TestCompleteStreamPublishesLLMErrorWhenTheCallFails(t *testing.T) {
 
 	<-gated.started
 	hub.FlushDebounced()
-	activeEvents := drainTopic(t, ch, 100*time.Millisecond)
+	activeEvents := drainTopic(t, ch)
 	if len(activeEvents) != 1 {
 		t.Fatalf("published %d llm events before the stream failed, want 1 active", len(activeEvents))
 	}
@@ -69,7 +68,7 @@ func TestCompleteStreamPublishesLLMErrorWhenTheCallFails(t *testing.T) {
 	close(gated.release)
 	<-done
 	hub.FlushDebounced()
-	terminalEvents := drainTopic(t, ch, 100*time.Millisecond)
+	terminalEvents := drainTopic(t, ch)
 	if len(terminalEvents) != 1 {
 		t.Fatalf("published %d llm events after the stream failed, want 1 error", len(terminalEvents))
 	}
@@ -123,7 +122,7 @@ func TestCompleteStreamPublishesLLMActiveBeforeUserTurnCompletes(t *testing.T) {
 	// Stream entry confirms the active event was published.
 	<-gated.started
 	hub.FlushDebounced()
-	active := drainTopic(t, ch, 100*time.Millisecond)
+	active := drainTopic(t, ch)
 	if len(active) != 1 {
 		t.Fatalf("published %d llm events before stream completed, want 1 active", len(active))
 	}
@@ -144,7 +143,7 @@ func TestCompleteStreamPublishesLLMActiveBeforeUserTurnCompletes(t *testing.T) {
 	close(gated.release)
 	<-done
 	hub.FlushDebounced()
-	finished := drainTopic(t, ch, 100*time.Millisecond)
+	finished := drainTopic(t, ch)
 	if len(finished) != 1 {
 		t.Fatalf("published %d llm events after stream completed, want 1 ok", len(finished))
 	}
@@ -191,7 +190,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		testutil.FailErr(t, "worker completeStream failed", err)
 	}
 	hub.FlushDebounced()
-	drainLLM := drainTopic(t, ch, 50*time.Millisecond)
+	drainLLM := drainTopic(t, ch)
 	if len(drainLLM) != 0 {
 		t.Fatalf("worker turn published %d llm events, want 0", len(drainLLM))
 	}
@@ -201,7 +200,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		testutil.FailErr(t, "non-host coordinator completeStream failed", err)
 	}
 	hub.FlushDebounced()
-	plain := drainTopic(t, ch, 50*time.Millisecond)
+	plain := drainTopic(t, ch)
 	if len(plain) != 1 {
 		t.Fatalf("non-host coordinator turn published %d llm events, want 1", len(plain))
 	}
@@ -232,7 +231,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		testutil.FailErr(t, "host first iteration completeStream failed", err)
 	}
 	hub.FlushDebounced()
-	firstIter := drainTopic(t, ch, 50*time.Millisecond)
+	firstIter := drainTopic(t, ch)
 	if len(firstIter) != 1 {
 		t.Fatalf("host first iteration published %d llm events, want 1 (active+ok coalesce per session)", len(firstIter))
 	}
@@ -251,7 +250,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		testutil.FailErr(t, "host completeStream failed", err)
 	}
 	hub.FlushDebounced()
-	hostLLM := drainTopic(t, ch, 50*time.Millisecond)
+	hostLLM := drainTopic(t, ch)
 	if len(hostLLM) != 1 {
 		t.Fatalf("host turn published %d llm events, want 1 (active+ok coalesce per session)", len(hostLLM))
 	}

@@ -80,6 +80,7 @@ type DefaultLoopbackProvenance struct {
 	listeners func(ctx context.Context) ([]socketListener, error)
 	// lineageSession names the session whose action launched pid.
 	lineageSession func(pid int) (string, bool)
+	observeNative  nativeListenerObserver
 	// containers lists running containers from every reachable engine.
 	containers        func(ctx context.Context) []dockerContainerInfo
 	mu                sync.RWMutex
@@ -91,7 +92,7 @@ func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 	sockets := discoverDockerSockets()
 	return newLoopbackProvenance(ctx, hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
 		return queryDockerContainers(ctx, sockets)
-	})
+	}, lineage.ObserveSessionListener)
 }
 
 func newLoopbackProvenance(
@@ -99,8 +100,9 @@ func newLoopbackProvenance(
 	listeners func(context.Context) ([]socketListener, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
+	observeNative nativeListenerObserver,
 ) *DefaultLoopbackProvenance {
-	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers}
+	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers, observeNative: observeNative}
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	if current, err := listeners(ctx); err == nil {

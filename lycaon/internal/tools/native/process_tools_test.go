@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -62,7 +63,21 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 	testutil.FailErr(t, "start unowned child", unowned.Start())
 	t.Cleanup(func() { _ = unowned.Process.Kill(); _ = unowned.Wait() })
 
+	disownLine, err := lineage.Open("command:call_2", "worker")
+	testutil.FailErr(t, "open disown lineage", err)
+	t.Cleanup(func() { _ = disownLine.Close() })
+	disowned := exec.Command("/bin/sh", "-c", "read _; exec 3>&-; echo dropped; read _")
+	disowned.ExtraFiles = []*os.File{disownLine.ChildFile()}
+	disownIn, err := disowned.StdinPipe()
+	testutil.FailErr(t, "disowned stdin", err)
+	disownOut, err := disowned.StdoutPipe()
+	testutil.FailErr(t, "disowned stdout", err)
+	testutil.FailErr(t, "start disowned child", disowned.Start())
+	disownLine.Started()
+	t.Cleanup(func() { _ = disownIn.Close(); _ = disowned.Process.Kill(); _ = disowned.Wait() })
+
 	denied := errors.New("review denied")
+	allow := false
 	reviewed := 0
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "worker", ParentSessionID: "task"},
@@ -74,12 +89,16 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 			if operation != "signal" || len(targets) != 1 || targets[0].PID != child.Process.Pid || !targets[0].Owned {
 				t.Fatal("incorrect resolved review target")
 			}
+			if allow {
+				return nil
+			}
 			return denied
 		}},
 	}
 	native := ProcessTools{Service: service}
 	reference := ""
-	for _, pid := range []int{child.Process.Pid, unowned.Process.Pid} {
+	disownedRef := ""
+	for _, pid := range []int{child.Process.Pid, unowned.Process.Pid, disowned.Process.Pid} {
 		raw, err := native.List(t.Context(), map[string]any{"pid": pid}, tc)
 		testutil.FailErr(t, "list process", err)
 		var listed struct{ Processes []hostprocess.Process }
@@ -97,7 +116,11 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 		if !row.Owned || row.Reference == "" {
 			t.Fatalf("the session's own process carries no reference: %s", raw)
 		}
-		reference = row.Reference
+		if pid == disowned.Process.Pid {
+			disownedRef = row.Reference
+		} else {
+			reference = row.Reference
+		}
 	}
 	args := map[string]any{"references": []any{reference}, "signal": "TERM"}
 	if _, err := native.Signal(t.Context(), args, tc); !errors.Is(err, denied) || reviewed != 1 {
@@ -108,8 +131,30 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "PROCESS_REFERENCE_STALE" || reviewed != 1 {
 		t.Fatalf("reference crossed the session boundary: %v", err)
 	}
-	if reject := toolrejection.AsToolReject(processError(hostprocess.ErrNotOwned)); reject == nil || reject.Code != "PROCESS_NOT_OWNED" {
-		t.Fatalf("unowned refusal code: %v", reject)
+	tc.Identity.SessionID = "worker"
+	_, err = disownIn.Write([]byte("\n"))
+	testutil.FailErr(t, "release lineage fd in child", err)
+	lineText, err := bufio.NewReader(disownOut).ReadString('\n')
+	testutil.FailErr(t, "await fd release", err)
+	if lineText != "dropped\n" {
+		t.Fatalf("unexpected child output %q", lineText)
+	}
+	_, err = native.Signal(t.Context(), map[string]any{"references": []any{disownedRef}, "signal": "TERM"}, tc)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "PROCESS_NOT_OWNED" || reviewed != 1 {
+		t.Fatalf("unowned process reached review or returned wrong code: err=%v reviewed=%d", err, reviewed)
+	}
+	allow = true
+	rawSignal, err := native.Signal(t.Context(), args, tc)
+	testutil.FailErr(t, "signal owned process after approval", err)
+	var settled struct {
+		Results []struct {
+			PID       int  `json:"pid"`
+			Delivered bool `json:"delivered"`
+		} `json:"results"`
+	}
+	testutil.FailErr(t, "decode signal result", json.Unmarshal([]byte(rawSignal), &settled))
+	if reviewed != 2 || len(settled.Results) != 1 || settled.Results[0].PID != child.Process.Pid || !settled.Results[0].Delivered {
+		t.Fatalf("expected delivered signal to owned child, got %s (reviewed=%d)", rawSignal, reviewed)
 	}
 }
 

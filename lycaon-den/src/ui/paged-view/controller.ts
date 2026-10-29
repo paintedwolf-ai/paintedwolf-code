@@ -76,6 +76,14 @@ export class PagedViewController<F> {
 
   frames(): readonly F[] { return [...this.cache.values()].map(entry => entry.frame); }
 
+  /** Reusing a resident frame renews its place in the bounded cache. */
+  find(predicate: (frame: F) => boolean): F | undefined {
+    for (const [key, entry] of this.cache) {
+      if (predicate(entry.frame)) return this.peek(key);
+    }
+    return undefined;
+  }
+
   peek(key: string): F | undefined {
     const held = this.cache.get(key);
     if (!held) return undefined;
