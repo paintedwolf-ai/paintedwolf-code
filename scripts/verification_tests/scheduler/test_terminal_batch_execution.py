@@ -179,8 +179,8 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
         self.assertTrue(custody.holds(int(ready.read_text()), lease, (info.st_dev, info.st_ino)))
         self.await_condition(lambda: any(e["ticket"] == active["ticket"]
                              and e.get("health", {}).get("state") == "supervision_lost"
-                             for e in self.queue.status()["runs"]))
-        status = self.queue.status()
+                             for e in batch.status_details(self.queue)["runs"]))
+        status = batch.status_details(self.queue)
         retained = next(e for e in status["runs"] if e["ticket"] == active["ticket"])
         self.assertEqual(retained["health"]["state"], "supervision_lost")
         self.assertEqual(status["capacity"]["reserved"], 1)

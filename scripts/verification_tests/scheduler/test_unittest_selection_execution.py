@@ -37,8 +37,10 @@ class UnittestSelectionTests(unittest.TestCase):
                       ["-k", "one", "two"], ["-k", "one", "-k"]):
             with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, "No verification was queued"):
                 planning.request(["test:runner", "--", *flags], {})
-        with self.assertRaisesRegex(ValueError, "one target at a time"):
+        with self.assertRaisesRegex(ValueError, "takes no selection arguments"):
             planning.validate_selection(["test:runner", "build"], ["-k", "terminal"])
+        with self.assertRaisesRegex(ValueError, "one target at a time"):
+            planning.validate_selection(["test:runner", "test:digest"], ["-k", "terminal"])
 
     def test_actual_unittest_or_selection_runs_only_matching_cases_and_default_stays_complete(self):
         with tempfile.TemporaryDirectory() as directory:
