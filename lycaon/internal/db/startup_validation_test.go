@@ -117,7 +117,7 @@ func TestMigrationActivationDefersSecondaryAuditWithoutLosingItsObligation(t *te
 	}
 }
 
-func TestRetentionSelectionUsesOnlyPrimaryTreesAndADeletionBoundedSet(t *testing.T) {
+func TestRetentionSelectionUsesPrimaryTreesAndBoundedMetadataSorts(t *testing.T) {
 	path, plan := completeRetainedFixture(t)
 	database, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open primary-selection fixture", err)
@@ -142,7 +142,7 @@ func TestRetentionSelectionUsesOnlyPrimaryTreesAndADeletionBoundedSet(t *testing
 	rows, err := database.QueryContext(t.Context(), "EXPLAIN "+retainedCompletenessSQL)
 	testutil.FailErr(t, "inspect pinned selection program", err)
 	defer rows.Close()
-	insert, remove, ephemeral, grouping := 0, 0, 0, 0
+	grouping := 0
 	for rows.Next() {
 		var address, p1, p2, p3, p5 int64
 		var opcode string
@@ -153,21 +153,15 @@ func TestRetentionSelectionUsesOnlyPrimaryTreesAndADeletionBoundedSet(t *testing
 			if !primaries[p2] {
 				t.Fatalf("selection reads an unaudited secondary tree at page %d", p2)
 			}
-		case "IdxInsert":
-			insert++
-		case "IdxDelete":
-			remove++
-		case "OpenEphemeral":
-			ephemeral++
 		case "SorterOpen":
 			grouping++
-		case "OpenWrite", "OpenAutoindex":
+		case "OpenWrite", "OpenAutoindex", "OpenEphemeral", "IdxInsert", "IdxDelete":
 			t.Fatalf("selection introduced an unbounded write class: %s", opcode)
 		}
 	}
 	testutil.FailErr(t, "finish selection instructions", rows.Err())
-	if insert != 1 || remove != 1 || ephemeral != 1 || grouping != 1 {
-		t.Fatalf("selection changed metadata write classes: insert=%d delete=%d trees=%d grouping=%d", insert, remove, ephemeral, grouping)
+	if grouping != 3 {
+		t.Fatalf("selection changed its three bounded metadata sorts: %d", grouping)
 	}
 }
 
