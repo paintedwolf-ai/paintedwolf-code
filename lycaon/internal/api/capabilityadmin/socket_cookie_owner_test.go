@@ -277,7 +277,11 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	legacy.Store.SetCookies(legacyURL, []*http.Cookie{{Name: "session", Value: value, Path: "/private", HttpOnly: true}})
 	_, err = service.SaveCookieJar(ctx, legacyRequest, legacy)
 	testutil.FailErr(t, "persist pre-change protected value", err)
-	legacyBefore := legacy.Store.Snapshot()
+	// Compare persisted forms: the seeded store's clock readings carry state
+	// that protected storage does not.
+	seeded, err := service.OpenCookieJar(ctx, legacyRequest)
+	testutil.FailErr(t, "reopen pre-change jar", err)
+	legacyBefore := seeded.Store.Snapshot()
 	if len(legacyBefore) != 1 || legacyBefore[0].NativeIssuer != "" {
 		t.Fatal("legacy fixture has an issuer")
 	}
@@ -296,10 +300,14 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	testutil.FailErr(t, "ordinary service URL", err)
 	port, err := strconv.Atoi(ordinaryURL.Port())
 	testutil.FailErr(t, "ordinary service port", err)
+	localPort, err := strconv.ParseUint(ordinaryURL.Port(), 10, 16)
+	testutil.FailErr(t, "ordinary service port range", err)
 	ordinaryArgs := maps.Clone(args)
 	delete(ordinaryArgs, "unix_socket")
 	ordinaryArgs["url"] = ordinaryServer.URL + "/private/info"
 	ordinaryArgs["capability_request"] = map[string]any{"loopback_connect": map[string]any{"ports": []any{port}}}
+	// Standing chat authority for the ordinary port keeps this leg about cookies.
+	tc.Local.LoopbackConnectGranted, tc.Local.LoopbackConnectPorts = true, []uint16{uint16(localPort)}
 	invoke("native-cookie-to-ordinary-transport", ordinaryArgs, true, false)
 	ordinaryArgs["cookie_jar"] = "ordinary-cookies"
 	reissue.Store(true)
