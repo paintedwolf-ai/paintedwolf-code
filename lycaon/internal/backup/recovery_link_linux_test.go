@@ -3,12 +3,12 @@
 package backup
 
 import (
- "github.com/lycaon/lycaon/internal/fileclone"
 	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

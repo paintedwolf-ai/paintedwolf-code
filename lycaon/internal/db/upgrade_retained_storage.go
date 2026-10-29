@@ -10,7 +10,18 @@ import (
 	"github.com/lycaon/lycaon/internal/db/migrations"
 )
 
-// Only the unpublished replacement uses rollback journaling. Activation opens
+func boundedRetainedRoute(plan migrations.Plan) bool {
+	return plan.BoundedRetainedStorage()
+}
+
+func executeRetainedRoute(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged bool) error {
+	if !boundedRetainedRoute(plan) {
+		return executeUpgrade(ctx, path, plan, progress, registry)
+	}
+	return executeRetainedUpgrade(ctx, path, plan, progress, registry, staged)
+}
+
+// Only the unpublished replacement disables its journal. Activation opens
 // the sealed, atomically published database with the ordinary WAL writer.
 func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged bool) (err error) {
 	writer, err := openRetainedUpgradeWriter(ctx, path)
@@ -29,6 +40,9 @@ func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Pl
 	if !known {
 		return fmt.Errorf("upgrade storage capacity is unavailable")
 	}
+	if err := checkUpgradeTempStorage(ctx, writer, plan.ScratchBytes()); err != nil {
+		return err
+	}
 	limit, err := storage.PageLimit(available, plan.ScratchBytes())
 	if err != nil {
 		return err
@@ -42,7 +56,7 @@ func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Pl
 }
 
 func openRetainedUpgradeWriter(ctx context.Context, path string) (*sql.DB, error) {
-	query := writerDSNQuery + "&_pragma=journal_mode(delete)&_pragma=temp_store(memory)"
+	query := writerDSNQuery + "&_pragma=journal_mode(off)&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"
 	writer, err := sql.Open("sqlite", fileDSN(path, query))
 	if err != nil {
 		return nil, err
@@ -54,9 +68,9 @@ func openRetainedUpgradeWriter(ctx context.Context, path string) (*sql.DB, error
 		_ = writer.Close()
 		return nil, err
 	}
-	if mode != "delete" {
+	if mode != "off" {
 		_ = writer.Close()
-		return nil, fmt.Errorf("private upgrade requires rollback journal, got %s", mode)
+		return nil, fmt.Errorf("private upgrade requires disposable journal mode, got %s", mode)
 	}
 	return writer, nil
 }

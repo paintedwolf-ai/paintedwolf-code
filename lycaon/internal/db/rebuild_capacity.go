@@ -8,12 +8,15 @@ import (
 	"syscall"
 )
 
-func constrainRebuildCopy(ctx context.Context, database *sql.DB, destination string) (func() error, error) {
+func constrainRebuildCopy(ctx context.Context, database *sql.DB, destination string, reserve uint64) (func() error, error) {
 	available, known, err := rebuildAvailableBytes(filepath.Dir(destination))
 	if err != nil || !known {
 		return func() error { return nil }, err
 	}
-	return setRebuildPageLimit(ctx, database, available)
+	if available < reserve {
+		return nil, &InsufficientSpaceError{NeededBytes: reserve, AvailableBytes: available}
+	}
+	return setRebuildPageLimit(ctx, database, available-reserve)
 }
 
 // Bound actual growth instead of requiring space proportional to discarded

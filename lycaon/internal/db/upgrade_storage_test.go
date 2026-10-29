@@ -8,12 +8,12 @@ import (
 
 func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 	for _, geometry := range [][2]uint64{{512, 4096}, {4096, 512}, {65536, 65536}} {
-		p, sector := geometry[0], geometry[1]
-		storage, err := BoundUpgradeStorage(17, p, sector, true)
+		p := geometry[0]
+		storage, err := BoundUpgradeStorage(17, p, true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := 17*(p+8+2*sector) + 2*sector + 17*p + 123 + 64<<20
+		want := 17*p + 123 + 64<<20
 		reserve, err := storage.RequiredBytes(123)
 		if err != nil || reserve != want {
 			t.Fatalf("reserve=%d want %d: %v", reserve, want, err)
@@ -29,20 +29,20 @@ func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 		if !errors.As(err, &space) || space.NeededBytes != reserve {
 			t.Fatalf("insufficient reserve: %v", err)
 		}
-		copied, err := BoundUpgradeStorage(17, p, sector, false)
-		if err != nil || copied.CloneBytes != 0 || copied.JournalBytes != storage.JournalBytes {
+		copied, err := BoundUpgradeStorage(17, p, false)
+		if err != nil || copied.CloneBytes != 0 {
 			t.Fatalf("copied=%+v: %v", copied, err)
 		}
 	}
 }
 
 func TestUpgradeStorageRejectsInvalidOrOverflowingGeometry(t *testing.T) {
-	for _, geometry := range [][3]uint64{{0, 4096, 4096}, {1, 0, 4096}, {1, 1000, 4096}, {1, 4096, 0}, {1, 4096, 131072}, {math.MaxUint64, 4096, 4096}} {
-		if _, err := BoundUpgradeStorage(geometry[0], geometry[1], geometry[2], true); err == nil {
+	for _, geometry := range [][2]uint64{{0, 4096}, {1, 0}, {1, 1000}, {1, 131072}, {math.MaxUint64, 4096}} {
+		if _, err := BoundUpgradeStorage(geometry[0], geometry[1], true); err == nil {
 			t.Fatalf("accepted %v", geometry)
 		}
 	}
-	storage, err := BoundUpgradeStorage(1, 4096, 4096, true)
+	storage, err := BoundUpgradeStorage(1, 4096, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,16 +52,4 @@ func TestUpgradeStorageRejectsInvalidOrOverflowingGeometry(t *testing.T) {
 	if limit, err := storage.PageLimit(math.MaxUint64, 0); err != nil || limit != 4294967294 {
 		t.Fatalf("SQLite ceiling=%d: %v", limit, err)
 	}
-}
-
-func TestUpgradeSectorProbeUsesPrivateDisposableDatabase(t *testing.T) {
-	root := t.TempDir()
-	sector, err := probeUpgradeSector(t.Context(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := BoundUpgradeStorage(1, 4096, sector, false); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("SQLite journal sector bytes: %d", sector)
 }

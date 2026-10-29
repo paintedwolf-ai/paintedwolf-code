@@ -1,8 +1,9 @@
 package fileclone
 
 import (
-	"github.com/lycaon/lycaon/internal/fssync"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // SupportedAt probes the actual volume without cloning installation data.

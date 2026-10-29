@@ -9,14 +9,14 @@ import (
 	"github.com/lycaon/lycaon/internal/fileclone"
 )
 
-// UpgradeStorage bounds the private replacement, its rollback journal and
+// UpgradeStorage bounds the private replacement, temporary sorting and
 // recovery clone divergence. Existing files are already charged to free space.
 type UpgradeStorage struct {
-	Pages, PageBytes, SectorBytes uint64
-	JournalBytes, CloneBytes      uint64
+	Pages, PageBytes uint64
+	CloneBytes       uint64
 }
 
-// InspectUpgradeStorage measures the replacement and the VFS on its volume.
+// InspectUpgradeStorage measures the retained replacement and its sort work.
 // staged excludes recovery clone divergence when an archive is the recovery point.
 func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, staged bool) (UpgradeStorage, error) {
 	var pages, pageBytes uint64
@@ -26,36 +26,25 @@ func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, stag
 	if err := database.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageBytes); err != nil {
 		return UpgradeStorage{}, err
 	}
-	sector, err := probeUpgradeSector(ctx, filepath.Dir(path))
-	if err != nil {
-		return UpgradeStorage{}, err
-	}
 	cloned := false
+	var err error
 	if !staged {
 		cloned, err = fileclone.SupportedAt(filepath.Dir(path))
 		if err != nil {
 			return UpgradeStorage{}, err
 		}
 	}
-	return BoundUpgradeStorage(pages, pageBytes, sector, cloned)
+	return BoundUpgradeStorage(pages, pageBytes, cloned)
 }
 
-// BoundUpgradeStorage includes sector-aligned headers between cache spills.
-// One original page has one main-journal before-image; new pages have none.
-func BoundUpgradeStorage(pages, pageBytes, sector uint64, cloned bool) (UpgradeStorage, error) {
-	out := UpgradeStorage{Pages: pages, PageBytes: pageBytes, SectorBytes: sector}
-	if pages == 0 || pageBytes < 512 || pageBytes > 65536 || pageBytes&(pageBytes-1) != 0 || sector < 512 || sector > 65536 || sector&(sector-1) != 0 {
+// BoundUpgradeStorage reserves divergence of a verified recovery clone.
+// The disposable replacement has no journal; failed work is discarded.
+func BoundUpgradeStorage(pages, pageBytes uint64, cloned bool) (UpgradeStorage, error) {
+	out := UpgradeStorage{Pages: pages, PageBytes: pageBytes}
+	if pages == 0 || pageBytes < 512 || pageBytes > 65536 || pageBytes&(pageBytes-1) != 0 || pages > math.MaxUint64/pageBytes {
 		return out, fmt.Errorf("invalid SQLite storage geometry")
 	}
-	record := pageBytes + 8 + 2*sector
-	if pages > (math.MaxUint64-2*sector)/record {
-		return out, fmt.Errorf("upgrade journal bound overflows")
-	}
-	out.JournalBytes = pages*record + 2*sector
 	if cloned {
-		if pages > math.MaxUint64/pageBytes {
-			return out, fmt.Errorf("upgrade clone bound overflows")
-		}
 		out.CloneBytes = pages * pageBytes
 	}
 	return out, nil
@@ -63,7 +52,7 @@ func BoundUpgradeStorage(pages, pageBytes, sector uint64, cloned bool) (UpgradeS
 
 // RequiredBytes reserves auxiliary files before assigning any target growth.
 func (s UpgradeStorage) RequiredBytes(scratch uint64) (uint64, error) {
-	total := s.JournalBytes
+	total := uint64(0)
 	for _, value := range []uint64{s.CloneBytes, scratch, 64 << 20} {
 		if value > math.MaxUint64-total {
 			return 0, fmt.Errorf("upgrade storage reserve overflows")
@@ -89,4 +78,15 @@ func (s UpgradeStorage) PageLimit(available, scratch uint64) (uint64, error) {
 		return 0, fmt.Errorf("store exceeds SQLite page limit")
 	}
 	return s.Pages + min(extra, maximum-s.Pages), nil
+}
+
+func storageSum(values ...uint64) (uint64, error) {
+	var out uint64
+	for _, value := range values {
+		if value > math.MaxUint64-out {
+			return 0, fmt.Errorf("upgrade storage bound overflows")
+		}
+		out += value
+	}
+	return out, nil
 }

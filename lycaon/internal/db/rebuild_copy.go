@@ -32,13 +32,24 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 	if err := file.Close(); err != nil {
 		return err
 	}
-	copyDB, err := sql.Open("sqlite", fileDSN(destination, "_pragma=synchronous(full)&_pragma=auto_vacuum(incremental)"))
+	query := "_pragma=synchronous(full)&_pragma=auto_vacuum(incremental)&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"
+	if boundedRetainedRoute(plan) {
+		query += "&_pragma=journal_mode(off)"
+	}
+	copyDB, err := sql.Open("sqlite", fileDSN(destination, query))
 	if err != nil {
 		return err
 	}
 	copyDB.SetMaxOpenConns(1)
 	defer func() { err = errors.Join(err, copyDB.Close()) }()
-	restoreLimit, err := constrainRebuildCopy(ctx, copyDB, destination)
+	reserve := uint64(0)
+	if boundedRetainedRoute(plan) {
+		reserve = plan.ScratchBytes()
+		if err := checkUpgradeTempStorage(ctx, copyDB, reserve); err != nil {
+			return err
+		}
+	}
+	restoreLimit, err := constrainRebuildCopy(ctx, copyDB, destination, reserve)
 	if err != nil {
 		return err
 	}
@@ -67,6 +78,12 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
+	if boundedRetainedRoute(plan) {
+		selection, err = prepareRebuildChunkInventory(ctx, tx, selection)
+		if err != nil {
+			return err
+		}
+	}
 	for _, object := range objects {
 		if object.kind != "table" || object.tableKind == "virtual" || object.name == "sqlite_sequence" {
 			continue
@@ -84,8 +101,18 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
+	if boundedRetainedRoute(plan) {
+		if err := validateRebuildChunkInventory(ctx, tx); err != nil {
+			return err
+		}
+	}
 	if err := validateRebuildCounts(ctx, tx, objects, selection); err != nil {
 		return err
+	}
+	if boundedRetainedRoute(plan) {
+		if _, err := tx.ExecContext(ctx, "DROP TABLE _upgrade_retained_chunks"); err != nil {
+			return err
+		}
 	}
 	for _, statement := range selection.After {
 		if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
@@ -149,7 +176,7 @@ func copyRebuildTable(ctx context.Context, tx *sql.Tx, object rebuildObject, fro
 		return err
 	}
 	statement := "INSERT INTO " + rebuildIdentifier(object.name) + " (" + strings.Join(columns, ",") + ") SELECT " + strings.Join(selected, ",") + " " + from // #nosec G202
-	if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
+	if _, err := tx.ExecContext(ctx, statement); err != nil {                                                                                                 // #nosec G701
 		return fmt.Errorf("copy retained table %s: %w", object.name, err)
 	}
 	return nil
