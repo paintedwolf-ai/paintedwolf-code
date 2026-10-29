@@ -20,6 +20,12 @@ mkdirSync(screenshotDir, { recursive: true });
 const SEARCH_BINDING_ID = "painted-wolf/platform:key-search-open";
 const LAUNCHER_BINDING_ID = "painted-wolf/platform:key-launcher-open";
 
+// The stock navigation leader of the host the web project runs on: Linux keeps
+// Mod+; clear of desktop and emoji reservations (src/shortcuts/keymap.ts).
+const LINUX_HOST = process.platform === "linux";
+const NAV_LEADER_PRESS = LINUX_HOST ? "ControlOrMeta+Shift+;" : "ControlOrMeta+;";
+const NAV_LEADER_DISPLAY = LINUX_HOST ? /^Ctrl\+Shift\+;$/ : /^(⌘;|Ctrl\+;)$/;
+
 async function openKeyboardSettings(page: Page) {
   await waitHarnessConnected(page);
   await page.keyboard.press("?");
@@ -176,7 +182,7 @@ webE2e("den:harness — leader key row in Keyboard Settings", async ({ page }) =
   await expect(page.getByTestId("keyboard-row-nav.leader")).toBeVisible();
   await expect(page.getByTestId("keyboard-chord-nav.leader")).toHaveAttribute(
     "data-binding",
-    /^(⌘;|Ctrl\+;)$/,
+    NAV_LEADER_DISPLAY,
   );
   await leaveSettings(page);
 });
@@ -190,7 +196,7 @@ webE2e("den:harness — chat focus shortcuts reveal an inline-stage chat", async
   await page.getByTestId("project-files-entry").click();
   await expect(page.getByTestId("project-files-view")).toBeVisible();
 
-  await page.keyboard.press("ControlOrMeta+;");
+  await page.keyboard.press(NAV_LEADER_PRESS);
   await page.keyboard.press("c");
   const chat = liveChatStage(page).getByTestId("chat-view");
   await expect(chat).toBeVisible();
@@ -201,7 +207,7 @@ webE2e("den:harness — chat focus shortcuts reveal an inline-stage chat", async
   await page.getByTestId("project-files-entry").click();
   await expect(page.getByTestId("project-files-view")).toBeVisible();
 
-  await page.keyboard.press("ControlOrMeta+;");
+  await page.keyboard.press(NAV_LEADER_PRESS);
   await page.keyboard.press("i");
   await expect(liveChatStage(page).getByTestId("chat-composer")).toBeFocused();
 });
