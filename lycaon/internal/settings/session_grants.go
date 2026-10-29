@@ -296,9 +296,6 @@ func grantedPathGrantCovers(g *RuleApprovalGate, durable []ApprovalGrant, action
 func grantedPathCoversTarget(
 	g *RuleApprovalGate, durable []ApprovalGrant, action hitl.ProposedAction, target *gate.FileTarget,
 ) bool {
-	if currentActionCoversTarget(action, target) {
-		return true
-	}
 	if g.grants != nil {
 		for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 			if grantedPathGrantApplies(grant, action, target) {

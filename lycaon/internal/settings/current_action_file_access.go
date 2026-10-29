@@ -33,3 +33,16 @@ func currentActionCoversTarget(action hitl.ProposedAction, target *gate.FileTarg
 	}
 	return false
 }
+
+func (g *RuleApprovalGate) fileAccessCoversTargets(durable []ApprovalGrant, action hitl.ProposedAction) bool {
+	targets := g.declaredFileTargets(action)
+	if len(targets) == 0 {
+		return false
+	}
+	for _, target := range targets {
+		if !currentActionCoversTarget(action, target) && !grantedPathCoversTarget(g, durable, action, target) {
+			return false
+		}
+	}
+	return true
+}
