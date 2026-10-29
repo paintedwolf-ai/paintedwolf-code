@@ -3,14 +3,17 @@ package command
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -46,17 +49,19 @@ type ProgramRuntime struct {
 	// Sessions names the person who started the session; the program acts for them.
 	Sessions SessionOwners
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
-	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
+	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
+	// ExternalHidden refuses the explicit `external --` selector; native gap
+	// launches still run and are recorded.
+	ExternalHidden bool
 
-	mu            sync.Mutex
-	outputs       map[string]*invocation.ProgramOutputRetention
-	resources     *sessionOutputResources
-	resourcesOnce sync.Once
-	disabled      atomic.Bool
+	mu        sync.Mutex
+	outputs   map[string]*invocation.ProgramOutputRetention
+	resources map[string]*sessionOutputResources
+	disabled  atomic.Bool
 }
 
 // SetDisabled turns the command program control off or on. Turning it off
@@ -78,6 +83,9 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
+	externalHidden bool
+	// retainOutput keeps one child stream in the program output store.
+	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
 	executor      *toolexecution.Executor
 	registry      *tools.DefaultRegistry
 	recorder      *invocation.SQLRecorder
@@ -95,6 +103,14 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+	baseEnv       []string
+
+	// envelope carries the call's launch capability requests to each launch.
+	envelope map[string]any
+
+	externalOnce sync.Once
+	external     toolcontract.OperationDefinition
+	externalErr  error
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -109,7 +125,18 @@ type ProgramOutcome struct {
 	ExecutedChildren int    `json:"executed_children"`
 	CompletedEffects int    `json:"completed_effects"`
 	UncertainEffects int    `json:"uncertain_effects"`
+	NativeGaps       int    `json:"native_gaps,omitempty"`
 	ReplayAvailable  bool   `json:"replay_available"`
+	// Refusal is the host decision that stopped the program; the output and
+	// status of every child that ran before it stay in this outcome.
+	Refusal *ProgramRefusal `json:"refusal,omitempty"`
+}
+
+// ProgramRefusal is a typed host refusal at the program's stop point with its
+// rendered feedback.
+type ProgramRefusal struct {
+	Code     string `json:"code"`
+	Feedback string `json:"feedback"`
 }
 
 const programOutputBytes = 64 << 10
@@ -124,6 +151,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	if r != nil && r.disabled.Load() {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
+	}
+	if timeout := toolkit.ClampIntArg(args, "timeout_ms", 0, 0, 7200000); timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+		defer cancel()
 	}
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
@@ -140,6 +172,25 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	parsed, snapshot, err := parseProgram(ctx, memory, source)
+	if err != nil {
+		return "", err
+	}
+	// The plan and frame stay alive while & jobs still run under supervision;
+	// they are released when the program settles.
+	release := func() { _ = snapshot.Close(); _ = parsed.Close() }
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
+
+	cwd, _ := args["cwd"].(string)
+	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, cwd)
+	if err != nil {
+		return "", err
+	}
 	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
 	if err != nil {
 		return "", err
@@ -147,33 +198,28 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if session == nil || session.OwnerPersonID == "" {
 		return "", fmt.Errorf("command program requires the session owner")
 	}
-	parsed, snapshot, err := parseProgram(ctx, memory, source)
+	branch, err := tc.SourceBranch(tc.Source.ActiveRootID)
 	if err != nil {
 		return "", err
 	}
-	defer parsed.Close()
-	defer snapshot.Close()
-
 	root := toolcontract.OperationInvocation{
-		Kind:         toolcontract.ProgramChildInvocation,
-		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
-		ActorID:      session.OwnerPersonID,
-		SessionID:    tc.Identity.SessionID,
-		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID},
-		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
-		CatalogDigest: snapshot.Plan.CatalogDigest,
-	}
-	if cwd, _ := args["cwd"].(string); cwd != "" {
-		root.Scope.Directory = cwd
+		Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
+		ActorID: session.OwnerPersonID, SessionID: tc.Identity.SessionID,
+		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, BranchID: branch.String(), Directory: cwd},
+		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: snapshot.Plan.CatalogDigest,
 	}
 	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: args}, memory)
 	if err != nil {
 		return "", err
 	}
-	defer frame.Close()
-	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
-	if err != nil {
-		return "", err
+	releasePlan := release
+	release = func() { frame.Close(); releasePlan() }
+	// A validation run's source identity is captured before anything runs.
+	var verification func() commandSourceIdentity
+	if tc.Execution.VerificationCheck {
+		_, reader := commandSourceReaders(ctx, tc, paths.Cwd().Abs)
+		identity := reader()
+		verification = func() commandSourceIdentity { return identity }
 	}
 	var owners ProgramOwners
 	if r.Owners != nil {
@@ -181,10 +227,24 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return "", err
 		}
 	}
-	var active []toolcontract.OperationDefinition
+	run := &programRun{catalog: catalog, commands: commandIndex(catalog), baseEnv: programEnvironment(tc), envelope: launchEnvelope(args)}
+	external, err := run.externalDefinition()
+	if err != nil {
+		return "", err
+	}
+	// Many command names share one operation owner; each definition enters
+	// the surface once, keyed by its operation identity.
+	active := []toolcontract.OperationDefinition{external}
+	seen := map[string]bool{}
 	for _, operation := range owners.Natives {
-		if definition, ok := r.Registry.Definition(operation.Tool); ok {
-			active = append(active, definition.Operation)
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, programOperationDefinition(definition.Operation))
+			}
 		}
 	}
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
@@ -197,25 +257,49 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
-	run := &programRun{
-		executor: r.Executor, registry: r.Registry, recorder: r.Recorder, supervisor: r.Supervisor, progress: r.Progress,
-		frame: frame, surface: surface, memory: memory, tc: tc, root: root, parentReceipt: tc.Invocation.ID, source: source,
-		catalog: catalog, commands: commandIndex(catalog),
-		capture: invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64},
+	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.externalHidden = r.ExternalHidden
+	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
+		if err != nil {
+			return err
+		}
+		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
+		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
+			return errors.Join(err, spill.Close())
+		}
+		return nil
 	}
+	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
+	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
+	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
 	if listeners == nil {
 		listeners = lineage.SessionListeners
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch}
+	builtins["sleep"] = sleepBuiltin()
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
 	if r.Builtins != nil {
-		for name, builtin := range r.Builtins(tc, dispatcher) {
+		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
+			if _, taken := builtins[name]; !taken {
+				builtins[name] = builtin
+			}
+		}
+	}
+	if owners.Builtins != nil {
+		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
+		if err != nil {
+			return "", err
+		}
+		releaseBefore := release
+		release = func() { releaseUtilities(); releaseBefore() }
+		for name, builtin := range utilities {
 			if _, taken := builtins[name]; !taken {
 				builtins[name] = builtin
 			}
@@ -232,8 +316,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:  memory,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:      memory,
+		Environment: run.baseEnv,
+		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -242,22 +327,35 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return evaluatedResult(evaluated), err
 	})
 	settled := make(chan error, 1)
-	r.Supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) { settled <- r.settleProgram(ctx, run, result, evaluated, stopped) })
+	handedOff = true
+	lifetime := &programLifetime{release: release}
+	defer lifetime.callerDone()
+	r.Supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) {
+		settled <- r.settleProgram(ctx, run, result, evaluated, stopped)
+		lifetime.settled()
+	})
 	var settleErr error
+	settledNow := false
 	select {
 	case settleErr = <-settled:
+		settledNow = true
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	if feedback := r.feedback(ctx, run, dispatcher, evalErr); feedback != nil {
+	feedback := r.feedback(ctx, run, dispatcher, result.StopCode, evalErr)
+	refusal := toolrejection.AsToolReject(feedback)
+	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
-	}
-	if settleErr != nil {
-		return "", settleErr
 	}
 	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
 	if err != nil {
-		return "", err
+		return "", errors.Join(feedback, err)
+	}
+	if refusal != nil {
+		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
+	}
+	if settledNow {
+		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -310,7 +408,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, Admission: r.sessionResources(), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
 	})
 	if err != nil {
 		return nil, false, err
@@ -339,26 +437,48 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 
 // feedback renders the first native owner rejection through the program
 // feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, evalErr error) error {
+func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stopCode string, evalErr error) error {
 	rejection := dispatcher.firstRejection()
 	if rejection == nil {
 		var refusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
-			return toolrejection.RejectInvalidArguments(refusal.Code, map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected})
+			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			if refusal.Command != "" {
+				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
+			enrichProgramReject(reject, refusal.Command, span)
+			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
 		}
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
-			return reject
+			enrichProgramReject(reject, "", run.root.Span)
+			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
+		}
+		if evalErr != nil && !errors.Is(evalErr, context.Canceled) && !errors.Is(evalErr, context.DeadlineExceeded) {
+			code := stopCode
+			if code == "" {
+				code = toolrejection.ToolOwnerFailedCode
+			}
+			reject := &toolrejection.ToolReject{Code: code, FailureClass: "owner_error", Data: map[string]any{"tool": "command", "reason": evalErr.Error()}}
+			enrichProgramReject(reject, "command", run.root.Span)
+			return errors.Join(evalErr, ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject))
 		}
 		// A host stop without a typed rejection is a host failure, never success.
 		return evalErr
 	}
+	reject := toolrejection.AsToolReject(rejection.cause)
+	enrichProgramReject(reject, rejection.operation.Command(), rejection.operation.Invocation().Span)
 	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
 	if err != nil || prepared == nil {
-		return errors.Join(rejection.cause, err)
+		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), err)
 	}
 	defer prepared.Close()
-	return run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
+	rendered := run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
+	if rendered != nil && toolrejection.AsToolReject(rendered) == nil {
+		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), rendered)
+	}
+	return ensureProgramRefusalText(rendered, reject)
 }
 
 func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result toolcontract.ProducerResult, stdout, stderr *boundedBuffer, scope captureprojection.Scope, screening captureprojection.StreamOptions) (ProgramOutcome, error) {
@@ -366,8 +486,12 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result to
 	if err != nil {
 		return ProgramOutcome{}, err
 	}
+	if run.tc.Effects.Out != nil {
+		receipt := projection.Program
+		run.tc.Effects.Out.CommandProgram = &receipt
+	}
 	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
-		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects}
+		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
 	for _, stream := range []struct {
 		buffer *boundedBuffer
 		target *string
@@ -387,7 +511,7 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	if outputs, ok := r.outputs[sessionID]; ok {
 		return outputs, nil
 	}
-	outputs, err := invocation.NewProgramOutputRetention(ctx, r.Recorder, r.Blobs, sessionID, r.sessionResources())
+	outputs, err := invocation.NewProgramOutputRetention(ctx, r.Recorder, r.Blobs, sessionID, r.sessionResourcesLocked(sessionID))
 	if err != nil {
 		return nil, err
 	}
@@ -475,6 +599,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			case commandsurface.SubstitutionPart:
 				out = append(out, node.SyntaxLocation)
 				list(node.Statements)
+			case commandsurface.ParameterPart:
+				words(node.Words())
+			case commandsurface.ArithmeticPart:
+				words(node.Words())
 			}
 		}
 	}
@@ -511,6 +639,12 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.ForLoop:
 			words(node.Items)
 			list(node.Body)
+		case commandsurface.CaseStatement:
+			words([]commandsurface.DeferredWord{node.Word})
+			for _, item := range node.Items {
+				words(item.Patterns)
+				list(item.Body)
+			}
 		case commandsurface.FunctionDeclaration:
 			statement(node.Body)
 		}
@@ -525,4 +659,150 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		}
 	}
 	return unique
+}
+
+// externalDefinition is the command tool's operation for confined launches:
+// the existing command review, detection and policy admit each launch.
+func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, error) {
+	r.externalOnce.Do(func() {
+		contract, ok := toolcontract.Lookup("command")
+		if !ok {
+			r.externalErr = fmt.Errorf("command contract missing")
+			return
+		}
+		r.external, r.externalErr = toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
+			Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+			Commands: []toolcontract.CommandSpecification{r.commands["external"]}, Resources: r.catalog.Language.Limits,
+			ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
+			Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
+		})
+	})
+	return r.external, r.externalErr
+}
+
+// programLifetime releases a program's plan and frame once both the tool call
+// has finished with them and the program (with its & jobs) has settled.
+type programLifetime struct {
+	mu                     sync.Mutex
+	callerFinished, isDone bool
+	release                func()
+}
+
+func (l *programLifetime) callerDone() {
+	l.mu.Lock()
+	l.callerFinished = true
+	done := l.isDone
+	l.mu.Unlock()
+	if done {
+		l.release()
+	}
+}
+
+func (l *programLifetime) settled() {
+	l.mu.Lock()
+	l.isDone = true
+	finished := l.callerFinished
+	l.mu.Unlock()
+	if finished {
+		l.release()
+	}
+}
+
+// launchCapabilityFields are the call's declarations that every confined launch
+// it reaches is reviewed with: confinement capabilities, SOCKS injection and
+// managed-secret use.
+var launchCapabilityFields = []string{"capability_request", "socks_proxy", "secret_use"}
+
+func launchEnvelope(args map[string]any) map[string]any {
+	envelope := map[string]any{}
+	for _, field := range launchCapabilityFields {
+		if value, ok := args[field]; ok {
+			envelope[field] = value
+		}
+	}
+	return envelope
+}
+
+// launchArguments are the arguments the existing command review, detection
+// and policy evaluate for one launch.
+func (r *programRun) launchArguments(line, cwd string) map[string]any {
+	arguments := map[string]any{"command": line, "cwd": cwd}
+	for field, value := range r.envelope {
+		arguments[field] = value
+	}
+	return arguments
+}
+
+// nativeArguments attaches any call-level capability declarations that the
+// bound native operation contract accepts.
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+	arguments := make(map[string]any, len(base)+len(r.envelope))
+	for k, v := range base {
+		arguments[k] = v
+	}
+	if raw, ok := r.envelope["capability_request"].(map[string]any); ok {
+		supported := map[string]any{}
+		for _, field := range contract.CapabilityRequestFields() {
+			if value, exists := raw[field]; exists {
+				supported[field] = value
+			}
+		}
+		if len(supported) > 0 {
+			arguments["capability_request"] = supported
+		}
+	}
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+		arguments["secret_use"] = secretUse
+	}
+	return arguments
+}
+
+// childOutputBytes bounds each child stream the output store retains.
+const childOutputBytes = 64 << 10
+
+// childOutputs tees a child's stdout and stderr into bounded buffers and
+// returns the streams to use and a function that retains what was written.
+func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context)) {
+	if r.retainOutput == nil {
+		return streams, func(context.Context) {}
+	}
+	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
+	teed := streams
+	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
+	execution := request.Invocation.Identity.ExecutionID
+	return teed, func(ctx context.Context) {
+		for _, stream := range []struct {
+			name   string
+			buffer *boundedBuffer
+		}{{"stdout", stdout}, {"stderr", stderr}} {
+			if data := stream.buffer.Bytes(); len(data) > 0 {
+				// Retention is evidence for previews; a failure here never
+				// changes the child's settled outcome.
+				_ = r.retainOutput(context.WithoutCancel(ctx), execution, stream.name, data, !stream.buffer.truncated)
+			}
+		}
+	}
+}
+
+// stampProgramRun states the settled program's run for verification evidence:
+// passed on status 0, failed otherwise, unverifiable when the host stopped it.
+// A program whose jobs still run states nothing.
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+	if tc.Effects.Out == nil {
+		return
+	}
+	verdict := api.SourceVerdictPassed
+	switch {
+	case outcome.Refusal != nil || outcome.State == "interrupted":
+		verdict = api.SourceVerdictUnverifiable
+	case outcome.Status != 0:
+		verdict = api.SourceVerdictFailed
+	}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	if tc.Execution.VerificationCheck && verification != nil {
+		identity := verification()
+		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
+	}
+	tc.Effects.Out.SourceRun = run
 }

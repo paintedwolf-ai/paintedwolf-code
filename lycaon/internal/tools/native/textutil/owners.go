@@ -141,6 +141,14 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
+}
+
 // Prepared is one bound utility invocation; it reads no input until run.
 // Mode is the catalog effect mode the bound form selects, or empty when the
 // command has one mode.
@@ -252,5 +260,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
-	return nativeutility.Settle(err, inv.status, false), err
+	result := nativeutility.Settle(err, inv.status, false)
+	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	return result, err
 }

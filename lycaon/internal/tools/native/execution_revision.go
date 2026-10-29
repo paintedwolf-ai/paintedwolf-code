@@ -52,7 +52,11 @@ func (c *ExecutionRevisionConflict) Error() string {
 }
 
 func (c *ExecutionRevisionConflict) Unwrap() []error {
-	reject := &toolrejection.ToolReject{Code: "COMMAND_REVISION_CONFLICT", Data: map[string]any{"path": c.Path}}
+	data := map[string]any{"path": c.Path}
+	if expected, observed := c.Pinned.Identity(), c.Current.Identity(); expected != "" && observed != "" && expected != observed {
+		data["expected_revision"], data["observed_revision"] = expected, observed
+	}
+	reject := &toolrejection.ToolReject{Code: "COMMAND_REVISION_CONFLICT", Data: data}
 	if c.Cause == nil {
 		return []error{reject}
 	}

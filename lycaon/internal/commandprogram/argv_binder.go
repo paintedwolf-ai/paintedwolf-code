@@ -24,8 +24,7 @@ func (f Fields) Values() []string {
 	return out
 }
 
-// ArgvBinder binds a complete argv to one catalog command's typed forms.
-// Utilities share it so option grammar comes only from the frozen catalog.
+// ArgvBinder binds argv to the selected command's catalog forms.
 type ArgvBinder interface {
 	Bind(toolcontract.CommandSpecification, Fields) (BoundArgv, error)
 }
@@ -96,8 +95,7 @@ func (b BoundArgv) scoped(key string, global bool) []BoundOption {
 	return out
 }
 
-// ArgvReview is the approval projection: the shared operation identity plus
-// this form's bound options, rather than a legacy tool's JSON schema.
+// ArgvReview carries the selected form's options and operands for approval.
 type ArgvReview struct {
 	OperationID string           `json:"operation_id"`
 	Command     string           `json:"command"`
@@ -230,6 +228,18 @@ func (b *argvBinding) global(subcommand []string) error {
 }
 
 func (b *argvBinding) options(scope string) error {
+	switch b.spec.Name {
+	case "echo":
+		return b.leadingOptions(func(word string) bool {
+			return len(word) > 1 && word[0] == '-' && strings.TrimLeft(word[1:], "neE") == ""
+		})
+	case "printf":
+		return b.leadingOptions(func(string) bool { return false })
+	case "jobs":
+		return b.jobsOptions()
+	case "ps":
+		return b.psOptions()
+	}
 	operandsOnly := false
 	for b.index < len(b.argv) {
 		word := b.argv[b.index]
@@ -247,6 +257,102 @@ func (b *argvBinding) options(scope string) error {
 			if err := b.option(word, scope); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (b *argvBinding) leadingOptions(valid func(string) bool) error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		if !operandsOnly && word.Value == "--" {
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+			continue
+		}
+		if !operandsOnly && valid(word.Value) {
+			for i := 1; i < len(word.Value); i++ {
+				flag := "-" + word.Value[i:i+1]
+				form, _ := b.exact(flag, "")
+				b.record(form, flag, word, nil, "")
+			}
+			continue
+		}
+		operandsOnly = true
+		operand := word
+		b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
+	}
+	return nil
+}
+
+func (b *argvBinding) jobsOptions() error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		switch {
+		case !operandsOnly && word.Value == "--":
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+		case !operandsOnly && optionWord(word.Value):
+			if strings.TrimLeft(word.Value[1:], "lp") != "" {
+				return b.fail(argvOptionUnsupported, word, "catalogued option")
+			}
+			for i := 1; i < len(word.Value); i++ {
+				flag := "-" + word.Value[i:i+1]
+				b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
+			}
+		default:
+			operand := word
+			b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
+		}
+	}
+	return nil
+}
+
+func (b *argvBinding) psOptions() error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		switch {
+		case !operandsOnly && word.Value == "--":
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+		case !operandsOnly && optionWord(word.Value):
+			if strings.HasPrefix(word.Value, "--") {
+				return b.fail(argvOptionUnsupported, word, "catalogued option")
+			}
+			suffix := word.Value[1:]
+			for i := 0; i < len(suffix); i++ {
+				ch := suffix[i]
+				flag := "-" + suffix[i:i+1]
+				switch ch {
+				case 'e', 'f', 'a', 'u', 'x', 'l':
+					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
+				case 'o', 'p':
+					rest := suffix[i+1:]
+					var val Field
+					if rest != "" {
+						val = Field{Value: rest, Span: word.Span}
+					} else {
+						if b.index >= len(b.argv) {
+							return b.fail(argvOperandInvalid, word, "value for "+flag)
+						}
+						val = b.argv[b.index]
+						b.index++
+					}
+					b.record(toolcontract.OptionForm{Spellings: []string{flag}, Arity: 1}, flag, word, Fields{val}, "")
+					i = len(suffix)
+				default:
+					return b.fail(argvOptionUnsupported, word, "catalogued option")
+				}
+			}
+		default:
+			operand := word
+			b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
 		}
 	}
 	return nil

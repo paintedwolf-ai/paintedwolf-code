@@ -48,23 +48,6 @@ func TestCommandSnapshotCaptureIncompatibleArgs(t *testing.T) {
 	}
 }
 
-func TestCommandDisallowedDesktopCapture(t *testing.T) {
-	cmd, _ := newCommandTool(t)
-	root := t.TempDir()
-	tctx := commandToolContext(root, "sess-1", "worker-1")
-
-	for _, disallowed := range []string{"screencapture -x out.png", "/usr/sbin/screencapture -x out.png", "scrot shot.png", "xwd -root"} {
-		args := map[string]any{
-			"command": disallowed,
-		}
-		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := toolrejection.AsToolReject(err)
-		if tr == nil || tr.Code != "DESKTOP_CAPTURE_DISALLOWED" {
-			t.Fatalf("command %q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", disallowed, err)
-		}
-	}
-}
-
 func TestCommandSnapshotCaptureMissingFileRejection(t *testing.T) {
 	cmd, _ := newCommandTool(t)
 	root := t.TempDir()

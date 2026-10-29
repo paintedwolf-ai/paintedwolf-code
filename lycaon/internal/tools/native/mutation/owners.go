@@ -130,6 +130,7 @@ func (o *Owners) limit(id string) int64 {
 // toolexecution.PreparedNativeEffect: streams reach it only after admission.
 type Prepared struct {
 	Operation string
+	Mode      string
 	Argv      commandprogram.BoundArgv
 	Review    commandprogram.ArgvReview
 	owners    *Owners
@@ -165,7 +166,40 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+}
+
+func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
+	hasOpt := func(key string) bool {
+		_, ok := bound.Last(key)
+		return ok
+	}
+	switch spec.Name {
+	case "tar":
+		if hasOpt("-t") {
+			return "listing-or-stream-decode"
+		}
+		return "create-extract-compress-decompress-to-path"
+	case "zip", "unzip":
+		if hasOpt("-l") {
+			return "listing-or-stream-decode"
+		}
+		return "create-extract-compress-decompress-to-path"
+	case "gzip":
+		if hasOpt("-t") || hasOpt("-c") {
+			return "listing-or-stream-decode"
+		}
+		return "create-extract-compress-decompress-to-path"
+	case "gunzip":
+		if hasOpt("-c") {
+			return "listing-or-stream-decode"
+		}
+		return "create-extract-compress-decompress-to-path"
+	}
+	if len(spec.Effects) > 0 {
+		return spec.Effects[0].Mode
+	}
+	return ""
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

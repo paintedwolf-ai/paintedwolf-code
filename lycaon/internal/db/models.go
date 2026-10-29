@@ -752,6 +752,7 @@ type InvocationProgramExecutions struct {
 	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
 	StartedAt                       string         `json:"started_at"`
 	SettledAt                       sql.NullString `json:"settled_at"`
+	NativeGapJson                   string         `json:"native_gap_json"`
 }
 
 type InvocationProgramNodes struct {

@@ -75,7 +75,7 @@ func (inv *invocation) fail(operand, reason string) {
 
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
 }
 
 // unsupportedForm refuses a catalogued spelling this frontend cannot perform
@@ -143,6 +143,12 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: certainty}, err
 	}
 	if reject := toolrejection.AsToolReject(err); reject != nil {
+		if reject.Data == nil {
+			reject.Data = map[string]any{}
+		}
+		if reject.Data["command"] == nil {
+			reject.Data["command"] = inv.name()
+		}
 		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), reject.Error(), reject.Code)
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: reject.Code, EffectCertainty: certainty}, err
 	}
@@ -160,6 +166,15 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 // destinationEntry resolves a copy or move destination: an existing directory
 // receives the source's base name; several sources require one.
+// destinationDisplay names a destination entry as the program wrote DEST.
+func (inv *invocation) destinationDisplay(dest, to string) string {
+	bound, err := inv.paths.Bind(inv.ctx, dest, true)
+	if err != nil {
+		return to
+	}
+	return destinationDisplay(dest, bound.Resolved.Abs, to)
+}
+
 func (inv *invocation) destinationEntry(dest string, source string, many bool) (string, error) {
 	bound, err := inv.bind(dest, true)
 	if err != nil {

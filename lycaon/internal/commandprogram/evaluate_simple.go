@@ -3,6 +3,7 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,6 +12,16 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
+
+// EvaluatorBuiltin reports names the evaluator runs itself, before any
+// dispatch: control, status, test, variable and source built-ins.
+func EvaluatorBuiltin(name string) bool {
+	switch name {
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
+		return true
+	}
+	return controlBuiltins[name]
+}
 
 // controlBuiltins change evaluator state rather than invoking an owner. They are
 // reserved: a function cannot shadow them.
@@ -72,8 +83,8 @@ func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.As
 
 // expanding runs one command's expansion with the statuses of the
 // substitutions it reaches retained. A nonzero unit prevents the containing
-// command (P08 AdmitSubstitution) and becomes its status; prevented reports
-// that the command must not run. Expansion refusals latch at the word.
+// command and becomes its status; prevented reports that the command must not
+// run. Expansion refusals latch at the word.
 func (f *frame) expanding(loc commandsurface.SyntaxLocation, expand func(scope *frame) error) (prevented bool, err error) {
 	g := *f
 	tracker := &substitutionStatus{}
@@ -148,6 +159,10 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 		})
 	case "unset":
 		return signal{}, f.unset(s, fields)
+	case "set":
+		return signal{}, f.setOptions(s, fields)
+	case "read":
+		return signal{}, f.readBuiltin(ctx, s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }
@@ -155,8 +170,14 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 func (f *frame) predicates() PredicateRuntime {
 	runtime := f.e.ports.Predicates
 	runtime.Expansion, runtime.Scope = f.e.expander, f
+	if frame, ok := f.state.dispatch.(FramePredicates); ok {
+		runtime.Files = frame.PredicateFiles()
+	}
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
+	}
+	if runtime.Patterns == nil {
+		runtime.Patterns = NativePredicatePatterns{Memory: runtime.Memory, LocalBoundsOnly: runtime.LocalBoundsOnly}
 	}
 	return runtime
 }
@@ -195,15 +216,22 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	if err != nil {
 		return err
 	}
+	var gap *toolcontract.NativeGap
 	if native {
 		if _, err := f.e.ports.Binder.Bind(spec, fields); err != nil {
 			var argv *ArgvError
-			if errors.As(err, &argv) {
-				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
-				return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
+			if !errors.As(err, &argv) {
+				child.close()
+				return err
 			}
-			child.close()
-			return err
+			gap = f.nativeGap(spec, argv, fields, assigns)
+			if gap == nil {
+				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
+				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
+				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+				refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
+				return refusal
+			}
 		}
 	}
 	environment, err := f.environment(assigns)
@@ -211,9 +239,9 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		child.close()
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
-	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native)}
+	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap}
 	var result toolcontract.ProducerResult
-	if native && spec.Name != "external" {
+	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
@@ -246,6 +274,8 @@ func (f *frame) settle(child *childRun, result toolcontract.ProducerResult, err 
 	}
 	child.settle(result, err)
 	f.publish.mark(result.PublicationEligible)
+	f.state.pipeStatus = []int{result.Status}
+	f.state.vars.SetPipeStatus(f.state.pipeStatus)
 	recordErr := f.state.control.Record(child.inv.Identity.ExecutionID, result, true, false)
 	if stop, stopped := f.state.latch.Stop(); stopped {
 		if stop.ExecutionID == child.inv.Identity.ExecutionID && err != nil {
@@ -307,8 +337,7 @@ func builtinOperand(value string, status bool) (int, bool) {
 }
 
 func (f *frame) unset(s commandsurface.Statement, fields Fields) error {
-	args := fields.Values()[1:]
-	functions := false
+	args, functions := fields.Values()[1:], false
 	if len(args) > 0 && (args[0] == "-v" || args[0] == "-f") {
 		functions, args = args[0] == "-f", args[1:]
 	}
@@ -405,4 +434,83 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declare
 	}
 	child.settle(result, err)
 	return err
+}
+
+// setOptions applies set -e/-u/-o errexit/-o nounset and their + forms;
+// -o pipefail is the fixed pipeline semantics. Other operands are usage 2.
+func (f *frame) setOptions(s commandsurface.Statement, fields Fields) error {
+	options := f.state.options
+	args := fields.Values()[1:]
+	for i := 0; i < len(args); i++ {
+		flags, enable := strings.CutPrefix(args[i], "-")
+		if !enable {
+			flags, _ = strings.CutPrefix(args[i], "+")
+		}
+		if flags == "" || flags == args[i] {
+			return f.builtinStatus(s.SyntaxLocation, "set", 2)
+		}
+		for _, flag := range flags {
+			name := ""
+			switch flag {
+			case 'e':
+				name = "errexit"
+			case 'u':
+				name = "nounset"
+			case 'o':
+				if i+1 >= len(args) {
+					return f.builtinStatus(s.SyntaxLocation, "set", 2)
+				}
+				i++
+				name = args[i]
+			}
+			switch {
+			case name == "errexit":
+				options.errexit = enable
+			case name == "nounset":
+				options.nounset = enable
+			case name == "pipefail" && enable:
+			default:
+				return f.builtinStatus(s.SyntaxLocation, "set", 2)
+			}
+		}
+	}
+	f.state.options = options
+	return f.builtinStatus(s.SyntaxLocation, "set", 0)
+}
+
+// nativeGap is the gap an unsupported native form becomes when dispatch can
+// run the installed program instead; nil keeps the refusal.
+func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
+	if argv.Code != argvOptionUnsupported && argv.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" {
+		return nil
+	}
+	gaps, ok := f.state.dispatch.(NativeGaps)
+	if !ok {
+		return nil
+	}
+	environment, err := f.environment(assigns)
+	if err != nil {
+		return nil
+	}
+	gap := &toolcontract.NativeGap{Command: spec.Name, Code: argv.Code, Form: argv.Word}
+	if !gaps.GapLaunchable(OperationRequest{OperationID: "external", Argv: fields, Environment: environment, Gap: gap}) {
+		return nil
+	}
+	return gap
+}
+
+// hostRefusal writes a host refusal to the statement's stderr in shell voice.
+func (f *frame) hostRefusal(command, form, expected, code string) {
+	if f.streams.Error == nil {
+		return
+	}
+	subject := command
+	if form != "" {
+		subject += ": " + form
+	}
+	if expected != "" {
+		_, _ = fmt.Fprintf(f.streams.Error, "%s: not supported here (expected %s) [%s]\n", subject, expected, code)
+		return
+	}
+	_, _ = fmt.Fprintf(f.streams.Error, "%s: not supported here [%s]\n", subject, code)
 }

@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -11,12 +12,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
+	owners            programOwnerTools
 	bgRegistry        *bgprocess.Registry
 	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
@@ -114,8 +117,11 @@ type ProgramServices struct {
 	Recorder  *invocation.SQLRecorder
 	Blobs     blobstore.Store
 	Projector *captureprojection.Projector
+	HTTP      httpaction.Deps
 	Progress  toolexecution.ProgramProgressFacts
 	Sessions  command.SessionOwners
+	// ExternalHidden withdraws the explicit external selector.
+	ExternalHidden bool
 }
 
 func (r *CommandServices) programs() *command.ProgramRuntime {
@@ -125,20 +131,33 @@ func (r *CommandServices) programs() *command.ProgramRuntime {
 	return r.commandTool.Programs
 }
 
-// SetProgramServices completes the program runtime at host composition.
-func (r *CommandServices) SetProgramServices(services ProgramServices) {
+// SetProgramServices completes the program runtime at host composition. An
+// owner that cannot be composed fails host startup rather than leaving
+// programs without their native utilities.
+func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs := r.programs()
 	if programs == nil {
-		return
+		return nil
 	}
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
 	programs.Progress, programs.Sessions = services.Progress, services.Sessions
 	programs.Supervisor.Interrupter = services.Recorder
+	programs.ExternalHidden = services.ExternalHidden
+	if programs.Executor != nil {
+		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
+	}
+	owners, err := r.owners.compose(services)
+	if err != nil {
+		return fmt.Errorf("compose command program owners: %w", err)
+	}
+	programs.Owners = owners
+	return nil
 }
 
 // setProgramExecutor binds the executor that admits each native child.
 func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 	if programs := r.programs(); programs != nil {
 		programs.Executor = executor
+		executor.SetProgramEntry("command", command.CaptureInvocation)
 	}
 }

@@ -127,11 +127,11 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	}
 	bound, err := p.Bind(ctx, cwd, false)
 	if err != nil {
-		return nil, err
+		return nil, callCwdReject(ctx, "CWD_OUT_OF_SCOPE", cwd, err)
 	}
 	bound, info, err := p.directoryBinding(ctx, bound)
 	if err != nil {
-		return nil, err
+		return nil, callCwdReject(ctx, "CWD_NOT_DIRECTORY", cwd, err)
 	}
 	p.cwdInfo = info
 	p.cwd = bound

@@ -93,7 +93,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err = surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !nativeCommandPrefix(bound.Command(), effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
@@ -105,7 +105,19 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	values := effect.Arguments
 	if effect.Argv != nil {
-		values = effect.Argv.Arguments()
+		argv := effect.Argv.Arguments()
+		if len(values) == 0 {
+			values = argv
+		} else {
+			merged := make(map[string]any, len(values)+len(argv))
+			for k, v := range values {
+				merged[k] = v
+			}
+			for k, v := range argv {
+				merged[k] = v
+			}
+			values = merged
+		}
 	}
 	arguments, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {
@@ -234,14 +246,43 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 	return result
 }
 
+// stageMatchesCommand checks the stage against its catalog command. A confined
+// external launch runs the launched program's own argv, so its stage starts
+// with that program rather than the external selector.
+func stageMatchesCommand(command string, argv []string) bool {
+	if command == "external" {
+		return len(argv) > 0 && argv[0] != ""
+	}
+	return nativeCommandPrefix(command, argv)
+}
+
 // Command prefixes come from the immutable catalog, never parsed command prose.
+// Multi-word git commands admit global flags (-C, -c, --no-pager) before the subcommand.
 func nativeCommandPrefix(command string, argv []string) bool {
 	parts := strings.Split(command, " ")
-	if len(argv) < len(parts) {
+	if len(argv) < len(parts) || len(parts) == 0 || parts[0] == "" || argv[0] != parts[0] {
 		return false
 	}
-	for i, part := range parts {
-		if part == "" || argv[i] != part {
+	idx := 1
+	if parts[0] == "git" && len(parts) > 1 {
+		for idx < len(argv) {
+			word := argv[idx]
+			switch {
+			case word == "-C" || word == "-c":
+				idx += 2
+				continue
+			case strings.HasPrefix(word, "-C") || strings.HasPrefix(word, "-c") || word == "--no-pager":
+				idx++
+				continue
+			}
+			break
+		}
+	}
+	if len(argv)-idx < len(parts)-1 {
+		return false
+	}
+	for i, part := range parts[1:] {
+		if part == "" || argv[idx+i] != part {
 			return false
 		}
 	}
@@ -269,9 +310,9 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
 }
 
-// validateNativeArguments checks a legacy structured value against its tool
-// schema. A catalog-bound form was already validated by the argv binder, so
-// its review record is not forced into that schema.
+// validateNativeArguments checks structured native tool values against their
+// schema. Catalog-bound argv is validated by its binder and carries a separate
+// review record.
 func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandprogram.ArgvReview, values map[string]any, tc tools.ToolContext) error {
 	if argv != nil {
 		if argv.OperationID != facts.Identity {

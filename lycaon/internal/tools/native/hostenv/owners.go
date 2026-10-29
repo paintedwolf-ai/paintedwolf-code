@@ -16,8 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // Owners serves every program; per-invocation state lives in Prepared.
@@ -95,18 +95,25 @@ func (o *Owners) Commands() []string {
 // Builtins returns one in-process dispatcher per utility for one invocation's
 // tool context, the shape the program runtime composes. nested runs env's
 // COMMAND operand as its own child; without it that form is refused.
-func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher {
+func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedCommand, bound NativeBindings) map[string]commandprogram.OperationDispatcher {
 	out := make(map[string]commandprogram.OperationDispatcher, len(o.specs))
 	for name := range o.specs {
-		out[name] = dispatcher{owners: o, tc: tc, nested: nested}
+		out[name] = dispatcher{owners: o, tc: tc, nested: nested, bound: bound}
 	}
 	return out
+}
+
+// NativeBindings reports whether this program binds a name to a native owner;
+// type, which and command -v describe what dispatch actually does.
+type NativeBindings interface {
+	NativeBound(name string) bool
 }
 
 type dispatcher struct {
 	owners *Owners
 	tc     tools.ToolContext
 	nested commandprogram.NestedCommand
+	bound  NativeBindings
 }
 
 func (d dispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -114,11 +121,20 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	if err != nil {
 		return settle(err, 0), err
 	}
-	return prepared.InvokeOwner(ctx, d.tc, d.nested, streams)
+	return prepared.InvokeOwner(ctx, d.tc, d.nested, d.bound, streams)
+}
+
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
 }
 
 // Prepared is one bound utility invocation; it performs no query until run.
 type Prepared struct {
+	Mode    string
 	Argv    commandprogram.BoundArgv
 	Review  commandprogram.ArgvReview
 	owners  *Owners
@@ -143,21 +159,34 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
-		return Prepared{}, argvRejection(err, spec)
+		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	mode := ""
+	if len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
+	}
+	if command == "env" {
+		mode = "inspect"
+		for _, op := range bound.Operands() {
+			if idx := strings.IndexByte(op.Value, '='); idx <= 0 {
+				mode = "dispatch"
+				break
+			}
+		}
+	}
+	return Prepared{Mode: mode, Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once. Stdout is written only after the
 // complete result is known, so a refusal never leaves a plausible prefix.
-func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested commandprogram.NestedCommand, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested commandprogram.NestedCommand, bound NativeBindings, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return settle(errors.New("host environment invocation is not prepared"), 0), errors.New("host environment invocation is not prepared")
 	}
 	if err := ctx.Err(); err != nil {
 		return settle(err, 0), err
 	}
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, bound: bound, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
 	err := p.run(inv)
 	if inv.passthrough != nil {
 		return *inv.passthrough, err
@@ -174,29 +203,6 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested 
 	return settle(err, inv.status), err
 }
 
-// settle projects a run onto the producer contract.
 func settle(err error, status int) toolcontract.ProducerResult {
-	if err == nil {
-		return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
-	}
-	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
-	if reject := toolrejection.AsToolReject(err); reject != nil {
-		result.Status, result.Terminal, result.StopCode = 2, toolcontract.ProducerRefused, reject.Code
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		result.Status, result.Terminal, result.StopCode = 130, toolcontract.ProducerInterrupted, ""
-	}
-	return result
-}
-
-// argvRejection maps a binder refusal to its catalog code with the word span.
-func argvRejection(err error, spec toolcontract.CommandSpecification) error {
-	var argvErr *commandprogram.ArgvError
-	if !errors.As(err, &argvErr) {
-		return err
-	}
-	return errors.Join(err, toolrejection.RejectInvalidArguments(argvErr.Code, map[string]any{
-		"command": spec.Name, "word": argvErr.Word, "expected": argvErr.Expected, "expected_form": spec.Argv,
-		"source_start_byte": argvErr.Span.StartByte, "source_end_byte": argvErr.Span.EndByte, "source_line": argvErr.Span.Line, "source_column": argvErr.Span.Column,
-	}))
+	return nativeutility.Settle(err, status, false)
 }

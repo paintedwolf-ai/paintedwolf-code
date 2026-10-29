@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -14,18 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/blobstore"
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/lineage"
-	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -38,110 +31,28 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type programFixture struct {
-	runtime    *command.ProgramRuntime
-	recorder   *invocation.SQLRecorder
-	database   db.Handle
-	session    string
-	dir        string
-	calls      int
-	background *bgprocess.Registry
-}
+type programFixture struct{ *programtest.Fixture }
 
-type fixtureSessions struct{}
-
-func (fixtureSessions) Get(_ context.Context, id string) (*api.Session, error) {
-	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
-}
-
-type progressFacts struct{ store progress.Store }
-
-func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
-}
-
-// newProgramFixture composes the real registry, executor, SQL receipts,
-// session process registry and supervisor around the command entry.
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
-	dir := t.TempDir()
-	database := testdbfixture.Open(t, "programs.db")
-	session := "session-1"
-	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
-	recorder := invocation.NewSQLRecorder(database)
-	registry := tools.NewDefaultRegistry()
-	for _, name := range []string{"write", "read"} {
-		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-			return "", errors.New("structured tool is not exercised")
-		}))
-	}
-	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
-	testutil.FailErr(t, "compile profile effects", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
-	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewMemoryStore()
-	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
-	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
-	runtime := &command.ProgramRuntime{
-		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
-		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
-		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: fixtureSessions{},
-		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}, Sources: dirSources(dir)}, nil
-		},
-	}
-	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background}
+	return &programFixture{programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
+		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
+	}})}
 }
 
-// call opens a real model receipt for one command call and runs the entry.
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
 	t.Helper()
-	f.calls++
-	callID := fmt.Sprintf("model-call-%d", f.calls)
-	args := map[string]any{"command": source}
-	contract, _ := toolcontract.Lookup("command")
-	parent, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
-	testutil.FailErr(t, "begin model receipt", err)
-	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
-	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.session, callID
-	tc.Invocation.ID = parent.ID
-	return f.runtime.Run(ctx, args, tc)
+	return f.Call(t, ctx, source)
 }
 
-func (f *programFixture) programRows(t *testing.T) []string {
-	t.Helper()
-	rows, err := f.database.QueryContext(t.Context(), `SELECT p.state FROM invocation_programs p ORDER BY p.started_at`)
-	testutil.FailErr(t, "read programs", err)
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var state string
-		testutil.FailErr(t, "scan program", rows.Scan(&state))
-		out = append(out, state)
-	}
-	return out
-}
+func (f *programFixture) programRows(t *testing.T) []string { return f.Programs(t) }
 
-func (f *programFixture) executions(t *testing.T) map[string]string {
-	t.Helper()
-	rows, err := f.database.QueryContext(t.Context(), `SELECT operation_id, state FROM invocation_program_executions ORDER BY ordinal`)
-	testutil.FailErr(t, "read executions", err)
-	defer rows.Close()
-	out := map[string]string{}
-	for rows.Next() {
-		var operation, state string
-		testutil.FailErr(t, "scan execution", rows.Scan(&operation, &state))
-		out[operation] += state + ";"
-	}
-	return out
-}
+func (f *programFixture) executions(t *testing.T) map[string]string { return f.Executions(t) }
 
 // firstLineOperation is a typed fixture reader that copies one stdin line and
 // then stops reading, as head does.
 func firstLineOperation() command.NativeOperation {
-	return command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	return command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("head"), request.Argv)
 		if err != nil {
 			return command.NativePrepared{}, err
@@ -163,7 +74,7 @@ func firstLineOperation() command.NativeOperation {
 // teeOperation is a typed fixture owner bound through InvokeNative: it copies
 // its actual stdin to the bound operand and to stdout.
 func teeOperation(dir string) command.NativeOperation {
-	return command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	return command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("tee"), request.Argv)
 		if err != nil {
 			return command.NativePrepared{}, err
@@ -219,10 +130,10 @@ func (f *programFixture) jobHandle(t *testing.T) string {
 	var outcome struct{ Stdout string }
 	testutil.FailErr(t, "decode jobs outcome", json.Unmarshal([]byte(listed), &outcome))
 	fields := strings.Fields(outcome.Stdout)
-	if len(fields) != 3 || fields[1] != "running" {
+	if len(fields) != 3 || fields[0] != "[1]" || fields[2] != "running" {
 		t.Fatalf("jobs output %q", outcome.Stdout)
 	}
-	return fields[0]
+	return fields[1]
 }
 
 func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) {
@@ -232,12 +143,12 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 	if !strings.Contains(out, `"stdout":"hello\n"`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("program outcome %s", out)
 	}
-	data, err := os.ReadFile(filepath.Join(f.dir, "out.txt"))
+	data, err := os.ReadFile(filepath.Join(f.Dir, "out.txt"))
 	if err != nil || string(data) != "hello\n" {
 		t.Fatalf("native owner effect %q %v", data, err)
 	}
 	executions := f.executions(t)
-	if executions["external"] != "completed;" || executions["write"] != "completed;" {
+	if executions["command"] != "completed;" || executions["write"] != "completed;" {
 		t.Fatalf("child receipts %v", executions)
 	}
 	if programs := f.programRows(t); len(programs) != 1 || programs[0] != "completed" {
@@ -255,7 +166,7 @@ func TestProgramEntryRefusesExcludedConstructBeforeEarlierWrite(t *testing.T) {
 	if start, _ := rejected.Data["source_start_byte"].(int); start < len("external -- /bin/echo x | tee first.txt; ") {
 		t.Fatalf("span does not locate the excluded construct: %v", rejected.Data)
 	}
-	if _, statErr := os.Stat(filepath.Join(f.dir, "first.txt")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(f.Dir, "first.txt")); !os.IsNotExist(statErr) {
 		t.Fatal("earlier valid write ran before whole-program validation")
 	}
 	if programs := f.programRows(t); len(programs) != 0 {
@@ -270,18 +181,32 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	handle := f.jobHandle(t)
 	_, err = f.call(t, t.Context(), "kill -TERM "+handle)
 	testutil.FailErr(t, "kill session job", err)
-	jobs := &command.SessionJobs{Registry: f.background, SessionID: f.session}
+	jobs := &command.SessionJobs{Registry: f.Background, SessionID: f.Session}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	exit, stopped, err := f.background.Lifecycle.Wait(ctx, f.session, handle)
+	exit, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle)
 	if err != nil || !stopped || exit == 0 {
 		t.Fatalf("killed job exit=%d stopped=%v err=%v", exit, stopped, err)
 	}
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	if _, err := f.call(t, t.Context(), "kill -TERM not-a-session-job"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("foreign job reference accepted: %v", err)
+	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
+		testutil.FailErr(t, "run foreign kill", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {
+			t.Fatalf("foreign job reference %s: %s", reference, out)
+		}
+	}
+}
+
+// %N, %% and $! name this session's jobs for kill and wait.
+func TestProgramEntryJobSpecsAddressSessionJobs(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `sleep 30 & first=$!; sleep 30 & kill %1; kill %%; wait $first; external -- /bin/echo "first=$?"; wait %2; external -- /bin/echo "second=$?"`)
+	testutil.FailErr(t, "run job specs", err)
+	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=143") || !strings.Contains(outcome.Stdout, "second=143") {
+		t.Fatalf("job spec outcome %s", out)
 	}
 }
 
@@ -292,8 +217,8 @@ func TestProgramEntryStopCancelsMidPipelineAndSettlesChildren(t *testing.T) {
 		_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 | tee never.txt")
 		done <- err
 	}()
-	f.awaitExecution(t, "external", "running")
-	if stopped := f.runtime.Supervisor.Stop(f.session); len(stopped) != 1 {
+	f.awaitExecution(t, "command", "running")
+	if stopped := f.Runtime.Supervisor.Stop(f.Session); len(stopped) != 1 {
 		t.Fatalf("stop acknowledged %v", stopped)
 	}
 	select {
@@ -318,8 +243,8 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 		_, err := f.call(t, t.Context(), "external -- /bin/sleep 30")
 		done <- err
 	}()
-	f.awaitExecution(t, "external", "running")
-	interrupted, err := f.runtime.Supervisor.Lost(t.Context(), f.session, "output:supervisor-lost")
+	f.awaitExecution(t, "command", "running")
+	interrupted, err := f.Runtime.Supervisor.Lost(t.Context(), f.Session, "output:supervisor-lost")
 	testutil.FailErr(t, "reconcile supervisor loss", err)
 	if interrupted != 1 {
 		t.Fatalf("loss interrupted %d programs", interrupted)
@@ -333,9 +258,9 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 		t.Fatalf("program state after loss %v", programs)
 	}
 	before := f.executions(t)
-	count, err := f.runtime.Supervisor.Lost(t.Context(), f.session, "output:supervisor-lost-again")
+	count, err := f.Runtime.Supervisor.Lost(t.Context(), f.Session, "output:supervisor-lost-again")
 	testutil.FailErr(t, "repeat reconciliation", err)
-	if count != 0 || fmt.Sprint(f.executions(t)) != fmt.Sprint(before) || before["external"] != "interrupted;" {
+	if count != 0 || fmt.Sprint(f.executions(t)) != fmt.Sprint(before) || before["command"] != "interrupted;" {
 		t.Fatalf("loss replayed or rewrote children: before %v after %v count %d", before, f.executions(t), count)
 	}
 }
@@ -345,12 +270,12 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
 	testutil.FailErr(t, "launch owned job", err)
 	handle := f.jobHandle(t)
-	if stopped := f.runtime.SetDisabled(true); len(stopped) != 1 {
+	if stopped := f.Runtime.SetDisabled(true); len(stopped) != 1 {
 		t.Fatalf("disable stopped %v", stopped)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	if _, stopped, err := f.background.Lifecycle.Wait(ctx, f.session, handle); err != nil || !stopped {
+	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle); err != nil || !stopped {
 		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
@@ -364,7 +289,7 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	if programs := f.programRows(t); len(programs) != 2 || programs[0] != "interrupted" || programs[1] != "completed" {
 		t.Fatalf("programs after disable %v", programs)
 	}
-	f.runtime.SetDisabled(false)
+	f.Runtime.SetDisabled(false)
 	if out, err := f.call(t, t.Context(), "external -- /bin/echo again"); err != nil || !strings.Contains(out, `"stdout":"again\n"`) {
 		t.Fatalf("re-enabled entry %s %v", out, err)
 	}
@@ -373,7 +298,7 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
 	f := newProgramFixture(t)
 	var asked []string
-	f.runtime.Listeners = func(_ context.Context, session string) ([]lineage.SocketObservation, error) {
+	f.Runtime.Listeners = func(_ context.Context, session string) ([]lineage.SocketObservation, error) {
 		asked = append(asked, session)
 		return []lineage.SocketObservation{{Local: netip.MustParseAddrPort("127.0.0.1:8080"), Listening: true}}, nil
 	}
@@ -387,10 +312,12 @@ func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
 	if !strings.Contains(out, `"stdout":""`) || !strings.Contains(out, `"status":1`) {
 		t.Fatalf("unowned port listed %s", out)
 	}
-	if _, err := f.call(t, t.Context(), "lsof -i 8080"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("malformed endpoint accepted: %v", err)
+	out, err = f.call(t, t.Context(), "lsof -i 8080")
+	testutil.FailErr(t, "lsof malformed endpoint", err)
+	if decodeOutcome(t, out).Refusal == nil {
+		t.Fatalf("malformed endpoint accepted: %s", out)
 	}
-	if len(asked) != 2 || asked[0] != f.session || asked[1] != f.session {
+	if len(asked) != 2 || asked[0] != f.Session || asked[1] != f.Session {
 		t.Fatalf("listener observation scope %v", asked)
 	}
 }
@@ -402,7 +329,190 @@ func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
 	if !strings.Contains(out, `"stdout":"y\n"`) || !strings.Contains(out, `"status":0`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("early consumer outcome %s", out)
 	}
-	if executions := f.executions(t); executions["external"] != "completed;" || executions["read"] != "completed;" {
+	if executions := f.executions(t); executions["command"] != "completed;" || executions["read"] != "completed;" {
 		t.Fatalf("children %v", executions)
+	}
+}
+
+// Desktop screen capture programs are refused at their launch point, after
+// earlier statements ran, without starting the capture program.
+func TestProgramEntryRefusesDesktopCaptureLaunch(t *testing.T) {
+	for _, program := range []string{"screencapture -x out.png", "/usr/sbin/screencapture -x out.png", "scrot shot.png", "xwd -root"} {
+		f := newProgramFixture(t)
+		out, err := f.call(t, t.Context(), program)
+		testutil.FailErr(t, "run refused capture", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "DESKTOP_CAPTURE_DISALLOWED" {
+			t.Fatalf("%q: expected DESKTOP_CAPTURE_DISALLOWED, got %s", program, out)
+		}
+		if executions := f.executions(t); executions["command"] != "refused;" {
+			t.Fatalf("%q: child receipts %v", program, executions)
+		}
+	}
+}
+
+// Retained program output holds its stored bytes, not the encoder's worst
+// case, so one session runs many programs without exhausting its quota.
+func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
+	f := newProgramFixture(t)
+	for i := range 150 {
+		out, err := f.call(t, t.Context(), fmt.Sprintf("external -- /bin/echo run-%d | tee out.txt", i))
+		if err != nil || !strings.Contains(out, `"state":"completed"`) {
+			t.Fatalf("program %d: %v %s", i, err, out)
+		}
+	}
+}
+
+// A native name without a native owner runs as its installed program, marked
+// external in its receipt with a native_gap fact; without one it refuses in
+// shell voice naming the command.
+func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), "external -- /bin/echo gap-line | grep gap")
+	testutil.FailErr(t, "run native gap", err)
+	if !strings.Contains(out, `"stdout":"gap-line\n"`) || decodeOutcome(t, out).NativeGaps != 1 {
+		t.Fatalf("gap launch outcome %s", out)
+	}
+	var operation, gap string
+	testutil.FailErr(t, "read gap receipt", f.Database.QueryRowContext(t.Context(), `SELECT operation_id, native_gap_json FROM invocation_program_executions WHERE native_gap_json != ''`).Scan(&operation, &gap))
+	if operation != "command" || !strings.Contains(gap, `"command":"grep"`) || !strings.Contains(gap, `"code":"COMMAND_NATIVE_FORM_UNSUPPORTED"`) {
+		t.Fatalf("gap receipt %s %s", operation, gap)
+	}
+	out, err = f.call(t, t.Context(), "external -- /bin/echo before; repo-map; external -- /bin/echo never")
+	testutil.FailErr(t, "run refused native name", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || !strings.Contains(outcome.Refusal.Feedback, "COMMAND_NATIVE_FORM_UNSUPPORTED") {
+		t.Fatalf("uninstalled native name: %s", out)
+	}
+	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: not supported here [COMMAND_NATIVE_FORM_UNSUPPORTED]") {
+		t.Fatalf("refusal replaced the partial result: %+v", outcome)
+	}
+}
+
+func decodeOutcome(t *testing.T, out string) command.ProgramOutcome {
+	t.Helper()
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
+	return outcome
+}
+
+// File predicates read the program's files from the statement's directory.
+func TestProgramEntryFilePredicatesReadRealFilesFromTheFrame(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "seed dir", os.MkdirAll(filepath.Join(f.Dir, "sub"), 0o755))
+	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("a"), 0o644))
+	testutil.FailErr(t, "seed nested file", os.WriteFile(filepath.Join(f.Dir, "sub", "b.txt"), []byte("b"), 0o644))
+	out, err := f.call(t, t.Context(), `test -f a.txt && [ -d sub ] && [[ -f sub/b.txt ]] && ! test -f missing && ! [ -d a.txt ] && cd sub && test -f b.txt; external -- /bin/echo "status=$?"`)
+	testutil.FailErr(t, "run predicates", err)
+	if outcome := decodeOutcome(t, out); outcome.Stdout != "status=0\n" {
+		t.Fatalf("predicates outcome %s", out)
+	}
+}
+
+// With the external selector hidden, `external --` refuses with a typed code
+// while a native gap still launches the installed program and is counted.
+func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.ExternalHidden = true
+	out, err := f.call(t, t.Context(), "grep -q nothing /dev/null; external -- /bin/echo never")
+	testutil.FailErr(t, "run hidden selector", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" || outcome.NativeGaps != 1 {
+		t.Fatalf("hidden external outcome %s", out)
+	}
+	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
+		t.Fatalf("hidden external stderr %q", outcome.Stderr)
+	}
+}
+
+// A settled program states its run for verification evidence: passed on
+// status 0, failed otherwise; a program whose job still runs states nothing.
+func TestProgramEntryStatesTheSettledRun(t *testing.T) {
+	for _, c := range []struct {
+		program, verdict string
+	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
+		f := newProgramFixture(t)
+		out := &tools.ToolInvocationOut{}
+		f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+		_, err := f.call(t, t.Context(), c.program)
+		testutil.FailErr(t, "run "+c.program, err)
+		switch {
+		case c.verdict == "" && out.SourceRun != nil:
+			t.Fatalf("%s with a running job stated %+v", c.program, out.SourceRun)
+		case c.verdict != "" && (out.SourceRun == nil || out.SourceRun.Verdict != c.verdict || out.SourceRun.Command != c.program):
+			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
+		}
+	}
+}
+
+type testLoopbackGate struct{}
+
+func (testLoopbackGate) Await(_ context.Context, ask tools.LoopbackConnectAsk) (tools.LoopbackConnectResult, error) {
+	return tools.LoopbackConnectResult{Authorized: true, Ports: ask.Ports}, nil
+}
+
+func (testLoopbackGate) SessionLoopbackGrant(context.Context, string, string) (bool, []uint16) {
+	return true, []uint16{8080}
+}
+
+func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "register http_request owner", f.Runtime.Registry.Register("http_request", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "", nil
+	}))
+	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandNetworkEgress, toolcontract.CommandExternalExec)
+	testutil.FailErr(t, "compile profile effects", err)
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	f.Runtime.Boundary = boundary
+	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), f.Runtime.Registry, "fixture")
+	f.Runtime.Executor.Capabilities.SetLoopbackConnectGate(testLoopbackGate{})
+	var curlGranted bool
+	var curlPorts []uint16
+	curlOp := command.NativeOperation{Tool: "http_request", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("curl"), request.Argv)
+		if err != nil {
+			return command.NativePrepared{}, err
+		}
+		return command.NativePrepared{Mode: "request", Review: bound.Review("http_request"), Invoke: func(_ context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			curlGranted = tc.Local.LoopbackConnectGranted
+			curlPorts = append([]uint16(nil), tc.Local.LoopbackConnectPorts...)
+			_, err := io.WriteString(streams.Output, "ok\n")
+			if err != nil {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+			}
+			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
+		}}, nil
+	}}
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
+			"curl": curlOp,
+			"tee":  teeOperation(f.Dir),
+			"head": firstLineOperation(),
+		}}, nil
+	}
+	args := map[string]any{
+		"command": "curl http://127.0.0.1:8080/health | tee out.txt | head",
+		"capability_request": map[string]any{
+			"local_listen":     map[string]any{"ports": []any{9090}},
+			"loopback_connect": map[string]any{"ports": []any{8080}},
+		},
+	}
+	contract, _ := toolcontract.Lookup("command")
+	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: "model-call-cap", ToolName: "command", Args: args, Contract: contract})
+	testutil.FailErr(t, "begin model receipt", err)
+	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
+	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "model-call-cap"
+	tc.Invocation.ID = parent.ID
+	out, err := f.Runtime.Run(t.Context(), args, tc)
+	testutil.FailErr(t, "run capability-forwarded pipeline", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "ok\n" {
+		t.Fatalf("pipeline outcome: %+v", outcome)
+	}
+	if !curlGranted || len(curlPorts) != 1 || curlPorts[0] != 8080 {
+		t.Fatalf("curl loopback grant = (%v, %v), want (true, [8080])", curlGranted, curlPorts)
+	}
+	executions := f.executions(t)
+	if executions["http_request"] != "completed;" || executions["write"] != "completed;" || executions["read"] != "completed;" {
+		t.Fatalf("child executions = %v", executions)
 	}
 }
