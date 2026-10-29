@@ -64,6 +64,22 @@ func metadataOperation(op, path string) error {
 			return fmt.Errorf("input bytes differ")
 		}
 		return nil
+	case "stdin-null":
+		var st unix.Stat_t
+		if err := unix.Fstat(0, &st); err != nil {
+			return err
+		}
+		if st.Mode&unix.S_IFMT != unix.S_IFCHR {
+			return fmt.Errorf("input is not a character device")
+		}
+		n, err := unix.Read(0, make([]byte, 1))
+		if err != nil {
+			return err
+		}
+		if n != 0 {
+			return fmt.Errorf("input carried bytes")
+		}
+		return nil
 	case "stdin-pipe":
 		var st unix.Stat_t
 		if err := unix.Fstat(0, &st); err != nil {

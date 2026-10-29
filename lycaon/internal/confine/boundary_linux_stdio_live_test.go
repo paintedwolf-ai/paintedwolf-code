@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -204,18 +205,24 @@ func TestLinuxNonregularInputRetainsPipeAndTerminalSemantics(t *testing.T) {
 	})
 }
 
-func TestLinuxClosedInputStaysClosed(t *testing.T) {
+func TestLinuxClosedInputArrivesAsNullStream(t *testing.T) {
+	requireLinuxSandbox(t)
 	file, err := os.CreateTemp(t.TempDir(), "closed-")
 	testutil.FailErr(t, "create closed descriptor fixture", err)
 	testutil.FailErr(t, "close descriptor fixture", file.Close())
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
-	self := requireLinuxSandbox(t)
-	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), "/bin/sh", []string{"-c", "test ! -e /proc/self/fd/0"}, denyConfinement(t.TempDir()))
-	testutil.FailErr(t, "prepare closed input command", err)
-	defer cleanup()
-	cmd.Stdin = file
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("closed input acquired an object: %v: %s", err, out)
+	outside := filepath.Join(outsideTemporaryWriteRoots(t), "outside")
+	seedMetadataFile(t, outside)
+	script := []string{"stdin-null input", "fchmod-stdin input", "fchown-stdin input", "futimes-stdin input", "fsetxattr-stdin input", "chmod " + outside}
+	got := runMetadata(t, denyConfinement(t.TempDir()), script, file)
+	if got[script[0]] != "ok" {
+		t.Fatalf("closed input did not arrive as an empty character stream: %v", got)
+	}
+	for _, line := range script[1:5] {
+		if _, ok := got[line]; !ok {
+			t.Fatalf("descriptor operation did not complete: %s", line)
+		}
+	}
+	if got[script[5]] != "EROFS" {
+		t.Fatalf("outside path metadata = %q, want EROFS", got[script[5]])
 	}
 }
