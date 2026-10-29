@@ -271,6 +271,7 @@ func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin 
 	}
 	return o.writeLiteral(pin, []byte{delimiter}, offset+int64(len(record)))
 }
+
 // emit writes one record to an output. A record that lacked its delimiter is
 // written without it; later output first restores a newline.
 func (o *output) emit(record []byte, delimiter byte, terminated bool) error {
