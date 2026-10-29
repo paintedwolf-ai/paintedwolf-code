@@ -74,7 +74,7 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 		}
 		s.inputs = append(s.inputs, input)
-		g.io.streams.Input = input
+		g.io.streams.Input = io.NopCloser(input)
 		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, false, nil
 	}
