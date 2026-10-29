@@ -14,9 +14,11 @@ import (
 )
 
 const usage = `usage:
-  conformance capture [-git-seed] [case...]   run the cases in their reference userlands and store the snapshots`
+  conformance capture [-git-seed] [case...]   run the cases in their reference userlands and store the snapshots
+  conformance live [-validate] [-generated-only] [-seed N]... [-programs N]
+                                              compare the corpus and generated programs with the live reference userlands`
 
-// Exit statuses: a failed capture, a usage error, or a capture that could not run.
+// Exit statuses: a failed run, a usage error, or a run that could not start.
 const (
 	exitFailed     = 1
 	exitUsage      = 2
@@ -35,6 +37,9 @@ type openRunner func(context.Context) (imageRunner, error)
 
 // Command runs the conformance command line and returns the process exit status.
 func Command(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "live" {
+		return runLive(ctx, args[1:], stdout, stderr, launchLiveDigest)
+	}
 	return runCommand(ctx, args, stdout, stderr, func(ctx context.Context) (imageRunner, error) {
 		r, err := referenceuserland.NewRunner(ctx)
 		if err != nil {
