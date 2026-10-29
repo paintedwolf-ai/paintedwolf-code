@@ -35,7 +35,16 @@ func NewStreamInput(ctx context.Context, source io.ReadCloser, budget *ByteBudge
 	return s, nil
 }
 
-func (s *StreamInput) Read(b []byte) (int, error) {
+func (s *StreamInput) Read(b []byte) (int, error)                             { return s.read(s.ctx, b) }
+func (s *StreamInput) ReadContext(ctx context.Context, b []byte) (int, error) { return s.read(ctx, b) }
+func (s *StreamInput) InputReady() bool {
+	s.mu.Lock()
+	ready := s.termination != StreamOpen
+	s.mu.Unlock()
+	return ready || inputReady(s.source)
+}
+
+func (s *StreamInput) read(ctx context.Context, b []byte) (int, error) {
 	s.mu.Lock()
 	termination, terminalError := s.termination, s.terminalError
 	s.mu.Unlock()
@@ -49,7 +58,10 @@ func (s *StreamInput) Read(b []byte) (int, error) {
 		s.finish(StreamCanceled, err)
 		return 0, err
 	}
-	n, err := s.source.Read(b)
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := readContext(ctx, s.source, b)
 	if canceled := s.ctx.Err(); canceled != nil {
 		s.finish(StreamCanceled, canceled)
 		return 0, canceled
@@ -57,6 +69,9 @@ func (s *StreamInput) Read(b []byte) (int, error) {
 	if charge := s.budget.Charge(int64(n)); charge != nil {
 		s.finish(StreamBudgetExceeded, charge)
 		return 0, charge
+	}
+	if ctx.Err() != nil {
+		return n, ctx.Err()
 	}
 	if errors.Is(err, io.EOF) {
 		s.finish(StreamEOF, nil)
@@ -102,6 +117,8 @@ func IsNullInput(r io.Reader) bool {
 
 type nullInput struct{}
 
+func (nullInput) InputReady() bool { return true }
+
 func (nullInput) Read([]byte) (int, error) { return 0, io.EOF }
 func (nullInput) Close() error             { return nil }
 
@@ -122,3 +139,12 @@ func (s NullOutput) Write(b []byte) (int, error) {
 	}
 	return len(b), nil
 }
+
+// borrowedInput leaves the descriptor lifetime with its enclosing scope.
+type borrowedInput struct{ io.Reader }
+
+func (b borrowedInput) Close() error { return nil }
+func (b borrowedInput) ReadContext(ctx context.Context, data []byte) (int, error) {
+	return readContext(ctx, b.Reader, data)
+}
+func (b borrowedInput) InputReady() bool { return inputReady(b.Reader) }

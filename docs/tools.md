@@ -222,11 +222,11 @@ unavailable, output remains delivered and a later edit needs a fresh read.
 ### Literal content and metadata commands
 
 `internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
-wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
-outline, summarize and repo-map built-ins. Argv binds through the catalog
-binder; each command runs under its catalog operation identity (`read`, `wc`,
-`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
-operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+wc, ls, stat, du, df, diff, cmp, file, xxd, hexdump, od, strings, the checksum
+family, base64 and the outline, summarize and repo-map built-ins. Argv binds
+through the catalog binder; each command runs under its catalog operation
+identity (`read`, `wc`, `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`)
+over the same typed operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
 each file as exact published stream bytes before any output, retaining its
 encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
 or output above the stream ceiling, refuses; nothing is truncated or summarized
@@ -241,11 +241,39 @@ long-ISO times after GNU's block total, and bare `stat` prints the catalog's
 GNU multi-line default. Ordinary operand failures (missing,
 directory, permission) go to stderr with the utility's status and later operands
 still run; authority, budget and platform refusals stop with their typed code.
-Only diff's complete status 1 is a publishable comparison. Literal windows and
-reversible numbering record exact source mappings when the output endpoint
-implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
-record none. The command never delivers a conversational read; only exact mapped
+Only diff's and cmp's complete status 1 is a publishable comparison. du walks
+through the same bounded held-root directory reads as `ls -R` and refuses a walk
+over `traversal_visits` rather than print a short total; df reads statfs through
+each bound path, defaulting to the attached folders and session scratch.
+Literal windows, strings runs and reversible numbering record exact source
+mappings when the output endpoint implements
+`commandprogram.SourceMappingRecorder`; notation, encodings and stdin record
+none. The command never delivers a conversational read; only exact mapped
 output that the delivery owner later delivers can qualify an edit base.
+
+`tree` runs in the search frontend over the same walk as find and rg, so the
+read boundary and visit budget apply and `--gitignore` uses the project ignore
+owner. `iconv` and `envsubst` run with the text utilities: iconv converts
+through `golang.org/x/text/encoding` and stages `-o` like a redirect; envsubst
+reads the statement's exported environment, where a managed secret stays its
+reference token.
+
+diff `-N` compares an absent file, and under `-r` an absent directory, as
+empty; `-x` and `-X` skip directory entries by base-name glob; and
+`--strip-trailing-cr` drops CR before each newline. Archives keep every
+extraction guard across gzip, bzip2, xz and zstd: tar `--exclude`, `-X` and
+`--exclude-vcs` patterns match any run of whole name components and prune
+excluded directories before their entries are examined, zip and unzip `-x`
+match the whole stored name, and every xz block's dictionary is checked
+against a 64 MiB ceiling before decoding.
+
+One date package (`internal/tools/native/datetext`) reads the `date -d`
+grammar, renders `+FORMAT`, parses `-j -f` strptime formats and applies `-v`
+adjustments. `date`, `touch -d`/`-t` and `find -newerXY` share it and read
+times in `TZ` from the program frame, UTC when unset. realpath resolves links
+before `..`, canonicalizes under `-e`, the default or `-m`, and projects
+`--relative-to`/`--relative-base`; an operand that does not resolve is an
+ordinary status-one failure and later operands still run.
 
 ### Search commands
 
@@ -710,7 +738,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -849,6 +877,8 @@ For a known command, `wait(until_complete=true, conditions=[{"kind":"process_don
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
 
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A call whose next wake falls more than ten seconds after it started, or whose program still waits only on jobs at that point, settles as `parked` with the waiting statement as its reason. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
+
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 
 ### Verify verdicts
@@ -933,6 +963,8 @@ Producer results separate ordinary status, typed terminal/host-stop facts, compl
 `command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
 
 The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. `timeout` and `nohup` dispatch their command exactly as a reached command, with its own receipt and confinement. `timeout` expiry signals the external process through program supervision (KILL after `-k`) or interrupts a native operation, and returns 124; the call's `timeout_ms` stays the outer bound. `time` and `time -p` report on stderr with processor time from reaped external children; a report that counted native operations as zero sets `cpu_time_unmeasured` in the result. `ulimit` reports the limits external children receive and sets soft and hard limits for later children of the same call only, from the per-resource capabilities the platform's resource-limit owner declares; a limit the platform does not provide is refused. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+When every live evaluator activity is blocked, `sleep`, shell `wait` (`wait`, `wait %N`, `wait PID`), `timeout` and `read -t` report their timer deadlines and exact job handles to the shared wait lease, so a long wait parks the call as described under wait leases. Polling loops run each probe between full sleep intervals; no readiness event wakes a sleep early. A timed read keeps its partial input and returns 142 on expiry, and `read -t 0` reports whether input is ready without consuming it.
 
 | Surface | Source |
 |---|---|

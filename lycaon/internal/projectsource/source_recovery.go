@@ -353,6 +353,10 @@ func (c *sourceRecoveryCapture) append(ctx context.Context, entry sourceledger.R
 	}
 	if entry.Path == "." {
 		c.rootSHA = entry.SHA
+		if os.FileMode(entry.Mode)&os.ModeSymlink != 0 {
+			_, _ = c.root.Write([]byte(entry.Link))
+			c.rootSHA = sourceblob.ContentSHA([]byte(entry.Link))
+		}
 	}
 	c.progress.entry()
 	return entry, nil

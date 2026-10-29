@@ -12,21 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// Clock is the time source program supervision reads. Tests inject one and
-// fire its timers as observed events.
-type Clock interface {
-	Now() time.Time
-	AfterFunc(time.Duration, func()) (stop func() bool)
-}
-
-// SystemClock is the host's wall clock.
-type SystemClock struct{}
-
-func (SystemClock) Now() time.Time { return time.Now() }
-func (SystemClock) AfterFunc(d time.Duration, f func()) func() bool {
-	return time.AfterFunc(d, f).Stop
-}
-
 // ParseDuration reads a sleep or timeout interval: decimal seconds with an
 // optional s, m, h or d suffix.
 func ParseDuration(word string) (time.Duration, bool) {
@@ -46,21 +31,21 @@ func ParseDuration(word string) (time.Duration, bool) {
 		return 0, false
 	}
 	scaled := value * float64(unit)
-	if scaled > float64(math.MaxInt64) {
+	if scaled >= float64(math.MaxInt64) {
 		return 0, false
 	}
 	return time.Duration(scaled), true
 }
 
 // TimeoutPlan is one bound timeout invocation. A zero Duration or KillAfter
-// disables that timer, as in GNU timeout.
+// disables that timer.
 type TimeoutPlan struct {
 	Duration, KillAfter time.Duration
 	Signal              Signal
 	PreserveStatus      bool
 }
 
-// TimedOutStatus is GNU timeout's status for an expired command.
+// TimedOutStatus reports an expired command.
 const TimedOutStatus = 124
 
 var errTimedOut = errors.New("timeout expired")

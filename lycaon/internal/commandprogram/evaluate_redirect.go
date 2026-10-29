@@ -93,7 +93,7 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 		}
 		s.inputs = append(s.inputs, input)
-		g.io.streams.SetReader(redirectDescriptor(r), io.NopCloser(input))
+		g.io.streams.SetReader(redirectDescriptor(r), borrowedInput{Reader: input})
 		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, false, nil
 	}
@@ -148,6 +148,7 @@ func (g *frame) redirectFailure(ctx context.Context, child *childRun, operator, 
 	}
 	return nil
 }
+
 // preflight refuses, before the first statement, every reachable construct
 // this evaluation cannot run: reserved function names and constructs whose
 // owner port is absent. Nothing has been dispatched when it refuses.

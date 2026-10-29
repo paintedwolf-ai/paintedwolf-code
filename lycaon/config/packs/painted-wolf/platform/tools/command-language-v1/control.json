@@ -154,7 +154,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "read [-r] [-d DELIM] [NAME ...]",
+      "argv": "read [-r] [-d DELIM] [-t SECONDS] [NAME ...]",
       "forms": [
         {
           "spellings": [
@@ -177,14 +177,27 @@
           "sample_values": [
             ":"
           ]
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "seconds",
+          "fixture_id": "read-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            "0.2"
+          ]
         }
       ],
       "operands": "Arguments change only the current program evaluator state.",
       "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
       "statuses": {
-        "0": "Read a complete delimited record and assigned its fields.",
-        "1": "Reached end of input before a delimiter; retained any fields read.",
-        "2": "Invalid options or target variable name."
+        "0": "Read a complete delimited record and assigned its fields, or -t 0 found input ready without consuming bytes or assigning variables.",
+        "1": "Reached end of input before a delimiter, found no ready input with -t 0, or received an invalid timeout; retained any fields read.",
+        "2": "Invalid options or target variable name.",
+        "142": "The input deadline elapsed; retained any fields read."
       },
       "effects": [
         {
@@ -225,7 +238,7 @@
           }
         }
       },
-      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. A timed read reports its deadline through program waiting; long waits park and resume with the complete program result. With -t 0, tests input readiness without consuming bytes or assigning variables.",
       "reuse": {
         "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
         "tests": [

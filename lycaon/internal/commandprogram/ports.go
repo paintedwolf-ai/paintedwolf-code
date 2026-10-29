@@ -197,6 +197,7 @@ type StreamPreparation interface {
 
 type OperationRequest struct {
 	StreamPreparation StreamPreparation
+	Wait              *ExecutionWait
 	Invocation        toolcontract.OperationInvocation
 	// OperationID is the catalog command name ("external" for launches); the
 	// typed owner's operation identity is the owner's own fact.
@@ -377,7 +378,7 @@ type ProgressAdmission interface {
 // session-scoped job identity that $! and wait/kill address.
 type ProgramSupervision interface {
 	RunProgram(context.Context, toolcontract.OperationInvocation, func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
-	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error)
+	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (string, error)
 }
 
 // Dispatch reaches operation owners and confined launch from one directory

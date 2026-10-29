@@ -126,6 +126,26 @@ dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the
 receipt owner's aggregate record.
 
+When every live statement and job is blocked, the evaluator reports a
+`WaitState` through `EvaluationPorts.Waits`: the waiting statement's text, the
+earliest timer wake on the program's `Clock`, and the exact job handles whose
+settlement wakes it. The host uses it to park the call and to refuse, before
+blocking, a wait that cannot complete within the call's bound. Concurrent frames
+register distinct activities; synchronous nested commands share one activity.
+Pipe endpoints bind the current frame and report blocking only from the stream
+rendezvous after checking readiness. Publishing bytes makes the reader runnable
+before its goroutine resumes. A timed read cancels only its own read, retaining
+partial fields and leaving the inherited descriptor usable. `-t 0` checks
+readiness without consuming bytes. Timer waits use the injected clock and keep
+their complete interval even when another activity becomes ready.
+
+A running external process remains runnable for wait aggregation. An explicit
+`timeout` deadline or a foreground wait on that process's exact supervised job
+permits completion waiting to park. Concurrent pipeline, substitution and parallel
+utility activities inherit the enclosing deadline and job identity. Readiness and
+completion transitions wake the waiting activity before delivering bytes or
+completion to its goroutine.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv

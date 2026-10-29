@@ -24,31 +24,38 @@ import (
 
 // supervisionClock fires program timers only when a test fires them; every
 // scheduled timer is an observed event.
+type supervisionTimer struct {
+	after time.Duration
+	fire  func()
+}
+
 type supervisionClock struct {
 	mu        sync.Mutex
 	timers    []func()
-	scheduled chan time.Duration
+	scheduled chan supervisionTimer
 }
 
 func newSupervisionClock() *supervisionClock {
-	return &supervisionClock{scheduled: make(chan time.Duration, 8)}
+	return &supervisionClock{scheduled: make(chan supervisionTimer, 8)}
 }
 
 func (c *supervisionClock) Now() time.Time { return time.Unix(1_000_000, 0) }
 
 func (c *supervisionClock) AfterFunc(d time.Duration, fn func()) func() bool {
 	stopped := false
+	var fire func()
 	c.mu.Lock()
-	c.timers = append(c.timers, func() {
+	fire = func() {
 		c.mu.Lock()
 		run := !stopped
 		c.mu.Unlock()
 		if run {
 			fn()
 		}
-	})
+	}
+	c.timers = append(c.timers, fire)
 	c.mu.Unlock()
-	c.scheduled <- d
+	c.scheduled <- supervisionTimer{after: d, fire: fire}
 	return func() bool {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -61,13 +68,11 @@ func (c *supervisionClock) AfterFunc(d time.Duration, fn func()) func() bool {
 // fireNext waits for the next timer the program schedules and fires it.
 func (c *supervisionClock) fireNext(t *testing.T, want time.Duration) {
 	t.Helper()
-	if got := <-c.scheduled; got != want {
-		t.Errorf("scheduled %v, want %v", got, want)
+	event := <-c.scheduled
+	if event.after != want {
+		t.Fatalf("scheduled %v, want %v", event.after, want)
 	}
-	c.mu.Lock()
-	fire := c.timers[len(c.timers)-1]
-	c.mu.Unlock()
-	fire()
+	event.fire()
 }
 
 type programCall struct {

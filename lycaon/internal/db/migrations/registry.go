@@ -24,11 +24,15 @@ type Step struct {
 	ScratchBytes uint64
 	ID           string
 	Checksum     string
-	From         Baseline
-	To           Baseline
-	Apply        func(context.Context, *sql.Tx) error
-	Validate     func(context.Context, *sql.Tx) error
-	RetainedCopy *RetainedCopy
+	// RebuildTables requires foreign-key enforcement off on the migration's
+	// held connection while tables are replaced. Execute still checks every
+	// foreign key before committing the complete route.
+	RebuildTables bool
+	From          Baseline
+	To            Baseline
+	Apply         func(context.Context, *sql.Tx) error
+	Validate      func(context.Context, *sql.Tx) error
+	RetainedCopy  *RetainedCopy
 	// Writes bounds the bytes the step writes to the store being upgraded.
 	// A step without it may rewrite the whole store.
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)

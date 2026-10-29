@@ -1,7 +1,7 @@
 // Package textutil is the command frontend for byte text transforms and
 // argument batching: echo, printf, seq, yes, sort, uniq, cut, tr, paste,
-// join, comm, column, fold, tac, rev, sed, awk and xargs. Every
-// utility binds argv through the catalog, streams exact bytes through
+// join, comm, column, fold, tac, rev, sed, awk, iconv, envsubst and xargs.
+// Every utility binds argv through the catalog, streams exact bytes through
 // commandprogram.Streams with no ambient locale, and charges working memory
 // to the program. xargs runs each batch as its own child through the
 // evaluator's nested-command port; input never becomes program text.
@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -51,6 +52,7 @@ var utilities = map[string]utility{
 	"paste": runPaste, "join": runJoin, "comm": runComm, "column": runColumn,
 	"fold": runFold, "tac": runTac, "rev": runRev,
 	"xargs": runXargs, "sed": runSed, "awk": runAwk,
+	"iconv": runIconv, "envsubst": runEnvsubst,
 }
 
 // leadingOptions are utilities whose options are only the declared leading
@@ -164,19 +166,35 @@ func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.Opera
 // Mode is the catalog effect mode the bound form selects, or empty when the
 // command has one mode.
 type Prepared struct {
-	Argv    commandprogram.BoundArgv
-	Review  commandprogram.ArgvReview
-	Mode    string
-	owners  *Owners
-	request commandprogram.OperationRequest
-	spec    toolcontract.CommandSpecification
-	run     utility
-	sed     *preparedSed
+	Argv           commandprogram.BoundArgv
+	Review         commandprogram.ArgvReview
+	Mode           string
+	DeferredSource bool
+	owners         *Owners
+	request        commandprogram.OperationRequest
+	spec           toolcontract.CommandSpecification
+	run            utility
+	sed            *preparedSed
 }
 
 // Close releases any admitted resources retained by the prepared invocation.
 func (p Prepared) Close() {
 	p.sed.close()
+}
+
+// RecordSourceRead records a source revision after its own path was admitted,
+// even if approval for the parsed script's effects is later declined.
+func (p Prepared) RecordSourceRead(ctx context.Context) error {
+	if p.sed == nil || p.sed.pinsRecorded {
+		return nil
+	}
+	for _, pin := range p.sed.pins {
+		if err := p.owners.Pins.AppendRevisionPin(ctx, p.request.Invocation.Identity.ExecutionID, pin); err != nil {
+			return err
+		}
+	}
+	p.sed.pinsRecorded = true
+	return nil
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
@@ -207,10 +225,51 @@ func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRe
 		}
 		prepared.sed = sedPlan
 		prepared.Mode = mode
+		prepared.Review.PathTargets = o.pathTargets(bound, sedPlan)
 		return prepared, nil
 	}
 	prepared.Mode = o.effectMode(bound)
+	if PathUtility(command) {
+		prepared.Review.PathTargets = o.pathTargets(bound, nil)
+	}
 	return prepared, nil
+}
+
+// PrepareNative projects script-file effects before the child approval while
+// preserving the streaming invocation's source capture and execution pin.
+func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramPaths, ports Ports, request commandprogram.OperationRequest) (Prepared, error) {
+	p, err := o.Prepare(ctx, request)
+	if err != nil || p.Argv.Command != "sed" || !argvFlag(p.Argv, "-f") {
+		return p, err
+	}
+	for _, item := range p.Argv.Items {
+		if item.Option == nil || item.Option.Key != "-f" {
+			continue
+		}
+		for _, value := range item.Option.Values {
+			if _, err := frame.Bind(ctx, value.Value, false); err != nil {
+				// The bound -f operand is already a typed read target. Defer
+				// loading until that target has passed child admission.
+				p.DeferredSource = true
+				return p, nil
+			}
+		}
+	}
+	ports.ToolContext = frame.ToolContext()
+	inv := newInvocation(ctx, p, ports, commandprogram.Streams{})
+	inv.preparing = true
+	source, program, err := loadSedFileScript(inv, p.sed.source)
+	inv.close()
+	if err != nil {
+		p.Close()
+		return Prepared{}, err
+	}
+	p.sed.source, p.sed.program = source, program
+	p.Review.PathTargets = o.pathTargets(p.Argv, p.sed)
+	if len(program.WriteFiles()) > 0 && p.Mode == "stream-script" {
+		p.Mode = "w-command"
+	}
+	return p, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean

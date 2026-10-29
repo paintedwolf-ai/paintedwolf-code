@@ -220,7 +220,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
 	defer releaseEnvironment()
-	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap, StreamPreparation: f.io,
+	request := OperationRequest{Wait: f.wait, Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap, StreamPreparation: f.io,
 		Process: ChildProcess{Limits: f.state.limits.pinned(), Times: f.times}}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {

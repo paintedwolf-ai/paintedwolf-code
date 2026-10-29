@@ -32,8 +32,7 @@ func prefixedCommand(name string, bound commandprogram.BoundArgv) commandprogram
 	return nil
 }
 
-// usageStatus is a prefix utility's own failure (GNU's 125) with its
-// diagnostic on stderr, as the installed utility reports it.
+// usageStatus writes a prefix utility's diagnostic and status.
 func usageStatus(streams commandprogram.Streams, status int, lines ...string) (toolcontract.ProducerResult, error) {
 	for _, line := range lines {
 		if _, err := fmt.Fprintln(nonNilWriter(streams.Error), line); err != nil {
@@ -91,6 +90,10 @@ func timeoutBuiltin(spec toolcontract.CommandSpecification, nested commandprogra
 				_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "timeout: sending signal %s to command '%s'\n", sig.Name, inner[0].Value)
 			}
 		}
+		if plan.Duration > 0 {
+			restore := request.Wait.Deadline(clock.Now().Add(plan.Duration), strings.Join(request.Argv.Values(), " "))
+			defer restore()
+		}
 		return commandprogram.RunTimeout(ctx, clock, plan, sent, func(ctx context.Context, relay *commandprogram.SignalRelay) (toolcontract.ProducerResult, error) {
 			parent := request
 			parent.Process.Signals = relay
@@ -125,8 +128,7 @@ func nohupBuiltin(spec toolcontract.CommandSpecification, nested commandprogram.
 	})
 }
 
-// nohupOutputRedirect finds an output redirect whose literal target names
-// nohup.out, the file GNU nohup would create for a terminal.
+// nohupOutputRedirect identifies literal terminal output file redirects.
 func nohupOutputRedirect(statement commandsurface.Statement) (commandsurface.ProgramRedirect, bool) {
 	for _, redirect := range statement.Redirects {
 		if redirect.HereDocument != nil || strings.Contains(redirect.Operator, "<") {

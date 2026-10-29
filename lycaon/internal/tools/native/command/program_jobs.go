@@ -32,6 +32,7 @@ type SessionJobs struct {
 
 	mu        sync.Mutex
 	results   map[string]jobOutcome
+	waiters   map[string]map[*jobWaiter]bool
 	signals   map[string]int
 	processes map[string]jobProcess
 	// order is the job table in start order. A job takes one more than the
@@ -44,6 +45,8 @@ type SessionJobs struct {
 	publicIDs    map[string]int
 	nextNativeID int
 }
+
+type jobWaiter struct{ unblock func() }
 
 type jobOutcome struct {
 	result toolcontract.ProducerResult
@@ -127,7 +130,7 @@ func (j *SessionJobs) BeginProgram() {
 }
 
 // start runs the job body detached from the launching statement's context.
-func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	if j == nil || j.Registry == nil || run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
 	}
@@ -151,7 +154,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			ctx = context.WithValue(ctx, jobProcessKey{}, tracker)
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
-			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
+			result, err := run(ctx, handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
 			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				status := j.signalStatus(handle)
 				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
@@ -254,6 +257,11 @@ func (j *SessionJobs) record(handle string, result toolcontract.ProducerResult, 
 		j.results = map[string]jobOutcome{}
 	}
 	j.results[handle] = jobOutcome{result: result, err: err}
+	for waiter := range j.waiters[handle] {
+		waiter.unblock()
+		delete(j.waiters[handle], waiter)
+	}
+	delete(j.waiters, handle)
 }
 
 // Resolve maps a job reference to its handle: %N (the Nth job this session
@@ -338,10 +346,41 @@ func (j *SessionJobs) reap(handle string) {
 }
 
 // Wait returns the job's own settled outcome; waiting does not stop it.
-func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.ProducerResult, error) {
+func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *commandprogram.ExecutionWait, statement string) (toolcontract.ProducerResult, error) {
 	handle, err := j.Resolve(reference)
 	if err != nil {
 		return toolcontract.ProducerResult{}, err
+	}
+	j.mu.Lock()
+	var waiter *jobWaiter
+	if _, complete := j.results[handle]; !complete && activity != nil {
+		unblock, err := activity.Block(ctx, commandprogram.WaitState{Statement: statement, Jobs: []string{handle}})
+		if err != nil {
+			j.mu.Unlock()
+			return toolcontract.ProducerResult{}, err
+		}
+		waiter = &jobWaiter{unblock: unblock}
+		if j.waiters == nil {
+			j.waiters = map[string]map[*jobWaiter]bool{}
+		}
+		if j.waiters[handle] == nil {
+			j.waiters[handle] = map[*jobWaiter]bool{}
+		}
+		j.waiters[handle][waiter] = true
+	}
+	j.mu.Unlock()
+	if waiter != nil {
+		defer func() {
+			j.mu.Lock()
+			defer j.mu.Unlock()
+			if j.waiters[handle][waiter] {
+				waiter.unblock()
+				delete(j.waiters[handle], waiter)
+				if len(j.waiters[handle]) == 0 {
+					delete(j.waiters, handle)
+				}
+			}
+		}()
 	}
 	if _, _, err := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle); err != nil {
 		return toolcontract.ProducerResult{}, jobLookupError(err, handle)

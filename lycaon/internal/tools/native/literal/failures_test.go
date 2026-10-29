@@ -76,6 +76,7 @@ func TestConfinementRefusesOutsideAuthorizedRoots(t *testing.T) {
 	for _, argv := range [][]string{
 		{"cat", outside}, {"cat", "escape"}, {"head", "-n", "1", "escape"}, {"sha256sum", "escape"},
 		{"diff", "input", "escape"}, {"stat", "-L", "-c", "%s", "escape"}, {"ls", "/etc"}, {"file", outside}, {"xxd", "escape"},
+		{"cmp", "input", "escape"}, {"od", "escape"}, {"strings", outside}, {"du", "/etc"}, {"df", "/etc"},
 	} {
 		refused(h, argv...)
 	}
@@ -92,6 +93,8 @@ func TestConfinementRefusesOutsideAuthorizedRoots(t *testing.T) {
 	refused(scoped, "cat", "../lines")
 	refused(scoped, "wc", "-l", "../crlf")
 	refused(scoped, "stat", "-c", "%F", "../lines")
+	refused(scoped, "du", "-s", "..")
+	refused(scoped, "cmp", "in", "../lines")
 }
 
 func TestStreamingInputsIgnoreWholeFileBudget(t *testing.T) {
@@ -199,7 +202,8 @@ func TestOperationBoundaryRejectsForeignCommands(t *testing.T) {
 	}
 	want := map[string]string{"cat": "read", "head": "read", "tail": "read", "nl": "read", "outline": "read", "file": "read", "xxd": "read", "hexdump": "read",
 		"shasum": "read", "sha1sum": "read", "sha256sum": "read", "sha512sum": "read", "md5sum": "read", "base64": "read",
-		"wc": "wc", "ls": "list_dir", "stat": "stat", "diff": "diff", "summarize": "summarize", "repo-map": "survey_repo"}
+		"od": "read", "strings": "read", "wc": "wc", "ls": "list_dir", "stat": "stat", "du": "stat", "df": "stat", "diff": "diff", "cmp": "diff",
+		"summarize": "summarize", "repo-map": "survey_repo"}
 	if got := h.owners.Commands(); len(got) != len(want) {
 		t.Fatalf("commands = %v", got)
 	}

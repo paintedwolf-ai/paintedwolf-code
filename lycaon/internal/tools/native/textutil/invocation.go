@@ -28,6 +28,7 @@ type invocation struct {
 	uncertain bool
 	releases  []func()
 	sed       *preparedSed
+	preparing bool
 	// The ordered xargs settlement loop owns the first stopped child outcome.
 	stoppedBatch *toolcontract.ProducerResult
 }
@@ -94,6 +95,10 @@ func (inv *invocation) close() {
 
 // fail records an ordinary per-operand failure on stderr; the run continues.
 func (inv *invocation) fail(status int, operand, reason string) {
-	fmt.Fprintf(&inv.errors, "%s: %s: %s\n", inv.spec.Name, operand, reason)
+	if inv.spec.Name == "iconv" {
+		fmt.Fprintf(&inv.errors, "iconv: cannot open input file `%s': %s\n", operand, reason)
+	} else {
+		fmt.Fprintf(&inv.errors, "%s: %s: %s\n", inv.spec.Name, operand, reason)
+	}
 	inv.status = max(inv.status, status)
 }

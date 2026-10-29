@@ -277,6 +277,7 @@ func TestEffectModesFollowTheCatalog(t *testing.T) {
 		{[]string{"find", ".", "-print"}, "default-predicates-print"},
 		{[]string{"find", ".", "-exec", "printf", "{}", ";"}, "-exec"},
 		{[]string{"find", ".", "-exec", "printf", "{}", ";", "-delete"}, "-delete"},
+		{[]string{"tree", "-L", "2"}, "always"},
 	} {
 		prepared, err := h.owners.Prepare(mustPaths(t, h), h.dispatch, requestFor(h, c.argv...))
 		testutil.FailErr(t, "prepare", err)
@@ -284,7 +285,7 @@ func TestEffectModesFollowTheCatalog(t *testing.T) {
 			t.Fatalf("%v mode %q, want catalogued %q", c.argv, got, c.mode)
 		}
 	}
-	if !slices.Equal(h.owners.Commands(), []string{"find", "grep", "rg"}) {
+	if !slices.Equal(h.owners.Commands(), []string{"find", "grep", "rg", "tree"}) {
 		t.Fatalf("commands %v", h.owners.Commands())
 	}
 }
