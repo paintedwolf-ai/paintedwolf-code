@@ -1,0 +1,317 @@
+//go:build linux
+
+package linuxsandbox
+
+import (
+	"bytes"
+	"encoding/binary"
+	"os"
+	"strconv"
+	"strings"
+
+	"golang.org/x/sys/unix"
+)
+
+// handoffPerformer carries the performer's socket from the inner helper.
+const handoffPerformer = "performer"
+
+// isPathCall reports whether nr is a notified name-creating call.
+func isPathCall(nr int32) bool {
+	n := uint32(nr)
+	if n == unix.SYS_OPENAT || (legacyOpen != 0 && n == legacyOpen) {
+		return true
+	}
+	for _, list := range [][]uint32{pathCreators, legacyPathCreators} {
+		for _, c := range list {
+			if c == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pathArgs is where a call keeps each of its arguments.
+type pathArgs struct {
+	op string
+	// dir and path index the directory and path of the name the call names
+	// first; newDir and newPath the second, for link and rename. A dir of -1
+	// means the working directory.
+	dir, path, newDir, newPath int
+	content                    int
+	flags, mode, dev           int
+	// fixedFlags are the open flags creat implies.
+	fixedFlags uint64
+	how        bool
+}
+
+const noArg = -1
+
+func pathArgsOf(nr uint32) (pathArgs, bool) {
+	a := pathArgs{dir: noArg, path: noArg, newDir: noArg, newPath: noArg, content: noArg, flags: noArg, mode: noArg, dev: noArg}
+	switch nr {
+	case unix.SYS_OPENAT:
+		a.op, a.dir, a.path, a.flags, a.mode = callOpen, 0, 1, 2, 3
+	case unix.SYS_OPENAT2:
+		a.op, a.dir, a.path, a.how = callOpen, 0, 1, true
+	case unix.SYS_MKDIRAT:
+		a.op, a.dir, a.path, a.mode = callMkdir, 0, 1, 2
+	case unix.SYS_MKNODAT:
+		a.op, a.dir, a.path, a.mode, a.dev = callMknod, 0, 1, 2, 3
+	case unix.SYS_SYMLINKAT:
+		a.op, a.content, a.dir, a.path = callSymlink, 0, 1, 2
+	case unix.SYS_LINKAT:
+		a.op, a.dir, a.path, a.newDir, a.newPath, a.flags = callLink, 0, 1, 2, 3, 4
+	case unix.SYS_RENAMEAT:
+		a.op, a.dir, a.path, a.newDir, a.newPath = callRename, 0, 1, 2, 3
+	case unix.SYS_RENAMEAT2:
+		a.op, a.dir, a.path, a.newDir, a.newPath, a.flags = callRename, 0, 1, 2, 3, 4
+	default:
+		return legacyPathArgs(nr, a)
+	}
+	return a, true
+}
+
+// performPath decides and performs one notified name-creating call.
+func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, unix.Errno, bool) {
+	args, ok := pathArgsOf(uint32(n.Nr))
+	performer := s.performer
+	if !ok || performer == nil {
+		return 0, unix.EACCES, false
+	}
+	call, dirs, errno := s.readPathCall(target, n, args)
+	defer func() {
+		for _, fd := range dirs {
+			_ = unix.Close(fd)
+		}
+	}()
+	if errno != 0 {
+		return 0, errno, true
+	}
+	if call.Op == callOpen && call.Flags&unix.O_CREAT == 0 && !args.how {
+		return 0, unix.EINVAL, true
+	}
+	if !target.valid() {
+		return 0, unix.EINTR, true
+	}
+	// The performer performs the call and answers the kernel itself.
+	call.Notification, call.Caller = target.id, target.pid
+	if err := performer.forward(call, dirs); err != nil {
+		return 0, unix.EACCES, false
+	}
+	return 0, errAnswered, true
+}
+
+// reportPerformed reports a refusal the performer returned for a forwarded
+// call, naming the caller as it now is.
+func (s *supervisor) reportPerformed(result pathResult) {
+	refusal := *result.Refusal
+	if result.Caller > 0 {
+		refusal.Process = (&targetProcess{pid: result.Caller}).comm()
+	}
+	s.refusals.report(refusal)
+}
+
+// errAnswered marks a call the kernel completed while installing its result.
+const errAnswered = unix.Errno(^uintptr(0) >> 1)
+
+// readPathCall copies a call's paths and opens the directories they resolve
+// from, as they are at notification time.
+func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathArgs) (pathCall, []int, unix.Errno) {
+	call := pathCall{Op: a.op, Flags: a.fixedFlags}
+	arg := func(i int) uint64 { return n.Args[i] }
+	var err error
+	if call.Path, err = target.readPath(arg(a.path)); err != nil {
+		return call, nil, errnoOf(err, unix.EFAULT)
+	}
+	if a.newPath != noArg {
+		if call.NewPath, err = target.readPath(arg(a.newPath)); err != nil {
+			return call, nil, errnoOf(err, unix.EFAULT)
+		}
+	}
+	if a.content != noArg {
+		if call.Content, err = target.readPath(arg(a.content)); err != nil {
+			return call, nil, errnoOf(err, unix.EFAULT)
+		}
+	}
+	if a.flags != noArg {
+		call.Flags = uint64(uint32(arg(a.flags)))
+	}
+	if a.mode != noArg {
+		call.Mode = uint32(arg(a.mode))
+	}
+	if a.dev != noArg {
+		call.Dev = arg(a.dev)
+	}
+	if a.how {
+		var how [24]byte
+		if size := arg(3); size < uint64(len(how)) {
+			return call, nil, unix.EINVAL
+		}
+		if err := target.read(arg(2), how[:]); err != nil {
+			return call, nil, unix.EFAULT
+		}
+		call.Flags = binary.NativeEndian.Uint64(how[0:])
+		call.Mode = uint32(binary.NativeEndian.Uint64(how[8:]))
+		call.Resolve = binary.NativeEndian.Uint64(how[16:])
+	}
+	caller := target.caller
+	call.Path = selfRelative(call.Path, caller.nsPid, caller.nsTid)
+	call.NewPath = selfRelative(call.NewPath, caller.nsPid, caller.nsTid)
+	call.Umask = caller.umask
+	// Each name resolves from the directory the caller named, its working
+	// directory when it named none; the kernel ignores it for an absolute path.
+	dirArgs := []int{a.dir}
+	if a.newPath != noArg {
+		dirArgs = append(dirArgs, a.newDir)
+	}
+	var dirs []int
+	for i, d := range dirArgs {
+		name := call.Path
+		if i == 1 {
+			name = call.NewPath
+		}
+		// The kernel ignores the directory of an absolute name, so the
+		// supervisor need not open it.
+		if strings.HasPrefix(name, "/") {
+			call.Absolute |= 1 << i
+			continue
+		}
+		dirfd := int32(unix.AT_FDCWD)
+		if d != noArg {
+			dirfd = int32(arg(d))
+		}
+		fd, err := target.openDir(dirfd)
+		if err != nil {
+			for _, fd := range dirs {
+				_ = unix.Close(fd)
+			}
+			return call, nil, errnoOf(err, unix.EBADF)
+		}
+		dirs = append(dirs, fd)
+	}
+	call.Dirs = len(dirs)
+	return call, dirs, 0
+}
+
+// openDir opens what a directory argument names for the caller: its working
+// directory, or the object one of its descriptors holds.
+func (t *targetProcess) openDir(dirfd int32) (int, error) {
+	link := "/proc/" + strconv.Itoa(t.pid) + "/cwd"
+	if dirfd != unix.AT_FDCWD {
+		if dirfd < 0 {
+			return -1, unix.EBADF
+		}
+		link = "/proc/" + strconv.Itoa(t.pid) + "/fd/" + strconv.Itoa(int(dirfd))
+	}
+	return unix.Open(link, unix.O_PATH|unix.O_CLOEXEC, 0)
+}
+
+// readPath copies one NUL-terminated path from the caller's memory, a page
+// at a time so a path near the end of a mapping is not read past.
+func (t *targetProcess) readPath(addr uint64) (string, error) {
+	if addr == 0 {
+		return "", unix.EFAULT
+	}
+	var out []byte
+	for len(out) < unix.PathMax {
+		chunk := 4096 - int(addr%4096)
+		if room := unix.PathMax - len(out); chunk > room {
+			chunk = room
+		}
+		buf := make([]byte, chunk)
+		n, err := t.handles.readAt(t.pid, buf, int64(addr))
+		if n == 0 && err != nil {
+			return "", unix.EFAULT
+		}
+		if i := indexByte(buf[:n], 0); i >= 0 {
+			return string(append(out, buf[:i]...)), nil
+		}
+		out = append(out, buf[:n]...)
+		addr += uint64(n)
+	}
+	return "", unix.ENAMETOOLONG
+}
+
+// callerFacts are what one calling thread's status says about it: its thread
+// group, its process and thread ids as the sandbox's PID namespace numbers
+// them, where the performer lives, and its file creation mask.
+type callerFacts struct {
+	tgid, nsPid, nsTid int
+	umask              uint32
+}
+
+// callerFactsOf reads the calling thread's status once; a mask it cannot read
+// is the most restrictive one.
+func callerFactsOf(tid int) (callerFacts, error) {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		return callerFacts{umask: 0o777}, err
+	}
+	return parseCallerFacts(raw)
+}
+
+// parseCallerFacts reads the fields of one status record without splitting it.
+func parseCallerFacts(raw []byte) (callerFacts, error) {
+	facts := callerFacts{umask: 0o777}
+	for len(raw) > 0 {
+		line := raw
+		if i := bytes.IndexByte(raw, '\n'); i >= 0 {
+			line, raw = raw[:i], raw[i+1:]
+		} else {
+			raw = nil
+		}
+		key, value, ok := bytes.Cut(line, []byte{':'})
+		if !ok {
+			continue
+		}
+		switch string(key) {
+		case "Tgid":
+			facts.tgid = lastStatusID(value)
+		case "Umask":
+			if mask, err := strconv.ParseUint(string(bytes.TrimSpace(value)), 8, 32); err == nil {
+				facts.umask = uint32(mask)
+			}
+		case "NStgid":
+			facts.nsPid = lastStatusID(value)
+		case "NSpid":
+			facts.nsTid = lastStatusID(value)
+		}
+	}
+	if facts.tgid <= 0 {
+		return facts, unix.ESRCH
+	}
+	return facts, nil
+}
+
+// lastStatusID is the last whitespace-separated number of a status value.
+func lastStatusID(value []byte) int {
+	fields := bytes.Fields(value)
+	if len(fields) == 0 {
+		return 0
+	}
+	id, _ := strconv.Atoi(string(fields[len(fields)-1]))
+	return id
+}
+
+// selfRelative rewrites the caller's own process links, which would name the
+// performer if it followed them as written.
+func selfRelative(path string, pid, tid int) string {
+	if pid <= 0 {
+		return path
+	}
+	own := "/proc/" + strconv.Itoa(pid)
+	for _, r := range []struct{ prefix, replacement string }{
+		{"/proc/self/", own + "/"},
+		{"/proc/thread-self/", own + "/task/" + strconv.Itoa(tid) + "/"},
+		{"/dev/fd/", own + "/fd/"},
+		{"/dev/stdin", own + "/fd/0"},
+		{"/dev/stdout", own + "/fd/1"},
+		{"/dev/stderr", own + "/fd/2"},
+	} {
+		if rest, ok := strings.CutPrefix(path, r.prefix); ok {
+			return r.replacement + rest
+		}
+	}
+	return path
+}
