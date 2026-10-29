@@ -3,8 +3,9 @@
 `go` measures each changed package with its own short tests, then measures a
 package that falls short again with the short tests that transitively reach it,
 crediting coverage across them. `den` runs the Vitest tests related to the
-changed files and measures those files. A unit (a Go package, a Den file)
-fails when more than `grace` of its changed statements are uncovered and fewer
+changed files and measures those files. `python` runs each declared Python
+suite whose tree holds a changed script under coverage.py, subprocesses
+included. A unit (a Go package, a Den or Python file) fails when more than `grace` of its changed statements are uncovered and fewer
 than `percent` of them are covered (scripts/coverage-policy.json). Code a
 change does not touch never fails; low package coverage is reported as a
 notice for the packages a change touches.
@@ -23,6 +24,7 @@ from artifact_paths import artifact_root
 import change_report
 from change_report import Finding
 import coverage_policy
+import python_coverage
 import verification_plan
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -305,16 +307,55 @@ def run_den(scope):
     return judged + findings, failed, f"{len(changed)} changed file(s)"
 
 
+# Python
+
+def run_python(scope):
+    floor = coverage_policy.changed("python")
+    changed = python_coverage.sources(ROOT, scope.paths)
+    if not changed:
+        return [], False, "no changed scripts Python"
+    measured = f"{len(changed)} changed file(s)"
+    measurements = python_coverage.measure(ROOT, changed, coverage_policy.python_suites(),
+                                           artifact_root(ROOT) / "coverage" / "changes-python")
+    if measurements is None:
+        return [Finding("error", "python", "tests failed, so changed coverage was not measured; fix the tests above")], \
+            True, measured
+    lines = change_report.changed_lines(ROOT, scope.base, changed)
+    units, findings = {}, []
+    for path in changed:
+        unit = units.setdefault(path, Unit(path.removeprefix("scripts/")))
+        measurement = measurements[path]
+        if isinstance(measurement, Exception):
+            findings.append(Finding("error", "python", f"{unit.name}: statements could not be read: {measurement}", path))
+            continue
+        for statement_lines, covered in measurement.changed(lines.get(path, ())):
+            unit.add(path, min(statement_lines), max(statement_lines), 1, covered, statement_lines)
+    judged, failed = judge("python", units, floor)
+    return judged + findings, failed or bool(findings), measured
+
+
+LANGUAGES = {"go": ("Changed coverage (Go)", run_go), "den": ("Changed coverage (Den)", run_den),
+             "python": ("Changed coverage (Python)", run_python)}
+
+
 def main(arguments):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("language", choices=("go", "den"))
-    language = parser.parse_args(arguments).language
-    title = "Changed coverage (Go)" if language == "go" else "Changed coverage (Den)"
+    parser.add_argument("language", choices=sorted(LANGUAGES))
+    parser.add_argument("--provision", action="store_true",
+                        help="install the pinned Python coverage tools for this interpreter, then exit")
+    options = parser.parse_args(arguments)
+    if options.provision:
+        if options.language != "python":
+            parser.error("--provision applies to python")
+        for requirements in python_coverage.requirement_files(ROOT, coverage_policy.python_suites()):
+            python_coverage.provision(requirements)
+        return 0
+    title, run = LANGUAGES[options.language]
     scope = change_report.resolve(ROOT)
     if scope is None:
         change_report.emit(ROOT, title, "no main branch is reachable, so there is no change to measure", [], False)
         return 2 if os.environ.get("GITHUB_ACTIONS") == "true" else 0
-    findings, failed, measured = (run_go if language == "go" else run_den)(scope)
+    findings, failed, measured = run(scope)
     change_report.emit(ROOT, title, f"{scope.describe()}; {measured}", findings, failed)
     return 1 if failed else 0
 

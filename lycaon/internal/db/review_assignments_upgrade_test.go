@@ -86,10 +86,21 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	if baseline != target {
 		t.Fatalf("upgraded baseline=%+v, want %+v", baseline, target)
 	}
-	var applied int
-	testutil.FailErr(t, "read migration ledger", reader.QueryRowContext(t.Context(), "SELECT count(*) FROM schema_migrations").Scan(&applied))
-	if applied != 5 {
-		t.Fatalf("migration ledger has %d steps, want 5", applied)
+	ledger, err := reader.QueryContext(t.Context(), "SELECT from_revision, to_revision FROM schema_migrations ORDER BY to_revision")
+	testutil.FailErr(t, "read migration ledger", err)
+	defer ledger.Close()
+	next := -1
+	for ledger.Next() {
+		var from, to int
+		testutil.FailErr(t, "scan migration ledger", ledger.Scan(&from, &to))
+		if next >= 0 && from != next {
+			t.Fatalf("migration ledger skips from revision %d to %d", next, from)
+		}
+		next = to
+	}
+	testutil.FailErr(t, "iterate migration ledger", ledger.Err())
+	if next != target.Revision {
+		t.Fatalf("migration ledger ends at revision %d, want %d", next, target.Revision)
 	}
 }
 

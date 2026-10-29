@@ -2,7 +2,6 @@ package sourcecatalog
 
 import (
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -17,7 +16,7 @@ func TestFileCountReturnsUnknownWhileDiscoveryContinues(t *testing.T) {
 	})
 	testutil.FailErr(t, "hold index preparation", err)
 	defer release()
-	ctx := testutil.BoundedContext(t, time.Second)
+	ctx := t.Context()
 	scope := FileScope{Audience: AgentAudience, IncludeHidden: true}
 	files, err := c.Trees.RootFileCount(ctx, "p", root, scope, 0)
 	testutil.FailErr(t, "nonblocking cold count", err)
@@ -25,7 +24,7 @@ func TestFileCountReturnsUnknownWhileDiscoveryContinues(t *testing.T) {
 		t.Fatalf("blocked discovery invented a measurement: %+v", files)
 	}
 	release()
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		files, err = c.Trees.RootFileCount(t.Context(), "p", root, scope, 0)
 		return err == nil && files.Measured
 	})

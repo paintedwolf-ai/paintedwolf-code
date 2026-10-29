@@ -49,7 +49,7 @@ func awaitGeneration(t *testing.T, started <-chan context.Context) context.Conte
 	select {
 	case ctx := <-started:
 		return ctx
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("generation did not start")
 		return nil
 	}
@@ -87,7 +87,7 @@ func TestGetCoalescesPendingAttemptAndRequestCancellationDoesNotStopIt(t *testin
 	service.Stop()
 	select {
 	case <-generationCtx.Done():
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("shutdown did not cancel generation")
 	}
 	if _, err := service.Request(t.Context(), target, "manual"); !errors.Is(err, ErrStopped) {
