@@ -2713,6 +2713,126 @@
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "lsof-session-listener-job-identity",
+      "program": "lsof -iTCP:3000 -sTCP:LISTEN",
+      "setup": {
+        "files": {},
+        "host_facts": {
+          "session_jobs": [
+            {
+              "number": 1,
+              "pid": 4242,
+              "name": "node",
+              "uid": 501
+            }
+          ],
+          "listeners": [
+            {
+              "protocol": "tcp",
+              "address": "127.0.0.1",
+              "port": 3000,
+              "uid": 501,
+              "holder_pid": 4242
+            }
+          ],
+          "process_inspection": "denied"
+        },
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "COMMAND PID  USER TYPE NAME\nnode    4242 501  IPv4 TCP 127.0.0.1:3000 (LISTEN) [session job #1 4242]\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative contract definition; native runtime qualification in program_lsof_test.go"
+    },
+    {
+      "id": "lsof-host-listener-needs-inspection-approval",
+      "program": "lsof -i :5432",
+      "setup": {
+        "files": {},
+        "host_facts": {
+          "session_jobs": [],
+          "listeners": [
+            {
+              "protocol": "tcp",
+              "address": "0.0.0.0",
+              "port": 5432,
+              "uid": 70,
+              "holder_pid": 900,
+              "holder_name": "postgres",
+              "holder_session": "outside"
+            }
+          ],
+          "process_inspection": "denied"
+        },
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "lsof: port 5432 is held outside this session; host process inspection was not approved, so those holders were not inspected\n",
+        "status": 1,
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative contract definition; native runtime qualification in program_lsof_test.go"
+    },
+    {
+      "id": "lsof-host-listener-approved",
+      "program": "lsof -i :5432",
+      "setup": {
+        "files": {},
+        "host_facts": {
+          "session_jobs": [],
+          "listeners": [
+            {
+              "protocol": "tcp",
+              "address": "0.0.0.0",
+              "port": 5432,
+              "uid": 70,
+              "holder_pid": 900,
+              "holder_name": "postgres",
+              "holder_session": "outside"
+            },
+            {
+              "protocol": "tcp",
+              "address": "::",
+              "port": 5432,
+              "uid": 0,
+              "holder_pid": null
+            }
+          ],
+          "process_inspection": "approved"
+        },
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "COMMAND  PID USER TYPE NAME\npostgres 900 70   IPv4 TCP *:5432 (LISTEN)\n?        ?   0    IPv6 TCP *:5432 (LISTEN)\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative contract definition; native runtime qualification in program_lsof_test.go"
     }
   ]
 }

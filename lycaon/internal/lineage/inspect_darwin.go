@@ -166,6 +166,4 @@ func livePIDs() ([]int, error) {
 	return out, nil
 }
 
-func listeners() ([]Listener, error) { return nil, ErrUnsupported }
-
 const supported = true
