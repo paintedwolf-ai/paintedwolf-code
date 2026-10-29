@@ -140,6 +140,11 @@ func (m *Context) Build() promptloop.ContextDeps {
 }
 
 func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
+	if profileID == prompts.CoordinatorProfileID && m != nil && m.Runtime != nil {
+		if surfaceID := strings.TrimSpace(m.Runtime.PromptTurnSurfaceID(sess.ID)); surfaceID != "" {
+			profileID = surfaceID
+		}
+	}
 	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
 }
 

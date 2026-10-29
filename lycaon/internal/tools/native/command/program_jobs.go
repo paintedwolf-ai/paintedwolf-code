@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,13 +14,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // SessionJobs puts a program's & jobs in the session's process registry, so
 // jobs, wait, kill, command_output and command_stop share one set of handles.
-// A native job has no fabricated OS PID; its stop cancels its own context.
+// A native job has a session numeric identifier; its stop cancels its context.
 type SessionJobs struct {
 	Registry      *bgprocess.Registry
 	Supervisor    *ProgramSupervisor
@@ -27,13 +30,16 @@ type SessionJobs struct {
 	ProjectID     string
 	ToolCallID    string
 
-	mu      sync.Mutex
-	results map[string]jobOutcome
-	signals map[string]int
+	mu        sync.Mutex
+	results   map[string]jobOutcome
+	signals   map[string]int
+	processes map[string]jobProcess
 	// order lists handles in start order; %N names order[N-1].
 	order []string
 	// programOrder tracks handles started by the active program.
 	programOrder []string
+	publicIDs    map[string]int
+	nextNativeID int
 }
 
 type jobOutcome struct {
@@ -42,9 +48,51 @@ type jobOutcome struct {
 }
 
 // jobStatus is the registry's observation; a stop request is not an exit.
-type jobStatus struct {
-	Handle      string
+type jobProcess struct {
+	Identity    hostprocess.Process
+	PID         int
+	Name        string
 	CommandLine string
+}
+
+type jobStatus struct {
+	Process     hostprocess.Process
+	Name        string
+	Handle      string
+	PID         int
+	CommandLine string
+}
+
+type jobProcessKey struct{}
+
+type jobProcessTracker struct {
+	once     sync.Once
+	ready    chan struct{}
+	onRecord func(jobProcess)
+}
+
+func noteJobProcess(ctx context.Context, pid int, args []string) {
+	t, _ := ctx.Value(jobProcessKey{}).(*jobProcessTracker)
+	if t == nil {
+		return
+	}
+	t.once.Do(func() {
+		if t.onRecord != nil {
+			p := jobProcess{CommandLine: strings.Join(args, " "), PID: pid}
+			if len(args) > 0 {
+				p.Name = filepath.Base(args[0])
+			}
+			if pid > 0 {
+				p.Identity, _ = hostprocess.Observe(pid)
+			}
+			t.onRecord(p)
+		}
+		close(t.ready)
+	})
+}
+
+func noteJobNative(ctx context.Context, args []string) {
+	noteJobProcess(ctx, 0, args)
 }
 
 // BeginProgram prunes finished jobs from prior programs before a new program
@@ -63,6 +111,11 @@ func (j *SessionJobs) BeginProgram() {
 	for _, handle := range j.order {
 		if active[handle] {
 			kept = append(kept, handle)
+		} else {
+			delete(j.processes, handle)
+			delete(j.results, handle)
+			delete(j.signals, handle)
+			delete(j.publicIDs, handle)
 		}
 	}
 	j.order = kept
@@ -80,23 +133,31 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	}
 	var handle string
 	ready := make(chan struct{})
+	done := make(chan struct{})
+	tracker := &jobProcessTracker{ready: make(chan struct{})}
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
 		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
-		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
+		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
+			defer close(done)
 			defer release()
 			<-ready
 			ctx, cancel := context.WithCancel(jobCtx)
 			defer cancel()
+			ctx = context.WithValue(ctx, jobProcessKey{}, tracker)
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
 			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
-			if ctx.Err() != nil {
+			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				status := j.signalStatus(handle)
-				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
-			return result.Status, err
+			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
+			if documents, ok := ctx.Value(programDocumentsKey{}).(*programDocuments); ok {
+				settled.UnsavedDocumentPaths, settled.ReleaseNotices = documents.takePaths()
+			}
+			return settled, err
 		},
 	})
 	if err != nil {
@@ -109,9 +170,61 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	j.order = append(j.order, handle)
 	j.programOrder = append(j.programOrder, handle)
 	j.mu.Unlock()
+	tracker.onRecord = func(process jobProcess) {
+		j.recordProcess(handle, process)
+	}
 	close(ready)
-	return handle, nil
+	select {
+	case <-tracker.ready:
+	case <-done:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	return strconv.Itoa(j.publicID(handle)), nil
 }
+
+// publicID exposes the real process PID when one started. Native jobs use a
+// session-unique positive integer above the platform process ID range.
+func (j *SessionJobs) publicID(handle string) int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if id := j.publicIDs[handle]; id > 0 {
+		return id
+	}
+	if pid := j.processes[handle].PID; pid > 0 {
+		if j.publicIDs == nil {
+			j.publicIDs = map[string]int{}
+		}
+		j.publicIDs[handle] = pid
+		return pid
+	}
+	if j.nextNativeID == 0 {
+		j.nextNativeID = 1 << 22
+	}
+	j.nextNativeID++
+	if j.publicIDs == nil {
+		j.publicIDs = map[string]int{}
+	}
+	j.publicIDs[handle] = j.nextNativeID
+	return j.nextNativeID
+}
+
+func (j *SessionJobs) recordProcess(handle string, process jobProcess) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.processes == nil {
+		j.processes = map[string]jobProcess{}
+	}
+	j.processes[handle] = process
+}
+
+func (j *SessionJobs) process(handle string) jobProcess {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.processes[handle]
+}
+
+func (j *SessionJobs) pid(handle string) int { return j.process(handle).PID }
 
 func (j *SessionJobs) signalStatus(handle string) int {
 	j.mu.Lock()
@@ -148,6 +261,21 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 			index = n - 1
 		}
 	default:
+		if pid, err := strconv.Atoi(reference); err == nil && pid > 0 {
+			for handle, id := range j.publicIDs {
+				if id == pid {
+					return handle, nil
+				}
+			}
+			for handle, process := range j.processes {
+				if process.PID != pid {
+					continue
+				}
+				if hostprocess.IsCurrent(process.Identity) || !hostprocess.ProcessExists(pid) {
+					return handle, nil
+				}
+			}
+		}
 		if slices.Contains(j.order, reference) {
 			return reference, nil
 		}
@@ -226,6 +354,9 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 	}
 	handle, err := j.Resolve(reference)
 	if err != nil {
+		if pid, convErr := strconv.Atoi(reference); convErr == nil && pid > 0 && (pid == os.Getpid() || hostprocess.ProcessExists(pid)) {
+			return processNotOwned("kill", reference)
+		}
 		return err
 	}
 	j.mu.Lock()
@@ -248,7 +379,12 @@ func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command
 		}
-		out = append(out, jobStatus{Handle: job.Handle, CommandLine: line})
+		process := j.process(job.Handle)
+		if process.CommandLine != "" {
+			line = process.CommandLine
+		}
+		out = append(out, jobStatus{Handle: job.Handle, PID: process.PID,
+			Process: process.Identity, Name: process.Name, CommandLine: line})
 	}
 	return out, nil
 }
@@ -264,4 +400,13 @@ func jobLookupError(err error, handle string) error {
 // wait and jobs never address host processes.
 func unknownJob(reference string) error {
 	return toolrejection.RejectInvalidArguments("COMMAND_JOB_UNKNOWN", map[string]any{"job": reference, "word": reference, "reason": "not a job of this session; use jobs to list this session's background jobs, then pass %N, %% or $!"})
+}
+
+func processNotOwned(command, target string) error {
+	return toolrejection.RejectInvalidArguments("PROCESS_NOT_OWNED", map[string]any{
+		"command": command,
+		"job":     target,
+		"word":    target,
+		"reason":  "process is not owned by this session; signal only background jobs started in this session",
+	})
 }

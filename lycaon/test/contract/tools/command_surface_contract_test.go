@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,31 +43,43 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 			t.Parallel()
 			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.SurfaceTurn{Schemas: schemas}, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
-			out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, prompts.AgentToolSurfaceTemplateVars(data))
+			vars := prompts.AgentToolSurfaceTemplateVars(data)
+			vars["session_scratch_dir"] = filepath.Join(t.TempDir(), "session-scratch")
+			out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, vars)
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)
 			for _, want := range []string{
-				"argv host runner",
-				"stage lines",
-				"pipeline",
-				// Sequencing is part of the grammar the surface must teach, and
-				// substitution is the boundary it must state stays rejected.
-				"`&&`",
-				"$()",
-				"skipped",
-				"background:true",
-				"command_stop",
-				"COMMAND_NOT_ARGV",
-				"COMMAND_ARGV_REQUIRED",
-				"Omit `stdout_to`",
+				"## command",
+				"GNU and BSD",
+				"--help",
+				"@scratch",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("profile %q surface missing %q", profile.ID, want)
 				}
 			}
-			for _, forbid := range []string{"separate command calls", "separate `command` calls", "pipes never execute"} {
+			for _, forbid := range []string{"argv host runner", "not a shell", "COMMAND_NOT_ARGV", "COMMAND_ARGV_REQUIRED", "separate command calls", "separate `command` calls", "pipes never execute"} {
 				if strings.Contains(strings.ToLower(out), strings.ToLower(forbid)) {
 					t.Fatalf("profile %q surface must not include %q", profile.ID, forbid)
 				}
+			}
+			if data.CommandEffects != profile.CommandEffects || data.CommandDeferred != profile.ToolDeferred("command") {
+				t.Fatalf("command surface lost profile facts: %+v", data)
+			}
+			if !data.CommandDeferred {
+				found := false
+				for _, tool := range data.Tools {
+					if tool.Name == "command" {
+						found = slices.Contains(tool.RequiredArgs, "command")
+					}
+				}
+				if !found || !strings.Contains(out, "`command`: `command`") {
+					t.Fatal("command schema's required source argument is unreachable")
+				}
+			}
+			mutates, _ := vars["profile_command_mutation"].(bool)
+			hidden, _ := vars["command_external_hidden"].(bool)
+			if strings.Contains(out, "external -- NAME") != (mutates && !hidden) {
+				t.Fatalf("external selector differs from profile facts: %+v", vars)
 			}
 			commandIdx := strings.Index(out, "## command")
 			toolIdx := strings.Index(out, "### Tools")
@@ -132,9 +145,12 @@ func TestWorkerPersonasWithCommandIncludeCommandSurface(t *testing.T) {
 		t.Run(agentID, func(t *testing.T) {
 			got, err := prompts.RenderPersona(context.Background(), engine, agentID, nil)
 			contractcheck.FailErr(t, "RenderPersona", err)
+			if !profile.ToolDeferred("command") && !strings.Contains(got, "`command`: `command`") {
+				t.Fatal("persona lacks the command schema source argument")
+			}
 			for _, want := range []string{
-				"argv host runner", "stage lines", "pipeline", "`&&`", "$()",
-				"COMMAND_NOT_ARGV", "COMMAND_ARGV_REQUIRED",
+				"## command",
+				"GNU and BSD", "--help",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("persona missing %q", want)

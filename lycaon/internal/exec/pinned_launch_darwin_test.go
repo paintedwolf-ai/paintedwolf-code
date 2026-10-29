@@ -62,7 +62,7 @@ func TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory(t *testing.T) 
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
-			if err := RunInOwnGroup(cmd); err != nil {
+			if err := RunInOwnGroup(t.Context(), cmd); err != nil {
 				t.Fatalf("pinned launch: %v; diagnostic %s", err, stderr.String())
 			}
 			if stdout.String() != "./task\nliteral argument\n" {
@@ -104,7 +104,7 @@ func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *test
 					t.Fatal(err)
 				}
 			}
-			err = RunInOwnGroup(cmd)
+			err = RunInOwnGroup(t.Context(), cmd)
 			if revoke && !errors.Is(err, os.ErrPermission) {
 				t.Fatalf("current authority refusal lost: %v", err)
 			}
@@ -153,7 +153,7 @@ func TestPinnedHostExecutionPreservesSetuidProcessInspection(t *testing.T) {
 	var output, diagnostic bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &diagnostic
-	if err := RunInOwnGroup(cmd); err != nil {
+	if err := RunInOwnGroup(t.Context(), cmd); err != nil {
 		t.Fatalf("privileged launch: %v; diagnostic %s", err, diagnostic.String())
 	}
 	if strings.TrimSpace(output.String()) != pid {

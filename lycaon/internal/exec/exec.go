@@ -53,8 +53,7 @@ type ExecOpts struct {
 	HostConsumer bool
 	// ProcessPriority applies ScanProcessPolicy / engine below-normal posture when set.
 	ProcessPriority ProcessPriority
-	// Started observes each stage's process once it has started, so a service
-	// that answers only that invocation can bind to its kernel identity.
+	// Started observes the launched process before any waiter can reap it.
 	Started func(pid int)
 }
 

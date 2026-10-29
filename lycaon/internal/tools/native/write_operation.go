@@ -3,6 +3,8 @@ package native
 import (
 	"context"
 	"fmt"
+	"io"
+	"math"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -29,6 +31,9 @@ type WriteInput struct {
 	// redirect output, text or not. It requires the execution-pinned admission.
 	Exact bool
 	Bytes []byte
+	// Source borrows an exact raw stream for this call; SourceBytes is its length.
+	Source      io.Reader
+	SourceBytes int64
 }
 
 type WriteAdmission uint8
@@ -62,8 +67,14 @@ type WriteResult struct {
 
 // Apply performs the complete native write operation, including scope, review,
 // revision, syntax, attribution and the existing source write door.
-func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (WriteResult, error) {
+func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (result WriteResult, err error) {
+	if input.Source != nil && (!input.Exact || input.Admission != WriteExecutionPinned) {
+		return WriteResult{}, unsupportedWriteAdmission()
+	}
 	if input.Admission != WriteConversational && input.Admission != WriteExecutionPinned {
+		return WriteResult{}, unsupportedWriteAdmission()
+	}
+	if input.Exact && ((input.Source != nil && (input.Bytes != nil || input.SourceBytes < 0 || input.SourceBytes == math.MaxInt64)) || (input.Source == nil && input.SourceBytes != 0)) {
 		return WriteResult{}, unsupportedWriteAdmission()
 	}
 	path := input.Path
@@ -81,6 +92,12 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 		return WriteResult{}, err
 	}
 	if input.Admission == WriteExecutionPinned {
+		defer func() {
+			if err == nil && result.Accepted && !result.Saved {
+				err = &UnpublishedWrite{Result: result}
+			}
+		}()
+
 		if input.Exact {
 			return t.applyPinnedBytes(ctx, input, tctx, resolved)
 		}
@@ -103,7 +120,11 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			return WriteResult{}, fmt.Errorf("read failed: %w", err)
 		}
 		return t.writeText(ctx, tctx, resolved, st, before, input, func(final string) (landing, error) {
-			return landEditedText(ctx, tctx, "write", resolved, st, final)
+			authored := input.Content
+			if input.Append && before != nil {
+				authored = *before + input.Content
+			}
+			return landEditedText(ctx, tctx, "write", resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
 		})
 	})
 }

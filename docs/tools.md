@@ -4,16 +4,15 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
 ## Portable command language version 1
 
-The [milestone 10](https://github.com/paintedwolf-ai/paintedwolf-code/milestone/10)
-contract is frozen independently from runtime activation. The currently shipped
-command path described below remains in use until its replacements land. The
-versioned catalog does not enable a shell fallback or qualify native execution.
+The versioned catalog defines the program language and native utility contracts.
+Programs dispatch through host-owned operations; the catalog grants no execution
+authority and provides no shell fallback.
 
 Machine sources live in
 [`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/).
@@ -23,31 +22,28 @@ status/publication rules, representation, retained output and compact schema cop
 Each utility family defines argv grammar, option spelling/arity/value role,
 effect modes, platform capabilities, status, encoding, examples and existing
 implementation/test references. The stock disposition inventory covers the live
-manifest, retaining domain operations and naming the future replacement work.
-No routine schema is retired by publishing these contracts.
+manifest and its domain operations.
 
 `./task codegen:tool-command-equivalence` compiles the same catalog into
 `toolcontract.LanguageV1`; its existing `:check` target detects drift.
 `CommandHelp` derives option help from these facts rather than maintaining a
-second executor/prompt option map. P04 consumes the typed facts in its parser;
-P03 binds executable operations through existing subsystem contracts. Pure catalog
+second executor/prompt option map. The parser consumes typed facts, and dispatch
+binds executable operations through existing subsystem contracts. Pure catalog
 facts carry no grant or execution authority.
 
 The catalog freezes both GNU and BSD `sed -i` without backups, GNU `stat -c`
 and BSD `stat -f` formats, and Base64 `-d`/`-D` decoding. Empty xargs launches
 nothing; `wc -l` counts LF bytes. Ripgrep's conflicting short options retain
 ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
-explicit bounded contract; P13 selects and qualifies an engine rather than
-calling RE2 full PCRE. File signatures name format-identification evidence,
+explicit bounded contract enforced by the native regex engine. File signatures name format-identification evidence,
 not archive/database trust.
 
-Native document streams encode accepted text with the captured encoding, BOM
-and newline policy. A checksum and byte count cover that same representation;
-disk provenance remains separate. Exact delivered literal source windows may
+Native byte streams preserve the saved file representation, including its
+encoding, BOM and newline policy. Checksums and byte counts cover those saved
+bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
-This deliberately replaces the old mixed editor-line/disk-byte wc projection
-for command output. Diff reuses the existing engine; complete stream bounds
-are independent from its old structured preview/context caps.
+Diff reuses the existing engine; complete stream bounds are independent from
+structured preview and context caps.
 
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
@@ -98,14 +94,10 @@ Typed syntax diagnostics carry byte ranges, line/column, expected forms and
 resource measurements through the existing rejection/OAR pipeline. They never
 guess missing source contents or create executable replacement calls.
 
-The new plan is separate from the existing process-stage plan. Retained verify,
-PTY, process launch, detection, secret inspection and command-identity consumers
-still require that process representation. The current command executor remains
-its consumer until the runtime integration replaces it. Do not flatten functions,
-loops or substitutions into process stages, broaden a retained surface merely
-because the new parser accepts a form, or remove a recognizer while one of these
-consumers still uses it. Their replacement and obsolete-path cleanup accompany
-the introducing runtime integration.
+Program plans retain functions, loops and substitutions through evaluation.
+Verify, terminal and process-launch surfaces use process-stage plans with their
+own accepted arguments. Dispatch binds each reached program operation to its
+owner rather than flattening the program into a process pipeline.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
@@ -186,21 +178,46 @@ A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
 
-Program operations pin execution revisions instead of conversational read bases.
-`native.ExecutionRevisions` captures each native input from the accepted shared
-document when one exists, otherwise from published disk, and captures each
-destination's revision or absence before the transform is prepared. A
-`WriteExecutionPinned` write rechecks the destination exactly in the document
-owner (or the write door's base check), rechecks its sources after review, and
-refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
-rebases, retries or reruns. External processes read published disk: their
-inputs are declared at launch as disk identities, not as observed reads. A
-`PublicationBarrier` refuses a dependent launch with
-`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
-state stays held and no other draft is saved. Each operation pins its own
-inputs, so a later statement captures newer revisions and sees earlier
-published writes; there is no whole-program snapshot. Program receipts retain
-the pins per execution.
+Program operations pin execution revisions from published disk. Native utilities,
+input redirections, Git, and external programs all read the saved file. After a
+reached operation is admitted, accepted changes authored only by that chat can
+publish through separate write admission, current review and the editor save
+path. Each preparation write has its own receipt. Read-only profiles read saved
+bytes without publishing drafts. Human and other chats' drafts stay unsaved.
+Redirects contribute their mutation effects before admission; input opening and
+destination capture happen after accepted-draft preparation settles. Earlier
+admitted operations may already have published when a later operation is refused.
+
+The initial response includes one note per affected path observed by native
+reads, stating that commands read the saved file. Notices first discovered by
+a background child reach its completion report; paths already reported in the
+initial response are not repeated. Native writes refuse dirty destinations with
+`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
+roots. Their outside saves merge with accepted and pending typing through the
+editor's existing filesystem-replica transition against the saved checkpoint.
+The editor's typing stays in the document even when a program changes disk.
+
+Each destination's revision or absence is captured before preparing its change.
+A `WriteExecutionPinned` write rechecks the destination in the document owner or
+write door and rechecks sources after review. Movement refuses with
+`COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
+editor accepts a command's write but cannot save it, that exact write stops with
+`COMMAND_PUBLICATION_PENDING`. Its accepted revision and held recovery version
+remain in the receipt; later children do not run. There is no dependent-launch
+barrier or draft substitution.
+
+Each operation captures its own inputs, so later statements see earlier saved
+writes rather than a whole-program snapshot. Internal captures, pipes and
+external printed paths grant no editor read basis. Exact source mappings credit
+only complete source lines actually delivered to the model, at the matching
+saved revision. Omitted, changed or partial-line bytes grant none. A later
+structured `edit` or `replace_lines` may change those seen lines; other lines
+still require a read. Read scopes stay frozen with both their revision and line
+coverage for each model response. The current inline delivery withholds credit
+when top-level output writers overlap or pass through nested tees rather than
+assigning ambiguous source positions. Optional editor credit reserves bounded
+snapshot and encoding capacity before opening the document; if that capacity is
+unavailable, output remains delivered and a later edit needs a fresh read.
 
 ### Literal content and metadata commands
 
@@ -210,9 +227,8 @@ outline, summarize and repo-map built-ins. Argv binds through the catalog
 binder; each command runs under its catalog operation identity (`read`, `wc`,
 `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
 operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
-each file as exact stream bytes before any output: the accepted document encoded
-in its recorded encoding, BOM and newline policy, or the published file. The pin
-names that representation separately from disk. An input above the read budget,
+each file as exact published stream bytes before any output, retaining its
+encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
 or output above the stream ceiling, refuses; nothing is truncated or summarized
 in its place.
 
@@ -396,9 +412,9 @@ The preferred tool is the highest-level capability that completely expresses the
 | Domain tool | Files, git, scans, search, workflow, delegation, browser, and other host operations |
 | Native analysis tool | A bounded first-party read or transformation with structured arguments, rejects, and evidence |
 | Confined MCP | An external protocol tool whose complete effect remains inside host confinement and policy |
-| Generic `command` | Last resort when no structured capability expresses the operation |
+| `command` | Programs that compose native utilities and confined external processes |
 
-Higher-level tools expose intent and consequences as fields, so the host can enforce scope, choose approval, preserve evidence, and offer specific recovery without parsing shell text. The generic command path still takes structured argv, not a shell string, and is not a shortcut around a native operation, project boundary, or approval gate.
+Domain tools expose intent and consequences as fields. `command` expresses programs whose reached statements bind to the same native owners, project boundaries and approval gates. Both forms preserve operation evidence and structured recovery.
 
 ### Root-scope guards
 
@@ -408,7 +424,22 @@ Temporary, cache, and tool data paths derive from the same OS conventions as sub
 
 Multi-root calls use explicit root addressing when a relative path is ambiguous. Host-data-relative spill paths are a separate jailed namespace that never exposes the absolute config directory.
 
-`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share. One grammar resolves it for native tools, `cwd`, stream redirects, and unquoted `command` and `verify` arguments, which reach the program as absolute paths; a quoted `@scratch/...` stays literal. Processes also receive the folder as `SCRATCH_DIR`. A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
+`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
+
+`@output/<program>.stdout` and `.stderr` address the invoking chat's retained
+command output copies. Unquoted addresses expand to absolute paths; quoted
+addresses remain literal. The host prepares this folder under its own state,
+outside writable scratch and standard temporary roots. These files are views,
+not authoritative output: retained screened blobs and their size and SHA-256
+identify the bytes. A host `read` repairs a missing or changed view and serves
+the retained bytes. Commands read the current file; changed bytes cannot reuse
+the original source mappings. Sandboxed commands receive read access through the
+standard read-root rules; native writes refuse this read namespace. The command
+result and receipt carry an `output_path` for each retained stream. Head and tail
+windows keep the start and summary visible, and their notice gives the exact next
+line to read with `sed -n`. Source mappings from later reads still refer to the
+original delivered file spans. Copies follow the session cleanup lifetime.
+
 
 Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 64 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). Portable `command` reads ordinary disk streams without a per-file gather limit; operations that need a whole input use a 32 MiB bound. Buffered stages keep a 64 MiB bound, records have a 4 MiB bound, and streaming throughput has a 1 GiB runaway guard. `grep -T` on nonseekable stdin needs a second pass and uses a quota-admitted anonymous spool bounded to 64 MiB; ordinary file searches stream. Program memory admission is aggregate, so representation conversion and concurrent work can refuse below an individual input ceiling. Editor documents and credential-read fallback retain their own bounded capture rules. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
 
@@ -645,14 +676,14 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Tool reads of that path serve the document's draft, unsaved edits included; tool writes land in the document and save it. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Conversational structured reads of that path serve the document's draft, unsaved edits included; structured writes land in the document and save it. The `command` tool follows the saved-file rules above. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
-| `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
-| `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
+| Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
+| Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
+| `command`, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 
@@ -879,7 +910,7 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
 
 ## Web research sources
 
@@ -891,8 +922,23 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P09 binds production admission. P08 supplies the shared status/control and complete-producer publication decision; P16 supplies staged destination publication.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. The evaluator settles each producer independently and publishes staged destinations only from complete eligible results.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
-Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
+
+### Command schema and guidance
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+
+The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+| Surface | Source |
+|---|---|
+| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
+| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
+| Per-call guidance | `platform/shared/partials/command-surface.md` |
+| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+
+OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.

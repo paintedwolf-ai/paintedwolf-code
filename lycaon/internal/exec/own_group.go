@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -23,7 +24,7 @@ type ProcessGroup struct {
 
 // StartInOwnGroup registers a prepared invocation's existing tree owner before
 // the helper releases payload execution. The caller retains its input cleanup.
-func StartInOwnGroup(cmd *exec.Cmd) (*ProcessGroup, error) {
+func StartInOwnGroup(ctx context.Context, cmd *exec.Cmd) (*ProcessGroup, error) {
 	if _, err := claimPrepared(cmd); err != nil {
 		return nil, err
 	}
@@ -31,13 +32,13 @@ func StartInOwnGroup(cmd *exec.Cmd) (*ProcessGroup, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := confine.ValidateProcessInputs(group.command); err != nil {
+	if err := confine.ValidateProcessInputs(ctx, group.command); err != nil {
 		return nil, group.release(err)
 	}
 	if err := group.start(); err != nil {
 		return nil, err
 	}
-	if err := confine.ConfirmProcessLaunch(group.command); err != nil {
+	if err := confine.ConfirmProcessLaunch(ctx, group.command); err != nil {
 		return nil, group.abort(err)
 	}
 	return group, nil
@@ -122,8 +123,8 @@ func (g *ProcessGroup) Stop() {
 }
 
 // RunInOwnGroup settles the same owned lifecycle for synchronous producers.
-func RunInOwnGroup(cmd *exec.Cmd) error {
-	group, err := StartInOwnGroup(cmd)
+func RunInOwnGroup(ctx context.Context, cmd *exec.Cmd) error {
+	group, err := StartInOwnGroup(ctx, cmd)
 	if err != nil {
 		return err
 	}

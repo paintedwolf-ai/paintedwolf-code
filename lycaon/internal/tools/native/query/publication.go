@@ -95,5 +95,5 @@ func (inv *invocation) publishText(source *source, destination toolcontract.Exec
 	if err != nil {
 		return err
 	}
-	return inv.barrier.Track(result)
+	return nil
 }

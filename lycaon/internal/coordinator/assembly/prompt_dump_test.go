@@ -39,7 +39,7 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 		"## core",
 		"Workspace: " + root,
 		"load through `request_tools`",
-		"Host runner and sandbox",
+		"Sandbox and worker checks",
 		strings.TrimSpace(summaryGuidance),
 		"excludes device/project skills",
 	} {

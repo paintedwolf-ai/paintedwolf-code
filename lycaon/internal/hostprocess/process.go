@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -34,7 +35,83 @@ type Process struct {
 	Instance   string `json:"instance"`
 	// Owned reports descent from a launch this session made. Only an owned
 	// process carries a reference, so only an owned process can be signaled.
-	Owned bool `json:"owned"`
+	Owned      bool         `json:"owned"`
+	StartOrder uint64       `json:"-"`
+	Stats      ProcessStats `json:"-"`
+}
+
+// ProcessStats holds observed kernel counters for the read-only ps view.
+// Individual fields remain empty when that kernel observation was unavailable.
+type ProcessStats struct {
+	CPUTime       time.Duration
+	Started       time.Time
+	VirtualBytes  uint64
+	ResidentBytes uint64
+	TTY           string
+	State         string
+	Available     bool
+}
+
+// VisibleProcess is a read-only process observation for shell ps and pgrep.
+type VisibleProcess struct {
+	Process
+	Command string
+}
+
+// Observe reads the kernel identity of a live process. Callers must retain the
+// instance, rather than treating a PID alone as ownership evidence.
+func Observe(pid int) (Process, error) { return inspect(pid) }
+
+// IsCurrent compares an observation with the current kernel instance.
+func IsCurrent(process Process) bool {
+	current, err := inspect(process.PID)
+	return err == nil && sameInstance(current, process)
+}
+
+// VisibleProcesses lists processes visible to the current user in PID order.
+func VisibleProcesses(ctx context.Context) ([]VisibleProcess, error) {
+	pids, err := listPIDs()
+	if err != nil {
+		return nil, err
+	}
+	sort.Ints(pids)
+	out := make([]VisibleProcess, 0, len(pids))
+	for _, candidate := range pids {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if candidate <= 0 {
+			continue
+		}
+		p, err := inspect(candidate)
+		if err != nil {
+			continue
+		}
+		cmd := strings.TrimSpace(readCommandLine(candidate))
+		if cmd == "" {
+			cmd = strings.TrimSpace(p.Executable)
+		}
+		if cmd == "" {
+			cmd = strings.TrimSpace(p.Name)
+		}
+		current, err := inspect(candidate)
+		if err != nil || !sameInstance(p, current) {
+			continue
+		}
+		out = append(out, VisibleProcess{Process: p, Command: cmd})
+	}
+	return out, nil
+}
+
+// ProcessExists reports whether pid currently exists on the host.
+func ProcessExists(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if _, err := inspect(pid); err == nil {
+		return true
+	}
+	return processExistsFallback(pid)
 }
 
 type Snapshot struct {

@@ -1,7 +1,9 @@
 package commandprogram
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -151,6 +153,7 @@ type BoundArgv struct {
 	Command      string
 	Items        []BoundItem
 	EndOfOptions bool
+	Help         bool
 }
 
 func (b BoundArgv) Operands() Fields {
@@ -427,7 +430,10 @@ func (b *argvBinding) psOptions() error {
 				ch := suffix[i]
 				flag := "-" + suffix[i:i+1]
 				switch ch {
-				case 'e', 'f', 'a', 'u', 'x', 'l':
+				case 'e', 'A', 'f', 'a', 'u', 'x', 'l':
+					if ch == 'A' {
+						flag = "-e"
+					}
 					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
 				case 'o', 'p':
 					rest := suffix[i+1:]
@@ -461,7 +467,15 @@ func optionWord(word string) bool { return len(word) > 1 && word[0] == '-' }
 func (b *argvBinding) option(word Field, scope string) error {
 	b.index++
 	if form, ok := b.exact(word.Value, scope); ok {
+		if word.Value == "--help" && b.spec.Name != "external" {
+			b.bound.Help = true
+		}
 		return b.consume(form, word.Value, word, Field{}, false)
+	}
+	if word.Value == "--help" && b.spec.Name != "external" {
+		b.bound.Help = true
+		b.record(toolcontract.OptionForm{Spellings: []string{"--help"}, Scope: scope, ValueRole: "boolean"}, "--help", word, nil, "")
+		return nil
 	}
 	if strings.HasPrefix(word.Value, "--") {
 		name, _, attached := strings.Cut(word.Value, "=")
@@ -649,4 +663,27 @@ func decimal(value string) bool {
 		}
 	}
 	return true
+}
+
+// WriteCatalogHelp writes a catalog command's help to out and returns a completed read-only result.
+func WriteCatalogHelp(spec toolcontract.CommandSpecification, out io.Writer) (toolcontract.ProducerResult, error) {
+	if out != nil {
+		if _, err := io.WriteString(out, spec.Help()+"\n"); err != nil {
+			return ownerResult(err), err
+		}
+	}
+	return ordinaryResult(0), nil
+}
+
+type helpDispatcher struct {
+	spec toolcontract.CommandSpecification
+}
+
+func (h helpDispatcher) Invoke(_ context.Context, _ OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	return WriteCatalogHelp(h.spec, streams.Output)
+}
+
+// HelpDispatcher returns an in-process dispatcher that writes spec's catalog help.
+func HelpDispatcher(spec toolcontract.CommandSpecification) OperationDispatcher {
+	return helpDispatcher{spec: spec}
 }

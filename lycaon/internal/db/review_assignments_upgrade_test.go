@@ -66,6 +66,8 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 		columns[table] = strings.Join(names, ",")
 		before[table] = retainedRows(t, rows)
 	}
+	released, err := inspectSchema(t.Context(), reader)
+	testutil.FailErr(t, "inspect released baseline", err)
 	testutil.FailErr(t, "close inspection", reader.Close())
 	testutil.FailErr(t, "upgrade copied corpus", UpgradeStaged(t.Context(), path))
 	testutil.FailErr(t, "reopen already upgraded corpus", UpgradeStaged(t.Context(), path))

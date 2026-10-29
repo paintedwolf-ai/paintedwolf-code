@@ -75,13 +75,14 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		}
 		pattern = append(pattern[:0], pattern[i+1:]...)
 		m.space.pattern = pattern
+		m.stream.pin = nil
 		return endRestart, true, nil
 	case 'n', 'N':
 		if !m.stream.aheadOK {
 			return endCycle, true, nil
 		}
 		if c.name == 'n' && !m.config.Quiet {
-			if err := out.emit(pattern, delimiter, m.stream.terminated); err != nil {
+			if err := out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
 				return endCycle, true, err
 			}
 		}
@@ -98,7 +99,7 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		}
 		return endDelete, true, err
 	case 'p':
-		err = out.emit(pattern, delimiter, m.stream.terminated)
+		err = out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset)
 	case 'P', 'W':
 		if c.name == 'W' {
 			out = m.outputs[c.arg]
@@ -106,7 +107,7 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		if i := bytes.IndexByte(pattern, delimiter); i >= 0 {
 			err = out.emit(pattern[:i], delimiter, true)
 		} else {
-			err = out.emit(pattern, delimiter, m.stream.terminated)
+			err = out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset)
 		}
 	case 'w':
 		err = m.outputs[c.arg].emit(pattern, delimiter, m.stream.terminated)
@@ -127,6 +128,10 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 	case 's':
 		err = c.sub.apply(m)
 	default:
+		switch c.name {
+		case 'g', 'G', 'x', 'z', 'y':
+			m.stream.pin = nil
+		}
 		err = m.space.edit(c, delimiter)
 	}
 	return endCycle, false, err

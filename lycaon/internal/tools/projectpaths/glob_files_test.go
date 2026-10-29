@@ -44,7 +44,7 @@ func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 		{"**/*.go", []string{"a.go", "pkg/b.go", "pkg/deep/c.go"}},
 		{"inner/*.go", nil},
 		{"escape/*", nil},
-		{"@ws/*.go", []string{"@ws/a.go"}},
+		{"@ws/*.go", nil},
 		{"./p*/b.go", []string{"./pkg/b.go"}},
 		{filepath.ToSlash(root) + "/*.go", []string{filepath.ToSlash(root) + "/a.go"}},
 		// The walk applies exactly the invocation's read authority, which

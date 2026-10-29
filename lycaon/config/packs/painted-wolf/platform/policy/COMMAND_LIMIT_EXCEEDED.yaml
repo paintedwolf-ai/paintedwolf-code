@@ -18,11 +18,11 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
-  what: 'command: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}).'
-  cause: 'The program reached a host limit. Earlier completed changes remain in effect.'
-  why: 'The limit does not undo work that already finished.'
-  fix: 'Use smaller inputs or reduce buffered work. Check earlier changes before retrying.'
-  instead: 'Check the result before retrying commands that change files.'
+  what: 'This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}).'
+  cause: 'The command stopped at this statement. Earlier completed steps and their results remain recorded.'
+  why: 'The host cannot run another step once the limit is reached.'
+  fix: 'Check the completed steps, then process the remaining items in fewer, larger steps or write intermediate results to a file.'
+  instead: 'Check the recorded results before retrying the remaining work.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command reached a resource limit
@@ -37,3 +37,4 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_LIMIT_EXCEEDED'
   - ast_nodes
+  - Check the recorded results

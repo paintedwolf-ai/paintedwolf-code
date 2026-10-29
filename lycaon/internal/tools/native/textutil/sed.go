@@ -149,7 +149,7 @@ func (r *sedRun) config() (sedscript.Config, error) {
 	return sedscript.Config{
 		Quiet: inv.flag("-n") || r.program.Quiet(), Delimiter: delimiter,
 		SpaceLimit: inv.limit("record_bytes"), StepLimit: inv.limit("query_work_steps"), Reserve: inv.reserve,
-		Stdout: inv.out, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
+		Stdout: inv.out, WriteLiteral: inv.out.WriteLiteral, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
 	}, nil
 }
 
@@ -200,6 +200,12 @@ func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecif
 				out.suffix = option.Values[0].Value
 			}
 		}
+	}
+	// BSD sed spells an empty in-place backup suffix as a separate argument.
+	// With -e/-f, that empty argument precedes the file operands and cannot be
+	// mistaken for a file name.
+	if option, ok := bound.Last("-i"); ok && len(option.Values) == 0 && len(operands) > 0 && operands[0].Value == "" && (len(bound.Options("-e")) > 0 || len(bound.Options("-f")) > 0) {
+		operands = operands[1:]
 	}
 	var parts []string
 	for _, item := range bound.Items {
