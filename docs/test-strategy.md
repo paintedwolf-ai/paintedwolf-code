@@ -1156,12 +1156,12 @@ they do not replace the host-release reachability guard or lifecycle repair in
 RSS enforcement.
 
 Only [`build-caches.yml`](../.github/workflows/build-caches.yml) saves caches,
-on pushes to main. A run restores only caches saved on its own ref or on main,
+on pushes to main and scheduled or manual maintenance. A run restores only caches saved on its own ref or on main,
 and each merge-queue run has its own ref, so an entry the queue saved could
 serve no later run while it evicted main's under the repository's 10 GB limit.
 Pull request, merge-queue, nightly, and tag runs therefore restore without
-saving. Keys follow toolchains and dependency locks, so main saves once per
-dependency change, and the workflow's summary reports total cache usage.
+saving. Keys follow toolchains and dependency locks, so main publishes each exact
+identity on a miss, and the workflow's summary reports total cache usage.
 Decision-engine cache identity includes Xcode only on macOS; Linux keys use
 only their own platform and compiler inputs.
 A running warmer finishes before the next push starts warming, so frequent
@@ -1173,7 +1173,7 @@ Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
-A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by commit instead: the Linux warmer runs `lint:full` and saves its golangci-lint results for each main commit, deleting the entries they replace, and lint lanes restore the newest, so they reanalyze only the packages that changed since and their dependents. Cache warming enters
+A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by maintenance source: scheduled and manual Linux warming runs `lint:full` and saves its golangci-lint results. Lint lanes restore the newest entry and reanalyze changed packages and their dependents. Cache warming enters
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
@@ -1217,45 +1217,34 @@ Shared test-location groups stay together, and every selected test belongs to
 one shard. Per-job concurrency does not increase. The execution deadline allows
 60 minutes for each larger slice, with separate setup and cleanup allowance.
 
-### Compiler cache storage admission
+### Compiler cache lifecycle
 
-Only the serialized main warmer publishes compiler caches. Each publication
-measures a tar payload compressed with zstd and reserves that size plus 5% and
-1 MiB for archive variance against an 8 GiB repository budget. Superseded platform
-entries remain available until GitHub's inventory confirms the new cache. Only
-when required to fit the upload does admission retire entries first, preferring
-superseded generations of the same platform family; it never displaces another
-family, ref, or unknown entry. A payload that cannot coexist with the other
-caches is reported and left unpublished. Oversized
-payloads are reported and left unpublished. The remaining allowance leaves
-headroom for tool caches; concurrent writes and GitHub eviction can still
-displace entries.
-This is write admission, not a storage reservation or a pinned cache.
+Only the serialized main warmer publishes compiler caches. Native cache identity
+includes the declared paths and compression format as well as the key. The warmer
+probes exact identities without restoring payloads; prefix matches remain misses.
+Every run reports each applicable family as an exact hit or miss. An all-hit push
+skips preparation, compilation, publication, and lint diagnostics. Native package
+archives are a preparation accelerator: signed-index resolution and its actual
+lookup run only when preparation is needed, and report their result separately.
+Scheduled and manual maintenance refresh optional Linux lint diagnostics.
 
-The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
-compiler-only payload. Go modules are downloaded during online provisioning
-before offline verification. Expanded sources and their duplicate archives do
-not compete with native compiler intermediates for repository storage. The desktop warmer removes workspace package
-outputs with Cargo's package-scoped cleanup, retaining dependency builds.
-Decision-engine preparation and tests share the deployment floor, Metal kernel
-path, and Rust/native path mappings. Checkout and captured-source builds map
-the snapshot parent consistently, so changing capture slots does not invalidate
-dependency fingerprints. Cargo still validates the current source.
-Hosted development Rust profiles are configured explicitly by setup and the
-calling workflows; cache restore and save do not change compiler settings.
-Development builds omit debug data,
-and desktop/decision-engine keys retain Xcode identity only on macOS. Go, desktop Rust,
-decision-engine, and release caches publish explicitly after successful warming;
-publication summaries record uncompressed bytes, measured compressed bytes,
-confirmed GitHub storage bytes, retired entry IDs, and skipped writes. A successful
-save step alone never permits retiring the prior cache because upload failures
-can be reported as warnings.
-Consumers remain read-only and rebuild safely on a miss.
+GitHub manages cache generations with its native least-recently-used eviction
+and unused-entry retention within the plan's allowance. Saves follow successful
+preparation and an exact miss. Consumers remain read-only and validate current
+inputs or rebuild on a miss; cache presence never grants a verification pass.
 
-Each platform warmer keeps preparation, compilation, and publication in one
-runner. The macOS warmer compiles release Go inputs before publishing the shared
-Go cache, alongside its native release cache. Cache hits skip unchanged compiler
-families; publication still requires successful preparation and storage admission.
+The publisher trims its ephemeral Go build cache to 1 GiB. Go modules and Rust
+registry sources are fetched during online preparation before offline checks.
+Compiler payloads retain dependencies rather than duplicate package downloads;
+Cargo's package-scoped cleanup removes local workspace outputs after warming.
+Decision-engine intermediates retain their paired MLX kernels. Cargo validates
+the selected source, deployment floor, compiler configuration, and path mappings.
+Hosted development Rust profiles are configured by setup and the calling
+workflows; cache restore and save leave those settings to their callers.
+
+Each platform keeps preparation, compilation, and publication on one runner.
+The macOS warmer prepares release Go inputs before publishing the shared Go
+cache beside its native release compiler inputs.
 
 The document core retains Cargo intermediates in the checkout compiler cache.
 Every build asks Cargo to validate its current inputs and stages a separate

@@ -109,38 +109,19 @@ func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 	}
 }
 
-func TestCompilerCacheRetirementRequiresPostSaveInventory(t *testing.T) {
+func TestNativeCacheActionsProbeExactKeysAndNeverDeleteEntries(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-release-build"} {
-		var action struct {
-			Runs struct {
-				Steps []struct {
-					Uses string
-					If   string
-					With map[string]string
-				}
-			}
-		}
+	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-release-build", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-linux-native", "setup-opengrep", "setup-webkit-atspi-images"} {
 		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
-		contractcheck.FailErr(t, "decode compiler cache "+name, yaml.Unmarshal([]byte(data), &action))
-		saved, confirmed := false, false
-		for _, step := range action.Runs.Steps {
-			if strings.HasPrefix(step.Uses, "actions/cache/save@") {
-				saved = true
-			}
-			if step.Uses == "./.github/actions/cache-budget" && step.With["record"] != "" {
-				confirmed = saved && step.With["record"] == "${{ steps.budget.outputs.record }}"
-			}
-			if name == "cache-release-build" && (step.Uses == "./.github/actions/cache-go" || step.Uses == "./.github/actions/cache-notices-tools") && step.If != "inputs.save != 'true'" {
-				t.Error("release publication must not restore nested caches again")
-			}
-		}
-		if !confirmed {
-			t.Errorf("%s must confirm its admitted payload after saving", name)
-		}
 		if strings.Contains(data, "CARGO_PROFILE_") {
-			t.Errorf("%s must leave compiler profiles to setup", name)
+			t.Errorf("%s must preserve caller-owned compiler profile settings", name)
+		}
+		if strings.Contains(data, "gh cache delete") || strings.Contains(data, "actions/caches/") {
+			t.Errorf("%s must leave cache retirement to the platform", name)
+		}
+		if name != "cache-lint-diagnostics" && name != "setup-linux-native" && (!strings.Contains(data, "lookup-only:") || !strings.Contains(data, "cache-hit")) {
+			t.Errorf("%s must expose the version-aware native lookup", name)
 		}
 	}
 }
