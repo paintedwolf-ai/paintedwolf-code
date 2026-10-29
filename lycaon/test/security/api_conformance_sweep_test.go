@@ -86,7 +86,7 @@ func TestAPIConformance(t *testing.T) {
 
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
-	sweep.effects = openConformanceEffects(t, h, hub)
+	sweep.effects = openConformanceEffects(t, h, hub, projectDir)
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)
 	// A keyed web research provider.
