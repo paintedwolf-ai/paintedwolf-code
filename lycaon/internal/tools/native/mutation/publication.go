@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -59,12 +60,30 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	target.append = strings.HasSuffix(destination.Redirect.Operator, ">>")
-	buffer, err := p.Owners.Revisions.NewBufferedBytes(ctx, p.Owners.limit("stream_bytes"), "stream_bytes")
+	if p.Owners.Admission == nil {
+		err := errors.New("redirect staging admission required")
+		_ = admission.Abandon(ctx, err)
+		return nil, err
+	}
+	maximum := p.Owners.limit("stream_bytes")
+	// One release slot per admitted MiB bounds retained lease metadata.
+	slots := 1 + (maximum-1)/(1<<20)
+	releaseState := func() {}
+	if memory := p.Owners.Revisions.Memory; memory != nil {
+		releaseState, err = memory.ReserveProgramState(ctx, 512+128*slots)
+		if err != nil {
+			_ = admission.Abandon(ctx, err)
+			return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
+		}
+	}
+	spool, err := scratch.NewByteSpool()
 	if err != nil {
+		releaseState()
 		_ = admission.Abandon(ctx, err)
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
-	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target, buffer: buffer}, nil
+	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target,
+		spool: spool, ctx: ctx, maximum: maximum, releases: make([]func(), 0, int(slots)), releaseState: releaseState}, nil
 }
 
 // OpenInput serves a < operand from its pinned published-disk capture. The
@@ -209,9 +228,15 @@ type fileStage struct {
 	field     commandprogram.Field
 	admission tools.CommandOutputWrite
 
-	mu      sync.Mutex
-	buffer  *native.BufferedBytes
-	settled bool
+	mu           sync.Mutex
+	spool        *scratch.ByteSpool
+	ctx          context.Context
+	maximum      int64
+	size         int64
+	held         int64
+	releases     []func()
+	releaseState func()
+	settled      bool
 }
 
 func (s *fileStage) Write(b []byte) (int, error) {
@@ -220,7 +245,24 @@ func (s *fileStage) Write(b []byte) (int, error) {
 	if s.settled {
 		return 0, io.ErrClosedPipe
 	}
-	return s.buffer.Write(b)
+	if err := s.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if int64(len(b)) > s.maximum-s.size {
+		return 0, tools.CommandLimitExceeded("stream_bytes", s.maximum, s.size+int64(len(b)))
+	}
+	target := min(s.maximum, ((s.size+int64(len(b))+(1<<20)-1)/(1<<20))*(1<<20))
+	if target > s.held {
+		release, err := s.owners.Admission.ReserveSpill(s.ctx, target-s.held)
+		if err != nil {
+			return 0, tools.CommandResourceRejection(err)
+		}
+		s.releases = append(s.releases, release)
+		s.held = target
+	}
+	n, err := s.spool.Write(b)
+	s.size += int64(n)
+	return n, err
 }
 
 func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished, error) {
@@ -230,11 +272,16 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 		return commandprogram.OutputPublished{}, io.ErrClosedPipe
 	}
 	s.settled = true
-	content := s.buffer.Bytes
+	reader, err := s.spool.Reader()
 	s.mu.Unlock()
-	defer s.buffer.Close()
+	defer s.close()
+	if err != nil {
+		return commandprogram.OutputPublished{}, errors.Join(err, s.admission.Abandon(ctx, err))
+	}
 	published, err := s.admission.Publish(ctx, func(ctx context.Context, tc tools.ToolContext) (commandprogram.OutputPublished, error) {
-		result, err := s.owners.publish(ctx, tc, s.target, content)
+		appendBytes := s.target.append && s.target.pin.Mode != toolcontract.AbsentRevision
+		result, err := s.owners.Operations.Write.Apply(ctx, native.WriteInput{Path: s.target.abs, Exact: true, Source: reader, SourceBytes: s.size,
+			Append: appendBytes, Memory: s.owners.Revisions.Memory, Admission: native.WriteExecutionPinned, Destination: s.target.pin}, tc)
 		if err != nil {
 			return commandprogram.OutputPublished{}, err
 		}
@@ -258,8 +305,18 @@ func (s *fileStage) Abandon(ctx context.Context) error {
 	}
 	s.settled = true
 	s.mu.Unlock()
-	s.buffer.Close()
+	s.close()
 	return s.admission.Abandon(ctx, nil)
+}
+
+func (s *fileStage) close() {
+	_ = s.spool.Close()
+	for _, release := range s.releases {
+		release()
+	}
+	s.releases = nil
+	s.held = 0
+	s.releaseState()
 }
 
 // nullStage is the virtual null device: writes are discarded, nothing publishes.

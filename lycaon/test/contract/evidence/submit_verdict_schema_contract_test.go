@@ -31,7 +31,7 @@ func TestSubmitVerdictSchemaRequiresEveryPhaseDiscriminant(t *testing.T) {
 				if workflowvalidation.ValidateReviewLoopVerdict(*phase.ReviewLoop, map[string]string{}, workflowvalidation.VerdictRules{}) == nil {
 					t.Fatal("runtime no longer requires a verdict discriminant")
 				}
-				for _, projected := range []tools.ToolMeta{full, tools.TrimCoordinatorToolMeta(full)} {
+				for _, projected := range []tools.ToolMeta{full, tools.ProjectProviderToolMeta(full)} {
 					for _, invalid := range []map[string]any{{}, {"verdict": ""}, {"verdict": nil}, {"verdict": 7}, {"claims": []any{}}} {
 						if tools.ValidateToolArgs(projected.ArgsSchema, map[string]any{"verdict": invalid}) == nil {
 							t.Fatalf("provider schema accepted missing/invalid discriminant: %v", invalid)

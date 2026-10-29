@@ -758,7 +758,7 @@ describe("attachDispatcher", () => {
 
     const press = (init: KeyboardEventInit) =>
       row.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
-    press({ key: ";", code: "Semicolon", ctrlKey: true });
+    press({ key: ";", code: "Semicolon", ctrlKey: true, shiftKey: true });
     press({ key: "c", code: "KeyC" });
     expect(goChat).toHaveBeenCalledOnce();
     expect(typeahead).not.toHaveBeenCalled();

@@ -12,9 +12,11 @@ import (
 type ForwardedKind string
 
 const (
-	ForwardedPayload    ForwardedKind = "payload"
-	ForwardedPathFile   ForwardedKind = "path_file"
-	ForwardedPathFolder ForwardedKind = "path_folder"
+	ForwardedPayload        ForwardedKind = "payload"
+	ForwardedPathFile       ForwardedKind = "path_file"
+	ForwardedPathFolder     ForwardedKind = "path_folder"
+	ForwardedExternalFile   ForwardedKind = "external_file"
+	ForwardedExternalFolder ForwardedKind = "external_folder"
 )
 
 // ForwardedAttachment identifies content available to a worker.
@@ -30,10 +32,10 @@ type ForwardedAttachment struct {
 
 // Hint returns the worker's access instruction.
 func (h ForwardedAttachment) Hint() string {
-	if h.Kind == ForwardedPathFolder {
+	if h.Kind == ForwardedPathFolder || h.Kind == ForwardedExternalFolder {
 		return PathFolderHintPrefix + h.Path + "]"
 	}
-	if h.Kind == ForwardedPathFile {
+	if h.Kind == ForwardedPathFile || h.Kind == ForwardedExternalFile {
 		display := h.Path
 		if h.StartLine >= 1 {
 			if h.EndLine > h.StartLine {
@@ -42,7 +44,13 @@ func (h ForwardedAttachment) Hint() string {
 				display = h.Path + ":" + strconv.Itoa(h.StartLine)
 			}
 		}
+		if strings.HasPrefix(h.MIME, "image/") {
+			return PathImageHintPrefix + display + "]"
+		}
 		return PathFileHintPrefix + display + "]"
+	}
+	if strings.HasPrefix(h.MIME, "image/") {
+		return PathImageHintPrefix + h.Path + "]"
 	}
 	return BodyHint(h.MIME, h.Path)
 }
@@ -80,14 +88,21 @@ func ForwardedAttachmentFromPart(part api.MessageContentPart) (ForwardedAttachme
 		return h, h.Filename != "" && h.MIME != "" && h.Path != "" && h.SizeBytes > 0
 	case api.MessageOriginRetrieval:
 		switch part.ReferenceKind {
-		case api.MessageReferenceKindPathFile, api.MessageReferenceKindPathFolder:
+		case api.MessageReferenceKindPathFile, api.MessageReferenceKindPathFolder,
+			api.MessageReferenceKindExternalFile, api.MessageReferenceKindExternalFolder:
 			loc := strings.TrimSpace(part.Path)
 			if loc == "" {
 				return ForwardedAttachment{}, false
 			}
 			kind := ForwardedPathFile
-			if part.ReferenceKind == api.MessageReferenceKindPathFolder {
+			switch part.ReferenceKind {
+			case api.MessageReferenceKindPathFolder:
 				kind = ForwardedPathFolder
+			case api.MessageReferenceKindExternalFile:
+				kind = ForwardedExternalFile
+			case api.MessageReferenceKindExternalFolder:
+				kind = ForwardedExternalFolder
+			case api.MessageReferenceKindPathFile, api.MessageReferenceKindSearchHit:
 			}
 			name := path.Base(loc)
 			if name == "." || name == "/" || name == "" {

@@ -24,7 +24,7 @@ copy:
   cause: Line numbers must fall within the file; use wc or read total_lines before replacing.
   why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
   fix: Read {{ paintedwolf.path }} from a valid current offset (offset 1 also handles an empty file) and use
-    its numbered content to select the intended replacement. Do not retry a read at the rejected out-of-range
+    its source block's line range to select the intended replacement. Do not retry a read at the rejected out-of-range
     start or use zero as a line number.
   instead: Branch on Code; lower the line range or re-read total_lines
 x-paintedwolf-category: recoverable
