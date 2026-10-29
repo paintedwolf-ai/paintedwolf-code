@@ -123,6 +123,8 @@ pub fn run() {
             clipboard::read_clipboard_text,
             clipboard::read_clipboard_image,
             clipboard::write_clipboard_text,
+            clipboard::write_secret_text,
+            clipboard::clear_secret_text,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,
             files::reveal_in_file_manager::file_manager_name,

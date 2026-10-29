@@ -16,7 +16,8 @@ func TestWriteRootRefusalHoldsForEverySpelling(t *testing.T) {
 	km, err := detectionpack.BundledKeyMaterialPaths()
 	testutil.FailErr(t, "bundled key material", err)
 	confine.SetKeyMaterialPathsSource(func() []string { return km })
-	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(nil) })
+	// Later tests in this binary rely on the floor TestMain installs.
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(func() []string { return keyMaterialTestFloor }) })
 
 	cs, err := detectionpack.BundledCredentialStorePaths()
 	testutil.FailErr(t, "bundled credential stores", err)

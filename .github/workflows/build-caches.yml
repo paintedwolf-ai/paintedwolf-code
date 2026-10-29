@@ -141,7 +141,7 @@ jobs:
         with:
           save: 'true'
 
-      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      # Lint lanes run on Linux. Findings on main do not stop warming; nightly reports them.
       - name: Record lint diagnostics
         if: runner.os == 'Linux'
         continue-on-error: true

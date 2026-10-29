@@ -1,1 +1,1343 @@
-$(cat /tmp/push-verification-plan.json)
+{
+  "groups": {
+    "default": [
+      "check-fast"
+    ],
+    "check-fast": [
+      "build",
+      "lint:full",
+      "budgets",
+      "den:typecheck",
+      "den:lint",
+      "den:test:fast",
+      "den:coverage:changes",
+      "test:short",
+      "test:contract",
+      "coverage:changes",
+      "scripts:coverage:changes",
+      "licenses:notices",
+      "comments:check",
+      "test:fail-messages:check",
+      "docs:links"
+    ],
+    "oar:verify": [
+      "test:oar",
+      "oar:conformance"
+    ],
+    "check": [
+      "build",
+      "build:cross",
+      "check:drift",
+      "openapi:lint",
+      "validate:workflows",
+      "oar:verify",
+      "check:tests",
+      "test:fail-messages:check",
+      "comments:check",
+      "lint:full",
+      "budgets",
+      "coverage:changes",
+      "den:coverage:changes",
+      "scripts:coverage:changes",
+      "lint:vuln",
+      "licenses:notices"
+    ],
+    "check:tests": [
+      "test:runner",
+      "test:full",
+      "den:typecheck",
+      "den:lint",
+      "den:test",
+      "den:test:rust",
+      "decide:test"
+    ],
+    "check:drift": [
+      "codegen:wire-enums:check",
+      "codegen:web-research-catalog:check",
+      "codegen:contribution-facts:check",
+      "codegen:contribution-inventory:check",
+      "codegen:theme-tokens:check",
+      "codegen:den-fonts:check",
+      "codegen:client-notices:check",
+      "codegen:host-markers:check",
+      "codegen:detection-packs:check",
+      "openapi:bundle:check",
+      "codegen:tool-command-equivalence:check",
+      "codegen:guidance-registry:check",
+      "oar:vendor:check",
+      "scan:rules:vendor:check",
+      "secret-mint:vendor:check",
+      "lint:vuln:vendor:check",
+      "codegen:native-tool-contracts:check",
+      "codegen:worker-branch-tools:check",
+      "codegen:approval-explanations:check",
+      "codegen:tool-presentation:check",
+      "codegen:den-types:check",
+      "db:sqlc:check",
+      "db:sqlc:vet",
+      "docs:links"
+    ],
+    "test:seatbelt": [
+      "seatbelt:confine",
+      "seatbelt:gated",
+      "seatbelt:scanstress"
+    ]
+  },
+  "go": {
+    "test:oar": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/oarcore",
+        "./internal/oar",
+        "./internal/oarcopy",
+        "./internal/guidance",
+        "./internal/toolvocab",
+        "./internal/catalogview",
+        "./internal/tools"
+      ]
+    },
+    "test:digest": {
+      "options": [],
+      "packages": [
+        "./..."
+      ]
+    },
+    "test:short": {
+      "options": [],
+      "packages": [
+        "./..."
+      ],
+      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)"
+    },
+    "test:wiring": {
+      "options": [],
+      "packages": [
+        "./test/wiring/..."
+      ]
+    },
+    "test:integration": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration"
+      ],
+      "packages": [
+        "./internal/...",
+        "./test/integration/...",
+        "./test/property/..."
+      ]
+    },
+    "test:stress": {
+      "options": [
+        "--full",
+        "--tags",
+        "stress",
+        "--timeout",
+        "90m"
+      ],
+      "packages": [
+        "./internal/db",
+        "./internal/findings",
+        "./internal/git",
+        "./internal/sourcecatalog",
+        "./internal/sourceledger",
+        "./internal/session/store",
+        "./internal/sourcecomparison"
+      ],
+      "flags": [
+        "-p=1",
+        "-parallel=1",
+        "-run=^TestStress"
+      ]
+    },
+    "test:full": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration",
+        "--timeout",
+        "40m"
+      ],
+      "packages": [
+        "./..."
+      ],
+      "bundled": true
+    },
+    "test:contract": {
+      "options": [
+        "--timeout",
+        "15m"
+      ],
+      "packages": [
+        "./test/contract/..."
+      ]
+    },
+    "test:security": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration",
+        "--timeout",
+        "40m"
+      ],
+      "packages": [
+        "./test/security/..."
+      ]
+    },
+    "test:race": {
+      "options": [
+        "--full",
+        "--race",
+        "--tags",
+        "integration",
+        "--timeout",
+        "40m"
+      ],
+      "packages": [
+        "./..."
+      ],
+      "exclude": "/test/security$|/internal/launchguard$"
+    },
+    "seatbelt:confine": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/confine/..."
+      ]
+    },
+    "seatbelt:gated": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration"
+      ],
+      "packages": [
+        "./cmd/opengrep-artifact",
+        "./internal/exec",
+        "./internal/hitl",
+        "./internal/mcp",
+        "./internal/scan/drivers/bundled",
+        "./internal/scan/drivers/external",
+        "./internal/scan/installed",
+        "./internal/scan/integration",
+        "./internal/toolexecution",
+        "./internal/webresearch",
+        "./test/contract/security"
+      ],
+      "flags": [
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$"
+      ],
+      "bundled": true
+    },
+    "seatbelt:scanstress": {
+      "options": [
+        "--full",
+        "--tags",
+        "scanstress"
+      ],
+      "packages": [
+        "./test/scanstress/..."
+      ],
+      "bundled": true
+    }
+  },
+  "tasks": {
+    "den:harness:test": [
+      "den:harness:test"
+    ],
+    "build": [
+      "build"
+    ],
+    "build:cross": [
+      "build:cross"
+    ],
+    "budgets": [
+      "budgets"
+    ],
+    "coverage:changes": [
+      "coverage:changes"
+    ],
+    "den:coverage:changes": [
+      "den:coverage:changes"
+    ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
+    ],
+    "codegen:approval-explanations:check": [
+      "codegen:approval-explanations:check"
+    ],
+    "codegen:client-notices:check": [
+      "codegen:client-notices:check"
+    ],
+    "codegen:contribution-facts:check": [
+      "codegen:contribution-facts:check"
+    ],
+    "codegen:contribution-inventory:check": [
+      "codegen:contribution-inventory:check"
+    ],
+    "codegen:den-fonts:check": [
+      "codegen:den-fonts:check"
+    ],
+    "codegen:den-types:check": [
+      "codegen:den-types:check"
+    ],
+    "codegen:detection-packs:check": [
+      "codegen:detection-packs:check"
+    ],
+    "codegen:guidance-registry:check": [
+      "codegen:guidance-registry:check"
+    ],
+    "codegen:host-markers:check": [
+      "codegen:host-markers:check"
+    ],
+    "codegen:native-tool-contracts:check": [
+      "codegen:native-tool-contracts:check"
+    ],
+    "codegen:theme-tokens:check": [
+      "codegen:theme-tokens:check"
+    ],
+    "codegen:dependency-inventory:check": [
+      "codegen:dependency-inventory:check"
+    ],
+    "codegen:tool-command-equivalence:check": [
+      "codegen:tool-command-equivalence:check"
+    ],
+    "codegen:tool-presentation:check": [
+      "codegen:tool-presentation:check"
+    ],
+    "codegen:web-research-catalog:check": [
+      "codegen:web-research-catalog:check"
+    ],
+    "codegen:wire-enums:check": [
+      "codegen:wire-enums:check"
+    ],
+    "codegen:worker-branch-tools:check": [
+      "codegen:worker-branch-tools:check"
+    ],
+    "comments:check": [
+      "comments:check"
+    ],
+    "db:sqlc:check": [
+      "db:sqlc:check"
+    ],
+    "db:sqlc:vet": [
+      "db:sqlc:vet"
+    ],
+    "den:lint": [
+      "den:lint"
+    ],
+    "den:lint:full": [
+      "den:lint:full"
+    ],
+    "den:test": [
+      "den:test"
+    ],
+    "den:test:digest": [
+      "den:test:digest"
+    ],
+    "den:test:fast": [
+      "den:test:fast"
+    ],
+    "den:test:rust": [
+      "den:test:rust"
+    ],
+    "den:typecheck": [
+      "den:typecheck"
+    ],
+    "docs:links": [
+      "docs:links"
+    ],
+    "lint:fast": [
+      "lint:fast"
+    ],
+    "lint:full": [
+      "lint:full"
+    ],
+    "lint:vuln": [
+      "lint:vuln"
+    ],
+    "oar:conformance": [
+      "oar:conformance"
+    ],
+    "oar:vendor:check": [
+      "oar:vendor:check"
+    ],
+    "openapi:bundle:check": [
+      "openapi:bundle:check"
+    ],
+    "openapi:lint": [
+      "openapi:lint"
+    ],
+    "scan:rules:vendor:check": [
+      "scan:rules:vendor:check"
+    ],
+    "secret-mint:vendor:check": [
+      "secret-mint:vendor:check"
+    ],
+    "test:fail-messages:check": [
+      "test:fail-messages:check"
+    ],
+    "test:runner": [
+      "test:runner"
+    ],
+    "validate:workflows": [
+      "validate:workflows"
+    ],
+    "lint:vuln:vendor:check": [
+      "lint:vuln:vendor:check"
+    ],
+    "den:webkit:scroll": [
+      "den:webkit:scroll"
+    ],
+    "den:webkit:atspi": [
+      "den:webkit:atspi"
+    ],
+    "test:confine:linux": [
+      "test:confine:linux"
+    ],
+    "decide:test": [
+      "decide:test"
+    ],
+    "licenses:notices": [
+      "licenses:notices"
+    ],
+    "nix:check": [
+      "nix:check"
+    ],
+    "nix:build": [
+      "nix:build"
+    ],
+    "test:linux:installed": [
+      "test:linux:installed"
+    ],
+    "release:rehearse:linux-signing": [
+      "release:rehearse:linux-signing"
+    ],
+    "release:rehearse:native-repositories": [
+      "release:rehearse:native-repositories"
+    ],
+    "release:rehearse:native-repositories-r2": [
+      "release:rehearse:native-repositories-r2"
+    ],
+    "release:rehearse:native-candidates": [
+      "release:rehearse:native-candidates"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
+    ],
+    "release:live-test": [
+      "release:live-test"
+    ],
+    "release:rehearse:package-probe": [
+      "release:rehearse:package-probe"
+    ],
+    "release:rehearse:rpm-metadata": [
+      "release:rehearse:rpm-metadata"
+    ],
+    "release:rehearse:pacman-construction": [
+      "release:rehearse:pacman-construction"
+    ]
+  },
+  "private": [
+    "check:tests",
+    "check:drift",
+    "seatbelt:confine",
+    "seatbelt:gated",
+    "seatbelt:scanstress"
+  ],
+  "selection": {
+    "test:digest": "go",
+    "test:oar": "go",
+    "test:short": "go",
+    "test:wiring": "go",
+    "test:integration": "go",
+    "test:stress": "go",
+    "test:full": "go",
+    "test:contract": "go",
+    "test:security": "go",
+    "test:race": "go",
+    "den:test:digest": "vitest",
+    "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
+    "lint:fast": "passthrough",
+    "lint:full": "passthrough",
+    "oar:conformance": "passthrough",
+    "den:webkit:atspi": "passthrough",
+    "test:confine:linux": "passthrough",
+    "nix:build": "passthrough",
+    "nix:check": "passthrough",
+    "release:rehearse:linux-signing": "passthrough",
+    "test:linux:installed": "passthrough",
+    "release:rehearse:native-repositories": "passthrough",
+    "release:rehearse:native-repositories-r2": "passthrough",
+    "release:rehearse:native-candidates": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
+    "release:live-test": "passthrough",
+    "release:rehearse:package-probe": "passthrough",
+    "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:pacman-construction": "passthrough"
+  },
+  "resources": {
+    "den:harness:test": {
+      "locks": [
+        "harness",
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "go": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
+    "build": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "build:cross": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:detection-packs:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "lint:fast": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
+    },
+    "lint:full": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
+    },
+    "lint:vuln": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "budgets": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "coverage:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "den:test": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:test:digest": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:test:fast": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:coverage:changes": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:lint": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:lint:full": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:typecheck": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:test:rust": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "scripts:coverage:changes": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "go:bundled": {
+      "locks": [
+        "go",
+        "scanners"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "codegen:approval-explanations:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:client-notices:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:contribution-facts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:contribution-inventory:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:den-fonts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:den-types:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:guidance-registry:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:host-markers:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:native-tool-contracts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:theme-tokens:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:dependency-inventory:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:tool-command-equivalence:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:tool-presentation:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:web-research-catalog:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:wire-enums:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:worker-branch-tools:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "comments:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "db:sqlc:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "db:sqlc:vet": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "docs:links": {
+      "locks": [],
+      "workers": 1
+    },
+    "oar:conformance": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "oar:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "openapi:bundle:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "openapi:lint": {
+      "locks": [],
+      "workers": 1
+    },
+    "scan:rules:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "secret-mint:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "test:fail-messages:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "validate:workflows": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "build:lycaon-dev": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "upgrade:corpus:seed": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "upgrade:corpus:boot": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "gocache:trim": {
+      "locks": [
+        "gocache",
+        "lint"
+      ],
+      "workers": 1
+    },
+    "lint:vuln:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "den:webkit:scroll": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "den:webkit:atspi": {
+      "locks": [
+        "harness"
+      ],
+      "progress": "log",
+      "workers": 1
+    },
+    "test:confine:linux": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
+    "build:decide": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "build:document-core": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "decide:test": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "licenses:notices": {
+      "locks": [
+        "notices"
+      ],
+      "workers": 1
+    },
+    "nix:check": {
+      "locks": [
+        "nix"
+      ],
+      "workers": 1,
+      "progress": "log"
+    },
+    "nix:build": {
+      "locks": ["*"],
+      "workers": 1,
+      "progress": "log"
+    },
+    "test:linux:installed": {
+      "locks": [],
+      "workers": 1
+    },
+    "release:rehearse:linux-signing": {
+      "locks": [
+        "linux-signing-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories": {
+      "locks": [
+        "native-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories-r2": {
+      "locks": [
+        "native-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-candidates": {
+      "locks": [
+        "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:package-probe": {
+      "locks": [
+        "linux-package-probe"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:rpm-metadata": {
+      "locks": [
+        "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-construction": {
+      "locks": [
+        "pacman-substrate"
+      ],
+      "workers": 1
+    }
+  },
+  "environment": {
+    "names": [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "TMPDIR",
+      "TZ",
+      "LANG",
+      "COMMAND_MODE",
+      "__CF_USER_TEXT_ENCODING",
+      "CC",
+      "CXX",
+      "SDKROOT",
+      "DEVELOPER_DIR",
+      "MACOSX_DEPLOYMENT_TARGET",
+      "CI",
+      "BENCHMARK",
+      "FUZZTIME",
+      "RUSTFLAGS",
+      "RUSTDOCFLAGS",
+      "NODE_OPTIONS",
+      "NODE_EXTRA_CA_CERTS",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR"
+    ],
+    "prefixes": [
+      "LC_",
+      "GO",
+      "CGO_",
+      "CARGO_",
+      "RUSTUP_",
+      "RUST_",
+      "PW_",
+      "OPENGREP_",
+      "VITE_",
+      "VITEST_",
+      "PLAYWRIGHT_",
+      "UPDATE_",
+      "COVERAGE_",
+      "XDG_",
+      "NPM_CONFIG_",
+      "BUN_",
+      "GITHUB_",
+      "RUNNER_"
+    ]
+  },
+  "ci": {
+    "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
+      "targets": [
+        "build",
+        "lint:full",
+        "budgets",
+        "den:typecheck",
+        "den:lint",
+        "coverage:changes",
+        "comments:check",
+        "test:fail-messages:check",
+        "docs:links",
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "verification",
+      "preflight": [
+        "test:contract",
+        "--",
+        "./test/contract/..."
+      ]
+    },
+    "limits": {
+      "targets": [
+        "budgets",
+        "coverage:changes",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "check",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification",
+      "priority": "reject"
+    },
+    "build": {
+      "targets": [
+        "build",
+        "build:cross",
+        "licenses:notices"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification"
+    },
+    "contracts": {
+      "targets": [
+        "check:drift",
+        "openapi:lint",
+        "validate:workflows",
+        "oar:verify"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification"
+    },
+    "lint": {
+      "targets": [
+        "lint:full",
+        "test:fail-messages:check",
+        "comments:check"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "analysis",
+      "priority": "reject",
+      "early_targets": [
+        "comments:check",
+        "test:fail-messages:check"
+      ]
+    },
+    "vulnerabilities": {
+      "targets": [
+        "lint:vuln"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "analysis"
+    },
+    "runner": {
+      "targets": [
+        "test:runner"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "check",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification"
+    },
+    "behavior": {
+      "targets": [
+        "test:full"
+      ],
+      "minutes": 150,
+      "profiles": [
+        "check",
+        "release",
+        "nightly",
+        "integration"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "workers": 3,
+      "shards": 2,
+      "contract_first": true,
+      "priority": "critical"
+    },
+    "frontend": {
+      "targets": [
+        "den:typecheck",
+        "den:lint",
+        "den:test"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "frontend"
+    },
+    "native": {
+      "targets": [
+        "den:test:rust",
+        "decide:test"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
+    },
+    "webkit": {
+      "targets": [
+        "den:webkit:scroll"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "runner": "macos-15"
+    },
+    "webkit-gtk": {
+      "targets": [
+        "den:webkit:atspi"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "platform": "linux"
+    },
+    "confinement-arm64": {
+      "targets": [
+        "test:confine:linux"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "nix": {
+      "targets": [
+        "nix:check"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "platform": "linux"
+    },
+    "race": {
+      "targets": [
+        "test:race"
+      ],
+      "minutes": 150,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "race",
+      "setup": "verification",
+      "shards": 3
+    },
+    "fuzz": {
+      "targets": [
+        "test:fuzz"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "fuzz",
+      "setup": "verification"
+    },
+    "stress": {
+      "targets": [
+        "test:stress"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "setup": "verification"
+    },
+    "go-coverage": {
+      "targets": [
+        "check:coverage"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "coverage",
+      "setup": "verification"
+    },
+    "frontend-coverage": {
+      "targets": [
+        "den:coverage-check"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "coverage",
+      "setup": "verification"
+    },
+    "transcript-scale": {
+      "targets": [
+        "den:test:transcript-scale"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "setup": "verification"
+    },
+    "vulnerability-freshness": {
+      "targets": [
+        "lint:vuln:fresh"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "analysis"
+    },
+    "benchmarks": {
+      "targets": [
+        "perf:bench"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "setup": "verification"
+    },
+    "sidecar-performance": {
+      "targets": [
+        "perf:sidecar"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "setup": "verification"
+    },
+    "sidecar-soak": {
+      "targets": [
+        "perf:soak"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "setup": "verification"
+    },
+    "integration-build": {
+      "targets": [
+        "build",
+        "licenses:notices"
+      ],
+      "timing_source": "build",
+      "minutes": 120,
+      "profiles": [
+        "integration"
+      ],
+      "suite": "all",
+      "setup": "verification"
+    }
+  },
+  "capacity": {
+    "runners": 20,
+    "macos_runners": 5,
+    "max_parallel": {
+      "fast": 1,
+      "integration": 4,
+      "check": 3,
+      "nightly": 2,
+      "release": 1
+    },
+    "footprints": {
+      "ci.yml": 1,
+      "qualification.yml": 3,
+      "build-caches.yml": 1,
+      "nightly.yml": 2,
+      "release.yml": 2,
+      "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
+      "release-halt.yml": 1,
+      "release-secrets-check.yml": 1,
+      "release-staple-probe.yml": 1,
+      "release-feed-signature-backfill.yml": 1,
+      "dependency-inventory.yml": 1,
+      "release-system-live-test.yml": 1,
+      "queue-health.yml": 1,
+      "queue-batching.yml": 1,
+      "issue-stale.yml": 1,
+      "issue-sweep.yml": 1,
+      "issue-intake.yml": 1,
+      "maintainability-issues.yml": 1,
+      "verification-recovery.yml": 1,
+      "dco.yml": 1,
+      "dependent-update.yml": 1
+    }
+  }
+}

@@ -1,4 +1,8 @@
-"""Reconcile bounded maintainability workstreams after a PR lands on main."""
+"""Reconcile bounded maintainability workstreams from a nightly report on main.
+
+Only artifacts whose measured content is unchanged on current main take their
+tracking from the report; the others are held with a record of both commits.
+"""
 from collections import Counter
 import json
 import os
@@ -10,28 +14,47 @@ from pathlib import Path
 from .budget_evidence import read_snapshot
 from .budget_issues import expected
 from .budget_workstreams import plan
-from .budget_history import checkpoint, intake, merged_pulls
+from .budget_history import ROOT, MainChanges, checkpoint, intake, merged_pulls
 from .github import api, pages, repository
 from .budget_snapshot import SHA
 
 
 def eligible(run, repo):
     return (run.get('repository', {}).get('full_name') == repo
-            and run.get('path') == '.github/workflows/qualification.yml'
-            and run.get('event') == 'push' and run.get('head_branch') == 'main'
+            and run.get('path') == '.github/workflows/nightly.yml'
+            and run.get('event') in {'schedule', 'workflow_dispatch'} and run.get('head_branch') == 'main'
             and run.get('status') == 'completed' and isinstance(run.get('head_sha'), str)
             and run.get('conclusion') in {'success', 'failure'}
             and SHA.fullmatch(run['head_sha']) is not None)
 
 
-def current_main(sha):
-    return api(f'{repository()}/git/ref/heads/main')['object']['sha'] == sha
+class Holds:
+    """Artifacts whose measurement inputs changed between the report source and main."""
+
+    def __init__(self, source):
+        self.source, self.records = source, {}
+        self.refresh()
+
+    def refresh(self):
+        self.changes = MainChanges(ROOT, self.source)
+
+    def __call__(self, row):
+        if (row['category'], row['id']) in self.records:
+            return True
+        if not self.changes.changed(row):
+            return False
+        self.records[(row['category'], row['id'])] = {
+            'category': row['category'], 'id': row['id'], 'report_source': self.source, 'main': self.changes.main}
+        return True
+
+    def report(self):
+        return [self.records[k] for k in sorted(self.records)]
 
 
 def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     repo = os.environ['GITHUB_REPOSITORY']
-    if not eligible(run, repo) or not current_main(run['head_sha']):
-        return {'skipped': 'not a current post-merge qualification push'}
+    if not eligible(run, repo):
+        return {'skipped': 'not a nightly observation of main'}
     pulls = merged_pulls(run, repo)
     if not pulls:
         return {'skipped': 'no merged PR associated with this main commit'}
@@ -50,7 +73,12 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
                 'measured': row['measured'], 'state': review['state']})
     prior = None if backfill else checkpoint()
     intake_keys = set(artifacts) if backfill else intake(run, artifacts, prior)
-    operations, suppressed = plan(list(pages(f'{repository()}/issues?state=all')), artifacts, observation, backfill, intake_keys)
+    holds = Holds(run['head_sha'])
+    operations, suppressed = plan(list(pages(f'{repository()}/issues?state=all')), artifacts, observation,
+                                  backfill, intake_keys, holds)
+    planned = set(holds.records)
+    waiting = [a for op in operations if op['action'] == 'hold' for a in op['artifacts']]
+    operations = [op for op in operations if op['action'] != 'hold']
     creations = 0
     selected = []
     for operation in operations:
@@ -63,18 +91,19 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     report = {'run_id': run['id'], 'source_sha': run['head_sha'], 'dry_run': dry_run,
               'backfill': backfill, 'intake_base_sha': prior['source_sha'] if prior else None, 'above_threshold': dict(Counter(row['category'] for row in artifacts.values())),
               'suppressed': suppressed, 'workstreams': workstreams, 'deferred_creations': deferred, 'applied_operations': 0, 'actions': dict(Counter(op['action'] for op in operations)),
-              'operations': selected}
-    if not current_main(run['head_sha']):
-        return {'skipped': 'main advanced during planning'}
+              'operations': selected, 'planned_main_sha': holds.changes.main, 'held': holds.report(),
+              'waiting_intake': waiting, 'held_operations': 0}
     if save_plan:
         save_plan(report)
     if not dry_run:
         for operation in selected:
             time.sleep(1)
-            # A full later snapshot converges state; do not write older evidence once main advances.
-            if not current_main(run['head_sha']):
-                report['stopped'] = 'main advanced during reconciliation'
-                break
+            holds.refresh()
+            # Main may advance while writing; an area with a newly changed member waits for a later report.
+            if [a for a in operation['artifacts'] if (a['category'], a['id']) not in planned and holds(a)]:
+                report['held'] = holds.report()
+                report['held_operations'] += 1
+                continue
             path = f'{repository()}/issues'
             if operation['action'] == 'create':
                 api(path, 'POST', operation['body'])
@@ -86,7 +115,8 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
             report['applied_operations'] += 1
             if save_plan:
                 save_plan(report)
-    if not dry_run and not deferred and 'stopped' not in report and current_main(run['head_sha']):
+    # Withheld intake keeps the checkpoint so a later report admits it.
+    if not dry_run and not deferred and not waiting and not report['held_operations']:
         report['checkpoint'] = {'schema_version': 1, 'source_sha': run['head_sha']}
     return report
 

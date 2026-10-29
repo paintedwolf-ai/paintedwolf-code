@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -54,7 +55,7 @@ func TestNixRegistrarSelectsOnlyTheInstalledPhysicalAuthority(t *testing.T) {
 			}
 		})
 	}
-	if _, err := runningNixRegistrar(&NixLayout{Output: "/custom/store/output"}); err == nil {
+	if _, err := runningNixRegistrar(&nixgeneration.Layout{Output: "/custom/store/output"}); err == nil {
 		t.Fatal("custom physical authority inferred without an installation fact")
 	}
 }
@@ -95,7 +96,7 @@ plugin-files =
 ln -s "$7" "$4"
 `
 	testutil.FailErr(t, "write fixture registrar", os.WriteFile(tool, []byte(program), 0o700))
-	retention, err := retainNix(context.Background(), &NixLayout{Output: "/selected-generation", NixStore: tool},
+	retention, err := retainNix(context.Background(), &nixgeneration.Layout{Output: "/selected-generation", NixStore: tool},
 		filepath.Join(root, "roots"), nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "register with closed configuration", err)
 	retention.Close()
@@ -123,7 +124,7 @@ func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing
 	tool := nativeNixClient(t)
 	resolved, err := filepath.EvalSymlinks(tool)
 	testutil.FailErr(t, "resolve selected native client", err)
-	layout := &NixLayout{Output: filepath.Dir(filepath.Dir(resolved)), NixStore: tool}
+	layout := &nixgeneration.Layout{Output: filepath.Dir(filepath.Dir(resolved)), NixStore: tool}
 	registrar, err := runningNixRegistrar(layout)
 	testutil.FailErr(t, "select actual physical GC authority", err)
 	poisonNixCallerConfiguration(t)
@@ -147,7 +148,7 @@ func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing
 	if _, err := os.Lstat(missing); !os.IsNotExist(err) {
 		t.Fatal("missing-output fixture unexpectedly exists")
 	}
-	missingLayout := &NixLayout{Output: missing, NixStore: tool}
+	missingLayout := &nixgeneration.Layout{Output: missing, NixStore: tool}
 	if _, err := runningNixRegistrar(missingLayout); err == nil {
 		t.Fatal("missing output accepted before registration")
 	}

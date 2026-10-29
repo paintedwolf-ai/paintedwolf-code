@@ -105,6 +105,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       cask_token: ${{ steps.release.outputs.cask_token }}
       matrix: ${{ steps.release.outputs.matrix }}
+      linux_public: ${{ steps.release.outputs.linux_public }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -182,6 +183,7 @@ jobs:
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
           echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
+          echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
     # Every Linux generation is assembled before any publication credential is materialized,
@@ -978,6 +980,21 @@ jobs:
             --generations linux-native --generations linux-pacman --artifacts release-artifacts \
             --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
             --base-url "${DOWNLOAD_BASE_URL}"
+
+  # Publish the Nix cache after the announced release.
+  linux-delivery:
+    needs: [classify, ship-gates, publish-immutable, publish-linux-repositories, publish-github-release]
+    if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.publish-linux-repositories.result == 'success' }}
+    uses: ./.github/workflows/release-linux-delivery.yml
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    secrets: inherit
+    with:
+      source_sha: ${{ needs.classify.outputs.source_sha }}
+      version: ${{ needs.classify.outputs.version }}
+      channel: ${{ needs.classify.outputs.channel }}
 
   # Follows the Linux activation so publication holds one runner beside the candidate build.
   update-cask:
