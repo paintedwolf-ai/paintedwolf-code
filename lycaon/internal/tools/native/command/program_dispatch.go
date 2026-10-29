@@ -100,6 +100,9 @@ type dispatchShared struct {
 	definitions map[string]toolcontract.OperationDefinition
 	rejected    *nativeRejection
 	evaluated   map[string]evaluatedChild
+	// stopWritten records that a stopped statement's stderr already carries
+	// its resource refusal line.
+	stopWritten bool
 }
 
 // evaluatedChild is a recorded execution the evaluator runs itself.
@@ -139,6 +142,30 @@ func (d *ProgramDispatcher) firstRejection() *nativeRejection {
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
 	return d.shared.rejected
+}
+
+// claimStopLine reports whether this caller writes the program's resource
+// stop line; a stop is written once, by whichever statement reports it first.
+func (d *ProgramDispatcher) claimStopLine() bool {
+	if d.shared == nil {
+		return true
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	claimed := !d.shared.stopWritten
+	d.shared.stopWritten = true
+	return claimed
+}
+
+// writeStatementRefusal writes a refused statement's shell-voice line.
+func (d *ProgramDispatcher) writeStatementRefusal(streams commandprogram.Streams, command string, cause error) {
+	if reject := toolrejection.AsToolReject(cause); programResourceRefusal(reject) {
+		if streams.Error != nil && d.claimStopLine() {
+			writeLimitRefusal(streams.Error, command, "", reject)
+		}
+		return
+	}
+	writeRejectRefusal(streams, command, cause)
 }
 
 var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
@@ -216,7 +243,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
-		return prepareChildFailure(streams, "external", request, err)
+		return d.prepareChildFailure(streams, "external", request, err)
 	}
 	defer child.release()
 	if d.run.externalHidden && request.Argv[0].Value == "external" {
@@ -361,18 +388,14 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
 	if err != nil {
-		return prepareChildFailure(streams, spec.Name, request, err)
+		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!native.OwnerInvoked || native.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeLimitRefusal(streams, spec.Name, reject)
-			} else {
-				writeRejectRefusal(streams, spec.Name, runErr)
-			}
+			d.writeStatementRefusal(streams, spec.Name, runErr)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -410,7 +433,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 	}
 	rejection := argvRejection(spec, cause)
 	reject := toolrejection.AsToolReject(rejection)
-	writeRejectRefusal(streams, spec.Name, rejection)
+	d.writeStatementRefusal(streams, spec.Name, rejection)
 	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
@@ -434,7 +457,7 @@ type programChild struct {
 	release   func()
 }
 
-func prepareChildFailure(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) prepareChildFailure(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
 	reject := toolrejection.AsToolReject(cause)
 	if reject == nil {
 		var limit *toolcontract.ProgramMemoryLimitError
@@ -458,11 +481,7 @@ func prepareChildFailure(streams commandprogram.Streams, command string, request
 		span := request.Invocation.Span
 		reject.Data["source_start_byte"], reject.Data["source_end_byte"] = span.StartByte, span.EndByte
 		reject.Data["source_line"], reject.Data["source_column"] = span.Line, span.Column
-		if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
-			writeLimitRefusal(streams, command, reject)
-		} else {
-			writeRejectRefusal(streams, command, cause)
-		}
+		d.writeStatementRefusal(streams, command, cause)
 		return refusedResult(reject.Code), cause
 	}
 	return refusedResult("COMMAND_OPERAND_INVALID"), cause
