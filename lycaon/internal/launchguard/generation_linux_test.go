@@ -232,6 +232,10 @@ func TestCaptureGenerationAndPolicyRecheck(t *testing.T) {
 	lockFile, err := os.OpenFile(filepath.Join(lockDirectory, digest+".lock"), os.O_RDWR, 0)
 	testutil.FailErr(t, "open lock file", err)
 	testutil.FailErr(t, "flock EX", unix.Flock(int(lockFile.Fd()), unix.LOCK_EX|unix.LOCK_NB))
+	if err := WritePolicy(pol); err == nil {
+		_ = lockFile.Close()
+		t.Fatal("WritePolicy selected a generation whose lock is exclusively held")
+	}
 	if g, err := CaptureGeneration(); err == nil {
 		g.Close()
 		_ = lockFile.Close()
@@ -246,6 +250,21 @@ func TestCaptureGenerationAndPolicyRecheck(t *testing.T) {
 		g.Close()
 		t.Fatal("CaptureGeneration accepted corrupted desktop binary")
 	}
+
+	// A policy whose parent is not root-controlled, or whose current file is
+	// not a regular file, is never replaced.
+	selected := policyPath
+	policyPath = filepath.Join(base, "missing", "policy.json")
+	if err := WritePolicy(pol); err == nil {
+		t.Fatal("WritePolicy wrote below a missing policy directory")
+	}
+	policyPath = selected
+	testutil.FailErr(t, "remove policy", os.Remove(policyPath))
+	testutil.FailErr(t, "policy directory", os.Mkdir(policyPath, 0o755))
+	if err := WritePolicy(pol); err == nil {
+		t.Fatal("WritePolicy replaced a policy that is not a regular file")
+	}
+	testutil.FailErr(t, "remove policy directory", os.Remove(policyPath))
 
 	// Oversized policy file is refused.
 	testutil.FailErr(t, "write oversized policy", os.WriteFile(policyPath, []byte(strings.Repeat(" ", 16385)), 0o644))
@@ -293,6 +312,17 @@ func TestLockDirectoryIsCreatedUnderControlledAncestry(t *testing.T) {
 		t.Fatal("accepted a writable ancestor")
 	}
 	testutil.FailErr(t, "restore ancestor", os.Chmod(filepath.Join(base, "run/paintedwolf"), 0o755))
+	// A component that cannot be created is refused.
+	testutil.FailErr(t, "plain file component", os.WriteFile(filepath.Join(base, "run/plain"), nil, 0o644))
+	if dir, err := ensureControlledDirectory(handle, "/run/plain/generation-locks", ownedPrivateDirectory); err == nil {
+		_ = dir.Close()
+		t.Fatal("created a directory below a regular file")
+	}
+	// A missing trust anchor is refused.
+	if file, err := openAnchor(filepath.Join(base, "absent")); err == nil {
+		_ = file.Close()
+		t.Fatal("opened a missing trust anchor")
+	}
 	testutil.FailErr(t, "remove lock directory", os.Remove(filepath.Join(base, "run/paintedwolf/generation-locks")))
 	testutil.FailErr(t, "plant link", os.Symlink(t.TempDir(), filepath.Join(base, "run/paintedwolf/generation-locks")))
 	if dir, err := ensureControlledDirectory(handle, "/run/paintedwolf/generation-locks", ownedPrivateDirectory); err == nil {

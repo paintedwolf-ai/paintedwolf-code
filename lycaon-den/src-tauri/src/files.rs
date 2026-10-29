@@ -3,7 +3,7 @@
 pub(crate) mod picked_file;
 pub(crate) mod pick_path;
 #[cfg(target_os = "linux")]
-mod linux_folder_picker;
+mod linux_path_picker;
 pub(crate) mod read_path_bytes;
 pub(crate) mod external_attachment_import;
 pub(crate) mod open_local_path;

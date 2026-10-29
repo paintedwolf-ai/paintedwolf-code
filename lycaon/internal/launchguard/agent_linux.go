@@ -36,7 +36,7 @@ const (
 func RunBrokerAgent() error {
 	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
 	if seals, err := unix.FcntlInt(agentSpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
-		return errors.New("entry specification is not sealed")
+		return unsealedEntry(agentSpecFD, seals, err)
 	}
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
@@ -139,15 +139,16 @@ func runModuleViewWatcher(spec EntrySpec) error {
 	if err != nil {
 		return err
 	}
-	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+	// Go's runtime epoll must not consume the mount notifications we poll below.
+	mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = mountinfo.Close() }()
+	defer func() { _ = unix.Close(mountinfo) }()
 	if err := sealModuleWatcher(Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups}); err != nil {
 		return err
 	}
-	return watchModuleMounts(int(mountinfo.Fd()), watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
+	return watchModuleMounts(mountinfo, watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
 }
 
 const watcherCapabilityMask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << unix.CAP_DAC_READ_SEARCH)
@@ -238,6 +239,7 @@ func sealModuleWatcher(caller Identity) error {
 	}
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
 	capabilities := [2]unix.CapUserData{{Permitted: watcherCapabilityMask, Effective: watcherCapabilityMask}}
+	// #nosec G103 -- both pointers name fixed-layout capability structures copied synchronously by the kernel.
 	if _, _, errno := syscall.AllThreadsSyscall(
 		unix.SYS_CAPSET,
 		uintptr(unsafe.Pointer(&header)),

@@ -198,7 +198,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$"
+      "exclude": "/test/security$|/internal/launchguard$"
     },
     "seatbelt:confine": {
       "options": [
@@ -425,6 +425,15 @@
     "release:rehearse:native-candidates": [
       "release:rehearse:native-candidates"
     ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
+    ],
     "release:live-test": [
       "release:live-test"
     ],
@@ -472,6 +481,9 @@
     "release:rehearse:native-repositories": "passthrough",
     "release:rehearse:native-repositories-r2": "passthrough",
     "release:rehearse:native-candidates": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
@@ -843,6 +855,31 @@
       ],
       "workers": 1
     },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:publish:aur-recipe": {
+      "locks": [
+        "aur-delivery"
+      ],
+      "workers": 1
+    },
     "release:live-test": {
       "locks": [
         "*"
@@ -932,7 +969,9 @@
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast"
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1280,7 +1319,10 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
+      "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,

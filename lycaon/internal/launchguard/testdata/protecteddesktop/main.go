@@ -44,13 +44,15 @@ type Facts struct {
 	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
 	BrokerOutput    string                      `json:"broker_output,omitempty"`
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
+	SupervisorState string                      `json:"supervisor_state,omitempty"`
+	BrokerAgents    int                         `json:"broker_agents"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
@@ -119,10 +121,15 @@ func main() {
 	facts.BrokerType, _ = unix.GetsockoptInt(6, unix.SOL_SOCKET, unix.SO_TYPE)
 	var lifetime unix.Stat_t
 	facts.LifetimeRegular = unix.Fstat(7, &lifetime) == nil && lifetime.Mode&unix.S_IFMT == unix.S_IFREG
+	// Descriptors beyond the handed-off set, named by their /proc link. The Go
+	// runtime opens its poller, wake eventfd and cgroup CPU limit file at startup
+	// on the lowest free numbers, which reach 8 once the frame holds 4.
 	for fd := 8; fd < 64; fd++ {
-		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil {
-			facts.OpenBeyond = append(facts.OpenBeyond, fd)
+		target, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(fd))
+		if err != nil || runtimeDescriptor(target) {
+			continue
 		}
+		facts.OpenBeyond = append(facts.OpenBeyond, strconv.Itoa(fd)+" "+target)
 	}
 	install := filepath.Dir(filepath.Dir(facts.Executable))
 	facts.ExecOutside = startName("/bin/true")
@@ -186,6 +193,10 @@ func runEngineVault(raw string) {
 // holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
 	broker := desktopBroker
+	// What the broker's peer and its agent look like when the first request
+	// goes out, so a refused request names the process that was missing.
+	facts.SupervisorState = processState(facts.BrokerPeerPID)
+	facts.BrokerAgents = brokerAgentCount()
 	null, err := os.Open("/dev/null")
 	if err != nil {
 		facts.BrokerError = err.Error()
@@ -203,7 +214,7 @@ func brokerProbe(facts *Facts) {
 	}, null, write, write)
 	_ = write.Close()
 	if err != nil {
-		facts.BrokerError = err.Error()
+		facts.BrokerError = "send: " + err.Error()
 		return
 	}
 	output, _ := io.ReadAll(read)
@@ -338,6 +349,39 @@ func brokeredUserProgram(broker, null *os.File) string {
 	}
 }
 
+// processState reports the kernel's State line for pid, or why it is unreadable.
+func processState(pid int) string {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+	if err != nil {
+		return err.Error()
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if state, ok := strings.CutPrefix(line, "State:"); ok {
+			return strings.TrimSpace(state)
+		}
+	}
+	return "unknown"
+}
+
+// brokerAgentCount counts the broker agent processes visible in /proc.
+func brokerAgentCount() int {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return -1
+	}
+	count := 0
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		raw, err := os.ReadFile("/proc/" + entry.Name() + "/cmdline")
+		if err == nil && strings.Contains(string(raw), "--broker-agent") {
+			count++
+		}
+	}
+	return count
+}
+
 // startName reports whether the kernel let this process execute path.
 func startName(path string) string {
 	pid, err := syscall.ForkExec(path, []string{path}, &syscall.ProcAttr{Files: []uintptr{0, 1, 2}})
@@ -359,4 +403,9 @@ func errnoName(err error) string {
 	default:
 		return err.Error()
 	}
+}
+
+// runtimeDescriptor reports a descriptor the Go runtime holds for itself.
+func runtimeDescriptor(target string) bool {
+	return target == "anon_inode:[eventpoll]" || target == "anon_inode:[eventfd]" || strings.HasPrefix(target, "/sys/fs/cgroup/")
 }

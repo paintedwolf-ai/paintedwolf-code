@@ -57,13 +57,15 @@ type protectedFacts struct {
 	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
 	BrokerOutput    string                      `json:"broker_output,omitempty"`
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
+	SupervisorState string                      `json:"supervisor_state,omitempty"`
+	BrokerAgents    int                         `json:"broker_agents"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
@@ -115,6 +117,7 @@ type runningLaunch struct {
 	stdin  io.WriteCloser
 	reader *bufio.Reader
 	facts  protectedFacts
+	stderr *strings.Builder
 }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
@@ -131,6 +134,13 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	stopProbe := make(chan struct{})
 	probeErr := make(chan error, 1)
 	go probeEarlyBrokerAgent(stopProbe, probeErr)
+	// Registered before the wait below so it runs after the bootstrap has
+	// exited and its standard error is complete.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("bootstrap stderr:\n%s", stderr.String())
+		}
+	})
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
 	t.Cleanup(func() {
 		_ = stdin.Close()
@@ -162,7 +172,26 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, stderr: &stderr}
+}
+
+// processState reads the kernel's State line for pid.
+func processState(t *testing.T, pid int) string {
+	t.Helper()
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	testutil.FailErr(t, "process status", err)
+	for _, line := range strings.Split(string(raw), "\n") {
+		if state, ok := strings.CutPrefix(line, "State:"); ok {
+			return strings.TrimSpace(state)
+		}
+	}
+	t.Fatalf("no State line in /proc/%d/status", pid)
+	return ""
+}
+
+// exitedState reports a zombie or dead State line.
+func exitedState(state string) bool {
+	return strings.HasPrefix(state, "Z") || strings.HasPrefix(state, "X")
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
@@ -235,12 +264,18 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
+	// The supervisor waits on the launch from before the desktop's first
+	// broker request until the tree ends; one that exited left the desktop
+	// with a broker nobody serves.
+	if state := processState(t, launch.cmd.Process.Pid); exitedState(state) || exitedState(facts.SupervisorState) {
+		t.Fatalf("supervisor %d is %q now and was %q at the desktop's broker probe, with %d broker agents", launch.cmd.Process.Pid, state, facts.SupervisorState, facts.BrokerAgents)
+	}
 	// The broker starts programs outside the protected namespace, with the
 	// caller's ordinary authority, and ends one whose caller abandons it.
 	own, err := os.Readlink("/proc/self/ns/user")
 	testutil.FailErr(t, "own user namespace", err)
 	if facts.BrokerError != "" || facts.BrokerExit != 0 || !strings.Contains(facts.BrokerOutput, own) || !strings.Contains(facts.BrokerOutput, "NoNewPrivs:\t0") {
-		t.Fatalf("brokered program did not run in the caller's namespace without no_new_privs: %q exit %d error %q (want %s)", facts.BrokerOutput, facts.BrokerExit, facts.BrokerError, own)
+		t.Fatalf("brokered program did not run in the caller's namespace without no_new_privs: %q exit %d error %q (want %s); supervisor %q with %d broker agents at the probe", facts.BrokerOutput, facts.BrokerExit, facts.BrokerError, own, facts.SupervisorState, facts.BrokerAgents)
 	}
 	if !facts.AbandonedEnded {
 		t.Fatal("an abandoned brokered program kept running")
@@ -418,7 +453,9 @@ func assertBrokerAgentSealed(t *testing.T, pid int) {
 // to hold only the caller's identity, zero capabilities, and the expected NoNewPrivs flag.
 func assertProcessThreadCredentials(t *testing.T, pid int, wantNoNewPrivs string, minThreads int) {
 	t.Helper()
-	threads, err := verifyProcessThreadsStatus(pid, os.Getuid(), os.Getgid(), wantNoNewPrivs)
+	groups, err := unix.Getgroups()
+	testutil.FailErr(t, "caller groups", err)
+	threads, err := verifyProcessThreadsStatus(pid, os.Getuid(), os.Getgid(), groups, wantNoNewPrivs)
 	testutil.FailErr(t, "process thread credentials", err)
 	if threads < minThreads {
 		t.Fatalf("process %d checked %d threads, want at least %d", pid, threads, minThreads)
@@ -509,7 +546,7 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	launch := startLaunch(t, f, env, "--exec-probe")
 	probe := launch.facts.Exec
 	if probe == nil {
-		t.Fatalf("the fixture engine reported no launches: %+v", launch.facts)
+		t.Fatalf("the fixture engine reported no launches: %+v; bootstrap stderr: %s", launch.facts, launch.stderr.String())
 	}
 	initial, err := os.Readlink("/proc/self/ns/user")
 	testutil.FailErr(t, "initial user namespace", err)
@@ -522,27 +559,33 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 		"host execution": {probe.HostExecOutput, probe.HostExecError, probe.HostExecCode},
 	} {
 		if run.err != "" || run.code != 7 || !strings.Contains(run.output, initial) || !strings.Contains(run.output, "NoNewPrivs:\t0") {
-			t.Fatalf("%s launch did not run outside the protected namespace with its exit status: %q code %d error %q (want %s)", name, run.output, run.code, run.err, initial)
+			t.Fatalf("%s launch did not run outside the protected namespace with its exit status: %q code %d error %q (want %s); bootstrap stderr: %s", name, run.output, run.code, run.err, initial, launch.stderr.String())
 		}
 	}
 	if probe.ConfinedError != "" && !strings.Contains(probe.ConfinedError, "exit status") || strings.Contains(probe.ConfinedOutput, initial) || strings.Contains(probe.ConfinedOutput, protected) || !strings.Contains(probe.ConfinedOutput, "NoNewPrivs:\t1") {
-		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr)
+		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q; bootstrap stderr: %s", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr, launch.stderr.String())
 	}
 	if probe.PreparedError != "" || probe.PreparedCode != 7 || !strings.Contains(probe.PreparedOutput, "streamed-over-stdin") || !strings.Contains(probe.PreparedOutput, initial) || !strings.Contains(probe.PreparedOutput, "NoNewPrivs:\t0") {
-		t.Fatalf("prepared launch did not stream through the broker outside the protected namespace: %q code %d error %q (want %s)", probe.PreparedOutput, probe.PreparedCode, probe.PreparedError, initial)
+		t.Fatalf("prepared launch did not stream through the broker outside the protected namespace: %q code %d error %q (want %s); bootstrap stderr: %s", probe.PreparedOutput, probe.PreparedCode, probe.PreparedError, initial, launch.stderr.String())
 	}
 	if probe.PreparedConfinedError != "" || probe.PreparedConfinedCode != 7 || !strings.Contains(probe.PreparedConfinedOutput, "streamed-over-stdin") || strings.Contains(probe.PreparedConfinedOutput, initial) || strings.Contains(probe.PreparedConfinedOutput, protected) || !strings.Contains(probe.PreparedConfinedOutput, "NoNewPrivs:\t1") {
-		t.Fatalf("prepared confined launch did not run in its own nested namespace through the broker: %q code %d error %q", probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError)
+		t.Fatalf("prepared confined launch did not run in its own nested namespace through the broker: %q code %d error %q; bootstrap stderr: %s", probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError, launch.stderr.String())
 	}
 	if !probe.TerminalSurvive {
-		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s", probe.TerminalError)
+		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s; bootstrap stderr: %s", probe.TerminalError, launch.stderr.String())
 	}
 	if !probe.RelayLossEnded {
-		t.Fatalf("killing the relay did not end the brokered session: %s", probe.RelayLossError)
+		t.Fatalf("killing the relay did not end the brokered session: %s; bootstrap stderr: %s", probe.RelayLossError, launch.stderr.String())
 	}
 	if !probe.BrowserEngineLossEnded {
-		t.Fatalf("killing the protected engine did not end the brokered browser: %s", probe.BrowserEngineLossError)
+		t.Fatalf("killing the protected engine did not end the brokered browser: %s; bootstrap stderr: %s", probe.BrowserEngineLossError, launch.stderr.String())
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)
+}
+
+func TestProtectedLaunchModulePathsReportTheirCoverage(t *testing.T) {
+	f := installLaunchFixture(t)
+	testutil.FailErr(t, "instrumented module path contracts", sudoFixture(t, "module-paths", f.dir,
+		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
 }

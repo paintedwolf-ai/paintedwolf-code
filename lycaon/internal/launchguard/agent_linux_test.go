@@ -8,6 +8,7 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,8 +18,12 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/launchbroker"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 const wantWatcherCapHex = "0000000000200004"
@@ -155,8 +160,11 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 		return err
 	}
 	userNS, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/user", watcherPID))
-	if err != nil || userNS == initUser {
-		return fmt.Errorf("watcher user namespace = %q (%v), must not be initial %q", userNS, err, initUser)
+	if err != nil {
+		return fmt.Errorf("watcher user namespace: %w", err)
+	}
+	if userNS == initUser {
+		return fmt.Errorf("watcher user namespace = %q, must not be initial", userNS)
 	}
 	info, err := os.Stat(fmt.Sprintf("/proc/%d/fd", watcherPID))
 	if err != nil {
@@ -230,11 +238,19 @@ func verifyMountNamespaceOwner(desktopPID, watcherPID int, initUser string) erro
 		return fmt.Errorf("NS_GET_USERNS on desktop mnt namespace: %w", err)
 	}
 	defer func() { _ = unix.Close(ownerUserFD) }()
-	if kind, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_NSTYPE); err != nil || kind != unix.CLONE_NEWUSER {
-		return fmt.Errorf("M_view owning namespace type = %#x (%v), want CLONE_NEWUSER", kind, err)
+	kind, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_NSTYPE)
+	if err != nil {
+		return fmt.Errorf("NS_GET_NSTYPE on the M_view owner: %w", err)
 	}
-	if ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID); err != nil || ownerUID != 0 {
-		return fmt.Errorf("M_view owning user namespace owner UID = %d (%v), want 0", ownerUID, err)
+	if kind != unix.CLONE_NEWUSER {
+		return fmt.Errorf("M_view owning namespace type = %#x, want CLONE_NEWUSER", kind)
+	}
+	ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID)
+	if err != nil {
+		return fmt.Errorf("NS_GET_OWNER_UID on the M_view owner: %w", err)
+	}
+	if ownerUID != 0 {
+		return fmt.Errorf("M_view owning user namespace owner UID = %d, want 0", ownerUID)
 	}
 	parentFD, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_PARENT)
 	if err != nil {
@@ -243,8 +259,11 @@ func verifyMountNamespaceOwner(desktopPID, watcherPID int, initUser string) erro
 	var parentStat, ownerStat, watcherUserStat, desktopUserStat unix.Stat_t
 	err = unix.Fstat(parentFD, &parentStat)
 	_ = unix.Close(parentFD)
-	if err != nil || parentStat.Ino != 0xEFFFFFFD {
-		return fmt.Errorf("M_view owning userns parent ino = %#x (%v), want 0xEFFFFFFD (%s)", parentStat.Ino, err, initUser)
+	if err != nil {
+		return fmt.Errorf("M_view owning userns parent: %w", err)
+	}
+	if parentStat.Ino != 0xEFFFFFFD {
+		return fmt.Errorf("M_view owning userns parent ino = %#x, want 0xEFFFFFFD (%s)", parentStat.Ino, initUser)
 	}
 	if err := unix.Fstat(ownerUserFD, &ownerStat); err != nil {
 		return err
@@ -294,16 +313,23 @@ func checkModuleWatcherSeal() error {
 	}
 	stopAfter := startLockedWorkerThreads(1)
 	defer stopAfter()
-	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
-		return fmt.Errorf("sealed watcher dumpable = %d (%v), want 0", dumpable, err)
+	dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
+	if err != nil {
+		return fmt.Errorf("sealed watcher dumpable: %w", err)
+	}
+	if dumpable != 0 {
+		return fmt.Errorf("sealed watcher dumpable = %d, want 0", dumpable)
 	}
 	if err := scrubSingleMount(probeDir); err != nil {
 		return fmt.Errorf("sealed watcher scrubSingleMount in initial user namespace: %w", err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
-	if err := unix.Statfs(probeDir, &st); err != nil || st.Flags&wantFlags != wantFlags {
-		return fmt.Errorf("sealed watcher statfs flags = %#x (%v), want %#x", st.Flags, err, wantFlags)
+	if err := unix.Statfs(probeDir, &st); err != nil {
+		return fmt.Errorf("sealed watcher statfs: %w", err)
+	}
+	if st.Flags&wantFlags != wantFlags {
+		return fmt.Errorf("sealed watcher statfs flags = %#x, want %#x", st.Flags, wantFlags)
 	}
 	wantUID := fmt.Sprintf("%d %d %d %d", uid, uid, uid, uid)
 	wantGID := fmt.Sprintf("%d %d %d %d", gid, gid, gid, gid)
@@ -311,8 +337,29 @@ func checkModuleWatcherSeal() error {
 	return verifyWatcherThreads(os.Getpid(), wantUID, wantGID, wantGroups)
 }
 
+// childUsernsCaller is the identity the user-namespace probe seals itself to.
+var childUsernsCaller = Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
+
 func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
-	cmd := exec.Command(os.Args[0], "-test.run=^TestChildUserNamespaceMountSetattrRefused$")
+	args := []string{"-test.run=^TestChildUserNamespaceMountSetattrRefused$"}
+	// A coverage build reports the child's counters beside the fixture's own.
+	// The child exits sealed to childUsernsCaller without CAP_DAC_OVERRIDE, so
+	// it writes into a directory that identity owns and the fixture moves the
+	// files up afterwards.
+	childCover := ""
+	if coverDir := os.Getenv("GOCOVERDIR"); testing.CoverMode() != "" && coverDir != "" {
+		dir, err := os.MkdirTemp(coverDir, "userns-child-")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		if err := os.Chown(dir, int(childUsernsCaller.UID), int(childUsernsCaller.GID)); err != nil {
+			return err
+		}
+		childCover = dir
+		args = append(args, "-test.gocoverdir="+dir)
+	}
+	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = append(os.Environ(), "PW_WATCHER_CHILD_USERNS_MOUNT="+mountPoint)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:                 unix.CLONE_NEWUSER,
@@ -323,6 +370,24 @@ func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("child userns mount_setattr probe failed: %w: %s", err, out)
+	}
+	if childCover == "" {
+		return nil
+	}
+	return collectChildCoverage(childCover)
+}
+
+// collectChildCoverage moves the probe's coverage files into the shared
+// children directory that dir was created under.
+func collectChildCoverage(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := os.Rename(filepath.Join(dir, entry.Name()), filepath.Join(filepath.Dir(dir), entry.Name())); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -346,7 +411,7 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 	if err := watcherUserNamespace(); err != nil {
 		t.Fatalf("watcherUserNamespace in (U_view, M_view): %v", err)
 	}
-	caller := Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
+	caller := childUsernsCaller
 	if err := sealModuleWatcher(caller); err != nil {
 		t.Fatalf("sealModuleWatcher in (U_view, M_view): %v", err)
 	}
@@ -382,5 +447,123 @@ func startLockedWorkerThreads(count int) func() {
 		for range count {
 			<-done
 		}
+	}
+}
+
+func checkInstrumentedBrokerAgent(t *testing.T, spec EntrySpec, frame *os.File) {
+	t.Helper()
+	server, peer, err := brokerPair()
+	testutil.FailErr(t, "instrumented broker socket", err)
+	defer peer.Close()
+	defer server.Close()
+	null, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
+	testutil.FailErr(t, "broker streams", err)
+	defer null.Close()
+	cmd := moduleFixtureCommand(t, "module-agent", Identity{UID: spec.UID, GID: spec.GID})
+	cmd.ExtraFiles = []*os.File{frame, server, null}
+	cmd.Stderr = os.Stderr
+	testutil.FailErr(t, "start instrumented broker", cmd.Start())
+	_ = server.Close()
+	channel, err := launchbroker.Send(peer, launchbroker.Request{Argv: []string{"/bin/true"}, Dir: "/", Environment: []string{"PATH=/usr/bin:/bin"}}, null, null, null)
+	testutil.FailErr(t, "instrumented broker request", err)
+	defer channel.Close()
+	started := moduleFixtureBrokerEvent(t, channel)
+	if started.Started <= 0 || started.Error != "" || started.Exited {
+		t.Fatalf("instrumented broker started event: %+v", started)
+	}
+	ended := moduleFixtureBrokerEvent(t, channel)
+	if !ended.Exited || ended.Code != 0 || ended.Error != "" {
+		t.Fatalf("instrumented broker exit event: %+v", ended)
+	}
+	_ = peer.Close()
+	testutil.FailErr(t, "instrumented broker ended", cmd.Wait())
+}
+
+func checkInstrumentedModuleWatcher(t *testing.T, dir string, spec EntrySpec, frame *os.File) {
+	t.Helper()
+	lifetimeR, lifetime, err := os.Pipe()
+	testutil.FailErr(t, "instrumented watcher lifetime", err)
+	defer lifetimeR.Close()
+	defer lifetime.Close()
+	ready, readyW, err := os.Pipe()
+	testutil.FailErr(t, "instrumented watcher readiness", err)
+	defer ready.Close()
+	defer readyW.Close()
+	image, err := os.Open(filepath.Join(spec.Generation.GenerationRoot, "bin/pw-launch-entry"))
+	testutil.FailErr(t, "watcher retained image", err)
+	defer image.Close()
+	cmd := moduleFixtureCommand(t, "module-agent", Identity{UID: spec.UID, GID: spec.GID})
+	cmd.ExtraFiles = []*os.File{frame, lifetimeR, readyW, image}
+	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappingsEnableSetgroups: true,
+	}
+	testutil.FailErr(t, "start instrumented watcher", cmd.Start())
+	_ = lifetimeR.Close()
+	_ = readyW.Close()
+	testutil.FailErr(t, "watcher ready deadline", ready.SetReadDeadline(moduleFixtureDeadline(t)))
+	var armed [1]byte
+	_, err = io.ReadFull(ready, armed[:])
+	testutil.FailErr(t, "instrumented watcher ready", err)
+	if armed[0] != 1 {
+		t.Fatalf("watcher ready byte = %v, want 1", armed)
+	}
+	uid := fmt.Sprintf("%d %d %d %d", spec.UID, spec.UID, spec.UID, spec.UID)
+	gid := fmt.Sprintf("%d %d %d %d", spec.GID, spec.GID, spec.GID, spec.GID)
+	testutil.FailErr(t, "instrumented watcher thread seal", verifyWatcherThreads(cmd.Process.Pid, uid, gid, strconv.Itoa(int(spec.GID))))
+	checkModuleWatcherPollAuthority(t, cmd.Process.Pid)
+	parentNS, err := os.Open("/proc/thread-self/ns/mnt")
+	testutil.FailErr(t, "fixture parent mount namespace", err)
+	defer parentNS.Close()
+	viewNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", cmd.Process.Pid))
+	testutil.FailErr(t, "instrumented watcher view", err)
+	defer viewNS.Close()
+	library := filepath.Join(dir, "actor-library-root")
+	baseline := filepath.Join(library, "baseline.so")
+	testutil.FailErr(t, "parent baseline module executable", canMapExecutable(baseline))
+	late, _, file, err := prepareLateMountPoint(filepath.Join(library, "instrumented-late"))
+	testutil.FailErr(t, "new module mount point", err)
+	testutil.FailErr(t, "new executable module mount", mountExecutableTmpfs(late, file))
+	testutil.FailErr(t, "parent module remains executable", canMapExecutable(file))
+	testutil.FailErr(t, "enter instrumented watcher view", unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS))
+	defer func() { _ = unix.Setns(int(parentNS.Fd()), unix.CLONE_NEWNS) }()
+	testutil.FailErr(t, "declared baseline library remains executable", canMapExecutable(baseline))
+	testutil.WaitFor(t, func() bool {
+		if !time.Now().Before(moduleFixtureDeadline(t)) {
+			t.Fatal("new module mount was not scrubbed before fixture cancellation")
+		}
+		var facts unix.Statfs_t
+		const flags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
+		return unix.Statfs(late, &facts) == nil && facts.Flags&flags == flags
+	})
+	if err := canMapExecutable(file); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("new module executable mapping in watcher view = %v, want EPERM", err)
+	}
+	testutil.FailErr(t, "leave instrumented watcher view", unix.Setns(int(parentNS.Fd()), unix.CLONE_NEWNS))
+	testutil.FailErr(t, "parent module mount unchanged", canMapExecutable(file))
+	_ = lifetime.Close()
+	testutil.FailErr(t, "instrumented watcher ended", cmd.Wait())
+}
+
+func moduleFixtureBrokerEvent(t *testing.T, channel *os.File) launchbroker.Event {
+	t.Helper()
+	type result struct {
+		event launchbroker.Event
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() { event, err := launchbroker.ReadEvent(channel); done <- result{event, err} }()
+	timer := time.NewTimer(time.Until(moduleFixtureDeadline(t)))
+	defer timer.Stop()
+	select {
+	case got := <-done:
+		testutil.FailErr(t, "module fixture broker event", got.err)
+		return got.event
+	case <-timer.C:
+		t.Fatal("module fixture canceled before broker event")
+		return launchbroker.Event{}
 	}
 }

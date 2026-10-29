@@ -178,7 +178,7 @@ func unrelayCommand(cmd *exec.Cmd) {
 // the broker starts them outside, where the caller's own authority decides.
 // Here a regular file with an execute bit is a program.
 func relayedExecutable(path string) (string, error) {
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- the caller's program path; only its mode is read before the broker starts it outside the module view
 	if err != nil {
 		return "", err
 	}

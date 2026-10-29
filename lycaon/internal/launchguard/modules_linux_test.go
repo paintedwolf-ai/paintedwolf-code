@@ -12,10 +12,13 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 const fixtureDesktopPIDEnv = "PW_LAUNCH_DESKTOP_PID"
@@ -305,14 +308,14 @@ func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func
 		runtime.LockOSThread()
 		_ = unix.Unshare(unix.CLONE_FS)
 		_ = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
-		mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+		mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 		if err != nil {
 			_ = readyW.Close()
 			done <- err
 			return
 		}
-		defer func() { _ = mountinfo.Close() }()
-		done <- watchModuleMounts(int(mountinfo.Fd()), int(watchR.Fd()), int(readyW.Fd()), policy.LogicalInstallRoot, roots)
+		defer func() { _ = unix.Close(mountinfo) }()
+		done <- watchModuleMounts(mountinfo, int(watchR.Fd()), int(readyW.Fd()), policy.LogicalInstallRoot, roots)
 	}()
 	var ack [1]byte
 	_, err = io.ReadFull(readyR, ack[:])
@@ -322,7 +325,7 @@ func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func
 		_ = watchR.Close()
 		return nil, err
 	}
-	return func() { _ = watchW.Close(); _ = <-done; _ = watchR.Close() }, nil
+	return func() { _ = watchW.Close(); <-done; _ = watchR.Close() }, nil
 }
 
 func prepareLateMountPoint(baseDir string) (dir, underlying, lateFile string, err error) {
@@ -349,14 +352,23 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 
 func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) error {
 	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
-		return fmt.Errorf("existing mount in module view mapped executable: %v, want EPERM", err)
+		if err == nil {
+			return errors.New("existing mount in module view mapped executable, want EPERM")
+		}
+		return fmt.Errorf("existing mount in module view mapped executable: %w, want EPERM", err)
 	}
 	if _, err := os.Stat(underlying); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("post-launch mount did not cover underlying directory in module view: stat %s = %v", underlying, err)
+		if err == nil {
+			return fmt.Errorf("post-launch mount did not cover underlying directory in module view: %s is still visible", underlying)
+		}
+		return fmt.Errorf("post-launch mount did not cover underlying directory in module view: stat %s: %w", underlying, err)
 	}
 	content, err := os.ReadFile(lateFile)
-	if err != nil || !bytes.Equal(content, []byte("late-module")) {
-		return fmt.Errorf("post-launch mount not readable in module view: %q (%v)", content, err)
+	if err != nil {
+		return fmt.Errorf("post-launch mount not readable in module view: %w", err)
+	}
+	if !bytes.Equal(content, []byte("late-module")) {
+		return fmt.Errorf("post-launch mount content in module view: %q, want late-module", content)
 	}
 	const bound = 100 * time.Millisecond
 	deadline := time.Now().Add(bound)
@@ -369,7 +381,10 @@ func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) er
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("post-launch mount was not scrubbed within %s: map=%v statErr=%v flags=%#x", bound, mapErr, statErr, st.Flags)
+			if mapErr == nil {
+				mapErr = errors.New("late module still maps executable")
+			}
+			return fmt.Errorf("post-launch mount was not scrubbed within %s (flags=%#x): %w", bound, st.Flags, errors.Join(mapErr, statErr))
 		}
 		time.Sleep(50 * time.Microsecond)
 	}
@@ -386,4 +401,166 @@ func canMapExecutable(path string) error {
 		return err
 	}
 	return unix.Munmap(region)
+}
+
+func TestReopenImageReturnsTheRetainedSelectionInode(t *testing.T) {
+	root := t.TempDir()
+	image := filepath.Join(root, "bin/painted-wolf-code")
+	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(image, []byte("desktop"), 0o755); err != nil {
+		t.Fatalf("write desktop image: %v", err)
+	}
+	selected, err := os.Open(image)
+	if err != nil {
+		t.Fatalf("open selected image: %v", err)
+	}
+	defer func() { _ = selected.Close() }()
+	reopened, err := reopenImage(GenerationPolicy{LogicalInstallRoot: root}, selected)
+	if err != nil {
+		t.Fatalf("reopenImage: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	var want, got unix.Stat_t
+	if err := unix.Fstat(int(selected.Fd()), &want); err != nil {
+		t.Fatalf("fstat selected image: %v", err)
+	}
+	if err := unix.Fstat(int(reopened.Fd()), &got); err != nil {
+		t.Fatalf("fstat reopened image: %v", err)
+	}
+	if got.Dev != want.Dev || got.Ino != want.Ino {
+		t.Fatalf("reopened image = %d:%d, want the selected inode %d:%d", got.Dev, got.Ino, want.Dev, want.Ino)
+	}
+}
+
+func TestAllowedModuleMountPointsFollowTheDesktopImageInterpreter(t *testing.T) {
+	root := t.TempDir()
+	image := filepath.Join(root, "bin/painted-wolf-code")
+	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	copyTestExecutable(t, image)
+	desktop, err := os.Open(image)
+	if err != nil {
+		t.Fatalf("open desktop image: %v", err)
+	}
+	defer func() { _ = desktop.Close() }()
+	interpreter, err := programInterpreter(desktop)
+	if err != nil {
+		t.Fatalf("programInterpreter: %v", err)
+	}
+	policy := GenerationPolicy{
+		LogicalInstallRoot: root,
+		LibraryRoots:       []string{"/usr/lib", "/usr/lib64"},
+		SystemExecutables:  []string{"/usr/libexec/webkit2gtk-4.1"},
+	}
+	got, err := allowedModuleMountPoints(policy)
+	if err != nil {
+		t.Fatalf("allowedModuleMountPoints: %v", err)
+	}
+	if want := moduleRoots(policy, interpreter); !slices.Equal(got, want) {
+		t.Fatalf("allowedModuleMountPoints = %v, want %v", got, want)
+	}
+}
+
+func copyTestExecutable(t *testing.T, destination string) {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("test executable: %v", err)
+	}
+	source, err := os.Open(executable)
+	if err != nil {
+		t.Fatalf("open test executable: %v", err)
+	}
+	defer func() { _ = source.Close() }()
+	target, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("create %s: %v", destination, err)
+	}
+	if _, err := io.Copy(target, source); err != nil {
+		_ = target.Close()
+		t.Fatalf("copy test executable: %v", err)
+	}
+	if err := target.Close(); err != nil {
+		t.Fatalf("close %s: %v", destination, err)
+	}
+}
+
+// The watcher arms its baseline from the mount table it is given, reports
+// readiness once, and ends when the last writer of its lifetime pipe closes.
+// With the logical installation root at "/" every mount is exempt, so the
+// test's own mount namespace is left untouched.
+func TestWatchModuleMountsArmsItsBaselineAndEndsWithItsLifetime(t *testing.T) {
+	mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatalf("open mountinfo: %v", err)
+	}
+	defer func() { _ = unix.Close(mountinfo) }()
+	var lifetime, ready [2]int
+	if err := unix.Pipe2(lifetime[:], unix.O_CLOEXEC); err != nil {
+		t.Fatalf("lifetime pipe: %v", err)
+	}
+	defer func() { _ = unix.Close(lifetime[0]) }()
+	// The watcher closes the ready write end itself once its baseline is armed.
+	if err := unix.Pipe2(ready[:], unix.O_CLOEXEC); err != nil {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("ready pipe: %v", err)
+	}
+	defer func() { _ = unix.Close(ready[0]) }()
+	done := make(chan error, 1)
+	go func() {
+		done <- watchModuleMounts(mountinfo, lifetime[0], ready[1], "/", nil)
+	}()
+	var armed [1]byte
+	if n, err := unix.Read(ready[0], armed[:]); err != nil || n != 1 || armed[0] != 1 {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("watcher readiness = %v (%d bytes, %v), want the single byte 1", armed, n, err)
+	}
+	if n, err := unix.Read(ready[0], armed[:]); err != nil || n != 0 {
+		_ = unix.Close(lifetime[1])
+		t.Fatalf("ready pipe after arming = %d bytes, %v; want end of file", n, err)
+	}
+	if err := unix.Close(lifetime[1]); err != nil {
+		t.Fatalf("close lifetime writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("watchModuleMounts after its lifetime ended: %v", err)
+	}
+}
+
+func checkInstrumentedModulePaths(t *testing.T, dir string) error {
+	runtime.LockOSThread()
+	testutil.FailErr(t, "private actor filesystem", unix.Unshare(unix.CLONE_FS|unix.CLONE_NEWNS))
+	testutil.FailErr(t, "private actor mounts", unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""))
+	testutil.FailErr(t, "actor subreaper", unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0))
+	t.Cleanup(func() {
+		tasks, err := os.ReadDir("/proc/self/task")
+		testutil.FailErr(t, "fixture child threads", err)
+		for _, task := range tasks {
+			raw, _ := os.ReadFile(filepath.Join("/proc/self/task", task.Name(), "children"))
+			for _, child := range strings.Fields(string(raw)) {
+				pid, err := strconv.Atoi(child)
+				testutil.FailErr(t, "fixture child identity", err)
+				_ = unix.Kill(pid, unix.SIGKILL)
+			}
+		}
+		for {
+			var status unix.WaitStatus
+			_, err := unix.Wait4(-1, &status, 0, nil)
+			if errors.Is(err, unix.ECHILD) {
+				break
+			}
+			if !errors.Is(err, unix.EINTR) {
+				testutil.FailErr(t, "reap fixture child", err)
+			}
+		}
+	})
+	spec, frame := moduleFixtureSelection(t, dir)
+	testutil.FailErr(t, "fixture generation mount", unix.Mount(spec.Generation.GenerationRoot, spec.Generation.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""))
+	checkInstrumentedModuleStage(t, dir, spec, frame)
+	checkInstrumentedBrokerAgent(t, spec, frame)
+	checkInstrumentedModuleWatcher(t, dir, spec, frame)
+	return nil
 }
