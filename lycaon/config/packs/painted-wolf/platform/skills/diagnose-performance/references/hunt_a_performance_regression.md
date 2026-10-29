@@ -4,7 +4,7 @@
 
 ## Workflow
 
-1. **Build the repeatable measurement.** A benchmark, a timed command (`time -p CMD` reports real, user and sys seconds on stderr), a request with a fixed payload. Fix the input, the machine, the power state, and the cache condition, and write them down — they are part of the number.
+1. **Build the repeatable measurement.** A benchmark, a timed command, a request with a fixed payload. Fix the input, the machine, the power state, and the cache condition, and write them down — they are part of the number.
 2. **Measure the noise floor before trusting any comparison.** Run it at least 5 times *on the same commit* and record the spread:
 
    ```text

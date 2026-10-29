@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -64,8 +63,6 @@ type evaluation struct {
 	sources      []SourceRecord
 	jobs         []string
 	procSubstFDs map[int]bool
-	// cpuUnmeasured is set when a time report counted native operations.
-	cpuUnmeasured atomic.Bool
 }
 
 // charge counts one unit of a cumulative program ceiling before the work it
@@ -184,8 +181,7 @@ func (e *evaluation) outcome(root *frame) ProgramOutcome {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := ProgramOutcome{Status: root.state.control.Status(), Exited: root.state.control.Exited(),
-		Children: append([]ChildRecord(nil), e.children...), Sources: append([]SourceRecord(nil), e.sources...), Jobs: append([]string(nil), e.jobs...),
-		CPUTimeUnmeasured: e.cpuUnmeasured.Load()}
+		Children: append([]ChildRecord(nil), e.children...), Sources: append([]SourceRecord(nil), e.sources...), Jobs: append([]string(nil), e.jobs...)}
 	if stop, ok := root.state.latch.Stop(); ok {
 		out.Stop = &stop
 	}

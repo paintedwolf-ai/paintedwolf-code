@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLanguageV1SnapshotsAreDetached(t *testing.T) {

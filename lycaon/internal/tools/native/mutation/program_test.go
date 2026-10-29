@@ -129,9 +129,9 @@ func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *te
 	testutil.FailErr(t, "create outside fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
 
-	// The OS temporary directory in its own spelling, which on macOS runs
-	// through a linked parent (/tmp or /var).
-	tmpDir := t.TempDir()
+	tmpDir, err := os.MkdirTemp("/tmp", "paintedwolf-temp-allow-") //nolint:usetesting // Exercises the /tmp OS temp write root explicitly.
+	testutil.FailErr(t, "create /tmp fixture dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	tmpFile := filepath.Join(tmpDir, "allowed.txt")
 	tmpSub := filepath.Join(tmpDir, "sub")
@@ -140,10 +140,10 @@ func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *te
 		t.Fatalf("OS temp write refused below Strict: err=%v stop=%+v", err, out.Stop)
 	}
 	if data, readErr := os.ReadFile(tmpFile); readErr != nil || string(data) != "temp-ok\n" {
-		t.Fatalf("temp redirect write = %q, %v", data, readErr)
+		t.Fatalf("/tmp redirect write = %q, %v", data, readErr)
 	}
 	if info, statErr := os.Stat(tmpSub); statErr != nil || !info.IsDir() {
-		t.Fatalf("temp mkdir = %v, %v", info, statErr)
+		t.Fatalf("/tmp mkdir = %v, %v", info, statErr)
 	}
 
 	redirectTarget := filepath.Join(outsideDir, "redirect.txt")

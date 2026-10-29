@@ -38,7 +38,7 @@ func (t *WriteTool) applyPinnedStream(ctx context.Context, input WriteInput, tc 
 		}
 		digest, resultBytes = landed.publishedSHA256, int64(landed.bytes)
 	} else {
-		result, err := applyAgentStream(ctx, tc, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: io.LimitReader(input.Source, input.SourceBytes+1), Mode: newFileMode(input.Mode),
+		result, err := applyAgentStream(ctx, tc, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: io.LimitReader(input.Source, input.SourceBytes+1),
 			BeforeCommit: func(current fseffect.Target, staged fseffect.Result) error {
 				if staged.Bytes != input.SourceBytes {
 					return errors.New("exact write stream length changed")

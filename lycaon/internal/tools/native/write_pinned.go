@@ -227,7 +227,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		proposed = append(append([]byte(nil), raw...), input.Bytes...)
 	}
 	land := func(final []byte) (landing, error) {
-		landed, err := landPinnedBytes(ctx, tctx, resolved, input.Destination, input.Mode, final, admitSources)
+		landed, err := landPinnedBytes(ctx, tctx, resolved, input.Destination, final, admitSources)
 		if conflictsWithPin(err) {
 			return landing{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: input.Destination, Cause: err}
 		}
@@ -257,8 +257,8 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 // journals and keeps any replaced file recoverable. Immediately before commit
 // the destination must still hold the captured bytes (or still be absent),
 // and admitSources rechecks the inputs the bytes came from.
-func landPinnedBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, mode os.FileMode, final []byte, admitSources func() error) (landing, error) {
-	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: bytes.NewReader(final), Mode: newFileMode(mode),
+func landPinnedBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, final []byte, admitSources func() error) (landing, error) {
+	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: bytes.NewReader(final),
 		BeforeCommit: func(current fseffect.Target, _ fseffect.Result) error {
 			if err := verifyRawBase(current, resolved.DisplayPath, pin.DiskSHA256); err != nil {
 				return err

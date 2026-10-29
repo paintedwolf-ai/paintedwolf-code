@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -27,13 +26,13 @@ import (
 // fixtureHost is the injected host-facts port; it is the owner's seam for
 // identity and system queries, not a replacement for any OS call.
 type fixtureHost struct {
-	system   hostos.System
-	identity hostos.Identity
+	system   SystemFacts
+	identity IdentityFacts
 	err      error
 }
 
-func (h fixtureHost) System(context.Context) (hostos.System, error)     { return h.system, h.err }
-func (h fixtureHost) Identity(context.Context) (hostos.Identity, error) { return h.identity, h.err }
+func (h fixtureHost) System(context.Context) (SystemFacts, error)     { return h.system, h.err }
+func (h fixtureHost) Identity(context.Context) (IdentityFacts, error) { return h.identity, h.err }
 func (h fixtureHost) Processors(_ context.Context, all bool) (int, error) {
 	if all {
 		return 8, h.err
@@ -43,8 +42,8 @@ func (h fixtureHost) Processors(_ context.Context, all bool) (int, error) {
 
 func defaultHost() fixtureHost {
 	return fixtureHost{
-		system:   hostos.System{Sysname: "FixtureOS", Nodename: "fixture-host", Release: "1.2.3", Version: "#1 fixture", Machine: "fx64"},
-		identity: hostos.Identity{User: "fixture-user", UID: 501, GID: 20, Groups: []int{20, 12}, GroupNames: map[int]string{20: "staff", 12: "everyone"}},
+		system:   SystemFacts{Sysname: "FixtureOS", Nodename: "fixture-host", Release: "1.2.3", Version: "#1 fixture", Machine: "fx64"},
+		identity: IdentityFacts{User: "fixture-user", UID: 501, GID: 20, Groups: []int{20, 12}, GroupNames: map[int]string{20: "staff", 12: "everyone"}},
 	}
 }
 

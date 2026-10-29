@@ -39,7 +39,7 @@ func TestNumericJobReferenceRefusesReusedKernelInstance(t *testing.T) {
 		t.Fatalf("observe current process: %v", err)
 	}
 	process.Instance += "-stale"
-	jobs := &SessionJobs{processes: map[string]jobProcess{"owned": {Identity: process}}, order: []string{"owned"}, numbers: map[string]int{"owned": 1}}
+	jobs := &SessionJobs{processes: map[string]jobProcess{"owned": {Identity: process}}, order: []string{"owned"}}
 	if handle, err := jobs.Resolve(strconv.Itoa(process.PID)); err == nil {
 		t.Fatalf("stale PID resolved to %q", handle)
 	}

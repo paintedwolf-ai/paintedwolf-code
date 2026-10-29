@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
@@ -33,9 +32,6 @@ type StageRun struct {
 	Skipped bool
 	// Connector is empty for the first stage and defaults to a pipe for subsequent stages.
 	Connector argv.Connector
-	// UserTime and SystemTime are the processor time the stage's process
-	// reported when it was reaped.
-	UserTime, SystemTime time.Duration
 }
 
 // ExitStatus reports the stage's exit code, or -1 for a stage that never ran.
@@ -531,10 +527,6 @@ func exitCodeFromWait(err error) int {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		// A shell reports a process a signal ended as 128 plus the signal.
-		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			return 128 + int(status.Signal())
-		}
 		return exitErr.ExitCode()
 	}
 	return -1

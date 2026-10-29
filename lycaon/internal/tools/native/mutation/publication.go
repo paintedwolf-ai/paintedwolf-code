@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -195,8 +194,6 @@ type pinnedTarget struct {
 	abs    string
 	pin    toolcontract.ExecutionRevision
 	append bool
-	// mode is the permission a created file gets; zero is the ordinary mode.
-	mode os.FileMode
 }
 
 // captureDestination pins abs and appends the pin at the execution's next
@@ -219,7 +216,7 @@ func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, target pinne
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
 	return o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes, Memory: o.Revisions.Memory,
-		Admission: native.WriteExecutionPinned, Destination: target.pin, Mode: target.mode}, tc)
+		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
 }
 
 // fileStage holds one destination's bytes until the evaluator publishes or

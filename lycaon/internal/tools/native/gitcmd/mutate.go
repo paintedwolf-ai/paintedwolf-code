@@ -165,8 +165,7 @@ func runCommit(ctx context.Context, p Prepared, tc tools.ToolContext, dir string
 			}
 		}
 	}
-	hash, staging, err := mut.Commit(ctx, tc, native.GitCommitRequest{Message: msg, Paths: paths, Staged: staged, Amend: has(p.Argv, "--amend"),
-		IdentityName: p.command.configValue("user.name"), IdentityEmail: p.command.configValue("user.email")})
+	hash, staging, err := mut.Commit(ctx, tc, native.GitCommitRequest{Message: msg, Paths: paths, Staged: staged, Amend: has(p.Argv, "--amend")})
 	if err != nil {
 		var cf *git.CommitFailed
 		if errors.As(err, &cf) {

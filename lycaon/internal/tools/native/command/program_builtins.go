@@ -150,7 +150,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 			}
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return readFailure(err), err
+			return ownerFailure(err), err
 		}
 		return readResult(0), nil
 	})
@@ -209,14 +209,6 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 
 func readResult(status int) toolcontract.ProducerResult {
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
-}
-
-// readFailure is a read-only builtin whose output could not be written: it
-// changed nothing, so a reader that finished first settles it as a closed pipe.
-func readFailure(err error) toolcontract.ProducerResult {
-	result := ownerFailure(err)
-	result.EffectCertainty = toolcontract.NoEffect
-	return result
 }
 
 // argvRejection projects a binder refusal with its exact word span. A typed

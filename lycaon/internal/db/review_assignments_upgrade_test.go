@@ -92,22 +92,15 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	testutil.FailErr(t, "read migration ledger", err)
 	defer ledger.Close()
 	next := -1
-	stepsFromRelease := 0
 	for ledger.Next() {
 		var from, to int
 		testutil.FailErr(t, "scan migration ledger", ledger.Scan(&from, &to))
 		if next >= 0 && from != next {
 			t.Fatalf("migration ledger skips from revision %d to %d", next, from)
 		}
-		if from == released.Revision {
-			stepsFromRelease++
-		}
 		next = to
 	}
 	testutil.FailErr(t, "iterate migration ledger", ledger.Err())
-	if stepsFromRelease != 1 {
-		t.Fatalf("migration ledger has %d steps from released revision %d, want 1", stepsFromRelease, released.Revision)
-	}
 	if next != target.Revision {
 		t.Fatalf("migration ledger ends at revision %d, want %d", next, target.Revision)
 	}

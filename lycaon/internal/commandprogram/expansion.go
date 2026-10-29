@@ -197,7 +197,7 @@ func (e *WordExpander) begin(ctx context.Context, scope ExpansionScope, word com
 	run := &expansionRun{ctx: ctx, expander: e, scope: scope, span: word.Span, mode: mode}
 	ifs, set := scope.Variable("IFS")
 	if !set {
-		ifs = defaultIFS
+		ifs = " \t\n"
 	}
 	run.assembly = fieldAssembly{limits: &e.limits, span: word.Span, ifs: ifs, charge: func(n int64) error { return run.charge(ctx, n) }}
 	return run, nil

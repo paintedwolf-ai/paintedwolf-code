@@ -5,7 +5,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -35,7 +34,7 @@ func registerCommandTools(
 		return err
 	}
 	ft := command.NewCommandFailureTracker()
-	hostUtilities, err := hostenv.NewOwners(hostos.Host{}, time.Now)
+	hostUtilities, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
 	if err != nil {
 		return err
 	}

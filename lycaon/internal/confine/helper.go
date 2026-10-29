@@ -71,7 +71,6 @@ func runHelper(args []string) error {
 	helperPinnedFinal = false
 	helperPinnedHostExecution = false
 	var target []string
-	var attributes ProcessAttributes
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag, pinExecutableFDFlag, pinReleaseFDFlag:
@@ -110,18 +109,6 @@ func runHelper(args []string) error {
 			helperPinnedFinal = true
 		case pinHostExecutionFlag:
 			helperPinnedHostExecution = true
-		case ignoreHangupFlag:
-			attributes.IgnoreHangup = true
-		case resourceLimitFlag:
-			if i+1 >= len(args) {
-				return fmt.Errorf("%s requires a value", resourceLimitFlag)
-			}
-			limit, err := parseResourceLimit(args[i+1])
-			if err != nil {
-				return err
-			}
-			attributes.Limits = append(attributes.Limits, limit)
-			i++
 		case "--":
 			target = args[i+1:]
 			i = len(args)
@@ -188,9 +175,6 @@ func runHelper(args []string) error {
 			return &CommandNotFoundError{Name: name}
 		}
 		resolved = p
-	}
-	if err := applyProcessAttributes(attributes); err != nil {
-		return err
 	}
 	if helperPinnedHostExecution {
 		// The host selected explicit host execution before constructing this helper.

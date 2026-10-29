@@ -132,11 +132,7 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}
-			offset := firstNull
-			if offset < 0 {
-				offset = line.Start
-			}
-			if err := r.binaryNotice(label, names, offset); err != nil {
+			if err := r.binaryNotice(label); err != nil {
 				return err
 			}
 			return errBinaryStop
@@ -188,19 +184,12 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 	return nil
 }
 
-// binaryNotice reports a matching binary file: grep on stderr; rg on stdout
-// with the offset of the byte that made the file binary, prefixed by the
-// file name when several files are searched.
-func (r *grepRun) binaryNotice(label string, names bool, offset int) error {
+func (r *grepRun) binaryNotice(label string) error {
 	if !r.rg {
 		r.inv.warn(false, "%s: binary file matches", label)
 		return nil
 	}
-	prefix := ""
-	if names {
-		prefix = label + ": "
-	}
-	return r.inv.out.text(fmt.Sprintf("%sbinary file matches (found \"\\0\" byte around offset %d)\n", prefix, offset))
+	return r.inv.out.text(fmt.Sprintf("Binary file %s matches\n", label))
 }
 
 // printLine writes one selected or context record; with -o it writes each

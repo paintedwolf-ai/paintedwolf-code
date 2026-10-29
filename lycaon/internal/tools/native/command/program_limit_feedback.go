@@ -2,21 +2,18 @@ package command
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// writeLimitRefusal writes a typed resource stop as one shell-voice line; the
-// structured rejection keeps the exact limit and source facts.
-func writeLimitRefusal(w io.Writer, command, subject string, reject *toolrejection.ToolReject) {
-	if w == nil || !programResourceRefusal(reject) {
+// writeLimitRefusal presents only the typed program budget stop in shell voice.
+// The structured rejection keeps the exact limit and source facts.
+func writeLimitRefusal(streams commandprogram.Streams, command string, reject *toolrejection.ToolReject) {
+	if streams.Error == nil || reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" {
 		return
-	}
-	if subject == "" || strings.HasPrefix(subject, "-") {
-		subject = "request"
 	}
 	reason := "limit exceeded"
 	if catalog, err := guidance.LoadHintConfigStock(); err == nil && catalog != nil {
@@ -26,5 +23,5 @@ func writeLimitRefusal(w io.Writer, command, subject string, reject *toolrejecti
 			}
 		}
 	}
-	_, _ = fmt.Fprintf(w, "%s: %s: %s [%s]\n", command, subject, reason, reject.Code)
+	_, _ = fmt.Fprintf(streams.Error, "%s: request: %s [%s]\n", command, reason, reject.Code)
 }

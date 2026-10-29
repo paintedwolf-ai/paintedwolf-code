@@ -32,12 +32,9 @@ func mutationProgramFixture(t *testing.T) *programtest.Fixture {
 			Extract: &native.ExtractArchiveTool{Boundary: boundary},
 		})
 		testutil.FailErr(t, "mutation operations", err)
-		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-			program := *mutations
-			program.Revisions.Memory, program.Admission = memory, admission
-			mutations := &program
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, _ *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			natives := map[string]command.NativeOperation{}
-			for _, name := range []string{"touch", "mv", "mktemp"} {
+			for _, name := range []string{"touch", "mv"} {
 				tool, _ := mutations.Operation(name)
 				natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 					prepared, err := mutations.Prepare(mutation.Program{Paths: frame}, request)
@@ -110,26 +107,5 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	}
 	if _, err := os.Stat(scratchFile); !os.IsNotExist(err) {
 		t.Fatalf("move retained scratch source: %v", err)
-	}
-}
-
-// A file mktemp creates is private, and moving it into the project keeps that
-// mode.
-func TestProgramMktempMoveKeepsPrivateMode(t *testing.T) {
-	f := mutationProgramFixture(t)
-	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Save saved.txt"))
-	raw, err := f.Call(t, t.Context(), `p=$(mktemp) && printf 'saved\n' > "$p" && mv "$p" saved.txt`)
-	testutil.FailErr(t, "run mktemp and move", err)
-	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
-		t.Fatalf("mktemp move = %+v", outcome)
-	}
-	saved := filepath.Join(f.Dir, "saved.txt")
-	info, err := os.Stat(saved)
-	testutil.FailErr(t, "stat moved file", err)
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("moved file mode = %v, want 0600", info.Mode().Perm())
-	}
-	if body, err := os.ReadFile(saved); err != nil || string(body) != "saved\n" {
-		t.Fatalf("moved file = %q, %v", body, err)
 	}
 }

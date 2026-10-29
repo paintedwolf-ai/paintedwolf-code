@@ -17,9 +17,6 @@ type GitCommitOpts struct {
 	Message string
 	Paths   []string
 	Amend   bool
-	// IdentityName and IdentityEmail, when set, replace the resolved author
-	// and committer fields.
-	IdentityName, IdentityEmail string
 }
 
 // Commit stages paths and creates or amends a commit.
@@ -70,12 +67,6 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 		}
 	}
 	identity := commitIdentity(ctx, dir)
-	if opts.IdentityName != "" {
-		identity.Name = opts.IdentityName
-	}
-	if opts.IdentityEmail != "" {
-		identity.Email = opts.IdentityEmail
-	}
 	out, code, err := gitexec.Run(ctx, dir, commitArgs(opts), gitexec.Opts{Profile: gitexec.ProfileHermetic, Identity: &identity})
 	if err != nil {
 		return "", err

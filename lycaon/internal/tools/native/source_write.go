@@ -106,14 +106,6 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 	return finishAgentMutation(ctx, tctx, mutation, journal, err)
 }
 
-// newFileMode is a request's creation mode; zero leaves the ordinary mode.
-func newFileMode(mode os.FileMode) *os.FileMode {
-	if mode == 0 {
-		return nil
-	}
-	return &mode
-}
-
 type agentStreamRequest struct {
 	Memory *toolcontract.ProgramMemory
 	// CopyBuffer is caller-admitted scratch retained until the stage closes.

@@ -87,7 +87,7 @@ frozen `commandsurface.ProgramSnapshot`. It walks `;`, `&&`, `||`, `!`,
 pipelines, braces and isolated `( )` frames, `if`/`elif`/`else`, `for`,
 `while`, `until`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
 `exit`/`return`/`break`/`continue`, assignments, `export`/`unset`,
-redirections, here-documents, here-strings, `time [-p]`, `ulimit` and statement-trailing `&`. Every simple command
+redirections, here-documents, here-strings and statement-trailing `&`. Every simple command
 is expanded through `Expander` when reached and dispatched through `Dispatch`:
 catalog names bind first through `ArgvBinder` and `Invoke`; other programs and
 `external --` use `Launch`. Unsupported option spellings refuse with the
@@ -234,21 +234,3 @@ Typed completeness and eligibility remain separate from ordinary status and
 verification evidence: native comparison status 1 may publish, while unclassified
 external status 1 cannot. Destination review, revision checks, publication and
 recovery remain with their existing operation domains.
-
-## Supervision prefixes and child process attributes
-
-`timeout` and `nohup` are dispatch prefixes beside `env`: their owner runs
-the COMMAND operand through `NestedCommand`, so it binds and is admitted like
-a reached command. `OperationRequest.Process` (`ChildProcess`) carries what an
-external launch for that request starts with, and a prefix passes it to its
-inner command: resource limits, an ignored SIGHUP, the `SignalRelay` timeout
-signals through, and the `ProcessTimes` account of an enclosing `time`.
-`RunTimeout` is the expiry state machine over an injected `Clock`: the signal
-goes to the process the inner command attached to the relay, a native inner
-command is interrupted through its context, KILL follows after `-k`, and the
-caller's context always wins. `time` reads the clock around the pipeline and
-reports processor time that external children reported when reaped; native
-operations count zero and set `ProgramOutcome.CPUTimeUnmeasured`. `ulimit`
-keeps a frame's `childLimits`: the first use pins the reported or set limits,
-which every later external child of the frame receives, and a `( )` frame
-keeps its own copy.
