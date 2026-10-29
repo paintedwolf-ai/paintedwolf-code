@@ -22,7 +22,6 @@ func TestWorkflowReadOnlyFileRefusesNativePublication(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := newCommandProgramSession(t, c.program, "")
-			s.h.SeedProgress(t, t.Context(), s.session)
 			locked := filepath.Join(s.dir, "locked.txt")
 			testutil.FailErr(t, "seed locked file", os.WriteFile(locked, []byte("original\n"), 0o644))
 			testutil.FailErr(t, "lock file", os.Chmod(locked, 0o444))
