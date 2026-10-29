@@ -6,15 +6,7 @@ import (
 	"time"
 )
 
-const (
-	// UnlockIdle closes an unlock when no held value has been used for this long.
-	UnlockIdle = 15 * time.Minute
-	// UnlockCeiling closes an unlock this long after presence opened it,
-	// however busy the chat is.
-	UnlockCeiling = 4 * time.Hour
-
-	sweepInterval = 30 * time.Second
-)
+const sweepInterval = 30 * time.Second
 
 // EndReason says why an unlock ended.
 type EndReason string
@@ -24,8 +16,10 @@ const (
 	EndCeiling      EndReason = "ceiling"
 	EndScreenLocked EndReason = "screen_locked"
 	EndSleep        EndReason = "sleep"
-	EndAppQuit      EndReason = "app_quit"
-	EndManual       EndReason = "manual"
+	// EndAway: the person's input stayed idle for the desktop's step-away period.
+	EndAway    EndReason = "away"
+	EndAppQuit EndReason = "app_quit"
+	EndManual  EndReason = "manual"
 	// EndRenewed: presence unlocked the same chat afresh.
 	EndRenewed EndReason = "renewed"
 	// EndRestart: the engine stopped while the unlock was open.
@@ -35,7 +29,7 @@ const (
 // IsLockReason reports whether reason names a lock a client may request.
 func IsLockReason(reason EndReason) bool {
 	switch reason {
-	case EndScreenLocked, EndSleep, EndAppQuit, EndManual:
+	case EndScreenLocked, EndSleep, EndAway, EndAppQuit, EndManual:
 		return true
 	case EndIdle, EndCeiling, EndRenewed, EndRestart:
 		return false
@@ -47,6 +41,7 @@ func IsLockReason(reason EndReason) bool {
 // Unlock is one chat's open unlock: a person verified presence, so the
 // chat's approved uses of values that person holds may proceed.
 type Unlock struct {
+	revoked *revocation
 	// ID is the presence challenge that opened the unlock.
 	ID            string
 	ChatSessionID string
@@ -61,7 +56,8 @@ type Unlock struct {
 func NewUnlock(chatSessionID string, verified Verified) Unlock {
 	at := verified.VerifiedAt.UTC()
 	return Unlock{
-		ID: verified.ChallengeID, ChatSessionID: chatSessionID, PersonID: verified.PersonID,
+		revoked: verified.revoked,
+		ID:      verified.ChallengeID, ChatSessionID: chatSessionID, PersonID: verified.PersonID,
 		Authenticator: verified.Authenticator, WindowLabel: verified.WindowLabel,
 		UnlockedAt: at, LastUsedAt: at,
 	}
@@ -105,15 +101,16 @@ type unlockEnd struct {
 // Unlocks holds every chat's unlock in memory only, so an engine restart
 // closes them all.
 type Unlocks struct {
+	broker   *Broker
 	mu       sync.Mutex
 	now      func() time.Time
 	byChat   map[string]Unlock
 	observer UnlockObserver
 }
 
-// NewUnlocks returns a registry with every chat locked.
-func NewUnlocks() *Unlocks {
-	return &Unlocks{now: time.Now, byChat: make(map[string]Unlock)}
+// NewUnlocks binds the registry to the broker whose proofs open its chats.
+func NewUnlocks(broker *Broker) *Unlocks {
+	return &Unlocks{broker: broker, now: time.Now, byChat: make(map[string]Unlock)}
 }
 
 // SetClock replaces the registry's clock in tests.
@@ -131,9 +128,19 @@ func (u *Unlocks) SetObserver(observer UnlockObserver) {
 }
 
 // Open starts an unlock. An unlock already open for the chat ends as renewed.
-func (u *Unlocks) Open(opened Unlock) {
+func (u *Unlocks) Open(opened Unlock) bool {
 	u.mu.Lock()
 	now := u.now().UTC()
+	if revoked := u.broker.revoked.Load(); opened.revoked != revoked {
+		observer := u.observer
+		u.mu.Unlock()
+		reason := EndRestart
+		if revoked != nil {
+			reason = revoked.reason
+		}
+		u.notify(observer, []unlockEnd{{opened, reason}}, now, opened.ChatSessionID)
+		return false
+	}
 	var ended []unlockEnd
 	if previous, ok := u.byChat[opened.ChatSessionID]; ok {
 		ended = append(ended, unlockEnd{previous, EndRenewed})
@@ -142,6 +149,7 @@ func (u *Unlocks) Open(opened Unlock) {
 	observer := u.observer
 	u.mu.Unlock()
 	u.notify(observer, ended, now, opened.ChatSessionID)
+	return true
 }
 
 // Active returns the chat's open unlock, ending it first if it has lapsed.
@@ -199,6 +207,10 @@ func (u *Unlocks) Lock(chatSessionID string, reason EndReason) bool {
 
 // LockAll ends every unlock, as when the person steps away from the device.
 func (u *Unlocks) LockAll(reason EndReason) int {
+	if u == nil {
+		return 0
+	}
+	u.broker.invalidate(reason)
 	return u.close(func(Unlock, time.Time) (EndReason, bool) { return reason, true })
 }
 
