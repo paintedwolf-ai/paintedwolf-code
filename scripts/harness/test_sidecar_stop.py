@@ -21,8 +21,7 @@ class DevelopmentStopTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.engine = self.bin / "pw"
-        shutil.copyfile(shutil.which("sleep"), self.engine)
-        self.engine.chmod(0o700)
+        self.engine.symlink_to(shutil.which("sleep"))
         self.config = self.root / "dev"
         (self.config / "locks").mkdir(parents=True)
         self.env = dict(os.environ, LYCAON_CONFIG_DIR=str(self.config), LYCAON_ADDR="127.0.0.1:0",
