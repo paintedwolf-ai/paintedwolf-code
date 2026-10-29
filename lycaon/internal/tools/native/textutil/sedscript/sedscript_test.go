@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type engine struct{ posix textsearch.POSIXEngine }
@@ -58,10 +59,27 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := Parse(t.Context(), f.script, f.extended, engine{posix})
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {
+		t.Fatal(err)
+	}
+	memory, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Parse(t.Context(), memory, f.script, f.extended, engine{posix})
+	if err != nil {
+		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("failed parse leaked memory: %+v", memory.InUse())
+		}
 		return "", nil, 0, err
 	}
+	defer func() {
+		program.Close()
+		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("closed program leaked memory: %+v", memory.InUse())
+		}
+	}()
 	delimiter := byte('\n')
 	if f.nul {
 		delimiter = 0
@@ -73,7 +91,13 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 		buffers[name] = &bytes.Buffer{}
 		writers[name] = buffers[name]
 	}
-	m, err := NewMachine(t.Context(), program, Config{Quiet: f.quiet || program.Quiet(), Delimiter: delimiter, SpaceLimit: 1 << 20, StepLimit: 1000, Stdout: &stdout, Writers: writers, Files: f.files})
+	m, err := NewMachine(t.Context(), program, Config{Quiet: f.quiet || program.Quiet(), Delimiter: delimiter, SpaceLimit: 1 << 20, StepLimit: 1000, Stdout: &stdout, Writers: writers, OpenFile: func(name string) (ReadFile, error) {
+		data, ok := f.files[name]
+		if !ok {
+			return nil, nil
+		}
+		return &fixtureFile{Buffer: bytes.NewBuffer(data)}, nil
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,4 +220,19 @@ func TestRefusalsAndLimits(t *testing.T) {
 	if _, _, _, err := (fixture{script: "s//x/", inputs: []string{"a\n"}}).run(t, false); !errors.As(err, &runtime) {
 		t.Fatalf("empty regex first: %v", err)
 	}
+}
+
+type fixtureFile struct{ *bytes.Buffer }
+
+func (f *fixtureFile) Close() error { return nil }
+func (f *fixtureFile) Next() (Record, error) {
+	text, err := f.ReadBytes('\n')
+	if len(text) == 0 {
+		return Record{}, err
+	}
+	terminated := text[len(text)-1] == '\n'
+	if terminated {
+		text = text[:len(text)-1]
+	}
+	return Record{Text: text, Terminated: terminated}, nil
 }

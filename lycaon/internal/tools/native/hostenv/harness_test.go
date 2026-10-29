@@ -99,7 +99,7 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 	exec.SetResolvedPathSource(func() string { return bin })
 	t.Cleanup(func() { exec.SetResolvedPathSource(nil) })
 	clock := &fixtureClock{at: time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("fixture", 5*3600))}
-	owners, err := NewOwners(host, clock.now, nil)
+	owners, err := NewOwners(host, clock.now)
 	testutil.FailErr(t, "owners", err)
 	tc := tools.ToolContext{
 		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
@@ -178,4 +178,5 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 // catalogBindings binds every catalog native, as a fully wired program does.
 type catalogBindings struct{}
 
-func (catalogBindings) NativeBound(string) bool { return true }
+func (catalogBindings) NativeBound(string) bool   { return true }
+func (catalogBindings) BaseEnvironment() []string { return nil }

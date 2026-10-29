@@ -37,9 +37,9 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 		"# Coordinator prompt dump",
 		"surface_id: `implement_investigate`",
 		"## core",
-		"Workspace: " + root,
+		"Project folder: " + root,
 		"load through `request_tools`",
-		"Host runner and sandbox",
+		"Sandbox and worker checks",
 		strings.TrimSpace(summaryGuidance),
 		"excludes device/project skills",
 	} {

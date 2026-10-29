@@ -33,8 +33,13 @@ func (t *WriteTool) applyPinned(ctx context.Context, input WriteInput, tctx tool
 			return WriteResult{}, unsupportedWriteAdmission()
 		}
 	}
-	revisions := ExecutionRevisions{Boundary: t.Boundary}
-	st, current, err := captureRevision(ctx, tctx, resolved, toolcontract.DestinationRevision)
+	revisions := ExecutionRevisions{Boundary: t.Boundary, Memory: input.Memory}
+	releaseMetadata, err := revisions.reserveWorking(ctx, 4*readcaps.MaxMutationBytes+(64<<10))
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer releaseMetadata()
+	st, current, err := captureDestinationRevision(ctx, tctx, resolved)
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -148,8 +153,32 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 			return WriteResult{}, unsupportedWriteAdmission()
 		}
 	}
-	revisions := ExecutionRevisions{Boundary: t.Boundary}
-	st, current, raw, err := captureDestinationBytes(ctx, tctx, resolved)
+	revisions := ExecutionRevisions{Boundary: t.Boundary, Memory: input.Memory}
+	releaseMetadata, err := revisions.reserveWorking(ctx, 4*readcaps.MaxMutationBytes+(64<<10))
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer releaseMetadata()
+	if input.Source != nil {
+		if input.SourceBytes > readcaps.MaxMutationBytes {
+			return t.applyPinnedStream(ctx, input, tctx, resolved, revisions)
+		}
+		releaseBytes, err := revisions.reserveWorking(ctx, 2*input.SourceBytes)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		defer releaseBytes()
+		input.Bytes = make([]byte, int(input.SourceBytes))
+		if _, err := io.ReadFull(input.Source, input.Bytes); err != nil {
+			return WriteResult{}, err
+		}
+		var extra [1]byte
+		if n, err := io.ReadFull(input.Source, extra[:]); n != 0 || err != io.EOF {
+			return WriteResult{}, errors.New("exact write stream length changed")
+		}
+	}
+	st, current, raw, releaseRaw, err := revisions.captureDestinationBytes(ctx, tctx, resolved, input.Append)
+	defer releaseRaw()
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -180,8 +209,21 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 			return landed, err
 		})
 	}
+	if input.Append && exists && (st.Disk == nil || int64(len(st.Content))+int64(len(input.Bytes)) > readcaps.MaxMutationBytes) {
+		result, err := landPinnedAppend(ctx, tctx, resolved, input.Destination, bytes.NewReader(input.Bytes), int64(len(input.Bytes)), admitSources)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		afterSuccessfulMutation(ctx, tctx, resolved.DisplayPath)
+		return WriteResult{Path: resolved.DisplayPath, Appended: true, InputBytes: len(input.Bytes), ResultBytes: result.bytes, Accepted: true, Saved: true, PublishedSHA256: result.publishedSHA256}, nil
+	}
 	proposed := input.Bytes
 	if input.Append && exists {
+		releaseAppend, err := revisions.reserveWorking(ctx, 2*int64(len(raw))+int64(len(input.Bytes)))
+		if err != nil {
+			return WriteResult{}, err
+		}
+		defer releaseAppend()
 		proposed = append(append([]byte(nil), raw...), input.Bytes...)
 	}
 	land := func(final []byte) (landing, error) {
@@ -192,7 +234,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		return landed, err
 	}
 	// Bytes the text door accepts keep its gates; everything else is binary.
-	if utf8.Valid(proposed) && guardMutationContent("write", resolved.DisplayPath, string(proposed)) == nil {
+	if len(proposed) <= readcaps.MaxMutationBytes && utf8.Valid(proposed) && guardMutationContent("write", resolved.DisplayPath, string(proposed)) == nil {
 		var before *string
 		if exists && st.Disk != nil {
 			text := st.Content

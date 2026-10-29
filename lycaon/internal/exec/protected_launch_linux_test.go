@@ -163,7 +163,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
 		t.Fatalf("a launch without the broker = %v, want refusal", err)
 	}
-	if _, err := StartInOwnGroup(&exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
+	if _, err := StartInOwnGroup(t.Context(), &exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
 		t.Fatal("StartInOwnGroup with missing binary succeeded")
 	}
 

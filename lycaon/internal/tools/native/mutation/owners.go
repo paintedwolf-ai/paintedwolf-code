@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -46,6 +47,7 @@ type Owners struct {
 	Revisions  native.ExecutionRevisions
 	Pins       PinRecorder
 	Operations Operations
+	Admission  tooloutput.SpillAdmission
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -140,12 +142,9 @@ type Prepared struct {
 	run       utility
 }
 
-// Program is one invocation's logical cwd and publication barrier. Every
-// write the program's utilities and redirects accept is tracked on Barrier so
-// a dependent external launch waits for it.
+// Program is one invocation's logical cwd.
 type Program struct {
-	Paths   *projectpaths.ProgramPaths
-	Barrier *native.PublicationBarrier
+	Paths *projectpaths.ProgramPaths
 }
 
 // Prepare binds a reached command through the catalog option grammar. It
@@ -156,7 +155,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	}
 	command := request.Argv[0].Value
 	spec, ok := o.specs[command]
-	if !ok || program.Paths == nil || program.Barrier == nil {
+	if !ok || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a mutation command", command)
 	}
 	if request.OperationID != command {
@@ -191,7 +190,7 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 		}
 		return "create-extract-compress-decompress-to-path"
 	case "gunzip":
-		if hasOpt("-c") {
+		if hasOpt("-c") || len(bound.Operands()) == 0 {
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"
@@ -206,6 +205,12 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("mutation invocation is not prepared")
+	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
 	err := p.run(inv)

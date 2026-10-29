@@ -1,0 +1,474 @@
+{
+  "commands": [
+    {
+      "name": "set",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "set [-e|-u|+e|+u|-o OPTION|+o OPTION]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Updated the selected program options.",
+        "2": "Unsupported option or missing option name."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "set -e",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "set-operands-valid",
+        "set-rejection"
+      ]
+    },
+    {
+      "name": "read",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "read [-r] [-d DELIM] [NAME ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "read-option-r",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 1,
+          "value_role": "delimiter",
+          "fixture_id": "read-option-d",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
+        }
+      ],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Read a complete delimited record and assigned its fields.",
+        "1": "Reached end of input before a delimiter; retained any fields read.",
+        "2": "Invalid options or target variable name."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'alpha\\n' | read VALUE",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "read-operands-valid",
+        "read-rejection"
+      ]
+    },
+    {
+      "name": "break",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "break [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the selected evaluator state change.",
+        "2": "Invalid arguments or use outside the required loop or function."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "for value in a; do break; done",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "break-operands-valid",
+        "break-rejection"
+      ]
+    },
+    {
+      "name": "continue",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "continue [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the selected evaluator state change.",
+        "2": "Invalid arguments or use outside the required loop or function."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "for value in a; do continue; done",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "continue-operands-valid",
+        "continue-rejection"
+      ]
+    },
+    {
+      "name": "return",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "return [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Selected status zero.",
+        "1": "Selected status one.",
+        "2": "Selected status two, invalid arguments, or return outside a function or sourced unit."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "f() { return 0; }; f",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. An explicit status from 0 through 255 is preserved; without an operand, the prior status is preserved.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "return-operands-valid",
+        "return-rejection"
+      ]
+    },
+    {
+      "name": "exit",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "exit [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Selected status zero.",
+        "1": "Selected status one.",
+        "2": "Selected status two or invalid arguments."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "exit 0",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. An explicit status from 0 through 255 is preserved; without an operand, the prior status is preserved.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "exit-operands-valid",
+        "exit-rejection"
+      ]
+    }
+  ]
+}

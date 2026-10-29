@@ -249,4 +249,16 @@ func TestBoundArgvAccessorsAndReviewProjection(t *testing.T) {
 	if err != nil || empty.Review("pwd").Options == nil || len(empty.Review("pwd").Operands) != 0 {
 		t.Fatalf("empty review %+v %v", empty.Review("pwd"), err)
 	}
+	helpBound, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "--help"))
+	if err != nil || !helpBound.Help {
+		t.Fatalf("grep --help: %v %+v", err, helpBound)
+	}
+	literalHelp, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "--", "--help", "file"))
+	if err != nil || literalHelp.Help {
+		t.Fatalf("grep -- --help: %v %+v", err, literalHelp)
+	}
+	valueHelp, err := CatalogBinder{}.Bind(catalogCommand(t, "grep"), argvFields("grep", "-e", "--help", "file"))
+	if err != nil || valueHelp.Help {
+		t.Fatalf("grep -e --help: %v %+v", err, valueHelp)
+	}
 }

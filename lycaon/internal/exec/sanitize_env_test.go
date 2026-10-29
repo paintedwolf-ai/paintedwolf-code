@@ -29,13 +29,19 @@ func TestReducedEnvironDropsAmbientCredentials(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
 	t.Setenv("GITHUB_TOKEN", "secret")
 	t.Setenv("LANG", "en_US.UTF-8")
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
 	got := ReducedEnviron()
 	joined := strings.Join(got, "\n")
-	if strings.Contains(joined, "AWS_SECRET_ACCESS_KEY=") || strings.Contains(joined, "GITHUB_TOKEN=") {
-		t.Fatalf("ReducedEnviron retained ambient credential: %v", got)
+	if strings.Contains(joined, "AWS_SECRET_ACCESS_KEY=") || strings.Contains(joined, "GITHUB_TOKEN=") || strings.Contains(joined, "COLORTERM=") {
+		t.Fatalf("ReducedEnviron retained ambient credential or COLORTERM: %v", got)
 	}
-	if !strings.Contains(joined, "LANG=en_US.UTF-8") || !strings.Contains(joined, "PATH=") {
-		t.Fatalf("ReducedEnviron dropped process plumbing: %v", got)
+	if !strings.Contains(joined, "LANG=en_US.UTF-8") || !strings.Contains(joined, "PATH=") || !strings.Contains(joined, "TERM=dumb") || !strings.Contains(joined, "PAGER=cat") {
+		t.Fatalf("ReducedEnviron dropped process plumbing or non-interactive terminal defaults: %v", got)
+	}
+	opts, err := AgentLaunchOptions(HostLaunch("exec test"), t.TempDir(), nil, nil)
+	if err != nil || !slices.Contains(opts.AppendEnv, "GIT_PAGER=cat") {
+		t.Fatalf("AgentLaunchOptions AppendEnv = %v, err = %v", opts.AppendEnv, err)
 	}
 	env, err := ProcessEnvironment(ExecOpts{
 		Launch: AgentLaunch(LaunchAgentCommand, "exec test", nil),

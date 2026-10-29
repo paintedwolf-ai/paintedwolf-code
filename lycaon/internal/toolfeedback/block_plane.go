@@ -208,9 +208,6 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 		return
 	}
 	applyObservationToken(gc, obs)
-	if strings.HasPrefix(code, "USE_") {
-		gc.Invocation.HabitRedirectMatch = code
-	}
 	switch code {
 	case "COMMAND_NOT_ARGV":
 		gc.Invocation.CommandNotArgv = true

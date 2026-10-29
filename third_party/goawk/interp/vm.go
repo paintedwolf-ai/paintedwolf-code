@@ -115,7 +115,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			ip++
 			array := p.arrays[arrayIndex]
 			index := p.toString(p.peekTop())
-			v := arrayGet(array, index)
+			v, err := p.arrayGet(array, index)
+			if err != nil {
+				return err
+			}
 			p.replaceTop(v)
 
 		case compiler.ArrayLocal:
@@ -123,7 +126,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			ip++
 			array := p.localArray(int(arrayIndex))
 			index := p.toString(p.peekTop())
-			v := arrayGet(array, index)
+			v, err := p.arrayGet(array, index)
+			if err != nil {
+				return err
+			}
 			p.replaceTop(v)
 
 		case compiler.InGlobal:
@@ -252,7 +258,9 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			ip += 2
 			array := p.arrays[arrayIndex]
 			index := p.toString(p.pop())
-			array[index] = num(array[index].num() + float64(amount))
+			if err := p.assignElement(array, index, num(array[index].num()+float64(amount))); err != nil {
+				return err
+			}
 
 		case compiler.IncrArrayLocal:
 			amount := code[ip]
@@ -260,7 +268,9 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			ip += 2
 			array := p.localArray(int(arrayIndex))
 			index := p.toString(p.pop())
-			array[index] = num(array[index].num() + float64(amount))
+			if err := p.assignElement(array, index, num(array[index].num()+float64(amount))); err != nil {
+				return err
+			}
 
 		case compiler.AugAssignField:
 			operation := compiler.AugOp(code[ip])
@@ -320,7 +330,9 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			if err != nil {
 				return err
 			}
-			array[index] = v
+			if err := p.assignElement(array, index, v); err != nil {
+				return err
+			}
 
 		case compiler.AugAssignArrayLocal:
 			operation := compiler.AugOp(code[ip])
@@ -333,7 +345,9 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			if err != nil {
 				return err
 			}
-			array[index] = v
+			if err := p.assignElement(array, index, v); err != nil {
+				return err
+			}
 
 		case compiler.Regex:
 			// Stand-alone /regex/ is equivalent to: $0 ~ /regex/
@@ -803,7 +817,14 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			// Pop the locals off the stack
 			p.popSlice(f.NumScalars)
 			p.frame = oldFrame
+			p.localArrays[len(p.localArrays)-1] = nil
 			p.localArrays = p.localArrays[:len(p.localArrays)-1]
+			for i := oldArraysLen; i < len(p.arrays); i++ {
+				p.arrays[i] = nil
+				if i < len(p.arrayHighWater) {
+					p.arrayHighWater[i] = 0
+				}
+			}
 			p.arrays = p.arrays[:oldArraysLen]
 
 			if r, ok := err.(returnValue); ok {
@@ -981,7 +1002,9 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			index := p.toString(p.peekTop())
 			if ret == 1 {
 				array := p.array(resolver.Scope(arrayScope), int(arrayIndex))
-				array[index] = numStr(line)
+				if err := p.assignElement(array, index, numStr(line)); err != nil {
+					return err
+				}
 			}
 			p.replaceTop(num(ret))
 		}
@@ -1056,7 +1079,7 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 		if err != nil {
 			return err
 		}
-		p.replaceTwo(num(float64(n)), str(out))
+		p.replaceTwo(num(float64(n)), transformedString(out, in))
 
 	case compiler.BuiltinIndex:
 		sValue, substr := p.peekPop()
@@ -1147,7 +1170,7 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 		if err != nil {
 			return err
 		}
-		p.replaceTwo(num(float64(n)), str(out))
+		p.replaceTwo(num(float64(n)), transformedString(out, in))
 
 	case compiler.BuiltinSubstr:
 		sValue, posValue := p.peekPop()
@@ -1166,13 +1189,14 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 			length := len(s) - pos + 1
 			substr = s[pos-1 : pos-1+length]
 		}
-		p.replaceTop(str(substr))
+		p.replaceTop(borrowedString(substr, sValue))
 
 	case compiler.BuiltinSubstrLength:
 		posValue, lengthValue := p.popTwo()
 		length := int(lengthValue.num())
 		pos := int(posValue.num())
-		s := p.toString(p.peekTop())
+		sValue := p.peekTop()
+		s := p.toString(sValue)
 		var substr string
 		if p.chars {
 			substr = substrLengthChars(s, pos, length)
@@ -1192,7 +1216,7 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 			}
 			substr = s[pos-1 : pos-1+length]
 		}
-		p.replaceTop(str(substr))
+		p.replaceTop(borrowedString(substr, sValue))
 
 	case compiler.BuiltinSystem:
 		if p.noExec {
@@ -1225,29 +1249,17 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 		if err := p.allocate(len(text)); err != nil {
 			return err
 		}
-		p.replaceTop(str(strings.ToLower(text)))
+		p.replaceTop(transformedString(strings.ToLower(text), p.peekTop()))
 
 	case compiler.BuiltinToupper:
 		text := p.toString(p.peekTop())
 		if err := p.allocate(len(text)); err != nil {
 			return err
 		}
-		p.replaceTop(str(strings.ToUpper(text)))
+		p.replaceTop(transformedString(strings.ToUpper(text), p.peekTop()))
 	}
 
 	return nil
-}
-
-// Fetch the value at the given index from array. This handles the strange
-// POSIX behavior of creating a null entry for non-existent array elements.
-// Per the POSIX spec, "Any other reference to a nonexistent array element
-// [apart from "in" expressions] shall automatically create it."
-func arrayGet(array map[string]value, index string) value {
-	v, ok := array[index]
-	if !ok {
-		array[index] = v
-	}
-	return v
 }
 
 // Stack operations follow. These should be inlined. Instead of just push and

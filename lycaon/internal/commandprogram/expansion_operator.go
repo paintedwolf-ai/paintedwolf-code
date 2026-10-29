@@ -1,8 +1,8 @@
 package commandprogram
 
 import (
+	"context"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -13,7 +13,7 @@ import (
 )
 
 // operated expands ${name OP word}. Operators read state only; none assigns.
-func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) error {
+func (r *expansionRun) operated(ctx context.Context, part commandsurface.ParameterPart, quoted bool) error {
 	value, set, err := r.parameterState(part)
 	if err != nil {
 		return err
@@ -23,34 +23,34 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 	switch strings.TrimPrefix(part.Operator, ":") {
 	case "-":
 		if missing {
-			return r.operand(part.Argument, quoted)
+			return r.operand(ctx, part.Argument, quoted)
 		}
-		return r.emit(value, quoted)
+		return r.emit(ctx, value, quoted)
 	case "+":
 		if missing {
-			return r.emit("", quoted)
+			return r.emit(ctx, "", quoted)
 		}
-		return r.operand(part.Argument, quoted)
+		return r.operand(ctx, part.Argument, quoted)
 	case "?":
 		if !missing {
-			return r.emit(value, quoted)
+			return r.emit(ctx, value, quoted)
 		}
 		message := "parameter null or not set"
 		if part.Argument != nil && len(part.Argument.Parts) > 0 {
-			if message, err = r.expander.ExpandScalar(r.ctx, r.scope, *part.Argument); err != nil {
+			if message, err = r.expander.ExpandScalar(ctx, r.scope, *part.Argument); err != nil {
 				return err
 			}
 		}
 		return invalidValue(part.Span, part.Name+": "+message)
 	case "^", "^^", ",", ",,":
-		return r.emit(convertCase(value, part.Operator), quoted)
+		return r.emit(ctx, convertCase(value, part.Operator), quoted)
 	}
-	compiled, err := r.parameterPattern(part)
+	compiled, err := r.parameterPattern(ctx, part)
 	if err != nil {
 		return err
 	}
 	if compiled == nil {
-		return r.emit(value, quoted)
+		return r.emit(ctx, value, quoted)
 	}
 	expression := &boundedPattern{expression: compiled, maximum: r.expander.limits.maximum["regex_work_steps"]}
 	switch part.Operator {
@@ -59,11 +59,11 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 		if expression.exceeded() {
 			return r.expander.limits.exceeded("regex_work_steps", expression.steps, part.Span)
 		}
-		return r.emit(removed, quoted)
+		return r.emit(ctx, removed, quoted)
 	}
 	replacement := ""
 	if part.Replacement != nil {
-		if replacement, err = r.expander.ExpandScalar(r.ctx, r.scope, *part.Replacement); err != nil {
+		if replacement, err = r.expander.ExpandScalar(ctx, r.scope, *part.Replacement); err != nil {
 			return err
 		}
 	}
@@ -74,10 +74,10 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 	if int64(len(replaced)) > r.expander.limits.valueBytes {
 		return r.expander.limits.exceeded("variable_value_bytes", int64(len(replaced)), part.Span)
 	}
-	if err := r.charge(int64(len(replaced))); err != nil {
+	if err := r.charge(ctx, int64(len(replaced))); err != nil {
 		return err
 	}
-	return r.emit(replaced, quoted)
+	return r.emit(ctx, replaced, quoted)
 }
 
 // parameterState reads a parameter's value and whether it is set.
@@ -87,9 +87,9 @@ func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string
 		positional := r.scope.Positional()
 		return strings.Join(positional, " "), len(positional) > 0, nil
 	case positionalName(name):
-		index, err := strconv.Atoi(name)
 		positional := r.scope.Positional()
-		if err != nil || index > len(positional) {
+		index, valid := parameterIndex(name, len(positional))
+		if !valid || index == 0 {
 			return "", false, nil
 		}
 		return positional[index-1], true, nil
@@ -106,29 +106,29 @@ func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string
 
 // operand expands an operator word in place. Within double quotes its text
 // stays quoted, as the enclosing quotes still apply.
-func (r *expansionRun) operand(word *commandsurface.DeferredWord, quoted bool) error {
+func (r *expansionRun) operand(ctx context.Context, word *commandsurface.DeferredWord, quoted bool) error {
 	if word == nil {
-		return r.emit("", quoted)
+		return r.emit(ctx, "", quoted)
 	}
 	if !quoted {
-		return r.word(word.Parts)
+		return r.word(ctx, word.Parts)
 	}
 	r.assembly.present = true
 	for _, inner := range word.Parts {
 		var err error
 		switch inner := inner.(type) {
 		case commandsurface.LiteralPart:
-			err = r.literal(inner.Value, expand.DoubleQuotedText)
+			err = r.literal(ctx, inner.Value, expand.DoubleQuotedText)
 		case commandsurface.SingleQuotedPart:
 			err = r.assembly.add("'"+inner.Value+"'", true)
 		case commandsurface.DoubleQuotedPart:
-			err = r.double(inner)
+			err = r.double(ctx, inner)
 		case commandsurface.ParameterPart:
-			err = r.parameter(inner, true)
+			err = r.parameter(ctx, inner, true)
 		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(inner, true)
+			err = r.arithmetic(ctx, inner, true)
 		case commandsurface.SubstitutionPart:
-			err = r.substitution(inner, true)
+			err = r.substitution(ctx, inner, true)
 		default:
 			err = &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 word part"}
 		}
@@ -141,11 +141,11 @@ func (r *expansionRun) operand(word *commandsurface.DeferredWord, quoted bool) e
 
 // parameterPattern compiles the operator's glob; quoted fragments are
 // literal. An empty pattern matches nothing to remove or replace.
-func (r *expansionRun) parameterPattern(part commandsurface.ParameterPart) (*regexp.Regexp, error) {
+func (r *expansionRun) parameterPattern(ctx context.Context, part commandsurface.ParameterPart) (*regexp.Regexp, error) {
 	if part.Argument == nil {
 		return nil, nil
 	}
-	value, err := r.expander.ExpandPattern(r.ctx, r.scope, *part.Argument)
+	value, err := r.expander.ExpandPattern(ctx, r.scope, *part.Argument)
 	if err != nil {
 		return nil, err
 	}

@@ -133,6 +133,7 @@ func (t *CodeRewriteTool) runSingleApply(ctx context.Context, tctx tools.ToolCon
 			return codeRewriteDiffResult(ctx, path, res.Language, len(res.Matches), st.Content, finalContent), nil
 		}
 
+		authoredContent := finalContent
 		reportTextIntent(tctx, resolved, st, true, finalContent)
 		if t.ContentApply != nil {
 			before := st.Content
@@ -150,7 +151,7 @@ func (t *CodeRewriteTool) runSingleApply(ctx context.Context, tctx tools.ToolCon
 		if err := rejectIfSyntaxUnhealthy(ctx, "code_rewrite", path, &beforeText, finalContent, mutationSeam{}); err != nil {
 			return "", err
 		}
-		landed, err := landEditedText(ctx, tctx, "code_rewrite", resolved, st, finalContent)
+		landed, err := landEditedText(ctx, tctx, "code_rewrite", resolved, st, editorTextProposal{Authored: authoredContent, Reviewed: finalContent})
 		if err != nil {
 			return "", err
 		}

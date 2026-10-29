@@ -1,4 +1,4 @@
-description: "File metadata (mode, size, mtime, entry_count for directories) Replaces command: stat(1)."
+description: "File metadata (mode, size, mtime, entry_count for directories)"
 schema:
   type: object
   properties:

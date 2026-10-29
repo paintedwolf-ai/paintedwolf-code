@@ -4,17 +4,18 @@ description: >
   `coordinator_profile`.
 command_effects: [read_only]
 tools:
+  command: sticky
   recall: sticky
-  read: sticky
+  read: true
   view_image: sticky
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
-  grep: sticky
-  find: sticky
+  grep: true
+  find: true
   summarize: sticky
-  jq: sticky
-  list_dir: sticky
+  jq: true
+  list_dir: true
   stat: sticky
   wc: sticky
   git_status: sticky
@@ -32,7 +33,6 @@ tools:
   held_result: true
   held_stop: true
 deny_tools:
-  - command
   - secret_*
   - write
   - edit
