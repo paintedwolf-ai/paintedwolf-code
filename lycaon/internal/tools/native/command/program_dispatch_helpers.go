@@ -315,8 +315,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		return
 	}
 	if programResourceRefusal(reject) {
-		// Resource refusals render once through settled program feedback, where
-		// the original limit facts and completed effects are available.
+		writeLimitRefusal(streams.Error, command, "", reject)
 		return
 	}
 	subject := command
@@ -326,7 +325,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 			break
 		}
 	}
-	if subject == command && len(request.Argv) > 1 {
+	if subject == command && len(request.Argv) > 1 && reject.Code != "COMMAND_LIMIT_EXCEEDED" {
 		subject += ": " + request.Argv[1].Value
 	}
 	detail := ""
@@ -345,8 +344,8 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		}
 	case "COMMAND_JOB_UNKNOWN":
 		detail = "no such job in this session; check active jobs with jobs"
-	case "PROCESS_NOT_OWNED":
-		detail = "process is not owned by this session; signal only background jobs started in this session"
+	case "COMMAND_LIMIT_EXCEEDED":
+		detail = "limit exceeded"
 	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
 		if detail != "" {
 			detail = "not supported here (expected " + detail + ")"
