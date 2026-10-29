@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
@@ -41,7 +42,7 @@ func (t *ChownTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		}
 	}
 	if !chownSupported() {
-		return "", &toolrejection.ToolReject{Code: "CHOWN_UNSUPPORTED", Data: nil}
+		return "", chownUnsupported()
 	}
 	paths, err := parseChownPaths(args)
 	if err != nil {
@@ -52,7 +53,7 @@ func (t *ChownTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		return "", toolkit.MissingArg("owner")
 	}
 	groupSpec, _ := args["group"].(string)
-	uid, gid, err := resolveChownIdentities(ownerSpec, groupSpec)
+	uid, gid, err := resolveChownIdentities(hostos.Host{}, ownerSpec, groupSpec)
 	if err != nil {
 		return "", err
 	}
@@ -84,10 +85,7 @@ type ChownInput struct {
 // ResolveChownIdentities applies the existing identity policy to numeric or
 // named owner and group specifications.
 func ResolveChownIdentities(owner, group string) (int, int, error) {
-	if !chownSupported() {
-		return 0, 0, &toolrejection.ToolReject{Code: "CHOWN_UNSUPPORTED", Data: nil}
-	}
-	return resolveChownIdentities(owner, group)
+	return resolveChownIdentities(hostos.Host{}, owner, group)
 }
 
 // Chown changes each path's ownership under scope, review and the source

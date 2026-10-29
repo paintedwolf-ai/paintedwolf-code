@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -46,6 +47,7 @@ type Owners struct {
 	Revisions  native.ExecutionRevisions
 	Pins       PinRecorder
 	Operations Operations
+	Admission  tooloutput.SpillAdmission
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -55,7 +57,7 @@ type Owners struct {
 type utility func(*invocation) error
 
 var utilities = map[string]utility{
-	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "mkdir": runMkdir,
+	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "ln": runLn, "mkdir": runMkdir,
 	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
 	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
 	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite, "patch": runPatch,
@@ -163,7 +165,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = mutationPathTargets(bound)
+	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {

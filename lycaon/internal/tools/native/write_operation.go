@@ -3,6 +3,8 @@ package native
 import (
 	"context"
 	"fmt"
+	"io"
+	"math"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -29,6 +31,12 @@ type WriteInput struct {
 	// redirect output, text or not. It requires the execution-pinned admission.
 	Exact bool
 	Bytes []byte
+	// Source borrows an exact raw stream for this call; SourceBytes is its length.
+	Source      io.Reader
+	SourceBytes int64
+	// Mode is the permission an exact pinned write gives a file it creates;
+	// zero uses the ordinary write mode. A replaced file keeps its own.
+	Mode os.FileMode
 }
 
 type WriteAdmission uint8
@@ -63,7 +71,13 @@ type WriteResult struct {
 // Apply performs the complete native write operation, including scope, review,
 // revision, syntax, attribution and the existing source write door.
 func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (result WriteResult, err error) {
+	if input.Source != nil && (!input.Exact || input.Admission != WriteExecutionPinned) {
+		return WriteResult{}, unsupportedWriteAdmission()
+	}
 	if input.Admission != WriteConversational && input.Admission != WriteExecutionPinned {
+		return WriteResult{}, unsupportedWriteAdmission()
+	}
+	if input.Exact && ((input.Source != nil && (input.Bytes != nil || input.SourceBytes < 0 || input.SourceBytes == math.MaxInt64)) || (input.Source == nil && input.SourceBytes != 0)) {
 		return WriteResult{}, unsupportedWriteAdmission()
 	}
 	path := input.Path
@@ -103,6 +117,9 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			beforeText := st.Content
 			before = &beforeText
 		} else if !os.IsNotExist(err) {
+			if toolrejection.AsToolReject(err) != nil {
+				return WriteResult{}, err
+			}
 			return WriteResult{}, fmt.Errorf("read failed: %w", err)
 		}
 		return t.writeText(ctx, tctx, resolved, st, before, input, func(final string) (landing, error) {
