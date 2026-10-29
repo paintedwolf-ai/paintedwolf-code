@@ -43,8 +43,10 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		return runInit(ctx, p, out, stderr)
 	case "git clone":
 		return runClone(ctx, p, tc, out, stderr)
+	case "git apply":
+		return runApply(ctx, p, tc, streams, out, stderr)
 	}
-	write := spec.Name != "git ls-remote"
+	write := spec.Name != "git ls-remote" && !bisectReads[spec.Name]
 	dir, repo, status, err := resolveCommandRepo(ctx, p, stderr, write)
 	if err != nil || status != 0 {
 		return settle(status, err, spec.Name)
@@ -56,6 +58,8 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	}
 	scopedTC := withRepoRoot(tc, repo.Root)
 	switch spec.Name {
+	case "git rm", "git mv":
+		return runFileMutation(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git add":
 		return runAdd(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git commit":
@@ -90,6 +94,9 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.NoEffect)
 	case "git pull":
 		return runPull(ctx, p, scopedTC, dir, repo, out, stderr)
+	case "git bisect", "git bisect start", "git bisect skip", "git bisect run", "git bisect reset",
+		"git bisect log", "git bisect terms", "git bisect visualize", "git bisect view":
+		return runBisect(ctx, p, scopedTC, repo, out, stderr)
 	default:
 		return settleMutationError(fmt.Errorf("unhandled git command %s", spec.Name), toolcontract.NoEffect)
 	}

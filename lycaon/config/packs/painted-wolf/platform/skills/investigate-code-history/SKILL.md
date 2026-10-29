@@ -17,4 +17,6 @@ optional_tools:
 7. Re-read the current implementation and its callers before concluding that an old commit still explains present behavior. Separate observed commit intent from your inference about the mechanism.
 8. Report the relevant commit hash, path and lines, observed change, and the smallest evidence-backed explanation. State when renames, squashes, shallow history, or local edits leave provenance uncertain.
 
+Tracked removals and renames made through `git rm` and `git mv` appear in source history as filesystem changes as well as in Git staging. For recovery of a live deletion or move, inspect source history before looking for a commit.
+
 See [history routing](references/history-routing.md) for tool selection and common attribution traps.

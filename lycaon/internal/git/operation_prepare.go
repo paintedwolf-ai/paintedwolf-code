@@ -103,7 +103,7 @@ func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) e
 		}
 	}
 	_, sequenceKind := sequenceKinds[r.Kind]
-	if len(state.Conflicts) > 0 && !(r.Kind == "merge" && (r.Action == "continue" || r.Action == "abort")) && !(sequenceKind && r.continuing()) && r.Kind != "add" && !(r.Kind == "reset" && r.Mode == "hard") {
+	if len(state.Conflicts) > 0 && !(r.Kind == "merge" && (r.Action == "continue" || r.Action == "abort")) && !(sequenceKind && r.continuing()) && !r.indexOnly() && !(r.Kind == "reset" && r.Mode == "hard") {
 		return operationRefusal("unresolved_conflicts", state.Conflicts...)
 	}
 	inProgress, err := sequenceInProgress(repo)
@@ -116,7 +116,7 @@ func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) e
 		if inProgress != r.Kind {
 			return operationRefusal("no_" + strings.ReplaceAll(r.Kind, "-", "_") + "_in_progress")
 		}
-	case inProgress != "" && r.Kind != "add" && !(r.Kind == "reset" && r.Mode == "hard"):
+	case inProgress != "" && !r.indexOnly() && !(r.Kind == "reset" && r.Mode == "hard"):
 		return operationRefusal("operation_in_progress", inProgress)
 	}
 	return nil
@@ -215,7 +215,7 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 		}
 	}
 	// Preserve merge control state only for the named continuation, abort, or staging.
-	if (p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort")) || p.request.Kind == "add" {
+	if (p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort")) || p.request.indexOnly() {
 		for _, name := range []string{"MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "ORIG_HEAD", "MERGE_AUTOSTASH", "AUTO_MERGE"} {
 			if err := p.copyFile(filepath.Join(repo.GitDir, name), filepath.Join(scratch, ".git", name)); err != nil {
 				return err
@@ -226,6 +226,9 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 }
 
 func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.Repo, scratch string) ([]string, error) {
+	if p.request.Kind == "stage" {
+		return nil, nil
+	}
 	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
 	if paths := p.addPaths(); len(paths) > 0 {
 		dirtyArgs = append(dirtyArgs, "--")
@@ -307,7 +310,7 @@ func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Rep
 	if p.result.Status == "failed" {
 		return nil
 	}
-	if p.request.Kind != "add" {
+	if !p.request.indexOnly() {
 		// Conflicting operations are reviewed too: conflict markers are file effects.
 		candidates := append([]string{}, dirty...)
 		if p.result.Before.Head != "" && after.Head != "" && p.result.Before.Head != after.Head {
@@ -411,7 +414,7 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 		}
 	}
 	for path, expected := range p.nestedHeads {
-		actual, err := optionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
+		actual, err := ResolveOptionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
 		if err != nil || actual != expected {
 			return operationRefusal("repository_changed_during_review", path)
 		}

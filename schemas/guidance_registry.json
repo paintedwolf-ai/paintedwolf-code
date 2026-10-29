@@ -1162,6 +1162,12 @@
       "emit": "guard:find",
       "summary": "find walk root {{ paintedwolf.path }} does not exist."
     },
+    "GIT_BISECT_DIRTY_TREE": {
+      "branch_instruction": "Leave the current changes in place; commit or stash them only if that is part of the task.",
+      "category": "recoverable",
+      "emit": "guard:git_bisect_dirty_tree",
+      "summary": "git bisect start needs a working tree without tracked changes."
+    },
     "GIT_COMMIT_BULK_DENIED": {
       "branch_instruction": "Resolve staging scope and commit intent before retrying",
       "category": "recoverable",
@@ -2219,10 +2225,10 @@
       "summary": "The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}."
     },
     "SANDBOX_CONTROL_PLANE_DENIED": {
-      "branch_instruction": "Continue without this path. Ask the person to export needed content or change the app settings.",
+      "branch_instruction": "Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution",
       "category": "control-plane",
       "emit": "guard:sandbox_control_plane",
-      "summary": "This operation would reach the app's own state through {{ paintedwolf.path }}."
+      "summary": "{{ paintedwolf.path }} is part of the agent host's control plane."
     },
     "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED": {
       "branch_instruction": "Branch on Code; re-request direct network access for this action",

@@ -3027,6 +3027,2024 @@
       ]
     },
     {
+      "name": "git grep",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] grep [-n] [-i] [-w] [-v] [-E|-F|-P|-G] [-l|-c|-q] [-h] [-z] [--cached] [-e PATTERN ...] [PATTERN] [REV ...] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git grep-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git grep-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--line-number"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-i",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-w",
+            "--word-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-w",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--invert-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-v",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E",
+            "--extended-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-E-extended",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fixed-strings"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-F-fixed",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P",
+            "--perl-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-P-perl",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-G",
+            "--basic-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-G-basic",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--files-with-matches",
+            "--name-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-l",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-c",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-h"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-h-nofilename",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--null"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-z",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "git grep-option-e-pattern",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
+        }
+      ],
+      "operands": "The first operand is the pattern unless -e supplies patterns. Operands before -- that name revisions or trees are searched at that revision; others are paths. Without a revision the tracked working-tree files are searched, and --cached searches the index. Paths are relative to the command directory.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "a line matched",
+        "1": "no match",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git grep -n alpha HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Native search over Git objects: files come from the revision's tree, the index or the tracked working tree, and lines match with the shared native regex engines (basic by default, -E, -F, -P). Output follows Git's REV:PATH:LINE layout, with paths relative to the command directory and binary matches reported as one line. Status 1 means no match; 128 is a repository or revision failure.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/grep.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-grep-operands-valid",
+        "git-grep-rejection",
+        "git grep-option-C-global",
+        "git grep-option-c-global",
+        "git grep-option-nopager-global",
+        "git grep-option-n",
+        "git grep-option-i",
+        "git grep-option-w",
+        "git grep-option-v",
+        "git grep-option-E-extended",
+        "git grep-option-F-fixed",
+        "git grep-option-P-perl",
+        "git grep-option-G-basic",
+        "git grep-option-l",
+        "git grep-option-c",
+        "git grep-option-q",
+        "git grep-option-h-nofilename",
+        "git grep-option-z",
+        "git grep-option-cached",
+        "git grep-option-e-pattern"
+      ]
+    },
+    {
+      "name": "git describe",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] describe [--tags] [--all] [--always] [--abbrev=N] [--long] [--match PATTERN ...] [--exclude PATTERN ...] [--first-parent] [--dirty[=MARK]] [--] [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git describe-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git describe-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-all",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--always"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-always",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git describe-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "--long"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-long",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--match"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git describe-option-match",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "v*"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git describe-option-exclude",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*-rc*"
+          ]
+        },
+        {
+          "spellings": [
+            "--first-parent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-firstparent",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--dirty"
+          ],
+          "arity": -1,
+          "value_role": "message",
+          "fixture_id": "git describe-option-dirty",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "-dirty"
+          ]
+        }
+      ],
+      "operands": "Optional commit-ish operands; --dirty describes the working tree and takes none.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git describe --always",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's describe through the Git owner's read door; --dirty reads working-tree state the way git status does, without writing the index.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-describe-operands-valid",
+        "git-describe-rejection",
+        "git describe-option-C-global",
+        "git describe-option-c-global",
+        "git describe-option-nopager-global",
+        "git describe-option-tags",
+        "git describe-option-all",
+        "git describe-option-always",
+        "git describe-option-abbrev",
+        "git describe-option-long",
+        "git describe-option-match",
+        "git describe-option-exclude",
+        "git describe-option-firstparent",
+        "git describe-option-dirty"
+      ]
+    },
+    {
+      "name": "git reflog",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] reflog [show] [-n N|-N] [--date=FORMAT] [--oneline] [REF]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git reflog-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git reflog-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reflog-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--max-count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git reflog-option-n-maxcount",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "5"
+          ],
+          "shorthand": "numeric"
+        },
+        {
+          "spellings": [
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "git reflog-option-date",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "iso"
+          ]
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reflog-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "An optional show followed by at most one REF; expire, delete and other reflog subcommands are not read forms.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git reflog -n 1",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's reflog listing through the Git owner's read door. Reflog maintenance subcommands change history and are refused.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-reflog-operands-valid",
+        "git-reflog-rejection",
+        "git reflog-option-C-global",
+        "git reflog-option-c-global",
+        "git reflog-option-nopager-global",
+        "git reflog-option-n-maxcount",
+        "git reflog-option-date",
+        "git reflog-option-oneline"
+      ]
+    },
+    {
+      "name": "git shortlog",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] shortlog [-s] [-n] [-e] [REV_RANGE ...] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git shortlog-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git shortlog-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--summary"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-s",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--numbered"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e",
+            "--email"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-e",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Revision ranges, then paths after --. With no revision it summarizes HEAD; it never reads a log from standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git shortlog -sn",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's shortlog through the Git owner's read door, always over revisions.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-shortlog-operands-valid",
+        "git-shortlog-rejection",
+        "git shortlog-option-C-global",
+        "git shortlog-option-c-global",
+        "git shortlog-option-nopager-global",
+        "git shortlog-option-s",
+        "git shortlog-option-n",
+        "git shortlog-option-e"
+      ]
+    },
+    {
+      "name": "git ls-tree",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] ls-tree [-r] [-t] [-d] [-l|--long] [--name-only|--name-status] [--full-tree] [-z] [--abbrev[=N]] REV [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git ls-tree-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git ls-tree-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-r",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-t",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-d",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--long"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-l",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--name-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-nameonly",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--name-status"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-namestatus",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--full-tree"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-fulltree",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-z",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git ls-tree-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        }
+      ],
+      "operands": "One tree-ish, then optional paths relative to the command directory.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git ls-tree --name-only HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's ls-tree through the Git owner's read door.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-ls-tree-operands-valid",
+        "git-ls-tree-rejection",
+        "git ls-tree-option-C-global",
+        "git ls-tree-option-c-global",
+        "git ls-tree-option-nopager-global",
+        "git ls-tree-option-r",
+        "git ls-tree-option-t",
+        "git ls-tree-option-d",
+        "git ls-tree-option-l",
+        "git ls-tree-option-nameonly",
+        "git ls-tree-option-namestatus",
+        "git ls-tree-option-fulltree",
+        "git ls-tree-option-z",
+        "git ls-tree-option-abbrev"
+      ]
+    },
+    {
+      "name": "git cat-file",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] cat-file (-t|-s|-p|-e) OBJECT",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git cat-file-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git cat-file-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-t-type",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-s-size",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-p-print",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-e-exists",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Exactly one of -t, -s, -p or -e and one object name. Batch modes are not supported; query one object per call.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git cat-file -t HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's cat-file through the Git owner's read door. Blob content is printed exactly, without text conversion.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-cat-file-operands-valid",
+        "git-cat-file-rejection",
+        "git cat-file-option-C-global",
+        "git cat-file-option-c-global",
+        "git cat-file-option-nopager-global",
+        "git cat-file-option-t-type",
+        "git cat-file-option-s-size",
+        "git cat-file-option-p-print",
+        "git cat-file-option-e-exists"
+      ]
+    },
+    {
+      "name": "git show-ref",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] show-ref [--heads|--branches] [--tags] [--verify] [-d|--dereference] [-s|--hash[=N]] [--abbrev[=N]] [-q|--quiet] [--] [PATTERN ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git show-ref-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git show-ref-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--heads",
+            "--branches"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-heads",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--verify"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-verify",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-d",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--hash"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git show-ref-option-s-hash",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git show-ref-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Ref patterns, or full ref names with --verify.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git show-ref --heads",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's show-ref through the Git owner's read door.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-show-ref-operands-valid",
+        "git-show-ref-rejection",
+        "git show-ref-option-C-global",
+        "git show-ref-option-c-global",
+        "git show-ref-option-nopager-global",
+        "git show-ref-option-heads",
+        "git show-ref-option-tags",
+        "git show-ref-option-verify",
+        "git show-ref-option-d",
+        "git show-ref-option-s-hash",
+        "git show-ref-option-abbrev",
+        "git show-ref-option-q"
+      ]
+    },
+    {
+      "name": "git for-each-ref",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] for-each-ref [--format=FORMAT] [--sort=KEY ...] [--count=N] [--points-at REV] [--merged REV] [--no-merged REV] [--contains REV] [--no-contains REV] [PATTERN ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git for-each-ref-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git for-each-ref-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git for-each-ref-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "git for-each-ref-option-format",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "%(refname:short)"
+          ]
+        },
+        {
+          "spellings": [
+            "--sort"
+          ],
+          "arity": 1,
+          "value_role": "key",
+          "fixture_id": "git for-each-ref-option-sort",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "-committerdate"
+          ]
+        },
+        {
+          "spellings": [
+            "--count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git for-each-ref-option-count",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "3"
+          ]
+        },
+        {
+          "spellings": [
+            "--points-at"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-pointsat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--merged"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-merged",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-merged"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-nomerged",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--contains"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-contains",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-contains"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-nocontains",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        }
+      ],
+      "operands": "Ref patterns; formats may not use signature atoms, which run a verification program.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git for-each-ref --format=%(refname) refs/heads",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's for-each-ref through the Git owner's read door. Signature atoms are refused because they run a verification program.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-for-each-ref-operands-valid",
+        "git-for-each-ref-rejection",
+        "git for-each-ref-option-C-global",
+        "git for-each-ref-option-c-global",
+        "git for-each-ref-option-nopager-global",
+        "git for-each-ref-option-format",
+        "git for-each-ref-option-sort",
+        "git for-each-ref-option-count",
+        "git for-each-ref-option-pointsat",
+        "git for-each-ref-option-merged",
+        "git for-each-ref-option-nomerged",
+        "git for-each-ref-option-contains",
+        "git for-each-ref-option-nocontains"
+      ]
+    },
+    {
+      "name": "git apply",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] apply [--check] [--stat] [--numstat] [--summary] [-p N] [-R] [--index|--cached] [-3] [--whitespace=ACTION] [--include=PATTERN] [--exclude=PATTERN] [--directory=ROOT] [-v] [PATCH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git apply-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git apply-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-check",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--stat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-stat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--numstat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-numstat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--summary"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-summary",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git apply-option-p",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-R",
+            "--reverse"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-R-reverse",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--index"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-index",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-3",
+            "--3way"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-3way",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--whitespace"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "git apply-option-whitespace",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "nowarn"
+          ]
+        },
+        {
+          "spellings": [
+            "--include"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git apply-option-include",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.txt"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git apply-option-exclude",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.txt"
+          ]
+        },
+        {
+          "spellings": [
+            "--directory"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git apply-option-directory",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "sub"
+          ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-v-verbose",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] apply [OPTION ...] [PATCH ...]; with no PATCH, or -, the patch is read from standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "every section applied",
+        "1": "a section does not apply (nothing changed) or a --3way merge left conflicts",
+        "128": "no valid patch, a corrupt patch, or --whitespace=error found whitespace errors"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "read-only"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git apply --stat ./fix.diff",
+        "stdout": " input |    2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          },
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n\\ No newline at end of file\n"
+        }
+      },
+      "notes": "Applies unified and Git diffs, including Git binary patches (literal and delta), through the hunk applier patch uses; hunks may land at an offset but need exact context. Nothing changes unless every section applies. --check, --stat, --numstat and --summary only read. Work tree files are captured before anything is written and publish through the same pinned write door as patch; a file changed after capture refuses with COMMAND_REVISION_CONFLICT. --index requires the work tree to match the index and then stages exactly the patched paths; --cached changes only the index. Index changes are one reviewed Git operation with git add's review and session-staging rules, leaving unrelated staged work alone. --3way merges a section into the current content from the preimage blob the patch names, using Git's merge-file; conflicts leave markers in the work tree and stages 1-3 in the index and report U PATH with status 1. --whitespace=warn (default) reports added lines with trailing whitespace or a space before a tab, fix strips trailing whitespace from them, error stops with status 128.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/apply.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/apply_test.go",
+          "lycaon/internal/git/operation_stage_test.go"
+        ],
+        "extension": "Shared hunk applier in internal/tools/native/patchapply; work tree publication through the mutation owners' pinned patch targets; index changes through the Git owner's reviewed stage operation.",
+        "evidence_kind": "owner tests over fixture repositories, compared with the bundled Git"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-apply-operands-valid",
+        "git-apply-rejection",
+        "git apply-option-C-global",
+        "git apply-option-c-global",
+        "git apply-option-nopager-global",
+        "git apply-option-check",
+        "git apply-option-stat",
+        "git apply-option-numstat",
+        "git apply-option-summary",
+        "git apply-option-p",
+        "git apply-option-R-reverse",
+        "git apply-option-index",
+        "git apply-option-cached",
+        "git apply-option-3way",
+        "git apply-option-whitespace",
+        "git apply-option-include",
+        "git apply-option-exclude",
+        "git apply-option-directory",
+        "git apply-option-v-verbose"
+      ]
+    },
+    {
       "name": "git add",
       "aliases": [],
       "family": "git",
@@ -3159,7 +5177,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3185,6 +5203,1562 @@
         "git add-option-u-update",
         "git add-option-q-quiet",
         "git add-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git mv",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] mv [-f] [-k] [-n|--dry-run] [-v] [--] SOURCE ... DESTINATION",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git mv-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git mv-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-f",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-k",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-v",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Paths are relative to the command directory. Use -- before path operands beginning with a dash. Pathspec magic and submodule operations are unsupported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary safety refusal",
+        "128": "repository or path failure",
+        "2": "usage or host refusal"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git mv -- ./input ./renamed",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Tracked removals and moves use the shared filesystem operations for review, source history and recovery, then the shared Git stage operation for the index. Dry runs have no effects. Index-only removal retains saved files. git rm removes the directories a removal leaves empty, keeping the repository root and the command directory; worktree removal of a tracked symbolic link is refused, and --cached untracks it. Force permits ordinary Git safety checks to be bypassed; it does not change host authority. A later index failure reports any filesystem effects already completed. Session staging includes affected paths and leaves unrelated staging intact.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/move.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/file_mutation_test.go"
+        ],
+        "extension": "Compose filesystem delete or move with the existing Git stage operation.",
+        "evidence_kind": "native contract fixtures and pinned reference observations"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-mv-operands-valid",
+        "git-mv-rejection",
+        "git mv-option-C-global",
+        "git mv-option-c-global",
+        "git mv-option-nopager-global",
+        "git mv-option-f",
+        "git mv-option-k",
+        "git mv-option-n",
+        "git mv-option-v"
+      ]
+    },
+    {
+      "name": "git rm",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] rm [-r] [--cached] [-f] [-n|--dry-run] [-q] [--ignore-unmatch] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git rm-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git rm-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-r",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-f",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--ignore-unmatch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-ignore-unmatch",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Paths are relative to the command directory. Use -- before path operands beginning with a dash. Pathspec magic and submodule operations are unsupported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary safety refusal",
+        "128": "repository or path failure",
+        "2": "usage or host refusal"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git rm -- ./input",
+        "stdout": "rm 'input'\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Tracked removals and moves use the shared filesystem operations for review, source history and recovery, then the shared Git stage operation for the index. Dry runs have no effects. Index-only removal retains saved files. git rm removes the directories a removal leaves empty, keeping the repository root and the command directory; worktree removal of a tracked symbolic link is refused, and --cached untracks it. Force permits ordinary Git safety checks to be bypassed; it does not change host authority. A later index failure reports any filesystem effects already completed. Session staging includes affected paths and leaves unrelated staging intact.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/remove.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/file_mutation_test.go"
+        ],
+        "extension": "Compose filesystem delete or move with the existing Git stage operation.",
+        "evidence_kind": "native contract fixtures and pinned reference observations"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-rm-operands-valid",
+        "git-rm-rejection",
+        "git rm-option-C-global",
+        "git rm-option-c-global",
+        "git rm-option-nopager-global",
+        "git rm-option-r",
+        "git rm-option-cached",
+        "git rm-option-f",
+        "git rm-option-n",
+        "git rm-option-q",
+        "git rm-option-ignore-unmatch"
+      ]
+    },
+    {
+      "name": "git bisect start",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect start [--term-old=TERM --term-new=TERM] [BAD [GOOD ...]] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect start-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect start-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect start-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-old",
+            "--term-good"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git bisect start-option-term-old",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fast"
+          ]
+        },
+        {
+          "spellings": [
+            "--term-new",
+            "--term-bad"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git bisect start-option-term-new",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "slow"
+          ]
+        }
+      ],
+      "operands": "An optional bad revision, then good revisions, then paths after --.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect start",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Starting refuses a tree with tracked changes; run bisect in a separate worktree instead.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-start-operands-valid",
+        "git-bisect-start-rejection",
+        "git bisect start-option-C-global",
+        "git bisect start-option-c-global",
+        "git bisect start-option-nopager-global",
+        "git bisect start-option-term-old",
+        "git bisect start-option-term-new"
+      ]
+    },
+    {
+      "name": "git bisect",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect (good|bad|old|new|TERM) [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "A verdict term (good, bad, old, new or the session's own terms), then revisions; a new verdict takes at most one.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect good",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Replaying a log file is not supported; git bisect log is the session record.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-operands-valid",
+        "git-bisect-rejection",
+        "git bisect-option-C-global",
+        "git bisect-option-c-global",
+        "git bisect-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect skip",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect skip [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect skip-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect skip-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect skip-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Revisions to skip; HEAD when none is given.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect skip",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. A skipped commit is passed over for the next best candidate.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-skip-operands-valid",
+        "git-bisect-skip-rejection",
+        "git bisect skip-option-C-global",
+        "git bisect skip-option-c-global",
+        "git bisect skip-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect run",
+      "operands_end_options": true,
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect run COMMAND [ARG ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect run-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect run-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect run-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "The check command and its arguments, run through normal dispatch with the program's capabilities.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect run true",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Status 0 marks the commit old, 125 skips it, 1 to 127 marks it new and any other status stops the run. An interruption leaves the session recorded at the commit under test and names the reset to run.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-run-operands-valid",
+        "git-bisect-run-rejection",
+        "git bisect run-option-C-global",
+        "git bisect run-option-c-global",
+        "git bisect run-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect reset",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect reset [COMMIT]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect reset-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect reset-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect reset-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "An optional commit to return to instead of the session's start.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect reset",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-reset-operands-valid",
+        "git-bisect-reset-rejection",
+        "git bisect reset-option-C-global",
+        "git bisect reset-option-c-global",
+        "git bisect reset-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect log",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect log",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect log-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect log-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect log-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect log",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-log-operands-valid",
+        "git-bisect-log-rejection",
+        "git bisect log-option-C-global",
+        "git bisect log-option-c-global",
+        "git bisect log-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect terms",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect terms [--term-old|--term-new]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect terms-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect terms-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-old",
+            "--term-good"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-term-old",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-new",
+            "--term-bad"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-term-new",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect terms",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-terms-operands-valid",
+        "git-bisect-terms-rejection",
+        "git bisect terms-option-C-global",
+        "git bisect terms-option-c-global",
+        "git bisect terms-option-nopager-global",
+        "git bisect terms-option-term-old",
+        "git bisect terms-option-term-new"
+      ]
+    },
+    {
+      "name": "git bisect visualize",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect visualize --oneline",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect visualize-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect visualize-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect visualize-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect visualize-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands; --oneline is required because graphical and paged views are not supported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect visualize --oneline",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-visualize-operands-valid",
+        "git-bisect-visualize-rejection",
+        "git bisect visualize-option-C-global",
+        "git bisect visualize-option-c-global",
+        "git bisect visualize-option-nopager-global",
+        "git bisect visualize-option-oneline"
+      ]
+    },
+    {
+      "name": "git bisect view",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect view --oneline",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect view-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect view-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect view-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect view-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands; --oneline is required because graphical and paged views are not supported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect view --oneline",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-view-operands-valid",
+        "git-bisect-view-rejection",
+        "git bisect view-option-C-global",
+        "git bisect view-option-c-global",
+        "git bisect view-option-nopager-global",
+        "git bisect view-option-oneline"
       ]
     },
     {
@@ -3344,7 +6918,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3509,7 +7083,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3670,7 +7244,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3833,7 +7407,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4061,7 +7635,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4237,7 +7811,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4419,7 +7993,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4579,7 +8153,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4753,7 +8327,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4946,7 +8520,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5121,7 +8695,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5260,7 +8834,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5431,7 +9005,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5597,7 +9171,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5769,7 +9343,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5931,7 +9505,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -6089,7 +9663,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [

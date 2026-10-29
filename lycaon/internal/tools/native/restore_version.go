@@ -25,6 +25,7 @@ type RestoreVersionTool struct {
 
 type restoreVersionLedger interface {
 	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
+	ResolveDeletedPath(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.DeletedPath, error)
 	ReadRestorableVersion(ctx context.Context, projectID, versionID string) (sourceledger.RestorableVersion, error)
 	QueryFileVersions(ctx context.Context, projectID, fileID string, limit int, beforeOrdinal int64) (sourceledger.FileVersionsResult, error)
 }
@@ -117,6 +118,15 @@ func resolveRestorableVersion(
 	versionID, baseVersionID string,
 ) (sourceledger.RestorableVersion, string, error) {
 	head, err := ledger.ResolveHead(ctx, projectID, branch, rootID, rel)
+	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		// A deleted file keeps its history under the deletion's head.
+		deleted, deletedErr := ledger.ResolveDeletedPath(ctx, projectID, branch, rootID, rel)
+		if deletedErr == nil {
+			head, err = sourceledger.BranchHead{FileID: deleted.FileID, VersionID: deleted.VersionID, RootID: rootID, Path: rel, State: "absent"}, nil
+		} else if !errors.Is(deletedErr, sourceledger.ErrHistoryNotFound) {
+			err = deletedErr
+		}
+	}
 	if err != nil && !errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return sourceledger.RestorableVersion{}, "", fmt.Errorf("resolve file head: %w", err)
 	}

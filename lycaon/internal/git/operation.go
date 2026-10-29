@@ -32,7 +32,9 @@ type OperationRequest struct {
 	ReinstateIndex   bool
 	// NoCommit stops a started merge before its commit, leaving it active.
 	NoCommit bool
-	Review   func(context.Context, []RestoreFile) error
+	// Entries are a "stage" operation's exact index changes.
+	Entries []IndexEntry
+	Review  func(context.Context, []RestoreFile) error
 }
 
 // RepositoryState is observed even when Git reports a failed or partial effect.
@@ -177,7 +179,7 @@ func operationStatus(before, after RepositoryState, code int, err error) string 
 func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
 	state := RepositoryState{Conflicts: []string{}}
 	var err error
-	state.Head, err = optionalObject(ctx, dir, "HEAD^{commit}")
+	state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
 	if err != nil {
 		return state, err
 	}
@@ -202,7 +204,7 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 		return state, err
 	}
 	state.StashLog = stashLog.SHA256
-	state.Stash, err = optionalObject(ctx, dir, "refs/stash")
+	state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
 	if err != nil {
 		return state, err
 	}
@@ -216,8 +218,9 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 	return state, err
 }
 
-// optionalObject distinguishes missing selectors by exit code; diagnostics are never parsed.
-func optionalObject(ctx context.Context, dir, ref string) (string, error) {
+// ResolveOptionalObject reads an object selector. An absent selector returns
+// an empty identity; failures other than Git's exact absence status remain errors.
+func ResolveOptionalObject(ctx context.Context, dir, ref string) (string, error) {
 	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--verify", "--quiet", "--end-of-options", ref}, hermeticOpts(0))
 	if err != nil {
 		return "", err

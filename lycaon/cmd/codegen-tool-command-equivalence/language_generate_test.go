@@ -21,7 +21,7 @@ func TestLanguageCatalogClosesOverFormsAndStockTools(t *testing.T) {
 	if len(catalog.Fixtures) < 700 {
 		t.Fatalf("option/limit fixture coverage=%d", len(catalog.Fixtures))
 	}
-	for _, name := range []string{"sed", "stat", "base64", "rg", "git switch", "curl", "jq-edit", "source"} {
+	for _, name := range []string{"sed", "stat", "base64", "rg", "git switch", "curl", "jq-edit", "source", "patch", "git apply"} {
 		help, ok := catalog.CommandHelp(name)
 		if !ok || !strings.Contains(help, name) {
 			t.Errorf("missing focused help for %s", name)

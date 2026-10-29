@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -40,6 +41,8 @@ var readForms = map[string]operandRule{
 	"git blame": blameOperands, "git branch": branchOperands, "git tag": tagOperands, "git rev-parse": anyOperands,
 	"git rev-list": revListOperands, "git merge-base": mergeBaseOperands, "git remote": remoteOperands,
 	"git config": configOperands, "git stash list": noOperands, "git worktree list": noOperands, "git ls-files": anyOperands,
+	"git grep": grepOperands, "git describe": anyOperands, "git reflog": reflogOperands, "git shortlog": anyOperands,
+	"git ls-tree": lsTreeOperands, "git cat-file": catFileOperands, "git show-ref": anyOperands, "git for-each-ref": anyOperands,
 }
 
 // Owners holds the Git read, mutation and network frontends.
@@ -140,11 +143,18 @@ type Prepared struct {
 	command   *command
 	owners    *Owners
 	paths     *projectpaths.ProgramPaths
+	// filesystem supplies the program's shared file effects and pinned inputs.
+	filesystem *mutation.Owners
+	// execution records the pinned file inputs.
+	execution string
+	// request and nested let git bisect run dispatch its check as a child.
+	request commandprogram.OperationRequest
+	nested  commandprogram.NestedCommand
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
 // operand rule. It reads and runs nothing.
-func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -171,14 +181,17 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	review := bound.Review(reviewID)
 	review.PathTargets = gitPathTargets(bound, parsed, mode)
 	return Prepared{
-		Command:   spec.Name,
-		Operation: o.ops[spec.Name],
-		Mode:      mode,
-		Argv:      bound,
-		Review:    review,
-		command:   parsed,
-		owners:    o,
-		paths:     paths,
+		Command:    spec.Name,
+		Operation:  o.ops[spec.Name],
+		Mode:       mode,
+		Argv:       bound,
+		Review:     review,
+		command:    parsed,
+		owners:     o,
+		paths:      paths,
+		filesystem: filesystem,
+		execution:  request.Invocation.Identity.ExecutionID,
+		request:    request,
 	}, nil
 }
 
@@ -193,7 +206,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
-	status, err := p.run(ctx, streams)
+	run := p.run
+	if p.command.spec.Name == "git grep" {
+		run = p.grep
+	}
+	status, err := run(ctx, streams)
 	if err == nil {
 		err = ctx.Err()
 	}

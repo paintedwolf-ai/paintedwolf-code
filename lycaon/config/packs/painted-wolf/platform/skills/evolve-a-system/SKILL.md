@@ -20,4 +20,4 @@ Use the request and observed project/environment to choose the matching procedur
 
 ## Boundaries
 
-Follow project policy and the user’s requested scope. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.
+Follow project policy and the user’s requested scope. Apply a reviewed or received unified diff in `command` with `git apply --check` and then `git apply` (or `patch -p1`); these keep review, revision capture and recovery, which `external --` skips. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.

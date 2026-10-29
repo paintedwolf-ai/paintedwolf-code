@@ -8,9 +8,11 @@ import (
 	"unicode/utf8"
 )
 
+// from is the rename or copy source recorded after the destination.
 type porcelainEntry struct {
 	status string
 	path   string
+	from   string
 }
 
 type porcelainParser struct {
@@ -21,9 +23,11 @@ type porcelainParser struct {
 
 func (p *porcelainParser) record(record []byte) error {
 	if p.renameSource {
-		if _, err := parseRepoPath(record); err != nil {
+		from, err := parseRepoPath(record)
+		if err != nil {
 			return err
 		}
+		p.entries[len(p.entries)-1].from = from
 		p.renameSource = false
 		return nil
 	}

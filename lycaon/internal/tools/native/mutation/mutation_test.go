@@ -387,6 +387,10 @@ func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
 	if r := h.run("", "edit", "--path", "file.txt", "--old-string", "beta", "--new-string", "BETA"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\nBETA\ngamma\n" {
 		t.Fatalf("edit: %+v %v %q", r.result, r.err, h.read("file.txt"))
 	}
+	same := h.run("", "edit", "--path", "file.txt", "--old-string", "BETA", "--new-string", "BETA")
+	if reject := toolrejection.AsToolReject(same.err); reject == nil || reject.Code != "EDIT_ARGS_CONFLICT" || reject.Data["detail"] != "old_string and new_string must differ" {
+		t.Fatalf("identical edit strings: %+v %v", same.result, same.err)
+	}
 	if r := h.run("", "replace-lines", "--path", "file.txt", "--start", "2", "--end", "3", "--content", "two\nthree"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\ntwo\nthree\n" {
 		t.Fatalf("replace-lines: %+v %v %q", r.result, r.err, h.read("file.txt"))
 	}
