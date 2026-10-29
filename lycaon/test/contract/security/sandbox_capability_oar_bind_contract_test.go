@@ -23,7 +23,7 @@ func TestSandboxCapabilityRulesBindActualRefusals(t *testing.T) {
 		if !strings.HasPrefix(rule.ID, "SANDBOX_") || rule.Anchor != oar.AnchorToolRejected {
 			continue
 		}
-		for _, tool := range rule.Selector["tool"] {
+		for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
 			assertIntrinsicRejection(t, pipeline, tool, rule.ID)
 			checked++
 		}

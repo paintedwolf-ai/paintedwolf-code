@@ -84,7 +84,7 @@ func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 			os.Exit(1)
 		}
 		l := newHeadlessLauncher(context.Background(), script, dir, true, false)
-		if _, _, err := launchConfined(context.Background(), l, script, nil); err != nil {
+		if _, _, err := launchBrowserProcess(context.Background(), l, script, nil); err != nil {
 			_, _ = io.WriteString(os.Stderr, err.Error())
 			srv.Close()
 			os.Exit(1)
@@ -102,8 +102,8 @@ func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	l := newHeadlessLauncher(ctx, "/nonexistent/chrome", t.TempDir(), true, false)
-	if _, _, err := launchConfined(ctx, l, "/nonexistent/chrome", nil); err == nil {
-		t.Fatal("launchConfined with missing binary succeeded")
+	if _, _, err := launchBrowserProcess(ctx, l, "/nonexistent/chrome", nil); err == nil {
+		t.Fatal("launchBrowserProcess with missing binary succeeded")
 	}
 	earlyDir := t.TempDir()
 	earlyExit := filepath.Join(earlyDir, "early-exit.sh")

@@ -27,7 +27,15 @@ type OperationFacts struct {
 type ProgressPolicy string
 
 // ProgressExistingAdmission preserves existing admission with separate attribution.
-const ProgressExistingAdmission ProgressPolicy = "existing_owner_admission"
+const (
+	ProgressExistingAdmission ProgressPolicy = "existing_owner_admission"
+	ProgressRequired          ProgressPolicy = "required"
+	ProgressNotRequired       ProgressPolicy = "not_required"
+)
+
+func (p ProgressPolicy) Valid() bool {
+	return p == ProgressExistingAdmission || p == ProgressRequired || p == ProgressNotRequired
+}
 
 // StreamContract distinguishes complete byte streams from display projections.
 type StreamContract struct {
@@ -51,7 +59,7 @@ func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
 	if facts.CatalogDigest != LanguageCatalogDigest() {
 		return OperationDefinition{}, fmt.Errorf("operation catalog digest mismatch")
 	}
-	if facts.Identity == "" || facts.Version < 1 || facts.Contract.Owner == "" || facts.ProgressGate != ProgressExistingAdmission || facts.RejectionContract == "" {
+	if facts.Identity == "" || facts.Version < 1 || facts.Contract.Owner == "" || !facts.ProgressGate.Valid() || facts.RejectionContract == "" {
 		return OperationDefinition{}, fmt.Errorf("operation identity, version, owner, progress and rejection contract required")
 	}
 	if strings.TrimSpace(facts.Identity) != facts.Identity || strings.TrimSpace(facts.Contract.Owner) != facts.Contract.Owner || facts.Contract.Lifecycle > LifecycleEphemeralControl {
@@ -91,6 +99,10 @@ func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
 }
 
 func (d OperationDefinition) Digest() string { return d.digest }
+
+// Serialized returns the exact immutable definition bytes named by Digest.
+// Receipt persistence must not decode and re-encode a different representation.
+func (d OperationDefinition) Serialized() string { return d.data }
 
 func (d OperationDefinition) Facts() OperationFacts {
 	var facts OperationFacts

@@ -6,3 +6,6 @@ internal/boolexpr/ast\.go:.*: unreachable func: (Ident|Not|And|Or)\.node
 
 # Sealed search DSL AST node markers (called via Node interface).
 internal/search/ast\.go:.*: unreachable func: (AndExpr|OrExpr|NotExpr|FilterExpr|TextExpr)\.node
+
+# Sealed command plan node markers (called via the CommandNode, TestNode and WordNode interfaces).
+internal/commandsurface/program_plan\.go:.*: unreachable func: [A-Za-z]+\.(commandNode|testNode|wordNode)

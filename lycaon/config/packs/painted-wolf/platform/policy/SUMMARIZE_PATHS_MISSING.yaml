@@ -3,12 +3,13 @@ id: SUMMARIZE_PATHS_MISSING
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - summarize
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.missing_paths
 when: paintedwolf.rejection_code == "SUMMARIZE_PATHS_MISSING"

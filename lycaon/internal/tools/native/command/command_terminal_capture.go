@@ -87,7 +87,7 @@ func runCommandTerminalCapture(
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
 	request := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement, bound.lease, commandLine),
 		ProjectDir: cwd, ProfileID: tctx.ProfileID(), Stages: stages, IOParams: ioParams,
 		PathExtra: append([]string(nil), tctx.Host.HostResourcePathExtra...),
 	}

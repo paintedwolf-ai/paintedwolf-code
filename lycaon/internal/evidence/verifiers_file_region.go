@@ -12,6 +12,9 @@ func (fileRegionVerifier) Verify(rec Record, claim Claim) (bool, string) {
 
 // VerifyFileRegion checks a path/line/excerpt claim against a read-shaped record.
 func VerifyFileRegion(rec Record, claim Claim) (bool, string) {
+	if rec.SourceDelivery != nil {
+		return verifyDeliveredSource(rec, claim)
+	}
 	excerpt := strings.TrimSpace(claim.Excerpt)
 	claimPath := effectiveClaimPath(rec, claim.Path)
 

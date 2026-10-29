@@ -350,27 +350,26 @@ func (r *SQLRecorder) InterruptRunning(ctx context.Context) (int64, error) {
 	if r == nil || r.queries == nil {
 		return 0, fmt.Errorf("invocation recorder is not configured")
 	}
-	return r.queries.InterruptRunningInvocationReceipts(ctx, nullableString(time.Now().UTC().Format(time.RFC3339Nano)))
+	return r.interruptModelAndPrograms(ctx, "")
 }
 
 func (r *SQLRecorder) InterruptRunningSession(ctx context.Context, sessionID string) (int64, error) {
 	if r == nil || r.queries == nil {
 		return 0, fmt.Errorf("invocation recorder is not configured")
 	}
-	return r.queries.InterruptRunningSessionInvocationReceipts(ctx, db.InterruptRunningSessionInvocationReceiptsParams{
-		SettledAt: nullableString(time.Now().UTC().Format(time.RFC3339Nano)),
-		SessionID: strings.TrimSpace(sessionID),
-	})
+	if strings.TrimSpace(sessionID) == "" {
+		return 0, fmt.Errorf("session identity required")
+	}
+	return r.interruptModelAndPrograms(ctx, strings.TrimSpace(sessionID))
 }
 
 // ArgsDigest identifies the exact structured argument object.
 func ArgsDigest(args map[string]any) (string, error) {
-	canonical, err := authzcontext.CanonicalJSON(args)
+	digest, err := authzcontext.CanonicalDigest(args)
 	if err != nil {
 		return "", fmt.Errorf("canonical invocation args: %w", err)
 	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:]), nil
+	return digest, nil
 }
 
 func terminalStatus(status api.InvocationStatus) bool {

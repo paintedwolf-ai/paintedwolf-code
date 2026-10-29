@@ -3,12 +3,13 @@ id: GREP_REGEX_INVALID
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - grep
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.detail
 when: paintedwolf.rejection_code == "GREP_REGEX_INVALID"

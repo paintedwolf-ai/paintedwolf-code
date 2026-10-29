@@ -3,13 +3,14 @@ id: CHOWN_BULK_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chown
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.bulk_denied
   - paintedwolf.requested
   - paintedwolf.max_paths

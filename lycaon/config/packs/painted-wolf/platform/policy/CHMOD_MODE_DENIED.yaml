@@ -3,13 +3,14 @@ id: CHMOD_MODE_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.mode
   - paintedwolf.mode_denied
   - paintedwolf.chmod_allowed_modes

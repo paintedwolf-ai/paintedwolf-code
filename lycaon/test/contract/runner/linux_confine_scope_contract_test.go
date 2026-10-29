@@ -58,6 +58,20 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
 }
 
+func TestLinuxConfineScopeCoversSharedProcessStatDecoder(t *testing.T) {
+	t.Parallel()
+	scopes := linuxConfineScopes(t, contractcheck.RepoRoot(t))
+	for _, name := range []string{"TestParseLinuxStatPreservesKernelFacts", "TestParseLinuxStatRejectsMalformedRecords", "TestParseLinuxStatBoundsTheEntireRecord"} {
+		covered := false
+		for _, scope := range scopes {
+			covered = covered || scope.covers("./internal/osprocess", name)
+		}
+		if !covered {
+			t.Errorf("applied Linux scope omits shared process-stat decoder test %s", name)
+		}
+	}
+}
+
 // Every command supervisor test runs on each architecture; a new one cannot fall outside the filter.
 func TestLinuxConfineScopeCoversEverySupervisorTest(t *testing.T) {
 	t.Parallel()
@@ -177,4 +191,19 @@ func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 		}
 	}
 	t.Error("no release and nightly CI lane runs test:confine:linux on ubuntu-24.04-arm")
+}
+
+func TestLinuxPrivilegeQualificationIsSelectedWithItsNativeTag(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, scope := range linuxConfineScopes(t, root) {
+		if !scope.covers("./internal/exec", "TestLinuxNativePrivilegeQualification") {
+			continue
+		}
+		if !strings.Contains(scope.Command, "--tags nativeprivileges") || !strings.Contains(scope.Command, "PW_NATIVE_PRIVILEGE_QUALIFICATION=ci") {
+			t.Fatal("native privilege qualification is selected without its required fixture build/setup mode")
+		}
+		return
+	}
+	t.Fatal("applied Linux lane omits genuine privilege qualification")
 }

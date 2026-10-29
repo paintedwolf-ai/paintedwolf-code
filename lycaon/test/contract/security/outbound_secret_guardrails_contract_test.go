@@ -108,11 +108,16 @@ func assertOutboundSecretDetectorRegistered(t *testing.T, root string) {
 // assertOutboundSecretBoundary checks screening and authority order.
 func assertOutboundSecretBoundary(t *testing.T, root string) {
 	t.Helper()
+	// Invoke resolves managed references, then enters the shared owner dispatch
+	// phase, which screens exact argv values before it returns them for Run.
 	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/executor_impl.go")
 	resolveAt := strings.Index(boundary, "e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)")
-	screenAt := strings.Index(boundary, "e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc)")
+	dispatchAt := strings.Index(boundary, "e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc, nil)")
 	invokeAt := strings.Index(boundary, "e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)")
-	if resolveAt < 0 || screenAt < 0 || invokeAt < 0 || !(resolveAt < screenAt && screenAt < invokeAt) {
+	dispatch := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/owner_dispatch.go")
+	phaseAt := strings.Index(dispatch, "func (e *Executor) prepareOwnerDispatch(")
+	screenAt := strings.Index(dispatch, "e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, *tc)")
+	if resolveAt < 0 || dispatchAt < 0 || invokeAt < 0 || !(resolveAt < dispatchAt && dispatchAt < invokeAt) || phaseAt < 0 || screenAt < phaseAt {
 		t.Fatal("managed references must resolve, then exact values must be screened, before tool invocation")
 	}
 	preflightSource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")

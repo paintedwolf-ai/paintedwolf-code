@@ -43,8 +43,27 @@ func agentEditInput(projectID string, edit tools.EditorDocumentEdit) editordoc.A
 	return editordoc.AgentEdit{
 		ProjectID: projectID, DocumentID: edit.DocumentID, ExpectedRevision: edit.ExpectedRevision, ReviewedRevision: edit.ReviewedRevision,
 		Content: edit.Content, OperationID: edit.OperationID, SessionID: edit.SessionID, Turn: edit.Turn,
-		ToolCallID: edit.ToolCallID, ToolName: edit.ToolName,
+		ToolCallID: edit.ToolCallID, ToolName: edit.ToolName, Pin: executionPin(edit.Pin),
 	}
+}
+
+func executionPin(pin *tools.EditorDocumentPin) *editordoc.ExecutionPin {
+	if pin == nil {
+		return nil
+	}
+	return &editordoc.ExecutionPin{Revision: pin.Revision, DiskSHA256: pin.BaseSHA256, Absent: pin.Absent}
+}
+
+// documentEditError keeps a pinned program conflict distinct from the moved
+// sentinel conversational edits retry on.
+func documentEditError(err error) error {
+	switch {
+	case errors.Is(err, editordoc.ErrExecutionConflict):
+		return errors.Join(tools.ErrEditorExecutionConflict, err)
+	case errors.Is(err, editordoc.ErrRevisionConflict):
+		return tools.ErrEditorDocumentMoved
+	}
+	return err
 }
 
 func appliedEdit(result *editordoc.AgentEditResult) (tools.EditorDocumentApplied, error) {
@@ -58,11 +77,8 @@ func appliedEdit(result *editordoc.AgentEditResult) (tools.EditorDocumentApplied
 
 func (a editorDocumentsAdapter) ApplyAgentEdit(ctx context.Context, projectID string, edit tools.EditorDocumentEdit) (tools.EditorDocumentApplied, error) {
 	result, err := a.service.ApplyAgentEdit(ctx, agentEditInput(projectID, edit))
-	if errors.Is(err, editordoc.ErrRevisionConflict) {
-		return tools.EditorDocumentApplied{}, tools.ErrEditorDocumentMoved
-	}
 	if err != nil {
-		return tools.EditorDocumentApplied{}, err
+		return tools.EditorDocumentApplied{}, documentEditError(err)
 	}
 	return appliedEdit(result)
 }
@@ -72,8 +88,12 @@ func editorDocumentText(d *editordoc.Document) (tools.EditorDocumentText, error)
 	if err != nil {
 		return tools.EditorDocumentText{}, err
 	}
+	base := d.BaseSHA256
+	if d.Absent {
+		base = ""
+	}
 	return tools.EditorDocumentText{
-		ID: d.ID, Revision: d.Revision, Text: d.Draft, SHA256: sha, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent,
+		ID: d.ID, Revision: d.Revision, Text: d.Draft, SHA256: sha, BaseSHA256: base, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent,
 	}, nil
 }
 
@@ -83,11 +103,8 @@ func (a editorDocumentsAdapter) ApplyAgentEdits(ctx context.Context, projectID s
 		inputs[i] = agentEditInput(projectID, edit)
 	}
 	results, err := a.service.ApplyAgentEdits(ctx, inputs)
-	if errors.Is(err, editordoc.ErrRevisionConflict) {
-		return nil, tools.ErrEditorDocumentMoved
-	}
 	if err != nil {
-		return nil, err
+		return nil, documentEditError(err)
 	}
 	applied := make([]tools.EditorDocumentApplied, len(results))
 	for i, result := range results {
@@ -102,14 +119,11 @@ func (a editorDocumentsAdapter) PreviewAgentEdits(ctx context.Context, projectID
 	inputs := make([]editordoc.AgentEdit, len(edits))
 	for i, edit := range edits {
 		inputs[i] = editordoc.AgentEdit{ProjectID: projectID, DocumentID: edit.DocumentID,
-			ExpectedRevision: edit.ExpectedRevision, Content: edit.Content, OperationID: edit.OperationID}
+			ExpectedRevision: edit.ExpectedRevision, Content: edit.Content, OperationID: edit.OperationID, Pin: executionPin(edit.Pin)}
 	}
 	previews, err := a.service.PreviewAgentEdits(ctx, inputs)
-	if errors.Is(err, editordoc.ErrRevisionConflict) {
-		return nil, tools.ErrEditorDocumentMoved
-	}
 	if err != nil {
-		return nil, err
+		return nil, documentEditError(err)
 	}
 	out := make([]tools.EditorDocumentPreview, len(previews))
 	for i, preview := range previews {
@@ -151,6 +165,11 @@ func (a editorDocumentsAdapter) AdvanceAgentRead(projectID, sessionID string, fr
 	}
 	a.service.DropAgentRead(projectID, sessionID, document.ID)
 	frozen.Forget(document.ID)
+}
+
+func (a editorDocumentsAdapter) PublishedThrough(ctx context.Context, projectID, documentID string, revision int64) (bool, error) {
+	published, _, err := a.service.PublishedThrough(ctx, projectID, documentID, revision)
+	return published, err
 }
 
 func (a editorDocumentsAdapter) FreezeAgentReads(projectID, sessionID string) map[string]int64 {

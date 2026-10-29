@@ -3,7 +3,7 @@ id: GIT_REPO_CONFIG_UNSAFE
 kind: policy
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - git_status
     - git_diff
     - git_log
@@ -22,6 +22,7 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.keys
 when: paintedwolf.rejection_code == "GIT_REPO_CONFIG_UNSAFE"

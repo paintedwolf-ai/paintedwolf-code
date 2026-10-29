@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // BranchWorkspace validates and prepares a complete worker branch.
@@ -34,6 +36,17 @@ func ValidateWorkerBranch(ctx context.Context, tctx ToolContext) error {
 		return nil
 	}
 	return tctx.Source.BranchWorkspace.ValidateMeta(ctx)
+}
+
+// AgentLaunchAuthority rechecks, at the launch door, the worker branch and the
+// live action lease that admitted an agent command under its bound identity.
+func AgentLaunchAuthority(tctx ToolContext, confinement *confine.Confinement, lease *confine.ActionLease, identity confine.EgressCommand) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := ValidateWorkerBranch(ctx, tctx); err != nil {
+			return err
+		}
+		return lease.ValidateLaunch(ctx, confinement, identity)
+	}
 }
 
 // RequiresWorkerBranch reports whether the named tool must claim a private

@@ -3,12 +3,13 @@ id: MKDIR_MODE_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - mkdir
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.mode_denied
   - paintedwolf.mode

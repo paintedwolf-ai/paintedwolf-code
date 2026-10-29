@@ -56,18 +56,10 @@ func (in OperationInvocation) Validate() error {
 	if in.ActorID == "" || in.SessionID == "" || in.CatalogDigest == "" {
 		return fmt.Errorf("explicit actor, session and catalog required")
 	}
-	switch in.Scope.Kind {
-	case ProjectOperationScope:
-		if in.Scope.ProjectID == "" {
-			return fmt.Errorf("project operation scope requires project identity")
-		}
-	case SessionOperationScope:
-		if in.Scope.ProjectID != "" || in.Scope.RootID != "" || in.Scope.BranchID != "" {
-			return fmt.Errorf("session operation scope cannot carry project tree identity")
-		}
-	default:
-		return fmt.Errorf("explicit project or session operation scope required")
+	if err := in.Scope.Validate(); err != nil {
+		return err
 	}
+
 	switch in.Kind {
 	case ProgramChildInvocation:
 		if in.Identity.ProgramID == "" || in.Identity.NodeID == "" || in.Identity.ExecutionID == "" || in.SourceUnitID == "" || in.ModelToolCallID != "" {

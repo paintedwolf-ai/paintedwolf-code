@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COMMAND_SYNTAX_INVALID
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+  - paintedwolf.expected_form
+when: paintedwolf.rejection_code == "COMMAND_SYNTAX_INVALID"
+effect: block
+copy:
+  what: 'Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}.'
+  cause: 'The complete submitted or captured syntax unit is malformed or has an unsupported source encoding.'
+  why: 'The host validates each complete syntax unit before executing it. A sourced-unit refusal does not erase earlier parent effects.'
+  fix: 'Review this source span and the expected form. Supply a complete UTF-8 syntax unit without BOM or NUL. The host has not guessed missing quotes or contents.'
+  instead: 'Expected: {{ paintedwolf.expected_form }}.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    source_line: 3
+    source_column: 7
+    expected_form: supported syntax
+  expect_contains:
+  - 'Code: COMMAND_SYNTAX_INVALID'
+  - '3:7'
+  - earlier parent effects

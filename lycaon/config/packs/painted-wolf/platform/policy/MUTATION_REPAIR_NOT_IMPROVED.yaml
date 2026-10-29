@@ -3,10 +3,10 @@ id: MUTATION_REPAIR_NOT_IMPROVED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [write, edit, replace_lines, code_rewrite]
+  paintedwolf.operation: [write, edit, replace_lines, code_rewrite]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.path, paintedwolf.rejection_code, paintedwolf.parse_errors, paintedwolf.python_indent_lines, paintedwolf.syntax_diagnostics_truncated]
+  facts: [paintedwolf.path, paintedwolf.rejection_code, paintedwolf.parse_errors, paintedwolf.python_indent_lines, paintedwolf.syntax_diagnostics_truncated, paintedwolf.operation]
 when: paintedwolf.rejection_code == "MUTATION_REPAIR_NOT_IMPROVED"
 effect: block
 copy:

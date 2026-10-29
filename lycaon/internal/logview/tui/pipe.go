@@ -153,7 +153,7 @@ func runPipeCommand(text, cmdline string) (stdout string, err error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	c.Stdout = &stdoutBuf
 	c.Stderr = &stderrBuf
-	err = c.Run()
+	err = execpkg.RunPrepared(c)
 	out := stdoutBuf.String()
 	if err != nil {
 		if s := strings.TrimSpace(stderrBuf.String()); s != "" {

@@ -57,11 +57,226 @@ incomplete input, denied authority, stale revisions and cancellation discard
 uncommitted staging. Earlier committed effects remain; programs are not
 multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
 
+Reached native operations freeze the normalized opaque-reference arguments
+before capability and policy review. Their separate `operation_arguments_v1`
+representation tags every scalar and container, sorts object keys by original
+bytes, and explicitly Base64-encodes non-UTF-8 strings and keys. Literal arrays
+cannot impersonate tags; numeric tokens retain their exact precision. The
+existing semantic grant normalization still removes declared authority-neutral
+arguments. Native review has a distinct identity domain; structured tool calls
+retain their existing digest and grant contracts. Owners receive the original
+frozen values, never a decoded inspection projection or resolved-secret record.
+
+The program frame separately retains the actual submitted `command` model
+arguments and real model call ID. Native operation arguments and child execution
+IDs cannot stand in for that outer observation. The immutable submitted JSON is
+borrowed until the frame closes. Closing denies new admission immediately;
+addressed roots and argument reservations remain held until active owner calls
+and prepared envelopes release their uses, then the shared facts are cleared.
+
 The golden program and option/limit fixture definitions are normative inputs
 for later acceptance suites. Catalog generation, reference probes and unit tests
 are distinct from executing native owners, live model qualification and installed
 platform evidence. macOS/Linux execution and installed qualification remain
 required; Windows-shaped paths and compile results never qualify native Windows.
+
+### Complete syntax units
+
+[`commandsurface.ParseProgram`](../lycaon/internal/commandsurface/program_parse.go)
+parses a submitted UTF-8 unit before exposing its typed plan. Original byte
+coordinates and a source digest survive quote removal; words retain literals,
+quotes, parameters and deferred substitutions. The private parsed tree returns
+detached snapshots. Parsing grants no operation capability and invokes no shell,
+filesystem operation, expansion or upstream interpreter.
+
+[`commandprogram.LoadSourceUnit`](../lycaon/internal/commandprogram/source_unit.go)
+captures an explicitly reached script through the source port. It requires the
+owner's exact UTF-8 representation, revision, complete range and byte digest, and
+validates the entire captured unit before any of its statements can be dispatched.
+A malformed script supplies no proof that earlier parent effects did not occur.
+Typed syntax diagnostics carry byte ranges, line/column, expected forms and
+resource measurements through the existing rejection/OAR pipeline. They never
+guess missing source contents or create executable replacement calls.
+
+The new plan is separate from the existing process-stage plan. Retained verify,
+PTY, process launch, detection, secret inspection and command-identity consumers
+still require that process representation. The current command executor remains
+its consumer until the runtime integration replaces it. Do not flatten functions,
+loops or substitutions into process stages, broaden a retained surface merely
+because the new parser accepts a form, or remove a recognizer while one of these
+consumers still uses it. Their replacement and obsolete-path cleanup accompany
+the introducing runtime integration.
+
+The syntax adapter reserves parser scratch before parsing and meters the selected
+upstream parser's allocations and recursive frames. Brace classification and
+static quote removal share that allocation pool; admission never invokes general
+field expansion or its account/environment/glob callbacks. The 8,192-node and
+64-edge limits count the completed selected syntax tree before host-plan
+allocation; temporary parser wrappers remain scratch. This clarifies the
+catalog's former generic “before allocation” wording without changing either
+threshold. Host lowering reserves a conservative typed-node, slice-growth,
+cloned-text and frame envelope against the same pool before allocating its plan.
+
+Source capture receives an explicit byte ceiling and representation before
+materialization. Execution uses `NewProgramParser` with working and retained
+state admission. Retained source/plan storage is charged to `program_state_bytes`
+before host-plan insertion; closing parser scratch does not release that state.
+Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
+while the original parsed program is released. `ParseProgram`, `Snapshot` and
+`Source` are bounded inspection helpers and do not grant execution authority;
+execution callers must retain the applicable leases while values remain reachable.
+`ValidatedProgramIdentity` supplies a zero-copy source/catalog identity only while
+that validated execution lease remains live. Admission can bind a whole-envelope
+progress update to this unit without treating an inspection copy or a caller's
+boolean as validation proof; the identity check itself applies no progress.
+Local parser tests do not qualify the later command dispatch, native utilities,
+publication or installed-platform wiring.
+
+
+### Complete byte streams
+
+`commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
+ingress byte budget. EOF, producer failure, deliberate consumer closure,
+cancellation and budget refusal have separate typed settlement facts. A preview,
+receipt, digest or truncation notice is never a pipeline source. Here-document
+and native-null inputs use the same exact byte endpoints; typed null sinks count
+ingress without opening a platform device or resolving secret references.
+
+`ScreenedPipe` connects the existing capture projection to that byte plane.
+Screening reserves actual payload/candidate capacities incrementally against the
+caller's aggregate working-memory ledger before allocation. It reuses the
+catalog window schedule, exact-value policy and interval rewrite; independent
+chunk screening is not equivalent. Managed-value and classification changes
+stop complete publication. Raw received hashes and emitted screened hashes stay
+separate, and emitted bytes preserve NUL, CRLF and invalid UTF-8 outside declared
+redactions. No general transform receives a secret-resolution API.
+
+`tooloutput.RetainScreenedStream` spools only already-screened bytes through the
+existing blob store's staging, compression, commit, retention and recovery claims.
+The plaintext and compressed staging overlap is admitted against spill quota;
+codec scratch is admitted after input EOF, when upstream screening can release
+its scratch. Preview and metadata have a separate retained-state lease. A
+readable failure prefix remains incomplete. Canceling input closes its source;
+copy/compression cancellation refuses a not-yet-committed body. Each live body
+reference has its own retention claim, separate from its initiating operation.
+Closing a spill releases its display preview and refuses future opens; body/disk
+accounting remains until active readers and recovery claims permit physical
+collection. `TransferBody` first durably attaches the exact reference, then moves
+the same claim and body leases into the existing invocation/output lifecycle.
+A failed attachment leaves the wrapper responsible. Preview closure cannot
+release a transferred body's quota. Bounded spill reads use one decoder worker,
+an8MiB history ceiling and admitted32MiB scratch; complete bodies may exceed
+that history size. Generic blob readers retain their existing profile. Callers
+keep applicable leases while their references remain reachable. These are
+logical capacity reservations, not process RSS.
+
+`StreamSourceMapping` carries only candidate ranges beside exact bytes. Its
+capture pin and digest stay unchanged when an exact presentation slice narrows
+the separate mapped range. `ProjectStreamMappings` admits and retains that
+metadata for explicitly exact slices; unspecified/arbitrary transforms drop it.
+Unseen retained bytes and printed source-like text establish no model read base.
+A source operation and the existing delivery boundary must still attribute the
+actual page before it qualifies as conversational evidence. These stream ports
+do not activate the later command-entry integration by themselves.
+
+Program operations pin execution revisions instead of conversational read bases.
+`native.ExecutionRevisions` captures each native input from the accepted shared
+document when one exists, otherwise from published disk, and captures each
+destination's revision or absence before the transform is prepared. A
+`WriteExecutionPinned` write rechecks the destination exactly in the document
+owner (or the write door's base check), rechecks its sources after review, and
+refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
+rebases, retries or reruns. External processes read published disk: their
+inputs are declared at launch as disk identities, not as observed reads. A
+`PublicationBarrier` refuses a dependent launch with
+`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
+state stays held and no other draft is saved. Each operation pins its own
+inputs, so a later statement captures newer revisions and sees earlier
+published writes; there is no whole-program snapshot. Program receipts retain
+the pins per execution.
+
+### Platform adapter evidence
+
+`fseffect.Replace` reports whether replacement, directory durability and byte
+verification actually occurred, even when a later step fails. Staged byte counts
+alone do not prove publication. Source mutation settlement preserves the same
+journal and reports committed publication separately from a later completion
+error. Ownership changes return an explicit capability and applied result;
+unsupported platforms never claim that metadata changed.
+
+Native TCP observations carry exact endpoints, an opaque socket resource identity
+and the holder's process incarnation. Fresh inherited-descriptor checks establish
+lineage membership. Session pairing additionally requires complete observation
+of every relevant holder: inaccessible process/socket tables produce
+`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
+ordinary connection admission. These are observations for mediated admission,
+not grants; mediated admission must recheck current identities at each required
+boundary.
+
+Portable external launch uses one prepared lifecycle through the existing
+`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
+process producers. Final sanitized environment, PATH selection, real cwd and
+literal argv are captured before helper construction. The helper receives the
+selected native executable path and held cwd, and never resolves a prepared
+command through PATH a second time. A current invocation path owner may supply
+its checked metadata handles; a held handle never grants source-read or execution
+authority. Host-managed native producers retain their existing OS authority. Agent command
+launches without an explicit scoped path port require their current initiating
+execution-authority callback: it revalidates the actual live action, actor/root
+identity, confinement and worker branch without consuming once-use permits twice.
+This admits execution metadata only and never grants source-read authority.
+Explicit strict confinement remains strict when the platform cannot apply it.
+
+Selection captures metadata identity without reading executable contents or
+preparsing shebangs. Execution-only files and directories retain their native
+permission semantics. Before start and at the actual helper handoff, the initiating
+owner rechecks current authority and captured entry/cwd identity. Existing process
+or process-tree supervision registers before release. Guard registration only
+establishes ownership; group, pipeline and PTY launch sites then require the
+captured handoff explicitly. Missing or concurrently released capture refuses. The helper then uses
+ordinary native pathname execution with the original literal argv, held cwd and
+frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
+rules. The absolute metadata selection is separate from the native filename sent
+to the kernel: relative slash operands and relative/empty PATH entries preserve
+that spelling under captured cwd. Discovery without cwd facts retains its explicit
+absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
+Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
+tracer, descriptor pathname or extra no-new-privileges restriction. Existing
+confinement still applies its own required restrictions.
+
+These are captured selection and current handoff checks. Native pathname lookup
+is not atomic with the final identity check, and mutable executable/interpreter
+contents are not immutable historical bytes. A stopped postexec image, credential,
+cwd or kernel-expanded argv snapshot is not a universal launch requirement.
+Available native process observations remain separate truthful facts, and absent
+observations never become successful enforcement claims. Exec transport EOF is
+not completed output, effects or recovery proof. Changed identity, current
+authority refusal, cancellation and actual native exec failures stop this launch;
+none selects another execution mechanism or automatically retries it.
+
+Synchronous and retained asynchronous groups share `ProcessGroup`: native Wait,
+tree cleanup and guard release settle once, and Stop ignores a settled invocation.
+Both managed browser postures use this lifecycle and the existing executor reaper;
+Chromium keeps its own sandbox when no host boundary is selected. Browser URL
+readiness stays separate from process admission, and both postures use the reduced
+environment. SDK transports retain their own native pipe and Wait lifecycle inside
+the prepared start callback; a failed handoff closes their terminal reader after
+native settlement.
+
+Complete macOS/Linux managed native fixtures, caller lifecycle regressions and
+installed-platform qualification remain required. Component fixtures and native
+helper success do not establish a connected command runtime or installed release.
+
+Windows qualification requires actual filesystem replacement while handles are
+open, reparse-point and exact-name identity checks, journal/error settlement,
+metadata capability results, typed null operands, executable alias resolution
+and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
+cancellation that preserves unrelated processes, and observed confinement and
+network enforcement. Packaging must deliver and verify the required executable,
+helper and security prerequisites on the installed target. Cross-compilation,
+Unix fixtures and unsupported results do not qualify those capabilities. The
+same native macOS/Linux runtime and installed-platform qualification obligations
+remain; individual adapter tests do not qualify the complete command evaluator.
 
 ## Altitude
 
@@ -190,6 +405,60 @@ Every mutation-capable profile can reach all three lifecycle tools; requesting g
 A tool profile is a declared capability surface for an agent role: allowed tools, filesystem scope, command policy, loop and output budgets, and optional deferred tools. Profiles answer which capabilities an agent may request; the effect boundary still answers whether a particular request may proceed.
 
 Open-world `tools: all` means all effective registered tools admitted to that workflow surface, including enabled extensions and MCP definitions. Restricted profiles remain closed and do not gain a tool merely because it registered at runtime.
+
+### Native command admission
+
+Typed command operations are selected explicitly from immutable native definitions.
+Retained structured schema registration and discovery do not expose a native
+binding. The effective profile declares the set-valued `command_effects` axes
+(`read_only`, `mutation`, `external_exec`, `network_egress`); an absent declaration
+admits none. Coordinator surface and session posture declarations further
+intersect that set. Project posture overlays can tighten their shipped set.
+These declarations do not activate the replacement command entry or remove
+current structured tools and shell restrictions.
+
+Each program frame pins the real initiating model call, actor, session, addressed
+roots and source branches. A child has its own host execution identity, fresh
+one-call capability state and owner contract; its identity does not replace the
+model call used for checkpoint correlation. Binding and effect-class admission
+supply no filesystem, network, revision, content-review or person authority.
+Those existing boundaries still admit each reached effect, including resumption.
+
+Reached admission freezes the actual reviewed opaque-reference argument object,
+separately from the ephemeral resolved-secret copy, under the shared retained
+state admission. The required recorder marker runs before entering the complete
+native owner. `OwnerInvoked` is independent of mutation certainty: an executed
+read with `NoEffect` still rules out a claim of zero program execution. A later
+host stop cannot rewrite a completed owner result or make its output publishable.
+Socket and direct-IP once permits bind session, the real model call and optional
+native execution id; a structured-only permit cannot authorize a native child.
+
+Progress requirements belong to immutable operation metadata. Retained operations
+use the existing progress-gated catalog; native definitions declare `required` or
+`not_required`. The shared progress predicate preserves worker and review-loop
+exemptions. The introducing command entry must validate the complete syntax unit
+and optional owner-prepared progress before applying that progress, then check
+known prerequisites and recheck reached effects against current progress. A
+progress update remains separate from program success and is never inferred
+from utility output.
+
+`PrepareProgramEnvelope` requires the actual parsed program's live validated
+identity before admitting the optional payload through the existing
+`update_progress` schema and author validation. `ApplyProgramProgress` uses the
+existing policy, secret screens, review and progress store, checking the held
+program identity and current root again before application. Its host envelope
+execution id has no invented shell node or source span. The progress recorder
+marker and `AuthorUpdateResult` remain separate from program-child settlement;
+a committed checklist is preserved after a later denied operation. These typed
+ports do not activate the replacement command entry.
+
+A listen request alone grants no connection. Automatic paired loopback access
+requires narrowed per-action conditional admission, current policy, and a fresh
+exact native listener/resource observation before dialing and before payload
+writes. Incomplete platform ownership observations use ordinary approval.
+Separately approved connect grants retain their existing authority. Resource
+identity changes stop later writes without rewriting earlier delivered effects;
+these checks do not claim kernel-atomic ownership across observation and write.
 
 ### Turn tool plans
 
@@ -505,7 +774,7 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P08 binds production admission.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P09 binds production admission. P08 supplies the shared status/control and complete-producer publication decision; P16 supplies staged destination publication.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 

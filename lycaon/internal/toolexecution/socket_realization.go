@@ -40,7 +40,7 @@ func (e *Capabilities) permitCoveredHostResourceSockets(
 			continue
 		}
 		if e.socketRuntime != nil {
-			e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
+			e.socketRuntime.IssuePermit(tc.PermitIdentity(), actionDigest, grant)
 		}
 		e.recordCapabilityDecision(ctx, tc, action.Invocation.Tool, grant, true, authzledger.AuthorizationSourceLease)
 	}

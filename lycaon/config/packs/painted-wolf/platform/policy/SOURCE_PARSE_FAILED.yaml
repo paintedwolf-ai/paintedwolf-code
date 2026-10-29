@@ -3,10 +3,11 @@ id: SOURCE_PARSE_FAILED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [read, grep, code_rewrite]
+  paintedwolf.operation: [read, grep, code_rewrite]
 requires:
   profiles: [tool]
   facts:
+    - paintedwolf.operation
     - paintedwolf.path
     - paintedwolf.rejection_code
     - paintedwolf.parse_timed_out

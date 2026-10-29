@@ -3,13 +3,14 @@ id: SURVEY_GLOB_INVALID
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - grep
     - find
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.detail
 when: paintedwolf.rejection_code == "SURVEY_GLOB_INVALID"

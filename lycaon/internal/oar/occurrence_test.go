@@ -46,7 +46,7 @@ func TestCapabilityFactsAreAvailableToEveryConsumer(t *testing.T) {
 		name := publishedName(fact.name, fact.tier)
 		t.Run(name, func(t *testing.T) {
 			expr := name + " == " + name
-			if fact.typ == oarcore.TypeListString {
+			if fact.typ == oarcore.TypeListString || fact.typ == oarcore.TypeListMap {
 				expr = "size(" + name + ") >= 0"
 			}
 			if err := checkWhenAgainstSpec(expr, nil); err != nil {

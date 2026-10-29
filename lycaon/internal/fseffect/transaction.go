@@ -29,12 +29,12 @@ type Location struct {
 	Rel  string
 }
 
-// Result identifies the byte stream staged and committed by Replace.
+// Result identifies staged bytes and the publication state actually reached.
+// An error does not imply that the destination remained unchanged.
 type Result struct {
-	// Committed distinguishes publication from later durability failures.
-	Committed bool
-	Bytes     int64
-	SHA256    string
+	Bytes       int64
+	SHA256      string
+	Publication PublicationState
 }
 
 // Target exposes the destination through its held parent.

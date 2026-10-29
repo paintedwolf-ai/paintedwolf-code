@@ -3,12 +3,13 @@ id: HTTP_REQUEST_FAILED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - http_request
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.retryable
   - paintedwolf.rejection_code
   - paintedwolf.http_method

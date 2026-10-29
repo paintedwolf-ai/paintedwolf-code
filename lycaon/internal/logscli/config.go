@@ -87,5 +87,5 @@ func editConfig(cfg logview.Config) error {
 	}
 	defer cleanup()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	return execpkg.RunPrepared(cmd)
 }

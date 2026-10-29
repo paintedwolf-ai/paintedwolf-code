@@ -97,21 +97,23 @@ type HTTPReporter func(lineage string, ep Endpoint, statusCode int, requestErr e
 
 // Broker is the host's loopback forward proxy.
 type Broker struct {
-	resolvePeer    PeerResolver
-	decideEndpoint EndpointDecider
-	loopbackGrant  LoopbackConnectAuthority
-	leaseLive      LeaseCheck
-	reportRefusal  RefusalReporter
-	dialEndpoint   DialEndpoint
-	reportDial     DialReporter
-	reportHTTP     HTTPReporter
-	httpLn         net.Listener
-	socksLn        net.Listener
-	server         *http.Server
-	serveCtx       context.Context
-	cancel         context.CancelFunc
-	serveWG        sync.WaitGroup
-	connWG         sync.WaitGroup
+	resolvePeer           PeerResolver
+	decideEndpoint        EndpointDecider
+	loopbackGrant         LoopbackConnectAuthority
+	ownedLoopback         OwnedLoopbackAuthority
+	reportLoopbackRefusal func(context.Context, string, Endpoint)
+	leaseLive             LeaseCheck
+	reportRefusal         RefusalReporter
+	dialEndpoint          DialEndpoint
+	reportDial            DialReporter
+	reportHTTP            HTTPReporter
+	httpLn                net.Listener
+	socksLn               net.Listener
+	server                *http.Server
+	serveCtx              context.Context
+	cancel                context.CancelFunc
+	serveWG               sync.WaitGroup
+	connWG                sync.WaitGroup
 }
 
 // New constructs the host broker. Without a peer resolver it serves nobody.
@@ -490,7 +492,17 @@ func (b *Broker) dialAuthorizedEndpointInner(ctx context.Context, lineage string
 		return nil, errCommandAuthorizationRevoked
 	}
 	if b.dialEndpoint == nil {
-		return defaultDialEndpoint(ctx, ep, leased, b.loopbackAuthorized(lineage, ep.Port))
+		var owned endpointOwnership
+		if b.ownedLoopback != nil {
+			owned = func(ctx context.Context, endpoint netip.AddrPort) (string, bool) {
+				return b.ownedLoopback(ctx, lineage, endpoint)
+			}
+		}
+		return defaultDialEndpoint(ctx, ep, leased, b.loopbackAuthorized(lineage, ep.Port), owned, func() {
+			if b.reportLoopbackRefusal != nil {
+				b.reportLoopbackRefusal(ctx, lineage, ep)
+			}
+		})
 	}
 	conn, err := b.dialEndpoint(ctx, ep)
 	if err != nil {

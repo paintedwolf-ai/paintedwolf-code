@@ -93,13 +93,15 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		}
 		confine.LogApplied(OpenToolName, tctx.Identity.SessionID, confinement)
 		egress := confine.EgressCommand{
-			SessionID:     tctx.Identity.SessionID,
-			RootSessionID: tctx.ChatSessionID(),
-			ProjectID:     tctx.Identity.ProjectID,
-			ProjectDir:    tctx.ActiveRootPath(),
-			ToolCallID:    tctx.Identity.ToolCallID,
-			ToolName:      OpenToolName,
-			CommandLine:   in.Command,
+			OwnedLoopbackPorts: append([]uint16(nil), tctx.Local.OwnedLoopbackPorts...),
+			SessionID:          tctx.Identity.SessionID,
+			RootSessionID:      tctx.ChatSessionID(),
+			ProjectID:          tctx.Identity.ProjectID,
+			ProjectDir:         tctx.ActiveRootPath(),
+			ToolCallID:         tctx.Identity.ToolCallID,
+		ActionID: tctx.EffectActionID(),
+			ToolName:           OpenToolName,
+			CommandLine:        in.Command,
 		}
 		if tctx.Files.PackageExecution != nil {
 			egress.DeclaredHosts = append([]string(nil), tctx.Files.PackageExecution.AllowedHosts...)
@@ -123,6 +125,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		profile := tctx.ProfileID()
 		hostRunner := hostcmd.NewRunner()
 		launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, "terminal_open", confinement)
+		launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, egressLease, egress)
 		if tctx.Files.PackageExecution != nil {
 			launch = launch.WithReducedEnvironment()
 		}

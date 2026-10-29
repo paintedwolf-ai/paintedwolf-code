@@ -49,6 +49,12 @@ func ensureIgnoreOverlayFormat(loc fseffect.Location) error {
 }
 
 func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string) error {
+	return applyAgentFileAdmitted(ctx, tctx, target, after, before, baseSHA256, nil)
+}
+
+// applyAgentFileAdmitted runs admit after review and the base check, just
+// before the reviewed bytes commit, so pinned inputs cannot move during review.
+func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string, admit func() error) error {
 	if before == nil && baseSHA256 != "" {
 		before = []byte{}
 	}
@@ -85,6 +91,11 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 			if err := verifyMutationSnapshot(target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
 			}
+			if admit != nil {
+				if err := admit(); err != nil {
+					return err
+				}
+			}
 			var err error
 			journal, err = prepareAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false)
 			if err != nil {
@@ -94,7 +105,7 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 			return err
 		},
 	})
-	if result.Committed {
+	if result.Publication.Committed() {
 		delivery.Commit(ctx)
 	}
 	return finishAgentMutation(ctx, tctx, mutation, journal, err)
@@ -168,7 +179,7 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			return prepareErr
 		},
 	})
-	if result.Committed {
+	if result.Publication.Committed() {
 		delivery.Commit(ctx)
 	}
 	return result, finishAgentMutation(ctx, tctx, mutation, journal, err)
@@ -354,7 +365,8 @@ func chmodAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 
 func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, uid, gid int) error {
 	return applyAgentMetadataChange(ctx, tctx, target, fmt.Sprintf("Set file owner to uid %d and gid %d.", uid, gid), func() error {
-		return fseffect.Chown(target.Location, uid, gid)
+		_, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: target.Location, UID: uid, GID: gid})
+		return err
 	})
 }
 

@@ -95,7 +95,7 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 		return true
 	}
 	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
-	path := filepath.Clean(strings.TrimSpace(modelPath))
+	path := filepath.Clean(modelPath)
 	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
 }
 

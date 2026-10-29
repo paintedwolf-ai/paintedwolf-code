@@ -1464,6 +1464,226 @@ CREATE INDEX IF NOT EXISTS idx_invocation_receipts_session_started
 CREATE INDEX IF NOT EXISTS idx_invocation_receipts_running
     ON invocation_receipts(status, started_at) WHERE status = 'running';
 
+-- Portable programs remain children of the one real model invocation receipt.
+CREATE TABLE IF NOT EXISTS invocation_programs (
+    id TEXT PRIMARY KEY,
+    parent_receipt_id TEXT NOT NULL UNIQUE REFERENCES invocation_receipts(id) ON DELETE CASCADE,
+    root_execution_id TEXT NOT NULL UNIQUE,
+    language_version INTEGER NOT NULL CHECK (language_version > 0),
+    catalog_digest TEXT NOT NULL,
+    source_unit_id TEXT NOT NULL,
+    source_digest TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    source_exact INTEGER NOT NULL CHECK (source_exact IN (0,1)),
+    plan_ref TEXT NOT NULL,
+    syntax_validated INTEGER NOT NULL CHECK (syntax_validated IN (0,1)),
+    state TEXT NOT NULL CHECK (state IN ('running','waiting','completed','rejected','failed','interrupted')),
+    status_code INTEGER CHECK (status_code BETWEEN 0 AND 255),
+    stop_code TEXT NOT NULL DEFAULT '',
+    detail_ref TEXT NOT NULL DEFAULT '',
+    progress_state TEXT NOT NULL DEFAULT 'unchanged' CHECK (progress_state IN ('unchanged','committed','rejected','unknown')),
+    progress_ref TEXT NOT NULL DEFAULT '',
+    trace_events INTEGER NOT NULL DEFAULT 0 CHECK (trace_events >= 0),
+    trace_bytes INTEGER NOT NULL DEFAULT 0 CHECK (trace_bytes >= 0),
+    started_at TEXT NOT NULL,
+    settled_at TEXT
+) STRICT;
+
+-- Envelope progress has no fabricated shell node or source span.
+CREATE TABLE IF NOT EXISTS invocation_program_progress (
+    execution_id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL UNIQUE REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    actor_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    root_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+    arguments_representation TEXT NOT NULL CHECK (arguments_representation='operation_arguments_v1'),
+    arguments_digest TEXT NOT NULL,
+    arguments_ref TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('running','unchanged','committed','rejected','unknown')),
+    owner_invoked INTEGER NOT NULL DEFAULT 0 CHECK (owner_invoked IN (0,1)),
+    detail_ref TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    settled_at TEXT
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_session ON invocation_program_progress(session_id);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_root_session ON invocation_program_progress(root_session_id);
+
+CREATE TABLE IF NOT EXISTS invocation_program_sources (
+    program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    source_unit_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    representation TEXT NOT NULL CHECK (representation IN ('utf8-no-bom','logical-utf8-lf','original-encoded-bytes')),
+    sha256 TEXT NOT NULL,
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    detail_ref TEXT NOT NULL,
+    PRIMARY KEY (program_id, source_unit_id)
+) STRICT, WITHOUT ROWID;
+
+-- Static nodes describe known syntax only, never hypothetical future iterations.
+CREATE TABLE IF NOT EXISTS invocation_program_nodes (
+    program_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    source_unit_id TEXT NOT NULL,
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    line INTEGER NOT NULL CHECK (line > 0),
+    column_number INTEGER NOT NULL CHECK (column_number > 0),
+    state TEXT NOT NULL DEFAULT 'not_started' CHECK (state IN ('not_started','reached','untaken')),
+    PRIMARY KEY (program_id, node_id),
+    FOREIGN KEY (program_id, source_unit_id) REFERENCES invocation_program_sources(program_id, source_unit_id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
+-- Frozen operation definitions are stored once per program and referenced by digest.
+CREATE TABLE IF NOT EXISTS invocation_program_definitions (
+    program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    definition_digest TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    lifecycle TEXT NOT NULL,
+    definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
+    PRIMARY KEY (program_id, definition_digest)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS invocation_program_executions (
+    id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+    parent_execution_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+    operation_id TEXT NOT NULL,
+    definition_digest TEXT NOT NULL,
+    arguments_representation TEXT NOT NULL CHECK (arguments_representation='operation_arguments_v1'),
+    arguments_digest TEXT NOT NULL,
+    reviewed_arguments_representation TEXT NOT NULL DEFAULT '' CHECK (reviewed_arguments_representation IN ('','operation_arguments_v1')),
+    reviewed_arguments_digest TEXT NOT NULL DEFAULT '',
+    reviewed_arguments_ref TEXT NOT NULL DEFAULT '',
+    native_command TEXT NOT NULL DEFAULT '',
+    effect_mode TEXT NOT NULL DEFAULT '',
+    effect_classes_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(effect_classes_json)),
+    arguments_ref TEXT NOT NULL,
+    canonical TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('prepared','waiting','running','completed','refused','failed','interrupted')),
+    owner TEXT NOT NULL,
+    lifecycle TEXT NOT NULL,
+    owner_started INTEGER NOT NULL DEFAULT 0 CHECK (owner_started IN (0,1)),
+    owner_invoked INTEGER NOT NULL DEFAULT 0 CHECK (owner_invoked IN (0,1)),
+    status_code INTEGER CHECK (status_code BETWEEN 0 AND 255),
+    stop_code TEXT NOT NULL DEFAULT '',
+    host_stop_code TEXT NOT NULL DEFAULT '',
+    output_publishable INTEGER NOT NULL DEFAULT 0 CHECK (output_publishable IN (0,1)),
+    complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0,1)),
+    publication_eligible INTEGER NOT NULL DEFAULT 0 CHECK (publication_eligible IN (0,1)),
+    publication_basis INTEGER NOT NULL DEFAULT 0 CHECK (publication_basis IN (0,1)),
+    effect_certainty TEXT NOT NULL DEFAULT 'none' CHECK (effect_certainty IN ('none','completed','attempted','unknown')),
+    evidence_kind TEXT NOT NULL DEFAULT '',
+    evidence_ref TEXT NOT NULL DEFAULT '',
+    owner_ref TEXT NOT NULL DEFAULT '',
+    recovery_ref TEXT NOT NULL DEFAULT '',
+    held_version_id TEXT NOT NULL DEFAULT '',
+    accepted_revision TEXT NOT NULL DEFAULT '',
+    published_revision TEXT NOT NULL DEFAULT '',
+    detail_ref TEXT NOT NULL DEFAULT '',
+    approval_ref TEXT NOT NULL DEFAULT '',
+    job_handle TEXT NOT NULL DEFAULT '',
+    conflict_path TEXT NOT NULL DEFAULT '',
+    conflict_expected_revision TEXT NOT NULL DEFAULT '',
+    conflict_observed_revision TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    settled_at TEXT,
+    CHECK (id != parent_execution_id),
+    CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
+    UNIQUE (program_id, id),
+    UNIQUE (program_id, ordinal),
+    FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE,
+    FOREIGN KEY (program_id, definition_digest) REFERENCES invocation_program_definitions(program_id, definition_digest) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_program_started
+    ON invocation_program_executions(program_id, started_at, id);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_running
+    ON invocation_program_executions(state, program_id) WHERE state IN ('prepared','waiting','running');
+
+CREATE TABLE IF NOT EXISTS invocation_program_outputs (
+    id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    execution_id TEXT,
+    stream TEXT NOT NULL CHECK (stream IN ('stdout','stderr','detail','source','arguments')),
+    reference TEXT NOT NULL,
+    retention_claim_id TEXT NOT NULL UNIQUE,
+    initiating_claim_id TEXT NOT NULL,
+    blob_id TEXT NOT NULL CHECK (blob_id <> ''),
+    blob_json TEXT NOT NULL CHECK (json_valid(blob_json)),
+    complete INTEGER NOT NULL CHECK (complete IN (0,1)),
+    redacted INTEGER NOT NULL CHECK (redacted IN (0,1)),
+    mappings_json TEXT NOT NULL CHECK (json_valid(mappings_json)),
+    preview TEXT NOT NULL DEFAULT '',
+    preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_execution ON invocation_program_outputs(execution_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invocation_program_outputs_reference ON invocation_program_outputs(program_id,reference);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_blob_id
+    ON invocation_program_outputs(blob_id);
+
+-- Only source-owner-confirmed delivered pages become observation records.
+CREATE TABLE IF NOT EXISTS invocation_program_deliveries (
+    id TEXT PRIMARY KEY,
+    output_id TEXT NOT NULL REFERENCES invocation_program_outputs(id) ON DELETE CASCADE,
+    response_id TEXT NOT NULL,
+    delivery_id TEXT NOT NULL,
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    source_owner_ref TEXT NOT NULL,
+    mappings_json TEXT NOT NULL CHECK (json_valid(mappings_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE (output_id, response_id, delivery_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_deliveries_output ON invocation_program_deliveries(output_id);
+
+-- What each execution captured before preparing an effect: accepted document
+-- revisions, published disk identities, absence preconditions and the disk
+-- identity declared to an external launch. Never a conversational read base.
+-- Rows hold the newest pins; full runs move into pin segments.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pins (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    role TEXT NOT NULL CHECK (role IN ('source','destination')),
+    mode TEXT NOT NULL CHECK (mode IN ('accepted_document','published_disk','absent')),
+    basis TEXT NOT NULL CHECK (basis IN ('captured','declared_at_launch')),
+    root_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    document_revision INTEGER NOT NULL CHECK (document_revision >= 0),
+    disk_sha256 TEXT NOT NULL,
+    representation TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    content_bytes INTEGER NOT NULL CHECK (content_bytes >= 0),
+    captured_at TEXT NOT NULL,
+    PRIMARY KEY (execution_id, ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
+-- Sealed runs of an execution's pins: revisionPinSegment consecutive pins as
+-- gzip-compressed JSON with the SHA-256 of the exact uncompressed body.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pin_segments (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    first_ordinal INTEGER NOT NULL CHECK (first_ordinal >= 0),
+    pin_count INTEGER NOT NULL CHECK (pin_count > 0),
+    encoding TEXT NOT NULL CHECK (encoding IN ('gzip-json-v1')),
+    body BLOB NOT NULL,
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    PRIMARY KEY (execution_id, first_ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
 -- Superseded coordinator draft bodies keyed by stable slot id.
 CREATE TABLE IF NOT EXISTS draft_versions (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -2039,6 +2259,10 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     -- A person answers or stops a checkpoint; expiry, a host stop, and policy name nobody.
     resolved_by_person_id TEXT REFERENCES people(id),
     project_id TEXT NOT NULL CHECK (project_id <> ''),
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     CHECK (
         (resolved_by IS NULL AND resolved_by_person_id IS NULL)
         OR (resolved_by IN ('expiry', 'host_stop', 'policy') AND resolved_by_person_id IS NULL)
@@ -2100,7 +2324,11 @@ CREATE TABLE IF NOT EXISTS approval_operations (
     status TEXT NOT NULL CHECK (status IN ('prepared', 'committed', 'rolled_back')),
     created_at TEXT NOT NULL,
     committed_at TEXT,
-    rolled_back_at TEXT
+    rolled_back_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body)))
 ) STRICT;
 
 -- Resolved checkpoint metadata awaiting its tool row.
@@ -2124,6 +2352,10 @@ CREATE TABLE IF NOT EXISTS chat_grants (
     delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
     created_at TEXT NOT NULL,
     expires_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     PRIMARY KEY (chat_session_id, id)
 ) STRICT, WITHOUT ROWID;
 
@@ -2433,6 +2665,19 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     superseded_by TEXT,
     PRIMARY KEY (session_id, handle)
 ) STRICT, WITHOUT ROWID;
+
+-- Exact delivered-window identity makes retries idempotent without weakening
+-- historical handle identity or manufacturing a model response.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_records_source_delivery
+    ON evidence_records(session_id,
+        json_extract(line_ranges,'$.source_delivery.response_id'),
+        json_extract(line_ranges,'$.source_delivery.delivery_id'),
+        json_extract(line_ranges,'$.source_delivery.source.SHA256'),
+        json_extract(line_ranges,'$.source_delivery.source.SourceID'),
+        json_extract(line_ranges,'$.source_delivery.source.Revision'),
+        json_extract(line_ranges,'$.source_delivery.source_start_byte'),
+        json_extract(line_ranges,'$.source_delivery.source_end_byte'))
+    WHERE json_type(line_ranges,'$.source_delivery')='object';
 
 CREATE INDEX IF NOT EXISTS idx_evidence_records_session_path ON evidence_records(session_id, path);
 CREATE INDEX IF NOT EXISTS idx_evidence_records_live ON evidence_records(session_id) WHERE superseded_by IS NULL;

@@ -1,5 +1,6 @@
 id: plan_write_only
 description: Plan markdown writes only under plan_write scope
+command_effects: [read_only, mutation]
 tools:
   complete_leg: sticky
   recall: sticky

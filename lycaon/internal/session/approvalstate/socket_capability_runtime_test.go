@@ -2,6 +2,7 @@ package approvalstate_test
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"net"
 	"os"
 	"path/filepath"
@@ -148,13 +149,13 @@ func TestSocketCapabilityRuntimePermitOnce(t *testing.T) {
 	rt := approvalstate.NewSocketCapabilityRuntime()
 	approved, resolved := tempSocket(t)
 	g := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
-	rt.IssuePermit("sess-1", "tc-1", "digest-1", g)
-	ok, err := rt.ConsumePermit("sess-1", "tc-1", "digest-1", g)
+	rt.IssuePermit(hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: "tc-1"}, "digest-1", g)
+	ok, err := rt.ConsumePermit(hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: "tc-1"}, "digest-1", g)
 	testutil.FailErr(t, "ConsumePermit", err)
 	if !ok {
 		t.Fatal("first consume must succeed")
 	}
-	ok, err = rt.ConsumePermit("sess-1", "tc-1", "digest-1", g)
+	ok, err = rt.ConsumePermit(hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: "tc-1"}, "digest-1", g)
 	if ok || err != nil {
 		t.Fatalf("second consume must fail: ok=%v err=%v", ok, err)
 	}
@@ -168,9 +169,9 @@ func TestSocketCapabilityRuntimeAuthorizedGrants(t *testing.T) {
 	ga := confine.SocketGrant{ApprovedPath: aApproved, ResolvedPath: aResolved}
 	gb := confine.SocketGrant{ApprovedPath: bApproved, ResolvedPath: bResolved}
 	rt.GrantChat(root, ga, "grant_t", "cp", "d", nil)
-	rt.IssuePermit("worker-1", "tc-2", "digest-2", gb)
+	rt.IssuePermit(hitl.EffectPermitIdentity{SessionID: "worker-1", ToolCallID: "tc-2"}, "digest-2", gb)
 
-	got := rt.AuthorizedGrants(root, "worker-1", "tc-2", "digest-2", []confine.SocketGrant{ga, gb})
+	got := rt.AuthorizedGrants(root, hitl.EffectPermitIdentity{SessionID: "worker-1", ToolCallID: "tc-2"}, "digest-2", []confine.SocketGrant{ga, gb})
 	if len(got) != 2 {
 		t.Fatalf("AuthorizedGrants = %+v", got)
 	}
@@ -207,12 +208,12 @@ func TestSocketCapabilityRuntimeForgetSession(t *testing.T) {
 	approved, resolved := tempSocket(t)
 	g := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
 	rt.GrantChat(root, g, "grant_t", "cp", "d", nil)
-	rt.IssuePermit(root, "tc-1", "digest-1", g)
+	rt.IssuePermit(hitl.EffectPermitIdentity{SessionID: root, ToolCallID: "tc-1"}, "digest-1", g)
 	rt.ForgetSession(root)
 	if len(rt.AppliedGrants(root)) != 0 {
 		t.Fatal("ForgetSession must clear task grants")
 	}
-	ok, _ := rt.ConsumePermit(root, "tc-1", "digest-1", g)
+	ok, _ := rt.ConsumePermit(hitl.EffectPermitIdentity{SessionID: root, ToolCallID: "tc-1"}, "digest-1", g)
 	if ok {
 		t.Fatal("ForgetSession must clear permits")
 	}

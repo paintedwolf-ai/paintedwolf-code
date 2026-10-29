@@ -3,12 +3,13 @@ id: COPY_SIZE_EXCEEDED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - copy
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.resource_limit
   - paintedwolf.max_file_bytes

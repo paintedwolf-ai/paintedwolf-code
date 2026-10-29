@@ -63,8 +63,15 @@ func lexicalRelUnder(root, target string) (string, bool) {
 
 // relUnderRoot maps a canonical in-root target to a relative path.
 func relUnderRoot(root, target string) (string, bool) {
-	if rel, ok := lexicalRelUnder(root, target); ok {
-		return rel, true
+	prefix := root + string(filepath.Separator)
+	if root == string(filepath.Separator) {
+		prefix = root
+	}
+	if strings.HasPrefix(target, prefix) {
+		return target[len(prefix):], true
+	}
+	if target == root {
+		return ".", true
 	}
 	resolved, err := filepath.EvalSymlinks(target)
 	if err != nil {
@@ -130,6 +137,18 @@ func (r *ReadRoot) Close() error {
 
 // openReadContained resolves every symlink hop beneath a held root descriptor.
 func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
+	return walkReadContained(root, relPath, true, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
+		fd, err := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+		if err != nil {
+			return nil, &fs.PathError{Op: "open effect target", Path: name, Err: err}
+		}
+		return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
+	})
+}
+
+// walkReadContained shares the same held-directory confinement for content and
+// metadata operations. Only an explicit no-follow query receives link metadata.
+func walkReadContained(root *openedRoot, relPath string, follow bool, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
 	baseFD, err := unix.Dup(int(root.file.Fd()))
 	if err != nil {
 		return nil, fmt.Errorf("duplicate effect root: %w", err)
@@ -158,6 +177,9 @@ func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
 			// PathError so os.IsNotExist recognizes a missing component.
 			return nil, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 		}
+		if len(pending) == 0 && !follow {
+			return visit(dir, name, &st)
+		}
 		if st.Mode&unix.S_IFMT == unix.S_IFLNK {
 			hops++
 			if hops > maxReadLinkHops {
@@ -179,26 +201,21 @@ func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
 			continue
 		}
 		if len(pending) == 0 {
-			// Nonblocking open allows file-type validation after a FIFO replacement.
-			fd, openErr := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
-			if openErr != nil {
-				return nil, &fs.PathError{Op: "open effect target", Path: name, Err: openErr}
-			}
-			return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
+			return visit(dir, name, &st)
 		}
 		fd, openErr := unix.Openat(int(dir.Fd()), name,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			metadataOpenFlags(true)|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if openErr != nil {
 			return nil, &fs.PathError{Op: "open effect directory", Path: name, Err: openErr}
 		}
 		w.push(os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)))
 	}
 	// A fully consumed path names a directory.
-	fd, err := unix.Dup(int(w.top().Fd()))
-	if err != nil {
-		return nil, fmt.Errorf("duplicate effect directory: %w", err)
+	var st unix.Stat_t
+	if err := unix.Fstat(int(w.top().Fd()), &st); err != nil {
+		return nil, err
 	}
-	return os.NewFile(uintptr(fd), w.top().Name()), nil
+	return visit(w.top(), ".", &st)
 }
 
 // OpenRead opens a target beneath the root, following symlinks that stay inside it.

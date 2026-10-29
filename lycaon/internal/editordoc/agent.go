@@ -23,6 +23,8 @@ type AgentEdit struct {
 	Turn             int
 	ToolCallID       string
 	ToolName         string
+	// Pin admits a program edit only at its captured state, without anchoring.
+	Pin *ExecutionPin `json:",omitempty"`
 }
 
 // An edit held against an externally changed file stays dirty and diverged.

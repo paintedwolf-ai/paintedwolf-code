@@ -46,7 +46,7 @@ type oneShotDirectIPRuntime struct {
 	consumed bool
 }
 
-func (*oneShotDirectIPRuntime) IssuePermit(string, string, string, string, string) {}
+func (*oneShotDirectIPRuntime) IssuePermit(hitl.EffectPermitIdentity, string, string, string) {}
 
 func (*oneShotDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool { return false }
 
@@ -54,7 +54,7 @@ func (*oneShotDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, str
 	return true
 }
 
-func (r *oneShotDirectIPRuntime) ConsumePermit(string, string, string, string, string) (bool, error) {
+func (r *oneShotDirectIPRuntime) ConsumePermit(hitl.EffectPermitIdentity, string, string, string) (bool, error) {
 	if r.consumed {
 		return false, nil
 	}
@@ -62,7 +62,7 @@ func (r *oneShotDirectIPRuntime) ConsumePermit(string, string, string, string, s
 	return true, nil
 }
 
-func (r *oneShotDirectIPRuntime) Authorized(string, string, string) bool {
+func (r *oneShotDirectIPRuntime) Authorized(hitl.EffectPermitIdentity, string) bool {
 	return !r.consumed
 }
 

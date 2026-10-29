@@ -58,24 +58,36 @@ func (f *StaticRejectFormatter) Parse(raw string) (*RejectBlock, error) {
 	return block, nil
 }
 
-// entryCoversTool validates a rejection card's tool selector.
+// entryCoversTool validates a rejection card's tool and operation selectors.
+// The operation is the host-attributed native operation, else the actual tool.
 func entryCoversTool(code string, entry HintEntry, data map[string]any) error {
-	if len(entry.Tools) == 0 {
-		return nil
-	}
 	tool, _ := data["tool"].(string)
 	if tool == "" {
 		return nil
 	}
-	for _, allowed := range entry.Tools {
+	if err := selectorCovers(code, entry.Tools, tool); err != nil {
+		return err
+	}
+	operation, _ := data["native_operation"].(string)
+	if operation == "" {
+		operation = tool
+	}
+	return selectorCovers(code, entry.Operations(), operation)
+}
+
+func selectorCovers(code string, selected []string, value string) error {
+	if len(selected) == 0 {
+		return nil
+	}
+	for _, allowed := range selected {
 		// [OAR-SEL-1] Selector membership uses exact string equality.
-		if allowed == tool {
+		if allowed == value {
 			return nil
 		}
 	}
 	return fmt.Errorf(
 		"guidance code %q is authored for %v; refusing to render it for %q",
-		code, entry.Tools, tool,
+		code, selected, value,
 	)
 }
 

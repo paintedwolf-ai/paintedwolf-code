@@ -1,5 +1,6 @@
 id: plan_review_readonly
 description: Read-only plan review — read and grep on plan paths
+command_effects: [read_only]
 tools:
   complete_leg: sticky
   recall: sticky

@@ -7,16 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/confine"
-	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
 // LaunchOptions configures a headless browser launch.
@@ -74,7 +71,8 @@ func LaunchHeadless(ctx context.Context, opts LaunchOptions) (*rod.Browser, func
 	if confined {
 		confine.LogApplied("browser", "", conf)
 	}
-	controlURL, kill, launchErr := launchConfined(launchCtx, l, resolved.Path, conf)
+	controlURL, kill, launchErr := launchBrowserProcess(launchCtx, l, resolved.Path, conf)
+
 	if launchErr != nil {
 		_ = os.RemoveAll(profileDir)
 		reason := "launch_failed"
@@ -135,70 +133,6 @@ func newHeadlessLauncher(ctx context.Context, browserPath, profileDir string, di
 		l = l.Set("disable-javascript", "true")
 	}
 	return l
-}
-
-// launchConfined starts a browser that outlives the discovery deadline.
-func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string, c *confine.Confinement) (string, func(), error) {
-	// The confinement helper replaces itself with the browser.
-	l = l.Delete(flags.Leakless)
-	args := l.FormatArgs()
-
-	// Keep context values while allowing the browser to outlive this call.
-	cmd, profileCleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), chromePath, args, execpkg.ExecOpts{
-		Launch: execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", c).WithReducedEnvironment(),
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	parser := launcher.NewURLParser().Context(ctx)
-	cmd.Stdout = parser
-	cmd.Stderr = parser
-	killCmd, waitCmd, err := execpkg.StartInOwnGroup(cmd)
-	if err != nil {
-		profileCleanup()
-		return "", nil, err
-	}
-
-	exit := make(chan struct{})
-	go func() {
-		_ = waitCmd()
-		// Natural exits also close the confinement profile pipe.
-		profileCleanup()
-		close(exit)
-	}()
-
-	kill := func() {
-		killCmd()
-		select {
-		case <-exit:
-		case <-time.After(2 * time.Second):
-		}
-	}
-
-	u, err := waitParserURL(ctx, parser, exit)
-	if err != nil {
-		// Err synchronizes with concurrent stdout and stderr parsing.
-		detail := trimBuf(parser.Err().Error())
-		kill()
-		return "", nil, fmt.Errorf("%w: %s", err, detail)
-	}
-	resolved, err := launcher.ResolveURL(u)
-	if err != nil {
-		kill()
-		return "", nil, err
-	}
-	return resolved, kill, nil
-}
-
-func waitParserURL(ctx context.Context, parser *launcher.URLParser, exit <-chan struct{}) (string, error) {
-	select {
-	case u := <-parser.URL:
-		return u, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case <-exit:
-		return "", fmt.Errorf("browser exited before publishing debug URL")
-	}
 }
 
 func profileParent(cacheDir string) string {

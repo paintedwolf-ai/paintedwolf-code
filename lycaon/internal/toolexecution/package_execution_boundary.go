@@ -11,7 +11,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -50,7 +52,20 @@ func (e *Boundary) preflightPackageExecution(
 	if e.packageExecution == nil {
 		return nil
 	}
-	packageExecution, err := e.packageExecution.Preflight(ctx, args, tc.ActiveRootPath())
+	var packageExecution *packageexec.Execution
+	var err error
+	if tc.Invocation.NativeOperation != nil {
+		stages := make([]exec.Stage, 0, len(tc.Invocation.NativeStages))
+		for _, stage := range tc.Invocation.NativeStages {
+			if len(stage.Argv) == 0 {
+				return fmt.Errorf("native package preflight requires bound argv")
+			}
+			stages = append(stages, exec.Stage{Name: stage.Argv[0], Args: stage.Argv[1:], Canonical: stage.CommandLine})
+		}
+		packageExecution, err = e.packageExecution.PreflightStages(ctx, stages, tc.ActiveRootPath())
+	} else {
+		packageExecution, err = e.packageExecution.Preflight(ctx, args, tc.ActiveRootPath())
+	}
 	if err != nil {
 		return fmt.Errorf("package execution preflight: %w", err)
 	}

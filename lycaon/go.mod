@@ -74,6 +74,7 @@ require (
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0
+	mvdan.cc/sh/v3 v3.14.1
 	pgregory.net/rapid v1.3.0
 )
 
@@ -320,3 +321,9 @@ require (
 replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.1
 
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
+
+replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
+
+replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
+// Bounded typed ERE execution; provenance and patch in third_party/README.md.
+replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2

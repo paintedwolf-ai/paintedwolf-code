@@ -3,12 +3,13 @@ id: SUMMARIZE_NO_MATERIAL
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - summarize
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.match_count
     - paintedwolf.path

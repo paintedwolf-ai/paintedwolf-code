@@ -3,10 +3,11 @@ id: SURVEY_BUNDLE_REQUIRED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - survey_repo
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   profiles:
   - tool

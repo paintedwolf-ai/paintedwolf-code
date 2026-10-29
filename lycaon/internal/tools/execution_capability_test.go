@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -37,6 +38,25 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 	}
 	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
 		t.Fatal("accepted conflicting authority")
+	}
+}
+
+func TestExecutionPermitCannotMoveBetweenProgramChildren(t *testing.T) {
+	req := confine.Request{HostExecution: true}
+	args := map[string]any{"argv": []string{"fixture-program", "same-operand"}}
+	tc := ToolContext{Identity: InvocationIdentity{SessionID: "session", ToolCallID: "actual-model-call"}, Invocation: Invocation{ID: "first-child"}, Execution: InvocationExecution{HostExecution: true}, Effects: InvocationEffects{CanonicalArgs: args}}
+	action := hitl.ProposedAction{Execution: hitl.ActionExecution{ExecutionBoundaryDigest: ExecutionBoundaryDigest(req)}}
+	tc.StampExecutionApproval(args, action)
+	other := tc
+	other.Invocation.ID = "second-child"
+	if reject := finalizeExecutionCapability(other, req); reject == nil {
+		t.Fatal("identical operands and outer model call reused another child's permit")
+	}
+	if reject := finalizeExecutionCapability(tc, req); reject != nil {
+		t.Fatalf("original child lost its permit: %v", reject)
+	}
+	if tc.Identity.ToolCallID != "actual-model-call" {
+		t.Fatal("child identity replaced actual model call correlation")
 	}
 }
 

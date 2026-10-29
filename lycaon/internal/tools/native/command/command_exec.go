@@ -81,13 +81,15 @@ func canonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
 // commandEgressIdentity supplies the shared subject for posture, leases, and attribution.
 func commandEgressIdentity(tctx tools.ToolContext, toolName, commandLine string) confine.EgressCommand {
 	identity := confine.EgressCommand{
-		SessionID:     tctx.Identity.SessionID,
-		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.Identity.ProjectID,
-		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.Identity.ToolCallID,
-		ToolName:      toolName,
-		CommandLine:   commandLine,
+		OwnedLoopbackPorts: append([]uint16(nil), tctx.Local.OwnedLoopbackPorts...),
+		SessionID:          tctx.Identity.SessionID,
+		RootSessionID:      tctx.ChatSessionID(),
+		ProjectID:          tctx.Identity.ProjectID,
+		ProjectDir:         tctx.ActiveRootPath(),
+		ToolCallID:         tctx.Identity.ToolCallID,
+		ActionID: tctx.EffectActionID(),
+		ToolName:           toolName,
+		CommandLine:        commandLine,
 	}
 	if tctx.Files.PackageExecution != nil {
 		identity.DeclaredHosts = append([]string(nil), tctx.Files.PackageExecution.AllowedHosts...)
@@ -215,7 +217,7 @@ func runCommandForeground(
 		return RunOutcome{}, fmt.Errorf("background registry not configured")
 	}
 	req := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, confinement, bound.lease, cmdKey),
 		ProjectDir: cwd,
 		ProfileID:  profile,
 		Stages:     stages,

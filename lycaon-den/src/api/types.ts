@@ -200,6 +200,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{id}/program-receipts/{program_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect bounded program and host child receipts */
+        get: operations["getCommandProgramReceipt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions/{id}/invocations": {
         parameters: {
             query?: never;
@@ -6182,6 +6199,8 @@ export interface components {
             tool: string;
             /** @description Arguments accepted directly by the named tool */
             args: {
+                /** @description Complete portable command program for an inspection action */
+                command?: string;
                 path?: string;
                 paths?: string[];
                 task?: string;
@@ -7869,6 +7888,8 @@ export interface components {
             /** @description Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args. */
             display_subject?: string;
             invocation?: components["schemas"]["InvocationReceipt"];
+            /** @description Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads. */
+            command_program?: components["schemas"]["CommandProgramReceipt"];
             /** @description Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row. */
             tool?: string;
             /** @description ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet. */
@@ -10556,6 +10577,28 @@ export interface components {
             /** Format: date-time */
             settled_at?: string;
         };
+        CommandProgramReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_receipt_id: string;
+            language_version: number;
+            catalog_digest: string;
+            source_digest: string;
+            source_ref: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
+            status_code?: number;
+            stop_code?: string;
+            detail_ref: string;
+            /** @enum {string} */
+            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
+            progress_ref?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+        };
         /** @enum {string} */
         ToolResultOutcome: "completed" | "rejected" | "error";
         FeedbackSubject: {
@@ -11270,6 +11313,120 @@ export interface components {
         ChatContentSearchPage: {
             matches: components["schemas"]["ChatContentMatch"][];
             /** @description Opaque cursor for the next search page; absent when the search reached the end of the content. */
+            next_cursor?: string;
+        };
+        /** @description Existing progress owner's envelope invocation, independent of shell effects. */
+        CommandProgramProgressReceipt: {
+            /** Format: uuid */
+            execution_id: string;
+            /** Format: uuid */
+            program_id: string;
+            /** Format: uuid */
+            root_session_id: string;
+            /** @enum {string} */
+            state: "running" | "unchanged" | "committed" | "rejected" | "unknown";
+            owner_invoked: boolean;
+            arguments_representation?: string;
+            arguments_digest: string;
+            arguments_ref: string;
+            detail_ref: string;
+        };
+        CommandExecutionOutput: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            /** @description Retained output handle owned by the program receipt. */
+            ref: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description The stream reached its end; false is a retained prefix. */
+            complete: boolean;
+            redacted: boolean;
+            /** @description Leading screened bytes of the retained stream as UTF-8. Never the authoritative body. */
+            preview: string;
+            preview_truncated: boolean;
+        };
+        /** @description Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed. */
+        CommandRevisionConflict: {
+            path: string;
+            expected_revision: string;
+            observed_revision: string;
+        };
+        /** @description Host dynamic execution. It has no assistant message or model tool-call identity. */
+        CommandExecutionReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            program_id: string;
+            /** @description Host syntax node identity within its program. */
+            node_id: string;
+            /** Format: uuid */
+            parent_execution_id: string;
+            owner: string;
+            lifecycle: string;
+            definition_digest: string;
+            arguments_representation?: string;
+            arguments_digest: string;
+            reviewed_arguments_representation?: string;
+            reviewed_arguments_digest?: string;
+            reviewed_arguments_ref?: string;
+            native_command?: string;
+            effect_mode?: string;
+            effect_classes?: ("read_only" | "mutation" | "external_exec" | "network_egress")[];
+            arguments_ref: string;
+            /** @description Compact display only. Not authority or replay input. */
+            command: string;
+            /** @enum {string} */
+            state: "prepared" | "waiting" | "running" | "completed" | "refused" | "failed" | "interrupted";
+            /** @description Durable before-owner marker; host loss can precede actual invocation. */
+            owner_started: boolean;
+            /** @description Actual invocation observed by the admission caller. Absence after a start marker is unknown. */
+            owner_invoked: boolean;
+            status_code?: number;
+            stop_code?: string;
+            host_stop_code?: string;
+            complete: boolean;
+            publication_eligible: boolean;
+            output_publishable: boolean;
+            /** @enum {string} */
+            effect_certainty: "none" | "completed" | "attempted" | "unknown";
+            evidence_kind?: string;
+            evidence_ref?: string;
+            owner_ref?: string;
+            recovery_ref?: string;
+            /** Format: uuid */
+            held_version_id?: string;
+            accepted_revision?: string;
+            published_revision?: string;
+            detail_ref: string;
+            approval_ref?: string;
+            /** @description Host background job this child started, for the existing background process views. */
+            job_handle?: string;
+            /** @description Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing. */
+            outputs?: components["schemas"]["CommandExecutionOutput"][];
+            revision_conflict?: components["schemas"]["CommandRevisionConflict"];
+        };
+        CommandProgramNode: {
+            /** @description Host syntax node identity within its program. */
+            id: string;
+            /** @description Captured syntax unit identity within its program. */
+            source_unit_id: string;
+            /** Format: int64 */
+            start_byte: number;
+            /** Format: int64 */
+            end_byte: number;
+            line: number;
+            column: number;
+            /** @enum {string} */
+            state: "not_started" | "reached" | "untaken";
+        };
+        CommandProgramReceiptPage: {
+            program: components["schemas"]["CommandProgramReceipt"];
+            progress?: components["schemas"]["CommandProgramProgressReceipt"];
+            executions: components["schemas"]["CommandExecutionReceipt"][];
+            /** @description Known static nodes only; never speculative future loop iterations. */
+            nodes: components["schemas"]["CommandProgramNode"][];
+            executions_omitted: number;
+            nodes_omitted: number;
             next_cursor?: string;
         };
         InvocationReceiptList: {
@@ -17231,6 +17388,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatContentSearchPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCommandProgramReceipt: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                program_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable program facts and one bounded child page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandProgramReceiptPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -29843,6 +30031,7 @@ export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
 export type InvocationIsolation = components["schemas"]["InvocationIsolation"];
 export type InvocationReceipt = components["schemas"]["InvocationReceipt"];
+export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolResultOutcome = components["schemas"]["ToolResultOutcome"];
 export type FeedbackSubject = components["schemas"]["FeedbackSubject"];
 export type ToolFeedback = components["schemas"]["ToolFeedback"];
@@ -29920,6 +30109,12 @@ export type MessageNavigationResponse = components["schemas"]["MessageNavigation
 export type ChatContentPage = components["schemas"]["ChatContentPage"];
 export type ChatContentMatch = components["schemas"]["ChatContentMatch"];
 export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage"];
+export type CommandProgramProgressReceipt = components["schemas"]["CommandProgramProgressReceipt"];
+export type CommandExecutionOutput = components["schemas"]["CommandExecutionOutput"];
+export type CommandRevisionConflict = components["schemas"]["CommandRevisionConflict"];
+export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
+export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
+export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];
 export type InvocationReceiptList = components["schemas"]["InvocationReceiptList"];
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];

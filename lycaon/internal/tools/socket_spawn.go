@@ -40,7 +40,7 @@ func FinalizeSocketGrantsForSpawn(tctx ToolContext) ([]confine.SocketGrant, *too
 					"reason": "missing current-call socket permit",
 				}}
 			}
-			ok, err := rt.ConsumePermit(tctx.Identity.SessionID, tctx.Identity.ToolCallID, tctx.Socket.SocketActionDigest, g)
+			ok, err := rt.ConsumePermit(tctx.PermitIdentity(), tctx.Socket.SocketActionDigest, g)
 			if err != nil {
 				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
 					"path":   g.ApprovedPath,

@@ -9,8 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement) lycexec.LaunchPlan {
+func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement, lease *confine.ActionLease, commandLine string) lycexec.LaunchPlan {
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
+	launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, lease, commandEgressIdentity(tctx, subject, commandLine))
 	if tctx.Files.PackageExecution != nil {
 		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
 	}

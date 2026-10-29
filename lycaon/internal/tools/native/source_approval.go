@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -43,12 +44,16 @@ func verifyEntrySnapshot(location fseffect.Location, expected string, directory 
 	return snapshotMatches(location, current, err, expected, directory)
 }
 
+// errMutationSnapshotMoved marks a target that changed while its mutation was
+// prepared or reviewed.
+var errMutationSnapshotMoved = errors.New("file changed while preparing or reviewing the change")
+
 func snapshotMatches(location fseffect.Location, current agentFileEvidence, err error, expected string, directory bool) error {
 	if err != nil {
 		return err
 	}
 	if current.sha256 != expected || (current.exists && current.isDir != directory) {
-		return fmt.Errorf("file changed while preparing or reviewing the change: %s", location.Rel)
+		return fmt.Errorf("%w: %s", errMutationSnapshotMoved, location.Rel)
 	}
 	return nil
 }

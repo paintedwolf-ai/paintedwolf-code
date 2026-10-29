@@ -2,6 +2,7 @@ id: worker_readonly
 description: >
   Read-only review surface with no leg tools. A workflow binds it by declaring
   `coordinator_profile`.
+command_effects: [read_only]
 tools:
   recall: sticky
   read: sticky

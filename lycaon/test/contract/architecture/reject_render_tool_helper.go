@@ -8,7 +8,7 @@ import (
 
 // renderToolFor selects a valid render target for a rejection card.
 func renderToolFor(entry guidance.HintEntry, fallback string) string {
-	for _, tool := range entry.Tools {
+	for _, tool := range append(append([]string(nil), entry.Tools...), entry.Operations()...) {
 		if tool = strings.TrimSpace(tool); tool != "" {
 			return tool
 		}

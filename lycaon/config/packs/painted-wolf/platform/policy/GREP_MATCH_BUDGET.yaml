@@ -3,12 +3,13 @@ id: GREP_MATCH_BUDGET
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - grep
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.max_len
   - paintedwolf.grep_nested_repeat

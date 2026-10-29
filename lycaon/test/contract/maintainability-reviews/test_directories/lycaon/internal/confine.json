@@ -2,20 +2,25 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "linux-future-path-floors",
+  "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Retain the measured 68-file confinement test directory. Shared admission, filesystem policy, floor contracts such as the key-material store floor, and applied platform boundaries stay beside their existing probe process and grant fixtures. Metadata and standard-stream contracts are two live suites under the same real command launch; they cover outside-root EROFS, exact allow-backs, original mount flags, unchanged source metadata, byte delivery, the null stream for closed input and descendant cleanup. The original-mount-flag contract joined the metadata suite rather than adding a file when the key-material floor contract arrived. The shared Linux probe remains bounded while new concerns have their own suites. Repackaging these tests would expose internal setup without creating a new authority boundary.",
-  "reviewed_commit": "2f1efac63043523bfcf5da741c0c8834a7476b21",
-  "ceiling": 68,
+  "reason": "Retain exactly 67 immediate test files. Shared admission, typed action and native-input contracts stay beside actual kernel, filesystem, socket and helper-boundary fixtures. Main file-mask, private shared-memory and future-path floor cases remain intact alongside portable capture and current-authority cases. Keeping private boundary fixtures here preserves direct control of their real inputs and cleanup without a public test API. Focused admission, vectors and native browser posture checks pass on Darwin; Linux kernel and privileged runtime qualification remains required. Additional membership requires renewed review. Current main metadata mount and standard-stream authority contracts remain in the same confinement boundary. Preserve the prior ceiling and reviewed shape; combined source membership and focused contract evidence require renewed review rather than an automatic ceiling or fingerprint increase.",
+  "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
+  "ceiling": 67,
   "boundaries": {
+    "lycaon/internal/confine/action_launch_test.go": "0a39805d9b791e44e0e4b0f271563f1be06006f503470a273cd050adaeff0bb8",
+    "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
     "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
     "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
     "lycaon/internal/confine/boundary_linux_shm_live_test.go": "f9f20c77850bbfa86c205ce0b938711edbec0462776a74861da22a316f3f1924",
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/process_pins_test.go": "d41d5d9060636d596301787cc0d677fb5c9da681f3dde04117ae4df2306e7be3",
+    "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
     "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
     "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
   },
-  "reviewed_shape": "bc2bdbad2a34a327f3687208dfa31eab97dfd90cf88b15cb6cfe09ed931cb187"
+  "reviewed_shape": "dbe6f07ec5acff52a46d70831f7b0d8b68b97931153bb2168834fba72a58ed9d"
 }

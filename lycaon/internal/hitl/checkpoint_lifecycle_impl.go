@@ -122,6 +122,14 @@ func (m *Checkpoints) RequestCheckpoint(ctx context.Context, req CheckpointReque
 		if req.ProposedAction == nil || plan.ActionDigest == "" || plan.ActionDigest != GrantKey(*req.ProposedAction) {
 			return nil, fmt.Errorf("approval plan action does not match proposed action")
 		}
+		if native := req.ProposedAction.Invocation.NativeInputs; native != nil {
+			authority, display, release, err := native.durableAuthority(plan)
+			if err != nil {
+				return nil, err
+			}
+			defer release()
+			plan, row.AuthorityFormat, row.nativeAuthority = display, authority.Representation(), authority
+		}
 		stored, err := storeApprovalPlan(plan)
 		if err != nil {
 			return nil, err

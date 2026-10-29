@@ -3,7 +3,7 @@ id: MUTATION_BROKE_PARSE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - edit
     - replace_lines
     - code_rewrite
@@ -13,6 +13,7 @@ requires:
     - filesystem
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.parse_errors
     - paintedwolf.python_indent_lines

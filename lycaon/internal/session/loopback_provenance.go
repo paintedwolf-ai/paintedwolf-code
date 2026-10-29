@@ -84,6 +84,7 @@ type DefaultLoopbackProvenance struct {
 	listeners func(ctx context.Context) ([]socketListener, error)
 	// lineageSession names the session whose action launched pid.
 	lineageSession func(pid int) (string, bool)
+	observeNative  nativeListenerObserver
 	// containers lists running containers from every reachable engine.
 	containers        func(ctx context.Context) []dockerContainerInfo
 	mu                sync.RWMutex
@@ -95,7 +96,7 @@ func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 	sockets := discoverDockerSockets()
 	return newLoopbackProvenance(ctx, hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
 		return queryDockerContainers(ctx, sockets)
-	})
+	}, lineage.ObserveSessionListener)
 }
 
 func newLoopbackProvenance(
@@ -103,8 +104,9 @@ func newLoopbackProvenance(
 	listeners func(context.Context) ([]socketListener, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
+	observeNative nativeListenerObserver,
 ) *DefaultLoopbackProvenance {
-	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers}
+	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers, observeNative: observeNative}
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	if current, err := listeners(ctx); err == nil {
@@ -131,7 +133,10 @@ func (p *DefaultLoopbackProvenance) IsSessionOwned(ctx context.Context, sessionI
 	}
 	current, err := p.listeners(ctx)
 	if err != nil {
-		current = nil
+		return false, ProvenanceEvidence{
+			Method:      ProvenanceUnverified,
+			Description: fmt.Sprintf("port %d cannot be attributed: the current listener table is unavailable", port),
+		}
 	}
 	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current, port))
 }
@@ -154,6 +159,14 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 }
 
 func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, workspaceDir string, port uint16, held []socketListener) (bool, ProvenanceEvidence) {
+	for _, l := range held {
+		if l.PID <= 0 || !l.Addr.IsValid() {
+			return false, ProvenanceEvidence{
+				Method:      ProvenanceUnverified,
+				Description: fmt.Sprintf("port %d has a listener with incomplete holder observation", port),
+			}
+		}
+	}
 	if owner, ok := p.lineageOwner(sessionID, held); ok {
 		for _, l := range held {
 			if !l.loopbackBound() {
@@ -166,6 +179,16 @@ func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, wo
 		return true, ProvenanceEvidence{
 			Method: ProvenanceLineage, OwnerID: strconv.Itoa(owner),
 			Description: fmt.Sprintf("listener process %d on port %d was launched by session %s", owner, port, sessionID),
+		}
+	}
+	if p.lineageSession != nil {
+		for _, l := range held {
+			if _, ok := p.lineageSession(l.PID); ok {
+				return false, ProvenanceEvidence{
+					Method:      ProvenanceUnverified,
+					Description: fmt.Sprintf("port %d is not verified as owned by this chat", port),
+				}
+			}
 		}
 	}
 
