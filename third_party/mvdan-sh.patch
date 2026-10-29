@@ -333,6 +333,54 @@
 +		t.Fatalf("retained literal changed: %q", value)
 +	}
 +}
+--- a/pattern/pattern.go
++++ b/pattern/pattern.go
+@@ -61,0 +62 @@
++	ScalarCollation                    // locale-independent single-scalar collating/equivalence atoms
+@@ -300,0 +302,2 @@
++		var lastCollation rune
++		hasLastCollation := false
+@@ -301,0 +305,2 @@
++			previousCollation := hasLastCollation
++			hasLastCollation = false
+@@ -335,0 +341,11 @@
++				if mode&ScalarCollation != 0 {
++					if previousCollation {
++						start = lastCollation
++					}
++					rest := sl.peekRest()
++					if len(rest) > 2 && rest[0] == '[' && (rest[1] == '.' || rest[1] == '=') {
++						if n, err := charClass(rest[1:], true); err == nil && n > 0 {
++							end, _ = utf8.DecodeRuneInString(rest[2 : n-1])
++						}
++					}
++				}
+@@ -354 +370 @@
+-				n, err := charClass(rest)
++				n, err := charClass(rest, mode&ScalarCollation != 0)
+@@ -361,0 +378,15 @@
++				}
++				if err == nil && n > 0 && mode&ScalarCollation != 0 && (rest[0] == '.' || rest[0] == '=') {
++					atom := rest[1 : n-2]
++					lastCollation, _ = utf8.DecodeRuneInString(atom)
++					hasLastCollation = true
++					if filenames && atom == "/" {
++						hasSlash = true
++					}
++					if atom == "-" {
++						bsb.WriteString(`\-`)
++					} else {
++						bsb.WriteString(regexp.QuoteMeta(atom))
++					}
++					sl.i += n
++					break
+@@ -393 +424 @@
+-func charClass(s string) (int, error) {
++func charClass(s string, scalarCollation bool) (int, error) {
+@@ -401,0 +433,3 @@
++		}
++		if scalarCollation && utf8.ValidString(name) && utf8.RuneCountInString(name) == 1 {
++			return len(name) + 3, nil
 --- /dev/null
 +++ b/syntax/allocation_budget.go
 @@ -0,0 +1,58 @@
