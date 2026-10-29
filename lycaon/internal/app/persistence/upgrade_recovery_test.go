@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"os"
@@ -126,7 +125,7 @@ func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
 	testutil.FailErr(t, "close source", database.Close())
 	space := &db.InsufficientSpaceError{NeededBytes: 2 << 30, AvailableBytes: 1 << 30}
 	hooks := db.UpgradeHooks{
-		Before:   func(context.Context, *sql.DB, migrations.Plan) error { return space },
+		Before:   func(context.Context, db.UpgradeSource, migrations.Plan) error { return space },
 		Progress: func(migrations.Phase) {},
 	}
 	builder := &Runtime{logger: slog.Default()}
@@ -140,12 +139,12 @@ func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonInsufficientSpace || refused.Space != space {
 		t.Fatalf("capture error = %v, want an insufficient-space refusal", err)
 	}
-	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return os.ErrPermission }
+	hooks.Before = func(context.Context, db.UpgradeSource, migrations.Plan) error { return os.ErrPermission }
 	err = builder.captureVersionRecovery(t.Context(), source, plan, hooks)
 	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonStorageUnavailable {
 		t.Fatalf("permission error = %v, want unavailable storage", err)
 	}
-	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return context.Canceled }
+	hooks.Before = func(context.Context, db.UpgradeSource, migrations.Plan) error { return context.Canceled }
 	if err = builder.captureVersionRecovery(t.Context(), source, plan, hooks); !errors.Is(err, context.Canceled) {
 		t.Fatalf("capture cancellation = %v, want cancellation", err)
 	}

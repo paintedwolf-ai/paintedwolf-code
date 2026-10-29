@@ -4,18 +4,31 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 54-file private database suite beside the queries and lifecycle authority it verifies. The source sweep query-plan contract inspects generated SQL constants to require indexed candidate pages without full scans or temporary sorting; exposing those constants for a separate test package would create a needless API. Existing recovery, migration, and crash contracts retain their own fixtures.",
-  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
-  "ceiling": 54,
+  "reason": "Retain exactly 75 private database test files. Pager, integrity, restart, copy and publication fixtures share one store lifecycle; exporting helpers only to move these tests would create a test-facing API. The joined suite preserves full strategy equivalence and failure/cancel custody, and now verifies pending-audit writes/checkpoints/restart, silent secondary-key substitution, primary-derived selection, concurrent metadata-sort accounting and deferred destructive cleanup. Existing crash, row and source-identity contracts remain. Further membership growth renews review.",
+  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
+  "ceiling": 75,
   "boundaries": {
     "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
+    "lycaon/internal/db/integrity_lifecycle_test.go": "9177cc3d12f03cc01407ce594dae743d5ef4a24b93e480962e4c44e8ed465285",
+    "lycaon/internal/db/integrity_retention_test.go": "7d45d4b54139f2409cabee012fdc0c3f785e55c088fd14e9d6bb167c4a1fdfb3",
     "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca",
-    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_chunk_inventory_test.go": "89b937e1c72e3e4263b75ef1965e1b51f0ac1ad0be386bd7187ddf7cbfdea4c1",
+    "lycaon/internal/db/rebuild_classification_test.go": "9c94d6a6476b8a0970ce8f7b2ff834b59b2985a7983a7ac8d0bbf612f095c237",
+    "lycaon/internal/db/rebuild_copy_test.go": "213b08ed5b29d14d900ce6b5723cac6fad019dfd582780b3c47b0e1700507f9d",
     "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
+    "lycaon/internal/db/rebuild_equivalence_test.go": "1694495a265ed236f000a03abdf6bfbb714da91871c21c7cf91f52d1f9e0e039",
     "lycaon/internal/db/rebuild_errors_test.go": "068ee8d208bd97d283e73e0afb5793f33d88767744451e3f01844805eb282765",
-    "lycaon/internal/db/rebuild_classification_test.go": "56711ac30d190a3012ed2475b52b56cac6b1d6f93c3bf1e0d57dd3dabddd490a",
+    "lycaon/internal/db/rebuild_failure_policy_test.go": "26fc4c8538958fea1684a77242a5e0edbe85ad041b9d0cf77d68c41ec9ca8199",
+    "lycaon/internal/db/rebuild_fast_custody_test.go": "2c70dd3e5ae3487053dd9dfe324db0aabbb83c57a25b23f936096c394eac7014",
+    "lycaon/internal/db/rebuild_strategy_equivalence_test.go": "f7d6057824ad6537ac4024368475888b8a0742d6e20c47770bc613c7b70fd9ab",
+    "lycaon/internal/db/rebuild_whole_copy_test.go": "c6d5b4c0d9d51c52a1527e05758fd30f6ad2ee45b7d3e9d65fa0ed06009a5bcf",
     "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "3ca9c9f432d0bf53d1fa1bec1ad5c8f03c355c1e1b8c036cc71a9f6890e6feb6",
-    "lycaon/internal/db/source_sweep_query_test.go": "04826ae8e38e8a7355de77c81fe2acc39c3be6819ec4a89cf6ebbf6801fdb94e"
+    "lycaon/internal/db/source_sweep_query_test.go": "04826ae8e38e8a7355de77c81fe2acc39c3be6819ec4a89cf6ebbf6801fdb94e",
+    "lycaon/internal/db/startup_validation_test.go": "9f564a778253fea8a15face7b5211ac850d72fce1c9161084bc7742003af1458",
+    "lycaon/internal/db/upgrade_integrity_test.go": "0ddc69b5be83c75cbbf7574e74b800cc48def029b058c18359f7a9093b464667",
+    "lycaon/internal/db/upgrade_rechunk_storage_test.go": "3c7337c12694ab4875a7f4fe38180a59f66c13e8cab16118cd91405140d16626",
+    "lycaon/internal/db/upgrade_retained_storage_test.go": "b1af112c7a37bcd2cb756654393b3865016018532937cf2387645bf8b48ccae9",
+    "lycaon/internal/db/upgrade_storage_test.go": "de5ee79379bf834ccdab1e326f3c6973a8cf78d68f621a60bc34a609b242f481"
   },
-  "reviewed_shape": "d2629fd7f0ed99396c1d92c155651e2a5331816fcf87c740ae2cd4401694c4d6"
+  "reviewed_shape": "e7602fa1924f149fe75800408c3f42f570f606011d21fb1d7435a0433a90f558"
 }

@@ -103,10 +103,17 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 			return fmt.Errorf("migration %s: %w", step.ID, err)
 		}
 	}
-	if err := checkIntegrity(ctx, tx); err != nil {
-		return err
+	// Commit the unfinished audit obligation with the new schema, so even a
+	// clean shutdown cannot lose the deferred exhaustive check.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO store_meta(key,value) VALUES('integrity_audit_failed','integrity audit pending') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+		return fmt.Errorf("record deferred integrity audit: %w", err)
 	}
-	if err := checkForeignKeys(ctx, tx); err != nil {
+	if err := WithIntegrityCache(ctx, conn, func() error {
+		if err := checkStructure(ctx, tx); err != nil {
+			return err
+		}
+		return checkForeignKeys(ctx, tx)
+	}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -152,7 +159,7 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 	}
 	defer func() { _ = rows.Close() }()
 	if rows.Next() {
-		return fmt.Errorf("upgraded store contains a foreign key violation")
+		return fmt.Errorf("%w: upgraded store contains a foreign key violation", ErrIntegrity)
 	}
 	return rows.Err()
 }
@@ -160,10 +167,10 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 // ErrIntegrity means SQLite found damaged data, rather than an interrupted check.
 var ErrIntegrity = errors.New("upgraded store failed integrity verification")
 
-// Check the final state while rollback is still possible. Obsolete tables do
-// not need an expensive index audit before the migration removes them.
-func checkIntegrity(ctx context.Context, tx *sql.Tx) error {
-	rows, err := tx.QueryContext(ctx, `PRAGMA integrity_check`)
+// Check structural validity while rollback is possible. Exhaustive secondary
+// index correspondence is deferred until the application can serve normally.
+func checkStructure(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA quick_check`)
 	if err != nil {
 		return err
 	}

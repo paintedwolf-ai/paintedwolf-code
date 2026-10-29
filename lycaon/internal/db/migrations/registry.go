@@ -68,10 +68,15 @@ func (p Plan) CopyPlan() *RetainedCopy {
 
 // Plan contains a complete route; callers cannot replace its registered steps.
 type Plan struct {
-	Source       Baseline `json:"source"`
-	Target       Baseline `json:"target"`
-	steps        []Step
-	scratchBytes uint64
+	Source                  Baseline `json:"source"`
+	Target                  Baseline `json:"target"`
+	steps                   []Step
+	scratchBytes            uint64
+	retainedStoragePrepared bool
+	retainedEntryRows       uint64
+	retainedTrees           map[string]retainedTree
+	retainedStoreBytes      uint64
+	retainedPageBytes       uint64
 }
 
 // Required reports whether the store needs transformation.

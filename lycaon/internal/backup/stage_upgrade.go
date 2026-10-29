@@ -33,9 +33,6 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 	if err := db.UpgradeStaged(ctx, path); err != nil {
 		return fmt.Errorf("upgrade extracted history: %w", err)
 	}
-	if err := validateStagedStore(ctx, path, db.SchemaVersion); err != nil {
-		return err
-	}
 	if err := historyretention.SuspendRestoredPolicy(root); err != nil {
 		if errors.Is(err, historyretention.ErrInvalidPolicy) {
 			return &InvalidError{Detail: "history-retention.json is invalid"}
@@ -44,7 +41,7 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 	}
 	for i := range manifest.Files {
 		entry := &manifest.Files[i]
-		if entry.RelPath != historyretention.PolicyFilename && (entry.RelPath != storeRelPath || !plan.Required()) {
+		if entry.RelPath != historyretention.PolicyFilename && entry.RelPath != storeRelPath {
 			continue
 		}
 		sum, size, err := sourceDigest(ctx, archiveSource{path: filepath.Join(root, entry.RelPath), kind: fileKindRegular})

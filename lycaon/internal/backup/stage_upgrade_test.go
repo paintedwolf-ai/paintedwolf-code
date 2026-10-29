@@ -52,6 +52,41 @@ func TestCanceledStagedInspectionLeavesSourceUntouched(t *testing.T) {
 	}
 }
 
+func TestCurrentSchemaRestoreSealsAuditObligationAndRefreshesItsManifest(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "store.db")
+	store := testdbfixture.OpenPath(t, path)
+	testutil.FailErr(t, "close clean archive source", store.Close())
+	before, size, err := sourceDigest(t.Context(), archiveSource{path: path, kind: fileKindRegular})
+	testutil.FailErr(t, "authenticate clean archive source", err)
+	baseline, err := db.CurrentBaseline(t.Context())
+	testutil.FailErr(t, "identify current archive schema", err)
+	manifest := Manifest{SchemaUserVersion: baseline.Revision, SchemaShapeDigest: baseline.Shape,
+		Files: []FileEntry{{RelPath: storeRelPath, Kind: fileKindRegular, SHA256: before, Size: size}}}
+	files := []PendingFile{{RelPath: storeRelPath, Kind: fileKindRegular, SHA256: before, Size: size}}
+	testutil.FailErr(t, "stage current schema with deferred audit", upgradeStagedStore(t.Context(), root, &manifest, files))
+	after, length, err := sourceDigest(t.Context(), archiveSource{path: path, kind: fileKindRegular})
+	testutil.FailErr(t, "authenticate staged obligation", err)
+	if after == before || manifest.Files[0].SHA256 != after || files[0].SHA256 != after || manifest.Files[0].Size != length || files[0].Size != length {
+		t.Fatal("current-schema staged bytes lost their updated integrity manifest")
+	}
+	reader, err := db.OpenReadOnly(t.Context(), path)
+	testutil.FailErr(t, "open sealed staged obligation", err)
+	defer reader.Close()
+	var state string
+	testutil.FailErr(t, "read restored audit obligation", reader.QueryRowContext(t.Context(), "SELECT value FROM store_meta WHERE key='integrity_audit_failed'").Scan(&state))
+	if state != "integrity audit pending" {
+		t.Fatal("clean archive skipped deferred verification after activation")
+	}
+	for _, suffix := range []string{"-wal", "-journal"} {
+		if info, err := os.Stat(path + suffix); err == nil && info.Size() > 0 {
+			t.Fatalf("staged obligation depends on unpublished sidecar %s", suffix)
+		} else if err != nil && !os.IsNotExist(err) {
+			testutil.FailErr(t, "inspect sealed staging", err)
+		}
+	}
+}
+
 func TestStagedInspectionKeepsConfirmedInvalidity(t *testing.T) {
 	for _, tc := range []struct {
 		reason db.RecoveryReason

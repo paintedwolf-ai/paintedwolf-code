@@ -3,7 +3,6 @@ package db
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -28,7 +27,7 @@ func TestRebuildRecoveryFailureUsesOperationalClassification(t *testing.T) {
 		t.Run(string(tc.reason)+tc.cause.Error(), func(t *testing.T) {
 			source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
 			invoked := false
-			store, err := OpenWithOptions(t.Context(), source, UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error { invoked = true; return tc.cause }}, StoreOptions{FastTestSync: true})
+			store, err := OpenWithOptions(t.Context(), source, UpgradeHooks{Before: func(context.Context, UpgradeSource, migrations.Plan) error { invoked = true; return tc.cause }}, StoreOptions{FastTestSync: true})
 			if store != nil {
 				_ = store.Close()
 				t.Fatal("opened despite failed recovery capture")
@@ -66,7 +65,7 @@ func TestRebuildAllocationAndSealUseOpenClassification(t *testing.T) {
 			before, err := os.ReadFile(source)
 			testutil.FailErr(t, "read original", err)
 			injectRebuildFault(t, source, tc.phase, tc.cause)
-			store, err := OpenWithOptions(t.Context(), source, UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error { return nil }}, StoreOptions{FastTestSync: true})
+			store, err := OpenWithOptions(t.Context(), source, UpgradeHooks{Before: func(context.Context, UpgradeSource, migrations.Plan) error { return nil }}, StoreOptions{FastTestSync: true})
 			if store != nil {
 				_ = store.Close()
 				t.Fatal("opened after failed copy/seal")

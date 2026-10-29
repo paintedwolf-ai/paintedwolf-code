@@ -4,12 +4,15 @@
   "kind": "runtime_service",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain the 19-method store lifetime. The obsolete per-table observation callback is removed; the audit controller coordinates only background work and never owns foreground write admission. Pending checks, quarantine, writer and reader pools still belong to this handle. Whole-snapshot, concurrent-diagnosis, foreground-save and reclamation coordination contracts passed, followed by the native production-copy audit. The capacity-failure regression verifies the same audit authority completes with a conservative fallback; no new subsystem, save gate, or retained ceiling is introduced.",
-  "reviewed_commit": "938578fd9ee0bf26659f9c393da43eeafef76299",
-  "ceiling": 19,
+  "reason": "Retain exactly 22 Store lifecycle methods. The handle owns its reader/writer pools, quarantine, durable pending-audit inspection and cleanup wait/completion signal. These additions expose the existing integrity authority to application composition without granting cleanup permission from context bags or duplicate state owners. Joined contracts preserve ordinary writes/checkpoints while pending, cancellation/restart custody, typed quarantine and eventual cleanup after success. Further method-set growth renews review.",
+  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
+  "ceiling": 22,
   "boundaries": {
     "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
-    "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca"
+    "lycaon/internal/db/integrity_lifecycle_test.go": "9177cc3d12f03cc01407ce594dae743d5ef4a24b93e480962e4c44e8ed465285",
+    "lycaon/internal/db/integrity_retention_test.go": "7d45d4b54139f2409cabee012fdc0c3f785e55c088fd14e9d6bb167c4a1fdfb3",
+    "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca",
+    "lycaon/internal/db/startup_validation_test.go": "9f564a778253fea8a15face7b5211ac850d72fce1c9161084bc7742003af1458"
   },
-  "reviewed_shape": "d3685613f13f5781ae4b75d7e60f5b2537335ca9d84cfc5a0c23ce189e41ea24"
+  "reviewed_shape": "5c56a0481523457765773d177c1fba91db5dbef7156bd99163b32614857c2665"
 }
