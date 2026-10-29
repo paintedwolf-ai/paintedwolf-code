@@ -21,7 +21,7 @@ class DevelopmentStopTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.engine = self.bin / "pw"
-        shutil.copy2(shutil.which("sleep"), self.engine)
+        shutil.copyfile(shutil.which("sleep"), self.engine)
         self.engine.chmod(0o700)
         self.config = self.root / "dev"
         (self.config / "locks").mkdir(parents=True)
