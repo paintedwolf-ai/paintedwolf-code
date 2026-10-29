@@ -104,6 +104,8 @@ type Network struct {
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
 	// SocketGrants connect through retained descriptors owned by the outer helper.
 	SocketGrants []SocketGrant `json:"socket_grants,omitempty"`
+	// DelegatedEndpoints are refused even when a socket grant names them.
+	DelegatedEndpoints []DelegatedEndpoint `json:"delegated_endpoints,omitempty"`
 	// beforeSocketConnect is an in-process synchronization seam; it is never
 	// read from a plan or configuration and carries no authorization.
 	beforeSocketConnect func() `json:"-"`
@@ -121,6 +123,9 @@ const SocketReferenceFD = 7
 type SocketGrant struct {
 	Path string `json:"path"`
 	FD   int    `json:"fd"`
+	// Delegated is set when the retained object is a delegated service's
+	// endpoint socket, however the grant named it.
+	Delegated DelegatedService `json:"delegated,omitempty"`
 }
 
 // DirectIPPermit narrows direct IP by transport and port.
@@ -227,7 +232,15 @@ func (p Plan) Validate() error {
 		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
 		}
+		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "unknown delegated service " + string(grant.Delegated)}
+		}
 		seenSockets[grant.Path], seenFDs[grant.FD] = true, true
+	}
+	for _, endpoint := range n.DelegatedEndpoints {
+		if endpoint.Service != DelegatedNixDaemon || !filepath.IsAbs(endpoint.Path) || strings.ContainsRune(endpoint.Path, 0) {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid delegated service endpoint"}
+		}
 	}
 	return nil
 }
