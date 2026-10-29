@@ -67,6 +67,12 @@ func NewVariables(ctx context.Context, memory *toolcontract.ProgramMemory, progr
 			return nil, err
 		}
 	}
+	// IFS starts as space, tab and newline and is never taken from the
+	// environment.
+	if err := v.store(ctx, "IFS", variable{value: " \t\n", set: true}); err != nil {
+		v.Close()
+		return nil, err
+	}
 	return v, nil
 }
 
