@@ -64,8 +64,8 @@ func TestWebSearchScreenAsksAndDenies(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.Unanswered}, nil
 	}
 	ctx := withSecretScreen(context.Background(), testSecretMatcher(t), ask, "", screenDestination{})
-	out := p.Search(ctx, googleCSETestSettings(), "leak "+plantedAWS, 5)
-	if out.ok || out.reason != "secret_denied" {
+	out := searchTestProvider(t, ctx, p, googleCSETestSettings(), "leak "+plantedAWS, 5)
+	if out.OK || out.Error == "" {
 		t.Fatalf("outcome=%+v want secret_denied", out)
 	}
 	if hits.Load() != 0 {
@@ -114,8 +114,8 @@ func TestWebSearchScreenApproveSendsVerbatim(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 	}
 	ctx := withSecretScreen(context.Background(), testSecretMatcher(t), ask, "", screenDestination{})
-	out := p.Search(ctx, googleCSETestSettings(), query, 5)
-	if !out.ok {
+	out := searchTestProvider(t, ctx, p, googleCSETestSettings(), query, 5)
+	if !out.OK {
 		t.Fatalf("outcome=%+v", out)
 	}
 	if gotQ != query {
@@ -138,8 +138,8 @@ func TestWebSearchScreenRedactsTransientQuery(t *testing.T) {
 	ctx := withSecretScreen(context.Background(), testSecretMatcher(t), func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 		return secretmatch.Resolution{Decision: secretmatch.SendRedacted}, nil
 	}, "", screenDestination{})
-	out := p.Search(ctx, googleCSETestSettings(), query, 5)
-	if !out.ok {
+	out := searchTestProvider(t, ctx, p, googleCSETestSettings(), query, 5)
+	if !out.OK {
 		t.Fatalf("outcome=%+v", out)
 	}
 	if strings.Contains(gotQ, plantedAWS) || !strings.Contains(gotQ, "[REDACTED]") {
@@ -237,8 +237,8 @@ func TestScreenInertMatcherByteIdentical(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.Unanswered}, nil
 	}
 	ctx := withSecretScreen(context.Background(), nil, ask, "", screenDestination{})
-	out := p.Search(ctx, googleCSETestSettings(), "leak "+plantedAWS, 5)
-	if !out.ok {
+	out := searchTestProvider(t, ctx, p, googleCSETestSettings(), "leak "+plantedAWS, 5)
+	if !out.OK {
 		t.Fatalf("nil matcher must not reject: %+v", out)
 	}
 	if askCalls.Load() != 0 || hits.Load() != 1 {
@@ -246,8 +246,8 @@ func TestScreenInertMatcherByteIdentical(t *testing.T) {
 	}
 
 	ctx = withSecretScreen(context.Background(), secretmatch.NewInertMatcher(), ask, "", screenDestination{})
-	out = p.Search(ctx, googleCSETestSettings(), "leak "+plantedAWS, 5)
-	if !out.ok || askCalls.Load() != 0 {
+	out = searchTestProvider(t, ctx, p, googleCSETestSettings(), "leak "+plantedAWS, 5)
+	if !out.OK || askCalls.Load() != 0 {
 		t.Fatalf("inert matcher must be byte-identical: out=%+v ask=%d", out, askCalls.Load())
 	}
 }
@@ -268,8 +268,8 @@ func TestScreenOneAskPerInvocation(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 	}
 	ctx := withSecretScreen(context.Background(), testSecretMatcher(t), ask, "", screenDestination{})
-	_ = p.Search(ctx, googleCSETestSettings(), query, 5)
-	_ = p.Search(ctx, googleCSETestSettings(), query, 5)
+	_ = searchTestProvider(t, ctx, p, googleCSETestSettings(), query, 5)
+	_ = searchTestProvider(t, ctx, p, googleCSETestSettings(), query, 5)
 	if askCalls.Load() != 1 {
 		t.Fatalf("ask calls=%d want 1", askCalls.Load())
 	}
@@ -288,7 +288,7 @@ func TestScreenPayloadsNeverCarryValue(t *testing.T) {
 		return "", nil
 	}
 	p := NewRESTSearchProvider(spec, KindKeyedExtra)
-	_ = p.Search(ctx, googleCSETestSettings(), plantedAWS, 5)
+	_ = searchTestProvider(t, ctx, p, googleCSETestSettings(), plantedAWS, 5)
 }
 
 func assertNoSecretValue(t *testing.T, value string, m secretmatch.Match, rej *toolrejection.ToolReject) {
