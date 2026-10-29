@@ -3,19 +3,21 @@ package native
 import (
 	"archive/tar"
 	"archive/zip"
+	"compress/bzip2"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -108,10 +110,6 @@ func archiveFormat(path string) (string, error) {
 		return "tar.gz", nil
 	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"):
 		return "tar.bz2", nil
-	case strings.HasSuffix(lower, ".tar.xz"), strings.HasSuffix(lower, ".txz"):
-		return "tar.xz", nil
-	case strings.HasSuffix(lower, ".tar.zst"), strings.HasSuffix(lower, ".tzst"):
-		return "tar.zst", nil
 	case strings.HasSuffix(lower, ".tar"):
 		return "tar", nil
 	case strings.HasSuffix(lower, ".zip"):
@@ -121,7 +119,7 @@ func archiveFormat(path string) (string, error) {
 			Code: "EXTRACT_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
 				"path":    filepath.ToSlash(path),
-				"allowed": []string{".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tzst"},
+				"allowed": []string{".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2"},
 			},
 		}
 	}
@@ -187,22 +185,25 @@ func extractZipFile(sink extractSink, archive fseffect.Location, budget *extract
 	return nil
 }
 
-// extractTarFile extracts a plain, gzip, bzip2, xz or zstd tar stream.
+// extractTarFile extracts a plain, gzip or bzip2 tar stream.
 func extractTarFile(sink extractSink, archive fseffect.Location, format string, budget *extractBudget, guard entryGuard) error {
 	f, err := fseffect.OpenRead(archive)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return err
+	var stream io.Reader = f
+	switch format {
+	case "tar.gz":
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return fmt.Errorf("open gzip: %w", err)
+		}
+		defer func() { _ = gz.Close() }()
+		stream = gz
+	case "tar.bz2":
+		stream = bzip2.NewReader(f)
 	}
-	stream, closeStream, err := OpenArchiveStream(format, f, info.Size())
-	if err != nil {
-		return err
-	}
-	defer closeStream()
 	tr := tar.NewReader(stream)
 	for {
 		hdr, err := tr.Next()
@@ -236,8 +237,7 @@ type extractSink struct {
 	dest      mutationTarget
 	strip     int
 	overwrite bool
-	selected  func(string) bool
-	flatten   bool
+	members   []string
 }
 
 func (s extractSink) target(rel string) mutationTarget {
@@ -249,19 +249,14 @@ func (s extractSink) target(rel string) mutationTarget {
 }
 
 // entry admits and writes one archive entry. Names are confined before
-// selection and stripping, links are refused rather than created, and every
-// write passes the entry and byte budgets and the governed-path guard first.
-// Flattening writes each file under its base name and skips directories. A
-// directory entry naming the archive root (./) is the destination itself.
+// stripping, links are refused rather than created, and every write passes
+// the entry and byte budgets and the governed-path guard first.
 func (s extractSink) entry(name string, isDir, isLink bool, budget *extractBudget, guard entryGuard, open func() (io.ReadCloser, error)) error {
-	if isDir && path.Clean(strings.ReplaceAll(name, "\\", "/")) == "." {
-		return nil
-	}
 	rel, err := safeArchiveEntryName(name)
 	if err != nil {
 		return err
 	}
-	if s.selected != nil && !s.selected(rel) {
+	if len(s.members) > 0 && !slices.Contains(s.members, rel) {
 		return nil
 	}
 	if s.strip > 0 {
@@ -270,12 +265,6 @@ func (s extractSink) entry(name string, isDir, isLink bool, budget *extractBudge
 			return nil
 		}
 		rel = strings.Join(parts[s.strip:], "/")
-	}
-	if s.flatten {
-		if isDir {
-			return nil
-		}
-		rel = path.Base(rel)
 	}
 	target := s.target(rel)
 	if !pathWithinDir(s.dest.Abs, target.Abs) {

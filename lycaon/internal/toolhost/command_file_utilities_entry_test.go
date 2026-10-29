@@ -23,13 +23,6 @@ import (
 var fileUtilityGoldens = []string{"du-apparent-total", "cmp-silent-different", "cmp-list-offsets", "od-hex-bytes", "strings-min-length", "tree-gitignore-depth", "iconv-latin1-redirect", "envsubst-shell-format"}
 
 func TestCommandFileUtilityGoldenProgramsRunThroughTheEntry(t *testing.T) {
-	runEntryGoldens(t, fileUtilityGoldens)
-}
-
-// runEntryGoldens runs the named catalog golden programs through the command
-// entry against their setup files, checking bytes, status and effects.
-func runEntryGoldens(t *testing.T, ids []string) {
-	t.Helper()
 	catalog, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "catalog", err)
 	var contract struct {
@@ -52,7 +45,7 @@ func runEntryGoldens(t *testing.T, ids []string) {
 	testutil.FailErr(t, "golden contract", json.Unmarshal(catalog.Contracts["golden"], &contract))
 	ran := 0
 	for _, golden := range contract.Golden {
-		if !slices.Contains(ids, golden.ID) {
+		if !slices.Contains(fileUtilityGoldens, golden.ID) {
 			continue
 		}
 		ran++
@@ -80,8 +73,8 @@ func runEntryGoldens(t *testing.T, ids []string) {
 			}
 		})
 	}
-	if ran != len(ids) {
-		t.Fatalf("ran %d of %d goldens", ran, len(ids))
+	if ran != len(fileUtilityGoldens) {
+		t.Fatalf("ran %d of %d file utility goldens", ran, len(fileUtilityGoldens))
 	}
 }
 

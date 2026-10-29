@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -110,11 +112,11 @@ func (p *ProgramPaths) Chdir(ctx context.Context, operand string, physical bool)
 	}
 	bound, err := p.Bind(ctx, target, false)
 	if err != nil {
-		return utilityPathError(operand, err)
+		return directoryError(operand, err)
 	}
 	bound, info, err := p.directoryBinding(ctx, bound)
 	if err != nil {
-		return utilityPathError(operand, err)
+		return directoryError(operand, err)
 	}
 	if physical {
 		bound.exactRelative = readRelative(bound.Resolved.ScopeRel)
@@ -141,6 +143,20 @@ func (e *UtilityError) Error() string {
 		return e.Message
 	}
 	return e.Operand + ": " + e.Message
+}
+
+// directoryError keeps host refusals and reports a missing or non-directory
+// target the way cd does.
+func directoryError(operand string, err error) error {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return &UtilityError{Operand: operand, Message: "No such file or directory"}
+	case errors.Is(err, syscall.ENOTDIR), errors.Is(err, errNotDirectory):
+		return &UtilityError{Operand: operand, Message: "Not a directory"}
+	case errors.Is(err, fs.ErrPermission):
+		return &UtilityError{Operand: operand, Message: "Permission denied"}
+	}
+	return err
 }
 
 // errNotDirectory marks a bound directory operand that names another entry.
