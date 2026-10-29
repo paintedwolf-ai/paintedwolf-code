@@ -25,13 +25,25 @@ class MeasuredTimingsTests(unittest.TestCase):
                                {"package": "p/two", "elapsed": 9.5, "reused": True},
                                {"package": "p/three", "exit_code": 1}])
             events(root, "b", [{"package": "p/one", "elapsed": 1.25, "reused": False}])
-            run = {"lane": "behavior", "shard": "1/2", "status": "passed", "started_at": 100.0, "finished_at": 160.0}
+            run = {"lane": "behavior", "shard": "1/2", "status": "passed", "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
             timings.record(root, run)
             measured = json.loads((root / "ci/timings.json").read_text())
-            self.assertEqual(measured, {"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 60.0,
+            self.assertEqual(measured, {"basis": "setup-and-execution", "lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 80.0,
                                         "packages": {"p/one": 5.25}})
             timings.record(root, {**run, "lane": "lint", "shard": ""})
             self.assertEqual(json.loads((root / "ci/timings.json").read_text())["packages"], {})
+
+    def test_execution_only_history_cannot_mix_with_setup_inclusive_estimates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'ci').mkdir()
+            run = {'lane': 'native', 'shard': '', 'status': 'passed', 'started_at': 100, 'finished_at': 150}
+            timings.record(root, run)
+            self.assertEqual(timings.merge([root / 'ci/timings.json']), {'lanes': {}, 'packages': {}})
+            timings.record(root, {**run, 'job_started_at': 200})
+            self.assertEqual(timings.merge([root / 'ci/timings.json'])['lanes'], {})
+            timings.record(root, {**run, 'job_started_at': 50})
+            self.assertEqual(timings.merge([root / 'ci/timings.json'])['lanes'], {'native': 100})
 
     def test_merge_keeps_passed_lane_rows_and_every_measured_package(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -42,7 +54,7 @@ class MeasuredTimingsTests(unittest.TestCase):
             paths = []
             for index, row in enumerate(rows):
                 path = root / f"{index}.json"
-                path.write_text(json.dumps(row))
+                path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
                 paths.append(path)
             self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "lint": 600},
                                                     "packages": {"a": 1, "b": 2}})
@@ -52,7 +64,7 @@ class MeasuredTimingsTests(unittest.TestCase):
             path = Path(directory) / "timings.json"
             for seconds in [True, 0, -1, float("nan"), float("inf"), "60", None]:
                 with self.subTest(seconds=seconds):
-                    path.write_text(json.dumps({"lane": "behavior", "shard": "1/2", "status": "passed",
+                    path.write_text(json.dumps({"basis": "setup-and-execution", "lane": "behavior", "shard": "1/2", "status": "passed",
                                                 "seconds": seconds,
                                                 "packages": {"valid": 2, "zero": 0, "negative": -1,
                                                              "infinite": float("inf"), "boolean": True}}))
@@ -61,11 +73,11 @@ class MeasuredTimingsTests(unittest.TestCase):
 
     def test_history_stops_once_required_rows_are_available(self):
         runs = {"workflow_runs": [{"id": 3}, {"id": 2}, {"id": 1}]}
-        artifacts = {3: [{"name": "verification-check-lint-1", "expired": False}],
-                     2: [{"name": "receipt-verification-check-lint-1", "expired": False},
-                         {"name": "receipt-verification-check-behavior-2-1", "expired": False},
-                         {"name": "receipt-verification-check-runner-1", "expired": True}],
-                     1: [{"name": "receipt-verification-check-lint-1", "expired": False}]}
+        artifacts = {3: [{"name": "verification-nightly-lint-1", "expired": False}],
+                     2: [{"name": "receipt-verification-nightly-lint-1", "expired": False},
+                         {"name": "receipt-verification-nightly-behavior-2-1", "expired": False},
+                         {"name": "receipt-verification-nightly-runner-1", "expired": True}],
+                     1: [{"name": "receipt-verification-nightly-lint-1", "expired": False}]}
         downloaded = []
 
         def download(repository, run, names, directory):
@@ -74,15 +86,15 @@ class MeasuredTimingsTests(unittest.TestCase):
                 path = Path(directory) / name / "ci" / "timings.json"
                 path.parent.mkdir(parents=True)
                 lane = "behavior" if "behavior" in name else "lint"
-                path.write_text(json.dumps({"lane": lane, "shard": "1/2" if lane == "behavior" else "",
+                path.write_text(json.dumps({"basis": "setup-and-execution", "lane": lane, "shard": "1/2" if lane == "behavior" else "",
                                             "status": "passed", "seconds": 60, "packages": {}}))
 
         with patch.object(timings.github, "api", return_value=runs), \
                 patch.object(timings.github, "pages", side_effect=lambda path, key: artifacts[int(path.split("/")[-2])]), \
                 patch.object(timings, "download", side_effect=download), \
-                patch.object(timings, "qualification_rows", return_value={"lint", "behavior 1/2"}):
+                patch.object(timings, "nightly_rows", return_value={"lint", "behavior 1/2"}):
             measured = timings.latest("owner/repo")
-        self.assertEqual(downloaded, [(2, ["receipt-verification-check-lint-1", "receipt-verification-check-behavior-2-1"])])
+        self.assertEqual(downloaded, [(2, ["receipt-verification-nightly-lint-1", "receipt-verification-nightly-behavior-2-1"])])
         self.assertEqual(measured, {"runs": [2], "lanes": {"lint": 60, "behavior 1/2": 60},
                                     "packages": {}, "lane_runs": {"lint": 2, "behavior 1/2": 2}})
 
@@ -100,7 +112,7 @@ class MeasuredTimingsTests(unittest.TestCase):
 
         def artifacts(path, key):
             run = int(path.split("/")[-2])
-            return [{"name": f"receipt-verification-{'release' if row['lane'] == 'webkit-gtk' else 'check'}-{index}", "expired": False}
+            return [{"name": f"receipt-verification-nightly-{index}", "expired": False}
                     for index, row in enumerate(data[run])]
 
         def download(repository, run, names, directory):
@@ -108,12 +120,12 @@ class MeasuredTimingsTests(unittest.TestCase):
             for index, row in enumerate(data[run]):
                 path = Path(directory) / names[index] / "ci" / "timings.json"
                 path.parent.mkdir(parents=True)
-                path.write_text(json.dumps(row))
+                path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
 
         with patch.object(timings.github, "api", return_value=runs) as api, \
                 patch.object(timings.github, "pages", side_effect=artifacts), \
                 patch.object(timings, "download", side_effect=download), \
-                patch.object(timings, "qualification_rows", return_value={"behavior 1/2", "behavior 2/2", "webkit-gtk"}):
+                patch.object(timings, "nightly_rows", return_value={"behavior 1/2", "behavior 2/2", "webkit-gtk"}):
             measured = timings.latest("example/repository")
         self.assertIn("per_page=20", api.call_args.args[0])
         self.assertEqual(downloaded, [3, 2])
@@ -121,11 +133,11 @@ class MeasuredTimingsTests(unittest.TestCase):
                                     "packages": {"a": 3, "b": 5},
                                     "lane_runs": {"behavior 1/2": 3, "behavior 2/2": 2, "webkit-gtk": 2}})
 
-    def test_history_requires_only_rows_produced_by_qualification(self):
+    def test_history_requires_only_rows_produced_by_nightly(self):
         expected = {timings.row_key(row["lane"], row["shard"])
-                    for matrix in (hosted_plan.matrix("check"), hosted_plan.matrix("release", platform=True))
+                    for matrix in (hosted_plan.matrix("nightly"),)
                     for row in matrix["include"]}
-        self.assertEqual(timings.qualification_rows(), expected)
+        self.assertEqual(timings.nightly_rows(), expected)
         self.assertTrue({"build", "webkit-gtk", "confinement-arm64"} <= expected)
         self.assertNotIn("integration-build", expected)
 
@@ -144,8 +156,8 @@ class MeasuredTimingsTests(unittest.TestCase):
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        rest = [row["lane"] for row in rows if not lanes[row["lane"]].get("first") and not lanes[row["lane"]].get("contract_first")]
-        self.assertEqual(rest[:4], ["webkit-gtk", "frontend", "native", "runner"])
+        rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") in {"compile", "normal"}]
+        self.assertEqual(rest[:4], ["native", "webkit-gtk", "frontend", "runner"])
         self.assertLess(rest.index("runner"), rest.index("contracts"))
 
     def test_plan_without_measurements_orders_by_budget(self):
@@ -153,7 +165,8 @@ class MeasuredTimingsTests(unittest.TestCase):
         with patch.object(hosted_plan, "catalog", return_value=data):
             rows = hosted_plan.matrix("check", timings={})["include"]
         lanes = hosted_plan.lanes()
-        order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in rows]
+        order = [(hosted_plan.PRIORITIES[row["priority"]], -row["minutes"])
+                 for row in rows if row["priority"] != "compile"]
         self.assertEqual(order, sorted(order))
 
 

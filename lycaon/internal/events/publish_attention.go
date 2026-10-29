@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -40,9 +41,9 @@ func (p *Publisher) PublishAttention(ctx context.Context) {
 	}
 	// The trigger context may cancel before the window elapses; keep its values.
 	build := context.WithoutCancel(ctx)
-	p.attentionWG.Add(1)
+	p.attentionInFlight++
 	p.attentionTimer = time.AfterFunc(AttentionRebuildWindow, func() {
-		defer p.attentionWG.Done()
+		defer p.attentionRebuildDone()
 		p.attentionMu.Lock()
 		if p.closed.Load() {
 			p.attentionMu.Unlock()
@@ -90,7 +91,30 @@ func (p *Publisher) SettleAttention(ctx context.Context) {
 	if pending {
 		p.FlushAttention(ctx)
 	}
-	p.attentionWG.Wait()
+	p.waitAttentionIdle()
+}
+
+// attentionRebuildDone retires one scheduled or running rebuild.
+func (p *Publisher) attentionRebuildDone() {
+	p.attentionMu.Lock()
+	defer p.attentionMu.Unlock()
+	p.attentionInFlight--
+	if p.attentionInFlight == 0 && p.attentionIdle != nil {
+		p.attentionIdle.Broadcast()
+	}
+}
+
+// waitAttentionIdle blocks until no rebuild is scheduled or running.
+// Rebuilds started while waiting extend the wait, under the same mutex.
+func (p *Publisher) waitAttentionIdle() {
+	p.attentionMu.Lock()
+	defer p.attentionMu.Unlock()
+	for p.attentionInFlight > 0 {
+		if p.attentionIdle == nil {
+			p.attentionIdle = sync.NewCond(&p.attentionMu)
+		}
+		p.attentionIdle.Wait()
+	}
 }
 
 // FlushAttention publishes immediately and cancels a pending rebuild.
@@ -105,14 +129,14 @@ func (p *Publisher) FlushAttention(ctx context.Context) {
 	}
 	if p.attentionTimer != nil {
 		if p.attentionTimer.Stop() {
-			p.attentionWG.Done()
+			p.attentionInFlight--
 		}
 		p.attentionTimer = nil
 	}
 	p.attentionRevision++
 	revision := p.attentionRevision
-	p.attentionWG.Add(1)
+	p.attentionInFlight++
 	p.attentionMu.Unlock()
-	defer p.attentionWG.Done()
+	defer p.attentionRebuildDone()
 	p.buildAndPublishAttention(ctx, revision)
 }

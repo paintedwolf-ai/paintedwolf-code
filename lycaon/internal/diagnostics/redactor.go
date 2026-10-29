@@ -36,8 +36,13 @@ func NewRedactor() (*Redactor, error) {
 }
 
 // RedactText removes structured and catalog-backed secret material.
-func (r *Redactor) RedactText(ctx context.Context, s string) string {
-	out := observability.RedactString(s)
+func (r *Redactor) RedactText(ctx context.Context, s string) (out string) {
+	defer func() {
+		if recover() != nil {
+			out = "[REDACTED]"
+		}
+	}()
+	out = observability.RedactCaptureText(s)
 	if r == nil {
 		return out
 	}

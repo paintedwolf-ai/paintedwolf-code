@@ -14,6 +14,8 @@ mod query;
 mod tests;
 #[cfg(test)]
 mod apt_probe_tests;
+#[cfg(test)]
+mod produced_fixtures;
 pub use query::refresh;
 
 pub(super) use command::{Output, Reader};
@@ -27,7 +29,9 @@ impl Reader for PerQuery {
     }
 }
 
-pub(super) fn valid_package_name(name: &str) -> bool { command::package_name(name) }
+pub(super) fn valid_package_name(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 255 && value.bytes().all(|c| c.is_ascii_alphanumeric() || b"+._-".contains(&c)) && !value.starts_with('-')
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

@@ -10,6 +10,7 @@ import (
 )
 
 type hostedStep struct {
+	Name     string
 	Uses     string
 	Run      string
 	If       string
@@ -80,9 +81,6 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	}
 	if gate == "ship-gates" {
 		expectedCondition = "${{ !cancelled() && inputs.rehearsal_run_id == '' }}"
-	}
-	if gate == "qualification" {
-		expectedCondition = "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}"
 	}
 	if !slices.Equal(got, dependencies) || job.If != expectedCondition {
 		t.Fatalf("%s must judge every dependency unless the run is cancelled: got %v (%s), want %v", gate, got, job.If, dependencies)
@@ -222,7 +220,7 @@ func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T)
 	const selected = "${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e') }}"
 	qualification := hostedJobs(t, "qualification")
 	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" {
-		t.Fatal("main qualification must include browser verification")
+		t.Fatal("release qualification must include browser verification")
 	}
 	nightly := hostedJobs(t, "nightly")
 	if !nightly["quarantine"].Continue {
@@ -231,15 +229,21 @@ func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T)
 	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
 		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
 	}
-	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e"})
-	const skipped = "${{ github.event_name != 'schedule' && inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}"
+	if nightly["platform"].Uses != "./.github/workflows/platform-verification.yml" ||
+		nightly["platform"].If != "${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all') }}" ||
+		!slices.Equal(hostedNeeds(t, nightly["platform"]), []string{"verification"}) ||
+		!slices.Equal(hostedNeeds(t, nightly["e2e"]), []string{"platform"}) {
+		t.Fatal("full nightly must retain platform verification within the serialized runner budget")
+	}
+	requireHostedGate(t, nightly, "nightly", []string{"verification", "platform", "upgrade-path", "e2e"})
+	const skipped = "${{ github.event_name != 'schedule' && inputs.suite != 'all' && (inputs.suite == 'e2e' && 'platform' || 'platform,e2e') || '' }}"
 	for _, step := range nightly["nightly"].Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
 			step.Env["SKIPPED"] == skipped && strings.Contains(step.Run, `--skipped "$SKIPPED"`) {
 			return
 		}
 	}
-	t.Fatal("nightly may excuse only deliberately unselected E2E; failures and unexpected skips must block")
+	t.Fatal("nightly may excuse only deliberately unselected platform and E2E; failures and unexpected skips must block")
 }
 
 func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
@@ -288,6 +292,11 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"
 			if step.Run != "" && !setup {
+				// The timestamp records setup time without invoking a verification target.
+				const jobStart = `python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'`
+				if workflow == "verification" && job == "verify" && step.Name == "Record job start" && step.Run == jobStart {
+					continue
+				}
 				t.Errorf("%s/%s must stage dependencies and notices before verification", workflow, job)
 			}
 		}

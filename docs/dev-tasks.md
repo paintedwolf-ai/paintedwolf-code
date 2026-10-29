@@ -26,6 +26,11 @@ After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
 
+In a fresh worktree, run `./task gitengine:fetch` before tests that create or
+inspect Git repositories. This downloads and verifies the pinned Git bundle.
+Verification copies the staged bundle into its captured tree; it does not
+provision a missing bundle.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
@@ -59,13 +64,13 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E after merge; releases require that exact commit's qualification. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly owns race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 ### Where credentials live in development
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
 
-Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, and on Windows, the identity is wrapped in `{configdir}/credential-vault-identity.age` with the app password, which the desktop sends to the engine over a private startup pipe, never argv or the environment. Custody details: [secrets](secrets.md).
+Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, credential storage refuses to open. Other release platforms also refuse until a native custodian is implemented. Custody details: [secrets](secrets.md).
 
 ```bash
 LYCAON_DEV=1 "$BUILD_DIR/lycaon-dev" credentials where        # report the vault and identity provider
@@ -659,6 +664,46 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
 | `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
+### Protected Linux desktop component
+
+`./task test:confine:linux -- launch` tests the real launcher with its reporting
+fixture desktop. The optional `launch-desktop` selection consumes a separately
+built **actual Den** and engine payload; it does not build Rust inside the Go
+leg or add a required CI gate. Run both selections for the transport and runtime
+contracts. Submit through `./task --background` and consume its sole `--wait`
+result as described below.
+
+Prepare Den through `./task den:bundle` on the exact committed source, retaining
+its background job metadata, completed result and full build output. Record the
+Git tree before and after preparation: both must equal the runtime check's source
+tree. Extract the resulting package without registering it. Use its owned installation
+directory, including desktop, engine helpers, `engine-root` and the complete
+native `manifest.json`, as the component directory. This is
+component evidence, not a published package or release qualification. Preparation
+is passthrough: its source record does not become a captured verification receipt.
+
+Set `PW_LAUNCH_DESKTOP_ARTIFACT` to an absolute JSON evidence file containing:
+`version` (1), `root` (the component directory), `source_commit`, `source_tree`,
+`before_tree`, `after_tree`, `manifest_sha256`, `preparation_job` and
+`preparation_result` (absolute paths to the retained background job files),
+`preparation_job_sha256`, `preparation_result_sha256`, and `system_executables`
+(the root-controlled system helper paths the fixture policy needs, including its
+WebKit helpers). Hash the exact bytes of each referenced evidence file. The
+manifest must cover the actual desktop, `pw`, `pw-logs`, `pw-vault-identity` and
+complete engine resources. The fixture retains those bytes and substitutes only
+the entry and bootstrap built from the runtime check's captured source, recording
+the resulting generation's own manifest and logical prefix.
+
+The selection refuses missing or inconsistent input rather than skipping. It
+needs passwordless `sudo`, Xvfb, the session bus, GTK/WebKit runtime dependencies,
+`ip` and `curl` on the native lane. Its root fixture creates private mount and
+network namespaces, an empty package database, a private display and session bus,
+a private identity service, and a fresh home. It admits only selected payload
+bytes, requires actual Den to start the selected engine and serve health, checks
+their kernel image/parent/namespace identities, and tears down its owned processes.
+No host package registration, desktop session or existing application is changed;
+external services cannot be reached from the private network namespace.
+
 ### OpenAPI release review
 
 `./task openapi:diff` compares the generated `docs/openapi.yaml` with
@@ -722,6 +767,12 @@ Go profiling and repeat flags run outside a shared batch with the Go resource.
 Background submissions validate these flags before creating a job.
 
 ### Selection arguments
+
+`./task den:test:rust -- --compile-only` and
+`./task decide:test -- --compile-only` compile all normal test targets without
+executing them. They use the same resources and pinned features as the complete
+test targets; a compile-only pass does not establish runtime verification.
+No other native selection flags are accepted.
 
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
@@ -933,7 +984,7 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The current set is the Apple Silicon macOS DMG and updater archive. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Linux x86_64, Linux aarch64, and Windows x86_64 remain `candidate` catalog entries outside the release matrix; promoting a platform requires a matching prebuilt engine release and platform install/update qualification. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. The non-publishing `linux-candidates` job builds, audits, and retains both Linux packages per architecture on every release run without signing or publication authority; see [Linux packages](#linux-packages). The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The current set is the Apple Silicon macOS DMG and updater archive. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Linux x86_64, Linux aarch64, and Windows x86_64 remain `candidate` catalog entries outside the release matrix; promoting a platform requires a matching prebuilt engine release and platform install/update qualification. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates` and `publish-immutable`; see [Linux in the release lane](#linux-in-the-release-lane). The non-publishing `linux-candidates` job builds, audits, and retains both Linux packages per architecture on every release run without signing or publication authority; see [Linux packages](#linux-packages). The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
@@ -949,7 +1000,9 @@ flowchart TD
     verify --> aggregate["aggregate-release:<br/>require every public platform build"]
     aggregate --> boundary["select only publication=public bytes"]
     boundary --> r2["Publish immutable R2 objects:<br/>public artifacts, corpus, manifest, cask"]
-    r2 --> cask["update-cask<br/>Homebrew tap"]
+    r2 --> linux["publish-linux-repositories<br/>apt, dnf and pacman generations"]
+    linux --> cask["update-cask<br/>Homebrew tap"]
+    linux --> www
     r2 --> mirror["publish-github-release<br/>(trailing mirror — gates nothing)"]
     r2 --> www["notify-website"]
     cask --> activate["activate-updater last<br/>publish channel latest.json pointer"]
@@ -957,11 +1010,11 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
-The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The protected controller supplies a fresh `release_admission.verify_release` selection through `scripts.nix_cache.release_authority.authorize`; it binds every selected architecture output, source, version, lock and actual NAR hash before transport credentials load. A saved accepted JSON receipt grants no publication authority.
+The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The release controller calls `scripts.nix_cache.release_authority.authorize` with the selected source and version; it binds the verified report, request and trust policy to that release and reads the exact-source Qualification record before transport credentials load. A saved accepted JSON receipt grants no publication authority.
 
 Nix constructs and verifies the standard signed file cache. Admission requires the entire runtime closure here, including dependencies available upstream. `scripts.nix_cache.publication.publish` rechecks signatures, actual NAR identities and local inventory, then uses the dedicated R2 transport to upload immutable NARs before metadata. It verifies each ordinary custom-domain URL before writing an immutable availability record. Public metadata must carry `no-store`, have no cache age or stale-hit status, and match exact admitted bytes. Configure the delivery domain to bypass caching, including negative caching, for `nix-cache-info` and `.narinfo`; a cached 404 or stale response refuses completion. No cache-busting URL can substitute for this check. NARs use immutable caching. Signature rotation can add signatures without changing their store identity or removing retained signatures, and appends a separate record while preserving the original release record.
 
-`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh installed-release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
+`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
 
 Publication, withdrawal and collection share a conditional R2 write lock. The lock never expires automatically: after a crashed publisher, the protected controller must explicitly authorize recovery of the exact recorded operation. A retry reuses identical objects and completes the availability record last. All writers for this prefix must use this owner. An immutable publication plan roots its objects before uploading begins; interrupted plans retain those bytes because a lost request may still commit. Withdrawal preserves every published `.narinfo`, release record and referenced NAR, including old pins. The retention operation only collects unreferenced upload debris older than an explicitly selected cutoff of at least one day; a missing retained object refuses collection. It never removes a published store path because an offer was withdrawn.
 
@@ -969,7 +1022,7 @@ Cache use remains an explicit choice. After a release publishes its dedicated Ni
 
 `./task release:live-test -- --local-nix-cache` uses disposable keys, private stores and owned loopback HTTP to rehearse complete closure copying, cold import, wrong trust, altered NARs/metadata, missing dependencies, key overlap, interrupted upload retry, ordinary-URL cached misses, withdrawal and debris collection. It makes no R2 calls and changes no daemon trust. Cache layout/signing follow [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html); conditional writes and custom-domain caching follow [R2](https://developers.cloudflare.com/r2/reference/consistency/). Actual production delivery and both architecture installed application substitution remain unperformed until the qualified release is selected.
 
-`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production cache credentials and controller admission remain unchanged.
+`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production delivery belongs to the release lane's `publish-nix-cache` job.
 The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
 
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
@@ -1105,7 +1158,7 @@ Choose the configuration that already owns the installation. Do not create a sec
 
 | Owner | Install and update | Rollback and remove |
 |---|---|---|
-| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Before disabling custody, move service-held identities to an app password, or restore the service later to access its retained state. Removing the module/package does not erase credentials. |
+| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. New or reopened app sessions need the service to establish credential custody. A running app may retain an identity it already loaded. Removing the module/package does not erase its retained identities or encrypted credentials; restore the service before reopening. |
 | Home Manager | Add the pinned input's `packages.${pkgs.stdenv.hostPlatform.system}.default` to `home.packages`, then use the existing Home Manager activation procedure. Update that input explicitly; do not replace its pin from the app. | Select the intended retained Home Manager generation or restore the prior input and activate. Remove the package from the same `home.packages`. System custody still needs an administrator's NixOS module; a standalone Home Manager activation does not install it. |
 | User profile | Choose the actual profile, inspect it with `nix profile list --profile "$PW_NIX_PROFILE"`, and add the selected source with `nix profile add --profile "$PW_NIX_PROFILE" "$PW_NIX_SOURCE#default"`. An exact commit remains pinned. To replace it, record `nix profile history`, remove the observed element name, then add the reviewed new source to that same profile. | Use `nix profile rollback` with that profile and the intended retained generation. Remove the observed element using `nix profile remove`; never guess an element name or profile path. |
 | Temporary build | Use `nix build --out-link "$PW_NIX_OUTPUT" "$PW_NIX_SOURCE#default"` with a chosen output link, then launch its `bin/painted-wolf-code`. A temporary build has no profile to upgrade. | Choose another exact source/output and relaunch when ready. Removing the chosen output link releases that root; Nix garbage collection owns unused outputs. |
@@ -1131,17 +1184,46 @@ A Nix generation rollback changes application/package files, not the live databa
 
 See the [update qualification matrix](operations/update-qualification.md#nix-owner-and-recovery-qualification) for owner-specific installed checks. The recipes above describe the package contract; the first released-pin, owner switching and both-architecture qualification remain pending the package/cache foundation.
 
-### Installed Linux result admission
+### Linux in the release lane
 
-The shared [`support-matrix.json`](../packaging/linux/support-matrix.json) defines required environment/installation/architecture/capability rows. `scripts.linux_release.installed_results` admits a collector campaign against that catalog, an exact source commit, and the final artifact manifest supplied by the release owner. It emits JSON with `accepted`, every row's `passed`/`failed`/`unverified` outcome, errors and a checklist for native observations. Missing rows or cases, unknown/duplicate identities, skipped results, stale source/artifact identities and emulation of native-only tiers refuse admission. A file digest checks retained evidence bytes; the collector still owns the truth of each observation.
+When the two Linux rows in [`packaging/release-platforms.json`](../packaging/release-platforms.json) are `public`, a regular release publishes them through [`release.yml`](../.github/workflows/release.yml) with the same admission and gates as macOS. There is no separate Linux approval, attestation or evidence upload; native field qualification against [`support-matrix.json`](../packaging/linux/support-matrix.json) is milestone evidence, not a recurring release gate.
 
-The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifact carries `id`, `installation`, `architecture`, `source_commit` and `identity`. File identity is `{ "kind": "file", "sha256": "<final payload digest>" }`. Nix identity is `{ "kind": "nix-closure", "sha256": "<NAR digest>", "store_path": "<exact output>", "lock_sha256": "<lock digest>" }`. Digests are lowercase SHA-256 hex; source commits are full lowercase Git SHAs. The campaign repeats the exact final manifest and adds `results`.
+- **Admission.** `classify` requires the exact-source Qualification record for the release commit. Every Linux repository authorization reads that record again before credentials are used and again before client authority changes.
+- **Signing.** Each Linux `build-release` leg stages and audits its packages, then `scripts.linux_release.release_signing` signs them under `release-signing` with `LINUX_PACKAGE_SIGNING_KEY`: an embedded RPM signature (the audited identity and payload must be unchanged) and binary detached `.sig` files for the DEB and pacman packages. Checksums and the package inventory are rewritten over the final signed bytes before upload.
+- **Collection.** `aggregate-release` requires every public package, checksum, detached signature and scanner audit. The public artifacts are deposited by `publish-immutable` with the macOS artifacts and mirrored to the GitHub Release.
+- **Repositories.** `linux-repositories` (apt and dnf, both architectures) and `linux-pacman-repositories` (one generation per architecture, in the pinned Arch container) assemble signed generations from those same public artifacts under `release-signing`, in turn and before `publication-credentials`, so a failed assembly refuses the release before any publication credential is used. A signed release RPM enters the dnf pool unchanged. After `publish-immutable`, `publish-linux-repositories` activates them under `downloads.paintedwolf.dev/linux` through `repository_r2` and `pacman_r2`. Its authorization binds each generation to the selected source, version, channel and the exact public package digests, and requires every catalog-public package to be offered. `update-cask` and `notify-website` wait for it.
+- **Withdrawal generations.** Each assembled offer is paired with a signed empty generation for the same channel and architectures: valid apt, dnf and pacman metadata that offers no package. `publish-linux-repositories` retains it under `linux/generations/` and indexes it at `linux/withdrawal-generations/<family>/<channel>/<architecture or all>/<version>.json` before the offer activates, so a halt never needs the signing key.
+- **Withdrawal.** `release-halt` prepares `scripts.linux_release.repository_withdrawal` in every run. Every channel that offers the halted version gets the existing `withdraw` operation and its permanent markers. If an earlier Linux release exists and `last_good_version` names it, that retained generation is restored; any other named version refuses. A first Linux release, or a halt with no `last_good_version`, activates the halted release's empty generation instead. Installs and upgrades stop, and installed packages stay untouched. An empty generation offers no version, so the next release publishes over it normally.
 
-Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+- **Nix cache.** After the release is announced and mirrored, `release.yml` calls [`release-linux-delivery.yml`](../.github/workflows/release-linux-delivery.yml). The call requires the Linux repository activation to have succeeded. Its `nix-closures` job builds the application closure on each native runner in turn, without credentials. `publish-nix-cache` then imports both closures and signs them with `NIX_CACHE_SIGNING_KEY` (key name `paintedwolf-cache-1`). It publishes them to `downloads.paintedwolf.dev/nix-cache` through `scripts.nix_cache.release_lane`. Each system's publication rereads the Qualification record through `nix_cache.release_authority.authorize`. The job first validates [`nix-cache-trust.json`](../packaging/linux/nix-cache-trust.json) against the provisioned cache identity.
+- **Halt.** `release-halt` also withdraws the halted release's Nix cache availability record. The closure, its NARs and old pins stay published.
 
-`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+The cache job skips while the Linux catalog rows are `candidate`. Once the rows are `public`, a missing secret or an invalid trust policy fails the job. `release-secrets-check` validates the cache credential and only warns while Linux is a candidate.
 
-The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
+#### Provisioning Linux delivery credentials
+
+We generate the cache key offline and never commit private material.
+
+**Nix cache.** Store the existing private key corresponding to the committed `paintedwolf-cache-1` public identity as `NIX_CACHE_SIGNING_KEY` in the `release-publication` environment. Run the release secrets check to confirm that its public half matches `packaging/linux/nix-cache-trust.json`.
+
+
+#### Installed qualification lane
+
+Installed GUI qualification is a local pre-release lane on the native qualification host's VMs, like `den:webkit:atspi`. No GitHub runner executes it: CI runs only what GitHub-hosted Ubuntu runners can. It produces milestone evidence against [`support-matrix.json`](../packaging/linux/support-matrix.json), not a release gate. The lane runs three steps from a clean checkout of the release controller commit that produced the selected plan:
+
+1. `./task test:linux:installed -- --prepare-qualification --source-commit SHA --source-tree TREE --control-run-id N --control-artifact-id N --qualification-plan-run-id N --qualification-plan-artifact-id N --output DIR`. This downloads the release controller's control inputs and plan by exact run and artifact ID, and refuses a checkout whose commit is not the plan's controller commit.
+2. `./task test:linux:installed -- --execute-plan --plan DIR/plan/qualification-plan.json --final-artifacts DIR/controls/final-artifacts.json --output EXECUTED`. This runs every planned guest target over SSH and physical input.
+3. `./task test:linux:installed -- --retain-qualification --prepared DIR --execution EXECUTED --output RAW`. This retains only a complete, freshly admitted campaign, recording its local producer: controller commit, repository and host.
+
+Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
+
+`scripts.linux_release.installed_results` admits the retained campaign against that catalog, an exact source commit and the final artifact manifest. Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs that admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+
+The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
+
+Architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance, and the release lane reads the exact-source Qualification record rather than these campaigns, so an accepted report grants nothing to a release.
 
 ### Updates
 
@@ -1165,6 +1247,8 @@ install receipt, and the user can change that preference in Settings.
 |----------------|----------|
 | **Direct download** | Download and verify automatically; install at normal quit or startup. An explicit restart installs sooner. |
 | **Homebrew cask** | Notifier only — "vX available", run `brew upgrade --cask painted-wolf-code`. The cask writes an explicit device receipt, so custom Homebrew prefixes work and another user's installation cannot misclassify this app |
+| **Linux system package** (apt, dnf, pacman) | Notifier only. Settings shows the owning package, its version and the channel. A newer release is reported together with whether the configured package source offers it, from read-only APT, DNF or pacman cache queries; no upgrade command is presented and download or restart requests return `package_managed` |
+| **Unpackaged Linux build** | Reports `unpackaged`; no command, download or restart |
 
 **Staged rollout.** Automatic checks admit a release to a growing fraction of devices as the published manifest ages (10% in its first 24 h, 50% until 48 h, then everyone). Each install draws one random bucket, stored locally in `updates/preferences.json` and never transmitted — the check request stays identifier-free. A user-initiated **Check now** bypasses the ramp, and a release the user has already been shown never disappears behind it. The ramp is an operational stagger for catching a bad release early, not a security boundary.
 
@@ -1237,7 +1321,8 @@ checks the private identity when signing, verifies the result with RSA/SHA-512,
 and replaces the destination only after verification. The private key comes
 from the protected `LINUX_PACKAGE_SIGNING_KEY` environment or an explicitly
 selected owner-only file; it is never a command argument. This trust is distinct
-from updater/feed signatures and Nix cache trust.
+from updater/feed signatures and Nix cache trust. In the release lane only the
+`release-signing` jobs receive this key; see [Linux in the release lane](#linux-in-the-release-lane).
 
 `./task release:rehearse:linux-signing -- --receipt /absolute/path/result.json`
 runs a local, non-publishing rehearsal with a disposable key and tiny RPM fixture.
@@ -1252,6 +1337,234 @@ own `linux-signing-fixture` lock, apart from the credentialed `release:live-test
 R2 rehearsal. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
+**Native apt/dnf repository rehearsals.**
+`./task release:rehearse:native-repositories -- --receipt /absolute/path/result.json`
+uses disposable keys and three tiny native package versions. It requires `apt-ftparchive`,
+`createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
+signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
+stale activation refusal and explicit recovery. It does not qualify the application,
+perform installed application upgrades, or publish to R2. Assembly, signed-index
+admission, publication, recovery/withdrawal, candidate retention and setup-package
+refusals are exercised directly by `./task test:runner` against committed signed
+fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
+tests require the native tools and fail rather than skip when one is missing.
+
+A separate target retains repositories for actual application candidates:
+`./task release:rehearse:native-candidates -- --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
+The input directory contains exactly one DEB and RPM for each selected architecture.
+The output must be new and outside the input directory; the receipt must remain outside
+both. Native package names, versions and architectures must match the independent
+selection. This creates disposable test trust, retains the final signed RPM bytes,
+DEB and repository inventories, and a public-only trust catalog. Private keys are
+removed before retained objects are reverified. `candidate-repositories.json` records
+the runtime source, release build, package input and final hashes, generation identities,
+and relative retained paths. The separate receipt also records the publisher source
+revision and tree. Serve these retained directories only in an isolated qualification
+environment with their explicitly selected test trust. This mode performs no R2 request,
+installation, production signing or application qualification.
+
+`python3 -m scripts.linux_release.native_repositories` assembles selected native
+packages into a new generation. `python3 -m scripts.linux_release.repository_transaction`
+accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
+`--expected-generation` (omit only for a new channel). This publisher owns a local
+origin directory; it does not upload to R2. All referenced objects are copied and
+reverified before activation. Apt retains package objects and by-hash indexes and
+replaces `InRelease` last. Dnf replaces a mirrorlist containing an immutable generation
+URL, so metadata and its signature share a versioned base URL. Configure immutable
+caching for `generations/`, `pool/`, and `by-hash/`; channel metadata and mirrorlists
+require no-store caching and zero negative-cache TTL. The deployment must serialize
+publishers across hosts; a filesystem lock covers publishers sharing this origin.
+
+**Explicit repository setup packages.** The native repository owner can construct
+`painted-wolf-code-repo` DEB/RPM packages with
+`python3 -m scripts.linux_release.repository_setup --directory /absolute/path/generation --catalog /absolute/path/keys.json --destination /absolute/path/new-setup-output --base-url https://reviewed-origin.example --private /absolute/path/owner-only-signing-key.asc`.
+The generation must first pass its full inventory/signature admission. Use
+`--rehearsal` only with disposable test trust. The output includes the setup package,
+signed `SHA256SUMS`, public key and generation-bound `setup.json`; no private key is
+copied. Verify the published full key fingerprint through the separately trusted
+release channel, verify `SHA256SUMS.asc` with that key and check `sha256sum -c SHA256SUMS`
+before installation. The explicit one-step setup is `sudo apt install ./painted-wolf-code-repo_<native-version>_all.deb`
+or `sudo dnf install ./painted-wolf-code-repo-<native-version>-<generation>.<channel>.noarch.rpm`.
+
+Setup installs only the selected channel configuration and public key. It does not
+install or restart the application, refresh repositories, import global RPM trust,
+or run scripts. Dnf prompts for the configured key when its repository is first used;
+verify that fingerprint explicitly. The configuration is a package-managed conffile:
+review package-manager prompts or `.rpmnew` files when changing channels or keys.
+The setup native identity includes its selected signing generation and channel, so a
+same-application-version trust upgrade replaces the previous key through ordinary
+package upgrades. Only one setup package/channel is selected at a time; feed
+preferences do not change it. Switching to a lower setup version/channel requires an
+explicit reviewed downgrade (`apt install --allow-downgrades ./<setup.deb>` or
+`dnf downgrade ./<setup.rpm>`).
+Use `sudo apt purge painted-wolf-code-repo` or `sudo dnf remove painted-wolf-code-repo`
+to remove unmodified setup files. Locally modified configuration may remain for review;
+removing setup leaves the installed application and mutable user data intact. The
+local native rehearsal installs and removes both setup formats in isolated roots,
+checks exact owned bytes and preserves a mutable user-data sentinel.
+
+The protected controller admits this control/trust surface separately from application
+packages through `scripts.linux_release.repository_setup_admission.admit_setup`.
+It supplies independently selected source, version, channel, generation inventory,
+origin and signer facts after verifying retained server artifact provenance. The API
+freezes regular input files and trust, verifies the exact signed checksum and native
+RPM signature, then reads native identity, script/trigger declarations, conffiles,
+relationship headers and exact root-owned payload bytes without installing anything.
+A producer's `setup.json` or accepted receipt does not authorize publication. Source
+and generation binding remain the controller's independent responsibility; the setup
+package carries configuration and trust rather than an application artifact identity.
+
+Every generation retains `client.conf`, the selected public key, exact inventory,
+source commit, and version. The configuration is an explicit setup artifact; installing
+the application does not add repositories or trust. For apt, verify the full catalog
+fingerprint with `gpg --show-keys --with-colons package-key.asc`, install the reviewed
+public key as `/etc/apt/keyrings/painted-wolf-code.asc`, and install `client.conf` with a
+`.sources` extension in `/etc/apt/sources.list.d/`. For dnf, verify the same fingerprint,
+install the reviewed key as `/etc/pki/rpm-gpg/painted-wolf-code.asc`, import it explicitly
+with `sudo rpm --import /etc/pki/rpm-gpg/painted-wolf-code.asc`, and install the reviewed
+configuration with a `.repo` extension in `/etc/yum.repos.d/`. Keep `gpgcheck=1` and
+`repo_gpgcheck=1`. Run the package manager's normal refresh/upgrade after setup.
+Stable and Preview use separate configurations; changing an app preference does not
+change repository selection, holds, pinning, or priorities.
+
+For recovery, select a retained verified generation and pass `--operation recover` with the
+currently active generation identity. This restores offers only; it does not modify
+installed packages or mutable application data. A withdrawn offer is replaced by the
+retained last-good index. Keep every referenced object while any supported index may
+still be cached. Rotation requires explicit verification/import of the successor key;
+keep predecessor public keys and generations for skipped-release recovery. This local
+origin rehearsal does not establish custom-domain CDN convergence; production publication
+verifies public bytes and cache roles itself.
+
+**Pacman repository rehearsal.**
+`./task release:rehearse:pacman-repositories -- --receipt /absolute/path/result.json`
+runs on an Arch-family environment with `makepkg`, `repo-add`, `bsdtar`, `gpg`,
+`fakeroot`, `git`, and passwordless sudo for disposable installation roots. It builds
+three tiny native fixtures, checks signed databases and embedded package signatures,
+and checks actual pacman ownership and N-to-N+1 upgrades in isolated roots. It
+neither installs the application on the desktop nor publishes to R2. Assembly,
+database and signature admission, publication, and recovery/withdrawal refusals
+are exercised by `./task test:runner` against committed signed fixtures under
+`scripts/verification_tests/distribution/testdata/`. On Linux those tests require
+`bsdtar`, `makepkg` and `gpg` and fail when a required tool is missing. Assembly needs
+`repo-add --include-sigs` (pacman 6.1 or later); committed generations are regenerated
+on Arch and the rehearsal qualifies assembly.
+
+For an owned SSH VM, `./task release:rehearse:pacman-vm` takes `--ssh-host`, `--ssh-port`, `--ssh-identity`, `--ssh-known-hosts`, and `--receipt`.
+It requires strict known-host verification, transfers only the admitted Python
+release modules into a new temporary directory, and removes that directory afterward.
+The VM needs the native tools above; update it with a complete `pacman -Syu` before
+installing missing build tools. Do not use partial system upgrades.
+
+`python3 -m scripts.linux_release.pacman_repository` creates a signed generation;
+`pacman_validation.admit` verifies every selected byte, both database archives and
+their aliases, embedded signatures, native identity, architecture and referenced
+packages.
+
+Repository setup is explicit: verify the catalog's full key fingerprint independently,
+import and locally trust the reviewed key with `pacman-key`, then add only the desired
+Stable or Preview repository. Keep `SigLevel = Required DatabaseRequired`; never use
+`TrustAll` or `SigLevel = Never`. A generation-pinned `Server` is appropriate for
+recovery, but does not automatically follow new releases. Run `sudo pacman -Syu`
+for ordinary configured-repository upgrades. An upstream release or enabled
+configuration does not prove a source offers that version. Keep package holds,
+stale databases, source unavailability and channel choice visible. Removing an
+offer changes future availability; it does not uninstall packages or erase mutable
+data. Retain signed generations and keys for explicit manual recovery. Artix
+services, arm64 and installed application workflows require their own evidence.
+
+`python3 -m scripts.linux_release.pacman_publication` accepts the selected generation,
+local `--store`, `--base-url`, trust `--catalog`, and reviewed `--expected-generation`.
+It retains immutable package bytes and complete signed generations, then activates
+required-signature databases. Pacman fetches database/signature pairs in separate
+requests: signatures publish first, mismatched pairs fail closed, and a refresh retry
+after both no-store objects converge recovers. Preserve packages referenced by older
+cached databases. `--operation recover` selects a previously retained healthy index and does not
+change an installed package. The native rehearsal exercises configured `pacman -Syu`,
+a deliberately mismatched database/signature refusal, restoration and retained-index
+recovery. Cache immutable generation and
+package objects; use no-store metadata and zero negative-cache TTL.
+
+The protected Python API requires a keyword-only `authorize` callback returning
+exact `True` before the first credentialed transport access and again after predecessor
+recheck, immediately before client authority activation. The callback receives the
+selected manifest, raw directory, protected catalog, namespace, origin, predecessor,
+operation and phase; accepted JSON is not authority. The CLI supplies no callback and
+keeps production closed.
+
+Repository R2 activation retains a per-channel `pending.json` before changing mutable
+client authority. The plan binds the exact generation, activation record, reviewed
+predecessor, operation, phase, origin and namespace. An interrupted plan permits only
+an exact retry; it has no time-based expiry. The publisher verifies authority and
+`current.json` readback before marking the plan complete. A different release or
+recovery must wait for that exact operation to converge, even when the client authority
+was already written before a crash. Protected workflow serialization remains required;
+this recovery record does not grant independent writers or replace predecessor checks.
+
+`python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
+through the existing R2 immutable-object helper and serialized release owner. Its
+current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`
+prefix; production use comes only from the release lane's `scripts.linux_release.release_repositories`, which supplies the authorization callback.
+It verifies public custom-domain bytes and object cache roles before replacing
+`InRelease` or a dnf mirrorlist, then verifies the authority and activation record.
+Interrupted uploads retain unreferenced objects and retries accept identical bytes.
+Reviewed expected-generation checks run before and after upload. Cross-host
+serialization belongs to the protected release workflow, not an R2 list-before-write
+check. `test:runner` covers ordering, interrupted upload/retry, stale plans, concurrent
+state changes, immutable collisions and fixture-prefix refusal against a real local
+generation and an in-memory object store. Those contracts do not replace a credentialed
+custom-domain rehearsal. Use only explicitly supplied test credentials; no credential
+lookup or automatic production fallback occurs. Repository manifests bind the exact
+source commit, final signed package hashes and a canonical `inventory_sha256` over
+their selected object rows for final-controller admission.
+
+`python3 -m scripts.linux_release.pacman_r2` uses the same explicit manifest and shared
+R2 object transport. It currently requires `--rehearsal` and an isolated
+`release-system-tests/<run>/...` prefix. Production use comes only from the release lane,
+whose callback binds the exact source and final public package digests. Protected workflow
+serialization owns cross-host publishers; expected-generation checks before and after
+upload refuse stale competing plans. `test:runner` covers ordering, interrupted pairs
+and retries against a real local generation and an in-memory object store. Real CDN
+convergence remains a separate credentialed qualification.
+
+For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
+then use `sudo pacman-key --add /path/to/package-key.asc`, inspect
+`sudo pacman-key --finger <full-fingerprint>`, and locally trust that reviewed identity
+with `sudo pacman-key --lsign-key <full-fingerprint>`. Add the reviewed repository
+configuration afterward and run a full system upgrade. To remove the application,
+close it and use `pacman -Qo` on its executable to identify the actual owning package,
+then `sudo pacman -R <owning-package>`. Package removal does not request a mutable-data
+wipe. Keep Artix's actual service/dependency choice and the verified shared native
+install script.
+Both manifest families bind their selected signing generation/fingerprint, source,
+final package hashes and canonical object inventory identity for release admission.
+
+Repository generation operations are explicit: `--operation publish` advances a
+version under its existing signing identity; `rotate` requires a distinct key and
+strictly newer signing generation; `recover` selects an exact retained healthy
+manifest; `withdraw` selects that retained replacement and permanently marks the
+previous generation and version as withdrawn. Reoffering either identity refuses.
+Operation receipts carry `operation`, `previous`, source, signer and final inventory
+facts; an ordinary release publication cannot authorize another operation. Retained
+`key-catalog.json` contains only the selected public key facts, so private or unknown
+catalog fields never enter the origin. Existing installations and mutable data are
+outside this publication owner's mutation scope.
+
+The existing protected `release-system-live-test` workflow accepts the explicit dispatch
+modes `native-repositories` and `pacman-repositories`; the scheduled/default updater rehearsal remains
+`release:live-test`. Native mode runs `./task release:rehearse:native-repositories-r2`
+on amd64 and arm64 Ubuntu runners, and pacman mode runs `./task release:rehearse:pacman-repositories-r2`
+in an official digest-pinned Arch base-devel container as an unprivileged fixture
+owner, each with only the existing `release-rehearsal` test environment. No secret
+values need to be loaded locally. The R2 target stages immutable objects,
+exercises a warmed missing authority, a deliberately corrupted test object and its
+restoration, retries, rotation, withdrawal and retained recovery under a unique
+`release-system-tests/` prefix. `--phase stage` supports interruption before activation;
+the exact source can resume with `--phase activate`. Public byte/cache-role readback
+precedes activation, and no cache purge is used. Test generation objects remain under
+the receipt's owned prefix for inspection and recovery; test private keys are removed.
+Receipts distinguish these format fixtures from a qualified application campaign.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
@@ -1262,12 +1575,23 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly, on ready PRs that change packaging inputs,
-or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
-request needs package artifacts. The release workflow calls the reusable
+and staging path. It runs weekly, when a packaging pull request into `main`
+opens ready or becomes ready, or by manual dispatch on the selected branch.
+Queue entry builds again when packaging inputs differ from the last successful
+candidate's source. Missing or uncertain retained source evidence also builds.
+Application-only pushes between readiness and queue entry do not rebuild
+packages; installed qualification still selects exact source and artifact bytes. Use
+`gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+request into another branch needs package artifacts. The release workflow calls the reusable
 [package build](../.github/workflows/linux-candidates.yml) directly with its exact
 selected source commit, within the release runner budget. Candidate
 artifacts include checksums and the source commit and are retained for 90 days.
+Installed rehearsals select a `linux-candidate-requests.yml` run from a main
+schedule or dispatch, or a pull request into `main`, by exact run, artifact,
+controller and source identities. For PR candidates, the API head identifies
+artifact provenance while the referenced reusable workflow identifies the built
+merge controller. Compact attempt-bound source metadata supports queue-entry
+comparison; it grants no installed or publication authority.
 The workflow has read-only repository access and no signing environment or
 publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
@@ -1340,8 +1664,8 @@ Select a release source explicitly when main is moving:
 gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
 ```
 
-The request remains queued until the shared executor can run it. Main pushes
-cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+Qualification runs only on dispatch. The request remains queued until the shared
+executor can run it. Its completed `qualification-source-<attempt>` artifact binds
 the selected source to the controller and workflow attempt; publication checks
 that evidence before accepting the source. A failed or canceled request supplies
 no qualification. Source selection does not publish or tag a release.
@@ -1351,11 +1675,10 @@ The selected source and controller must have identical `.github/`, `scripts/`,
 any candidate checks start. Select a newer main commit when those interfaces
 change; qualification never combines an old script API with a new workflow.
 
-Rollout requires a fresh qualified candidate after this policy lands. Existing
-successful runs without a source receipt do not qualify release sources. Finish
-any already selected release before adopting this gate, or select and qualify a
-main commit containing it before requesting a release. Receipts expire after
-90 days; requalify expired candidates within the tooling compatibility rule.
+Receipts expire after 90 days; requalify expired candidates within the tooling
+compatibility rule. The daily nightly covers main's complete verification signal;
+release admission requires the explicit exact-source Qualification receipt.
+
 Historical dispatch lookup searches that retention window and filters the source
 SHA in the run title before downloading and verifying the receipt.
 

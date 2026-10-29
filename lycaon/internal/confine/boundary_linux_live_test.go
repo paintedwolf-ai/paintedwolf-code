@@ -146,6 +146,8 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "floors":
+		return floorsProbe()
 	case "longcwd":
 		return longcwdProbe()
 	case "interrupted":
@@ -335,12 +337,13 @@ func TestLinuxDeniedReadsAreHidden(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	proj := t.TempDir()
 	secret := filepath.Join(proj, "other-worker")
+	const secretContent = "PAINTED_WOLF_CONFINE_DENIED_READ_SECRET_CONTENT"
 	testutil.FailErr(t, "mkdir secret", os.Mkdir(secret, 0o755))
-	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte("s3"), 0o644))
+	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte(secretContent), 0o644))
 	c := denyConfinement(proj)
 	c.ReadDenyPaths = []string{secret}
 	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "ls "+secret+" && cat "+secret+"/token && echo LEAK")
-	if status.ExitStatus() == 0 || strings.Contains(out, "s3") || strings.Contains(out, "LEAK") {
+	if status.ExitStatus() == 0 || strings.Contains(out, secretContent) || strings.Contains(out, "LEAK") {
 		t.Fatalf("denied read exposed content: exit %d: %s", status.ExitStatus(), out)
 	}
 }
@@ -452,7 +455,8 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	defer master.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(t.TempDir()))
+	root := t.TempDir()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(root))
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
@@ -472,8 +476,15 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	terminal.await(t, "ready-for-input")
 	send("\x03")
 	terminal.await(t, "KeyboardInterrupt")
-	send("print('interrupt' + '-survived')\n")
-	terminal.await(t, "interrupt-survived")
+	created := filepath.Join(root, "after-interrupt")
+	send(fmt.Sprintf("with open(%q, 'w') as output: output.write('created')\n\n", created))
+	send("print('write' + '-survived')\n")
+	terminal.await(t, "write-survived")
+	contents, err := os.ReadFile(created)
+	testutil.FailErr(t, "read file created after Ctrl-C", err)
+	if string(contents) != "created" {
+		t.Fatalf("file created after Ctrl-C = %q", contents)
+	}
 	send("raise SystemExit(7)\n")
 	_ = cmd.Wait()
 	if status, _ := cmd.ProcessState.Sys().(syscall.WaitStatus); status.Signaled() || status.ExitStatus() != 7 {
@@ -481,15 +492,136 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	}
 }
 
+func TestLinuxPerformerLossAnswersExitTimeCreate(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interpreter", err)
+	root := t.TempDir()
+	script := fmt.Sprintf(`import atexit, errno, os, sys
+def exit_create():
+ print('exit-create-started', flush=True)
+ try:
+  fd = os.open(%q, os.O_WRONLY | os.O_CREAT, 0o600)
+ except OSError as err:
+  print('exit-create-answer:' + str(err.errno), flush=True)
+ else:
+  os.close(fd)
+atexit.register(exit_create)
+print('ready-for-exit', flush=True)
+sys.stdin.readline()
+raise SystemExit(7)
+`, filepath.Join(root, "exit-create"))
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	confine.StartRefusalWatch(t.Context(), "")
+	boundary := denyConfinement(root)
+	lease, err := confine.BindAction(&boundary, confine.EgressCommand{SessionID: "performer-loss", ToolName: "command", CommandLine: python})
+	testutil.FailErr(t, "bind performer-loss action", err)
+	defer lease.Close(t.Context())
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-c", script}, boundary)
+	testutil.FailErr(t, "confine interpreter", err)
+	defer cleanup()
+	input, err := cmd.StdinPipe()
+	testutil.FailErr(t, "interpreter input", err)
+	defer input.Close()
+	out := &terminalWatch{done: make(chan struct{})}
+	cmd.Stdout, cmd.Stderr = out, out
+	testutil.FailErr(t, "start interpreter", cmd.Start())
+	go func() { _ = cmd.Wait(); close(out.done) }()
+	defer func() { _ = cmd.Process.Kill(); <-out.done }()
+	out.await(t, "ready-for-exit")
+	performer := confinedDescendant(t, cmd.Process.Pid, linuxsandbox.PerformerFlag)
+	target := confinedDescendant(t, cmd.Process.Pid, python)
+	pidfd, err := unix.PidfdOpen(performer, 0)
+	testutil.FailErr(t, "hold performer identity", err)
+	defer unix.Close(pidfd)
+	defer func() { _ = unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0) }()
+	testutil.FailErr(t, "stop performer", unix.PidfdSendSignal(pidfd, unix.SIGSTOP, nil, 0))
+	testutil.WaitFor(t, func() bool {
+		if ctx.Err() != nil {
+			t.Fatalf("performer never stopped: %s", out.text())
+		}
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", performer))
+		for _, line := range strings.Split(string(raw), "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "State:" {
+				return fields[1] == "T"
+			}
+		}
+		return false
+	})
+	_, err = input.Write([]byte("exit\n"))
+	testutil.FailErr(t, "start interpreter exit", err)
+	out.await(t, "exit-create-started")
+	testutil.WaitFor(t, func() bool {
+		if ctx.Err() != nil {
+			t.Fatalf("interpreter never entered exit create: %s", out.text())
+		}
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/syscall", target))
+		fields := strings.Fields(string(raw))
+		return len(fields) > 0 && fields[0] == strconv.Itoa(unix.SYS_OPENAT)
+	})
+	testutil.FailErr(t, "end stopped performer", unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0))
+	out.await(t, "exit-create-answer:"+strconv.Itoa(int(unix.EACCES)))
+	<-out.done
+	if status := cmd.ProcessState.Sys().(syscall.WaitStatus); !status.Exited() || status.ExitStatus() != 7 {
+		t.Fatalf("interpreter exit after performer loss: %v\n%s", status, out.text())
+	}
+	if got := lease.SettledRefusals(t.Context()); got.Witness != confine.WitnessIncomplete {
+		t.Fatalf("performer loss witness = %s, want incomplete", got.Witness)
+	}
+}
+
+func confinedDescendant(t *testing.T, parent int, argument string) int {
+	t.Helper()
+	found := 0
+	testutil.WaitFor(t, func() bool {
+		queue := []int{parent}
+		for len(queue) > 0 {
+			pid := queue[0]
+			queue = queue[1:]
+			for _, child := range threadChildren(pid) {
+				id, err := strconv.Atoi(child)
+				if err != nil {
+					continue
+				}
+				queue = append(queue, id)
+				command, _ := os.ReadFile("/proc/" + child + "/cmdline")
+				args := strings.Split(string(command), "\x00")
+				if len(args) > 1 && (args[0] == argument || args[1] == argument) {
+					found = id
+					return true
+				}
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// threadChildren lists the children of every thread of pid. A child belongs
+// to the thread that forked it, and the helper forks from whichever thread
+// its locked goroutine runs on, which is rarely the main thread.
+func threadChildren(pid int) []string {
+	tasks, _ := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	var children []string
+	for _, task := range tasks {
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/task/%s/children", pid, task.Name()))
+		children = append(children, strings.Fields(string(raw))...)
+	}
+	return children
+}
+
 // terminalWatch accumulates what a terminal's main side reads.
 type terminalWatch struct {
-	mu  sync.Mutex
-	buf strings.Builder
+	mu   sync.Mutex
+	buf  strings.Builder
+	done chan struct{}
 }
 
 func watchTerminal(master *os.File) *terminalWatch {
-	w := &terminalWatch{}
+	w := &terminalWatch{done: make(chan struct{})}
 	go func() {
+		defer close(w.done)
 		chunk := make([]byte, 4096)
 		for {
 			n, err := master.Read(chunk)
@@ -519,11 +651,31 @@ func (w *terminalWatch) text() string {
 func (w *terminalWatch) await(t *testing.T, marker string) {
 	t.Helper()
 	for !strings.Contains(w.text(), marker) {
+		select {
+		case <-w.done:
+			if !strings.Contains(w.text(), marker) {
+				t.Fatalf("terminal closed before %q:\n%q", marker, w.text())
+			}
+			return
+		default:
+		}
 		if t.Context().Err() != nil {
 			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func TestTerminalWatchKeepsFinalOutputAfterClosing(t *testing.T) {
+	read, write, err := os.Pipe()
+	testutil.FailErr(t, "terminal watch pipe", err)
+	defer read.Close()
+	terminal := watchTerminal(read)
+	_, err = write.WriteString("final-marker")
+	testutil.FailErr(t, "write final output", err)
+	testutil.FailErr(t, "close final output", write.Close())
+	<-terminal.done
+	terminal.await(t, "final-marker")
 }
 
 // openPty opens a pseudo-terminal pair that is no session's controlling terminal.
@@ -886,26 +1038,29 @@ func TestLinuxHelperRefusesWhenAttestationFails(t *testing.T) {
 	}
 }
 
-func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
+// A helper whose namespaces are not the engine's, as when the protected
+// launch's broker starts it outside the engine's namespace, still relaunches
+// itself into fresh namespaces rather than taking itself for the inner helper.
+func TestLinuxHelperRelaunchesFromOutsideTheEnginesNamespaces(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	// Namespaces that match nothing make the outer helper believe it is already
-	// inside, so it must fail on the first privileged step and say so.
 	plan := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
-		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]"}},
+		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]", "ipc": "ipc:[0]"}},
 		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
-	status, stderr := rawHelper(t, self, plan, "/bin/true")
-	reason, ok := linuxsandbox.ParseUnavailable(stderr)
-	if status.ExitStatus() != confine.HelperUnavailableExit || !ok || reason.Code != linuxsandbox.UnavailableMount {
-		t.Fatalf("exit %d, reason %+v (%v): %s", status.ExitStatus(), reason, ok, stderr)
+	if status, stderr := rawHelper(t, self, plan, "/bin/true"); status.ExitStatus() != 0 {
+		t.Fatalf("helper started outside the engine's namespaces: exit %d: %s", status.ExitStatus(), stderr)
 	}
+}
+
+func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
+	self := requireLinuxSandbox(t)
 	unsupported := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
 		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
 		Network: linuxsandbox.Network{Mode: "tunnel"},
 	}
-	status, stderr = rawHelper(t, self, unsupported, "/bin/true")
+	status, stderr := rawHelper(t, self, unsupported, "/bin/true")
 	if status.ExitStatus() != confine.HelperFailureExit || !strings.Contains(stderr, linuxsandbox.UnsupportedNetworkMode) {
 		t.Fatalf("unsupported plan: exit %d: %s", status.ExitStatus(), stderr)
 	}

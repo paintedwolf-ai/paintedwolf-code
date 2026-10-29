@@ -27,7 +27,7 @@ func TestOllamaNativeBase(t *testing.T) {
 	cases := map[string]string{
 		"http://localhost:11434/v1":  "http://localhost:11434",
 		"http://localhost:11434/v1/": "http://localhost:11434",
-		"http://10.0.20.5:11434/v1":  "http://10.0.20.5:11434",
+		"http://192.0.2.5:11434/v1":  "http://192.0.2.5:11434",
 		"http://localhost:11434":     "http://localhost:11434",
 	}
 	for in, want := range cases {

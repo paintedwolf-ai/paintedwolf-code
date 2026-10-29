@@ -40,6 +40,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "NSEvent",
   "NSGraphics",
   "NSResponder",
+  "NSPasteboard",
+  "NSPasteboardItem",
   "NSRunningApplication",
   "NSScreen",
   "NSView",
@@ -95,6 +97,8 @@ profiling = ["tauri/devtools"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 semver = "1"
+cc = "1"
+pkg-config = "0.3"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -136,7 +140,7 @@ gdkwayland-sys = "0.18"
 # client connection separate from GTK's.
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
-x11rb = { version = "0.13", features = ["screensaver"] }
+x11rb = { version = "0.14", features = ["screensaver"] }
 
 # An in-test compositor serves the idle protocol to the step-away monitor.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
@@ -153,6 +157,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
   "Win32_System_Threading",
+  "Win32_System_DataExchange",
   "Win32_System_Com",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",

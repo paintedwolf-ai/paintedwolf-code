@@ -11,6 +11,11 @@ import {
   webE2e,
 } from "./helpers.ts";
 
+// The stock navigation leader of the host the web project runs on
+// (src/shortcuts/keymap.ts): Linux adds Shift to stay clear of desktop reservations.
+const NAV_LEADER_PRESS =
+  process.platform === "linux" ? "ControlOrMeta+Shift+;" : "ControlOrMeta+;";
+
 webE2e("tree browsing keeps focus; the editor focus command transfers scrolling", async ({
   page,
   request,
@@ -37,7 +42,7 @@ webE2e("tree browsing keeps focus; the editor focus command transfers scrolling"
   await expect(content).toHaveAttribute("contenteditable", "true");
   await expect(row).toBeFocused();
 
-  await page.keyboard.press("ControlOrMeta+;");
+  await page.keyboard.press(NAV_LEADER_PRESS);
   await page.keyboard.press("t");
   await expect(content).toBeFocused();
   await page.keyboard.press("PageDown");

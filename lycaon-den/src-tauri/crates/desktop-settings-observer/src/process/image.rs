@@ -4,8 +4,8 @@ use std::{
     collections::BTreeSet,
     fs::{File, OpenOptions},
     io::{self, Read},
-    os::unix::{fs::{MetadataExt, OpenOptionsExt}, io::AsRawFd},
-    path::{Component, Path, PathBuf},
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    path::{Component, Path},
 };
 const NAME: &str = "pw-desktop-settings";
 #[derive(Deserialize)]
@@ -17,8 +17,7 @@ struct Manifest {
     architecture: String,
     install_root: String,
     executables: Vec<Entry>,
-    #[serde(default, deserialize_with = "some_payload")]
-    payload: Option<Vec<PayloadEntry>>,
+    payload: Vec<PayloadEntry>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -39,9 +38,6 @@ struct PayloadEntry {
     size: Option<u64>,
     #[serde(deserialize_with = "Option::deserialize")]
     target: Option<String>,
-}
-fn some_payload<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<PayloadEntry>>, D::Error> {
-    Vec::<PayloadEntry>::deserialize(d).map(Some)
 }
 pub(super) struct Image {
     file: File,
@@ -121,7 +117,8 @@ impl Image {
             return Err(invalid());
         }
         let manifest: Manifest = serde_json::from_slice(&raw)?;
-        if manifest.package != "painted-wolf-code"
+        if manifest.format_version != 2
+            || manifest.package != "painted-wolf-code"
             || manifest.version.is_empty()
             || manifest.architecture != std::env::consts::ARCH
             || Path::new(&manifest.install_root) != root
@@ -135,11 +132,7 @@ impl Image {
             return Err(invalid());
         }
         let expected = entries[0];
-        match (manifest.format_version, manifest.payload.as_deref()) {
-            (1, None) => {}
-            (2, Some(payload)) => verify_payload(payload, expected)?,
-            _ => return Err(invalid()),
-        }
+        verify_payload(&manifest.payload, expected)?;
         let mut file = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(path)?;
         let before = file.metadata()?;
         if !before.is_file() || before.mode() & 0o111 == 0 || before.mode() & 0o6022 != 0 || before.len() != expected.size || before.len() > 16 << 20 {
@@ -175,8 +168,9 @@ impl Image {
         }
         Ok(Self { file })
     }
-    pub(super) fn executable(&self) -> PathBuf {
-        PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
+    /// The verified image, which the launcher executes by descriptor.
+    pub(super) fn file(&self) -> &File {
+        &self.file
     }
 }
 
@@ -184,7 +178,7 @@ impl Image {
 mod tests {
     use super::*;
     use serde_json::{json, Value};
-    use std::{fs::Permissions, os::unix::fs::PermissionsExt, sync::atomic::{AtomicU64, Ordering}};
+    use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
 
     struct Fixture {
         base: PathBuf,
@@ -255,15 +249,10 @@ mod tests {
     #[test]
     fn format_2_manifest_and_payload_seal_are_verified() {
         let fixture = Fixture::new();
-        assert!(fixture.open().unwrap().executable().starts_with("/proc/self/fd/"));
-        let mut v1 = fixture.manifest_v2();
-        v1["format_version"] = json!(1);
-        fixture.write_manifest(&v1);
-        assert!(fixture.open().is_err());
-        v1.as_object_mut().unwrap().remove("payload");
-        fixture.write_manifest(&v1);
-        assert!(fixture.open().is_ok());
+        assert!(fixture.open().unwrap().file().metadata().is_ok());
         for mutate in [
+            |m: &mut Value| { m["format_version"] = json!(1); },
+            |m: &mut Value| { m["format_version"] = json!(1); m.as_object_mut().unwrap().remove("payload"); },
             |m: &mut Value| { m.as_object_mut().unwrap().remove("payload"); },
             |m: &mut Value| { m["payload"][1]["sha256"] = json!("0".repeat(64)); },
             |m: &mut Value| { m["payload"][1]["size"] = json!(1); },
@@ -281,7 +270,7 @@ mod tests {
     #[test]
     fn unknown_future_manifest_versions_are_refused() {
         let fixture = Fixture::new();
-        for version in [0u8, 3, 99] {
+        for version in [0u8, 1, 3, 99] {
             let mut bad = fixture.manifest_v2();
             bad["format_version"] = json!(version);
             fixture.write_manifest(&bad);

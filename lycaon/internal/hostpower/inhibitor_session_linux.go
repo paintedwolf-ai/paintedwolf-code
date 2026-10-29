@@ -67,7 +67,11 @@ func (l *sessionLease) watch() {
 			if response.Sender != l.service.owner {
 				continue
 			}
-			code, isResponse := responseCode(response, l.request)
+			code, isResponse, err := responseCode(response, l.request)
+			if err != nil {
+				l.done <- err
+				return
+			}
 			if !isResponse || code == 0 {
 				continue
 			}
@@ -154,7 +158,9 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
 	if err := awaitGrant(ctx, service, request); err != nil {
-		_ = bus.Object(service.owner, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), busDeadline)
+		_ = bus.Object(service.owner, request).CallWithContext(cleanup, portalRequest+".Close", 0).Err
+		cancel()
 		_ = bus.Close()
 		return nil, err
 	}
@@ -176,10 +182,14 @@ func requestPath(bus *dbus.Conn, token string) dbus.ObjectPath {
 // awaitGrant waits for the request's first Response: 0 grants the inhibition,
 // which then lasts until the request is closed; any other code refuses it.
 func awaitGrant(ctx context.Context, service *sessionService, request dbus.ObjectPath) error {
+	ctx, cancel := context.WithTimeout(ctx, busDeadline)
+	defer cancel()
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("desktop portal did not answer the inhibitor request: %w", ctx.Err())
+		case <-service.bus.Context().Done():
+			return unavailable(ReasonDisconnected, "desktop portal disconnected before granting inhibition")
 		case response, ok := <-service.signals:
 			if !ok || response == nil || service.lost(response) {
 				return unavailable(ReasonDisconnected, "sleep inhibitor service owner disconnected")
@@ -187,7 +197,10 @@ func awaitGrant(ctx context.Context, service *sessionService, request dbus.Objec
 			if response.Sender != service.owner {
 				continue
 			}
-			code, isResponse := responseCode(response, request)
+			code, isResponse, err := responseCode(response, request)
+			if err != nil {
+				return err
+			}
 			if !isResponse {
 				continue
 			}
@@ -200,17 +213,18 @@ func awaitGrant(ctx context.Context, service *sessionService, request dbus.Objec
 }
 
 // responseCode is the code of request's Response signal.
-func responseCode(signal *dbus.Signal, request dbus.ObjectPath) (uint32, bool) {
+func responseCode(signal *dbus.Signal, request dbus.ObjectPath) (uint32, bool, error) {
 	if signal.Path != request || signal.Name != portalRequest+".Response" {
-		return 0, false
+		return 0, false, nil
 	}
-	code := uint32(2)
-	if len(signal.Body) > 0 {
-		if value, ok := signal.Body[0].(uint32); ok {
-			code = value
+	if len(signal.Body) == 2 {
+		code, codeOK := signal.Body[0].(uint32)
+		_, detailsOK := signal.Body[1].(map[string]dbus.Variant)
+		if codeOK && detailsOK {
+			return code, true, nil
 		}
 	}
-	return code, true
+	return 0, true, errors.New("desktop portal answered the inhibitor in an unknown shape")
 }
 
 func requestToken() (string, error) {
