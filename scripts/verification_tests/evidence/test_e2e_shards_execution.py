@@ -40,3 +40,20 @@ class E2EShardsTests(unittest.TestCase):
         ]:
             with self.subTest(listing=listing, count=count), self.assertRaises(ValueError):
                 shards.deal(listing, count)
+
+
+class HostedE2EPartitionTests(unittest.TestCase):
+    def test_hosted_slots_cover_the_suite_once_without_a_second_wave(self):
+        import yaml
+        root = Path(__file__).resolve().parents[3]
+        jobs = yaml.safe_load((root / ".github/workflows/e2e-verification.yml").read_text())["jobs"]
+        web = jobs["playwright-web"]
+        self.assertEqual(web["strategy"]["matrix"]["shard"], [1, 2])
+        run = next(step for step in web["steps"] if step.get("run") == "./task e2e:den")
+        self.assertEqual(run["env"]["LYCAON_E2E_JOB_SHARD"], "${{ matrix.shard }}/2")
+        self.assertEqual(web["strategy"]["max-parallel"], "${{ inputs.web-parallel }}")
+        listing = {"suites": [{"file": f"spec-{i}.ts"} for i in range(25)]}
+        selections = shards.deal(listing, 4)
+        files = [file for selection in selections for file in selection]
+        self.assertEqual(sorted(files), sorted(suite["file"] for suite in listing["suites"]))
+        self.assertEqual(len(files), len(set(files)))
