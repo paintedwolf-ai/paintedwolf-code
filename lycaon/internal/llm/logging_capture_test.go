@@ -117,7 +117,7 @@ func TestCaptureLLMStreamWritesTimingAfterCollect(t *testing.T) {
 	_, _, _ = modelcall.CollectStream(ch)
 
 	var data []byte
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		var err error
 		data, err = os.ReadFile(logPath)
 		return err == nil && len(data) > 0
@@ -182,7 +182,7 @@ func TestCaptureLLMStreamRecordsMidStreamError(t *testing.T) {
 	for range ch {
 	}
 	var got string
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		got = captureErrorField(t, logPath)
 		return got != ""
 	})
@@ -241,7 +241,7 @@ func TestRegistrySummarizerPurposeLabelsStreamCapture(t *testing.T) {
 	// The stream capture row is written asynchronously after the provider
 	// channel drains.
 	var got string
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		got = captureCallField(t, logPath)
 		return got != ""
 	})
