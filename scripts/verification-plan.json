@@ -497,8 +497,7 @@
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
-    "userlands:build": "passthrough",
-    "test:conformance:live": "passthrough"
+    "userlands:build": "passthrough"
   },
   "resources": {
     "den:harness:test": {

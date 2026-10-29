@@ -174,7 +174,7 @@ func (r *expansionRun) arithmeticIncDec(ctx context.Context, n commandsurface.Ar
 	if n.Operator == "--" {
 		next = current - 1
 	}
-	if err := assignScopeValue(ctx, r.scope, name, index, strconv.FormatInt(next, 10), n.Span); err != nil {
+	if err := assignArithmeticVariable(ctx, r.scope, name, index, next, n.Span); err != nil {
 		return 0, err
 	}
 	if n.Postfix {
@@ -214,7 +214,7 @@ func (r *expansionRun) arithmeticAssign(ctx context.Context, n commandsurface.Ar
 			return 0, err
 		}
 	}
-	if err := assignScopeValue(ctx, r.scope, name, index, strconv.FormatInt(next, 10), n.Span); err != nil {
+	if err := assignArithmeticVariable(ctx, r.scope, name, index, next, n.Span); err != nil {
 		return 0, err
 	}
 	return next, nil

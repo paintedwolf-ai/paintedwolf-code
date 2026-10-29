@@ -61,14 +61,6 @@ func TestEvaluateStatusAndShortCircuitOrdering(t *testing.T) {
 		{"case without a match is status 0", "case x in y) echo no;; esac; echo $?", []string{"echo 0"}, 0, false},
 		{"case quoted pattern is literal", "x='*'; case a in \"$x\") echo no;; a) echo a;; esac", []string{"echo a"}, 0, false},
 		{"arithmetic drives a loop", "i=0; while [ $i -lt 3 ]; do echo $i; i=$((i + 1)); done", []string{"echo 0", "echo 1", "echo 2"}, 0, false},
-		{"until runs while the condition fails", "i=0; until [ $i -ge 3 ]; do echo $i; i=$((i + 1)); done; echo $?", []string{"echo 0", "echo 1", "echo 2", "echo 0"}, 0, false},
-		{"until true never runs body", "until true; do echo x; done; echo $?", []string{"echo 0"}, 0, false},
-		{"until status is the last body status", "until [ -n \"$x\" ]; do x=1; grep z; done; echo $?", []string{"grep z", "echo 1"}, 0, false},
-		{"until break and continue", "i=0; until false; do i=$((i + 1)); if [ $i = 2 ]; then continue; fi; echo $i; if [ $i = 3 ]; then break; fi; done", []string{"echo 1", "echo 3"}, 0, false},
-		{"errexit ignores the until condition", "set -e; until grep z; do break; done; echo after", []string{"grep z", "echo after"}, 0, false},
-		{"brace words dispatch as fields", "echo {a,b}{1,2} x{01..03}; for i in {1..3}; do echo $i; done", []string{"echo a1 a2 b1 b2 x01 x02 x03", "echo 1", "echo 2", "echo 3"}, 0, false},
-		{"brace words in arrays", "a=({a,b} c); echo ${#a[@]} \"${a[@]}\"", []string{"echo 3 a b c"}, 0, false},
-		{"assigning default lives in the current frame", ": ${PORT:=8080}; echo $PORT; ( : ${HOST:=x} ); echo [$HOST]", []string{"echo 8080", "echo []"}, 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -225,17 +217,6 @@ func TestEvaluateHereDocumentIsStdin(t *testing.T) {
 	}
 	if got := f.stdout.String(); got != "line value\nraw $x\n" {
 		t.Fatalf("here-document stdin %q", got)
-	}
-}
-
-func TestEvaluateHereStringIsStdinInRedirectOrder(t *testing.T) {
-	f := newEvalFixture(t)
-	program := "x='a  b'; cat <<< \"$x\"; cat < input.txt <<< later; cat <<< first < input.txt; cat <<< $x 2>&1"
-	if _, err := f.run(t, t.Context(), program); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.stdout.String(); got != "a  b\nlater\nfrom file\na  b\n" {
-		t.Fatalf("here-string stdin %q", got)
 	}
 }
 

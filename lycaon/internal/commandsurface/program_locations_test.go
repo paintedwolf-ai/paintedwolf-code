@@ -17,7 +17,6 @@ if $(echo cond); then echo then; else echo else; fi
 while $(echo loop); do break; done
 helper() { echo $(echo function); }
 { echo grouped; } && ( echo isolated ) | cat
-echo {first,$(echo brace)}
 `
 	locations := commandsurface.ExecutionLocations(parseProgram(t, source).Statements)
 	texts := make([]string, 0, len(locations))
@@ -47,22 +46,7 @@ echo {first,$(echo brace)}
 			t.Fatalf("no location for %q in %q", want, texts)
 		}
 	}
-	// Nodes inside brace alternatives carry the whole brace word's span, so the
-	// substitution and its statement both appear as that word.
-	if got := countOf(texts, "{first,$(echo brace)}"); got != 2 {
-		t.Fatalf("brace alternative locations = %d, want the substitution and its statement", got)
-	}
 	if got := commandsurface.ExecutionLocations(nil); len(got) != 0 {
 		t.Fatalf("empty program locations = %v", got)
 	}
-}
-
-func countOf(texts []string, want string) int {
-	count := 0
-	for _, text := range texts {
-		if text == want {
-			count++
-		}
-	}
-	return count
 }

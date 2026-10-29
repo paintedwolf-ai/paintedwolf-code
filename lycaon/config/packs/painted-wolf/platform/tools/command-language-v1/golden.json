@@ -739,57 +739,8 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "brace-expansion",
-      "program": "echo {a,b}{1,2} {01..03} \"{a,b}\" pre{,.bak}",
-      "setup": {
-        "files": {},
-        "host_facts": {},
-        "helpers": {}
-      },
-      "expected": {
-        "stdout": "a1 a2 b1 b2 01 02 03 {a,b} pre pre.bak\n",
-        "stderr": "",
-        "status": 0,
-        "diagnostic": null,
-        "source_span": null,
-        "semantic_effects": [],
-        "receipts": {
-          "zero_program_effects": false,
-          "required_completed_operations": [],
-          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
-        }
-      },
-      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
-    },
-    {
-      "id": "brace-field-bound",
-      "program": "printf x > ./never; echo {1..16385}",
-      "setup": {
-        "files": {},
-        "host_facts": {},
-        "helpers": {}
-      },
-      "expected": {
-        "stdout": "",
-        "stderr": "",
-        "status": 2,
-        "diagnostic": "COMMAND_LIMIT_EXCEEDED",
-        "source_span": {
-          "start_byte": 25,
-          "end_byte": 35
-        },
-        "semantic_effects": [],
-        "receipts": {
-          "zero_program_effects": true,
-          "required_completed_operations": [],
-          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
-        }
-      },
-      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
-    },
-    {
-      "id": "brace-zero-step",
-      "program": "printf x > ./never; echo {a..z..0}",
+      "id": "excluded-brace",
+      "program": "printf x > ./never; echo {a,b}",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -802,7 +753,7 @@
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 25,
-          "end_byte": 34
+          "end_byte": 30
         },
         "semantic_effects": [],
         "receipts": {
@@ -814,8 +765,8 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "brace-mixed-range",
-      "program": "printf x > ./never; echo {1..a}",
+      "id": "excluded-here-string",
+      "program": "printf x > ./never; cat <<< x",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -827,35 +778,12 @@
         "status": 2,
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
-          "start_byte": 25,
-          "end_byte": 31
+          "start_byte": 24,
+          "end_byte": 27
         },
         "semantic_effects": [],
         "receipts": {
           "zero_program_effects": true,
-          "required_completed_operations": [],
-          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
-        }
-      },
-      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
-    },
-    {
-      "id": "here-string",
-      "program": "x=abc; wc -c <<< \"$x\"",
-      "setup": {
-        "files": {},
-        "host_facts": {},
-        "helpers": {}
-      },
-      "expected": {
-        "stdout": "4\n",
-        "stderr": "",
-        "status": 0,
-        "diagnostic": null,
-        "source_span": null,
-        "semantic_effects": [],
-        "receipts": {
-          "zero_program_effects": false,
           "required_completed_operations": [],
           "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
@@ -889,22 +817,25 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "until-loop",
-      "program": "i=0; until [ \"$i\" -ge 3 ]; do i=$((i+1)); done; printf '%s\\n' \"$i\"",
+      "id": "excluded-until",
+      "program": "printf x > ./never; until true; do :; done",
       "setup": {
         "files": {},
         "host_facts": {},
         "helpers": {}
       },
       "expected": {
-        "stdout": "3\n",
+        "stdout": "",
         "stderr": "",
-        "status": 0,
-        "diagnostic": null,
-        "source_span": null,
+        "status": 2,
+        "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
+        "source_span": {
+          "start_byte": 20,
+          "end_byte": 25
+        },
         "semantic_effects": [],
         "receipts": {
-          "zero_program_effects": false,
+          "zero_program_effects": true,
           "required_completed_operations": [],
           "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
@@ -938,31 +869,8 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "parameter-assign-default",
-      "program": ": ${PORT:=8080}; printf '%s\\n' \"$PORT\"",
-      "setup": {
-        "files": {},
-        "host_facts": {},
-        "helpers": {}
-      },
-      "expected": {
-        "stdout": "8080\n",
-        "stderr": "",
-        "status": 0,
-        "diagnostic": null,
-        "source_span": null,
-        "semantic_effects": [],
-        "receipts": {
-          "zero_program_effects": false,
-          "required_completed_operations": [],
-          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
-        }
-      },
-      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
-    },
-    {
-      "id": "parameter-assign-positional",
-      "program": "printf x > ./never; : ${1:=x}",
+      "id": "excluded-parameter-assignment",
+      "program": "printf x > ./never; echo ${x:=a}",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -974,8 +882,8 @@
         "status": 2,
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
-          "start_byte": 22,
-          "end_byte": 29
+          "start_byte": 25,
+          "end_byte": 32
         },
         "semantic_effects": [],
         "receipts": {

@@ -193,7 +193,7 @@ func (f *frame) exportVariable(ctx context.Context, name, value string) error {
 	return f.state.vars.Export(ctx, name)
 }
 
-// ExpansionScope implementation.
+// ExpansionScope implementation: expansion reads, never assigns.
 
 // Address converts an @label prefix through the frame's directory owner.
 func (f *frame) Address(ctx context.Context, label string) (string, bool, error) {
