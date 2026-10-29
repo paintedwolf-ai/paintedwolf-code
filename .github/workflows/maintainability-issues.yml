@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: Completed nightly run for the current main commit
+        description: Completed nightly run on main
         required: true
         type: string
       dry_run:
