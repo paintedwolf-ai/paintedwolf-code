@@ -4,15 +4,19 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 33-file database lifecycle as one authority. Atomic exchange removes the empty-occupant workaround; platform syscalls belong to fseffect while journal identities, retained-copy equivalence, store-space bounds, and restart decisions remain with db. Committed-WAL preservation, process interruption, older-build writes before exchange, and deterministic allocation failure contracts support this boundary. The full production-copy migration also preserved all 159 retained roots. Empty-file exchange preflight stays beside beginRebuild, retaining the same lifecycle. Focused tests cover unsupported flags, cleanup, installed restart retirement, and refusal to seal an open WAL connection.",
-  "reviewed_commit": "ac877a716c3dab6acb954c64d6b556e8dd8465bb",
-  "ceiling": 38,
+  "reason": "Retain the measured45-file database lifecycle as one authority at this exact membership. Retained copying, physical page admission, verified recovery, discard on failure, sealing and atomic publication share one transaction and restart lifecycle; extracting a forwarding storage service would split that authority. The migration package owns its pinned route and sorter inventory; fseffect and platform adapters own filesystem primitives. Source-derived scratch facts remain in the upgrade Plan, while db owns private file admission and publication. Focused current-tree contracts cover actual SQLITE_FULL with original and recovery readable, obsolete-index rebuilding, chunk coverage without independent temporary B-trees, amplified rechunking, final WAL opening and crash/seal/copy failures. Further membership growth renews review.",
+  "reviewed_commit": "c87872be023f90ceb814ab24b37b84d78bd9edda",
+  "ceiling": 45,
   "boundaries": {
     "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
     "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca",
-    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_chunk_inventory_test.go": "89b937e1c72e3e4263b75ef1965e1b51f0ac1ad0be386bd7187ddf7cbfdea4c1",
+    "lycaon/internal/db/rebuild_copy_test.go": "0749722b7fbd1188cef38599534dd63de30bd2ec6348d96b139b8ac7374a78f7",
     "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
-    "lycaon/internal/db/rebuild_journal_test.go": "87978fdf388007775cb16d2195423d18cb266db711ac0ab8b6c47640f3c0377b"
+    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_journal_test.go": "87978fdf388007775cb16d2195423d18cb266db711ac0ab8b6c47640f3c0377b",
+    "lycaon/internal/db/upgrade_rechunk_storage_test.go": "3c7337c12694ab4875a7f4fe38180a59f66c13e8cab16118cd91405140d16626",
+    "lycaon/internal/db/upgrade_retained_storage_test.go": "b1af112c7a37bcd2cb756654393b3865016018532937cf2387645bf8b48ccae9"
   },
-  "reviewed_shape": "b83b906a389f8091516f924653a22c280aa01c1114de0a1aab05433987eacf16"
+  "reviewed_shape": "0ff260d50ebf4bec6af06af114bd9a422bdec255e59fdcfbda6f6dbc4f577084"
 }
