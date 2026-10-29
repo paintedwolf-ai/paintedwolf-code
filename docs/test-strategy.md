@@ -182,14 +182,13 @@ metric and artifact. Module workstream issues keep the individual findings and s
 evidence together so one architectural review can address related measurements.
 
 [`maintainability-issues.yml`](../.github/workflows/maintainability-issues.yml)
-reconciles cleanup issues after a completed Qualification push on main. It checks
+reconciles cleanup issues after a completed nightly observation on main. It checks
 that the commit is the current main tip and is associated with a PR merged into
-this repository's main branch. PR, merge-group, foreign-repository, direct-push,
-and qualification-dispatch observations cannot create issues. Only successful
-and failed qualifications are considered: canceled and other conclusions may
-not retain the limits receipt needed to validate the complete inventory. A
-qualification failure in another lane does not hide maintainability debt already
-merged.
+this repository's main branch. Only scheduled and manual nightly observations
+from this repository are eligible. Successful and failed runs can retain the
+limits receipt needed to validate the complete inventory. Failure in another
+lane does not hide maintainability debt already merged. A run whose source is
+no longer current main defers reconciliation until a current observation.
 
 The maintainability report contains a complete inventory of every artifact above
 `warn`, including untouched artifacts and artifacts admitted by an exception.
@@ -222,7 +221,7 @@ identity, measurement in the rendered tables, and thresholds. One area fingerpri
 covers all measurements, full source membership, exceptions, structural shapes,
 and review records. The compressed, bounded tracking inventory stores admitted identities; it does
 not duplicate per-artifact hashes or full measurements.
-The linked qualification report
+The linked nightly report
 retains the complete evidence. Module summaries distinguish hard-limit breaches
 and renewed reviews; expandable sections list individual measurements and source links.
 The reconciler preserves human prose outside the block and updates evidence
@@ -250,7 +249,7 @@ complete snapshot converges a partially applied run. Checkpoints are retained fo
 90 days; expiration or an unavailable current receipt requires explicit replay/backfill.
 
 To preview or recover, dispatch **Maintainability cleanup** with `run_id` set to
-a completed Qualification push for the current main tip. `dry_run` defaults to
+a completed nightly run for the current main tip. `dry_run` defaults to
 true. `backfill` defaults to false; setting it true includes untouched baseline
 debt and establishes a fresh checkpoint after a successful apply. Review the
 retained `maintainability-issues.json` plan and category counts before applying a
@@ -672,7 +671,7 @@ Run every task from the repository root through `./task`.
 | `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
-Each gate runs once per change. A pushed change runs affected-scope integration in CI and full qualification after merge, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
+Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
 
 Digest output lists up to five slow packages and Go tests, and up to five slow
 Vitest assertions, when they take at least one second. Go reports the slowest
@@ -688,7 +687,7 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full` |
+| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
 | `./task check:coverage` | Go aggregate statement coverage floor |
 | `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
@@ -752,8 +751,7 @@ behind it. Marking a pull request ready and enabling auto-merge
 (`gh pr merge <number> --auto --squash`) is how work enters the queue: GitHub
 adds it once the fast tier's `check` passes. Auto-merge is enabled with the
 author's own credentials. No workflow enables it, because a merge enabled with
-a workflow's `GITHUB_TOKEN` would not start main's push workflows, qualification
-and cache warming.
+a workflow's `GITHUB_TOKEN` would not start main's cache warming workflow.
 
 The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
@@ -789,7 +787,7 @@ verification. Mixed changes union their lane and package obligations.
 Hosted lane ordering uses one comparable set of estimates. A selected matrix
 uses measured durations only when every row has a valid measurement; otherwise
 all rows use their catalog budgets. A new or resharded lane therefore switches
-the whole selected matrix to budgets until qualification measures its rows.
+the whole selected matrix to budgets until nightly measures its rows.
 Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
@@ -802,20 +800,20 @@ work longest first. With four slots, both behavior shards start beside rejection
 checks. Compilation promotion preserves that start and never removes a lane or
 changes its verification recipe. Timing estimates are advisory; the model is not
 a guarantee of hosted runtime.
-The catalog declares `integration-build` with `timing_source: build`: qualification
+The catalog declares `integration-build` with `timing_source: build`: nightly
 measures build plus cross compilation, a conservative estimate for the smaller
-integration build. Timing sources must run in qualification, cover the receiving
+integration build. Timing sources must run in nightly, cover the receiving
 lane's stages, and use the same execution configuration.
 
 Lanes and shards are planned from measured durations. Each lane of main's
-qualification records setup plus execution time beside its receipts in `ci/timings.json`;
+nightly records setup plus execution time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. A job-start marker precedes
 checkout and provisioning. Measurements without that timing basis supply package
 weights only; they cannot mix execution-only times with setup-inclusive estimates.
 Evidence-upload time is accounted for separately by queue health. The plan job reads the
-newest valid measurement for each row and package from check and release platform
-receipts in at most 20 completed qualifications, filling gaps from older runs.
-History stops once the rows qualification actually runs have measurements. The
+newest valid measurement for each row and package from nightly
+receipts in at most 20 completed runs, filling gaps from older runs.
+History stops once the rows nightly actually runs have measurements. The
 job summary records the estimate basis, missing timing rows, source runs, and
 matrix order, including declared timing sources.
 Every shard receives the same package durations, so the shards partition the
@@ -866,34 +864,29 @@ tier for a pull request whose events start no CI, such as the dependency
 inventory's. A pull request's checks leave out dispatch runs, so the
 dispatch's `dispatched-check` job reports its gate as the required `check`
 commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs the complete check, then platform confinement and upgrade corpus beside
-the `release` profile's platform lanes, then browser and desktop journeys on
-main. One qualification runs at a time. Its `queue: max` concurrency queue
-retains up to 100 pending requests and preserves explicit candidate runs.
-[`qualification-supersession.yml`](../.github/workflows/qualification-supersession.yml)
-runs per main push (`qualification-supersession-${{ github.sha }}`) to cancel
-queued or running background push qualifications superseded by newer main. It
-reads live main, requires the old source to be an ancestor, and rechecks each
-run before cancellation. Manual candidate requests are never canceled by this
-controller. Selection also drops obsolete pushes at admission. Canceled runs
-produce no qualification evidence. The executor queue limit is a bound, not a
-reservation: GitHub cancels additional requests when it is full.
+runs only on manual dispatch for an exact release candidate on main. It runs the
+complete check, then platform confinement and upgrade corpus beside the release
+profile's platform lanes, then browser and desktop journeys. One qualification
+runs at a time. Its `queue: max` concurrency queue retains up to 100 pending
+requests; GitHub cancels additional requests when it is full.
 
-A manual request selects a full `source-sha` from main's history, or the dispatch
-commit when omitted. The main workflow remains the controller; each verification,
+A request selects a full `source-sha` from main's history, or the dispatch commit
+when omitted. The main workflow remains the controller; each verification,
 platform, and E2E checkout uses the selected source. The final aggregate requires
 every stage and publishes `qualification-source-<attempt>`, binding the source
 commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
-request cannot qualify a source. Release admission verifies that binding and a
-successful aggregate job and an unexpired source receipt. Runs without that
-receipt must be qualified again before release. A failed-job rerun may reuse its
-successful source selection; the receipt identifies the attempt that completed
-the aggregate. Selected candidates share the same three-runner capacity as
-background main qualification.
+request cannot qualify a source. Release admission requires a successful manual
+Qualification aggregate and its unexpired exact-source receipt. A failed-job
+rerun may reuse its successful source binding; the receipt identifies the attempt
+that completed the aggregate. Candidate qualification holds at most three runners.
 
-Nightly retains race, fuzz, WebKit, stress, and performance coverage. A release
-requires a successful **Qualification** run for its exact source on main;
-passing merge admission is insufficient.
+Nightly qualifies main daily with every check and release-platform catalog lane,
+platform confinement and upgrade corpus, and complete web and desktop journeys.
+It also runs race, fuzz, WebKit, stress, coverage, and performance checks, plus the
+prior-release upgrade rehearsal. The stages run in turn within its two-runner
+budget. Specific manual matrix selections stay scoped; scheduled and `all` runs cover the
+complete check tier. A release requires successful manual **Qualification** for its exact
+source on main; daily nightly and merge admission do not grant publication.
 
 Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
 analysis-tool caches immediately after compiler preparation. Optional lint
@@ -1049,7 +1042,7 @@ measured runner wait or execution bottleneck and an agreed budget. There is no
 new paid runner requirement.
 
 Keep affected correctness checks before merge and the full platform matrix in
-main qualification. Platform-sensitive changes still select their relevant
+the daily nightly. Platform-sensitive changes still select their relevant
 platform checks immediately. Do not remove architecture or data-integrity
 coverage to shorten admission.
 
@@ -1121,17 +1114,12 @@ do not authorize retry. Recovery does not retry pull request artifacts with a
 privileged token.
 
 [`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
-runs only for failed push, merge-group, or manual CI/qualification runs whose
-head repository is this repository. Other events skip runner allocation. The
+runs only for failed merge-group or manual CI/Qualification runs whose head
+repository is this repository. Other events skip runner allocation. The
 controller checks eligibility again before downloading receipts. It runs code
-from main, parses bounded JSON without extracting or executing
-artifacts, and recovers measured runner faults. Failure details remain in run
-annotations, summaries, and retained evidence. It
-proposes a draft revert only for a source failure on the current main tip with
-one introducing merged PR and a qualified immediate parent. Ambiguous attribution,
-advanced main, and conflicts require investigation from the qualification run.
-Revert proposals link directly to that run. Reverts never
-merge automatically.
+from main, parses bounded JSON without extracting or executing artifacts, and
+retries measured runner faults. Source failures remain in run annotations,
+summaries, and retained evidence for investigation.
 
 Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 [`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
@@ -1292,22 +1280,20 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
+| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
-retains explicit requests, drops superseded pushes at admission, and permits
-maintenance to cancel obsolete background runs; both use one executor at a time. The maintenance workflows
-share one group across workflows; their schedules are staggered. Push-triggered qualification supersession may
-replace a pending maintenance request; scheduled work returns at its next
-schedule, and an explicit dispatch restores a needed candidate. Issue intake, an issue's lifecycle nudge, and verification
-recovery handle one event per run instead: each run is a single job bounded to
-fifteen minutes.
+retains explicit release requests; both use one executor at a time. Maintenance
+workflows share one group across workflows and stagger their schedules. Issue
+intake, an issue's lifecycle nudge, and verification recovery handle one event
+per run instead: each run is a single job bounded to fifteen minutes.
 
 Linux package construction is a reusable workflow. Release calls consume the
 release class's existing two-runner footprint without entering maintenance.
@@ -1316,7 +1302,8 @@ maintenance class's single runner through `linux-candidate-requests.yml`. Its
 path filter includes packaging, native setup, release builders, and toolchain
 inputs. A pull request into another branch builds nothing: its head cannot land,
 and each push would hold the shared executor for a full package build while the
-queue coordinator and health report wait behind it. Pending standalone
+health report waits behind it. Queue batching serializes independently so maintenance
+cannot replace its pending reconciliation. Pending standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 
@@ -1325,9 +1312,9 @@ the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
 footprint is small and each pull request's is a single bounded job. Nothing reorders or preempts runs.
 
-At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 + 1 = 11 runners and
-the merge queue 8, leaving one runner outside those classes. Ready PR jobs share
-that remaining capacity and may wait during bursts. Full lint before admission
+At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 + 1 + 1 = 12 runners and
+the merge queue 8, filling the 20-runner budget. Ready PR jobs may queue behind
+that peak. Full lint before admission
 uses more PR time but prevents deterministic analyzer failures from occupying
 speculative integration groups. Caps do not establish queue latency guarantees.
 On macOS, qualification, warming, and nightly hold one runner each and a release

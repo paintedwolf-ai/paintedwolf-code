@@ -154,15 +154,20 @@ func (u *Unlocks) Open(opened Unlock) bool {
 
 // Active returns the chat's open unlock, ending it first if it has lapsed.
 func (u *Unlocks) Active(chatSessionID string) (Unlock, bool) {
-	return u.current(chatSessionID, false)
+	return u.current(chatSessionID, false, "")
 }
 
 // Use returns the chat's open unlock and extends its idle deadline.
 func (u *Unlocks) Use(chatSessionID string) (Unlock, bool) {
-	return u.current(chatSessionID, true)
+	return u.current(chatSessionID, true, "")
 }
 
-func (u *Unlocks) current(chatSessionID string, use bool) (Unlock, bool) {
+// UseIfCurrent extends only the unlock under which an effect was admitted.
+func (u *Unlocks) UseIfCurrent(chatSessionID, unlockID string) {
+	u.current(chatSessionID, true, unlockID)
+}
+
+func (u *Unlocks) current(chatSessionID string, use bool, expectedID string) (Unlock, bool) {
 	if u == nil {
 		return Unlock{}, false
 	}
@@ -175,14 +180,14 @@ func (u *Unlocks) current(chatSessionID string, use bool) (Unlock, bool) {
 			delete(u.byChat, chatSessionID)
 			ended = append(ended, unlockEnd{open, reason})
 			ok = false
-		} else if use {
+		} else if use && (expectedID == "" || open.ID == expectedID) {
 			open.LastUsedAt = now
 			u.byChat[chatSessionID] = open
 		}
 	}
 	observer := u.observer
 	u.mu.Unlock()
-	if len(ended) > 0 || (ok && use) {
+	if len(ended) > 0 || (ok && use && (expectedID == "" || open.ID == expectedID)) {
 		u.notify(observer, ended, now, chatSessionID)
 	}
 	return open, ok

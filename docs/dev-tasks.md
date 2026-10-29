@@ -64,7 +64,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E after merge; releases require that exact commit's qualification. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly owns race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 ### Where credentials live in development
 
@@ -1229,6 +1229,24 @@ We generate the cache key offline and never commit private material.
 **Nix cache.** Store the existing private key corresponding to the committed `paintedwolf-cache-1` public identity as `NIX_CACHE_SIGNING_KEY` in the `release-publication` environment. Run the release secrets check to confirm that its public half matches `packaging/linux/nix-cache-trust.json`.
 
 
+#### Installed qualification lane
+
+Installed GUI qualification is a local pre-release lane on the native qualification host's VMs, like `den:webkit:atspi`. No GitHub runner executes it: CI runs only what GitHub-hosted Ubuntu runners can. It produces milestone evidence against [`support-matrix.json`](../packaging/linux/support-matrix.json), not a release gate. The lane runs three steps from a clean checkout of the release controller commit that produced the selected plan:
+
+1. `./task test:linux:installed -- --prepare-qualification --source-commit SHA --source-tree TREE --control-run-id N --control-artifact-id N --qualification-plan-run-id N --qualification-plan-artifact-id N --output DIR`. This downloads the release controller's control inputs and plan by exact run and artifact ID, and refuses a checkout whose commit is not the plan's controller commit.
+2. `./task test:linux:installed -- --execute-plan --plan DIR/plan/qualification-plan.json --final-artifacts DIR/controls/final-artifacts.json --output EXECUTED`. This runs every planned guest target over SSH and physical input.
+3. `./task test:linux:installed -- --retain-qualification --prepared DIR --execution EXECUTED --output RAW`. This retains only a complete, freshly admitted campaign, recording its local producer: controller commit, repository and host.
+
+Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
+
+`scripts.linux_release.installed_results` admits the retained campaign against that catalog, an exact source commit and the final artifact manifest. Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs that admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+
+The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
+
+Architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance, and the release lane reads the exact-source Qualification record rather than these campaigns, so an accepted report grants nothing to a release.
+
 ### Updates
 
 Before broad activation, use the [update qualification matrix](operations/update-qualification.md)
@@ -1658,8 +1676,8 @@ Select a release source explicitly when main is moving:
 gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
 ```
 
-The request remains queued until the shared executor can run it. Main pushes
-cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+Qualification runs only on dispatch. The request remains queued until the shared
+executor can run it. Its completed `qualification-source-<attempt>` artifact binds
 the selected source to the controller and workflow attempt; publication checks
 that evidence before accepting the source. A failed or canceled request supplies
 no qualification. Source selection does not publish or tag a release.
@@ -1669,11 +1687,10 @@ The selected source and controller must have identical `.github/`, `scripts/`,
 any candidate checks start. Select a newer main commit when those interfaces
 change; qualification never combines an old script API with a new workflow.
 
-Rollout requires a fresh qualified candidate after this policy lands. Existing
-successful runs without a source receipt do not qualify release sources. Finish
-any already selected release before adopting this gate, or select and qualify a
-main commit containing it before requesting a release. Receipts expire after
-90 days; requalify expired candidates within the tooling compatibility rule.
+Receipts expire after 90 days; requalify expired candidates within the tooling
+compatibility rule. The daily nightly covers main's complete verification signal;
+release admission requires the explicit exact-source Qualification receipt.
+
 Historical dispatch lookup searches that retention window and filters the source
 SHA in the run title before downloading and verifying the receipt.
 
