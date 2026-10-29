@@ -103,8 +103,11 @@ type Publisher struct {
 
 	attentionMu         sync.Mutex
 	attentionTimer      *time.Timer
-	attentionWG         sync.WaitGroup
 	attentionDeliveryMu sync.Mutex
+	// attentionInFlight counts scheduled and running rebuilds; attentionIdle
+	// (bound to attentionMu) wakes waiters when it reaches zero.
+	attentionInFlight int
+	attentionIdle     *sync.Cond
 	// attentionMu guards build order and the latest accepted revision.
 	attentionRevision  uint64
 	attentionPublished uint64

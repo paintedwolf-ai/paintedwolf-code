@@ -11,7 +11,7 @@ func (p *Publisher) Close(ctx context.Context) error {
 	p.attentionMu.Lock()
 	if p.attentionTimer != nil {
 		if p.attentionTimer.Stop() {
-			p.attentionWG.Done()
+			p.attentionInFlight--
 		}
 		p.attentionTimer = nil
 	}
@@ -24,7 +24,7 @@ func (p *Publisher) Close(ctx context.Context) error {
 	p.messagePatchesMu.Unlock()
 	done := make(chan struct{})
 	go func() {
-		p.attentionWG.Wait()
+		p.waitAttentionIdle()
 		if patches != nil {
 			patches.wg.Wait()
 		}
