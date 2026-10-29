@@ -159,8 +159,11 @@ func (l layout) systemAccess(generation *os.Root, family, arch string) (SystemAc
 	var catalog launchCatalog
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&catalog); err != nil || catalog.FormatVersion != 1 {
-		return SystemAccess{}, fmt.Errorf("native generation: unsupported launch catalog (%v)", err)
+	if err := decoder.Decode(&catalog); err != nil {
+		return SystemAccess{}, fmt.Errorf("native generation: decode launch catalog: %w", err)
+	}
+	if catalog.FormatVersion != 1 {
+		return SystemAccess{}, fmt.Errorf("native generation: unsupported launch catalog format %d", catalog.FormatVersion)
 	}
 	selected, ok := catalog.Families[family]
 	if !ok {
