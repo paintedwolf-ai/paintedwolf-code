@@ -145,3 +145,45 @@ func TestRetainedCompleteDamagedSecondaryIndexRebuilds(t *testing.T) {
 	defer reader.Close()
 	testutil.FailErr(t, "fully validate rebuilt image", validateUpgradeIntegrity(t.Context(), reader))
 }
+
+func TestRetainedCompletenessPredicatesAreIndependent(t *testing.T) {
+	for _, change := range []struct {
+		name, sql string
+		refused   bool
+	}{
+		{name: "staging", sql: `INSERT INTO source_manifest_staging(build_id,bucket,root_path,path,identity,size,mode) VALUES('pending',0,'/work/a','pending','stat',1,420)`},
+		{name: "unreferenced chunk", sql: `INSERT INTO source_manifest_chunks(id,entry_count,total_bytes) VALUES('unreferenced',1,1); INSERT INTO source_manifest_entries(chunk_id,ordinal,root_path,path,identity,size,mode) VALUES('unreferenced',0,'/work/a','unreferenced','stat',1,420)`},
+		{name: "incorrect counts", sql: `UPDATE source_manifest_chunks SET entry_count=entry_count+1 WHERE id=(SELECT id FROM source_manifest_chunks LIMIT 1)`, refused: true},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			source, _ := completeRetainedFixture(t)
+			writer, err := sql.Open("sqlite", source)
+			testutil.FailErr(t, "open independent selection change", err)
+			_, err = writer.Exec(change.sql)
+			testutil.FailErr(t, "change one completeness fact", err)
+			plan, err := PlanUpgrade(t.Context(), writer)
+			testutil.FailErr(t, "plan changed source", err)
+			plan, err = plan.PrepareRetainedStorage(t.Context(), writer)
+			testutil.FailErr(t, "measure changed primary rows", err)
+			testutil.FailErr(t, "close changed source", writer.Close())
+			before, err := os.ReadFile(source)
+			testutil.FailErr(t, "retain changed source bytes", err)
+			prepared, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan, nil)
+			if change.refused {
+				if !errors.Is(err, migrations.ErrIntegrity) {
+					t.Fatalf("malformed counts were accepted: %v", err)
+				}
+			} else {
+				testutil.FailErr(t, "reconstruct incomplete source", err)
+			}
+			if prepared.wholeFile {
+				t.Fatal("one incomplete fact bypassed selected-row reconstruction")
+			}
+			after, err := os.ReadFile(source)
+			testutil.FailErr(t, "read original after selection", err)
+			if !bytes.Equal(before, after) {
+				t.Fatal("selection/refusal changed source bytes")
+			}
+		})
+	}
+}
