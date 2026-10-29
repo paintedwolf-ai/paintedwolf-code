@@ -90,3 +90,10 @@ func TestRetainedRouteAcceptsReviewedAuthorityDecoderCorrection(t *testing.T) {
 		t.Fatal("reviewed decoder-only correction lost resource proof")
 	}
 }
+
+func TestRetainedSelectionRejectsPhysicalCountOverflow(t *testing.T) {
+	trees := map[string]retainedTree{"source_manifest_chunks": {cells: math.MaxUint64, record: 200}}
+	if _, err := retainedRouteSortBytes(trees, 4096); err == nil {
+		t.Fatal("accepted overflowing physical selection")
+	}
+}

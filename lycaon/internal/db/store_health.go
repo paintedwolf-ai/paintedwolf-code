@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,7 +49,7 @@ func (s *Store) quarantine(failure *StoreIncompatibleError) {
 	_ = s.writer.Close()
 }
 
-func prepareAuditState(ctx context.Context, writer *sql.DB, due bool) error {
+func prepareAuditState(ctx context.Context, writer DBTX, due bool) error {
 	if due {
 		_, err := writer.ExecContext(ctx, `INSERT INTO store_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, integrityAuditFailedMetaKey, integrityAuditPendingValue)
 		return err

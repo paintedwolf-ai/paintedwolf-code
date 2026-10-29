@@ -90,7 +90,7 @@ func verifyFastCustodyImage(t *testing.T, path string, revision int) {
 	database, err := openReader(t.Context(), path)
 	testutil.FailErr(t, "open retained custody image", err)
 	defer func() { _ = database.Close() }()
-	testutil.FailErr(t, "verify retained custody integrity and foreign keys", validateUpgradeIntegrity(t.Context(), database))
+	testutil.FailErr(t, "verify retained custody integrity and foreign keys", auditSnapshot(t.Context(), database, nil))
 	got, err := ReadUserVersion(t.Context(), database)
 	testutil.FailErr(t, "read retained custody revision", err)
 	if got != revision {

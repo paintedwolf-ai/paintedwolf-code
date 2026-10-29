@@ -18,7 +18,7 @@ type retainedTree struct {
 // Index reconstruction has its own later survey, only on the row-copy path.
 func retainedRouteTree(name string) bool {
 	switch name {
-	case "source_manifest_entries", "source_snapshot_roots", "vault_unlocks", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects", "checkpoints", "sqlite_schema":
+	case "source_manifest_chunks", "source_snapshot_chunks", "source_manifest_entries", "source_snapshot_roots", "vault_unlocks", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects", "checkpoints", "sqlite_schema":
 		return true
 	}
 	return false

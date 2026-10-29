@@ -63,8 +63,8 @@ func checkpointSnapshot(ctx context.Context, path string) error {
 }
 
 // A quiescent image preserves the checkpointed source bytes. Its recovery
-// manifest verifies hashes and shape; the migration verifies final integrity
-// before commit, without scanning obsolete source indexes twice.
+// manifest verifies hashes and shape. Migration activation checks structural
+// validity; exhaustive index correspondence is audited after serving begins.
 func installQuiescentSnapshot(ctx context.Context, path, destination string, version int) error {
 	snapshot, err := openReader(ctx, path)
 	if err != nil {

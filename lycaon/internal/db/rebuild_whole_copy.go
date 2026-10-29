@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -15,23 +16,29 @@ import (
 )
 
 type retainedCopyResult struct {
-	sharedOriginal    bool
-	wholeFile         bool
-	validatedIdentity string
+	sharedOriginal   bool
+	wholeFile        bool
+	preparedIdentity string
 }
 
 // A complete selection preserves every source byte, including shadow rows and
-// counters. Full validation of this same image establishes index trust before
-// the candidate predicates can authorize recovery capture.
-func copyWholeRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan, progress func(migrations.Phase)) (retainedCopyResult, bool, error) {
+// counters. Recovery capture verifies the sealed bytes; exhaustive secondary
+// index audits run after activation rather than delaying normal use.
+func copyWholeRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (retainedCopyResult, bool, error) {
 	var result retainedCopyResult
-	reader, err := openReader(ctx, source)
+	reader, err := sql.Open("sqlite", fileDSN(source, readerDSNQuery+"&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"))
 	if err != nil {
 		return result, false, err
 	}
 	defer reader.Close()
+	if err := checkUpgradeTempStorage(ctx, reader, plan.ScratchBytes()); err != nil {
+		return result, true, err
+	}
 	complete, err := retentionComplete(ctx, reader, plan)
 	if err != nil {
+		if errors.Is(err, migrations.ErrIntegrity) {
+			return result, true, err
+		}
 		if rebuildIntegrityFailure(err) {
 			return result, false, nil
 		}
@@ -72,33 +79,41 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 	}
 	result.sharedOriginal = cloned
 	result.wholeFile = true
-	err = prepareWholeRetainedStore(ctx, destination, plan, cloned, progress)
+	err = prepareWholeRetainedStore(ctx, destination, plan, cloned)
 	if rebuildIntegrityFailure(err) {
-		// A damaged secondary index can be reconstructed from primary rows by
-		// the existing path. Operational failures never trigger an expensive retry.
+		// Confirmed damage encountered while preparing the image can use primary
+		// reconstruction. Operational failures never trigger an expensive retry.
 		return retainedCopyResult{}, false, os.Remove(destination)
 	}
 	if err != nil {
 		return result, true, err
 	}
-	result.validatedIdentity, err = fspath.EntryIdentity(destination)
+	result.preparedIdentity, err = fspath.EntryIdentity(destination)
 	return result, true, err
 }
+
+// EXCEPT inserts only physical chunk IDs, then deletes referenced IDs. Its
+// temporary tree cannot grow with the number of retained snapshots.
+const retainedCompletenessSQL = `SELECT EXISTS(SELECT 1 FROM source_manifest_staging NOT INDEXED),
+ EXISTS(SELECT id FROM source_manifest_chunks NOT INDEXED EXCEPT SELECT chunk_id FROM source_snapshot_chunks INDEXED BY sqlite_autoindex_source_snapshot_chunks_1),
+ COALESCE((SELECT SUM(entry_count) FROM source_manifest_chunks NOT INDEXED),0),
+ EXISTS(SELECT 1 FROM source_snapshot_chunks INDEXED BY sqlite_autoindex_source_snapshot_chunks_1 GROUP BY snapshot_id,chunk_id HAVING count(*)>1)`
 
 func retentionComplete(ctx context.Context, source DBTX, plan migrations.Plan) (bool, error) {
 	entries, measured := plan.RetainedSourceEntries()
 	if !measured {
 		return false, nil
 	}
-	var staging, omitted bool
+	var staging, omitted, repeated bool
 	var declared uint64
-	err := source.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM source_manifest_staging NOT INDEXED),
- EXISTS(SELECT 1 FROM source_manifest_chunks m NOT INDEXED WHERE NOT EXISTS(SELECT 1 FROM source_snapshot_chunks c WHERE c.chunk_id=m.id)),
- COALESCE((SELECT SUM(entry_count) FROM source_manifest_chunks NOT INDEXED),0)`).Scan(&staging, &omitted, &declared)
+	err := source.QueryRowContext(ctx, retainedCompletenessSQL).Scan(&staging, &omitted, &declared, &repeated)
+	if err == nil && repeated {
+		return false, fmt.Errorf("%w: source snapshot repeats a physical chunk", migrations.ErrIntegrity)
+	}
 	return !staging && !omitted && declared == entries, err
 }
 
-func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations.Plan, cloned bool, progress func(migrations.Phase)) (err error) {
+func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations.Plan, cloned bool) (err error) {
 	writer, err := openRetainedUpgradeWriter(ctx, path)
 	if err != nil {
 		return err
@@ -138,10 +153,7 @@ func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations
 	if actual != plan.Source {
 		return fmt.Errorf("whole-store copy changed the released schema")
 	}
-	if progress != nil {
-		progress(migrations.Validating)
-	}
-	return validateUpgradeIntegrity(ctx, writer)
+	return prepareAuditState(ctx, writer, true)
 }
 
 func rebuildIntegrityFailure(err error) bool {

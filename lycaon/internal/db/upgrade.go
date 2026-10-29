@@ -104,7 +104,20 @@ func planUpgrade(ctx context.Context, database DBTX, registry *migrations.Regist
 // UpgradeStaged upgrades only a caller-owned extracted database, before restore publication.
 // The original archive and live installation remain the caller's recovery material.
 func UpgradeStaged(ctx context.Context, path string) error {
-	return upgradeExisting(ctx, path, UpgradeHooks{}, true)
+	if err := upgradeExisting(ctx, path, UpgradeHooks{}, true); err != nil {
+		return err
+	}
+	// Even a current-schema archive may have unaudited secondary indexes.
+	// Seal the obligation into the staged bytes before their manifest is updated.
+	writer, err := openRetainedUpgradeWriter(ctx, path)
+	if err != nil {
+		return err
+	}
+	err = prepareAuditState(ctx, writer, true)
+	if err := errors.Join(err, writer.Close()); err != nil {
+		return err
+	}
+	return sealRebuiltStore(ctx, path)
 }
 
 func upgradeExisting(ctx context.Context, path string, hooks UpgradeHooks, staged bool) (err error) {
@@ -142,7 +155,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	}
 	if !plan.Required() {
 		if staged {
-			return validateStoreIntegrity(ctx, reader)
+			return validateUpgradeStructure(ctx, reader)
 		}
 		if hooks.BeforeCurrentOpen != nil {
 			return hooks.BeforeCurrentOpen(ctx, reader, plan)
