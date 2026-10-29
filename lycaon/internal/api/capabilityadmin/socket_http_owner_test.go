@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -140,17 +141,8 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	database := testdbfixture.Open(t, "socket-owner.db")
 	testdbseed.InsertSessionWithRoot(t, database, "root-1", testdbseed.DefaultProjectID, workspace)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
-	service := secretcap.NewWithStore(database, values, nil)
-	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
-	testutil.FailErr(t, "socket matcher", err)
-	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("h", 32)))
-	testutil.FailErr(t, "socket fingerprinter", err)
-	matcher.SetFingerprinter(fingerprinter)
-	service.SetFingerprinter(fingerprinter)
 	const secret = "socket-owner-secret-value"
-	stored, err := service.Put(ctx, secretcap.PutRequest{ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1", OperationID: "fixture", Name: "Service credential", Purpose: "socket owner fixture", Scope: secretcap.ScopeProject, Origin: secretcap.OriginGenerated, Value: secret, Format: secretcap.FormatBase64URL, EntropyBits: 256})
-	testutil.FailErr(t, "store credential", err)
+	service, matcher, credentialReference := newSocketRecipientSecret(t, ctx, database, root, secret)
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "approval store", err)
 	defer approvals.Close()
@@ -193,7 +185,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		}
 		return executor.Secrets.AskSecretScreen(ctx, alert)
 	}}))
-	args := map[string]any{"url": "http://service.invalid/info", "unix_socket": path, "auth": map[string]any{"scheme": "bearer", "token": stored.Metadata.Reference}, "token_jar": "service-tokens", "capture_tokens": []any{map[string]any{"name": "api", "from": "header:X-Service-Token"}}}
+	args := map[string]any{"url": "http://service.invalid/info", "unix_socket": path, "auth": map[string]any{"scheme": "bearer", "token": credentialReference}, "token_jar": "service-tokens", "capture_tokens": []any{map[string]any{"name": "api", "from": "header:X-Service-Token"}}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "first", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: workspace, IsPrimary: true}}, ActiveRootID: "root"}}
 	_, err = executor.Invoke(ctx, "http_request", args, tc)
 	testutil.FailErr(t, "send to retained original", err)
@@ -243,17 +235,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		t.Fatal("changed socket object reused old recipient authority")
 	}
 	assertNoUnixAccept(t, decoy)
-	metadata, err := service.ListProject(ctx, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "preserve stored credential", err)
-	preservedCredential := false
-	for _, meta := range metadata {
-		if meta.Reference == stored.Metadata.Reference {
-			preservedCredential = true
-		}
-	}
-	if !preservedCredential {
-		t.Fatal("recipient refusal discarded stored credential")
-	}
+	assertSocketCredentialPreserved(t, ctx, service, credentialReference)
 	preserved, err := service.OpenTokenJar(ctx, jarRequest)
 	testutil.FailErr(t, "preserve original token jar", err)
 	if preserved.Tokens["api"] != originalToken {
@@ -305,5 +287,35 @@ func assertNoUnixAccept(t *testing.T, listener *net.UnixListener) {
 	testutil.FailErr(t, "poll decoy readiness", pollErr)
 	if ready != 0 {
 		t.Fatal("decoy accepted or queued a connection")
+	}
+}
+
+func newSocketRecipientSecret(t *testing.T, ctx context.Context, database db.Handle, root, secret string) (*secretcap.Service, *secretmatch.Matcher, string) {
+	t.Helper()
+	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
+	service := secretcap.NewWithStore(database, values, nil)
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "socket matcher", err)
+	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("h", 32)))
+	testutil.FailErr(t, "socket fingerprinter", err)
+	matcher.SetFingerprinter(fingerprinter)
+	service.SetFingerprinter(fingerprinter)
+	stored, err := service.Put(ctx, secretcap.PutRequest{ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1", OperationID: "fixture", Name: "Service credential", Purpose: "socket owner fixture", Scope: secretcap.ScopeProject, Origin: secretcap.OriginGenerated, Value: secret, Format: secretcap.FormatBase64URL, EntropyBits: 256})
+	testutil.FailErr(t, "store credential", err)
+	return service, matcher, stored.Metadata.Reference
+}
+
+func assertSocketCredentialPreserved(t *testing.T, ctx context.Context, service *secretcap.Service, reference string) {
+	t.Helper()
+	metadata, err := service.ListProject(ctx, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "preserve stored credential", err)
+	preservedCredential := false
+	for _, meta := range metadata {
+		if meta.Reference == reference {
+			preservedCredential = true
+		}
+	}
+	if !preservedCredential {
+		t.Fatal("recipient refusal discarded stored credential")
 	}
 }

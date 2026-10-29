@@ -103,7 +103,7 @@ func (s *supervisor) connectUnix(socket, referenceID int) unix.Errno {
 	if err != nil {
 		return unix.EACCES
 	}
-	defer reference.Close()
+	defer func() { _ = reference.Close() }()
 	if s.network.beforeSocketConnect != nil {
 		s.network.beforeSocketConnect()
 	}

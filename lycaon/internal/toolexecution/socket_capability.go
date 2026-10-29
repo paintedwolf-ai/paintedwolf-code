@@ -92,15 +92,7 @@ func (e *Capabilities) preflightSocketCapability(
 		adapter = *e.socketAdapter
 	}
 	if contract.SocketArg != "" && adapter.Native != socketref.RetainedObject {
-		denied := make([]confine.SocketGrant, 0, len(socketPaths))
-		for _, path := range socketPaths {
-			denied = append(denied, confine.SocketGrant{ApprovedPath: path})
-		}
-		e.recordCapabilityRequested(ctx, tc, tool, denied)
-		for _, grant := range denied {
-			e.recordCapabilityDecision(ctx, tc, tool, grant, false, authzledger.AuthorizationSourcePolicy)
-		}
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{Code: isolation.CodeSocketPathRefused, Data: map[string]any{"path": socketPaths[0], "state": "socket_realization_unavailable", "enforcement": string(adapter.Native), "recovery": "use_approved_service_endpoint", "reason": socketref.ErrUnsupported.Error()}})
+		return nil, e.refuseUnsupportedNativeSocket(ctx, tool, args, tc, socketPaths, adapter.Native)
 	}
 	chatSession := tc.ChatSessionID()
 	chatGrants := []confine.SocketGrant{}
@@ -389,4 +381,17 @@ func socketObservationFields(
 func hasSocketPair(pairs map[string]struct{}, key string) bool {
 	_, ok := pairs[key]
 	return ok
+}
+
+// Native consumers require retained-object realization before requesting approval.
+func (e *Capabilities) refuseUnsupportedNativeSocket(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, socketPaths []string, enforcement socketref.Enforcement) error {
+	denied := make([]confine.SocketGrant, 0, len(socketPaths))
+	for _, path := range socketPaths {
+		denied = append(denied, confine.SocketGrant{ApprovedPath: path})
+	}
+	e.recordCapabilityRequested(ctx, tc, tool, denied)
+	for _, grant := range denied {
+		e.recordCapabilityDecision(ctx, tc, tool, grant, false, authzledger.AuthorizationSourcePolicy)
+	}
+	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{Code: isolation.CodeSocketPathRefused, Data: map[string]any{"path": socketPaths[0], "state": "socket_realization_unavailable", "enforcement": string(enforcement), "recovery": "use_approved_service_endpoint", "reason": socketref.ErrUnsupported.Error()}})
 }
