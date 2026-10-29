@@ -4,14 +4,13 @@
   "kind": "algorithm",
   "workstream": "portable-command-parser",
   "disposition": "retain",
-  "reason": "Retain this pure syntax-validation and typed-lowering algorithm across three files at 416 lines and 25 methods. Shared source positions, syntax counters, quote proofs and allocation-ledger ordering form one boundary without effect or admission authority. Reviewed parser/lowering, live execution identity and independent snapshot-lease contracts support this shape; further growth or shape changes require renewed review.",
-  "reviewed_commit": "0f7b18249b7b85bcb53faab5839618eb3db19fef",
-  "ceiling": 25,
+  "reason": "Retain exactly the reviewed 746 lines, 34 methods and 14 fields without growth. This compiler owns one bounded pure syntax-validation and typed-lowering algorithm with shared AST, source spans, allocation pool and admitted arithmetic-index context. It owns no operation authority, I/O dispatch or effect lifecycle. Extracting a forwarding context would obscure admission ordering without separating a domain responsibility. Independent review and the complete 157-test commandsurface package, including complete-unit rejection, mutable versus read-only arithmetic indexes, semantic/scratch boundaries and aggregate-state/snapshot lifetimes, support retaining this cohesive shape. Growth, structural changes or changed boundary contracts require renewed review; these ceilings provide no additional headroom.",
+  "reviewed_commit": "23865ec969410486cdd477403303af6631fc060a",
+  "ceiling": 34,
   "boundaries": {
-    "lycaon/internal/commandsurface/program_parse_test.go": "463aae58ad77482ac77c7ffe0e5008521b3a7d54d1c9f8f292f5af4b011858f7",
-    "lycaon/internal/commandsurface/program_scratch_test.go": "3150c84e9bb2520d73ad1f8d3ff101bc36caada7e746b04049cf371981d46251",
-    "lycaon/internal/commandsurface/program_retention_test.go": "516f89c235845fd14a56ac37774982b6d1cfe3b39830d74de973a1eeff8c730f",
-    "lycaon/internal/commandsurface/program_identity_test.go": "0b94a4dd23979a0584393bdd7176787a1bd5ee1102467aa21800c94d328f1392"
+    "lycaon/internal/commandsurface/program_parse_test.go": "0c937c8e0e0bc957b982880f275fcf7d9eb01fbb0f559660342903bf447db66f",
+    "lycaon/internal/commandsurface/program_scratch_test.go": "208f5e0f7177f3ff990f6436f60680e5afad84b497ac80753b853eb9eb5f8095",
+    "lycaon/internal/commandsurface/program_retention_test.go": "516f89c235845fd14a56ac37774982b6d1cfe3b39830d74de973a1eeff8c730f"
   },
-  "reviewed_shape": "8b47e979f889c0ed5f6776dca33913752bbf6a44fdd35fb712a9eac5883a56f9"
+  "reviewed_shape": "c02e59fbeda0d5a0068f374fdf2747f49d5a0aa5125924572ec52be2086c7a81"
 }

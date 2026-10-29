@@ -49,6 +49,36 @@ func TestNativeBooleanOperandsAreData(t *testing.T) {
 		t.Fatalf("NUL accepted: %+v", got)
 	}
 }
+
+func TestNonemptyFilePredicateUsesTheAdmittedMetadataProbe(t *testing.T) {
+	for _, name := range []string{"test", "["} {
+		for _, path := range []string{"nonempty", "empty"} {
+			t.Run(name+" "+path, func(t *testing.T) {
+				calls := 0
+				runtime := PredicateRuntime{LocalBoundsOnly: true, Files: predicateFileFunc(func(_ context.Context, inv toolcontract.OperationInvocation, operator, operand string) (bool, error) {
+					calls++
+					if inv != fixtureInvocation() || operator != "-s" || operand != path {
+						t.Fatalf("probe changed: %+v %q %q", inv, operator, operand)
+					}
+					return operand == "nonempty", nil
+				})}
+				args := []string{"-s", path}
+				if name == "[" {
+					args = append(args, "]")
+				}
+				result, err := runtime.TestBuiltin(t.Context(), fixtureInvocation(), name, args)
+				testutil.FailErr(t, "nonempty predicate", err)
+				want := 1
+				if path == "nonempty" {
+					want = 0
+				}
+				if result.Status != want || !result.Complete || calls != 1 {
+					t.Fatalf("result %+v; probes %d", result, calls)
+				}
+			})
+		}
+	}
+}
 func TestArgvPredicates(t *testing.T) {
 	cases := []struct {
 		name   string

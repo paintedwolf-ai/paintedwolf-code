@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -15,11 +16,29 @@ import (
 // eligible and no host stop latched; otherwise staged bytes are abandoned.
 func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run func(*frame) (signal, error)) (signal, error) {
 	if len(s.Redirects) == 0 {
-		return run(f)
+		sig, err := run(f)
+		if procErr := f.procSubst.finish(ctx, f, err); procErr != nil && err == nil {
+			err = procErr
+		}
+		return sig, err
 	}
 	g := *f
 	g.publish = newEligibility()
 	var staged []*stagedRedirect
+	var openedInputs []io.Closer
+	closeInputs := func() {
+		for _, in := range openedInputs {
+			_ = in.Close()
+		}
+		openedInputs = nil
+	}
+	closeProcSubstOutputs := func() {
+		for _, out := range staged {
+			if ps, ok := out.output.(*procSubstStagedOutput); ok {
+				_ = ps.closeOnce()
+			}
+		}
+	}
 	settleStaged := func(publish bool) error {
 		var first error
 		for _, out := range staged {
@@ -30,16 +49,27 @@ func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run 
 		return first
 	}
 	for _, r := range s.Redirects {
-		out, failed, err := g.bind(ctx, r)
+		out, in, failed, err := g.bind(ctx, r)
 		if out != nil {
 			staged = append(staged, out)
 		}
+		if in != nil {
+			openedInputs = append(openedInputs, in)
+		}
 		if err != nil || failed {
+			closeInputs()
+			closeProcSubstOutputs()
+			_ = g.procSubst.finish(ctx, &g, err)
 			_ = settleStaged(false)
 			return signal{}, err
 		}
 	}
 	sig, err := run(&g)
+	closeInputs()
+	closeProcSubstOutputs()
+	if procErr := g.procSubst.finish(ctx, &g, err); procErr != nil && err == nil {
+		err = procErr
+	}
 	_, stopped := f.state.latch.Stop()
 	eligible := err == nil && !stopped && g.publish.eligible()
 	f.publish.mark(eligible)
@@ -82,60 +112,93 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 // bind applies one redirect to g.streams. failed reports an ordinary failure
 // (for example a failed target substitution or a refused open) after which the
 // command is not run; err reports a host stop.
-func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
+func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, io.Closer, bool, error) {
 	switch r.Operator {
 	case ">&":
-		if r.Descriptor == 2 {
-			g.streams.Error = g.streams.Output
-		} else {
-			g.streams.Output = g.streams.Error
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.streams.hasWriter(src) {
+			return nil, nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
 		}
-		return nil, false, nil
+		g.streams.SetWriter(redirectDescriptor(r), g.streams.Writer(src))
+		return nil, nil, false, nil
+	case "<&":
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.streams.hasReader(src) {
+			return nil, nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
+		}
+		g.streams.SetReader(redirectDescriptor(r), g.streams.Reader(src))
+		return nil, nil, false, nil
 	case "<<", "<<-":
-		return g.hereDocument(ctx, r)
+		out, failed, err := g.hereDocument(ctx, r)
+		return out, nil, failed, err
 	}
-	var target string
+	var field Field
 	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
 		var err error
-		target, err = g.e.expander.ExpandScalar(ctx, scope, r.Target)
+		field, err = g.e.expander.ExpandScalarField(ctx, scope, r.Target)
 		return err
 	})
 	if prevented || err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
+	target := field.Value
 	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	child.producer = false
-	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
+		if subst := field.ProcessSubstitution(); subst != nil {
+			if input, ok := subst.OpenReader(); ok {
+				g.streams.SetReader(redirectDescriptor(r), input)
+				child.settle(ctx, ordinaryResult(0), nil)
+				return nil, input, false, nil
+			}
+		}
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			return nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
+			return nil, nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
 		}
-		g.streams.Input = input
+		g.streams.SetReader(redirectDescriptor(r), io.NopCloser(input))
 		child.settle(ctx, ordinaryResult(0), nil)
-		return nil, false, nil
+		return nil, input, false, nil
 	}
-	_, outputs := g.redirections()
-	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
-	if err != nil {
-		return nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
+	var staged StagedOutput
+	if subst := field.ProcessSubstitution(); subst != nil {
+		if writer, ok := subst.OpenWriter(); ok {
+			staged = NewProcessSubstitutionStagedOutput(writer)
+		}
+	}
+	if staged == nil {
+		_, outputs := g.redirections()
+		var openErr error
+		staged, openErr = outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
+		if openErr != nil {
+			return nil, nil, true, g.redirectFailure(ctx, child, r.Operator, target, openErr)
+		}
 	}
 	errorStream := g.streams.Error
 	switch r.Operator {
 	case "&>", "&>>":
-		g.streams.Output, g.streams.Error = staged, staged
+		g.streams.SetWriter(1, staged)
+		g.streams.SetWriter(2, staged)
 	default:
-		if r.Descriptor == 2 {
-			g.streams.Error = staged
-		} else {
-			g.streams.Output = staged
-		}
+		g.streams.SetWriter(redirectDescriptor(r), staged)
 	}
-	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, false, nil
+	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, nil, false, nil
+}
+
+func redirectDescriptor(r commandsurface.ProgramRedirect) int {
+	if r.Descriptor >= 0 {
+		return r.Descriptor
+	}
+	switch r.Operator {
+	case "<", "<&", "<<", "<<-":
+		return 0
+	default:
+		return 1
+	}
 }
 
 // redirectFailure records a refused open: owner stops latch, other failures
@@ -175,7 +238,7 @@ func (g *frame) hereDocument(ctx context.Context, r commandsurface.ProgramRedire
 	if prevented || err != nil {
 		return nil, true, err
 	}
-	g.streams.Input = io.NopCloser(strings.NewReader(body))
+	g.streams.SetReader(redirectDescriptor(r), io.NopCloser(strings.NewReader(body)))
 	return nil, false, nil
 }
 
@@ -237,7 +300,7 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			}
 			switch r.Operator {
 			case "<":
-				if ports.Input == nil || r.Descriptor > 0 {
+				if ports.Input == nil || r.Descriptor == 1 || r.Descriptor == 2 {
 					refuse(r.SyntaxLocation, "< with an input owner on descriptor 0")
 				}
 			case ">", ">>", "&>", "&>>":
@@ -249,7 +312,11 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 		switch c := s.Command.(type) {
 		case commandsurface.SimpleCommand:
 			for _, a := range c.Assignments {
+				if a.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: a.Index}.Words())
+				}
 				words([]commandsurface.DeferredWord{a.Value})
+				words(a.Array)
 			}
 			words(c.Words)
 			if len(c.Words) > 0 && staticWord(c.Words[0]) == "source" && ports.Sources == nil {
@@ -289,6 +356,10 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			statement(c.Body)
 		case commandsurface.TestExpression:
 			test(c.Expression)
+		case commandsurface.ArithmeticCommand:
+			words(c.Words())
+		case commandsurface.TrapCommand:
+			statements(c.Statements)
 		}
 	}
 	statements = func(items []commandsurface.Statement) {

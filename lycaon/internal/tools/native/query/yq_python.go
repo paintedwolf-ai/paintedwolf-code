@@ -1,5 +1,9 @@
 package query
 
+import (
+	"github.com/lycaon/lycaon/internal/commandprogram"
+)
+
 // pythonYqFlags are spellings only python yq (jq over YAML) has. Any of them
 // selects that dialect; every other yq invocation is mikefarah yq v4. The
 // spellings both share (-e, -n, -r, -i, --indent) mean the same in each.
@@ -40,13 +44,13 @@ func runPythonYq(inv *invocation) error {
 }
 
 // rewritePythonYq holds one file's output through its pinned publication.
-func (inv *invocation) rewritePythonYq(file string) error {
+func (inv *invocation) rewritePythonYq(file commandprogram.Field) error {
 	stdout := inv.out
 	defer func() { inv.out = stdout }()
-	if file == "-" {
-		return inv.usage(file, "a FILE for -i")
+	if file.Value == "-" {
+		return inv.usage(file.Value, "a FILE for -i")
 	}
-	bound, err := inv.paths.Bind(inv.ctx, file, true)
+	bound, err := inv.paths.Bind(inv.ctx, file.Value, true)
 	if err != nil {
 		return err
 	}
@@ -67,7 +71,7 @@ func (inv *invocation) rewritePythonYq(file string) error {
 	}
 	defer result.Close()
 	inv.out = &output{ctx: inv.ctx, w: result, maximum: inv.owners.limit("whole_file_bytes"), limitID: "whole_file_bytes", steps: stdout.steps, maxSteps: stdout.maxSteps}
-	err = runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}, captured: source})
+	err = runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: commandprogram.Fields{file}, captured: source})
 	stdout.steps = inv.out.steps
 	if err != nil || inv.status != 0 {
 		return err

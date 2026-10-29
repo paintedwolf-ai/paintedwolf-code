@@ -8,6 +8,24 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 )
 
+func (r *expansionRun) field(value string, pieces []expansionPiece) Field {
+	hasSubst := false
+	for _, piece := range pieces {
+		if piece.subst != nil {
+			hasSubst = true
+			break
+		}
+	}
+	if !hasSubst {
+		return Field{Value: value, Span: r.span}
+	}
+	parts := make([]FieldPart, len(pieces))
+	for i, piece := range pieces {
+		parts[i] = FieldPart{Value: piece.text, Substitution: piece.subst}
+	}
+	return NewFieldWithParts(value, r.span, parts)
+}
+
 // fields materializes the assembled fields. A field with an active unquoted
 // glob character is a pathname pattern over the logical-path view: sorted
 // matches replace it, and a pattern with no match stays literal.
@@ -15,8 +33,8 @@ func (r *expansionRun) fields(ctx context.Context) (Fields, error) {
 	limits := r.expander.limits
 	out := make(Fields, 0, len(r.assembly.complete))
 	var argv int64
-	appendField := func(value string) error {
-		size := int64(len(value))
+	appendField := func(field Field) error {
+		size := int64(len(field.Value))
 		if size > limits.argumentBytes {
 			return limits.exceeded("argument_bytes", size, r.span)
 		}
@@ -26,7 +44,7 @@ func (r *expansionRun) fields(ctx context.Context) (Fields, error) {
 		if int64(len(out)+1) > limits.fields {
 			return limits.exceeded("expanded_fields", int64(len(out)+1), r.span)
 		}
-		out = append(out, Field{Value: value, Span: r.span})
+		out = append(out, field)
 		return nil
 	}
 	for _, pieces := range r.assembly.complete {
@@ -39,10 +57,13 @@ func (r *expansionRun) fields(ctx context.Context) (Fields, error) {
 			return nil, err
 		}
 		if len(matches) == 0 {
-			matches = []string{value}
+			if err := appendField(r.field(value, pieces)); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		for _, match := range matches {
-			if err := appendField(match); err != nil {
+			if err := appendField(Field{Value: match, Span: r.span}); err != nil {
 				return nil, err
 			}
 		}

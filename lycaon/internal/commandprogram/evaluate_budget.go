@@ -54,14 +54,15 @@ type evaluation struct {
 	limits      evaluationLimits
 	programName string
 
-	mu          sync.Mutex
-	counters    map[string]int64
-	live        int64
-	traceEvents int64
-	traceBytes  int64
-	children    []ChildRecord
-	sources     []SourceRecord
-	jobs        []string
+	mu           sync.Mutex
+	counters     map[string]int64
+	live         int64
+	traceEvents  int64
+	traceBytes   int64
+	children     []ChildRecord
+	sources      []SourceRecord
+	jobs         []string
+	procSubstFDs map[int]bool
 }
 
 // charge counts one unit of a cumulative program ceiling before the work it

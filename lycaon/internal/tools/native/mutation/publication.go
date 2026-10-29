@@ -101,14 +101,9 @@ func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInv
 	}
 	data := []byte(source.Content)
 	sum := sha256.Sum256(data)
-	rev := hex.EncodeToString(sum[:])
-	switch {
-	case source.Revision.DocumentID != "":
-		rev = "document:" + source.Revision.DocumentID + "@" + strconv.FormatInt(source.Revision.DocumentRevision, 10)
-	case source.Revision.ContentSHA256 != "":
-		rev = "sha256:" + source.Revision.ContentSHA256
-	case source.Revision.DiskSHA256 != "":
-		rev = "disk:" + source.Revision.DiskSHA256
+	rev := source.Revision.Identity()
+	if rev == "" {
+		rev = hex.EncodeToString(sum[:])
 	}
 	return commandprogram.CapturedSource{
 		Pin: toolcontract.SourcePin{
@@ -132,6 +127,7 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 	if operator != "" {
 		cmd = "redirect " + operator
 	}
+	err = wrapPathError(cmd, err)
 	if reject := toolrejection.AsToolReject(err); reject != nil {
 		if reject.Data == nil {
 			reject.Data = map[string]any{}
@@ -142,20 +138,6 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 		reject.Data["source_end_byte"] = target.Span.EndByte
 		reject.Data["source_line"] = target.Span.Line
 		reject.Data["source_column"] = target.Span.Column
-		return err
-	}
-	var pathErr *projectpaths.PathError
-	if errors.As(err, &pathErr) {
-		reason := pathErr.Error()
-		if pathErr.Cause != nil {
-			reason = pathErr.Cause.Error()
-		}
-		return errors.Join(err, toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
-			"command": cmd, "word": target.Value, "path": pathErr.Operand, "reason": reason,
-			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
-			"source_start_byte": target.Span.StartByte, "source_end_byte": target.Span.EndByte,
-			"source_line": target.Span.Line, "source_column": target.Span.Column,
-		}))
 	}
 	return err
 }

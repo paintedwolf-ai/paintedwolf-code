@@ -2,7 +2,6 @@ package toolhost
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -13,6 +12,7 @@ import (
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
