@@ -180,15 +180,20 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 // itself; a link to a directory stays a file-style entry.
 func (t *MoveTool) moveSource(ctx context.Context, tctx tools.ToolContext, from string, directories bool) (projectpaths.Resolved, error) {
 	prof := tctx.ProfileID()
-	if directories {
-		resolved, err := assertMoveWritePath(ctx, t.Boundary, tctx, from, prof)
-		if err != nil {
-			return projectpaths.Resolved{}, err
-		}
-		if info, err := os.Lstat(resolved.Abs); err == nil && info.IsDir() {
-			return resolved, nil
-		}
+	entry, err := assertMoveWritePath(ctx, t.Boundary, tctx, from, prof)
+	if err != nil {
+		return projectpaths.Resolved{}, err
 	}
-	return assertMutationFileSource(ctx, t.Boundary, tctx, from, prof, "move",
-		"MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
+	info, statErr := os.Lstat(entry.Abs)
+	if statErr == nil && info.IsDir() && directories {
+		return entry, nil
+	}
+	resolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, from, prof, "move", "MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
+	if err != nil {
+		return projectpaths.Resolved{}, err
+	}
+	if statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return entry, nil
+	}
+	return resolved, nil
 }

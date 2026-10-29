@@ -31,6 +31,8 @@ type invocation struct {
 	// effects counts mutations that committed, so a later stop reports them.
 	effects   int
 	uncertain bool
+	// evidence is the utility's own receipt evidence, such as failed hunks.
+	evidence toolcontract.OperationEvidence
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -134,8 +136,17 @@ func ordinary(err error) (string, bool) {
 	return "", false
 }
 
-// settle turns the utility's ordinary status or stop into one producer result.
+// settle turns the utility's ordinary status or stop into one producer
+// result carrying the utility's evidence.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	result, err := inv.outcome(err)
+	if inv.evidence.Kind != "" && result.Evidence.Kind == "" {
+		result.Evidence = inv.evidence
+	}
+	return result, err
+}
+
+func (inv *invocation) outcome(err error) (toolcontract.ProducerResult, error) {
 	var domain toolcontract.ProducerFailure
 	if errors.As(err, &domain) {
 		return domain.ProducerResult(), err

@@ -209,8 +209,8 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		if httpNative.Prepare != nil {
 			owners.Natives["curl"] = httpNative
 		}
-		if gitNative.Prepare != nil {
-			owners.Natives["git"] = gitNative
+		if gitNative != nil {
+			owners.Natives["git"] = gitNative(mutationOwners)
 		}
 		return owners, nil
 	}, nil
@@ -218,14 +218,15 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 
 // gitOperation serves the git umbrella command: each bound form keeps its
 // structured Git tool's identity where one is registered, and otherwise runs
-// as the catalog command's own read execution.
-func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
+// as the catalog command's own read execution. Each program binds it to its
+// own staged publication, which git apply shares with patch.
+func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.NativeOperation, error) {
 	if t.git == nil {
-		return command.NativeOperation{}, nil
+		return nil, nil
 	}
 	owners, err := gitcmd.NewOwners(t.git)
 	if err != nil {
-		return command.NativeOperation{}, err
+		return nil, err
 	}
 	owners.Boundary = t.boundary
 	registered := func(tool string) bool {
@@ -241,15 +242,18 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 			identities = append(identities, tool)
 		}
 	}
-	return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		prepared, err := owners.PrepareGit(frame, request)
-		if err != nil {
-			return command.NativePrepared{}, err
-		}
-		tool := prepared.Operation
-		if !registered(tool) {
-			tool = ""
-		}
-		return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
-	}}, nil
+	return func(filesystem *mutation.Owners) command.NativeOperation {
+		return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			nested, _ := dispatch.(commandprogram.NestedCommand)
+			prepared, err := owners.PrepareGit(frame, filesystem, nested, request)
+			if err != nil {
+				return command.NativePrepared{}, err
+			}
+			tool := prepared.Operation
+			if !registered(tool) {
+				tool = ""
+			}
+			return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+		}}
+	}, nil
 }

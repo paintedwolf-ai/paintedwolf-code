@@ -70,6 +70,12 @@ func (d programDispatch) Launch(ctx context.Context, request commandprogram.Oper
 
 func (h *harness) evaluate(program string) (commandprogram.ProgramOutcome, error) {
 	h.t.Helper()
+	return h.evaluateTo(program, io.Discard)
+}
+
+// evaluateTo runs a program with its standard output bound to stdout.
+func (h *harness) evaluateTo(program string, stdout io.Writer) (commandprogram.ProgramOutcome, error) {
+	h.t.Helper()
 	parsed, err := commandsurface.ParseProgram([]byte(program), commandsurface.ParseOptions{SourceName: "program"})
 	testutil.FailErr(h.t, "parse", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
@@ -78,7 +84,7 @@ func (h *harness) evaluate(program string) (commandprogram.ProgramOutcome, error
 	testutil.FailErr(h.t, "memory", err)
 	publication := h.publication()
 	return commandprogram.Evaluate(h.t.Context(), parsed.Snapshot(), commandprogram.EvaluationPorts{Invocation: h.invocation(), Dispatch: programDispatch{h}, Binder: commandprogram.CatalogBinder{},
-		Files: noGlobs{}, Publication: publication, Input: publication, Memory: memory})
+		Files: noGlobs{}, Publication: publication, Input: publication, Memory: memory, Streams: commandprogram.Streams{Output: stdout, Error: io.Discard}})
 }
 
 type noGlobs struct{}
