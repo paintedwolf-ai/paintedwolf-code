@@ -18,6 +18,32 @@ import (
 
 const releasedCorpusRoot = "../../testdata/upgrade-corpus"
 
+// snapshotManifestEntries lists every snapshot root's entries as
+// snapshot, root, path and content, through the bucketed layout when the
+// store still has it and through per-root manifests otherwise.
+func snapshotManifestEntries(t *testing.T, database *sql.DB, tables map[string][]string) []string {
+	t.Helper()
+	query := `SELECT r.snapshot_id, r.root_path, e.path, e.sha256 FROM source_snapshot_roots r
+JOIN source_manifest_layout l ON l.manifest_id = r.manifest_id
+JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id`
+	if _, bucketed := tables["source_snapshot_chunks"]; bucketed {
+		query = `SELECT c.snapshot_id, e.root_path, e.path, e.sha256 FROM source_snapshot_chunks c
+JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id`
+	}
+	rows, err := database.QueryContext(t.Context(), query)
+	testutil.FailErr(t, "read snapshot manifest entries", err)
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var snapshot, root, path, sha string
+		testutil.FailErr(t, "scan snapshot manifest entry", rows.Scan(&snapshot, &root, &path, &sha))
+		out = append(out, strings.Join([]string{snapshot, root, path, sha}, "\x00"))
+	}
+	testutil.FailErr(t, "finish snapshot manifest entries", rows.Err())
+	slices.Sort(out)
+	return out
+}
+
 // releasedCorpusStores lists every shipped corpus store so a new release
 // fixture is exercised without editing this test.
 func releasedCorpusStores(t *testing.T) []string {
@@ -126,15 +152,26 @@ func sharedColumns(before, after []string) []string {
 // reshapedByRegisteredSteps names released tables whose stored values a
 // registered step rewrites; every other released row survives verbatim.
 var reshapedByRegisteredSteps = map[string]string{
-	"source_history_entries": "SourceNamespace moves plan identity into typed columns",
-	"evidence_index":         "ToolResultPaths backfills recorded result paths into the derived search index",
-	"evidence_fts":           "ToolResultPaths reindexes the derived search text",
+	"source_history_entries":  "SourceNamespace moves plan identity into typed columns",
+	"evidence_index":          "ToolResultPaths backfills recorded result paths into the derived search index",
+	"evidence_fts":            "ToolResultPaths reindexes the derived search text",
+	"source_manifest_chunks":  "SourceManifestLayout regroups each snapshot root's entries into content-identified chunks",
+	"source_manifest_entries": "SourceManifestLayout moves entries into per-root manifests without root or ordinal columns",
+	"history_storage_clock":   "SourceManifestLayout advances the storage generation as it writes the converted chunks",
+}
+
+// queuedByRegisteredSteps names released tables a registered step adds rows
+// to; every released row stays.
+var queuedByRegisteredSteps = map[string]string{
+	"schema_migrations":         "each applied step records its ledger row",
+	"source_blob_reclaim_queue": "SourceManifestLayout queues the blobs retired manifest entries named for the reclaimer to re-check",
 }
 
 // retiredColumnsByRegisteredSteps names released columns a registered step
 // drops; the remaining columns keep their rows.
 var retiredColumnsByRegisteredSteps = map[string][]string{
-	"rewind_operations": {"journal_path"},
+	"rewind_operations":       {"journal_path"},
+	"source_manifest_staging": {"bucket", "root_path"},
 }
 
 func retainedColumns(table string, columns []string) []string {
@@ -164,6 +201,7 @@ func sqliteShadowTable(table string) bool {
 var retiredByRegisteredSteps = map[string]string{
 	"source_branch_heads":       "source_head_entries",
 	"source_checkpoint_entries": "",
+	"source_snapshot_chunks":    "source_manifest_layout",
 }
 
 // seedReleasedCredentials writes device credential, vault and grant rows with
@@ -227,6 +265,10 @@ func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
 			for table, columns := range released {
 				before[table] = projectedRows(t, source, table, retainedColumns(table, columns))
 			}
+			manifests := snapshotManifestEntries(t, source, released)
+			if len(manifests) == 0 {
+				t.Fatal("released store has no snapshot manifest entries to retain")
+			}
 			testutil.FailErr(t, "close released store", source.Close())
 
 			for boot := range 2 {
@@ -259,11 +301,11 @@ func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
 					if sqliteShadowTable(table) {
 						continue
 					}
-					if table == "schema_migrations" {
-						ledger := projectedRows(t, reader, table, columns)
+					if _, queued := queuedByRegisteredSteps[table]; queued {
+						kept := projectedRows(t, reader, table, columns)
 						for _, row := range before[table] {
-							if !slices.Contains(ledger, row) {
-								t.Fatalf("upgrade rewrote released migration record %s", row)
+							if !slices.Contains(kept, row) {
+								t.Fatalf("%s: upgrade rewrote released row %s", table, row)
 							}
 						}
 						continue
@@ -290,6 +332,9 @@ func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
 							t.Fatalf("%s: upgrade synthesized %d program rows", table, count)
 						}
 					}
+				}
+				if got := snapshotManifestEntries(t, reader, upgraded); !slices.Equal(got, manifests) {
+					t.Fatalf("snapshot manifest entries changed\nbefore %v\nafter  %v", manifests, got)
 				}
 				assertCorpusSemantics(t, reader, semantics)
 				testutil.FailErr(t, "close upgraded store", reader.Close())
