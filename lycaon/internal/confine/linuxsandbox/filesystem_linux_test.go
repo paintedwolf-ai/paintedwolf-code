@@ -78,6 +78,13 @@ func TestFilesystemMountOrderingPreservesExactAllowBacks(t *testing.T) {
 			paths = append(paths, target)
 		}
 	}
+	args := []string{"-test.run=^TestFilesystemMountOrderingPreservesExactAllowBacks$"}
+	// A coverage build emits counters at exit, so the sealed root view keeps
+	// that directory writable and the child never creates a temporary one.
+	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+		fs.WriteRoots = append(fs.WriteRoots, dir)
+		args = append(args, "-test.gocoverdir="+dir)
+	}
 	raw, err := json.Marshal(fs)
 	if err != nil {
 		t.Fatal("encode mount fixture:", err)
@@ -86,7 +93,7 @@ func TestFilesystemMountOrderingPreservesExactAllowBacks(t *testing.T) {
 	if err != nil {
 		t.Fatal("locate mount fixture binary:", err)
 	}
-	cmd := exec.Command(self, "-test.run=^TestFilesystemMountOrderingPreservesExactAllowBacks$")
+	cmd := exec.Command(self, args...)
 	cmd.Env = append(os.Environ(), "PW_METADATA_MOUNT_PLAN="+string(raw), "PW_METADATA_ALLOW_BACKS="+strings.Join(paths, "\n"))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
