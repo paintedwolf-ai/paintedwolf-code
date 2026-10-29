@@ -46,6 +46,8 @@ func planOperation(ctx context.Context, dir string, req OperationRequest) (opera
 		err = p.stash(ctx, dir)
 	case "add":
 		err = p.add()
+	case "stage":
+		err = p.stageEntries()
 	case "reset":
 		err = p.reset(ctx, dir)
 	case "clean":
@@ -205,8 +207,11 @@ func (p *operationPlan) run(ctx context.Context, dir string) ([]byte, int, error
 			return out, code, err
 		}
 	}
-	if p.request.Kind == "add" {
+	switch p.request.Kind {
+	case "add":
 		return gitexec.RunTo(ctx, dir, p.args, p.opts, io.Discard)
+	case "stage":
+		return p.runStage(ctx, dir)
 	}
 	return gitexec.Run(ctx, dir, p.args, p.opts)
 }

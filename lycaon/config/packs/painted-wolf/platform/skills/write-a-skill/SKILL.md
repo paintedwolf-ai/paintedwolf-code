@@ -22,7 +22,7 @@ metadata:
 The body is executed by whichever model is running, including a small one. Write for the weakest reader you ship to.
 
 1. **Open with the entry check.** Give the one observation that proves the skill applies, and what to do when it fails. A reader who cannot confirm the precondition should leave rather than improvise.
-2. **One action per numbered step.** Name the tool, command, or file the step operates on. "Call `scan_summary`" and "write a table with columns X, Y, Z" are steps. "Consider the failure modes" is a topic.
+2. **One action per numbered step.** Name the tool, command, or file the step operates on. "Call `scan_summary`" and "write a table with columns X, Y, Z" are steps. "Consider the failure modes" is a topic. Name the native command form (`git apply`, `patch -p1`, `sed -i`) rather than `external --`: native forms keep review, revision capture and recovery.
 3. **Name the artifact each step produces.** A step producing nothing observable cannot be checked, skipped, or resumed. If the artifact is a table, give its columns; if it is a decision, give the options.
 4. **Show one worked example.** A single filled-in row, command, or minimal snippet carries more than the paragraph describing it. Long examples belong in `references/`.
 5. **Bound every search.** Any step that can repeat needs a stopping rule — a count, a depth, or the condition that ends it. "Until minimal" is not a stopping rule.

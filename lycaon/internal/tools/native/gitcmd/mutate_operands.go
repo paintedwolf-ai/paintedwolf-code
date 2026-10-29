@@ -15,6 +15,14 @@ var mutateForms = map[string]operandRule{
 	"git stash": stashOperands, "git reset": resetOperands, "git clean": cleanOperands,
 	"git worktree": worktreeOperands, "git fetch": anyOperands, "git pull": pullOperands,
 	"git push": anyOperands, "git ls-remote": anyOperands, "git clone": cloneOperands,
+	"git apply": applyOperands,
+}
+
+func applyOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	if has(bound, "--index") && has(bound, "--cached") {
+		return operandInvalid(spec, "--cached", "either --index or --cached, not both")
+	}
+	return nil
 }
 
 func initOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
@@ -266,6 +274,11 @@ func effectMode(spec toolcontract.CommandSpecification, c *command, bound comman
 			return "add"
 		}
 		return "remove-or-prune"
+	case "git apply":
+		if (has(bound, "--check") || has(bound, "--stat") || has(bound, "--numstat") || has(bound, "--summary")) && !has(bound, "--index") && !has(bound, "--cached") && !has(bound, "-3") {
+			return "read-only"
+		}
+		return "mutation"
 	case "git push":
 		if has(bound, "--delete") || has(bound, "--force-with-lease") {
 			return "delete-or-lease"

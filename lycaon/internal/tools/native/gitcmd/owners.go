@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -140,11 +141,16 @@ type Prepared struct {
 	command   *command
 	owners    *Owners
 	paths     *projectpaths.ProgramPaths
+	// patches is the program's staged publication, which git apply shares
+	// with patch for work tree files.
+	patches *mutation.Owners
+	// execution records the captures git apply pins.
+	execution string
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
 // operand rule. It reads and runs nothing.
-func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, patches *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -176,6 +182,8 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 		command:   parsed,
 		owners:    o,
 		paths:     paths,
+		patches:   patches,
+		execution: request.Invocation.Identity.ExecutionID,
 	}, nil
 }
 
