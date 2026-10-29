@@ -68,6 +68,14 @@ func (r *fileMutation) remove() error {
 			return nil
 		}
 	}
+	if !has(r.p.Argv, "--cached") {
+		for _, entry := range entries {
+			// The shared delete removes regular files and directories only.
+			if info, err := os.Lstat(entryAbs(r.repo.Root, entry.path)); err == nil && info.Mode()&os.ModeSymlink != 0 {
+				return unsupportedFileForm(r.p, entry.path, "regular files; use --cached to untrack a symbolic link")
+			}
+		}
+	}
 	if has(r.p.Argv, "-n") {
 		for _, entry := range entries {
 			if !has(r.p.Argv, "-q") {
