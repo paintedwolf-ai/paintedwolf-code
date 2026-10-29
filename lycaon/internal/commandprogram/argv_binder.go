@@ -382,8 +382,9 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 }
 
 // optional handles forms that never take a following nonempty word: an
-// attached value (--porcelain=v1), or, for optional-empty-only, the BSD
-// spelling of -i followed by an empty word, which means the same as GNU -i.
+// attached value (--porcelain=v1), or, for optional-attached-or-empty, also
+// a following empty word (GNU sed -i.bak, or BSD sed -i followed by an empty
+// argument).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
@@ -392,12 +393,11 @@ func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, wo
 			values = Fields{{Value: value, Span: word.Span}}
 		}
 		b.record(form, spelling, word, values, "")
-	case "optional-empty-only":
-		if attached && value != "" {
-			return b.fail(argvOptionUnsupported, word, "empty "+form.ValueRole+" for "+spelling)
-		}
+	case "optional-attached-or-empty":
 		values := Fields{}
-		if b.index < len(b.argv) && b.argv[b.index].Value == "" {
+		if attached {
+			values = append(values, Field{Value: value, Span: word.Span})
+		} else if b.index < len(b.argv) && b.argv[b.index].Value == "" {
 			values = append(values, b.argv[b.index])
 			b.index++
 		}
