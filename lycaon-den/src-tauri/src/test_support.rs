@@ -1,5 +1,8 @@
 //! Shared test helpers.
 
+#[cfg(target_os = "linux")]
+pub mod private_display;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;

@@ -6,34 +6,43 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/pathfold"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
-// deltaPathLimit bounds retained changes; overflow requires a full survey.
+// deltaPathLimit bounds the paths retained per root. A wider burst folds
+// into the directories that hold it; only one that folds to the root
+// overflows into a full survey.
 const deltaPathLimit = 65536
 
 // deltaTracker accumulates observed changes between source publications.
 type deltaTracker struct {
-	mu    sync.Mutex
-	roots map[string]*rootDelta
-	seq   uint64
+	mu        sync.Mutex
+	roots     map[string]*rootDelta
+	seq       uint64
+	pathLimit int
 	// admit excludes changes outside the capture scope.
 	admit func(ctx context.Context, root string) func(rel string) bool
 }
 
 type rootDelta struct {
-	// covered names the full observation needed for incremental publication.
-	covered string
-	scopeID string
+	// covered names the manifest incremental publication builds on, and
+	// coveredBoundaries the directories that observation did not enter.
+	covered           string
+	coveredBoundaries []Boundary
+	scopeID           string
 	// paths holds each changed path with the sequence it arrived at.
 	paths map[string]uint64
 	// overflow requires a full survey after path loss or scope changes.
 	overflow   bool
 	overflowAt uint64
+	// rescopedAt is the last change to an ignore file, whose rules the next
+	// capture must read afresh.
+	rescopedAt uint64
 }
 
 func newDeltaTracker() *deltaTracker {
-	return &deltaTracker{roots: make(map[string]*rootDelta)}
+	return &deltaTracker{roots: make(map[string]*rootDelta), pathLimit: deltaPathLimit}
 }
 
 func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
@@ -42,7 +51,7 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	}
 	root := filepath.Clean(ev.ProjectDir)
 	// Scope decisions read ignore files; they run before the lock.
-	overflow := false
+	overflow, rescoped := false, false
 	var admit func(string) bool
 	rels := make([]string, 0, len(ev.Paths))
 	for _, raw := range ev.Paths {
@@ -55,9 +64,16 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 			overflow = true
 			continue
 		}
-		if ignoreFileChanged(rel) {
-			overflow = true
-		} else if t.admit != nil {
+		if governed, ok := ignoreFileDomain(rel); ok {
+			// The directory the file governs is re-read under its new rules.
+			rescoped = true
+			if governed == "." {
+				overflow = true
+			}
+			rels = append(rels, governed)
+			continue
+		}
+		if t.admit != nil {
 			if admit == nil {
 				admit = t.admit(ctx, root)
 			}
@@ -77,16 +93,28 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 		d.overflowAt = t.seq
 	}
 	for _, rel := range rels {
-		if len(d.paths) >= deltaPathLimit {
-			t.seq++
-			d.overflow = true
-			d.overflowAt = t.seq
-			return
-		}
 		t.seq++
-		d.paths[rel] = t.seq
+		if !d.overflow {
+			d.paths[rel] = t.seq
+		}
+	}
+	if rescoped {
+		d.rescopedAt = t.seq
+	}
+	if folded, ok := pathfold.Fold(d.paths, t.pathLimit, laterSequence); ok {
+		d.paths = folded
+	} else {
+		d.overflow = true
+		d.overflowAt = t.seq
+	}
+	if d.overflow {
+		clear(d.paths)
+		d.overflowAt = t.seq
 	}
 }
+
+// laterSequence keeps the newest change a folded directory stands for.
+func laterSequence(a, b uint64) uint64 { return max(a, b) }
 
 func (t *deltaTracker) root(root string) *rootDelta {
 	d := t.roots[root]
@@ -99,14 +127,17 @@ func (t *deltaTracker) root(root string) *rootDelta {
 
 // A publication consumes changes through the plan's sequence.
 type deltaPlan struct {
-	// covered is the head the changes apply to; empty means survey the root.
-	covered string
-	scopeID string
-	paths   []string
+	// covered is the manifest the changes apply to; empty means survey the root.
+	covered    string
+	boundaries []Boundary
+	scopeID    string
+	paths      []string
 	// upTo leaves later changes pending for the next publication.
 	upTo uint64
 	// overflow requires a full survey of the candidate.
 	overflow bool
+	// rescope requires the candidate to read ignore files afresh.
+	rescope bool
 }
 
 // Full surveys also record a sequence boundary.
@@ -129,6 +160,8 @@ func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 		return plan
 	}
 	plan.covered = d.covered
+	plan.boundaries = append([]Boundary(nil), d.coveredBoundaries...)
+	plan.rescope = d.rescopedAt > 0
 	plan.paths = make([]string, 0, len(d.paths))
 	for rel := range d.paths {
 		plan.paths = append(plan.paths, rel)
@@ -138,7 +171,9 @@ func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 
 func (d *rootDelta) resetLocked() {
 	d.covered = ""
+	d.coveredBoundaries = nil
 	d.overflow = false
+	d.rescopedAt = 0
 	clear(d.paths)
 }
 
@@ -165,7 +200,7 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
-	next := deltaPlan{covered: plan.covered, upTo: t.seq}
+	next := deltaPlan{covered: plan.covered, boundaries: plan.boundaries, upTo: t.seq, rescope: d.rescopedAt > plan.upTo}
 	if d.overflow {
 		next.covered = ""
 		next.overflow = true
@@ -181,7 +216,7 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 }
 
 // Publication consumes observed changes through upTo.
-func (t *deltaTracker) coveredBy(root, head, scopeID string, upTo uint64, exact bool) {
+func (t *deltaTracker) coveredBy(root, manifest string, boundaries []Boundary, scopeID string, upTo uint64, exact bool) {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -196,10 +231,14 @@ func (t *deltaTracker) coveredBy(root, head, scopeID string, upTo uint64, exact 
 			delete(d.paths, rel)
 		}
 	}
-	d.covered = head
+	d.covered = manifest
+	d.coveredBoundaries = append([]Boundary(nil), boundaries...)
 	d.scopeID = scopeID
 	if d.overflowAt <= upTo {
 		d.overflow = false
+	}
+	if d.rescopedAt <= upTo {
+		d.rescopedAt = 0
 	}
 }
 
@@ -237,11 +276,18 @@ func deltaRel(root, raw string) (string, bool) {
 	return rel, true
 }
 
-// Ignore-file changes invalidate admission decisions below them.
-func ignoreFileChanged(rel string) bool {
-	base := rel
-	if i := strings.LastIndex(rel, "/"); i >= 0 {
-		base = rel[i+1:]
+// ignoreFileDomain names the directory whose admission an ignore file
+// decides: its own directory, or the root for the repository's exclude file.
+func ignoreFileDomain(rel string) (string, bool) {
+	if rel == ".git/info/exclude" {
+		return ".", true
 	}
-	return base == ".gitignore" || base == ".ignore" || rel == ".git/info/exclude"
+	dir, base := ".", rel
+	if i := strings.LastIndex(rel, "/"); i >= 0 {
+		dir, base = rel[:i], rel[i+1:]
+	}
+	if base == ".gitignore" || base == ".ignore" {
+		return dir, true
+	}
+	return "", false
 }

@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -55,10 +56,21 @@ func (s *supervisor) serveNotifications(listener int) {
 	for {
 		var n seccompNotif
 		if err := ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_RECV, unsafe.Pointer(&n)); err != nil {
-			if errors.Is(err, unix.EINTR) {
+			// ENOENT is a call whose caller was interrupted, for instance by
+			// the Go runtime's preemption signal, before it could be read;
+			// the caller retries it. Closing the listener would instead fail
+			// every later notified call with ENOSYS.
+			if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
 				continue
 			}
 			return
+		}
+		// The performer serves one name-creating call at a time, so answering
+		// those here costs no concurrency and saves waking another thread;
+		// socket calls, which can wait on the network, run beside the loop.
+		if isPathCall(n.Nr) {
+			s.answer(listener, n)
+			continue
 		}
 		go s.answer(listener, n)
 	}
@@ -71,6 +83,9 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 	if !examined {
 		s.refusals.report(Refusal{Unexamined: true})
 	}
+	if errno == errAnswered {
+		return
+	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
@@ -82,11 +97,14 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 // the supervisor could examine the call at all. A call that ended before it
 // was examined is not reported.
 func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, bool) {
-	target, err := openTarget(listener, n)
+	target, err := s.openTarget(listener, n)
 	if err != nil {
 		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
+	if isPathCall(n.Nr) {
+		return s.performPath(target, n)
+	}
 	fd := int(int32(n.Args[0]))
 	sock, err := unix.PidfdGetfd(target.pidfd, fd, 0)
 	if err != nil {
@@ -128,7 +146,20 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return 0, unix.ENOSYS
 	}
 	if req.Op != OpListen {
-		if err := s.decodeAddress(&req, info, raw, target); err != nil {
+		err := s.decodeAddress(&req, info, raw, target)
+		if errors.Is(err, errUnresolvedSocketPath) {
+			// What a relative path names depends on a working directory the
+			// supervisor could not read, so it cannot decide the call.
+			if target.valid() {
+				s.refusals.report(Refusal{Unexamined: true, Process: target.comm()})
+			}
+			return 0, unix.EACCES
+		}
+		if errors.Is(err, errUnisolatedFamily) {
+			s.refusals.report(Refusal{Operation: refusalOperation(req.Op), Target: "family:" + strconv.Itoa(info.domain), Process: target.comm()})
+			return 0, unix.EAFNOSUPPORT
+		}
+		if err != nil {
 			return 0, unix.EINVAL
 		}
 	}
@@ -175,6 +206,18 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	}
 }
 
+// errUnisolatedFamily marks an address of a family the sandbox's namespaces
+// do not isolate.
+var errUnisolatedFamily = errors.New("socket family is not isolated by the sandbox")
+
+// refusalOperation names a refused call in the macOS kernel's vocabulary.
+func refusalOperation(op SocketOp) string {
+	if op == OpBind {
+		return "network-bind"
+	}
+	return "network-outbound"
+}
+
 // decodeAddress fills the request's address from the supervisor's copy.
 func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []byte, target *targetProcess) error {
 	if len(raw) < 2 {
@@ -193,7 +236,11 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 		if i := indexByte(path, 0); i >= 0 {
 			path = path[:i]
 		}
-		req.Unix = resolveSocketPath(string(path), target)
+		resolved, ok := resolveSocketPath(string(path), target)
+		if !ok {
+			return errUnresolvedSocketPath
+		}
+		req.Unix = resolved
 		return nil
 	case family == unix.AF_INET && len(raw) >= 8:
 		port := binary.BigEndian.Uint16(raw[2:4])
@@ -201,9 +248,14 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 	case family == unix.AF_INET6 && len(raw) >= 24:
 		port := binary.BigEndian.Uint16(raw[2:4])
 		req.IP = netip.AddrPortFrom(netip.AddrFrom16([16]byte(raw[8:24])), port)
-	default:
-		// Other families stay inside the sandbox's namespaces.
+	case info.domain == unix.AF_UNIX || slices.Contains(isolatedSocketFamilies, uint32(info.domain)):
+		// The kernel answers an address of another family on these sockets
+		// inside the sandbox's own namespaces.
 		return nil
+	default:
+		// The filter creates no socket of another family; one that reached
+		// the sandbox anyway is not one the namespaces isolate.
+		return errUnisolatedFamily
 	}
 	if req.Op == OpConnect && req.IP.Addr().Unmap().IsLoopback() && !req.HostSocket {
 		req.SandboxListener = sandboxListens(target.pid, info.typ, req.IP.Port())
@@ -220,21 +272,26 @@ func indexByte(b []byte, c byte) int {
 	return -1
 }
 
+// errUnresolvedSocketPath marks a relative path-socket address whose working
+// directory the supervisor could not read.
+var errUnresolvedSocketPath = errors.New("relative socket path has no readable working directory")
+
 // resolveSocketPath gives a path-socket address the meaning the target's
 // working directory gives it, with symbolic links resolved, so a grant matches
-// the socket it names whatever spelling reaches it.
-func resolveSocketPath(path string, target *targetProcess) string {
+// the socket it names whatever spelling reaches it. A relative path whose
+// working directory cannot be read has no meaning the supervisor can decide.
+func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 	if !filepath.IsAbs(path) {
 		cwd, err := os.Readlink("/proc/" + strconv.Itoa(target.pid) + "/cwd")
-		if err != nil {
-			return ""
+		if err != nil || !filepath.IsAbs(cwd) {
+			return "", false
 		}
 		path = filepath.Join(cwd, path)
 	}
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved
+		return resolved, true
 	}
-	return filepath.Clean(path)
+	return filepath.Clean(path), true
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's
@@ -286,7 +343,7 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 		NewFD:      uint32(fd),
 		NewFDFlags: target.fdFlags(fd),
 	}
-	if err := ioctlPtr(target.listener, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(&add)); err != nil {
+	if _, err := ioctlAddFD(target.listener, &add); err != nil {
 		s.host.forget(cookie)
 		return 0, unix.EINTR
 	}
@@ -371,49 +428,34 @@ type targetProcess struct {
 	id       uint64
 	pid      int
 	pidfd    int
-	mem      *os.File
+	handles  *processHandles
+	cache    *targetHandles
+	// caller is what the calling thread's status said when it was opened.
+	caller callerFacts
 }
 
-func openTarget(listener int, n seccompNotif) (*targetProcess, error) {
+func (s *supervisor) openTarget(listener int, n seccompNotif) (*targetProcess, error) {
 	// The notification names the calling thread; descriptors and memory
 	// belong to its thread group.
-	tgid, err := threadGroup(int(n.PID))
+	// Resolve the current notifying thread. A cached /proc status descriptor
+	// may still refer to a task that exited before this notification.
+	caller, err := callerFactsOf(int(n.PID))
 	if err != nil {
 		return nil, err
 	}
-	t := &targetProcess{listener: listener, id: n.ID, pid: tgid, pidfd: -1}
-	fd, err := unix.PidfdOpen(t.pid, 0)
+	handles, err := s.targets.acquire(caller.tgid)
 	if err != nil {
 		return nil, err
 	}
-	t.pidfd = fd
-	mem, err := os.Open("/proc/" + strconv.Itoa(t.pid) + "/mem")
-	if err != nil {
-		t.close()
-		return nil, err
-	}
-	t.mem = mem
-	// Both handles were opened while the call was still pending, so they name
-	// the process that made it, not a later one with its number.
+	t := &targetProcess{listener: listener, id: n.ID, pid: caller.tgid, pidfd: handles.pidfd, handles: handles, cache: s.targets, caller: caller}
+	// The pidfd is live, so it names this thread group's process and not an
+	// earlier one with its number, and the call is still pending, so the
+	// thread whose status named that group is still in it.
 	if !t.valid() {
 		t.close()
 		return nil, unix.ESRCH
 	}
 	return t, nil
-}
-
-// threadGroup reads the thread group a thread belongs to.
-func threadGroup(tid int) (int, error) {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
-	if err != nil {
-		return 0, err
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		if value, ok := strings.CutPrefix(line, "Tgid:"); ok {
-			return strconv.Atoi(strings.TrimSpace(value))
-		}
-	}
-	return 0, unix.ESRCH
 }
 
 func (t *targetProcess) valid() bool {
@@ -425,7 +467,7 @@ func (t *targetProcess) read(addr uint64, into []byte) error {
 	if len(into) == 0 {
 		return nil
 	}
-	n, err := t.mem.ReadAt(into, int64(addr))
+	n, err := t.handles.readAt(t.pid, into, int64(addr))
 	if err != nil || n != len(into) {
 		return errors.New("short read of the target's memory")
 	}
@@ -460,20 +502,41 @@ func (t *targetProcess) fdFlags(fd int) uint32 {
 }
 
 func (t *targetProcess) close() {
-	if t.mem != nil {
-		_ = t.mem.Close()
-	}
-	if t.pidfd >= 0 {
-		_ = unix.Close(t.pidfd)
+	if t.handles != nil {
+		t.cache.release(t.handles)
+		t.handles = nil
 	}
 }
 
+var seccompIoctl = func(fd int, req uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+	r1, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
+	return r1, errno
+}
+
 func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
-	if errno != 0 {
-		return errno
+	for {
+		_, errno := seccompIoctl(fd, req, arg)
+		if errno == unix.EINTR && req != unix.SECCOMP_IOCTL_NOTIF_RECV {
+			continue
+		}
+		if errno != 0 {
+			return errno
+		}
+		return nil
 	}
-	return nil
+}
+
+func ioctlAddFD(fd int, add *seccompNotifAddfd) (int, error) {
+	for {
+		r1, errno := seccompIoctl(fd, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(add))
+		if errno == unix.EINTR {
+			continue
+		}
+		if errno != 0 {
+			return -1, errno
+		}
+		return int(r1), nil
+	}
 }
 
 func rawResult(r1, _ uintptr, errno unix.Errno) (int64, unix.Errno) {

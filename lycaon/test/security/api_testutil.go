@@ -131,11 +131,7 @@ func createSessionForProjectHandlerHTTP(t *testing.T, serve http.Handler, projec
 
 func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session) wire.Session {
 	t.Helper()
-	// Preparation resolves the effective catalog and attaches the ambient
-	// workflow; on a loaded runner that work can exceed ten seconds.
-	started := time.Now()
-	deadline := started.Add(testutil.Timeout(30 * time.Second))
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w := httptest.NewRecorder()
 		serve.ServeHTTP(w, req)
@@ -154,7 +150,7 @@ func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("session preparation did not complete after %v: status %q", time.Since(started), sess.Status)
+	t.Fatalf("session preparation did not complete: status %q", sess.Status)
 	return sess
 }
 
@@ -288,14 +284,10 @@ func listMessagesHTTP(t *testing.T, srv *api.Server, sessionID string) []wire.Me
 	return msgs
 }
 
-const promptIdleBudget = 30 * time.Second
-
 func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string) {
 	t.Helper()
-	timeout := testutil.Timeout(promptIdleBudget)
 	accepted := acceptPromptHTTP(t, srv, sessionID, text)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		// Two idle reads fence the transcript snapshot.
 		preStatus := getSessionHTTP(t, srv, sessionID).Status
 		msgs := listMessagesHTTP(t, srv, sessionID)
@@ -310,21 +302,19 @@ func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s prompt %q did not produce a response within %s", sessionID, text, timeout)
+	t.Fatalf("session %s prompt %q did not produce a response", sessionID, text)
 }
 
 // postPromptAndWaitTranscriptHTTP waits for matching transcript content.
-func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, text, want string, timeout time.Duration) {
+func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, text, want string) {
 	t.Helper()
 	acceptPromptHTTP(t, srv, sessionID, text)
-	waitTranscriptContainsHTTP(t, srv, sessionID, want, timeout)
+	waitTranscriptContainsHTTP(t, srv, sessionID, want)
 }
 
-func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string, timeout time.Duration) {
+func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		msgs := listMessagesHTTP(t, srv, sessionID)
 		for _, msg := range msgs {
 			if strings.Contains(msg.Content, want) {
@@ -337,14 +327,12 @@ func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want s
 	var stacks bytes.Buffer
 	_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
 	t.Logf("goroutines at transcript wait timeout:\n%s", stacks.String())
-	t.Fatalf("session %s transcript did not contain %q within %s; messages: %+v", sessionID, want, timeout, listMessagesHTTP(t, srv, sessionID))
+	t.Fatalf("session %s transcript did not contain %q; messages: %+v", sessionID, want, listMessagesHTTP(t, srv, sessionID))
 }
 
-func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int, timeout time.Duration) {
+func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		msgs := listMessagesHTTP(t, srv, sessionID)
 		enqueued := 0
 		for _, msg := range msgs {
@@ -357,7 +345,7 @@ func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, w
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s task enqueue count != %d within %s; messages: %+v", sessionID, want, timeout, listMessagesHTTP(t, srv, sessionID))
+	t.Fatalf("session %s task enqueue count != %d; messages: %+v", sessionID, want, listMessagesHTTP(t, srv, sessionID))
 }
 
 func taskMessageEnqueued(message wire.Message) bool {
@@ -365,9 +353,9 @@ func taskMessageEnqueued(message wire.Message) bool {
 		message.ToolResult.Dispatch != nil && message.ToolResult.Dispatch.WorkerID != ""
 }
 
-func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string, timeout time.Duration) {
+func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string) {
 	t.Helper()
-	testutil.WaitFor(t, timeout, func() bool {
+	testutil.WaitFor(t, func() bool {
 		for _, message := range listMessagesHTTP(t, srv, sessionID) {
 			if message.ToolResult == nil {
 				continue
@@ -382,11 +370,9 @@ func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string,
 	})
 }
 
-func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int, timeout time.Duration) {
+func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -404,16 +390,14 @@ func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, w
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s workflow run count did not reach %d within %s", sessionID, wantCount, timeout)
+	t.Fatalf("session %s workflow run count did not reach %d", sessionID, wantCount)
 }
 
 // waitActiveWorkflowRunHTTP waits for an asynchronous workflow start.
-func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string, timeout time.Duration) wire.WorkflowRun {
+func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string) wire.WorkflowRun {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
 	var last string
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -425,7 +409,7 @@ func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWor
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s active workflow run %q not present within %s; last=%s", sessionID, wantWorkflowID, timeout, last)
+	t.Fatalf("session %s active workflow run %q not present; last=%s", sessionID, wantWorkflowID, last)
 	return wire.WorkflowRun{}
 }
 
