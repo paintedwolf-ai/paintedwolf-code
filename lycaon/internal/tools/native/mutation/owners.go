@@ -60,13 +60,13 @@ var utilities = map[string]utility{
 	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "ln": runLn, "mkdir": runMkdir,
 	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
 	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
-	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite,
+	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite, "patch": runPatch,
 }
 
 // createOperations names the owner of utilities whose catalog entry has no
-// structured tool disposition: they create files and directories through the
-// write and mkdir operations.
-var createOperations = map[string]string{"touch": "write", "mktemp": "write"}
+// structured tool disposition: they create and replace files through the
+// write operation.
+var createOperations = map[string]string{"touch": "write", "mktemp": "write", "patch": "write"}
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations Operations) (*Owners, error) {
@@ -196,7 +196,7 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"
-	case "code-rewrite":
+	case "code-rewrite", "patch":
 		if hasOpt("--dry-run") {
 			return "dry-run"
 		}

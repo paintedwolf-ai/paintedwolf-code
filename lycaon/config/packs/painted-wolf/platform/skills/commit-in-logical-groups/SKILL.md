@@ -17,6 +17,8 @@ If needed, load `git_commit` with `request_tools` before committing. Read reposi
 
 Start with `git status --short`, `git diff --stat`, and a bounded `git log`. Narrow large trees by path. These establish changed paths, their scale, and recent commit conventions without reading every hunk.
 
+For an intentional tracked removal or rename, `command` supports `git rm -- PATH ...` and `git mv -- SOURCE DESTINATION`; these use recoverable filesystem operations and session staging. `git rm --cached` keeps the saved file. Inspect the affected paths before committing.
+
 Groups are decided from paths, stat counts, and what recent commits were about. Write the groups down first, in `update_progress`, one line each, before any hunk is read. (If intermediate working notes are needed, store them under `@scratch/`, never in the repository.) Then read hunks (`git diff -- paths` in `command`) only for a file whose group is still ambiguous from its path and size: a new file in an unfamiliar package, a change that could belong to two features, a large diff in a file several groups touch. A hunk read may move a file between the declared groups; it never opens a second survey pass. Budget one batch of hunk reads for the whole tree, and none when the user has said the tree is finished work. On a tree of hundreds of files, reading every diff is not diligence; it is the survey never ending. Survey once, then commit.
 
 A file that carries changes for two groups goes whole into the group that needs it first, and the message says so. Do not split a file by hunk; a commit is a set of whole files that leaves the project building.

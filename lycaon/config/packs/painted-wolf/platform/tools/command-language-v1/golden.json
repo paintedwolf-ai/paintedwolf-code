@@ -636,7 +636,7 @@
     },
     {
       "id": "excluded-trap",
-      "program": "printf x > ./never; trap x INT",
+      "program": "printf x > ./never; trap data EXIT",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -649,7 +649,7 @@
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
-          "end_byte": 30
+          "end_byte": 24
         },
         "semantic_effects": [],
         "receipts": {
@@ -2833,6 +2833,188 @@
         }
       },
       "qualification": "normative contract definition; native runtime qualification in program_lsof_test.go"
+    },
+    {
+      "id": "patch-stdin-redirect",
+      "program": "patch -p1 < ./fix.diff",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n",
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "patching file input\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "document-publication",
+            "path": "input",
+            "bytes": "ALPHA\nbeta\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "patch-input-file",
+      "program": "patch -p1 -i ./fix.diff",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n",
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "patching file input\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "document-publication",
+            "path": "input",
+            "bytes": "ALPHA\nbeta\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "patch-heredoc",
+      "program": "patch -p1 <<'EOF'\n--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\nEOF",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "patching file input\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "document-publication",
+            "path": "input",
+            "bytes": "ALPHA\nbeta\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "patch-git-apply-heredoc",
+      "program": "git apply <<'EOF'\n--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\nEOF",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "document-publication",
+            "path": "input",
+            "bytes": "ALPHA\nbeta\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "git-tracked-move-and-remove",
+      "program": "git init -q; git add -- input other; git commit -q -m base; git mv -- input renamed; git status --short; git commit -q -m rename; git rm -- other; git commit -q -m remove; git ls-files",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n",
+          "other": "gamma\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "R  input -> renamed\nrm 'other'\nrenamed\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "git-commit",
+            "paths": [
+              "input",
+              "other"
+            ]
+          },
+          {
+            "kind": "filesystem-move",
+            "from": "input",
+            "path": "renamed"
+          },
+          {
+            "kind": "git-commit",
+            "paths": [
+              "input",
+              "renamed"
+            ]
+          },
+          {
+            "kind": "filesystem-delete",
+            "path": "other"
+          },
+          {
+            "kind": "git-commit",
+            "paths": [
+              "other"
+            ]
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     }
   ]
 }

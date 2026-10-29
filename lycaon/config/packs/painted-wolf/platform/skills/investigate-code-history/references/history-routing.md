@@ -16,6 +16,10 @@ Native Git commands in `command` provide committed history. `source_history` pro
 | Which commits differ between branches? | `git rev-list --left-right --count base...head`, `git log base..head`, and `git diff base head -- paths` in `command` |
 | What does a ref resolve to? | `git rev-parse ref` in `command` |
 | How do I undo a retained file change? | `restore_version(path)` or with `version_id`, only when requested |
+| Where did text exist at an older revision? | `command`: `git grep -n PATTERN REV -- PATH`; `git show REV:PATH` for the whole file |
+| Which release contains a commit? | `command`: `git describe --tags --always REV`; `git log` between the named tags |
+| Where did a branch point before a reset or rebase? | `command`: `git reflog -n 20 [REF]`; `git show` the earlier entry before restoring anything |
+| Which files or objects exist at a revision? | `command`: `git ls-tree -r --name-only REV`, `git cat-file -t`/`-p REV:PATH`; Read the current file before comparing |
 
 Discover local branches with `git branch --list` in `command`. Local refs do not establish remote state, PR status or CI results.
 

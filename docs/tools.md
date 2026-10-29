@@ -45,6 +45,50 @@ qualify conversational edit evidence, while internal execution reads do not.
 Diff reuses the existing engine; complete stream bounds are independent from
 structured preview and context caps.
 
+`patch` and `git apply` share one hunk applier over parsed unified and Git
+diffs: offset search, GNU fuzz for `patch` (`-F`, default 2), exact context
+for `git apply`, reversal and Git binary patches (`git apply` only). Both
+capture every touched file before the first write and publish each file through
+the pinned write door; `patch` publishes files whose hunks applied and reports
+failed hunks on stderr and in receipt evidence without writing `.rej` or `.orig`
+files, while `git apply` changes nothing unless every section applies.
+`git apply --index` and `--cached` change the index through one reviewed Git
+operation with `git add`'s session-staging rules, and `--3way` merges from the
+preimage blob with Git's merge-file, reporting conflicted paths and index stages.
+
+`git rm` and `git mv` compose recoverable filesystem deletion or movement with
+the same Git stage operation. `git rm --cached` changes only the index. Both
+commands support dry runs, preserve unrelated staging, and include affected
+paths in session staging. Ordinary Git safety checks precede removal; force
+does not change host authority. `git rm` removes the directories a removal
+leaves empty, each through the same recoverable delete, and keeps the
+repository root and the command directory. If index staging fails after a
+filesystem change, the result retains the completed effect and its source
+recovery. A following `git commit` builds its tree in a private index seeded
+from `HEAD`, so staged deletions, both sides of a rename and the selected
+paths are committed while unrelated staged work stays staged.
+
+`git grep` searches a revision's tree, the index or the tracked working tree
+with the same native regex engines as `grep` (basic by default, `-E`, `-F`,
+`-P`) and prints Git's `REV:PATH:LINE` layout with paths relative to the
+command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
+`git cat-file`, `git show-ref` and `git for-each-ref` run through the Git
+owner's read door with their catalogued options; `git shortlog` without a
+revision summarizes `HEAD`. Batch object reads, reflog maintenance and
+signature format atoms are refused.
+
+`git bisect` runs natively on the Git owner. Sessions live in the repository's
+`BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
+own `git bisect` and `git status` see the same session, and every step checks
+out through the Git owner's checkout operation. `git bisect start` refuses a
+tree with tracked changes with `GIT_BISECT_DIRTY_TREE`; a separate worktree
+keeps that tree untouched. `git bisect run` dispatches its check as an ordinary
+child of the program: status 0 marks the commit old, 125 skips it, 1 to 127
+marks it new, and any other status stops the run. An interrupted run leaves
+the session recorded at the commit under test and names the `git bisect reset`
+to run. `git bisect visualize` and `view` are limited to `--oneline`, and
+`replay` is refused because `git bisect log` is the session record.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete
