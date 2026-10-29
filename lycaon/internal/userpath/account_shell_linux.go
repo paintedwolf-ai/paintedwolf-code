@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,7 +19,29 @@ import (
 func defaultAccountShell(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return linuxAccountShell(ctx, "/usr/bin/getent", os.Getuid())
+	program, err := linuxAccountLookupPath(os.Stat)
+	if err != nil {
+		return "", err
+	}
+	return linuxAccountShell(ctx, program, os.Getuid())
+}
+
+func linuxAccountLookupPath(stat func(string) (fs.FileInfo, error)) (string, error) {
+	// NSS is host identity plumbing; a project or person PATH cannot replace it.
+	for _, program := range []string{"/usr/bin/getent", "/run/current-system/sw/bin/getent"} {
+		info, err := stat(program)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("account lookup utility unavailable: %w", err)
+		}
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+			return "", errors.New("account lookup utility is not a regular executable")
+		}
+		return program, nil
+	}
+	return "", errors.New("account lookup utility absent from system locations")
 }
 
 // NSS resolves local and directory-backed accounts by uid.
