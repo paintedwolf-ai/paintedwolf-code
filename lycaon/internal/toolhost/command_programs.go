@@ -84,6 +84,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		return nil, err
 	}
 	hostenvOwners, err := hostenv.NewOwners(hostos.Host{}, time.Now, t.boundary)
+
 	if err != nil {
 		return nil, err
 	}

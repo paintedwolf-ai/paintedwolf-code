@@ -36,6 +36,7 @@ func registerCommandTools(
 	}
 	ft := command.NewCommandFailureTracker()
 	hostUtilities, err := hostenv.NewOwners(hostos.Host{}, time.Now, boundary)
+
 	if err != nil {
 		return err
 	}
