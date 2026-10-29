@@ -27,6 +27,9 @@ type WaitLease struct {
 	Active     bool
 	StartedAt  time.Time
 	Triggers   []WaitTrigger
+	// Tool and ToolCallID name the call that parked the session, if one did.
+	Tool       string
+	ToolCallID string
 }
 
 // openWaitLeaseLocked opens a lease for a host-mover sleep.
@@ -42,6 +45,8 @@ func openWaitLeaseLocked(st *sessionSleep, sessionID string, mover SleepMover) W
 		Active:     true,
 		StartedAt:  st.activityStartedAt,
 		Triggers:   append([]WaitTrigger(nil), st.waitTriggers...),
+		Tool:       st.caller.tool,
+		ToolCallID: st.caller.toolCallID,
 	}
 }
 
@@ -56,6 +61,8 @@ func closeWaitLeaseLocked(st *sessionSleep, sessionID string) (WaitLease, bool) 
 		Active:     false,
 		StartedAt:  st.activityStartedAt,
 		Triggers:   append([]WaitTrigger(nil), st.waitTriggers...),
+		Tool:       st.caller.tool,
+		ToolCallID: st.caller.toolCallID,
 	}
 	st.activityID = ""
 	st.activityStartedAt = time.Time{}

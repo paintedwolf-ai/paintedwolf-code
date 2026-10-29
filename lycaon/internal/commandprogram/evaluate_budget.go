@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -50,6 +51,7 @@ var catalogEvaluationLimits = sync.OnceValues(func() (evaluationLimits, error) {
 // and background job of one invocation. Counters are cumulative per program.
 type evaluation struct {
 	ports       EvaluationPorts
+	waits       *executionWaits
 	expander    *WordExpander
 	limits      evaluationLimits
 	programName string
@@ -63,6 +65,8 @@ type evaluation struct {
 	sources      []SourceRecord
 	jobs         []string
 	procSubstFDs map[int]bool
+	// cpuUnmeasured is set when a time report counted native operations.
+	cpuUnmeasured atomic.Bool
 }
 
 // charge counts one unit of a cumulative program ceiling before the work it
@@ -181,7 +185,8 @@ func (e *evaluation) outcome(root *frame) ProgramOutcome {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := ProgramOutcome{Status: root.state.control.Status(), Exited: root.state.control.Exited(),
-		Children: append([]ChildRecord(nil), e.children...), Sources: append([]SourceRecord(nil), e.sources...), Jobs: append([]string(nil), e.jobs...)}
+		Children: append([]ChildRecord(nil), e.children...), Sources: append([]SourceRecord(nil), e.sources...), Jobs: append([]string(nil), e.jobs...),
+		CPUTimeUnmeasured: e.cpuUnmeasured.Load()}
 	if stop, ok := root.state.latch.Stop(); ok {
 		out.Stop = &stop
 	}

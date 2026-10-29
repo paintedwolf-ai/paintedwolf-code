@@ -18,7 +18,8 @@ func Command(
 	if IsHelperInvocation(os.Args) {
 		return nil, func() {}, ErrNestedHelper
 	}
-	if c.HostExecution && c.lineage == nil {
+	extra := c.Process.arguments()
+	if c.HostExecution && c.lineage == nil && len(extra) == 0 {
 		return exec.CommandContext(ctx, name, args...), func() {}, nil
 	}
 	var profile string
@@ -34,28 +35,28 @@ func Command(
 	if err != nil {
 		return nil, func() {}, err
 	}
-	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
+	helperArgs := append([]string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}, extra...)
 	if c.HostExecution {
 		helperArgs = append(helperArgs, pinHostExecutionFlag)
 	}
 	// ExtraFiles[0] lands on helperProfileFD in the child.
-	extra := []*os.File{pr}
+	files := []*os.File{pr}
 	if marker := c.lineage.ChildFile(); marker != nil {
 		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
-		extra = append(extra, marker)
+		files = append(files, marker)
 	}
 	reports, closeReports := refusalReport(c)
 	if reports != nil {
 		// A nil entry leaves the marker's descriptor closed when there is none.
-		for len(extra) < helperRefusalFD-helperProfileFD {
-			extra = append(extra, nil)
+		for len(files) < helperRefusalFD-helperProfileFD {
+			files = append(files, nil)
 		}
-		extra = append(extra, reports)
+		files = append(files, reports)
 		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
 	}
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
-	cmd.ExtraFiles = extra
+	cmd.ExtraFiles = files
 	go func() {
 		defer func() { _ = pw.Close() }()
 		_, _ = io.WriteString(pw, profile)

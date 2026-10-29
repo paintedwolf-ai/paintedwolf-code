@@ -2543,7 +2543,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Retain event semantics plus timer alias",
-      "behavior_change_or_retention": "Implement in-process context-cancelable sleep <seconds> (including fractional seconds and s suffix) inside command; preserve event-driven wait tool for handle/condition parking",
+      "behavior_change_or_retention": "The wait tool and command programs share one park primitive. Native sleep waits its full timer interval; shell wait uses exact supervised job handles; timeout and read -t contribute deadlines. Long blocked programs release the turn and resume through the same wait lease.",
       "existing_semantic_difference": "Host-observed conditions and exact handles; timer subset",
       "implementing_issues": [
         "P22",

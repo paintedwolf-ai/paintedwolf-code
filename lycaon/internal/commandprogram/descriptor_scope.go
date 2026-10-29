@@ -16,6 +16,7 @@ import (
 // must not replace a pipe or substitution endpoint created inside its scope.
 type descriptorFrame struct {
 	streams     Streams
+	wait        *ExecutionWait
 	generations [10]uint64
 	scope       *descriptorScope
 }
@@ -38,7 +39,7 @@ func (d *descriptorFrame) setError(w io.Writer)     { d.setWriter(2, w) }
 func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 	streams := d.streams
 	if d.scope == nil {
-		return streams, nil
+		return streams.WithActivity(d.wait), nil
 	}
 	parent := d
 	parent.scope = d.scope.base.scope
@@ -52,7 +53,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 		needed = needed || changed && d.generations[fd] == d.scope.base.generations[fd]
 	}
 	if !needed {
-		return streams, nil
+		return streams.WithActivity(d.wait), nil
 	}
 	bound, err := d.scope.open(ctx)
 	if err != nil {
@@ -68,7 +69,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 			streams.SetWriter(fd, bound.Writer(fd))
 		}
 	}
-	return streams, nil
+	return streams.WithActivity(d.wait), nil
 }
 
 // pending reports descriptor work that must cross admission before local state
@@ -94,7 +95,7 @@ func isNullRedirectTarget(v string) bool {
 func (s *descriptorScope) needsAdmission() bool {
 	for _, plan := range s.plans {
 		switch plan.redirect.Operator {
-		case "<<", "<<-", ">&", "<&":
+		case "<<", "<<-", "<<<", ">&", "<&":
 			continue
 		default:
 			if plan.target.ProcessSubstitution() == nil && isNullRedirectTarget(plan.target.Value) {
@@ -203,7 +204,7 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 		plan := descriptorPlan{redirect: r}
 		switch r.Operator {
 		case ">&", "<&":
-		case "<<", "<<-":
+		case "<<", "<<-", "<<<":
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
 				plan.body, err = f.e.expander.ExpandDocument(ctx, scope, r)
@@ -276,8 +277,8 @@ func (s *descriptorScope) open(ctx context.Context) (Streams, error) {
 		g.io = descriptorFrame{streams: streams}
 		for _, plan := range s.plans {
 			r := plan.redirect
-			if r.Operator == "<<" || r.Operator == "<<-" {
-				g.io.streams.SetReader(redirectDescriptor(r), io.NopCloser(strings.NewReader(plan.body)))
+			if r.Operator == "<<" || r.Operator == "<<-" || r.Operator == "<<<" {
+				g.io.streams.SetReader(redirectDescriptor(r), borrowedInput{Reader: strings.NewReader(plan.body)})
 				continue
 			}
 			out, failed, err := s.bind(ctx, &g, r, plan.target)

@@ -15,9 +15,13 @@ type WaitDeliveriesDeps struct {
 	RunWaitResume func(ctx context.Context, sessionID string, delivery WaitDelivery) (*promptresult.Result, error)
 }
 type WaitDeliveries struct {
-	depsMu        sync.RWMutex
-	deps          WaitDeliveriesDeps
-	waitWinners   sync.Map
+	depsMu      sync.RWMutex
+	deps        WaitDeliveriesDeps
+	waitWinners sync.Map
+	// endedWaits holds wait ends that no resume turn delivers; the session's
+	// next turn opens with them.
+	endedMu       sync.Mutex
+	endedWaits    map[string][]awaitstore.Condition
 	Admission     *Admission
 	Turns         *HostTurns
 	Subscriptions *WaitSubscriptions
@@ -123,4 +127,31 @@ func (l *WaitDeliveries) scheduleWaitResumeRetry(ctx context.Context, sessionID 
 		winner.retryScheduled.Store(false)
 		l.runWaitResume(ctx, sessionID, winner)
 	})
+}
+
+func (l *WaitDeliveries) rememberEndedWait(sessionID string, winner awaitstore.Condition) {
+	sessionID = strings.TrimSpace(sessionID)
+	if l == nil || sessionID == "" {
+		return
+	}
+	l.endedMu.Lock()
+	defer l.endedMu.Unlock()
+	if l.endedWaits == nil {
+		l.endedWaits = map[string][]awaitstore.Condition{}
+	}
+	l.endedWaits[sessionID] = append(l.endedWaits[sessionID], winner)
+}
+
+// TakeEndedWaits returns, once, the wait ends the session's next turn opens
+// with, oldest first.
+func (l *WaitDeliveries) TakeEndedWaits(sessionID string) []awaitstore.Condition {
+	if l == nil {
+		return nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	l.endedMu.Lock()
+	defer l.endedMu.Unlock()
+	ended := l.endedWaits[sessionID]
+	delete(l.endedWaits, sessionID)
+	return ended
 }
