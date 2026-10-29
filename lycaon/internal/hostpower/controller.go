@@ -50,6 +50,9 @@ const (
 	// ReasonNoApplicationID is a provider that refuses callers it cannot
 	// attribute to an application.
 	ReasonNoApplicationID ProviderReasonCode = "no_application_id"
+	// ReasonOwnUserOverride is a login manager whose locks the holder's own
+	// desktop overrides, with no session layer to stop that desktop.
+	ReasonOwnUserOverride ProviderReasonCode = "own_user_override"
 	// ReasonPlatform is a platform without an inhibition protocol.
 	ReasonPlatform ProviderReasonCode = "platform_unsupported"
 )
@@ -270,6 +273,9 @@ func (c *Controller) watch(lease lease) {
 	err, ok := <-lease.Done()
 	if !ok {
 		err = nil
+	}
+	if releaseErr := lease.Release(); err == nil {
+		err = releaseErr
 	}
 	c.mu.Lock()
 	if c.lease == lease {

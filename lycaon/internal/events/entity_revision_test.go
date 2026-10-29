@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,7 +45,6 @@ func TestEntityRevisionReachesTheWire(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.publish()
 			hub.FlushDebounced()
-			deadline := time.After(2 * time.Second)
 			for {
 				select {
 				case env := <-ch:
@@ -58,7 +56,7 @@ func TestEntityRevisionReachesTheWire(t *testing.T) {
 						t.Fatalf("%s entity_revision = %d, want %d", env.Topic, env.EntityRevision, tc.want)
 					}
 					return
-				case <-deadline:
+				case <-t.Context().Done():
 					t.Fatal("timeout waiting for the event under test")
 				}
 			}

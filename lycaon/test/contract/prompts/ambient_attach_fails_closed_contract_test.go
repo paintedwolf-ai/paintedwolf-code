@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
@@ -92,7 +91,7 @@ func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPo
 func (f ambientAttachFixture) awaitPrepared(t *testing.T, sessionID string) wire.Session {
 	t.Helper()
 	var last wire.Session
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
 		req.Header.Set("Authorization", api.TestAuthHeader())
 		w := httptest.NewRecorder()

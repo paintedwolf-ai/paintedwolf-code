@@ -198,10 +198,10 @@ describe("intakeHomeIdeaDrop — native paths", () => {
     expect(item.reason).toBe(DROP_REJECT_MISSING);
   });
 
-  it("counts buffered paths against the byte plane cap", async () => {
+  it("counts buffered paths against the reference plane cap", async () => {
     vi.mocked(importPathKind).mockResolvedValue("file");
     const current = await intakeHomeIdeaDrop(
-      [pathItem("/a"), pathItem("/b"), pathItem("/c")],
+      Array.from({ length: TEST_CAPS.max_references }, (_, i) => pathItem(`/file-${i}`)),
       [],
     );
     const overflow = await intakeOne([pathItem("/d")], current);
@@ -210,13 +210,13 @@ describe("intakeHomeIdeaDrop — native paths", () => {
 });
 
 describe("chip projection", () => {
-  it("labels rejects, sizes web files, and leaves paths bare", async () => {
+  it("labels rejects, sizes web files, and shows full native paths", async () => {
     vi.mocked(importPathKind).mockResolvedValue("file");
     const web = await intakeOne([fileItem(webFile("a.txt", 12))], []);
     const path = await intakeOne([pathItem("/tmp/shot.png")], []);
     const rejected = await intakeOne([fileItem(webFile("e.txt", 0))], []);
     expect(homeIdeaChipDetail(web)).toBe("12 B");
-    expect(homeIdeaChipDetail(path)).toBe("");
+    expect(homeIdeaChipDetail(path)).toBe("/tmp/shot.png");
     expect(homeIdeaChipDetail(rejected)).toBe(
       rejectMessageForCode("unsupported_attachment"),
     );
@@ -256,7 +256,7 @@ describe("stageHomeIdeaAttachments", () => {
     expect(staged[0]).toMatchObject({ kind: "text", name: "a.txt" });
   });
 
-  it("imports native paths as immutable snapshots", async () => {
+  it("stages native image paths as live external references", async () => {
     vi.mocked(importPathKind).mockResolvedValue("file");
     vi.mocked(importExternalAttachment).mockResolvedValue(
       receipt({ filename: "shot.png", kind: "image", mime: "image/png" }),
@@ -267,12 +267,22 @@ describe("stageHomeIdeaAttachments", () => {
       "proj-1",
       [buffered],
     );
-    expect(importExternalAttachment).toHaveBeenCalledWith("proj-1", "/tmp/shot.png");
+    expect(importExternalAttachment).not.toHaveBeenCalled();
     expect(staged[0]).toMatchObject({
-      kind: "image",
+      kind: "external-file", projectId: "proj-1", path: "/tmp/shot.png",
       name: "shot.png",
-      importedCopy: true,
     });
+  });
+
+  it.each([
+    { path: "/tmp/report.pdf", kind: "document" as const, mime: "application/pdf" },
+    { path: "/tmp/bug.mov", kind: "video" as const, mime: "video/quicktime" },
+  ])("keeps the native $kind projection and its live original path", async ({ path, kind, mime }) => {
+    vi.mocked(importPathKind).mockResolvedValue("file");
+    vi.mocked(importExternalAttachment).mockResolvedValue(receipt({ filename: path.split("/").pop(), kind, mime }));
+    const buffered = await intakeOne([pathItem(path)], []);
+    const staged = await stageHomeIdeaAttachments({ uploadAttachment: vi.fn() }, "proj-1", [buffered]);
+    expect(staged).toMatchObject([{ kind, importedCopy: true }, { kind: "external-file", path, projectId: "proj-1" }]);
   });
 
   it("maps an import failure to a structured reject chip", async () => {
@@ -280,7 +290,7 @@ describe("stageHomeIdeaAttachments", () => {
     vi.mocked(importExternalAttachment).mockRejectedValue(
       Object.assign(new Error("too large"), { code: "attachment_too_large" }),
     );
-    const buffered = await intakeOne([pathItem("/tmp/huge.bin")], []);
+    const buffered = await intakeOne([pathItem("/tmp/huge.mov")], []);
     const staged = await stageHomeIdeaAttachments(
       { uploadAttachment: vi.fn() },
       "proj-1",
@@ -288,7 +298,7 @@ describe("stageHomeIdeaAttachments", () => {
     );
     expect(staged[0]).toMatchObject({
       kind: "reject",
-      name: "huge.bin",
+      name: "huge.mov",
       rejectCode: "attachment_too_large",
     });
   });

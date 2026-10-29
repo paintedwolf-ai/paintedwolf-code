@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/sourcefeed/watcher_test.go",
+  "kind": "test_suite",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Retain the existing watcher event/filter suite at 430 lines. This change only supplies the callback lifecycle group to its fixtures; new drain and cancellation behavior is tested separately in watch_drain_test.go. Splitting the unchanged event fixtures would expand this lifecycle fix without clarifying its contracts.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
+  "ceiling": 430,
+  "boundaries": {
+    "lycaon/internal/sourcefeed/watch_drain_test.go": "1be370587fb4205cb14e1e8775e67d922b93111cee0e8125304bedcc8f4d6d1c"
+  }
+}
