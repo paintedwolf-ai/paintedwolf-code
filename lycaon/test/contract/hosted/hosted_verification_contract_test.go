@@ -23,6 +23,7 @@ type hostedStep struct {
 const mergeGroupFailFast = "${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}"
 
 type hostedJob struct {
+	Name        string
 	Uses        string
 	Permissions map[string]string
 	Needs       yaml.Node
