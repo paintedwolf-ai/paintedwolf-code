@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -145,15 +144,6 @@ func (f *commandWorkflowFixture) readFile(t *testing.T, rel string) string {
 
 func (f *commandWorkflowFixture) run(t *testing.T) {
 	t.Helper()
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		select {
-		case <-done:
-		case <-time.After(30 * time.Second):
-			f.h.Sessions.Manager.Runner.Execution.Cancel(f.session)
-		}
-	}()
 	_, err := f.h.Sessions.Manager.Submissions.Prompt(t.Context(), f.session, "execute workflow")
 	testutil.FailErr(t, "prompt workflow", err)
 }

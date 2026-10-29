@@ -105,7 +105,7 @@ func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
 	if len(progs) != 1 || progs[0].status != 0 {
 		t.Fatalf("programs = %+v", progs)
 	}
-	if !hasExec(f.executions(t, progs[0].id), "mv", "completed") {
+	if !hasExec(f.executions(t, progs[0].id), "move", "completed") {
 		t.Fatalf("move receipt = %+v", f.executions(t, progs[0].id))
 	}
 }
@@ -138,7 +138,7 @@ func TestWorkflowGitFreshRepositoryIgnoresUnrelatedNestedRepository(t *testing.T
 	if len(progs) != 3 {
 		t.Fatalf("programs = %+v", progs)
 	}
-	if !hasExec(f.executions(t, progs[1].id), "git add", "completed") || !hasExec(f.executions(t, progs[1].id), "git commit", "completed") {
+	if !hasExec(f.executions(t, progs[1].id), "git add", "completed") || !hasExec(f.executions(t, progs[1].id), "git_commit", "completed") {
 		t.Fatalf("git mutation receipts = %+v", f.executions(t, progs[1].id))
 	}
 }
