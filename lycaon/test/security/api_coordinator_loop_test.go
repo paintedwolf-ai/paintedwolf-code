@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -158,12 +159,34 @@ type coordinatorWakeFacts struct {
 	RunID                 string                        `json:"run_id"`
 	RunStatus             *wire.WorkflowRunStatus       `json:"run_status"`
 	RunPhase              string                        `json:"run_phase"`
+	Runs                  []coordinatorWakeRun          `json:"runs"`
 	HumanApprovalAwaiting *bool                         `json:"human_approval_awaiting"`
 	HostObligationHeld    *bool                         `json:"host_obligation_held"`
 	PendingUserInput      *bool                         `json:"pending_user_input"`
 	Escalated             bool                          `json:"escalated"`
 	TranscriptRoles       []wire.MessageRole            `json:"transcript_roles"`
+	Messages              []coordinatorWakeMessage      `json:"messages"`
 	ReadErrors            map[string]string             `json:"read_errors"`
+}
+
+// coordinatorWakeRun is one workflow run of the session, active or retired,
+// so a no_active_run denial names which run ended and in which phase.
+type coordinatorWakeRun struct {
+	ID           string                 `json:"id"`
+	WorkflowID   string                 `json:"workflow_id"`
+	Status       wire.WorkflowRunStatus `json:"status"`
+	CurrentPhase string                 `json:"current_phase"`
+	ParentRunID  string                 `json:"parent_run_id,omitempty"`
+	CompletedAt  string                 `json:"completed_at,omitempty"`
+}
+
+// coordinatorWakeMessage is one transcript row's structure without its content.
+type coordinatorWakeMessage struct {
+	Role         wire.MessageRole `json:"role"`
+	Kind         wire.MessageKind `json:"kind,omitempty"`
+	HostSignalID string           `json:"host_signal_id,omitempty"`
+	ToolCalls    []string         `json:"tool_calls,omitempty"`
+	ResultTool   string           `json:"result_tool,omitempty"`
 }
 
 func (facts coordinatorWakeFacts) String() string {
@@ -205,6 +228,25 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 			facts.RunID, facts.RunStatus, facts.RunPhase = run.ID, &run.Status, run.CurrentPhase
 		}
 	}
+	rows, err := h.DB.QueryContext(ctx, `SELECT id, workflow_id, status, current_phase, parent_run_id, completed_at
+		FROM workflow_runs WHERE session_id = ? ORDER BY created_at, id`, sessionID)
+	if readOK("runs", err) {
+		facts.Runs = []coordinatorWakeRun{}
+		for rows.Next() {
+			var entry coordinatorWakeRun
+			var parent, completed sql.NullString
+			if err := rows.Scan(&entry.ID, &entry.WorkflowID, &entry.Status, &entry.CurrentPhase, &parent, &completed); err != nil {
+				facts.ReadErrors["runs"] = err.Error()
+				break
+			}
+			entry.ParentRunID, entry.CompletedAt = parent.String, completed.String
+			facts.Runs = append(facts.Runs, entry)
+		}
+		if err := rows.Err(); err != nil {
+			facts.ReadErrors["runs"] = err.Error()
+		}
+		_ = rows.Close()
+	}
 	awaiting, err := h.Workflows.Manager.Policy.HumanApprovalAwaiting(ctx, sessionID)
 	if readOK("human_approval", err) {
 		facts.HumanApprovalAwaiting = &awaiting
@@ -217,8 +259,17 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 	messages, err := h.Store.GetMessages(ctx, sessionID)
 	if readOK("transcript", err) {
 		facts.TranscriptRoles = make([]wire.MessageRole, 0, len(messages))
+		facts.Messages = make([]coordinatorWakeMessage, 0, len(messages))
 		for _, msg := range messages {
 			facts.TranscriptRoles = append(facts.TranscriptRoles, msg.Role)
+			entry := coordinatorWakeMessage{Role: msg.Role, Kind: msg.Kind, HostSignalID: msg.HostSignalID}
+			for _, call := range msg.ToolCalls {
+				entry.ToolCalls = append(entry.ToolCalls, call.Name)
+			}
+			if msg.ToolResult != nil {
+				entry.ResultTool = msg.ToolResult.Tool
+			}
+			facts.Messages = append(facts.Messages, entry)
 		}
 	}
 	return facts
@@ -255,10 +306,27 @@ func TestCoordinatorWakeFacts(t *testing.T) {
 	groundingState := grounding.NewStateStore()
 	groundingState.Set(sess.ID, grounding.UngroundedCounter{Escalated: true})
 	h.Sessions.Manager.Coordinator.Loop.Grounding = groundingState
-	roles := []wire.MessageRole{wire.MessageRoleUser, wire.MessageRoleAssistant, wire.MessageRoleUser}
-	for _, role := range roles {
-		testutil.FailErr(t, "append transcript", h.Store.AppendMessages(ctx, sess.ID,
-			wire.Message{ID: uuid.NewString(), Role: role, Content: "private diagnostic input"}))
+	toolCallID := uuid.NewString()
+	transcript := []wire.Message{
+		{ID: uuid.NewString(), Role: wire.MessageRoleUser, Content: "private diagnostic input"},
+		{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Content: "private diagnostic input"},
+		{ID: uuid.NewString(), Role: wire.MessageRoleUser, Kind: wire.MessageKindHostLoopWake, HostSignalID: "signal-1", Content: "private diagnostic input"},
+		{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Content: "private diagnostic input",
+			ToolCalls: []wire.ToolCall{{ID: toolCallID, Name: "read", Args: map[string]any{"path": "private diagnostic input"}}}},
+		{ID: uuid.NewString(), Role: wire.MessageRoleTool, Content: "private diagnostic input",
+			ToolResult: &wire.ToolResult{Tool: "read", ToolCallID: toolCallID, Content: "private diagnostic input"}},
+	}
+	roles := make([]wire.MessageRole, 0, len(transcript))
+	for _, msg := range transcript {
+		roles = append(roles, msg.Role)
+		testutil.FailErr(t, "append transcript", h.Store.AppendMessages(ctx, sess.ID, msg))
+	}
+	expectedRuns := []coordinatorWakeRun{{ID: run.ID, WorkflowID: "plan", Status: wire.WorkflowRunStatusRunning, CurrentPhase: "research"}}
+	expectedMessages := []coordinatorWakeMessage{
+		{Role: wire.MessageRoleUser}, {Role: wire.MessageRoleAssistant},
+		{Role: wire.MessageRoleUser, Kind: wire.MessageKindHostLoopWake, HostSignalID: "signal-1"},
+		{Role: wire.MessageRoleAssistant, ToolCalls: []string{"read"}},
+		{Role: wire.MessageRoleTool, ResultTool: "read"},
 	}
 	facts := collectCoordinatorWakeFacts(ctx, h, sess.ID, receipt.ID, "execution_failed", nil)
 	if facts.Reason != "execution_failed" || facts.SessionStatus == nil || *facts.SessionStatus != wire.SessionStatusIdle ||
@@ -271,6 +339,9 @@ func TestCoordinatorWakeFacts(t *testing.T) {
 	if facts.HumanApprovalAwaiting == nil || *facts.HumanApprovalAwaiting || facts.HostObligationHeld == nil || *facts.HostObligationHeld || len(facts.ReadErrors) != 0 {
 		t.Fatalf("holds or reads = %s", facts)
 	}
+	if !reflect.DeepEqual(facts.Runs, expectedRuns) || !reflect.DeepEqual(facts.Messages, expectedMessages) {
+		t.Fatalf("runs or messages = %s", facts)
+	}
 	var rendered coordinatorWakeFacts
 	testutil.FailErr(t, "decode reported facts", json.Unmarshal([]byte(facts.String()), &rendered))
 	if !reflect.DeepEqual(rendered, facts) {
@@ -282,13 +353,13 @@ func TestCoordinatorWakeFacts(t *testing.T) {
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 	facts = collectCoordinatorWakeFacts(canceled, h, sess.ID, receipt.ID, "", context.Canceled)
-	for _, source := range []string{"session", "submission", "turn", "workflow", "human_approval", "host_obligation", "transcript"} {
+	for _, source := range []string{"session", "submission", "turn", "workflow", "runs", "human_approval", "host_obligation", "transcript"} {
 		if facts.ReadErrors[source] == "" {
 			t.Errorf("missing %s read error: %s", source, facts)
 		}
 	}
 	if facts.SessionStatus != nil || facts.SubmissionStatus != nil || facts.TurnStatus != nil || facts.RunStatus != nil ||
-		facts.PendingUserInput != nil || facts.HumanApprovalAwaiting != nil || facts.HostObligationHeld != nil || facts.TranscriptRoles != nil ||
+		facts.PendingUserInput != nil || facts.HumanApprovalAwaiting != nil || facts.HostObligationHeld != nil || facts.TranscriptRoles != nil || facts.Runs != nil || facts.Messages != nil ||
 		facts.AdmissionError != context.Canceled.Error() {
 		t.Fatalf("unreadable facts reported as known: %s", facts)
 	}
