@@ -267,7 +267,7 @@ class Executor:
         self.requests = self.plan["requests"]
         self.members = self.plan["batch"]["members"]
         self.source = os.environ["PW_SOURCE_SNAPSHOT_COMMIT"]
-        self.completion = Publisher(self.source)
+        self.completion = Publisher(self.source, self.directory)
         self.tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
         self.completed = {r["ticket"]: set() for r in self.requests}
         self.running = {r["ticket"]: set() for r in self.requests}

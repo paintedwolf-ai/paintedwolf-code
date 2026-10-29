@@ -18,8 +18,29 @@ def sealed_receipt(directory, receipt):
             and seal.get("digest") == digest(receipt))
 
 
+def recovered_outcome(directory, requests):
+    """Called only after kernel custody is empty, never to authorize terminal cleanup."""
+    final = read_optional(Path(directory) / "executor.complete") or {}
+    summary = read_optional(Path(directory) / "summary.json") or {}
+    source = final.get("source_commit")
+    receipts = [read_optional(Path(directory) / (r["ticket"] + ".json")) for r in requests]
+    if (source and source == summary.get("source_commit") and type(final.get("exit_code")) is int
+            and final["exit_code"] in {0, 1}
+            and type(summary.get("requests")) is int and summary["requests"] == len(requests)
+            and all(isinstance(r, dict) and r.get("source_commit") == source
+                    and r.get("request") == request["ticket"]
+                    and (sealed_receipt(directory, r) if r.get("status") == "passed" else
+                         r.get("status") in {"failed", "cancelled", "unverified"})
+                    for r, request in zip(receipts, requests))):
+        return {"status": "completed", "exit_code": final["exit_code"]}
+    return {"status": "unverified", "exit_code": 2}
+
+
 class Publisher:
-    def __init__(self, source):
+    def __init__(self, source, directory=None):
+        self.directory = Path(directory) if directory is not None else None
+        self.observer_lost = False
+        self.seals = {}
         descriptor = os.environ.pop("PW_TEST_COMPLETION_FD", None)
         self.file = os.fdopen(int(descriptor), "w") if descriptor else None
         if self.file is not None:
@@ -29,13 +50,36 @@ class Publisher:
 
     def send(self, kind, **facts):
         if self.file is not None:
-            self.file.write(json.dumps({"kind": kind, "source_commit": self.source, **facts}) + "\n")
-            self.file.flush()
+            try:
+                self.file.write(json.dumps({"kind": kind, "source_commit": self.source, **facts}) + "\n")
+                self.file.flush()
+            except BrokenPipeError:
+                self.observer_lost = True
+                try:
+                    self.file.close()
+                except BrokenPipeError:
+                    pass
+                self.file = None
+
+    def persist_receipts(self):
+        if self.directory is not None:
+            for request, value in self.seals.items():
+                write_json(self.directory / (request + ".seal"), {"source_commit": self.source, "digest": value})
 
     def receipt(self, value):
-        self.send("request_complete", request=value["request"], digest=digest(value))
+        self.seals[value["request"]] = digest(value)
+        self.send("request_complete", request=value["request"], digest=self.seals[value["request"]])
+        if self.observer_lost:
+            # The live executor still owns and settles its operation reservations.
+            self.persist_receipts()
 
     def finish(self, code):
+        if self.directory is not None:
+            # The observer can die after accepting a pipe record but before persisting it.
+            self.persist_receipts()
+            # Recovery reads this only after the last kernel lease holder exits.
+            # A file never authorizes descendant signaling or early custody release.
+            write_json(self.directory / "executor.complete", {"source_commit": self.source, "exit_code": code})
         self.send("executor_complete", exit_code=code)
         if self.file is not None:
             self.file.close()

@@ -829,7 +829,10 @@ supervisor or executor does not declare surviving work terminal.
 Stage completion settles its own reservation before publishing passing results.
 The executor seals exact request receipts through a private completion channel
 that stage children do not inherit. Subscribers require its exact durable seal
-before returning a passing receipt. A later executor crash preserves those
+before returning a passing receipt. A live executor can finish and seal its
+already settled work if the supervisor dies; abandoned recovery accepts its
+final completion fact only after kernel custody becomes empty. These files
+never authorize signals or early custody release. A later executor crash preserves those
 independently completed receipts; unsealed or changed passing files become
 unverified. Final batch settlement additionally requires the executor's actual
 completion fact, including a legitimate failing outcome, rather than the outer
@@ -838,7 +841,9 @@ snapshot wrapper's exit or a summary file alone.
 If terminal cleanup cannot be verified, `cleanup_blocked` reports an unverified
 outcome while the original supervisor retains admission and source custody.
 A holder's own exit can let cleanup finish, but does not turn that unverified
-outcome into a pass. This diagnostic adds no cancellation permission: unshared
+outcome into a pass. A caller waiting for final batch cleanup receives exit 2
+from that private batch outcome; exact earlier request and stage facts remain
+unchanged. This diagnostic adds no cancellation permission: unshared
 work still requires one of the documented adverse health flags below, or an
 explicit `--force` for known unwanted work. No process basename grants an
 exception or identifies a safe cleanup target.

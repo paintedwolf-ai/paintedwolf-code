@@ -11,7 +11,7 @@ from unittest.mock import patch
 import verification_batch as batch
 import verification_cancel as cancel
 import verification_custody as custody
-from verification_completion import Publisher, Witness, sealed_receipt
+from verification_completion import Publisher, Witness, recovered_outcome, sealed_receipt
 from verification_tests import support
 from verification_tests.scheduler.test_terminal_settlement_execution import TerminalFixture
 
@@ -103,6 +103,42 @@ class CaptureBoundaryTests(TerminalFixture):
         self.assertTrue(witness.completed(1))
         self.assertFalse(witness.completed(0))
 
+    def test_dead_observer_does_not_interrupt_the_live_executors_completed_work(self):
+        directory = self.root / "continuation"
+        directory.mkdir()
+        witness = Witness()
+        descriptor = os.dup(witness.writer)
+        with patch.dict(os.environ, PW_TEST_COMPLETION_FD=str(descriptor)):
+            publisher = Publisher("source", directory)
+        witness.close()  # The original batch supervisor crashed.
+        receipt = {"request": "request", "status": "passed", "exit_code": 0, "source_commit": "source"}
+        (directory / "request.json").write_text(json.dumps(receipt))
+        publisher.receipt(receipt)
+        self.assertTrue(publisher.observer_lost)
+        self.assertTrue(sealed_receipt(directory, receipt))
+        requests = [{"ticket": "request"}]
+        self.assertEqual(recovered_outcome(directory, requests)["status"], "unverified")
+        (directory / "summary.json").write_text(json.dumps({"requests": 1, "source_commit": "source"}))
+        publisher.finish(0)
+        self.assertEqual(recovered_outcome(directory, requests), {"status": "completed", "exit_code": 0})
+        receipt["source_commit"] = "replacement"
+        (directory / "request.json").write_text(json.dumps(receipt))
+        self.assertEqual(recovered_outcome(directory, requests)["status"], "unverified")
+
+    def test_observer_death_between_pipe_publication_and_seal_persistence_recovers_exact_fact(self):
+        directory = self.root / "publication-race"
+        directory.mkdir()
+        witness = Witness()
+        with patch.dict(os.environ, PW_TEST_COMPLETION_FD=str(os.dup(witness.writer))):
+            publisher = Publisher("source", directory)
+        receipt = {"request": "request", "status": "passed", "source_commit": "source"}
+        publisher.receipt(receipt)
+        self.assertFalse(sealed_receipt(directory, receipt))
+        witness.close()  # No durable receipt seal was persisted by the observer.
+        publisher.finish(0)
+        self.assertTrue(publisher.observer_lost)
+        self.assertTrue(sealed_receipt(directory, receipt))
+
     def test_cleanup_diagnostic_does_not_add_public_cancel_permission(self):
         entry = {"ticket": "fixture", "kind": "invocation", "state": "running", "name": "fixture",
                  "health": {"state": "cleanup_blocked"}}
@@ -182,6 +218,48 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
 
     def test_final_batch_settles_a_helper_that_retains_only_the_batch_lease(self):
         self.batch_escape_case(False)
+
+    def test_blocked_final_shared_only_holder_retains_custody_and_returns_unverified(self):
+        ready, stop = self.root / "shared-holder", self.root / "shared-stop"
+        self.addCleanup(stop.touch)
+        descendant = ("import os,time\nfrom pathlib import Path\n"
+                      f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
+                      f"while not Path({str(stop)!r}).exists(): time.sleep(.01)\n")
+        tool = self.repo / "task"
+        original = tool.read_text()
+        marker = "if pathlib.Path(os.environ['FIXTURE_HOLD']).exists():"
+        self.assertEqual(original.count(marker), 1)
+        fork = ("if name == 'build':\n"
+                " fds=(int(os.environ['PW_TEST_EXECUTION_FD']),7,8)\n"
+                f" subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=fds,start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                f" while not pathlib.Path({str(ready)!r}).exists(): time.sleep(.01)\n")
+        tool.write_text(original.replace(marker, fork + marker))
+        owner = self.scripts / "verification_custody.py"
+        owner.write_text(owner.read_text() + "\ndef lease_holders(path):\n    raise PermissionError('fixture inspection refusal')\n")
+        self.queue.resume()
+        request = self.start("build")
+        self.await_condition(ready.exists)
+        def blocked():
+            return any(e.get("terminal_settlement", {}).get("state") == "blocked"
+                       for e in self.queue.status()["runs"] if e.get("kind") == "batch")
+        self.await_condition(blocked)
+        self.assertIsNone(request.poll(), "final shared custody was released as a pass")
+        active = next(e for e in self.queue.status()["runs"] if e.get("kind") == "batch")
+        directory = Path(active["directory"])
+        source = Path(self.records()[0]["cwd"])
+        self.assertTrue((source / "source.txt").is_file())
+        self.assertTrue(self.queue.status()["operations"], "cleanup dropped its admission guard")
+        pid = int(ready.read_text())
+        source_lease = Path(str(source) + ".lock")
+        info = source_lease.stat()
+        self.assertTrue(custody.holds(pid, source_lease, (info.st_dev, info.st_ino)))
+        self.assertEqual(self.receipts()[0]["status"], "passed", "completed stage facts were erased")
+        stop.touch()
+        self.collect(request, 2)
+        final = json.loads((directory / "finished.json").read_text())
+        self.assertEqual((final["status"], final["exit_code"]), ("unverified", 2))
+        self.assertEqual(self.receipts()[0]["status"], "passed")
+        self.assertEqual(self.queue.status()["runs"], [])
 
     def invocation_case(self, code):
         ready, parent_exit, stop = self.root / "invocation-holder", self.root / "invocation-exit", self.root / "invocation-stop"

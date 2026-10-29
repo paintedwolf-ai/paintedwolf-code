@@ -18,7 +18,7 @@ from verification_health import annotate, identity, owner_identity, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
 from verification_lifetime import Capability, TerminalSettlement
-from verification_completion import Witness, sealed_receipt
+from verification_completion import Witness, recovered_outcome, sealed_receipt
 
 
 MAX_REQUESTS = 32
@@ -61,7 +61,8 @@ def recover_abandoned(entry):
         receipt = directory / (request["ticket"] + ".json")
         if not receipt.exists():
             write_json(receipt, unfinished_receipt(directory, request, "All batch execution processes exited"))
-    write_json(directory / "finished.json", {"finished_at": time.time()})
+    write_json(directory / "finished.json", {"finished_at": time.time(),
+               **recovered_outcome(directory, plan["requests"])})
 
 
 def active_members(queue, members):
@@ -276,6 +277,9 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         result = value
                         print(f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})",
                               file=sys.stderr, flush=True)
+                        final = read_optional(directory / "finished.json") or {}
+                        if final.get("status") == "unverified":
+                            return 2
                         # The receipt keeps the tool's own code; the caller gets
                         # the runner's verdict.
                         return outcome_exit(result["exit_code"], result["status"] != "unverified")
@@ -477,7 +481,9 @@ def supervise(queue, directory, inherited_fd):
         capability.file.close()
         with queue.locked():
             queue.entries()
-        write_json(directory / "finished.json", {"finished_at": time.time()})
+        write_json(directory / "finished.json", {"finished_at": time.time(),
+                   "status": "unverified" if cleanup_blocked else "completed",
+                   "exit_code": 2 if cleanup_blocked else code})
         prune(queue, Path(entry["source"]))
     return 2 if cleanup_blocked else code
 
