@@ -9,7 +9,7 @@ import (
 func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 	for _, geometry := range [][2]uint64{{512, 4096}, {4096, 512}, {65536, 65536}} {
 		p := geometry[0]
-		storage, err := BoundUpgradeStorage(17, p, true)
+		storage, err := BoundUpgradeStorage(17, p, UpgradeSharing{OriginalClone: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -29,7 +29,7 @@ func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 		if !errors.As(err, &space) || space.NeededBytes != reserve {
 			t.Fatalf("insufficient reserve: %v", err)
 		}
-		copied, err := BoundUpgradeStorage(17, p, false)
+		copied, err := BoundUpgradeStorage(17, p, UpgradeSharing{})
 		if err != nil || copied.CloneBytes != 0 {
 			t.Fatalf("copied=%+v: %v", copied, err)
 		}
@@ -38,11 +38,11 @@ func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 
 func TestUpgradeStorageRejectsInvalidOrOverflowingGeometry(t *testing.T) {
 	for _, geometry := range [][2]uint64{{0, 4096}, {1, 0}, {1, 1000}, {1, 131072}, {math.MaxUint64, 4096}} {
-		if _, err := BoundUpgradeStorage(geometry[0], geometry[1], true); err == nil {
+		if _, err := BoundUpgradeStorage(geometry[0], geometry[1], UpgradeSharing{RecoveryClone: true}); err == nil {
 			t.Fatalf("accepted %v", geometry)
 		}
 	}
-	storage, err := BoundUpgradeStorage(1, 4096, true)
+	storage, err := BoundUpgradeStorage(1, 4096, UpgradeSharing{OriginalClone: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,5 +51,31 @@ func TestUpgradeStorageRejectsInvalidOrOverflowingGeometry(t *testing.T) {
 	}
 	if limit, err := storage.PageLimit(math.MaxUint64, 0); err != nil || limit != 4294967294 {
 		t.Fatalf("SQLite ceiling=%d: %v", limit, err)
+	}
+}
+
+func TestUpgradeSharingOwnersReserveOneRemainingDivergence(t *testing.T) {
+	const pages, pageBytes, scratch = uint64(17), uint64(4096), uint64(123)
+	const originalBytes = pages * pageBytes
+	for _, original := range []bool{false, true} {
+		for _, recovery := range []bool{false, true} {
+			storage, err := BoundUpgradeStorage(pages, pageBytes, UpgradeSharing{OriginalClone: original, RecoveryClone: recovery})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// With one old-file-sized budget and three new pages available, either
+			// immutable owner consumes that budget; two owners never consume it twice.
+			limit, err := storage.PageLimit((64<<20)+scratch+originalBytes+3*pageBytes, scratch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := pages + 3
+			if !original && !recovery {
+				want += pages
+			}
+			if limit != want {
+				t.Fatalf("sharing original=%v recovery=%v admitted%d pages,want%d", original, recovery, limit, want)
+			}
+		}
 	}
 }
