@@ -179,8 +179,8 @@ func (p capacityPlan) footprint(t *testing.T, name, event string, inputs map[str
 		visit(job)
 	}
 	return footprint{
-		total: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].total }),
-		macos: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].macos }),
+		total: widestAntichain(ancestors, func(job string) int { return weights[job].total }),
+		macos: widestAntichain(ancestors, func(job string) int { return weights[job].macos }),
 	}
 }
 
@@ -191,38 +191,6 @@ func admits(condition, event string) bool {
 		return true
 	}
 	return (match[2] == event) == (match[1] == "==")
-}
-
-// widestAntichain is the heaviest set of jobs that can run at once: none needs another, directly or transitively.
-func widestAntichain(t *testing.T, name string, ancestors map[string]map[string]bool, weight func(string) int) int {
-	t.Helper()
-	var jobs []string
-	for job := range ancestors {
-		jobs = append(jobs, job)
-	}
-	slices.Sort(jobs)
-	if len(jobs) > 20 {
-		t.Fatalf("%s has %d jobs; split it before its footprint can be bounded", name, len(jobs))
-	}
-	widest := 0
-	for subset := 1; subset < 1<<len(jobs); subset++ {
-		sum, independent := 0, true
-		for i, job := range jobs {
-			if subset&(1<<i) == 0 {
-				continue
-			}
-			sum += weight(job)
-			for j, other := range jobs {
-				if subset&(1<<j) != 0 && ancestors[job][other] {
-					independent = false
-				}
-			}
-		}
-		if independent && sum > widest {
-			widest = sum
-		}
-	}
-	return widest
 }
 
 func (p capacityPlan) jobFootprint(t *testing.T, workflow, name, event string, job capacityJob, inputs map[string]string) footprint {
