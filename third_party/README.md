@@ -64,7 +64,7 @@ budget returns a typed refusal with no partial tree.
 The modifications are recorded in [mvdan-sh.patch](mvdan-sh.patch). Only
 `syntax.Parse` activates `WithBudget(Budget{MaxBytes: ...})` or the shared
 `WithBudget(Budget{Pool: ...})`; other parser entry
-points explicitly refuse that option. The host's per-unit ceiling is 32 MiB
+points explicitly refuse that option. The host's per-unit ceiling is 64 MiB
 from `evaluation_memory_bytes`; the aggregate holds only the ledger's admitted
 high-water mark and is released after lowering. All active parse calls,
 retained state and old/new host-plan overlap must fit the host aggregate; a
@@ -216,13 +216,22 @@ marked lowering every scalar stays literal, so predicate matching is
 unchanged. `CompilePatternTextBounded` compiles text the host has already
 validated against its declared grammar (pcre-common-v1 for `-P`); it is not a
 qualification of the engine's own syntax. A `BoundedSession` meters one
-record's steps, time and allocation across every search of that record, and
+record's steps and allocation across every search of that record, and
 `Find` returns leftmost-first spans or, in longest mode, the POSIX
 leftmost-longest match with POSIX subexpression offsets: `Stop` keeps the
 preferred capture vector (farthest group-0 end, then per group in order a set
 group, the earliest start and the farthest end) and keeps backtracking, so
 each start explores every path. The metered writer emits no
 prefix or atomicity optimizations, which keeps that exploration exhaustive.
+
+P21 routes BRE, ERE and RE2 validated trees through the same metered VM.
+`CompileSyntaxBounded` preserves standard-tree captures, flags and literal
+private-use scalars; `CompileWordSyntaxBounded` adds ASCII word exclusions
+without interpreting pattern scalars as host markers. Record decoding is
+admitted before allocating rune/byte-offset arrays. Caller cancellation,
+operation steps and allocation bound the selected parser, lowering, writer and
+VM. The former `regex_cpu_ms` wall-clock deadline is retired in favor of
+`regex_work_steps`; these entry points make no CPU-time guarantee.
 
 The predicate grammar adapter also retains the selected Go1.26.4
 `regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
@@ -280,7 +289,18 @@ host-facing entry points:
   iterations take `n-1` steps. `Allocate` runs before concatenation,
   `sprintf`/`printf` (bounded by literal bytes, widths, precisions and argument
   sizes before formatting), `sub`/`gsub` results, `toupper`/`tolower`, `split`
-  and new array elements. The meter is cumulative created bytes, not live heap.
+  and new array elements. `Retain` reconciles the same allocation ledger between
+  completed input records against reachable globals, array keys and values,
+  active stack values and fields. Fields and substrings keep their actual full
+  backing string in the existing value owner; assignments, calls and returns
+  preserve it. New map keys are detached before insertion. Concatenation owns
+  its new bytes. Dead stack slots are cleared before reconciliation, and map
+  entry high-water storage remains charged after deletes. Shared backing strings
+  can be conservatively counted more than once. Temporaries within one record
+  still share the allocation ceiling; there is no cumulative input-byte ceiling.
+  The host reserves fixed interpreter/scanner capacity before execution and
+  admits variable storage through the same program working-memory account.
+  These logical reservations are distinct from a process heap/RSS ceiling.
 
 GoAWK regexes use Go's RE2 syntax with leftmost-longest matching (`Longest()`
 on every compiled regex, upstream). That is not POSIX ERE: the host refuses

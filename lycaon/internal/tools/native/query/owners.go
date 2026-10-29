@@ -159,6 +159,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("query invocation is not prepared")
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer func() {
+		for _, release := range inv.releases {
+			release()
+		}
+	}()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()

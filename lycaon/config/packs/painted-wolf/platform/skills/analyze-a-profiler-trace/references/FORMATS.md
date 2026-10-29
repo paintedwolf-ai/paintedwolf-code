@@ -2,7 +2,7 @@
 
 ## Identify by shape
 
-Query the top-level keys first (native `jq` with query `keys` for files under 20 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
+Query the top-level keys first (native `jq` with query `keys` for files at most 64 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
 
 | Shape you see | Format | Producer |
 |---|---|---|

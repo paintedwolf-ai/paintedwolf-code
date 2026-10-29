@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -482,7 +483,7 @@ func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 		}}, nil
 	}}
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
 			"curl": curlOp,
 			"tee":  teeOperation(f.Dir),

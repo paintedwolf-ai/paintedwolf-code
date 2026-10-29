@@ -54,7 +54,7 @@ func DocumentBytes(doc tools.EditorDocumentText, resolved projectpaths.Resolved,
 		return nil, AccessRead.SizeReject("read", resolved.DisplayPath, int64(len(text)), maxBytes)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDocumentUnrepresentable, err)
+		return nil, fmt.Errorf("%w: %w", ErrDocumentUnrepresentable, err)
 	}
 	if textfile.SHA256(encoded) == doc.SHA256 {
 		return encoded, nil

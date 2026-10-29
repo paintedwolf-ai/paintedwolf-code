@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -37,7 +36,7 @@ type Owners struct {
 	// StreamBytes bounds one invocation's stdout; zero selects stream_bytes.
 	StreamBytes int64
 
-	accounts   accounts
+	accounts   *accounts
 	catalog    toolcontract.LanguageCatalog
 	specs      map[string]toolcontract.CommandSpecification
 	ops        map[string]string
@@ -60,7 +59,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
+	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, accounts: &accounts{}, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
 	if o.signatures, err = decodeSignatures(catalog.Contracts["signatures"]); err != nil {
 		return nil, err
 	}
@@ -85,6 +84,14 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 		}
 	}
 	return o, nil
+}
+
+// ForProgram binds memory for one program while retaining the shared account
+// lookup cache and its lock alongside the immutable catalog and operations.
+func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
+	program := *o
+	program.Revisions.Memory = memory
+	return &program
 }
 
 // Operation returns the catalog operation identity that owns a command.
@@ -141,6 +148,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer inv.closeInputs()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()
@@ -159,14 +167,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

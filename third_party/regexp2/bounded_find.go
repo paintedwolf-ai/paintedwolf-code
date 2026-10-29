@@ -49,10 +49,31 @@ type BoundedProgram struct {
 // CompileMarkedBounded compiles a host-validated standard tree with numbered
 // captures, references and host markers under a meter.
 func CompileMarkedBounded(ctx context.Context, source *syntax.Regexp, limits SyntaxBudget) (program *BoundedProgram, err error) {
+	return compileSyntaxBounded(ctx, source, limits, true, false)
+}
+
+// CompileSyntaxBounded preserves standard-tree captures, flags and literal
+// scalars. Unlike the host-marked entry, it never interprets private scalars.
+func CompileSyntaxBounded(ctx context.Context, source *syntax.Regexp, limits SyntaxBudget) (*BoundedProgram, error) {
+	return compileSyntaxBounded(ctx, source, limits, false, false)
+}
+
+// CompileWordSyntaxBounded wraps a literal-preserving standard tree in ASCII
+// word exclusions. Pattern scalars cannot acquire host-marker authority.
+func CompileWordSyntaxBounded(ctx context.Context, source *syntax.Regexp, limits SyntaxBudget) (*BoundedProgram, error) {
+	return compileSyntaxBounded(ctx, source, limits, false, true)
+}
+
+func compileSyntaxBounded(ctx context.Context, source *syntax.Regexp, limits SyntaxBudget, marked, word bool) (program *BoundedProgram, err error) {
 	defer recoverBudget(&err)
 	m := budget.New(ctx, limits)
 	defer m.Close()
-	tree := enginesyntax.FromMarkedSyntax(source, m, MarkedInputBound)
+	var tree *enginesyntax.RegexTree
+	if marked {
+		tree = enginesyntax.FromMarkedSyntax(source, m, MarkedInputBound)
+	} else {
+		tree = enginesyntax.FromCapturingSyntax(source, m, MarkedInputBound, word)
+	}
 	code, err := enginesyntax.WriteMetered(tree, m)
 	if err != nil {
 		return nil, err
@@ -87,7 +108,7 @@ type BoundedSession struct {
 	runner *Runner
 }
 
-// Session opens a metered run. Steps, time and allocation accumulate across
+// Session opens a metered run. Steps and allocation accumulate across
 // every Find until Close.
 func (p *BoundedProgram) Session(ctx context.Context, limits SyntaxBudget) (session *BoundedSession, err error) {
 	defer recoverBudget(&err)
@@ -100,6 +121,13 @@ func (p *BoundedProgram) Session(ctx context.Context, limits SyntaxBudget) (sess
 func (s *BoundedSession) Charge(steps int64) (err error) {
 	defer recoverBudget(&err)
 	s.meter.Step(steps)
+	return nil
+}
+
+// ReserveMemory admits host-side record decoding before allocation.
+func (s *BoundedSession) ReserveMemory(bytes int64) (err error) {
+	defer recoverBudget(&err)
+	s.meter.Alloc(bytes)
 	return nil
 }
 

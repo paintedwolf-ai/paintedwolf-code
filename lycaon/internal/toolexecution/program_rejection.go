@@ -18,7 +18,7 @@ func completeNativeRejection(bound toolcontract.BoundOperation, err error) {
 		return
 	}
 	facts, invocation := definition.Facts(), bound.Invocation()
-	toolrejection.CompleteFailureMetadata(rejected, facts.Identity, facts.Contract.Owner)
+	rejected = toolrejection.CompleteFailureMetadata(rejected, facts.Identity, facts.Contract.Owner)
 	// A source location is one unit. Mixing an owner's nested start with the
 	// enclosing program's end would fabricate a range.
 	for _, key := range []string{"source_start_byte", "source_end_byte", "source_line", "source_column"} {

@@ -64,14 +64,15 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if bound.Null {
 		return commandprogram.NullInput(), nil
 	}
-	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
+	source, err := p.Owners.Revisions.OpenStream(ctx, p.Tools, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if err := p.Owners.Pins.AppendRevisionPin(ctx, destination.Invocation.Identity.ExecutionID, source.Revision); err != nil {
+		_ = source.Reader.Close()
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
-	return io.NopCloser(strings.NewReader(source.Content)), nil
+	return source.Reader, nil
 }
 
 // Capture pins one source script from its accepted document or published disk.
@@ -126,6 +127,7 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 	if err == nil {
 		return nil
 	}
+	err = tools.CommandResourceRejection(err)
 	cmd := "redirect"
 	if operator != "" {
 		cmd = "redirect " + operator
@@ -199,7 +201,7 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
+	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes, Memory: o.Revisions.Memory,
 		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
 	if err != nil {
 		return result, err

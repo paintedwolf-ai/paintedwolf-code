@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -174,7 +175,6 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	inv := h.invocation()
 	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
 	testutil.FailErr(t, "open input", err)
-	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed\n"), 0o644))
 	data, err := io.ReadAll(input)
 	testutil.FailErr(t, "read input", err)
 	pins := h.pins.pins[inv.Identity.ExecutionID]
@@ -183,6 +183,23 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	}
 	if _, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: h.invocation(), Target: commandprogram.Field{Value: "missing.txt"}}); err == nil {
 		t.Fatal("missing input opened")
+	}
+}
+
+func TestInputRedirectRefusesChangedCapturedBytes(t *testing.T) {
+	h := newHarness(t, map[string]string{"in.txt": "captured input\n"})
+	inv := h.invocation()
+	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
+	testutil.FailErr(t, "open input", err)
+	defer input.Close()
+	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed bytes!\n"), 0644))
+	data, err := io.ReadAll(input)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" || len(data) != 0 {
+		t.Fatalf("changed input escaped under captured pin: %q %v", data, err)
+	}
+	pins := h.pins.pins[inv.Identity.ExecutionID]
+	if len(pins) != 1 || pins[0].ContentSHA256 != textfile.SHA256([]byte("captured input\n")) {
+		t.Fatalf("capture pins %+v", pins)
 	}
 }
 
@@ -200,7 +217,8 @@ func TestRedirectOutsideRootsIsRefusedWithoutEffect(t *testing.T) {
 		t.Fatal("refused redirect created a file")
 	}
 	r := h.run("", "rm", "-f", "--", outside)
-	if r.result.Terminal != toolcontract.ProducerRefused || toolrejection.AsToolReject(r.err) == nil || r.result.EffectCertainty != toolcontract.NoEffect || !strings.Contains(r.stderr, r.result.StopCode) {
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || reject == nil || reject.Code != r.result.StopCode || r.result.EffectCertainty != toolcontract.NoEffect {
 		t.Fatalf("rm outside roots %+v %v %q", r.result, r.err, r.stderr)
 	}
 }

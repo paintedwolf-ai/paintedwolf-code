@@ -1,8 +1,10 @@
 package textutil
 
 import (
-	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"io/fs"
 	"path"
@@ -12,8 +14,9 @@ import (
 	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // awkInterpreterBytes is the program working memory held while GoAWK runs;
@@ -46,49 +49,51 @@ func runAwk(inv *invocation) error {
 	if err := awkInspect(inv, programWord, program); err != nil {
 		return err
 	}
-	files := pinnedFiles{}
-	var args []string
-	sources, err := inv.openInputs(operands)
+	paths, err := newPaths(inv)
 	if err != nil {
 		return err
 	}
-	defer closeSources(sources)
-	if inv.status != 0 {
-		inv.status = 2
-	}
-	if len(operands) > 0 {
-		for _, source := range sources {
-			if source.name != "-" {
-				content, err := io.ReadAll(source.reader)
-				if err != nil {
-					return err
-				}
-				files[fsKey(source.name)] = content
-			}
-			args = append(args, source.name)
-		}
-		if len(args) == 0 {
-			return nil
+	files := &pinnedFiles{inv: inv, paths: paths, operands: make(map[string]commandprogram.Field)}
+	defer files.Close()
+	var args []string
+	for _, operand := range operands {
+		args = append(args, operand.Value)
+		if operand.Value != "-" {
+			files.operands[fsKey(operand.Value)] = operand
 		}
 	}
-	if err := inv.reserve(awkInterpreterBytes); err != nil {
+	if err := inv.reserve(awkInterpreterBytes + 3*inv.limit("record_bytes")); err != nil {
 		return err
 	}
 	interpreter, err := interp.New(program)
 	if err != nil {
 		return err
 	}
-	budget := &awkBudget{steps: inv.limit("query_work_steps"), bytes: inv.limit("evaluation_memory_bytes")}
+	budget := &awkBudget{steps: inv.limit("query_work_steps"), bytes: inv.limit("evaluation_memory_bytes"), memory: inv.ports.Memory, ctx: inv.ctx}
+	defer budget.Close()
 	status, err := interpreter.ExecuteContext(inv.ctx, &interp.Config{
 		Stdin: inv.streams.Input, Output: inv.out, Error: &inv.errors,
 		Argv0: "awk", Args: args, NoArgVars: true, Vars: vars,
 		NoExec: true, NoFileWrites: true, FileSystem: files,
-		Environ: []string{}, Budget: budget,
+		Environ: []string{}, Budget: budget, MaxInputRecord: int(inv.limit("record_bytes")),
 	})
+	if files.failure != nil {
+		return files.failure
+	}
+	var missing *awkInputFailure
+	if errors.As(err, &missing) {
+		fmt.Fprintf(&inv.errors, "awk: fatal: cannot open file '%s' for reading: %s\n", missing.name, missing.reason)
+		inv.status = 2
+		return nil
+	}
+	var record *interp.RecordLimitError
+	if errors.As(err, &record) {
+		return tools.CommandLimitExceeded("record_bytes", int64(record.Maximum), int64(record.Observed))
+	}
 	var limit *awkLimit
 	switch {
 	case errors.As(err, &limit):
-		return nativeutility.LimitExceeded(limit.id, limit.maximum, limit.maximum+1)
+		return tools.CommandLimitExceeded(limit.id, limit.maximum, limit.maximum+1)
 	case inv.ctx.Err() != nil:
 		return inv.ctx.Err()
 	case err != nil:
@@ -189,6 +194,8 @@ type awkLimit struct {
 func (l *awkLimit) Error() string { return "awk exceeded " + l.id }
 
 type awkBudget struct {
+	ctx          context.Context
+	memory       *toolcontract.ProgramMemory
 	steps, bytes int64
 	used, made   int64
 }
@@ -201,22 +208,71 @@ func (b *awkBudget) Step() error {
 }
 
 func (b *awkBudget) Allocate(n int) error {
-	if b.made += int64(n); b.made > b.bytes {
+	if n < 0 || int64(n) > b.bytes-b.made {
 		return &awkLimit{id: "evaluation_memory_bytes", maximum: b.bytes}
 	}
+	if b.memory != nil {
+		if err := b.memory.ReserveBytes(b.ctx, int64(n)); err != nil {
+			return err
+		}
+	}
+	b.made += int64(n)
 	return nil
 }
 
-// pinnedFiles serves PATH operands from their pinned captures only; any other
-// name does not exist.
-type pinnedFiles map[string][]byte
+func (b *awkBudget) Retain(n int) error {
+	if int64(n) >= b.made {
+		return b.Allocate(n - int(b.made))
+	}
+	if b.memory != nil {
+		b.memory.ReleaseBytes(b.made - int64(n))
+	}
+	b.made = int64(n)
+	return nil
+}
+func (b *awkBudget) Close() {
+	if b.memory != nil {
+		b.memory.ReleaseBytes(b.made)
+	}
+	b.made = 0
+}
 
-func (f pinnedFiles) Open(name string) (fs.File, error) {
-	content, ok := f[name]
+// pinnedFiles opens the current AWK operand through the shared capture owner.
+// GoAWK consumes ordinary input files sequentially; no operand body is retained.
+type pinnedFiles struct {
+	inv      *invocation
+	paths    *projectpaths.ProgramPaths
+	operands map[string]commandprogram.Field
+	current  io.ReadCloser
+	failure  error
+}
+
+func (f *pinnedFiles) Close() {
+	if f.current != nil {
+		_ = f.current.Close()
+		f.current = nil
+	}
+}
+func (f *pinnedFiles) Open(name string) (fs.File, error) {
+	operand, ok := f.operands[name]
 	if !ok {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
-	return &pinnedFile{name: name, Reader: bytes.NewReader(content), size: int64(len(content))}, nil
+	f.Close()
+	reader, revision, err := f.inv.capture(f.paths, operand)
+	if err != nil {
+		if reason, ordinaryFailure := ordinary(err); ordinaryFailure {
+			return nil, &awkInputFailure{name: operand.Value, reason: reason}
+		}
+		f.failure = pathRejection(err, operand)
+		return nil, err
+	}
+	f.current = reader
+	var size int64
+	if revision != nil {
+		size = revision.ContentBytes
+	}
+	return &pinnedFile{ReadCloser: reader, name: name, size: size}, nil
 }
 
 // fsKey spells a name the way GoAWK presents it to its file system.
@@ -228,13 +284,12 @@ func fsKey(name string) string {
 }
 
 type pinnedFile struct {
-	*bytes.Reader
+	io.ReadCloser
 	name string
 	size int64
 }
 
 func (f *pinnedFile) Stat() (fs.FileInfo, error) { return pinnedInfo{f}, nil }
-func (f *pinnedFile) Close() error               { return nil }
 
 type pinnedInfo struct{ f *pinnedFile }
 
@@ -266,3 +321,7 @@ func awkProgram(inv *invocation) (commandprogram.Field, string, commandprogram.F
 	}
 	return files[0].Values[0], strings.Join(parts, "\n"), operands, nil
 }
+
+type awkInputFailure struct{ name, reason string }
+
+func (e *awkInputFailure) Error() string { return e.name + ": " + e.reason }

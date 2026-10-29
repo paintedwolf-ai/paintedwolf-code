@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}}
-	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: natives}, nil
 	}
 	out, err := f.call(t, t.Context(), "git status -sb; git -C sub ls-files; git --no-pager log --format=%s")
@@ -111,7 +112,7 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "a"), []byte("a\n"), 0o644))
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
-	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			prepared, err := owners.PrepareGit(frame, request)
 			if err != nil {

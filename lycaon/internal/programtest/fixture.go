@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -99,7 +100,7 @@ func New(t *testing.T, options Options) *Fixture {
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{},
-		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
