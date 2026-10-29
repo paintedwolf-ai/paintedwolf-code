@@ -41,6 +41,17 @@ class NativeRepositoryAssemblyTests(unittest.TestCase):
         arguments = {"catalog": self.catalog, "private": self.private, "rehearsal": True, "package": PACKAGE, **options}
         return assemble(family, selected, self.inputs, destination, "preview", **arguments), destination
 
+    def test_apt_indexes_list_platform_named_release_packages_by_their_architecture(self):
+        released = "paintedwolf-repository-fixture_v0.0.1_linux-x86_64.deb"
+        selected = manifest("deb", self.inputs, file=released)
+        (self.inputs / NATIVE["deb"]).rename(self.inputs / released)
+        receipt, directory = self.assemble("deb", selected)
+        admit(receipt, directory, self.catalog, True)
+        amd64 = (directory / "dists/preview/main/binary-amd64/Packages").read_text()
+        self.assertIn("Package: " + PACKAGE + "\n", amd64)
+        self.assertIn("Filename: " + receipt["packages"][0]["file"] + "\n", amd64)
+        self.assertEqual(sorted(path.name for path in (directory / "dists/preview/main").iterdir()), ["binary-amd64"])
+
     def test_signed_generations_admit_and_retain_post_signing_package_identity(self):
         for family in ["deb", "rpm"]:
             with self.subTest(family=family):

@@ -50,10 +50,15 @@ def signed_rpm(path: Path, catalog: Path, rehearsal: bool) -> bool:
 def apt_indexes(destination: Path, channel: str, architectures: list[str], catalog: Path,
                 private: Path | None, rehearsal: bool):
     distribution = destination / "dists" / channel
+    # Release files are named by platform, so apt-ftparchive's filename-based -a filter would drop
+    # them; each index selects its stanzas by their own Architecture field instead.
+    listing = subprocess.check_output(["apt-ftparchive", "packages", "pool"], cwd=destination).decode()
+    stanzas = [stanza.strip("\n") for stanza in listing.split("\n\n") if stanza.strip()]
     for arch in architectures:
         binary = distribution / "main" / ("binary-" + arch)
         binary.mkdir(parents=True)
-        data = subprocess.check_output(["apt-ftparchive", "-a", arch, "packages", "pool"], cwd=destination)
+        data = "".join(stanza + "\n\n" for stanza in stanzas
+                       if re.search(r"^Architecture: (\S+)$", stanza, re.M).group(1) in {arch, "all"}).encode()
         (binary / "Packages").write_bytes(data)
         (binary / "Packages.gz").write_bytes(gzip.compress(data, mtime=0))
         for path in [binary / "Packages", binary / "Packages.gz"]:
