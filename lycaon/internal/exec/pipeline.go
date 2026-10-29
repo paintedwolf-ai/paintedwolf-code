@@ -60,10 +60,6 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
 }
 
-func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
-	return configureStageCmdEnv(cmd, opts, nil)
-}
-
 // ProcessEnvironment builds the sanitized base environment for a process launch
 // before OS-specific sandbox confinement variables (such as proxy or SSH
 // wrappers) are attached. Both the command program's native env builtin and
@@ -74,7 +70,7 @@ func ProcessEnvironment(opts ExecOpts) ([]string, error) {
 
 func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
 	provided := opts.Env
-	if provided == nil && (opts.Launch.Environment == EnvironmentReduced || opts.Launch.Kind == LaunchAgentCommand) {
+	if opts.Launch.reduced() {
 		provided = ReducedEnviron()
 	}
 	if len(opts.Launch.ExtraEnv) > 0 {

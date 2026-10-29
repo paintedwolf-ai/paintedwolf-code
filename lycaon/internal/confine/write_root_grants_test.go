@@ -495,3 +495,22 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 		t.Fatalf("session scratch root %q not unioned into write roots: %v", scratchDir, roots)
 	}
 }
+
+func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin confstr user roots only")
+	}
+	userRoots := darwinUserRoots()
+	if len(userRoots) == 0 {
+		t.Fatal("darwinUserRoots() returned no confstr roots on darwin")
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
+	for _, root := range userRoots {
+		probe := filepath.Join(root, "xcrun_db-probe")
+		if !PathWithinWriteRoots(probe, roots) {
+			t.Fatalf("darwin confstr root child %q not within WriteRootsForBoundary when TMPDIR is overridden: %v", probe, roots)
+		}
+	}
+}

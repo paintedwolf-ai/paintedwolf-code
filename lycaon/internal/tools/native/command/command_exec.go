@@ -237,6 +237,7 @@ func runCommandForeground(
 		sourceRevision, sourceRootDigest = source.Revision, source.Root
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		bound.close(ctx)
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	index := watchIndex(tctx, confinement)
