@@ -1,0 +1,147 @@
+package db
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+func completeRetainedFixture(t *testing.T) (string, migrations.Plan) {
+	t.Helper()
+	path, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 300, "/work/b": 9})
+	writer, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open complete source", err)
+	_, err = writer.Exec(`DELETE FROM source_manifest_entries WHERE chunk_id='orphan'; DELETE FROM source_manifest_chunks WHERE id='orphan'; DELETE FROM source_manifest_staging`)
+	testutil.FailErr(t, "retain every source row", err)
+	plan, err := PlanUpgrade(t.Context(), writer)
+	testutil.FailErr(t, "plan complete source", err)
+	plan, err = plan.PrepareRetainedStorage(t.Context(), writer)
+	testutil.FailErr(t, "measure complete source", err)
+	var actual uint64
+	testutil.FailErr(t, "count primary rows", writer.QueryRow("SELECT COUNT(*) FROM source_manifest_entries NOT INDEXED").Scan(&actual))
+	measured, ok := plan.RetainedSourceEntries()
+	if !ok || measured != actual {
+		t.Fatalf("physical entry count=%d measured=%v actual=%d", measured, ok, actual)
+	}
+	testutil.FailErr(t, "close complete source", writer.Close())
+	testutil.FailErr(t, "seal complete source", sealRebuiltStore(t.Context(), path))
+	return path, plan
+}
+
+func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
+	source, plan := completeRetainedFixture(t)
+	before, err := os.ReadFile(source)
+	testutil.FailErr(t, "read complete original", err)
+	destination := filepath.Join(t.TempDir(), "replacement.db")
+	prepared, err := copyRetainedStore(t.Context(), source, destination, plan)
+	testutil.FailErr(t, "prepare complete whole-file image", err)
+	if !prepared.wholeFile || prepared.validatedIdentity == "" {
+		t.Fatal("complete selection reconstructed rows or lost validation custody")
+	}
+	after, err := os.ReadFile(source)
+	testutil.FailErr(t, "read retained original", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("private whole-file preparation changed original")
+	}
+	reader, err := openReader(t.Context(), destination)
+	testutil.FailErr(t, "open private image", err)
+	storage, err := InspectUpgradeStorage(t.Context(), reader, destination, true, prepared.sharedOriginal)
+	testutil.FailErr(t, "account staged sharing", err)
+	if (storage.CloneBytes != 0) != prepared.sharedOriginal {
+		t.Fatal("staged clone lost original divergence reserve")
+	}
+	testutil.FailErr(t, "close private image", reader.Close())
+	captured := false
+	hooks := UpgradeHooks{Before: func(_ context.Context, source UpgradeSource, _ migrations.Plan) error {
+		captured = true
+		if source.SharedOriginal != prepared.sharedOriginal {
+			t.Fatal("recovery lost clone provenance")
+		}
+		return nil
+	}}
+	testutil.FailErr(t, "capture validated same image", captureRetainedRecovery(t.Context(), destination, plan, hooks, false, prepared))
+	if !captured {
+		t.Fatal("validated image did not reach recovery")
+	}
+	// Validation custody applies to one file identity, not a reusable boolean.
+	raw, err := os.ReadFile(destination)
+	testutil.FailErr(t, "read prepared image", err)
+	testutil.FailErr(t, "move validated image", os.Rename(destination, destination+".saved"))
+	testutil.FailErr(t, "replace with identical different inode", os.WriteFile(destination, raw, 0600))
+	captured = false
+	if err := captureRetainedRecovery(t.Context(), destination, plan, hooks, false, prepared); err == nil || captured {
+		t.Fatal("replacement reused another file's validation")
+	}
+}
+
+func TestRetainedIncompleteSelectionKeepsRowReconstruction(t *testing.T) {
+	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
+	reader, err := openReader(t.Context(), source)
+	testutil.FailErr(t, "open incomplete source", err)
+	plan, err := PlanUpgrade(t.Context(), reader)
+	testutil.FailErr(t, "plan incomplete source", err)
+	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)
+	testutil.FailErr(t, "measure incomplete source", err)
+	testutil.FailErr(t, "close incomplete source", reader.Close())
+	prepared, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan)
+	testutil.FailErr(t, "retain selected rows", err)
+	if prepared.wholeFile || prepared.sharedOriginal || prepared.validatedIdentity != "" {
+		t.Fatal("incomplete retention bypassed row reconstruction")
+	}
+}
+
+func TestRetainedCompleteMalformedCountsStillRefuse(t *testing.T) {
+	source, _ := completeRetainedFixture(t)
+	writer, err := sql.Open("sqlite", source)
+	testutil.FailErr(t, "open malformed fixture", err)
+	_, err = writer.Exec("UPDATE source_manifest_chunks SET entry_count=entry_count+1")
+	testutil.FailErr(t, "break declared counts", err)
+	plan, err := PlanUpgrade(t.Context(), writer)
+	testutil.FailErr(t, "plan malformed counts", err)
+	plan, err = plan.PrepareRetainedStorage(t.Context(), writer)
+	testutil.FailErr(t, "measure primary rows", err)
+	testutil.FailErr(t, "close malformed fixture", writer.Close())
+	_, err = copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan)
+	if !errors.Is(err, migrations.ErrIntegrity) {
+		t.Fatalf("bad source counts were admitted: %v", err)
+	}
+}
+
+func TestRetainedCompleteDamagedSecondaryIndexRebuilds(t *testing.T) {
+	source, _ := completeRetainedFixture(t)
+	reader, err := openReader(t.Context(), source)
+	testutil.FailErr(t, "open complete source", err)
+	var page, size int64
+	testutil.FailErr(t, "locate secondary index", reader.QueryRow("SELECT rootpage FROM sqlite_schema WHERE name='idx_source_manifest_entries_path'").Scan(&page))
+	testutil.FailErr(t, "read page size", reader.QueryRow("PRAGMA page_size").Scan(&size))
+	testutil.FailErr(t, "close source", reader.Close())
+	file, err := os.OpenFile(source, os.O_RDWR, 0)
+	testutil.FailErr(t, "open index page", err)
+	_, err = file.WriteAt(make([]byte, size), (page-1)*size)
+	testutil.FailErr(t, "damage secondary page", err)
+	testutil.FailErr(t, "close index bytes", file.Close())
+	reader, err = openReader(t.Context(), source)
+	testutil.FailErr(t, "open damaged source", err)
+	plan, err := PlanUpgrade(t.Context(), reader)
+	testutil.FailErr(t, "plan damaged source", err)
+	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)
+	testutil.FailErr(t, "measure damaged source", err)
+	testutil.FailErr(t, "close damaged source", reader.Close())
+	destination := filepath.Join(t.TempDir(), "replacement.db")
+	prepared, err := copyRetainedStore(t.Context(), source, destination, plan)
+	testutil.FailErr(t, "rebuild damaged secondary index", err)
+	if prepared.wholeFile || prepared.sharedOriginal {
+		t.Fatal("damaged index retained whole-file validation")
+	}
+	reader, err = openReader(t.Context(), destination)
+	testutil.FailErr(t, "open rebuilt image", err)
+	defer reader.Close()
+	testutil.FailErr(t, "fully validate rebuilt image", validateUpgradeIntegrity(t.Context(), reader))
+}

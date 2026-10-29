@@ -14,9 +14,15 @@ import (
 //go:embed released-baselines.json
 var releasedBaselinesJSON []byte
 
+// UpgradeSource identifies the held recovery reader and immutable block sharing.
+type UpgradeSource struct {
+	*sql.DB
+	SharedOriginal bool
+}
+
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {
-	Before func(context.Context, *sql.DB, migrations.Plan) error
+	Before func(context.Context, UpgradeSource, migrations.Plan) error
 	// BeforeCurrentOpen captures application-version recovery using the existing reader.
 	BeforeCurrentOpen func(context.Context, *sql.DB, migrations.Plan) error
 	After             func(context.Context, migrations.Plan) error
@@ -162,7 +168,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		if hooks.Progress != nil {
 			hooks.Progress(migrations.Snapshotting)
 		}
-		if err := hooks.Before(ctx, reader, plan); err != nil {
+		if err := hooks.Before(ctx, UpgradeSource{DB: reader}, plan); err != nil {
 			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Source.Revision, "capture upgrade recovery")
 		}
 	}

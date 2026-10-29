@@ -245,7 +245,7 @@ func preflightRetainedUpgrade(ctx context.Context, opts CreateOpts, plan migrati
 	if err != nil || !known {
 		return err
 	}
-	storage, err := db.InspectUpgradeStorage(ctx, opts.SQLDB, opts.DBPath, false)
+	storage, err := db.InspectUpgradeStorage(ctx, opts.SQLDB, opts.DBPath, false, opts.SharedOriginal)
 	if err != nil {
 		return err
 	}

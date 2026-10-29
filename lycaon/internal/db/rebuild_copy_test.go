@@ -21,7 +21,8 @@ func TestRetainedCopyPreservesReleasedRowsAndHistory(t *testing.T) {
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan upgrade", err)
 	destination := filepath.Join(t.TempDir(), "rebuilt.db")
-	testutil.FailErr(t, "copy retained store", copyRetainedStore(t.Context(), source, destination, plan))
+	_, err = copyRetainedStore(t.Context(), source, destination, plan)
+	testutil.FailErr(t, "copy retained store", err)
 	copyDB, err := sql.Open("sqlite", destination)
 	testutil.FailErr(t, "open retained copy", err)
 	defer func() { _ = copyDB.Close() }()
@@ -115,7 +116,8 @@ func TestRetainedCopyDoesNotReadRetiredIndex(t *testing.T) {
 	}
 	testutil.FailErr(t, "close damaged source", reader.Close())
 	destination := filepath.Join(t.TempDir(), "rebuilt.db")
-	testutil.FailErr(t, "copy without obsolete index reads", copyRetainedStore(t.Context(), source, destination, plan))
+	_, err = copyRetainedStore(t.Context(), source, destination, plan)
+	testutil.FailErr(t, "copy without obsolete index reads", err)
 	testutil.FailErr(t, "upgrade retained data", UpgradeStaged(t.Context(), destination))
 }
 
@@ -126,7 +128,7 @@ func TestRetainedCopyRefusesExistingDestination(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan upgrade", err)
-	if err := copyRetainedStore(t.Context(), source, source, plan); !os.IsExist(err) {
+	if _, err := copyRetainedStore(t.Context(), source, source, plan); !os.IsExist(err) {
 		t.Fatalf("existing target error = %v", err)
 	}
 	actual, err := inspectSchema(t.Context(), reader)
