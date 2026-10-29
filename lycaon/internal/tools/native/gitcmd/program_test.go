@@ -360,3 +360,51 @@ func nestedCommand(dispatch commandprogram.Dispatch) commandprogram.NestedComman
 	return nested
 }
 
+// TestProgramEntryBisectRunDispatchesItsCheck: git bisect run hands its check
+// to the program's own dispatch, here the native git grep, and names the
+// first bad commit through the command entry.
+func TestProgramEntryBisectRunDispatchesItsCheck(t *testing.T) {
+	bin, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "bundled git", err)
+	f := newProgramFixture(t)
+	gitRun := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = f.dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=Ann", "GIT_AUTHOR_EMAIL=ann@example.test", "GIT_COMMITTER_NAME=Ann", "GIT_COMMITTER_EMAIL=ann@example.test")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	gitRun("init", "-q", "-b", "main")
+	for i := 1; i <= 12; i++ {
+		state := "good\n"
+		if i >= 7 {
+			state = "bad\n"
+		}
+		testutil.FailErr(t, "seed state", os.WriteFile(filepath.Join(f.dir, "state"), []byte(state), 0o644))
+		gitRun("add", "state")
+		gitRun("commit", "-q", "--allow-empty", "-m", fmt.Sprintf("commit %d", i))
+	}
+	culprit := gitRun("rev-parse", "HEAD~5")
+	f.bindMutationOwners(t)
+	out, err := f.call(t, t.Context(), "git bisect start HEAD HEAD~11 && git bisect run git grep -q good -- state")
+	testutil.FailErr(t, "bisect program", err)
+	var outcome struct {
+		Stdout string `json:"stdout"`
+		State  string `json:"state"`
+	}
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
+	if outcome.State != "completed" || !strings.Contains(outcome.Stdout, culprit+" is the first bad commit\n") || !strings.Contains(outcome.Stdout, "running 'git' 'grep' '-q' 'good' '--' 'state'\n") {
+		t.Fatalf("program outcome %s", out)
+	}
+	if executions := f.executions(t); executions["git bisect start"] != "completed;" || executions["git bisect run"] != "completed;" || !strings.HasPrefix(executions["git grep"], "completed;") {
+		t.Fatalf("child receipts %v", executions)
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, ".git", "BISECT_START")); err != nil {
+		t.Fatal("bisect session ended before git bisect reset")
+	}
+}
