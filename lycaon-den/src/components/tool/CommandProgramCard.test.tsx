@@ -129,6 +129,47 @@ describe("CommandProgramCard", () => {
     expect(container.textContent).not.toMatch(/[A-Z]{4,} [A-Z]{4,}/);
   });
 
+  it.each([
+    {
+      name: "pipeline", source: "printf 'one\\ntwo\\n' | grep one | wc -l", idle: node("structural-root", 1, "not_started"),
+      executions: [
+        execution("p1", { node_id: "n1", native_command: "printf", command: "printf 'one\\ntwo\\n'" }),
+        execution("p2", { node_id: "n2", native_command: "grep", command: "grep one" }),
+        execution("p3", { node_id: "n3", native_command: "wc", command: "wc -l" }),
+      ],
+    },
+    {
+      name: "untaken branch", source: "if false; then\n  echo unused\nfi", idle: node("untaken-branch", 2, "untaken"),
+      executions: [execution("condition", { native_command: "false", command: "false", status_code: 1 })],
+    },
+  ])("keeps a completed $name free of remaining work", async ({ source, idle, executions }) => {
+    const completed = program({ progress_state: "committed" });
+    const { container } = renderCard(commandPart(completed, { args: { command: source } }), () => page({
+      program: completed,
+      executions,
+      nodes: [...executions.map((row) => node(row.node_id, 1)), idle, node("structural-list", 1, "not_started")],
+      nodes_omitted: 2,
+    }));
+    await waitFor(() => expect(container.querySelectorAll('[data-testid="command-program-stage"]')).toHaveLength(executions.length));
+    expect(section(container, "result")?.textContent).toContain("StateCompleted");
+    expect(section(container, "remaining")).toBeNull();
+  });
+
+  it.each(["rejected", "failed", "interrupted"] as const)("preserves remaining statements when the program is %s", async (state) => {
+    const stopped = program({ state, status_code: 130, progress_state: "unknown" });
+    const { container } = renderCard(commandPart(stopped), () => page({
+      program: stopped,
+      nodes: [node("n1", 1), node("pending-statement", 4, "not_started"), node("untaken-branch", 9, "untaken")],
+      nodes_omitted: 3,
+    }));
+    await waitFor(() => expect(container.querySelectorAll('[data-testid="command-program-stage"]')).toHaveLength(3));
+    const remaining = section(container, "remaining")?.textContent ?? "";
+    expect(remaining).toContain("Not startedLine 4, column 1");
+    expect(remaining).toContain("Omitted statements3");
+    expect(remaining).toContain("ProgressUnknown");
+    expect(remaining).not.toContain("Line 9");
+  });
+
   it("shows failure, partial effects and unknown outcome without a success state", async () => {
     const failed = program({ state: "failed", status_code: 1, stop_code: "HTTP_REQUEST_FAILED" });
     const part = commandPart(failed, {
