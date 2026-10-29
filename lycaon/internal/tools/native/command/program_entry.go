@@ -6,10 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"slices"
 	"strings"
@@ -25,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -32,7 +29,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ProgramRuntime holds the host services every command program composes.
@@ -416,7 +416,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	}
 	active := []toolcontract.OperationDefinition{external}
 	if write, ok := r.Registry.Definition("write"); ok {
-		active = append(active, write.Operation)
+		active = append(active, offeredProgramDefinition("write", write.Operation))
 	}
 	seen := map[string]bool{external.Facts().Identity: true, "write": true}
 	for _, operation := range owners.Natives {
@@ -426,7 +426,13 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 			}
 			seen[tool] = true
 			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, definition.Operation)
+				active = append(active, offeredProgramDefinition(tool, definition.Operation))
+			} else if spec, ok := run.catalogCommand(tool); ok {
+				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				active = append(active, definition)
 			}
 		}
 	}
@@ -444,6 +450,17 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	definitions, err := run.controlDefinitions()
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	for _, name := range []string{"cd", "realpath", "readlink", "native_path"} {
+		spec, ok := run.catalogCommand(name)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("path command %s missing from catalog", name)
+		}
+		definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		definitions[name] = definition
 	}
 	hostCommands := make([]string, 0, len(definitions))
 	for name := range definitions {
@@ -819,7 +836,7 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 
 // nativeArguments attaches any call-level capability declarations that the
 // bound native operation contract accepts.
-func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract, loopbackPorts []uint16) map[string]any {
 	arguments := make(map[string]any, len(base)+len(r.envelope))
 	for k, v := range base {
 		arguments[k] = v
@@ -833,6 +850,26 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 		}
 		if len(supported) > 0 {
 			arguments["capability_request"] = supported
+		}
+	}
+	foreignPorts := make([]uint16, 0, len(loopbackPorts))
+	for _, port := range loopbackPorts {
+		if !slices.Contains(r.tc.Local.OwnedLoopbackPorts, port) {
+			foreignPorts = append(foreignPorts, port)
+		}
+	}
+	if len(foreignPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
+		request, _ := arguments["capability_request"].(map[string]any)
+		if request == nil {
+			request = map[string]any{}
+			arguments["capability_request"] = request
+		}
+		if _, explicit := request["loopback_connect"]; !explicit {
+			ports := make([]any, len(foreignPorts))
+			for i, port := range foreignPorts {
+				ports[i] = int(port)
+			}
+			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
 	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {

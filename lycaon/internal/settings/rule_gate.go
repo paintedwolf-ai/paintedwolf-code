@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/isolation"
-
 	"github.com/lycaon/lycaon/pkg/pathglob"
 )
 
@@ -428,16 +427,20 @@ func IsPathMutatingTool(tool string) bool {
 // controlPlaneDenyResult blocks a declared path inside the host's own state
 // tree. Command tools declare no paths here; confinement answers for them.
 func controlPlaneDenyResult(action hitl.ProposedAction) *hitl.ApprovalResult {
-	if IsCommandToolName(action.Invocation.Tool) {
+	if IsCommandToolName(action.Invocation.Tool) && action.Invocation.NativePathTargets == nil {
 		return nil
 	}
 	write := IsPathMutatingTool(action.Invocation.Tool)
-	for _, f := range action.Invocation.Files {
+	for i, f := range action.Invocation.Files {
+		pathWrite := write
+		if action.Invocation.NativePathTargets != nil && i < len(action.Invocation.NativePathTargets) {
+			pathWrite = action.Invocation.NativePathTargets[i].Write
+		}
 		path := strings.TrimSpace(f)
 		if !filepath.IsAbs(path) {
 			continue
 		}
-		if confine.ControlPlanePathDenied(path, write, action.Scope.SessionScratchRoot, action.Scope.SessionOutputRoot) {
+		if confine.ControlPlanePathDenied(path, pathWrite, action.Scope.SessionScratchRoot, action.Scope.SessionOutputRoot) {
 			return &hitl.ApprovalResult{
 				Denied:      true,
 				DenyCode:    isolation.CodeControlPlaneDenied,

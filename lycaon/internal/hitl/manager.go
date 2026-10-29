@@ -2,12 +2,12 @@
 package hitl
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/packageexec"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +53,17 @@ type ActionInvocation struct {
 	Args          map[string]any
 	Files         []string
 	ResolvedFiles []string
-	ActionID      string
+	// NativePathTargets are the bound command owner's file operands. A present
+	// empty slice means the native form has no file operand.
+	NativePathTargets []NativePathTarget
+	// ApprovedFileAccess carries exact authority already approved for this invocation.
+	ApprovedFileAccess []GrantedPathDelta `json:"-"`
+	ActionID           string
+}
+
+type NativePathTarget struct {
+	Path  string
+	Write bool
 }
 
 // ActionScope binds an action to its project and session context.

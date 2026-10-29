@@ -2,8 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -13,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -100,6 +100,13 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if args == nil {
 		return nil
 	}
+	if targets := nativePathTargetsFromArgs(args); targets != nil {
+		files := make([]string, 0, len(targets))
+		for _, target := range targets {
+			files = append(files, target.Path)
+		}
+		return files
+	}
 	if commandStreamTools[tool] {
 		return commandStreamFiles(args)
 	}
@@ -147,6 +154,26 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	}
 	files = append(files, pairFilesFromArgs(args)...)
 	return files
+}
+
+// nativePathTargetsFromArgs consumes the owner-bound projection. It never
+// guesses file operands from an argv word or a command's help prose.
+func nativePathTargetsFromArgs(args map[string]any) []hitl.NativePathTarget {
+	raw, present := args["path_targets"]
+	if !present {
+		return nil
+	}
+	targets := []hitl.NativePathTarget{}
+	groups, _ := raw.(map[string]any)
+	for _, direction := range []string{"read", "write"} {
+		paths, _ := groups[direction].([]any)
+		for _, item := range paths {
+			if path, _ := item.(string); path != "" {
+				targets = append(targets, hitl.NativePathTarget{Path: path, Write: direction == "write"})
+			}
+		}
+	}
+	return targets
 }
 
 // commandStreamFiles reads redirection and stream-field paths from the plan.
@@ -204,13 +231,15 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:  eval.NativeInputs,
-			Tool:          eval.ToolName,
-			BoundStages:   toolcontract.CloneExecutionStages(eval.BoundStages),
-			Args:          eval.ToolArgs,
-			Files:         append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-			ResolvedFiles: append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-			ActionID:      eval.ActionID,
+			NativeInputs:       eval.NativeInputs,
+			Tool:               eval.ToolName,
+			BoundStages:        toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:               eval.ToolArgs,
+			Files:              append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:      append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets:  append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
+			ActionID:           eval.ActionID,
 		},
 		Resources: hitl.ActionResources{
 			ApprovalCategory:     eval.ApprovalCategory,

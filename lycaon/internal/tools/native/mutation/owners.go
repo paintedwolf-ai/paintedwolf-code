@@ -165,7 +165,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = mutationPathTargets(bound)
+	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {

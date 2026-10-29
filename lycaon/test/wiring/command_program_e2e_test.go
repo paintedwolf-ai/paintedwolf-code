@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -35,29 +36,46 @@ type commandProgramSession struct {
 
 // newCommandProgramSession is an implementer session with a recorded progress
 // checklist, so project writes pass the progress gate.
-func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
+func newCommandProgramSession(t *testing.T, program, approvals string, posture ...gate.Posture) *commandProgramSession {
 	t.Helper()
-	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
+	return newCommandProgramSessionWithArgs(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals, posture...)
+}
+
+func newCommandProgramSessionWithArgs(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
+	t.Helper()
+	s := newCommandProgramSessionWithArgsWithoutProgress(t, args, request, approvals, posture...)
 	s.h.SeedProgress(t, t.Context(), s.session)
 	return s
 }
 
 func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
+	return newCommandProgramSessionWithArgsWithoutProgress(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals)
+}
+
+func newCommandProgramSessionWithArgsWithoutProgress(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
+	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
-		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": program}}},
+		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: args}},
 		FollowUpText: "Program finished.",
 	}}})
-	h := BuildForTest(t, WithLLMClient(mock))
+	options := []Option{WithLLMClient(mock)}
+	if len(posture) > 0 {
+		options = append(options, withGlobalApprovalPosture(posture[0]))
+	}
+	h := BuildForTest(t, options...)
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed sub dir", os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	overlay := filepath.Join(dir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlay, 0o700))
 	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n" + approvals
+	if len(posture) > 0 {
+		rules = "approval_posture: " + string(posture[0]) + "\n" + rules
+	}
 	testutil.FailErr(t, "write approvals", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(rules), 0o600))
-	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
+	sess, err := h.CreateHarnessSession(t, request, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), sess.ID)

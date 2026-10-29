@@ -209,7 +209,61 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, dispatch commandprogr
 			return Prepared{}, argvRejection(err, spec)
 		}
 	}
-	return Prepared{Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(o.ops[spec.Name]), owners: o, paths: paths, dispatch: dispatch, request: request, spec: spec, run: utilities[spec.Name], bindErr: bindErr}, nil
+	review := bound.Review(o.ops[spec.Name])
+	review.PathTargets = searchPathTargets(bound)
+	return Prepared{Operation: o.ops[spec.Name], Argv: bound, Review: review, owners: o, paths: paths, dispatch: dispatch, request: request, spec: spec, run: utilities[spec.Name], bindErr: bindErr}, nil
+}
+
+// searchPathTargets mirrors each owner's typed operand grammar. Patterns,
+// expressions and find primaries are data, not filesystem authority.
+func searchPathTargets(bound commandprogram.BoundArgv) []commandprogram.PathTarget {
+	targets := []commandprogram.PathTarget{}
+	add := func(path string, write bool) {
+		if path != "" && path != "-" {
+			targets = append(targets, commandprogram.PathTarget{Path: path, Write: write})
+		}
+	}
+	for _, item := range bound.Items {
+		if item.Option != nil && item.Option.ValueRole == "path" {
+			for _, value := range item.Option.Values {
+				add(value.Value, false)
+			}
+		}
+	}
+	if bound.Command == "find" {
+		_, deletes := bound.Last("-delete")
+		items := bound.Items
+		for len(items) > 0 && items[0].Option != nil {
+			items = items[1:]
+		}
+		for len(items) > 0 && items[0].Operand != nil && !expressionWord(items[0].Operand.Value) {
+			add(items[0].Operand.Value, deletes)
+			items = items[1:]
+		}
+		return targets
+	}
+	operands := bound.Operands().Values()
+	if bound.Command == "rg" {
+		if _, files := bound.Last("--files"); files {
+			for _, path := range operands {
+				add(path, false)
+			}
+			return targets
+		}
+	}
+	explicit := false
+	for _, item := range bound.Items {
+		if item.Option != nil && (item.Option.Key == "-e" || item.Option.Key == "-f") {
+			explicit = true
+		}
+	}
+	if !explicit && len(operands) > 0 {
+		operands = operands[1:]
+	}
+	for _, path := range operands {
+		add(path, false)
+	}
+	return targets
 }
 
 // bindSearchArgv binds argv through CatalogBinder, preserving a signed numeric
