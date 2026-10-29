@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
@@ -15,7 +14,7 @@ import (
 func AwaitComparisonScreen(t *testing.T, server *hostapi.Server, projectID, viewID string) wire.SourceComparisonView {
 	t.Helper()
 	var view wire.SourceComparisonView
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(projectID, viewID), nil))
 		view = *ReadSourceViewResponse(t, response, http.StatusOK).Comparison

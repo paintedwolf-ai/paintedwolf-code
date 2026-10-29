@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -55,7 +54,7 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 		t.Fatalf("expected no delegation, got %q", dep)
 	}
 	foundTask := false
-	testutil.WaitFor(t, 8*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
 		for _, msg := range msgs {

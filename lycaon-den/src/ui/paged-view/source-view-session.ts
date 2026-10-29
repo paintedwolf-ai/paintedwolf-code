@@ -371,7 +371,7 @@ export class SourceViewSession<K extends Kind> {
     signal?.throwIfAborted();
     const current = this.value;
     const basis = current ? this.basisFor(current) : undefined;
-    const resident = current && basis && this.frames.frames().find(frame => frame.view_id === current.id
+    const resident = current && basis && this.frames.find(frame => frame.view_id === current.id
       && frame.projection_revision === basis.revision
       && frame.rows.length <= limit && frame.span.start === offset
       && frame.span.end >= Math.min(offset + limit, frame.extent.rows));

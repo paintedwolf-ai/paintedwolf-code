@@ -3,7 +3,6 @@
 package osprocess
 
 import (
-	"bytes"
 	"os"
 	"strconv"
 )
@@ -38,18 +37,9 @@ func sessionOf(pid int) int {
 	if err != nil {
 		return 0
 	}
-	// The command name may contain spaces and parentheses; fields resume after the last ')'.
-	end := bytes.LastIndexByte(raw, ')')
-	if end < 0 {
+	record, err := ParseLinuxStat(raw)
+	if err != nil || record.PID != pid {
 		return 0
 	}
-	fields := bytes.Fields(raw[end+1:])
-	if len(fields) < 4 {
-		return 0
-	}
-	sid, err := strconv.Atoi(string(fields[3]))
-	if err != nil {
-		return 0
-	}
-	return sid
+	return record.SessionID
 }

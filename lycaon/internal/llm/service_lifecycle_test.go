@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
@@ -98,7 +97,7 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 			}()
 			select {
 			case <-started:
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("initial discovery did not reach the provider")
 			}
 			cancel()
@@ -107,12 +106,12 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 				if got.allocated || !errors.Is(got.err, context.Canceled) {
 					t.Fatalf("canceled allocation = %+v", got)
 				}
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("constructor did not join canceled discovery")
 			}
 			select {
 			case <-canceled:
-			case <-time.After(time.Second):
+			case <-t.Context().Done():
 				t.Fatal("constructor left its provider request running")
 			}
 		})

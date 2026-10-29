@@ -190,6 +190,14 @@ func TestPendingOverlaySummaryIDs(t *testing.T) {
 	if len(ids) != 1 || ids[0] != "j1" {
 		t.Fatalf("ids = %v want [j1]", ids)
 	}
+
+	superseded := append(pendingMergeHistory(), api.Message{
+		Role:          api.MessageRoleAssistant,
+		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j1", Status: "promoted"},
+	})
+	if ids := surface.PendingOverlaySummaryIDs(superseded); len(ids) != 0 {
+		t.Fatalf("superseded overlay summary ids = %v, want []", ids)
+	}
 }
 
 func TestPartialWorkerSummaryJobIDs(t *testing.T) {
@@ -201,6 +209,14 @@ func TestPartialWorkerSummaryJobIDs(t *testing.T) {
 	ids := surface.PartialWorkerSummaryJobIDs(history)
 	if len(ids) != 1 || ids[0] != "j-partial" {
 		t.Fatalf("ids = %v want [j-partial]", ids)
+	}
+
+	history = append(history, api.Message{
+		Role:          api.MessageRoleAssistant,
+		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j-partial", Status: api.WorkerSummaryStatusComplete},
+	})
+	if ids := surface.PartialWorkerSummaryJobIDs(history); len(ids) != 0 {
+		t.Fatalf("superseded partial summary ids = %v, want []", ids)
 	}
 }
 

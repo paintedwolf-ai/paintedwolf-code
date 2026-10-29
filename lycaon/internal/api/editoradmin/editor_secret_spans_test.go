@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/editordoc"
@@ -96,7 +95,7 @@ func TestScreenProjectionCompletesInTheBackground(t *testing.T) {
 	d, err := f.h.EditorDocuments.CurrentSnapshot(t.Context(), f.project.ID, opened.ID)
 	testutil.FailErr(t, "read document", err)
 	var screen *wire.SecretScreen
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		status, projected := f.h.EditorScreenProjection(t.Context(), d)
 		screen = projected
 		return status == wire.SecretScreenComplete
@@ -126,7 +125,6 @@ func TestRefreshRepublishesScreenedDocuments(t *testing.T) {
 
 	f.h.RefreshProjectSecretScreens(t.Context(), uuid.NewString())
 	f.h.RefreshProjectSecretScreens(t.Context(), f.project.ID)
-	deadline := time.After(testutil.Timeout(5 * time.Second))
 	for {
 		select {
 		case envelope := <-updates:
@@ -138,7 +136,7 @@ func TestRefreshRepublishesScreenedDocuments(t *testing.T) {
 				t.Fatal("a screening refresh reported a content change")
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("refresh published no editor document event")
 		}
 	}
