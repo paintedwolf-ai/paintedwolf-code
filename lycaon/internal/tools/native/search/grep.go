@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 type grepMode int
@@ -39,13 +38,12 @@ type grepRun struct {
 	offsets, tabs, nullNames bool
 	numberWidth              int
 	// names is the forced -H/-h choice; nil decides per file.
-	names        *bool
-	quietErrors  bool
-	replace      *string
-	recursive    bool
-	follow       bool
-	selection    selection
-	searchBinary bool
+	names       *bool
+	quietErrors bool
+	replace     *string
+	recursive   bool
+	follow      bool
+	selection   selection
 	// binaryMode is binary (notice), text (-a) or without-match (-I).
 	binaryMode      string
 	skipDirectories bool
@@ -55,7 +53,6 @@ type grepRun struct {
 	// prune holds the index requirement when acceleration applies; drafts
 	// are the unsaved documents the index cannot speak for.
 	prune    litprefilter.Requirement
-	drafts   sourceview.DraftOverlay
 	pruned   int
 	selected bool
 	stopped  bool
@@ -117,7 +114,6 @@ func runRg(inv *invocation) error {
 		r.replace = &replacement
 	}
 	r.selection = newSelection(inv, true)
-	r.searchBinary = r.selection.unrestricted >= 3
 	if err := r.selection.compileRg(); err != nil {
 		return err
 	}
@@ -405,6 +401,7 @@ var errQuietMatch = errors.New("quiet match")
 func (r *grepRun) searchOperands() error {
 	inv := r.inv
 	r.walker = newWalker(inv)
+	defer r.walker.close()
 	operands := r.operands
 	implicit := false
 	if len(operands) == 0 {
@@ -439,7 +436,10 @@ func (r *grepRun) searchOperands() error {
 	return nil
 }
 
-func (r *grepRun) stdinLabel() string {
+func (r *grepRun) searchStdin() error {
+	if r.mode == modeFileList {
+		return nil
+	}
 	label := "(standard input)"
 	if r.json != nil {
 		label = "<stdin>"
@@ -447,18 +447,11 @@ func (r *grepRun) stdinLabel() string {
 	if named, ok := r.inv.value("--label"); ok {
 		label = named
 	}
-	return label
-}
-
-func (r *grepRun) searchStdin() error {
-	if r.mode == modeFileList {
-		return nil
-	}
 	var err error
 	if r.tabs {
 		err = r.searchAlignedStdin()
 	} else {
-		err = r.searchStream(r.stdinLabel(), r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
+		err = r.searchStream(label, r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
 	}
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
@@ -501,7 +494,7 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 		if !r.selection.commandLineFile(operand) {
 			return nil
 		}
-		return r.searchFile(e, r.forcedNames(multiple))
+		return r.searchFile(e, r.forcedNames(multiple), false)
 	}
 	if !r.recursive {
 		if r.skipDirectories {
@@ -561,7 +554,7 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 				return err
 			}
 		case child.file():
-			if err := r.searchFile(child, r.forcedNames(true)); err != nil {
+			if err := r.searchFile(child, r.forcedNames(true), true); err != nil {
 				return err
 			}
 		}
@@ -578,15 +571,16 @@ func displayOr(display string) string {
 
 // searchFile pins and searches one regular file. rg's recursion skips binary
 // files unless -uuu asks for them.
-func (r *grepRun) searchFile(e entry, names bool) error {
+func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
+	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
 	if r.indexProvesNoMatch(e) {
 		r.pruned++
-		return r.searchContent(e.display, nil, nil, names)
+		return r.searchNoMatch(e.display, names)
 	}
-	streamed, pin, err := r.inv.openPinnedStream(e.bound)
+	streamed, pin, err := r.inv.openWalkedPinnedStream(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)
@@ -595,8 +589,10 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		return err
 	}
 	defer func() { _ = streamed.Reader.Close() }()
-	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
-		return nil
+	if checkBinary {
+		if streamed.FirstNullOffset >= 0 {
+			return nil
+		}
 	}
 	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
@@ -610,19 +606,13 @@ func (r *grepRun) indexAcceleration() {
 		return
 	}
 	r.prune = r.matcher.Requirement()
-	if !r.prune.Empty() {
-		r.drafts = sourceview.DraftsFor(r.inv.ctx, r.inv.tc)
-	}
 }
 
 // indexProvesNoMatch asks the source catalog about one walked file. The
 // cached filter speaks only for the exact size, mode and mtime it was built
-// under, and never for an unsaved draft.
+// under.
 func (r *grepRun) indexProvesNoMatch(e entry) bool {
 	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
-		return false
-	}
-	if _, draft := r.drafts.Lookup(e.bound.Resolved.Abs); draft {
 		return false
 	}
 	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{

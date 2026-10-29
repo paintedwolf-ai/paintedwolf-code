@@ -51,6 +51,7 @@ func unavailable(form, reason string) error {
 func runFind(inv *invocation) error {
 	inv.failure = 1
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
+	defer r.walker.close()
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}
@@ -316,6 +317,9 @@ func (r *findRun) remove(e entry) (bool, error) {
 		return true, nil
 	}
 	target, err := inv.paths.Bind(inv.ctx, e.display, true)
+	if err == nil {
+		err = inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target.Resolved.Abs, true)
+	}
 	if err == nil {
 		err = inv.owners.Remover.RemoveRecoverable(inv.ctx, inv.tc, target)
 	}

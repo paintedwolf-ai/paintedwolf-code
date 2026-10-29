@@ -136,7 +136,7 @@ func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *test
 			defer cleanup()
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
-			if err := RunInOwnGroup(cmd); err != nil {
+			if err := RunInOwnGroup(t.Context(), cmd); err != nil {
 				t.Fatalf("native launch: %v; diagnostic %s", err, stderr.String())
 			}
 			var payload linuxPinnedPayload
@@ -163,7 +163,7 @@ func TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv(t *testing.T) {
 	defer cleanup()
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	testutil.FailErr(t, "launch through native pathname", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "launch through native pathname", RunInOwnGroup(t.Context(), cmd))
 	if stdout.String() != "./fixture-script\nliteral space\n" {
 		t.Fatalf("script argv changed: %q", stdout.String())
 	}

@@ -16,8 +16,8 @@ const variableBytes = 96
 // parameters and last statuses. It implements ExpansionScope; the evaluator
 // owns every mutation. Values are opaque text, so a secret reference stays a
 // reference until a declared sink resolves it. Nothing persists past the
-// invocation, and IFS is fixed: an environment IFS is inert data. Refusals
-// carry no source span; the evaluator locates them at the assignment.
+// invocation. Refusals carry no source span; the evaluator locates them at the
+// assignment.
 type Variables struct {
 	memory            *toolcontract.ProgramMemory
 	bounds            catalogBounds
@@ -303,8 +303,6 @@ func assignable(bounds catalogBounds, name, value string) error {
 	switch {
 	case !VariableName(name):
 		return invalidValue(toolcontract.SourceSpan{}, "a variable name")
-	case name == "IFS":
-		return &ExpansionError{Code: codeSyntaxUnsupported, Expected: "fixed space/tab/newline splitting"}
 	case name == "PIPESTATUS":
 		return &ExpansionError{Code: codeSyntaxUnsupported, Expected: "read-only PIPESTATUS"}
 	case strings.IndexByte(value, 0) >= 0:

@@ -35,8 +35,8 @@ entries; `Environment` applies one dispatch's `NAME=value` prefix without
 changing the frame, and `Clone` gives an isolated group or substitution unit its
 own copy. Entries are charged to `program_state_bytes` with old/new overlap and
 bounded by `variable_count`, `variable_value_bytes` and `environment_bytes`.
-Names follow the shell identifier grammar, NUL is refused and `IFS` cannot be
-assigned; an `IFS` inherited from the environment is inert data.
+Names follow the shell identifier grammar, and NUL is refused. `IFS` controls
+unquoted field splitting and `read`; a command prefix applies only to that command.
 
 `WordExpander` expands the detached plan's words, never upstream syntax objects.
 Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
@@ -106,14 +106,14 @@ unit and runs it in the current frame; its pin is recorded in the outcome.
 
 Before the first statement, preflight refuses reserved function names and any
 construct whose owner port is absent, with `COMMAND_SYNTAX_UNSUPPORTED`. Every
-reached statement is one `statement_visits` unit, each `while` test and `for`
-item one `loop_iterations` unit, and function, source and substitution nesting
-are bounded by depth ceilings. Operations, in-process native builtins, function
-calls, substitutions, redirections, source units, isolated groups, pipelines
-and jobs are child executions: each charges `child_executions` and holds the
-catalog's per-execution trace settlement reservation until it settles.
-Evaluator bookkeeping (assignments, declarations, branch and loop results) is
-not a child execution. Frames keep their variables in `Variables`; a function's
+reached statement and redirection is one `statement_visits` unit, each `while`
+test and `for` item one `loop_iterations` unit, and function, source and
+substitution nesting are bounded by depth ceilings. Real command and process
+dispatches count against `child_executions`, while AST frames, in-process
+evaluator builtins and redirects count against `statement_visits`. Recorded
+executions hold the catalog's per-execution trace settlement reservation until
+they settle. Evaluator bookkeeping (assignments, declarations, branch and loop
+results) is not a child execution. Frames keep their variables in `Variables`; a function's
 `NAME=value` prefixes overlay its frame without mutating the caller. Child receipts belong to the
 dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the

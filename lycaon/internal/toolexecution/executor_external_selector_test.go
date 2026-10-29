@@ -38,6 +38,21 @@ func TestCommandSchemaOffersExternalOnlyWhenNotHidden(t *testing.T) {
 	if !strings.Contains(description(), toolcommand.ExternalSelectorLine) {
 		t.Fatal("offered selector missing from the command schema")
 	}
+	readOnlyMetas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "explore_readonly", ProjectRootCount: 1})
+	testutil.FailErr(t, "list read-only tools", err)
+	for _, meta := range readOnlyMetas {
+		if meta.Name == "command" {
+			if strings.Contains(meta.Description, "external --") {
+				t.Fatalf("read-only command schema must not advertise external selector: %s", meta.Description)
+			}
+			props, _ := meta.ArgsSchema["properties"].(map[string]any)
+			for _, forbidden := range []string{"capability_request", "secret_use", "snapshot_capture", "socks_proxy", "terminal_capture", "verification"} {
+				if _, ok := props[forbidden]; ok {
+					t.Fatalf("read-only command schema must prune %s: %v", forbidden, props)
+				}
+			}
+		}
+	}
 	rt.Executor.Metadata.SetCommandExternalHidden(true)
 	if got := description(); strings.Contains(got, "external --") {
 		t.Fatalf("hidden selector still in the command schema: %s", got)

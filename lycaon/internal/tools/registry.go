@@ -167,8 +167,11 @@ type InvocationSource struct {
 	ModelSourceContext *api.SourceContext
 	// EditorReadBases freezes reads known before this response executes tools;
 	// the response's own accepted writes advance it.
-	EditorReadBases     *AgentReadBases
-	Roots               []projectroot.RootRef
+	EditorReadBases *AgentReadBases
+	Roots           []projectroot.RootRef
+	// RootHistory is the project's attachment generation when Roots was
+	// captured; it answers stale spellings and later removals from facts.
+	RootHistory         projectroot.HistoryView
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
@@ -239,8 +242,12 @@ type InvocationHost struct {
 	HostDataDir string
 	// SessionScratchDir contains writable session-scoped scratch data.
 	SessionScratchDir string
+	// SessionOutputDir contains host-published session output, never a command write root.
+	SessionOutputDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.
 	MaxToolSpillBytes int
+	// ModelContextWindow is the active model's context window in tokens.
+	ModelContextWindow int
 	// HostResources are exact catalog ids attached to the structured action.
 	HostResources        []string
 	HostResourceFamilies []string
@@ -329,6 +336,9 @@ type InvocationLocal struct {
 
 // InvocationEffects carries invocation results and observations.
 type InvocationEffects struct {
+	// CheckMutationProgress admits a reached project file creation or edit.
+	// Command programs install this at their native write boundary.
+	CheckMutationProgress func(context.Context, string, string) error
 	// ReportProgress publishes host-measured work on this invocation's activity.
 	ReportProgress func(api.ToolProgress)
 	// ArgsTruncated marks arguments cut before parsing.

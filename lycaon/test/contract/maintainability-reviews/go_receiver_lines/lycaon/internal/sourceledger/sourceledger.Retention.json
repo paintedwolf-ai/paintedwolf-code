@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/sourceledger/sourceledger.Retention",
+  "kind": "runtime_service",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Retain the existing source-content maintenance lifecycle at329 receiver lines and16 methods. Capture and maintenance leases, exact live recovery claims, bounded retirement, blob references and physical reclamation share the same custody facts. A materialized window selects at most256 queue identities before structural empty filtering; only candidates with neither manifest entries nor object rows bypass per-manifest reclamation. SQLite owns that bounded internal window; Go retains one nonempty candidate at a time. Remaining manifest rows and candidates share the original256-row transaction budget and claim checks. Actual claimed-window,513-empty progress, mixed-manifest, rollback and recovery suites pass. No changed trigger, second queue or maintenance service is introduced. Growth or new lifecycle requires renewed review.",
+  "reviewed_commit": "bf9c3ccddaf7e836691d7ef7035ccf5481c9166c",
+  "ceiling": 329,
+  "reviewed_shape": "47c7855cb2e4f91ef8201426085aa2b738ade9c89d7c90d29659fea6437bcf08",
+  "boundaries": {
+    "lycaon/internal/sourceledger/recovery_retention.go": "d4eff529dc084e40aa897fda233d2d3a6c554421c3072af66385c496719f7308",
+    "lycaon/internal/sourceledger/recovery_retention_test.go": "de9d516868f9862b80191db2723183a39b7222a6daba1bb569a86085e9e8caaf",
+    "lycaon/internal/sourceledger/recovery_claim_release_test.go": "82d3525842d1a04a69624461b9e37667662b42d988b5de1fdd93ec3f75c90e84"
+  }
+}

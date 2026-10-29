@@ -74,7 +74,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	defer end()
 	bound := effect.Operation
 	definition, invocation := bound.Definition(), bound.Invocation()
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
@@ -95,12 +95,15 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), facts.Commands, effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
 	if err != nil {
 		return result, err
+	}
+	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
+		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
@@ -144,7 +147,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	defer releaseObservation()
-	if err := checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
+	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
@@ -223,10 +226,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	return result, err
 }
 
-func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
+func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
+	// Publication reaches the write door after its output is staged. Its
+	// destination, including scratch or output, decides the checklist gate.
+	if bound.Publication() != toolcontract.NoPublication {
+		return nil
+	}
 	if provider == nil {
 		return fmt.Errorf("native admission requires current progress facts")
 	}
+	definition, invocation := bound.Definition(), bound.Invocation()
 	state, err := provider.ProgramProgressState(ctx, invocation.SessionID)
 	if err != nil {
 		return err
@@ -246,6 +255,13 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 		result.Terminal = toolcontract.ProducerInterrupted
 	}
 	return result
+}
+
+func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) bool {
+	if bound.Publication() != toolcontract.NoPublication {
+		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
+	}
+	return stageMatchesCommand(bound.Command(), bound.Definition().ReadOnlyFacts().Commands, argv)
 }
 
 // stageMatchesCommand checks the stage against its catalog command. A confined
@@ -322,7 +338,7 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
-	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
+	return checkLiveProgramProgress(ctx, progressFacts, bound)
 }
 
 // validateNativeArguments checks structured native tool values against their
@@ -335,7 +351,7 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		}
 		return nil
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir); reject != nil {
 		return reject
 	}
 	var schema map[string]any

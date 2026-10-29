@@ -70,7 +70,7 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "curl owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: mutation.Program{Paths: paths, Barrier: &native.PublicationBarrier{}}}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: mutation.Program{Paths: paths}}
 }
 
 type run struct {

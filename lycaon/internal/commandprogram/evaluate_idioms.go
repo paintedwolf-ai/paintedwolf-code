@@ -126,19 +126,19 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	fd, path := e.allocateProcSubstFD()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.streams = f.streams
-	g.streams.SetWriter(2, &syncWriter{w: f.streams.Error})
+	g.io.streams = f.io.streams
+	g.io.setWriter(2, &syncWriter{w: f.io.streams.Error})
 	var subst *ProcessSubstitution
 	if op == "<(" {
 		g.producerPipe = pipe
-		g.streams.SetReader(0, NullInput())
-		g.streams.SetWriter(1, pipe)
+		g.io.setReader(0, NullInput())
+		g.io.setWriter(1, pipe)
 		subst = NewProcessSubstitution(path, op, func() (io.ReadCloser, bool) {
 			return pipe.ConsumerEnd(), true
 		}, nil)
 	} else {
-		g.streams.SetReader(0, pipe.ConsumerEnd())
-		g.streams.SetWriter(1, &syncWriter{w: f.streams.Output})
+		g.io.setReader(0, pipe.ConsumerEnd())
+		g.io.setWriter(1, &syncWriter{w: f.io.streams.Output})
 		subst = NewProcessSubstitution(path, op, nil, func() (io.WriteCloser, bool) {
 			return procSubstPipeWriter{pipe: pipe}, true
 		})

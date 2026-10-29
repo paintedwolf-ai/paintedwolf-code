@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/projectsource/projectsource.SourceEffects",
+  "kind": "runtime_service",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The 638 receiver lines and nineteen methods retain one checked publication/recovery transition: staged identity, held source, cross-volume custody, retained-tree custody and journal start belong to the same operation row. Native primitives, recovery quota/custody and durable settlement already have distinct owners. Recovery, interruption and staged replacement contracts support this measured ceiling and shape; growth requires renewed review.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 19,
+  "boundaries": {
+    "lycaon/internal/projectsource/source_recovery_tree_test.go": "27e58737c400ad7411496bf1548290d46ce64c1b4e392babd4ca6459ac764386",
+    "lycaon/internal/projectsource/source_mutation_commit_failure_test.go": "31cf2f967c622b4cd63ea98d16cff21f86cd70ff7f27cc65232a32f839b51916"
+  },
+  "reviewed_shape": "e9f352fca5b45f82d4daab75d6d950d87626ca60258e66d59fac13aef69c2132"
+}

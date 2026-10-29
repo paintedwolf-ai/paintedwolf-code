@@ -1395,6 +1395,36 @@ type CommandProgramNode struct {
 	State        string `json:"state"`
 }
 
+// CommandProgramOutputLimit Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
+type CommandProgramOutputLimit struct {
+	Code     string `json:"code"`
+	LimitID  string `json:"limit_id"`
+	Maximum  int64  `json:"maximum"`
+	Observed int64  `json:"observed"`
+}
+
+// CommandProgramOutputWindow
+type CommandProgramOutputWindow struct {
+	Stream string `json:"stream"`
+	Ref    string `json:"ref"`
+	// Session output address of the retained stream copy.
+	OutputPath string `json:"output_path"`
+	// Bytes in the saved stream. For an incomplete stream the final total is unknown.
+	TotalBytes int64 `json:"total_bytes"`
+	// Lines in the saved stream. For an incomplete stream the final total is unknown.
+	TotalLines        int                        `json:"total_lines"`
+	Complete          bool                       `json:"complete"`
+	Truncated         bool                       `json:"truncated"`
+	HeadEndByte       int64                      `json:"head_end_byte"`
+	HeadEndLine       int                        `json:"head_end_line"`
+	TailStartByte     int64                      `json:"tail_start_byte"`
+	TailStartLine     int                        `json:"tail_start_line"`
+	OmittedBytes      int64                      `json:"omitted_bytes"`
+	OmittedLines      int                        `json:"omitted_lines"`
+	InlineBudgetBytes int                        `json:"inline_budget_bytes"`
+	Limit             *CommandProgramOutputLimit `json:"limit,omitempty"`
+}
+
 // CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
 type CommandProgramProgressReceipt struct {
 	ExecutionID             string `json:"execution_id"`
@@ -1424,6 +1454,8 @@ type CommandProgramReceipt struct {
 	ProgressRef     string     `json:"progress_ref,omitempty"`
 	StartedAt       time.Time  `json:"started_at"`
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
+	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
+	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
 }
 
 // CommandProgramReceiptPage

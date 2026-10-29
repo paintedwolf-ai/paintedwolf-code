@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -37,8 +38,9 @@ type invocation struct {
 	// noMatchPublishes marks a complete status-one search as publishable.
 	noMatchPublishes bool
 	effects          toolcontract.EffectCertainty
-	pinCount         int
 	releases         []func()
+	pins             []toolcontract.ExecutionRevision
+	flushedPins      int
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -51,6 +53,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 		inv.stderr = io.Discard
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
+	inv.out.beforeWrite = inv.flushPins
 	return inv
 }
 
@@ -159,16 +162,37 @@ func patternRejection(err error) error {
 	return err
 }
 
+const searchPinBatchSize = 1024
+
 // recordPin retains every capture of this execution before its bytes are used.
 func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if inv.owners.Pins == nil || execution == "" {
 		return fmt.Errorf("search reads require a program execution and pin recorder")
 	}
-	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pinCount, []toolcontract.ExecutionRevision{revision}); err != nil {
+	if err := revision.Validate(); err != nil {
 		return err
 	}
-	inv.pinCount++
+	inv.pins = append(inv.pins, revision)
+	if len(inv.pins)%searchPinBatchSize == 0 || len(inv.pins)-inv.flushedPins >= searchPinBatchSize {
+		return inv.flushPins()
+	}
+	return nil
+}
+
+func (inv *invocation) flushPins() error {
+	if len(inv.pins) <= inv.flushedPins {
+		return nil
+	}
+	execution := inv.request.Invocation.Identity.ExecutionID
+	if inv.owners.Pins == nil || execution == "" {
+		return fmt.Errorf("search reads require a program execution and pin recorder")
+	}
+	first := inv.flushedPins
+	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, first, inv.pins[first:]); err != nil {
+		return err
+	}
+	inv.flushedPins = len(inv.pins)
 	return nil
 }
 
@@ -204,6 +228,25 @@ func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.Ex
 	if err != nil {
 		return native.ExecutionStream{}, nil, err
 	}
+	return inv.finishPinnedStream(streamed)
+}
+
+func (inv *invocation) openWalkedPinnedStream(e entry, w *walker) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	if e.depth == 0 || e.link || e.bound.Resolved.External || w == nil || strings.HasSuffix(strings.ToLower(e.name), ".gz") {
+		return inv.openPinnedStream(e.bound)
+	}
+	root := w.readRoot(e.bound)
+	if root == nil {
+		return inv.openPinnedStream(e.bound)
+	}
+	streamed, err := inv.owners.Revisions.OpenWalkedStream(inv.ctx, inv.tc, e.bound.Resolved, root, 0)
+	if err != nil {
+		return native.ExecutionStream{}, nil, err
+	}
+	return inv.finishPinnedStream(streamed)
+}
+
+func (inv *invocation) finishPinnedStream(streamed native.ExecutionStream) (native.ExecutionStream, *toolcontract.SourcePin, error) {
 	if err := inv.recordPin(streamed.Revision); err != nil {
 		_ = streamed.Reader.Close()
 		return native.ExecutionStream{}, nil, err
@@ -237,6 +280,9 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	} else if errors.Is(err, errUsage) {
 		err = nil
 	}
+	if flushErr := inv.flushPins(); flushErr != nil && err == nil {
+		err = flushErr
+	}
 	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
@@ -268,8 +314,10 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 type output struct {
 	ctx              context.Context
 	w                io.Writer
+	beforeWrite      func() error
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
+	scratch          []byte
 	maximum, written int64
 }
 
@@ -318,14 +366,29 @@ func (o *output) flush() error {
 }
 
 func (o *output) Write(p []byte) (int, error) {
+	if len(p) > 0 && o.beforeWrite != nil {
+		if err := o.beforeWrite(); err != nil {
+			return 0, err
+		}
+	}
 	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
 }
 
 func (o *output) text(parts ...string) error {
-	for _, part := range parts {
-		if _, err := io.WriteString(o, part); err != nil {
-			return err
+	if len(parts) == 1 {
+		if len(parts[0]) == 0 {
+			return nil
 		}
+		_, err := io.WriteString(o, parts[0])
+		return err
 	}
-	return nil
+	o.scratch = o.scratch[:0]
+	for _, part := range parts {
+		o.scratch = append(o.scratch, part...)
+	}
+	if len(o.scratch) == 0 {
+		return nil
+	}
+	_, err := o.Write(o.scratch)
+	return err
 }
