@@ -62,7 +62,6 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		{"direct sctp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "sctp", Port: 53}}}, UnsupportedNetworkGrant},
 		{"relative socket", Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "run/x.sock", FD: SocketReferenceFD}}}, UnsupportedNetworkGrant},
 		{"unknown delegated grant", Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "/run/x.sock", FD: SocketReferenceFD, Delegated: "container_engine"}}}, UnsupportedNetworkGrant},
-		{"relative delegated endpoint", Network{Mode: NetworkDeny, DelegatedEndpoints: []DelegatedEndpoint{{Service: DelegatedNixDaemon, Path: "nix/socket"}}}, UnsupportedNetworkGrant},
 	}
 	for _, tc := range cases {
 		err := Plan{Version: PlanVersion, Network: tc.net}.Validate()

@@ -104,8 +104,6 @@ type Network struct {
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
 	// SocketGrants connect through retained descriptors owned by the outer helper.
 	SocketGrants []SocketGrant `json:"socket_grants,omitempty"`
-	// DelegatedEndpoints are refused even when a socket grant names them.
-	DelegatedEndpoints []DelegatedEndpoint `json:"delegated_endpoints,omitempty"`
 	// beforeSocketConnect is an in-process synchronization seam; it is never
 	// read from a plan or configuration and carries no authorization.
 	beforeSocketConnect func() `json:"-"`
@@ -236,11 +234,6 @@ func (p Plan) Validate() error {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "unknown delegated service " + string(grant.Delegated)}
 		}
 		seenSockets[grant.Path], seenFDs[grant.FD] = true, true
-	}
-	for _, endpoint := range n.DelegatedEndpoints {
-		if endpoint.Service != DelegatedNixDaemon || !filepath.IsAbs(endpoint.Path) || strings.ContainsRune(endpoint.Path, 0) {
-			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid delegated service endpoint"}
-		}
 	}
 	return nil
 }

@@ -117,7 +117,7 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 	path := filepath.Clean(r.Unix)
 	// A delegated service acts with its own authority, so no socket grant can
 	// stand in for host execution, whatever name reached its retained object.
-	for _, endpoint := range n.DelegatedEndpoints {
+	for _, endpoint := range KnownDelegatedEndpoints() {
 		if endpoint.Path == path {
 			return refuse(OperationHostServiceDelegation, path)
 		}
@@ -263,7 +263,9 @@ type DelegatedEndpoint struct {
 	Path    string           `json:"path"`
 }
 
-// KnownDelegatedEndpoints lists the endpoints the boundary refuses.
+// KnownDelegatedEndpoints lists the endpoints the boundary refuses by name.
+// A grant whose retained object is one of these sockets arrives marked
+// Delegated, whatever name it was approved under.
 func KnownDelegatedEndpoints() []DelegatedEndpoint {
 	return []DelegatedEndpoint{{Service: DelegatedNixDaemon, Path: "/nix/var/nix/daemon-socket/socket"}}
 }
