@@ -76,7 +76,7 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err := captureRetainedRecovery(ctx, replacement, plan, hooks, staged); err != nil {
 		return err
 	}
-	if err := executeUpgrade(ctx, replacement, plan, hooks.Progress, registry); err != nil {
+	if err := executeRetainedUpgrade(ctx, replacement, plan, hooks.Progress, registry, staged); err != nil {
 		return err
 	}
 	if err := sealRebuiltStore(ctx, replacement); err != nil {
