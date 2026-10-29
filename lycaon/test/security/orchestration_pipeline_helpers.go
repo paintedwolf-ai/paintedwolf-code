@@ -66,42 +66,26 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	var lastStages any
-	ok := testutil.WaitForNoFatal(15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
 		}
-		lastStages = vars["topology_stages"]
 		stages, _ := vars["topology_stages"].(map[string]any)
 		entry, _ := stages[stage].(map[string]any)
 		return entry != nil && entry["complete"] == true
 	})
-	if !ok {
-		run, _ := mgr.Store.Runs.Get(context.Background(), runID)
-		phase := ""
-		if run != nil {
-			phase = run.CurrentPhase
-		}
-		t.Fatalf("topology stage %q never completed; phase = %q, topology_stages = %+v",
-			stage, phase, lastStages)
-	}
+
 }
 
 func waitWorkflowPhase(t *testing.T, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
-	var last string
-	ok := testutil.WaitForNoFatal(15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		run, err := mgr.Store.Runs.Get(context.Background(), runID)
 		if err != nil || run == nil {
 			return false
 		}
-		last = run.CurrentPhase
 		return run.CurrentPhase == phase
 	})
-	if !ok {
-		vars, _ := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
-		t.Fatalf("workflow never reached phase %q; stuck at %q, topology_stages = %+v",
-			phase, last, vars["topology_stages"])
-	}
+
 }
