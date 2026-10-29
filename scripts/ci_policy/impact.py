@@ -98,6 +98,9 @@ def selected_lanes(scope, lanes):
     if any(confinement_source(p) for p in paths):
         # Seccomp filters, syscall numbers and argument layouts differ by architecture.
         chosen.add("confinement-arm64")
+    if any(command_language_source(p) for p in paths):
+        # The live differential compares the command language with the reference userlands.
+        chosen.add("reference-userlands")
     return chosen & set(lanes)
 
 
@@ -107,6 +110,21 @@ def confinement_source(path):
         return True
     name = path.removeprefix("lycaon/internal/exec/")
     return name != path and "/" not in name and (name.startswith("supervisor") or "_linux" in name)
+
+
+COMMAND_LANGUAGE_SOURCES = (
+    "lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/",
+    "lycaon/internal/commandsurface/",
+    "lycaon/internal/commandprogram/",
+    "lycaon/internal/tools/native/",
+    "lycaon/test/commandconformance/",
+    "lycaon/test/wiring/conformance/",
+)
+
+
+def command_language_source(path):
+    """The command catalog, its parser and evaluator, its native utilities, and the conformance corpus."""
+    return path.startswith(COMMAND_LANGUAGE_SOURCES)
 
 
 def reverse_closure(graph, seeds):

@@ -120,7 +120,11 @@ func New(t testing.TB, options Options) *Fixture {
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range append([]string{"write", "read"}, options.Tools...) {
-		if _, exists := registry.Definition(name); exists {
+		if _, exists := registry.Operation(name); exists {
+			continue
+		}
+		if toolcontract.IsCommandOperation(name) {
+			testutil.FailErr(t, "register "+name+" operation", registry.RegisterOperation(name))
 			continue
 		}
 		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {

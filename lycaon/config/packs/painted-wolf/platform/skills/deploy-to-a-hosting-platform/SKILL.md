@@ -3,6 +3,7 @@ name: deploy-to-a-hosting-platform
 description: Before CLI deployment to Vercel, Netlify, Fly.io, or Cloudflare, select and verify the intended target.
 # ask_user is named for the case where a secret must come from the user; profiles without it still deploy.
 optional_tools:
+  - command
   - ask_user
 metadata:
   host_resources: vercel-cli|netlify-cli|fly-cli|cloudflare-wrangler
@@ -21,7 +22,7 @@ Use this workflow to deploy from the CLI. On a process start that deploys, decla
 3. **Determine where the build runs.** Vercel and Netlify normally build remotely; Fly may use a local or remote builder; Wrangler may upload a local build produced by project tooling. A green local build never proves a remote build, and a green remote build never proves runtime behavior. Read the build log from the environment that actually built the artifact.
 4. **Environment variables are per-environment and are the classic failure.** A variable set for preview but not production makes a deploy that worked in preview fail in production. List the target environment's variables and confirm what the build needs is present *before* promoting.
 5. **Never put a secret in a command-line flag**; argv lands in process listings and the transcript. Pass a managed reference on the CLI's `stdin` or in `env`; when the value must come from the user, request it with `ask_user` `response_type: secret` (see use-secrets-without-reading-them). Never echo the value back.
-6. **Verify after deploying**: request the deployed URL with `http_request` (status, headers, and a bounded body are the evidence; `fetch_url` when the page's readable content matters). From a `command` program, `curl -sS -v --fail-with-body URL` gives the same evidence with the connection, TLS and header lines on stderr; to check a new deployment before DNS points at it, keep the production name with `--connect-to` and read the platform's logs for that deployment id. "The command exited 0" is not evidence the site works — a successful upload can still serve a broken app.
+6. **Verify after deploying**: request the deployed URL with native `curl` in `command` (status, headers, and a bounded body are the evidence; `fetch_url` when the page's readable content matters). From a `command` program, `curl -sS -v --fail-with-body URL` gives the same evidence with the connection, TLS and header lines on stderr; to check a new deployment before DNS points at it, keep the production name with `--connect-to` and read the platform's logs for that deployment id. "The command exited 0" is not evidence the site works — a successful upload can still serve a broken app.
 7. Report the deployment/version/release id, exact target, and URL. Also state whether rollback covers code only or includes configuration and data; most platforms do not reverse migrations or external state.
 
 ## Before promoting to production, stop if

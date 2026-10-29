@@ -12,7 +12,7 @@ Use this workflow to answer metrics questions with bounded, captured queries. On
 ## Workflow
 
 1. Name the endpoint first and confirm it is the local or dev stack. A heavy query against a shared production Prometheus can stall it for everyone; anything non-loopback needs the user's explicit say-so before the first query.
-2. Ask the smallest question that answers the task. Query the server's HTTP API with `http_request` — `GET /api/v1/query` for a spot value before any `/api/v1/query_range` with `start`/`end`/`step` — declaring `loopback_connect` for its port. Reserve `promtool` for offline `check` and `test rules`. Most "what is the error rate" questions need one instant vector, not a graph's worth of samples.
+2. Ask the smallest question that answers the task. Query the server's HTTP API with `curl` in `command` — `GET /api/v1/query` for a spot value before any `/api/v1/query_range` with `start`/`end`/`step` — declaring `loopback_connect` for its port. Reserve `promtool` for offline `check` and `test rules`. Most "what is the error rate" questions need one instant vector, not a graph's worth of samples.
 3. Bound every range query — explicit start, end, and a step that keeps the sample count in the hundreds. Wide label matchers over long ranges are the queries that stall servers; scope the selector to the job and metric the question is actually about.
 4. Validate configuration statically where possible — `promtool check config` and `promtool check rules` catch syntax and semantics without a server at all.
 5. Unit-test alert rules instead of eyeballing them — `promtool test rules` runs recorded series through the rules and asserts what fires when. A rule change without a rule test is a guess; write the test file alongside the change.

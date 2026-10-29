@@ -423,18 +423,24 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		}
 	}
 	active := []toolcontract.OperationDefinition{external}
-	if write, ok := r.Registry.Definition("write"); ok {
-		active = append(active, write.Operation)
+	if write, ok := r.Registry.Operation(programPublicationTool); ok {
+		active = append(active, offeredProgramDefinition(programPublicationTool, write.Operation))
 	}
-	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, "write": true}
+	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, programPublicationTool: true}
 	for _, operation := range owners.Natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
 				continue
 			}
 			seen[tool] = true
-			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, definition.Operation)
+			if definition, ok := r.Registry.Operation(tool); ok {
+				active = append(active, offeredProgramDefinition(tool, definition.Operation))
+			} else if spec, ok := run.catalogCommand(tool); ok {
+				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				active = append(active, definition)
 			}
 		}
 	}

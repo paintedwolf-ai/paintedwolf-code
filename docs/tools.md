@@ -1006,7 +1006,7 @@ Producer results separate ordinary status, typed terminal/host-stop facts, compl
 
 ### Command schema and guidance
 
-`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Domain source tools remain loadable where the profile offers them; routine operations run only through command. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
 
 The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. `timeout` and `nohup` dispatch their command exactly as a reached command, with its own receipt and confinement. `timeout` expiry signals the external process through program supervision (KILL after `-k`) or interrupts a native operation, and returns 124; the call's `timeout_ms` stays the outer bound. `time` and `time -p` report on stderr with processor time from reaped external children; a report that counted native operations as zero sets `cpu_time_unmeasured` in the result. `ulimit` reports the limits external children receive and sets soft and hard limits for later children of the same call only, from the per-resource capabilities the platform's resource-limit owner declares; a limit the platform does not provide is refused. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
 
@@ -1020,3 +1020,30 @@ When every live evaluator activity is blocked, `sleep`, shell `wait` (`wait`, `w
 | Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
 
 OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
+
+---
+
+## Portable command cutover inventory
+
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 79 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
+
+The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
+
+| Area | Current path and cutover decision |
+|---|---|
+| Native utilities | `internal/toolhost/command_programs.go` composes literal, mutation, query, search, text, host-environment, Git, and HTTP operations. The catalog accepts common GNU and BSD spellings. Unsupported syntax is a typed admission refusal; utility option and input errors use native status and stderr. |
+| External programs | The command program's process launcher applies the configured confinement and capability decisions at launch. A utility gap that falls through to an installed binary records `native_gap` for repair in the corresponding utility branch. |
+| Results and receipts | Invocation records identify program and child executions, source pins, delivered ranges, effects, completeness, and host-stop facts. An incomplete result cannot become successful evidence merely because one child exited zero. |
+| Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
+| Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
+| Routine tools | `command` is on the routine floor. Routine file, search, query, Git inspection and HTTP operations have no callable registration or profile offer. Their contracts remain available for command admission, receipts, approvals and historical decoding. Domain tools and conversational edits keep their structured surfaces. |
+
+### Source-index behavior
+
+A ready index accelerates the parts of a query it can prove current. The native `grep` and `rg` paths consult exact-revision Bloom filters per walked file; uncovered, changed, out-of-scope, still-indexing, symlink, and otherwise undecidable files are read live. The source-index coverage change in #1466 makes native survey and listing combine indexed covered entries with live directory reconciliation, including additions and deletions. `find` currently walks and stats live entries because its expression and traversal semantics require current filesystem facts beyond the safe index projection. Native search tests and #1466 exercise mixed indexed and live scopes through direct tools and the `command` entry. An index miss is never evidence that a live area is empty.
+
+### Qualification and default cutover
+
+The stock profiles and coordinator surfaces use the command environment for routine work. Its disable control refuses new program dispatch and settles its live work; it never sends a program to a shell as a fallback. Named operation contracts retain their authority, approval and history meanings after their standalone schemas leave the offered roster.
+
+Focused tests establish the changed registry, catalog and runtime contracts on their recorded source. GitHub CI checks each PR; a local composition supports direct human command testing and application validation with the shipped prompts. Historical run-3 results remain diagnostic evidence. A local development build does not establish installed macOS/Linux qualification, and Windows-host qualification remains pending. No release is part of this cutover.

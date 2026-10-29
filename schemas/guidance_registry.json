@@ -1325,7 +1325,7 @@
       "summary": "The request named a cookie the jar does not carry for this URL, so nothing was sent."
     },
     "HTTP_REQUEST_FAILED": {
-      "branch_instruction": "Keep the method, headers, body, and destination explicit in `http_request` when retrying",
+      "branch_instruction": "Keep the method, headers, body, and destination explicit in native `curl` in `command` when retrying",
       "category": "recoverable",
       "emit": "guard:http_request",
       "summary": "The HTTP request did not complete.{% if paintedwolf.http_requests_started %} The host started {{ paintedwolf.http_requests_started }} exchange attempts for {{ paintedwolf.http_method }}.{% endif %}{% if paintedwolf.http_responses_received %} It received {{ paintedwolf.http_responses_received }} responses; the last status was {{ paintedwolf.http_last_status }}.{% endif %}"
@@ -1361,10 +1361,10 @@
       "summary": "The request named a token reference that the token jar does not carry, so nothing was sent."
     },
     "HTTP_REQUEST_WEB_PAGE": {
-      "branch_instruction": "Keep http_request when you need the exact markup, headers, or status of this endpoint",
+      "branch_instruction": "Keep native curl when you need the exact markup, headers, or status of this endpoint",
       "category": "informational",
       "emit": "guard:http_request",
-      "summary": "http_request returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup."
+      "summary": "curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup."
     },
     "IMAGE_BYTES_EXCEEDED": {
       "branch_instruction": "Branch on Code IMAGE_BYTES_EXCEEDED; view a smaller copy of the image",
@@ -2749,7 +2749,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use `write`/`edit` for blueprint files until approval/handoff",
+      "branch_instruction": "Use command redirects or `edit` for blueprint files until approval/handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2798,13 +2798,13 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use `write`/`edit` on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Use command redirects or `edit` on the blueprint file; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
     },
     "SPEC_POSTURE_STUB_REQUIRED": {
-      "branch_instruction": "Write blueprint stub with write before Task researchers",
+      "branch_instruction": "Write blueprint stub with a staged command redirect before Task researchers",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Phase 1 plan stub required before Task(plan-writer)"

@@ -31,7 +31,7 @@ copy:
   why: The host wires every stream itself instead of handing the line to a shell, so each redirection must name one
     destination it can open, review, and record.
   fix: '{% if paintedwolf.redirection_terminal %}Drop the file redirection here, or run the program through
-    `command`, which writes redirected output through the same write scope as `write`.{% else %}{% if
+    `command`, which writes redirected output through the declared write scope.{% else %}{% if
     paintedwolf.redirection_conflict %}Keep either the inline redirection or the structured field, not both.{% else
     %}{% if paintedwolf.redirection_pipe %}Move the file redirection to the last stage for output or the first stage
     for input, or join the programs with `&&` and a file between them.{% else %}Use `>`, `>>`, `2>`, `2>>`, `&>`,

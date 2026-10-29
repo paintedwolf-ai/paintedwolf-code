@@ -16,6 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -54,7 +56,11 @@ func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
 	searches, err := search.NewOwners(native.ExecutionRevisions{Boundary: f.Runtime.Boundary}, f.Recorder, nil)
 	testutil.FailErr(t, "prepare search operations", err)
 	searches.Catalog = catalog
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(_ tools.ToolContext, _ *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		programSearch := *searches
+		programSearch.Revisions.Memory = memory
+		programSearch.Admission = admission
+		searches := &programSearch
 		natives := map[string]command.NativeOperation{}
 		for _, name := range searches.Commands() {
 			tool, _ := searches.Operation(name)

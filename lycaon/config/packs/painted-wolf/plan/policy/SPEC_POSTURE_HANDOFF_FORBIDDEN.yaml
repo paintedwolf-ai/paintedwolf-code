@@ -11,7 +11,7 @@ copy:
   cause: Handoff tools blocked until plan workflow milestones are met
   why: Finish stub, research, expand, and human approval
   fix: Finish stub, research, expand, and human approval
-  instead: Use `write`/`edit` for blueprint files until approval/handoff
+  instead: Use command redirects or `edit` for blueprint files until approval/handoff
   what: Handoff tools blocked until plan workflow milestones are met
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec

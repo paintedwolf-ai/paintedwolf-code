@@ -2,19 +2,15 @@
 # this profile is what the host will actually let through. If they disagree, the
 # profile wins — so keep the offered list a subset of the granted one.
 id: example_docs_only
-description: Docs writer — reads the tree, writes prose, runs nothing
+description: Docs writer — reads the tree and writes prose with native commands; runs no programs
+command_effects: [read_only, mutation]
 tools:
-  read: sticky
-  grep: sticky
-  find: sticky
-  list_dir: sticky
+  command: sticky
   summarize: sticky
   survey_repo: sticky
-  write: sticky
   edit: sticky
   update_progress: true
 deny_tools:
-  - command
   - verify
   - git_commit
   - git_restore

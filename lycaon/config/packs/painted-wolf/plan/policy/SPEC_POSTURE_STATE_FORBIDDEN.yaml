@@ -9,9 +9,9 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_STATE_FORBIDDEN"
 effect: block
 copy:
   cause: State tracking tools are forbidden in spec posture
-  why: Use `write`/`edit` on the blueprint file only; state tracking is build-only
-  fix: Use `write`/`edit` on the blueprint file only; state tracking is build-only
-  instead: Use `write`/`edit` on the blueprint file; state tracking tools are build-only
+  why: Use command redirects or `edit` on the blueprint file only; state tracking is build-only
+  fix: Use command redirects or `edit` on the blueprint file only; state tracking is build-only
+  instead: Use command redirects or `edit` on the blueprint file; state tracking tools are build-only
   what: State tracking tools are forbidden in spec posture
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec

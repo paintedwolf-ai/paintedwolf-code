@@ -56,8 +56,13 @@ func TestLoadAgentToolSurfaceExploreReadonly(t *testing.T) {
 	for _, tool := range data.Requestable {
 		requestable[tool.Name] = true
 	}
-	if !foundCommand || !requestable["read"] || !requestable["find"] {
-		t.Fatalf("explore_readonly must offer command and keep read/find requestable: tools=%v requestable=%v", data.Tools, data.Requestable)
+	if !foundCommand {
+		t.Fatal("explore_readonly must offer command")
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if requestable[retired] {
+			t.Errorf("retired routine schema %s is requestable", retired)
+		}
 	}
 
 }
