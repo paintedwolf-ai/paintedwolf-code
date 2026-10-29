@@ -94,7 +94,7 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 
 // EXCEPT inserts only physical chunk IDs, then deletes referenced IDs. Its
 // temporary tree cannot grow with the number of retained snapshots.
-const retainedCompletenessSQL = `SELECT EXISTS(SELECT 1 FROM source_manifest_staging NOT INDEXED),
+const retainedCompletenessSQL = `SELECT EXISTS(SELECT 1 FROM source_manifest_staging INDEXED BY sqlite_autoindex_source_manifest_staging_1),
  EXISTS(SELECT id FROM source_manifest_chunks NOT INDEXED EXCEPT SELECT chunk_id FROM source_snapshot_chunks INDEXED BY sqlite_autoindex_source_snapshot_chunks_1),
  COALESCE((SELECT SUM(entry_count) FROM source_manifest_chunks NOT INDEXED),0),
  EXISTS(SELECT 1 FROM source_snapshot_chunks INDEXED BY sqlite_autoindex_source_snapshot_chunks_1 GROUP BY snapshot_id,chunk_id HAVING count(*)>1)`

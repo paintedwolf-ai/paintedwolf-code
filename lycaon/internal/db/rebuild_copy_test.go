@@ -31,15 +31,24 @@ func TestRetainedCopyPreservesReleasedRowsAndHistory(t *testing.T) {
 	testutil.FailErr(t, "attach reference", err)
 	objects, err := readRebuildObjects(t.Context(), copyDB)
 	testutil.FailErr(t, "read source tables", err)
+	state, err := integrityAuditState(t.Context(), copyDB)
+	testutil.FailErr(t, "read reconstructed audit obligation", err)
+	if state != integrityAuditPendingValue {
+		t.Fatal("reconstructed image lost its deferred audit obligation")
+	}
 	for _, object := range objects {
 		if object.kind != "table" || object.tableKind == "virtual" || object.name == "source_blob_reclaim_queue" || plan.CopyPlan().Sources[object.name] != "" {
 			continue
 		}
 		t.Run(object.name, func(t *testing.T) {
 			name := rebuildIdentifier(object.name)
+			predicate := ""
+			if object.name == "store_meta" {
+				predicate = " WHERE key <> 'integrity_audit_failed'"
+			}
 			for _, pair := range [][2]string{{"main", "original"}, {"original", "main"}} {
 				var different int
-				query := "SELECT COUNT(*) FROM (SELECT * FROM " + pair[0] + "." + name + " EXCEPT SELECT * FROM " + pair[1] + "." + name + ")"
+				query := "SELECT COUNT(*) FROM (SELECT * FROM " + pair[0] + "." + name + predicate + " EXCEPT SELECT * FROM " + pair[1] + "." + name + predicate + ")"
 				testutil.FailErr(t, "compare unchanged rows", copyDB.QueryRow(query).Scan(&different))
 				if different != 0 {
 					t.Fatalf("%d unchanged rows differ", different)
