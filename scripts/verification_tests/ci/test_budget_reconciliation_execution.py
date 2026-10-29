@@ -13,7 +13,7 @@ from ci_policy import budget_history as history
 
 def run():
     return dict(id=42, run_attempt=1, repository={'full_name': 'owner/repo'},
-                path='.github/workflows/qualification.yml', event='push', head_branch='main',
+                path='.github/workflows/nightly.yml', event='schedule', head_branch='main',
                 status='completed', conclusion='failure', created_at='2026-10-09T12:00:00Z', head_sha='a' * 40)
 
 
@@ -27,11 +27,11 @@ def zipped(value, duplicate=False):
 
 
 class EvidenceTests(unittest.TestCase):
-    def test_only_current_qualification_limits_receipt_supplies_snapshot(self):
+    def test_only_current_nightly_limits_receipt_supplies_snapshot(self):
         raw = zipped(report())
-        artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=len(raw))
+        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
         ignored = [{**artifact, 'id': 2, 'name': 'receipt-verification-integration-limits-1'},
-                   {**artifact, 'id': 3, 'name': 'receipt-verification-check-limits-2'}]
+                   {**artifact, 'id': 3, 'name': 'receipt-verification-nightly-limits-2'}]
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                 patch.object(evidence, 'pages', return_value=ignored + [artifact]), \
                 patch.object(evidence.subprocess, 'check_output', return_value=raw) as download:
@@ -41,7 +41,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(download.call_args.args[0][-1], 'repos/owner/repo/actions/artifacts/1/zip')
 
     def test_missing_expired_ambiguous_or_oversized_receipts_fail_closed(self):
-        artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=100)
+        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=100)
         for artifacts in [[], [{**artifact, 'expired': True}], [artifact, artifact],
                           [{**artifact, 'size_in_bytes': evidence.MAX_ARCHIVE_BYTES + 1}]]:
             with self.subTest(artifacts=artifacts), patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
@@ -56,7 +56,7 @@ class EvidenceTests(unittest.TestCase):
         invalid['tracking']['complete'] = False
         values.append(zipped(invalid))
         for raw in values:
-            artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=len(raw))
+            artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
             with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(evidence, 'pages', return_value=[artifact]), \
                     patch.object(evidence.subprocess, 'check_output', return_value=raw):
@@ -93,7 +93,7 @@ class ReconciliationTests(unittest.TestCase):
             result = tracker.reconcile(current or run(), dry_run)
         return result, calls, read
 
-    def test_failed_qualification_creates_issue_for_merged_warning(self):
+    def test_failed_nightly_creates_issue_for_merged_warning(self):
         result, calls, read = self.invoke()
         writes = [call for call in calls.call_args_list if len(call.args) > 1]
         self.assertEqual(len(writes), 1)
@@ -116,8 +116,8 @@ class ReconciliationTests(unittest.TestCase):
             read.assert_not_called()
             self.assertFalse(any(len(call.args) > 1 for call in calls.call_args_list))
 
-    def test_only_completed_repository_qualification_pushes_are_eligible(self):
-        mutations = [dict(event='pull_request'), dict(event='merge_group'), dict(event='workflow_dispatch'),
+    def test_only_completed_repository_nightly_observations_are_eligible(self):
+        mutations = [dict(event='pull_request'), dict(event='merge_group'), dict(event='push'),
                      dict(head_branch='feature'), dict(repository={'full_name': 'foreign/repo'}),
                      dict(path='.github/workflows/ci.yml'), dict(status='in_progress'), dict(head_sha='invalid'),
                      dict(conclusion='cancelled'), dict(conclusion='timed_out'), dict(conclusion='neutral'),
@@ -129,6 +129,7 @@ class ReconciliationTests(unittest.TestCase):
             api.assert_not_called()
             read.assert_not_called()
         self.assertTrue(tracker.eligible({**run(), 'conclusion': 'success'}, 'owner/repo'))
+        self.assertTrue(tracker.eligible({**run(), 'event': 'workflow_dispatch'}, 'owner/repo'))
         self.assertTrue(tracker.eligible({**run(), 'conclusion': 'failure'}, 'owner/repo'))
 
     def test_stale_run_and_main_advance_abort_writes(self):
