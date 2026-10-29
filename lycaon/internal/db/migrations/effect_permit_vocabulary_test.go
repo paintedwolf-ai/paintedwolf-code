@@ -3,11 +3,14 @@ package migrations_test
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -111,21 +114,79 @@ func assertApprovalMigrationRollback(t *testing.T, payload []byte) {
 	database, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "fixture.db"))
 	testutil.FailErr(t, "open refusal fixture", err)
 	defer database.Close()
-	_, err = database.Exec(`CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT); CREATE TABLE approval_operations(checkpoint_id TEXT PRIMARY KEY); CREATE TABLE chat_grants(id TEXT PRIMARY KEY)`)
-	testutil.FailErr(t, "create retained tables", err)
-	_, err = database.Exec(`INSERT INTO checkpoints VALUES('fixture','tool_approval',?)`, string(payload))
+	_, err = database.Exec(`
+CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT);
+CREATE TABLE approval_operations(checkpoint_id TEXT PRIMARY KEY,session_id TEXT,option_id TEXT,option_json TEXT,status TEXT,committed_at TEXT);
+CREATE INDEX retained_operation_status ON approval_operations(status);
+CREATE TABLE chat_grants(chat_session_id TEXT,id TEXT,checkpoint_id TEXT,delta_json TEXT,expires_at TEXT,PRIMARY KEY(chat_session_id,id)) WITHOUT ROWID;
+CREATE INDEX retained_grant_id ON chat_grants(id);
+INSERT INTO approval_operations VALUES
+ ('fixture','session','option','{"retained":"prepared"}','prepared',NULL),
+ ('unrelated','other-session','other-option','{"retained":"committed"}','committed','2026-10-01T00:00:00Z');
+INSERT INTO chat_grants VALUES
+ ('session','grant','fixture','{"retained":"chat"}',NULL),
+ ('other-session','other-grant','unrelated','{"retained":"day"}','2026-10-02T00:00:00Z');`)
+	testutil.FailErr(t, "create populated retained tables", err)
+	_, err = database.Exec(`INSERT INTO checkpoints VALUES('fixture','tool_approval',?),('unrelated','content_apply','{"retained":true}')`, string(payload))
 	testutil.FailErr(t, "persist unrecognized retained authority", err)
+	before := approvalDatabaseSnapshot(t, database)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin refused migration", err)
 	if err := migrations.EffectPermitIdentity(migrations.Baseline{Revision: 5}).Apply(t.Context(), tx); err == nil {
 		t.Fatal("migration accepted unrecognized retained authority")
 	}
 	testutil.FailErr(t, "roll back refused migration", tx.Rollback())
-	var raw string
-	var added int
-	testutil.FailErr(t, "read unchanged checkpoint", database.QueryRow(`SELECT payload_json FROM checkpoints WHERE id='fixture'`).Scan(&raw))
-	testutil.FailErr(t, "read rolled back schema", database.QueryRow(`SELECT count(*) FROM pragma_table_info('checkpoints') WHERE name LIKE 'authority_%'`).Scan(&added))
-	if raw != string(payload) || added != 0 {
-		t.Fatal("refused migration changed retained authority or its schema")
+	after := approvalDatabaseSnapshot(t, database)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused migration changed retained table data or complete SQLite schema")
 	}
+}
+
+func approvalDatabaseSnapshot(t *testing.T, database *sql.DB) map[string][]string {
+	t.Helper()
+	state := map[string][]string{"schema": approvalQuerySnapshot(t, database, "SELECT * FROM sqlite_schema")}
+	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='table'`)
+	testutil.FailErr(t, "enumerate retained tables", err)
+	var tables []string
+	for rows.Next() {
+		var table string
+		testutil.FailErr(t, "read retained table name", rows.Scan(&table))
+		tables = append(tables, table)
+	}
+	testutil.FailErr(t, "enumerate all retained tables", rows.Err())
+	testutil.FailErr(t, "close retained table inventory", rows.Close())
+	for _, table := range tables {
+		quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
+		state["table:"+table] = approvalQuerySnapshot(t, database, "SELECT * FROM "+quoted)
+	}
+	return state
+}
+
+func approvalQuerySnapshot(t *testing.T, database *sql.DB, query string) []string {
+	t.Helper()
+	rows, err := database.Query(query)
+	testutil.FailErr(t, "read retained state", err)
+	defer rows.Close()
+	columns, err := rows.Columns()
+	testutil.FailErr(t, "read retained columns", err)
+	var records []string
+	for rows.Next() {
+		values, destinations := make([]any, len(columns)), make([]any, len(columns))
+		for index := range values {
+			destinations[index] = &values[index]
+		}
+		testutil.FailErr(t, "read complete retained row", rows.Scan(destinations...))
+		cells := make([]string, len(values))
+		for index, value := range values {
+			cells[index] = fmt.Sprintf("%T:%#v", value, value)
+		}
+		encoded, err := json.Marshal(cells)
+		testutil.FailErr(t, "encode typed retained row", err)
+		records = append(records, string(encoded))
+	}
+	testutil.FailErr(t, "read all retained rows", rows.Err())
+	sort.Strings(records)
+	header, err := json.Marshal(columns)
+	testutil.FailErr(t, "encode retained columns", err)
+	return append([]string{string(header)}, records...)
 }
