@@ -112,7 +112,7 @@ func RevalidateSocketGrant(g SocketGrant) error {
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
 		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
 	}
-	if g.Binding.Mode() == socketref.RetainedObject && !g.Binding.MatchesPath(now) {
+	if g.Binding.Enforcement == socketref.RetainedObject && !g.Binding.MatchesPath(now) {
 		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
 	}
 	return nil
