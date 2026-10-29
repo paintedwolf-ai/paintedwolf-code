@@ -25,18 +25,27 @@ def select(api, repository, repository_id, run_id, artifact_id, controller, arch
             or type(partial) is not bool):
         raise ValueError('candidate selection requires exact typed producer and native CPU identities')
     run=api(f'repos/{repository}/actions/runs/{run_id}')
-    if (type(run.get('id')) is not int or run['id']!=run_id or run.get('head_sha')!=controller
+    pull_request=run.get('event')=='pull_request'
+    pulls=run.get('pull_requests',[])
+    eligible=(run.get('event') in {'workflow_dispatch','schedule'} and run.get('head_branch')=='main'
+              or pull_request and isinstance(pulls,list) and any(isinstance(row,dict)
+                  and isinstance(row.get('base'),dict) and row['base'].get('ref')=='main' for row in pulls))
+    workflows=run.get('referenced_workflows',[])
+    references=[row.get('sha') for row in workflows if isinstance(row,dict) and isinstance(row.get('path'),str)
+                and row['path'].partition('@')[0]==repository+'/.github/workflows/linux-candidates.yml'] if isinstance(workflows,list) else []
+    head=run.get('head_sha')
+    if (type(run.get('id')) is not int or run['id']!=run_id
+            or not isinstance(head,str) or not re.fullmatch('[a-f0-9]{40}',head)
+            or (references!=[controller] if pull_request else head!=controller)
             or run.get('repository',{}).get('id')!=repository_id
             or run.get('repository',{}).get('full_name')!=repository
             or run.get('head_repository',{}).get('id')!=repository_id
-            or run.get('path')!='.github/workflows/linux-candidates.yml'
-            or run.get('head_branch') not in {'main','linux/candidate-ci-isolation'}
-            or run.get('event') not in {'push','workflow_dispatch','schedule'}
+            or run.get('path')!='.github/workflows/linux-candidate-requests.yml' or not eligible
             or run.get('status')!='completed' or run.get('conclusion')!=('failure' if partial else 'success')
             or type(run.get('run_attempt')) is not int or run['run_attempt']<1):
         raise ValueError('candidate input run differs from its independently pinned native producer')
     role=('linux-partial-diagnostics-' if partial else 'linux-candidate-')+'linux-'+ARCHES[architecture]
-    artifact=artifact_for_run(api,repository,repository_id,run_id,controller,role)
+    artifact=artifact_for_run(api,repository,repository_id,run_id,head,role)
     if artifact['artifact_id']!=artifact_id:
         raise ValueError('candidate artifact ID differs from its independently selected role')
     return {'repository':repository,'repository_id':repository_id,'run_id':run_id,
