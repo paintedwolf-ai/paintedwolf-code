@@ -4,6 +4,13 @@
 //! GTK on Linux, the OS pasteboard elsewhere. Shutdown is terminal.
 
 mod service;
+mod secret;
+#[cfg(target_os = "macos")]
+mod secret_macos;
+#[cfg(target_os = "windows")]
+mod secret_windows;
+#[cfg(target_os = "linux")]
+mod secret_linux;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -47,6 +54,24 @@ pub async fn write_clipboard_text(
     state: tauri::State<'_, ClipboardState>,
 ) -> Result<(), ClipboardError> {
     state.service.write(&app, text).await
+}
+
+#[tauri::command]
+pub async fn write_secret_text(
+    text: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ClipboardState>,
+) -> Result<u64, ClipboardError> {
+    state.service.write_secret(&app, text).await
+}
+
+#[tauri::command]
+pub async fn clear_secret_text(
+    copy: u64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ClipboardState>,
+) -> Result<(), ClipboardError> {
+    state.service.clear_secret(&app, copy).await
 }
 
 /// Empty when the board has no text.

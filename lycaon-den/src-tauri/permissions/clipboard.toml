@@ -9,6 +9,16 @@ description = "Write plain text to the OS clipboard for copy and cut actions."
 commands.allow = ["write_clipboard_text"]
 
 [[permission]]
+identifier = "allow-write-secret-text"
+description = "Copy a revealed secret value to the OS clipboard, marked as secret for clipboard history."
+commands.allow = ["write_secret_text"]
+
+[[permission]]
+identifier = "allow-clear-secret-text"
+description = "Clear a copied secret value when it expires, only while that copy is still on the clipboard."
+commands.allow = ["clear_secret_text"]
+
+[[permission]]
 identifier = "allow-paste-into-focused-view"
 description = "Run the system Paste action in the focused web view for context-menu Paste on macOS."
 commands.allow = ["paste_into_focused_view"]

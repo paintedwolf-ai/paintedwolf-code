@@ -15,7 +15,8 @@ const clipboard = vi.hoisted(() => ({
   read: vi.fn(async () => ({ readable: true, text: "" }) as
     | { readable: true; text: string }
     | { readable: false }),
-  write: vi.fn(async () => {}),
+  write: vi.fn(async () => 1),
+  clear: vi.fn(async (_copy: number) => {}),
   copy: vi.fn(async () => {}),
 }));
 vi.mock("../../utils/clipboard.ts", () => ({
@@ -23,6 +24,11 @@ vi.mock("../../utils/clipboard.ts", () => ({
   writeClipboardText: clipboard.write,
   copyTextToClipboard: clipboard.copy,
 }));
+
+vi.mock("../../utils/secret-clipboard.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../utils/secret-clipboard.ts")>();
+  return { ...original, secretClipboardLease: () => original.secretClipboardLease({ write: clipboard.write, clear: clipboard.clear }) };
+});
 
 const REVEALED = "native-authenticated-value";
 
@@ -102,7 +108,8 @@ afterEach(() => {
   clipboard.read.mockReset();
   clipboard.read.mockResolvedValue({ readable: true, text: "" });
   clipboard.write.mockReset();
-  clipboard.write.mockResolvedValue(undefined);
+  clipboard.write.mockResolvedValue(1);
+  clipboard.clear.mockClear();
   clipboard.copy.mockReset();
   vi.restoreAllMocks();
 });
@@ -323,8 +330,8 @@ describe("ManagedSecretsPanel", () => {
     let settle: () => void = () => {};
     clipboard.write.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          settle = resolve;
+        new Promise<number>((resolve) => {
+          settle = () => resolve(1);
         }),
     );
     await revealValue();
@@ -340,8 +347,8 @@ describe("ManagedSecretsPanel", () => {
 
   it("does not attribute an old clipboard completion to a newer reveal", async () => {
     revealResolves();
-    let finishCopy!: () => void;
-    clipboard.write.mockReturnValueOnce(new Promise<void>((resolve) => { finishCopy = resolve; }));
+    let finishCopy: () => void = () => { throw new Error("copy promise is not initialized"); };
+    clipboard.write.mockReturnValueOnce(new Promise<number>((resolve) => { finishCopy = () => resolve(1); }));
     await revealValue();
     fireEvent.click(screen.getByTestId("managed-secret-copy-value"));
     fireEvent.click(screen.getByTestId("managed-secret-hide-value"));
@@ -366,7 +373,8 @@ describe("ManagedSecretsPanel", () => {
     );
   });
 
-  it("leaves what the user copied on the clipboard when the value hides", async () => {
+  it("keeps a copy usable after remasking and expires only its receipt", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     revealResolves();
     await revealValue();
 
@@ -378,6 +386,9 @@ describe("ManagedSecretsPanel", () => {
     window.dispatchEvent(new Event("blur"));
 
     expect(clipboard.write).toHaveBeenCalledTimes(1);
+    expect(clipboard.clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(clipboard.clear).toHaveBeenCalledWith(1);
     expect(clipboard.read).not.toHaveBeenCalled();
   });
 

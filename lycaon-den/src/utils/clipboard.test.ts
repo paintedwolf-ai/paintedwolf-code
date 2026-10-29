@@ -47,6 +47,14 @@ describe("clipboard", () => {
     });
   });
 
+  it("copies exposed editor credentials as the exact text the person selected", async () => {
+    isTauriRuntime.mockReturnValue(true);
+    invoke.mockResolvedValue(undefined);
+    const text = "DB_PASSWORD=person-chosen-value";
+    await copyTextToClipboard(text);
+    expect(invoke.mock.calls).toEqual([["write_clipboard_text", { text }]]);
+  });
+
   it("reads navigator.clipboard outside the desktop shell", async () => {
     const readText = vi.fn(async () => "from-web");
     vi.stubGlobal("navigator", { clipboard: { readText } });
