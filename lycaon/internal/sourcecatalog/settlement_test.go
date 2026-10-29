@@ -57,7 +57,7 @@ func TestObserveServesMovingGenerationWhileReconciling(t *testing.T) {
 	}
 	select {
 	case <-refreshStarted:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background reconciliation did not start")
 	}
 	close(releaseRefresh)
@@ -111,7 +111,7 @@ func TestObserveJoinsKnownInvalidationOnce(t *testing.T) {
 
 	select {
 	case <-buildStarted:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("build 2 did not start")
 	}
 	close(releaseBuild)
@@ -207,7 +207,7 @@ func TestObserveWithinReturnsAnExpiredWaitWithoutAGeneration(t *testing.T) {
 	}
 	select {
 	case <-buildStarted:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the build did not start")
 	}
 
@@ -266,7 +266,7 @@ func TestObserveWithinServesTheCompleteGenerationWhileItIsStale(t *testing.T) {
 	}
 	select {
 	case <-rebuildStarted:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the replacing build did not start")
 	}
 

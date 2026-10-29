@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -137,9 +138,15 @@ func TestSyncMessageWriteThroughReplacesEvidence(t *testing.T) {
 }
 
 func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
+	// Revisions 3 and 4 share one shape, so the released revision-4 corpus
+	// restamped as revision 3 is a revision-3 store.
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.3-rc1", "store.db"))
+	testutil.FailErr(t, "read released corpus", err)
 	path := filepath.Join(t.TempDir(), "store.db")
-	database, err := db.Open(path)
+	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, raw, 0o600))
+	database, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open projection fixture", err)
+	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	const session = "path-repair"
 	testdbseed.InsertSessionWithRoot(t, database, session, testdbseed.DefaultProjectID, t.TempDir())
 	tx, err := database.BeginTx(t.Context(), nil)
@@ -162,14 +169,11 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	_, err = tx.ExecContext(t.Context(), `UPDATE evidence_index SET shape='url' WHERE message_id='observation-0001'`)
 	testutil.FailErr(t, "seed unrelated observation shape", err)
 	testutil.FailErr(t, "commit source fixture", tx.Commit())
-	testutil.FailErr(t, "close source fixture", database.Shutdown(t.Context()))
-	source, err := sql.Open("sqlite", path)
-	testutil.FailErr(t, "open prior revision", err)
-	// Revision3 has revision4's SQL shape; its path repair is data-only.
-	db.DeriveRevision4Fixture(t, source)
-	_, err = source.Exec(`PRAGMA user_version=3`)
+	_, err = database.Exec(`PRAGMA user_version=3`)
 	testutil.FailErr(t, "set source revision", err)
-	testutil.FailErr(t, "close prior revision", source.Close())
+	_, err = database.Exec(releasedUnlockAudit)
+	testutil.FailErr(t, "restore the released unlock audit", err)
+	testutil.FailErr(t, "close prior revision", database.Close())
 	testutil.FailErr(t, "upgrade recorded projection", db.UpgradeStaged(t.Context(), path))
 	upgraded, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "inspect repaired projection", err)
@@ -193,3 +197,31 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	}
 	testutil.FailErr(t, "reopen current upgrade", db.UpgradeStaged(t.Context(), path))
 }
+
+// releasedUnlockAudit returns vault_unlocks to its released shape, before it
+// admitted the away end reason, so a fresh store stands in for revision 3.
+const releasedUnlockAudit = `CREATE TABLE vault_unlocks_released (
+    id TEXT PRIMARY KEY CHECK (length(id) = 36),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    chat_session_id TEXT NOT NULL CHECK (length(trim(chat_session_id)) > 0),
+    person_id TEXT NOT NULL REFERENCES people(id),
+    authenticator TEXT NOT NULL CHECK (
+        authenticator IN ('macos_user_presence', 'windows_user_presence', 'linux_user_presence', 'linux_app_password')
+    ),
+    window_label TEXT NOT NULL CHECK (length(trim(window_label)) BETWEEN 1 AND 120),
+    unlocked_at TEXT NOT NULL CHECK (unlocked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+    ended_at TEXT CHECK (ended_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+    end_reason TEXT CHECK (end_reason IN (
+        'idle', 'ceiling', 'screen_locked', 'sleep', 'app_quit', 'manual', 'renewed', 'restart'
+    )),
+    CHECK ((ended_at IS NULL) = (end_reason IS NULL))
+) STRICT;
+DROP TABLE vault_unlocks;
+ALTER TABLE vault_unlocks_released RENAME TO vault_unlocks;
+CREATE INDEX idx_vault_unlocks_project_chat
+    ON vault_unlocks(project_id, chat_session_id, unlocked_at, id);
+CREATE INDEX idx_vault_unlocks_person
+    ON vault_unlocks(person_id);
+CREATE INDEX idx_vault_unlocks_open
+    ON vault_unlocks(id)
+    WHERE ended_at IS NULL;`

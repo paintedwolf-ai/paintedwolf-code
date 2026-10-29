@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,7 +32,7 @@ func expectTopic(t *testing.T, ch <-chan api.EventEnvelope, topic api.EventTopic
 			t.Fatalf("topic = %q want %s", envelope.Topic, topic)
 		}
 		return envelope
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatalf("timeout waiting for %s event", topic)
 	}
 	return api.EventEnvelope{}
@@ -154,7 +153,7 @@ func TestPublisherPublishLLMAssignsCallID(t *testing.T) {
 		if ev.CallID == "" {
 			t.Fatal("expected generated call_id")
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout")
 	}
 }
@@ -389,7 +388,7 @@ func TestPublisherPublishCheckpointPayload(t *testing.T) {
 		if ev.ID != "chk-1" || ev.ToolApproval == nil || ev.ToolApproval.Plan.Presentation.Tool != "write" || ev.Status != api.CheckpointStatusPending {
 			t.Fatalf("event = %+v", ev)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for checkpoint event")
 	}
 }
@@ -463,7 +462,7 @@ func TestPublishLLMPreservesCallID(t *testing.T) {
 		if ev.CallID != callID {
 			t.Fatalf("call_id = %q, want the supplied %q", ev.CallID, callID)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("no llm event delivered")
 	}
 }

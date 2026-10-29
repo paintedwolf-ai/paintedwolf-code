@@ -58,24 +58,26 @@ func runTerminalRunner(t *testing.T, scanner scan.CodeScanner, runtime ...scanca
 		Trigger:    api.ScanTriggerManual,
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
+	if s, ok := scanner.(*slowSuccessScanner); ok {
+		s.store = store
+		s.scanID = created.ID
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() { _ = runner.Run(ctx) }()
 
-	for {
+	for ctx.Err() == nil {
 		if scans := rec.snapshot(); len(scans) > 0 {
 			if scans[0].ID != created.ID {
 				t.Fatalf("OnTerminal scan id = %q want %q", scans[0].ID, created.ID)
 			}
 			return scans
 		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("timed out waiting for OnTerminal")
-		case <-time.After(25 * time.Millisecond):
-		}
+		time.Sleep(10 * time.Millisecond)
 	}
+	t.Fatal("timed out waiting for OnTerminal")
+	return nil
 }
 
 type deadlineScanner struct{}
@@ -91,23 +93,25 @@ func (deadlineScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scanoutput
 	return nil, ctx.Err()
 }
 
-type slowSuccessScanner struct{}
+type slowSuccessScanner struct {
+	store  *scan.SQLStore
+	scanID string
+}
 
-func (slowSuccessScanner) ID() string { return "slow-success" }
+func (*slowSuccessScanner) ID() string { return "slow-success" }
 
-func (slowSuccessScanner) Categories() []api.ScanCategory {
+func (*slowSuccessScanner) Categories() []api.ScanCategory {
 	return []api.ScanCategory{api.ScanCategorySecurity}
 }
 
-func (slowSuccessScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scanoutput.Result, error) {
-	timer := time.NewTimer(2500 * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-timer.C:
-		return &scanoutput.Result{}, nil
+func (s *slowSuccessScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scanoutput.Result, error) {
+	for ctx.Err() == nil {
+		if rec, err := s.store.Get(ctx, s.scanID); err == nil && rec != nil && rec.LongRunning {
+			return &scanoutput.Result{}, nil
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
+	return nil, ctx.Err()
 }
 
 func TestRunnerOnTerminalFiresOnComplete(t *testing.T) {
@@ -146,7 +150,7 @@ func TestRunnerHardRuntimeLimitIsTerminalWithoutRetry(t *testing.T) {
 }
 
 func TestRunnerSoftRuntimeLimitPersistsLongRunningState(t *testing.T) {
-	scans := runTerminalRunner(t, slowSuccessScanner{}, scancatalog.RuntimePolicy{
+	scans := runTerminalRunner(t, &slowSuccessScanner{}, scancatalog.RuntimePolicy{
 		SoftLimitSec: 1, HardLimitSec: 0, CPUUnits: 1, Parallelism: 1,
 	})
 	got := scans[0]

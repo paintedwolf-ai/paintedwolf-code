@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,6 +53,8 @@ func (l *modelTurn) runAssistantStreamTurn(
 		messageID = st.ensureCoordinatorDraftSlot()
 	}
 	outputID := uuid.NewString()
+	ctx, capture := trainingcapture.Begin(ctx, sessionID, messageID, outputID)
+	defer capture.Flush(ctx)
 	assistantMsg := newProvisionalAssistantMessage(api.Message{
 		ID:        messageID,
 		CreatedAt: time.Now().UTC(),
@@ -188,6 +191,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		}
 		st.output.id = committed.ID
 		canonicalOutputID = committed.ID
+		trainingcapture.Settled(ctx, committed.ID, wireAssistant)
 	}
 	if l.Deps.UpdateMessage != nil {
 		if err := l.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, wireAssistant); err != nil {
@@ -318,9 +322,11 @@ func (l *modelTurn) completeStream(
 	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
+	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
+	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
@@ -507,12 +513,13 @@ func (l *modelTurn) buildTurnRequest(
 	if st != nil && st.spendSoftStopGranted {
 		turnTools = filterSpendSoftStopToolMetas(turnTools)
 	}
-	// A prose-only turn keeps its tool definitions, which transports validate
-	// tool history against, and forbids calling them: a final turn with no
-	// completion tool, or a report-document repair that asks for one fence.
+	// A final turn with no completion tool keeps its tool definitions, which
+	// transports validate tool history against, and forbids calling them.
+	// Closeout repairs on earlier turns keep the surface callable: the repair
+	// kick offers resuming work, which retires the pinned report.
 	toolUse := modelcall.ToolUseAllowed
 	callable := turnTools
-	if l.Closeout.repairsReportDocument(ctx, sessionID) || (st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0) {
+	if st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0 {
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}

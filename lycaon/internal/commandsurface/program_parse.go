@@ -86,10 +86,10 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 // scratch against its enclosing program while parsing.
 // It only uses the upstream syntax package, never its interpreter or executor.
 func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	return parseProgram(context.Background(), source, options, nil)
+	return parseProgram(context.Background(), source, options, nil, nil)
 }
 
-func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory *toolcontract.ProgramMemory) (*ParsedProgram, error) {
+func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (*ParsedProgram, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -114,11 +114,16 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if options.CatalogDigest != "" && options.CatalogDigest != toolcontract.LanguageCatalogDigest() {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "the frozen compiled language/catalog identity"}
 	}
-	pool, releaseScratch, err := scratchLedger(ctx, languageLimit(catalog, "evaluation_memory_bytes"), memory)
-	if err != nil {
-		return nil, err
+	if pool == nil {
+		var releaseScratch func()
+		var err error
+		pool, releaseScratch, err = scratchLedger(ctx, languageLimit(catalog, "evaluation_memory_bytes"), memory, 0)
+		if err != nil {
+			releaseScratch()
+			return nil, err
+		}
+		defer releaseScratch()
 	}
-	defer releaseScratch()
 	// A source label is a path operand or an inline label. Reuse the declared
 	// per-argument byte ceiling; never retain a caller's large substring backing.
 	labelMaximum := languageLimit(catalog, "argument_bytes")
@@ -163,6 +168,9 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 		releaseState, err = memory.ReserveProgramState(ctx, hostBytes)
 		if err != nil {
 			return nil, err
+		}
+		if releaseState == nil {
+			return nil, fmt.Errorf("program state admission returned no release")
 		}
 		defer func() {
 			if !retained {
