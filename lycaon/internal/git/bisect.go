@@ -238,7 +238,16 @@ func NextBisect(ctx context.Context, dir string, state BisectState) (BisectStep,
 	}
 	for _, oid := range order {
 		if oid != state.Bad && !skipped[oid] {
-			step.Next = oid
+			// Git counts what remains if this commit turns out old: the
+			// candidates it does not reach.
+			reach := append([]string{"rev-list", "--count", oid, "--not"}, state.Good...)
+			out, err := restoreGit(ctx, dir, hermeticOpts(0), append(reach, bisectPathspec(state.Names)...)...)
+			if err != nil {
+				return step, err
+			}
+			reaches, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+			all, _ := strconv.Atoi(vars["bisect_all"])
+			step.Next, step.Remaining = oid, all-reaches-1
 			return step, nil
 		}
 	}
