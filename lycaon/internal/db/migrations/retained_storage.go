@@ -23,51 +23,113 @@ func (p Plan) PrepareRetainedStorage(ctx context.Context, database DBTX) (Plan, 
 	if pageBytes == 0 || pages > math.MaxUint64/pageBytes {
 		return p, fmt.Errorf("invalid retained source size")
 	}
-	scratch, entries, err := retainedSortBytes(ctx, database, pages*pageBytes, pageBytes)
+	trees, err := retainedInventory(ctx, database, nil, true)
+	if err != nil {
+		return p, err
+	}
+	scratch, err := retainedRouteSortBytes(trees, pageBytes)
 	if err != nil {
 		return p, err
 	}
 	p.scratchBytes, err = storageSum(p.scratchBytes, scratch)
 	p.retainedStoragePrepared = err == nil
-	p.retainedEntryRows = entries
+	p.retainedEntryRows = trees["source_manifest_entries"].cells
+	p.retainedTrees = trees
+	p.retainedStoreBytes = pages * pageBytes
+	p.retainedPageBytes = pageBytes
 	return p, err
 }
 
-// retainedSortBytes covers the reviewed revision-4 route and retained-copy
-// index builds. dbstat reads each source B-tree once, independent of how many
-// snapshots share its rows. No migration or snapshot serialization runs here.
-func retainedSortBytes(ctx context.Context, database DBTX, storeBytes, pageBytes uint64) (uint64, uint64, error) {
-	cells, indexRecord, manifestRecord, manifestCells, err := retainedInventory(ctx, database)
+// RetainedCopyScratch surveys old indexes only when reconstruction is needed.
+// It reuses primary facts already measured for the migration itself.
+func (p Plan) RetainedCopyScratch(ctx context.Context, database DBTX) (uint64, error) {
+	if !p.BoundedRetainedStorage() {
+		return 0, nil
+	}
+	trees, err := retainedInventory(ctx, database, p.retainedTrees, false)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	// The released shape has UNIQUE(snapshot_id,chunk_id). Retained copying
-	// reconstructs that constraint before conversion, so each physical entry
-	// occurs at most once per root, even when entry_count metadata is wrong.
-	rootRows := manifestCells
-	indexBytes, err := storageSum(storeBytes, storeBytes)
+	var rows, largest uint64
+	for _, tree := range trees {
+		if tree.kind == "table" {
+			rows, err = storageSum(rows, tree.cells)
+			if err != nil {
+				return 0, err
+			}
+		}
+		if tree.kind == "index" || tree.name == "evidence_records" || tree.name == "source_snapshot_roots" {
+			largest = max(largest, tree.record)
+		}
+	}
+	records, err := storageSum(p.retainedStoreBytes, p.retainedStoreBytes)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	indexRecord, err = storageSum(indexRecord, indexRecord, 80)
+	largest, err = storageSum(largest, largest, 80)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	manifestRecord, err = storageSum(manifestRecord, manifestRecord, 80)
+	scratch, err := sorterStorageBytes(records, rows, largest, p.retainedPageBytes)
+	return max(scratch, p.ScratchBytes()), err
+}
+
+// Each class has its own record-size bound. A large checkpoint payload does
+// not inflate every manifest sort's merge window. No amplified target table
+// receives a later bulk index: its empty indexes are maintained in main pages.
+func retainedRouteSortBytes(trees map[string]retainedTree, pageBytes uint64) (uint64, error) {
+	var indexRows, indexBytes, indexRecord uint64
+	for _, name := range []string{"vault_unlocks", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects"} {
+		tree := trees[name]
+		var err error
+		indexRows, err = storageSum(indexRows, tree.cells)
+		if err != nil {
+			return 0, err
+		}
+		indexBytes, err = storageSum(indexBytes, tree.bytes, tree.bytes)
+		if err != nil {
+			return 0, err
+		}
+		indexRecord = max(indexRecord, tree.record)
+	}
+	largest, err := storageSum(indexRecord, indexRecord, 80)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	if rootRows != 0 && manifestRecord > math.MaxUint64/rootRows {
-		return 0, 0, fmt.Errorf("root sorter bound overflows")
+	budget, err := sorterStorageBytes(indexBytes, indexRows, largest, pageBytes)
+	if err != nil {
+		return 0, err
 	}
-	// Existing index keys already occur in source pages. The new evidence key
-	// takes disjoint JSON subtrees plus the source primary key; twice the source
-	// file covers their encodings. Rechunked tables create indexes while empty;
-	// their later index maintenance uses capped main pages, never bulk sorting.
-	// Later populated index rebuilds concern unchanged source tables only.
-	// This is specific to the registered v4 route.
-	scratch, err := sorterStorageBytes(max(indexBytes, rootRows*manifestRecord), max(cells, rootRows), max(indexRecord, manifestRecord), pageBytes)
-	return scratch, manifestCells, err
+	// UNIQUE(snapshot_id,chunk_id) is re-enforced before conversion: a root
+	// selects each physical manifest row at most once, independent of metadata.
+	for _, name := range []string{"source_manifest_entries", "source_snapshot_roots", "sqlite_schema"} {
+		tree := trees[name]
+		largest, err = storageSum(tree.record, tree.record, 80)
+		if err != nil {
+			return 0, err
+		}
+		if tree.cells != 0 && largest > math.MaxUint64/tree.cells {
+			return 0, fmt.Errorf("retained sort input overflows")
+		}
+		bytes, err := sorterStorageBytes(tree.cells*largest, tree.cells, largest, pageBytes)
+		if err != nil {
+			return 0, err
+		}
+		budget = max(budget, bytes)
+	}
+	// The authority conversion pages at most32 checkpoint payloads by id. If
+	// SQLite chooses a bounded ORDER BY index, its ephemeral tree has at most33
+	// records including the in-flight key. Charge the maximum legal temporary
+	// page size, independently of the main database geometry.
+	largest, err = storageSum(trees["checkpoints"].record, trees["checkpoints"].record, 80)
+	if err != nil {
+		return 0, err
+	}
+	if largest > math.MaxUint64/66 {
+		return 0, fmt.Errorf("checkpoint sort input overflows")
+	}
+	checkpoint, err := storageSum(66*largest, 66*65536, 64<<20)
+	return max(budget, checkpoint), err
 }
 
 // sorterStorageBytes follows the pinned SQLite single-threaded PMA sorter:

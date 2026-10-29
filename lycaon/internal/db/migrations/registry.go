@@ -74,6 +74,9 @@ type Plan struct {
 	scratchBytes            uint64
 	retainedStoragePrepared bool
 	retainedEntryRows       uint64
+	retainedTrees           map[string]retainedTree
+	retainedStoreBytes      uint64
+	retainedPageBytes       uint64
 }
 
 // Required reports whether the store needs transformation.
