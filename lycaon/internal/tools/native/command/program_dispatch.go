@@ -233,7 +233,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
-		return prepareChildFailure(streams, "external", request, err)
+		return d.prepareChildFailure(streams, "external", request, err)
 	}
 	defer child.release()
 	if d.run.externalHidden && request.Argv[0].Value == "external" {
@@ -378,7 +378,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
 	if err != nil {
-		return prepareChildFailure(streams, spec.Name, request, err)
+		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
@@ -447,7 +447,7 @@ type programChild struct {
 	release   func()
 }
 
-func prepareChildFailure(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) prepareChildFailure(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
 	reject := toolrejection.AsToolReject(cause)
 	if reject == nil {
 		var limit *toolcontract.ProgramMemoryLimitError

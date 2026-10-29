@@ -107,7 +107,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
-		return prepareChildFailure(streams, spec.Name, request, err)
+		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
