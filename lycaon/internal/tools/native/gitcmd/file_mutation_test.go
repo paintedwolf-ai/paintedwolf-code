@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestRemoveTrackedFiles(t *testing.T) {
@@ -391,5 +392,45 @@ func TestRemoveSelectedConflict(t *testing.T) {
 	testutil.FailErr(t, "remove selected conflict", got.err)
 	if got.result.Status != 0 || !h.absent("a.txt") || h.git("ls-files", "--unmerged", "--", "a.txt") != "" || !strings.Contains(h.git("diff", "--cached", "--name-only"), "staged.txt") {
 		t.Fatalf("conflict removal %+v %q", got.result, got.stderr)
+	}
+}
+
+func TestRemovePrunesEmptiedDirectoriesUpToTheWorkingDirectory(t *testing.T) {
+	h := newApplyHarness(t)
+	for _, name := range []string{"deep/a/b/leaf", "deep/a/kept/other", "cwd/inner/leaf", "cwd/sibling"} {
+		h.write(name, name+"\n")
+	}
+	h.git("add", ".")
+	h.git("commit", "-q", "-m", "nested")
+	got := h.exec("git", "rm", "-q", "--", "deep/a/b/leaf", "deep/a/kept/other")
+	testutil.FailErr(t, "remove nested", got.err)
+	if got.result.Status != 0 || !h.absent("deep") {
+		t.Fatalf("remove %+v %q; deep retained=%v", got.result, got.stderr, !h.absent("deep"))
+	}
+	var err error
+	h.paths, err = projectpaths.NewProgramPaths(t.Context(), h.owners.Boundary, h.tc, filepath.Join(h.root, "cwd", "inner"))
+	testutil.FailErr(t, "working directory", err)
+	got = h.exec("git", "rm", "-q", "--", "leaf")
+	testutil.FailErr(t, "remove in working directory", got.err)
+	if got.result.Status != 0 || h.absent("cwd/inner") || !h.absent("cwd/inner/leaf") {
+		t.Fatalf("remove %+v %q; working directory removed=%v", got.result, got.stderr, h.absent("cwd/inner"))
+	}
+	if staged := h.git("diff", "--cached", "--name-status"); staged != "D\tcwd/inner/leaf\nD\tdeep/a/b/leaf\nD\tdeep/a/kept/other\nA\tstaged.txt\n" {
+		t.Fatalf("staged %q", staged)
+	}
+}
+
+func TestCachedRemovalAndMoveKeepParentDirectories(t *testing.T) {
+	h := newApplyHarness(t)
+	got := h.exec("git", "rm", "-q", "--cached", "--", "sub/b.txt")
+	testutil.FailErr(t, "cached removal", got.err)
+	if got.result.Status != 0 || h.absent("sub/b.txt") {
+		t.Fatalf("cached removal %+v %q", got.result, got.stderr)
+	}
+	h.git("add", "sub/b.txt")
+	got = h.exec("git", "mv", "--", "sub/b.txt", "moved.txt")
+	testutil.FailErr(t, "move", got.err)
+	if got.result.Status != 0 || h.absent("sub") {
+		t.Fatalf("move %+v %q; source directory removed=%v", got.result, got.stderr, h.absent("sub"))
 	}
 }
