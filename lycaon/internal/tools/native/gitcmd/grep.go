@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -288,10 +289,16 @@ func (g *gitGrep) readWorktree(rel string) ([]byte, bool, error) {
 	if !info.Mode().IsRegular() {
 		return nil, false, nil
 	}
-	if info.Size() > g.limit {
+	// The descriptor-relative open refuses a parent replaced by a link.
+	f, err := fseffect.OpenRead(fseffect.Location{Root: g.root, Rel: filepath.FromSlash(rel)})
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = f.Close() }()
+	content, err := io.ReadAll(io.LimitReader(f, g.limit+1))
+	if err == nil && int64(len(content)) > g.limit {
 		return nil, false, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": g.limit, "path": rel}}
 	}
-	content, err := os.ReadFile(abs)
 	return content, err == nil, err
 }
 
