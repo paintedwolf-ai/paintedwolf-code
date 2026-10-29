@@ -71,6 +71,9 @@ type protectedFacts struct {
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *engineProbe                `json:"exec,omitempty"`
+	ModuleUser      string                      `json:"module_user"`
+	ModuleLibrary   string                      `json:"module_library"`
+	BrokerUserExec  string                      `json:"broker_user_exec,omitempty"`
 }
 
 // engineProbe mirrors the fixture's report on the engine's launch paths.
@@ -290,6 +293,15 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.ExecOutside != "EACCES" || facts.ExecGeneration != "started" {
 		t.Fatalf("execution domain: outside %s, generation %s", facts.ExecOutside, facts.ExecGeneration)
 	}
+	// Native code maps executable only from the administrator's closure; the
+	// caller's own files stay executable for programs the broker starts.
+	if facts.ModuleUser != "EPERM" || facts.ModuleLibrary != "ok" {
+		t.Fatalf("module view: caller file %s, library root %s", facts.ModuleUser, facts.ModuleLibrary)
+	}
+	if facts.BrokerUserExec != "brokered-user-program" {
+		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
+	}
+	testutil.FailErr(t, "post-launch host mounts arrive noexec in the module view", sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID)))
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}
@@ -570,4 +582,10 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)
+}
+
+func TestProtectedLaunchModulePathsReportTheirCoverage(t *testing.T) {
+	f := installLaunchFixture(t)
+	testutil.FailErr(t, "instrumented module path contracts", sudoFixture(t, "module-paths", f.dir,
+		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
 }

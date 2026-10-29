@@ -17,7 +17,7 @@ import (
 func entryFixture() EntrySpec {
 	return EntrySpec{
 		Version: 1, SupervisorPID: 10, UID: 1000, GID: 1000,
-		Generation:  GenerationPolicy{Version: 1, GenerationRoot: "/opt/painted-wolf-code", LogicalInstallRoot: "/opt/painted-wolf-code", ManifestSHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
+		Generation:  GenerationPolicy{Version: 1, GenerationRoot: "/opt/painted-wolf-code", LogicalInstallRoot: "/opt/painted-wolf-code", ManifestSHA256: "0000000000000000000000000000000000000000000000000000000000000000", LibraryRoots: []string{"/usr/lib"}},
 		Image:       pkgmanifest.Executable{Path: "/opt/painted-wolf-code/bin/painted-wolf-code", Size: 1, SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		Environment: []string{"PATH=/usr/bin:/bin"},
 	}
@@ -34,6 +34,7 @@ func TestEntryFrameRejectsIdentityAndTransportAmbiguity(t *testing.T) {
 		{"missing supervisor", func(s *EntrySpec) { s.SupervisorPID = 1 }, false},
 		{"other role", func(s *EntrySpec) { s.Image.Path = "/usr/bin/sh" }, false},
 		{"wrong generation", func(s *EntrySpec) { s.Generation.GenerationRoot = "/opt/other" }, false},
+		{"no module policy", func(s *EntrySpec) { s.Generation.LibraryRoots = nil }, false},
 		{"invalid supplementary identity", func(s *EntrySpec) { s.Groups = []uint32{^uint32(0)} }, false},
 		{"relative image", func(s *EntrySpec) { s.Image.Path = "painted-wolf-code" }, false},
 		{"duplicate environment", func(s *EntrySpec) { s.Environment = []string{"A=one", "A=two"} }, false},

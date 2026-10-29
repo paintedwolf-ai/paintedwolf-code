@@ -54,8 +54,8 @@ func CaptureCaller() (Identity, error) {
 // mappings, as the original login identity. Nothing ever runs as uid 0 inside
 // the namespace: the clone's capabilities end with its identity change, before
 // the entry executes. The mappings preserve filesystem ownership facts, not
-// authority to assume uid 0. The mount namespace stays the stage's, which the
-// initial user namespace owns, so nothing inside can change a mount.
+// authority to assume uid 0. The mount namespace belongs to the watcher's sibling root-owned user
+// namespace, so nothing inside the desktop's user namespace can change a mount.
 func EntryAttributes(caller Identity) (*syscall.SysProcAttr, error) {
 	if os.Getuid() != 0 || os.Geteuid() != 0 || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
 		return nil, errors.New("protected launch requires the privileged stage and a login user")

@@ -8,6 +8,7 @@ package launchguard
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +23,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -56,6 +58,14 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		digest := `"manifest_sha256":"` + os.Getenv(fixtureHash) + `"`
 		tampered := strings.Replace(mustRead(filepath.Join(dir, "launch.json")), digest, `"manifest_sha256":"`+strings.Repeat("0", 64)+`"`, 1)
 		err = os.WriteFile(filepath.Join(dir, "launch.json"), []byte(tampered), 0o644)
+	case "module-paths":
+		err = checkInstrumentedModulePaths(t, dir)
+	case "module-stage":
+		err = runFixtureModuleStage()
+	case "module-agent":
+		err = RunBrokerAgent()
+	case "module-view":
+		err = verifyModuleViewIsolation(dir, os.Getenv(fixtureDesktopPIDEnv))
 	default:
 		err = fmt.Errorf("unknown fixture mode %q", mode)
 	}
@@ -63,7 +73,9 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	os.Exit(0)
+	if testing.CoverMode() == "" && mode != "module-paths" {
+		os.Exit(0)
+	}
 }
 
 func mustRead(path string) string {
@@ -86,6 +98,10 @@ func lockFree(path string) error {
 // installFixture runs as root: a root-owned generation holding the entry and
 // the fixture desktop, its manifest, the policy, a logical install root and a
 // setuid copy of the fixture-linked bootstrap.
+// fixtureLibraryRoot is the fixture policy's one library root. The fixture
+// binaries are static, so the root only has to exist and be root-controlled.
+const fixtureLibraryRoot = "/usr/lib"
+
 func installFixture(dir string, binaries []string) error {
 	if len(binaries) != 3 {
 		return errors.New("fixture needs bootstrap, entry and desktop binaries")
@@ -184,7 +200,7 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 	if err := os.Rename(staging, generation); err != nil {
 		return err
 	}
-	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install})
+	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install, LibraryRoots: []string{fixtureLibraryRoot}})
 	if err != nil {
 		return err
 	}
@@ -267,8 +283,24 @@ func fixtureArchitecture() string {
 func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 	t.Helper()
 	args := append([]string{"-n", "env", fixtureModeEnv + "=" + mode, fixtureDirEnv + "=" + dir}, extra...)
+	if mode == "module-paths" {
+		args = append(args, fixtureDeadlineEnv+"="+strconv.FormatInt(moduleFixtureDeadline(t).Add(-time.Second).UnixNano(), 10))
+	}
+	coverDir := os.Getenv("PW_GO_CHILD_COVERDIR")
+	if testing.CoverMode() != "" && coverDir != "" {
+		args = append(args, "GOCOVERDIR="+coverDir)
+	}
 	args = append(args, os.Args[0], "-test.run=^TestProtectedLaunchFixture$")
+	if mode == "module-paths" {
+		args = append(args, "-test.timeout="+time.Until(moduleFixtureDeadline(t)).String())
+	}
+	if testing.CoverMode() != "" && coverDir != "" {
+		args = append(args, "-test.gocoverdir="+coverDir)
+	}
 	out, err := exec.Command("sudo", args...).CombinedOutput()
+	if testing.CoverMode() != "" && coverDir != "" {
+		_ = exec.Command("sudo", "-n", "chmod", "-R", "a+rX", coverDir).Run()
+	}
 	if err != nil {
 		return fmt.Errorf("%s fixture: %w: %s", mode, err, out)
 	}
@@ -321,4 +353,169 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	digest, err := os.ReadFile(filepath.Join(dir, "digest"))
 	testutil.FailErr(t, "fixture digest", err)
 	return launchFixture{dir: dir, bootstrap: filepath.Join(dir, "pw-launch"), digest: string(digest), install: filepath.Join(dir, "install"), binaries: binaries}
+}
+
+// moduleFixtureCommand retains counters from fixture actors after identity changes.
+func moduleFixtureCommand(t *testing.T, mode string, caller Identity) *exec.Cmd {
+	t.Helper()
+	args := []string{"-test.run=^TestProtectedLaunchFixture$"}
+	deadline := moduleFixtureDeadline(t)
+	args = append(args, "-test.timeout="+(time.Until(deadline)+time.Second).String())
+	env := []string{fixtureModeEnv + "=" + mode, fixtureDeadlineEnv + "=" + strconv.FormatInt(deadline.UnixNano(), 10)}
+	if parent := os.Getenv("GOCOVERDIR"); testing.CoverMode() != "" && parent != "" {
+		dir, err := os.MkdirTemp(parent, "module-actor-") //nolint:usetesting // Child counters must stay in GOCOVERDIR.
+		testutil.FailErr(t, "actor coverage directory", err)
+		testutil.FailErr(t, "actor coverage identity", os.Chown(dir, int(caller.UID), int(caller.GID)))
+		args = append(args, "-test.gocoverdir="+dir)
+		env = append(env, "GOCOVERDIR="+dir)
+		t.Cleanup(func() {
+			testutil.FailErr(t, "collect actor coverage", collectChildCoverage(dir))
+			testutil.FailErr(t, "remove actor coverage directory", os.Remove(dir))
+		})
+	}
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
+	t.Cleanup(cancel)
+	cmd := exec.CommandContext(ctx, os.Args[0], args...)
+	cmd.Env = env
+	return cmd
+}
+
+func moduleFixtureSelection(t *testing.T, dir string) (EntrySpec, *os.File) {
+	t.Helper()
+	uid, err := strconv.Atoi(os.Getenv(fixtureUIDEnv))
+	testutil.FailErr(t, "fixture caller uid", err)
+	gid, err := strconv.Atoi(os.Getenv(fixtureGIDEnv))
+	testutil.FailErr(t, "fixture caller gid", err)
+	if uid <= 0 || gid < 0 {
+		t.Fatal("module fixture requires a non-root caller")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "launch.json"))
+	testutil.FailErr(t, "fixture generation policy", err)
+	policy, err := decodePolicy(raw)
+	testutil.FailErr(t, "decode fixture policy", err)
+	library := filepath.Join(dir, "actor-library-root")
+	testutil.FailErr(t, "private declared library root", os.Mkdir(library, 0o755))
+	testutil.FailErr(t, "baseline library module", os.WriteFile(filepath.Join(library, "baseline.so"), []byte("baseline-module"), 0o755))
+	testutil.FailErr(t, "library baseline mount", unix.Mount(library, library, "", unix.MS_BIND|unix.MS_REC, ""))
+	testutil.FailErr(t, "library mount propagation", unix.Mount("", library, "", unix.MS_SHARED, ""))
+	policy.LibraryRoots = append(policy.LibraryRoots, library)
+	desktop := filepath.Join(policy.GenerationRoot, "bin/painted-wolf-code")
+	content, err := os.ReadFile(desktop)
+	testutil.FailErr(t, "selected desktop bytes", err)
+	digest := sha256.Sum256(content)
+	home := filepath.Join(dir, "actor-home")
+	testutil.FailErr(t, "actor home", os.Mkdir(home, 0o700))
+	testutil.FailErr(t, "actor home identity", os.Chown(home, uid, gid))
+	spec := EntrySpec{
+		Version: 1, SupervisorPID: os.Getpid(), UID: uint32(uid), GID: uint32(gid), Groups: []uint32{uint32(gid)},
+		Generation: policy, Image: pkgmanifest.Executable{Path: desktop, SHA256: hex.EncodeToString(digest[:]), Size: int64(len(content))},
+		Environment: []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
+	}
+	frame, err := sealEntrySpec(spec)
+	testutil.FailErr(t, "sealed module selection", err)
+	t.Cleanup(func() { _ = frame.Close() })
+	return spec, frame
+}
+
+func checkInstrumentedModuleStage(t *testing.T, dir string, spec EntrySpec, frame *os.File) {
+	t.Helper()
+	open := func(path string) *os.File {
+		file, err := os.Open(path)
+		testutil.FailErr(t, "stage descriptor "+path, err)
+		t.Cleanup(func() { _ = file.Close() })
+		return file
+	}
+	generation := open(spec.Generation.GenerationRoot)
+	desktop := open(spec.Image.Path)
+	entry := open(filepath.Join(spec.Generation.GenerationRoot, "bin/pw-launch-entry"))
+	origin := open("/proc/self/ns/user")
+	lifetime, err := os.Create(filepath.Join(dir, "actor-lifetime"))
+	testutil.FailErr(t, "generation lifetime", err)
+	defer lifetime.Close()
+	broker, peer, err := brokerPair()
+	testutil.FailErr(t, "stage broker pair", err)
+	defer broker.Close()
+	defer peer.Close()
+	input, inputW, err := os.Pipe()
+	testutil.FailErr(t, "stage input", err)
+	defer input.Close()
+	defer inputW.Close()
+	outputR, output, err := os.Pipe()
+	testutil.FailErr(t, "stage output", err)
+	defer outputR.Close()
+	defer output.Close()
+	cmd := moduleFixtureCommand(t, "module-stage", Identity{UID: spec.UID, GID: spec.GID})
+	cmd.ExtraFiles = []*os.File{frame, generation, desktop, entry, origin, peer, lifetime, entry, broker, output}
+	cmd.Stdin, cmd.Stderr = input, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWNS}
+	testutil.FailErr(t, "run instrumented stage", cmd.Run())
+	_ = peer.Close()
+	_ = output.Close()
+	var facts protectedFacts
+	testutil.FailErr(t, "desktop facts deadline", outputR.SetReadDeadline(moduleFixtureDeadline(t)))
+	testutil.FailErr(t, "read stage desktop facts", json.NewDecoder(outputR).Decode(&facts))
+	if facts.UIDs != [3]int{int(spec.UID), int(spec.UID), int(spec.UID)} || facts.ReadError != "" || facts.ModuleUser != "EPERM" || facts.ModuleLibrary != "ok" || facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
+		t.Fatalf("stage desktop boundary: %+v", facts)
+	}
+	if facts.Namespace.OwnerUID != 0 {
+		t.Fatalf("stage desktop user namespace: %+v", facts.Namespace)
+	}
+	testutil.FailErr(t, "live stage watcher seal", verifyLiveWatcherProcess(facts.PID))
+	_ = inputW.Close()
+}
+
+const fixtureDeadlineEnv = "PW_LAUNCH_FIXTURE_DEADLINE"
+
+func moduleFixtureDeadline(t *testing.T) time.Time {
+	t.Helper()
+	if raw := os.Getenv(fixtureDeadlineEnv); raw != "" {
+		deadline, err := strconv.ParseInt(raw, 10, 64)
+		testutil.FailErr(t, "fixture deadline", err)
+		return time.Unix(0, deadline)
+	}
+	if deadline, ok := t.Deadline(); ok {
+		return deadline
+	}
+	return time.Now().Add(time.Minute)
+}
+
+func runFixtureModuleStage() error {
+	output := os.NewFile(stageServerFD+1, "fixture-desktop-facts")
+	defer output.Close()
+	previous := os.Stdout
+	os.Stdout = output
+	defer func() { os.Stdout = previous }()
+	return RunStage()
+}
+
+func checkModuleWatcherPollAuthority(t *testing.T, pid int) {
+	t.Helper()
+	proc := filepath.Join("/proc", strconv.Itoa(pid))
+	descriptors, err := os.ReadDir(filepath.Join(proc, "fd"))
+	testutil.FailErr(t, "watcher descriptors", err)
+	mountinfo := map[string]bool{}
+	var epolls []string
+	for _, descriptor := range descriptors {
+		target, err := os.Readlink(filepath.Join(proc, "fd", descriptor.Name()))
+		testutil.FailErr(t, "watcher descriptor target", err)
+		if strings.HasPrefix(target, proc+"/task/") && filepath.Base(target) == "mountinfo" {
+			mountinfo[descriptor.Name()] = true
+		}
+		if target == "anon_inode:[eventpoll]" {
+			epolls = append(epolls, descriptor.Name())
+		}
+	}
+	if len(mountinfo) != 1 {
+		t.Fatalf("watcher mount notification descriptors = %v, want one", mountinfo)
+	}
+	for _, epoll := range epolls {
+		raw, err := os.ReadFile(filepath.Join(proc, "fdinfo", epoll))
+		testutil.FailErr(t, "watcher epoll registrations", err)
+		for line := range strings.SplitSeq(string(raw), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && fields[0] == "tfd:" && mountinfo[fields[1]] {
+				t.Fatalf("mount notification descriptor %s also registered with epoll descriptor %s", fields[1], epoll)
+			}
+		}
+	}
 }

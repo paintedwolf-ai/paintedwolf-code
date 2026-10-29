@@ -5,6 +5,7 @@ package launchguard
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -20,10 +21,11 @@ const entrySelfFD = entryLifetimeFD + 1
 
 // RunStage is the privileged stage: uid 0 of the initial user namespace,
 // cloned into a fresh mount namespace by the bootstrap. It binds the selected
-// generation, starts the broker agent as uid 0 so the agent clears dumpable
-// and drops privileges itself without a dumpable exec window, then clones the
+// generation, starts the broker agent as uid 0 in the launch's own mount
+// namespace so the agent clears dumpable and drops privileges itself without
+// a dumpable exec window, then enters the module view and clones the
 // unprivileged entry into the protected user namespace as the original
-// caller; both children are reparented to the supervisor when the stage exits.
+// caller; all children are reparented to the supervisor when the stage exits.
 func RunStage() error {
 	if uid, euid, suid := unix.Getresuid(); uid != 0 || euid != 0 || suid != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator identity")
@@ -76,12 +78,21 @@ func RunStage() error {
 		return err
 	}
 	defer func() { _ = null.Close() }()
+	// The module-view watcher ends when the last writer of its lifetime pipe
+	// closes: the broker agent holds the write end until the launch ends.
+	watchR, watchW, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = watchW.Close() }()
 	// The broker agent starts as uid 0 in the initial user namespace and drops
 	// to the caller's identity after execve, so the kernel never resets its
-	// dumpable flag to 1 under the caller's credentials. It starts before the
-	// entry so no desktop ever runs without a broker: an agent that cannot
-	// start refuses the launch, and an entry that cannot start ends the agent
-	// when the bootstrap closes the desktop's end of the socket.
+	// dumpable flag to 1 under the caller's credentials. It starts in the
+	// launch's own mount namespace, before the stage enters the module view, so
+	// the programs it runs map native code from the host, and before the entry
+	// so no desktop ever runs without a broker: an agent that cannot start
+	// refuses the launch, and an entry that cannot start ends the agent when
+	// the bootstrap closes the desktop's end of the socket.
 	agent := &exec.Cmd{
 		Path:       "/proc/self/fd/" + strconv.Itoa(agentSelfFD),
 		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
@@ -89,14 +100,33 @@ func RunStage() error {
 		Stdin:      null,
 		Stdout:     null,
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{frame, serverFile, entryImage},
+		ExtraFiles: []*os.File{frame, serverFile, watchW, entryImage},
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid: true,
 		},
 	}
 	if err := agent.Start(); err != nil {
+		_ = watchR.Close()
 		return fmt.Errorf("start broker agent: %w", err)
 	}
+	// The module-view watcher and the entry start in the module view.
+	runtime.LockOSThread()
+	leave, err := enterModuleView(spec.Generation, mounted)
+	if err != nil {
+		_ = watchR.Close()
+		return err
+	}
+	if err := startModuleViewWatcher(frame, watchR, entryImage); err != nil {
+		_ = leave()
+		return err
+	}
+	viewed, err := reopenImage(spec.Generation, mounted)
+	if err != nil {
+		_ = leave()
+		return err
+	}
+	_ = mounted.Close()
+	mounted = viewed
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -114,10 +144,60 @@ func RunStage() error {
 		SysProcAttr: attributes,
 	}
 	if err := entry.Start(); err != nil {
+		_ = leave()
 		return fmt.Errorf("start protected entry: %w", err)
+	}
+	if err := leave(); err != nil {
+		return fmt.Errorf("leave module view: %w", err)
+	}
+	return nil
+}
+
+// startModuleViewWatcher starts the module-view mount watcher in the current
+// mount namespace, hands it the read end of its lifetime pipe, and waits until
+// its baseline scan is armed before moving the calling thread into its view.
+func startModuleViewWatcher(frame, watchR, entryImage *os.File) error {
+	defer func() { _ = watchR.Close() }()
+	readyR, readyW, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	watcher := &exec.Cmd{
+		Path:       "/proc/self/fd/" + strconv.Itoa(watcherSelfFD),
+		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
+		Env:        []string{},
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{frame, watchR, readyW, entryImage},
+		SysProcAttr: &syscall.SysProcAttr{
+			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+			UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappingsEnableSetgroups: true,
+		},
+	}
+	err = watcher.Start()
+	_ = readyW.Close()
+	if err != nil {
+		_ = readyR.Close()
+		return fmt.Errorf("start module view watcher: %w", err)
+	}
+	var ready [1]byte
+	_, err = io.ReadFull(readyR, ready[:])
+	_ = readyR.Close()
+	if err != nil {
+		return fmt.Errorf("module view watcher did not become ready: %w", err)
+	}
+	viewNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", watcher.Process.Pid))
+	if err != nil {
+		return fmt.Errorf("open module view mount namespace: %w", err)
+	}
+	err = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
+	_ = viewNS.Close()
+	if err != nil {
+		return fmt.Errorf("enter module view mount namespace: %w", err)
 	}
 	return nil
 }
 
 // agentSelfFD is where the broker agent's image sits for its execution.
-const agentSelfFD = agentBrokerFD + 1
+const agentSelfFD = agentWatchFD + 1
