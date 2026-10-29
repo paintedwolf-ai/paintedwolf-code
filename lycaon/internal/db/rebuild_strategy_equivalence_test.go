@@ -30,7 +30,7 @@ func TestRetainedStrategiesPreserveTheSameLogicalStore(t *testing.T) {
 	registry, err := schemaRegistry(t.Context())
 	testutil.FailErr(t, "load common migration registry", err)
 	whole := filepath.Join(t.TempDir(), "whole.db")
-	prepared, used, err := copyWholeRetainedStore(t.Context(), source, whole, plan, nil)
+	prepared, used, err := copyWholeRetainedStore(t.Context(), source, whole, plan)
 	testutil.FailErr(t, "prepare whole-file strategy", err)
 	if !used || !prepared.wholeFile || prepared.preparedIdentity == "" {
 		t.Fatal("complete source did not exercise the whole-file strategy")
