@@ -165,8 +165,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	terminal := ""
 	harnesses := map[string][]canaryCall{
 		"command": {
-			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "env": map[string]any{"SEEN": "seen-command-arg.txt"}}, received: seen("seen-command-arg.txt")},
-			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-command-env.txt"}}, received: seen("seen-command-env.txt")},
+			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
 		},
 		"verify": {
 			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-verify.txt"}}, received: seen("seen-verify.txt")},

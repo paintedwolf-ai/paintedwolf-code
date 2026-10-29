@@ -62,7 +62,7 @@ func TestExtractArchiveToolZip(t *testing.T) {
 		"dest": "out",
 	}, nativefixture.Context(tmpDir))
 	testutil.FailErr(t, "extract", err)
-	var result extractArchiveResponse
+	var result ExtractResult
 	testutil.FailErr(t, "decode extraction result", json.Unmarshal([]byte(out), &result))
 	if result.Path != "sdk.zip" || result.Dest != "out" || result.Entries != 1 || result.Bytes != 5 ||
 		!slices.Equal(result.Extracted, []extractEntryResult{{Path: "lib/foo.txt", Bytes: 5}}) {
@@ -156,14 +156,15 @@ func TestExtractArchiveToolAllowsNonSinkOverlayFiles(t *testing.T) {
 	}
 }
 
+// Plain, gzip and bzip2 tar are supported formats; other archive kinds refuse.
 func TestExtractArchiveToolRejectsUnsupportedFormat(t *testing.T) {
 	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "data.tar"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "data.rar"), []byte("x"), 0o644); err != nil {
 		testutil.FailErr(t, "write", err)
 	}
 	tool := &ExtractArchiveTool{Boundary: extractTestBoundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "data.tar",
+		"path": "data.rar",
 		"dest": "out",
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
@@ -245,7 +246,9 @@ func TestExtractEntryLimitPrecedesCommit(t *testing.T) {
 		extract func(extractSink, fseffect.Location, *extractBudget, entryGuard) error
 	}{
 		{".zip", writeTestZip, extractZipFile},
-		{".tar.gz", writeTestTarGz, extractTarGzFile},
+		{".tar.gz", writeTestTarGz, func(s extractSink, l fseffect.Location, b *extractBudget, g entryGuard) error {
+			return extractTarFile(s, l, "tar.gz", b, g)
+		}},
 	} {
 		t.Run(tc.suffix, func(t *testing.T) {
 			tmpDir := t.TempDir()
@@ -253,12 +256,12 @@ func TestExtractEntryLimitPrecedesCommit(t *testing.T) {
 			tc.write(t, filepath.Join(tmpDir, name), map[string]string{"one.txt": "x", "two.txt": "x"})
 			tctx := nativefixture.Context(tmpDir)
 			tool := &ExtractArchiveTool{Boundary: extractTestBoundary(t)}
-			archive, _, err := tool.loadArchive(t.Context(), tctx, name, tctx.ProfileID())
+			archive, _, _, err := tool.loadArchive(t.Context(), tctx, name, tctx.ProfileID())
 			testutil.FailErr(t, "load archive", err)
 			dest, _, err := tool.prepareDest(t.Context(), tctx, "out", tctx.ProfileID())
 			testutil.FailErr(t, "prepare destination", err)
 			sink := extractSink{ctx: t.Context(), tctx: tctx, dest: resolvedMutationTarget(dest)}
-			budget := &extractBudget{entries: hostExtractMaxEntries - 1}
+			budget := &extractBudget{entries: int(archiveLimit("archive_extract_entries")) - 1}
 			err = tc.extract(sink, archive.EffectLocation(), budget, protectedEntryGuard)
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" {
@@ -266,7 +269,7 @@ func TestExtractEntryLimitPrecedesCommit(t *testing.T) {
 			}
 			files, err := os.ReadDir(filepath.Join(tmpDir, "out"))
 			testutil.FailErr(t, "read extracted files", err)
-			if len(files) != 1 || budget.entries != hostExtractMaxEntries || budget.bytes != 1 || len(budget.out) != 1 {
+			if len(files) != 1 || budget.entries != int(archiveLimit("archive_extract_entries")) || budget.bytes != 1 || len(budget.out) != 1 {
 				t.Fatalf("entry limit committed %d files with budget %+v, want exactly one new entry", len(files), budget)
 			}
 			got, err := os.ReadFile(filepath.Join(tmpDir, "out", budget.out[0].Path))
@@ -287,7 +290,7 @@ func TestExtractSizeLimitPrecedesCommit(t *testing.T) {
 	sink := extractSink{ctx: context.Background(), tctx: tctx, dest: resolvedMutationTarget(dest)}
 	existing := filepath.Join(tmpDir, "out", "existing.txt")
 	testutil.FailErr(t, "seed existing file", os.WriteFile(existing, []byte("keep"), 0o644))
-	budget := &extractBudget{bytes: hostExtractMaxUncompressedBytes - 1}
+	budget := &extractBudget{bytes: archiveLimit("archive_extract_bytes") - 1}
 	_, err = writeExtractFile(sink, sink.target("existing.txt"), strings.NewReader("xx"), budget)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EXTRACT_SIZE_EXCEEDED" {
@@ -298,7 +301,7 @@ func TestExtractSizeLimitPrecedesCommit(t *testing.T) {
 	if string(got) != "keep" {
 		t.Fatalf("oversized entry replaced existing file: %q", got)
 	}
-	budget.bytes = hostExtractMaxUncompressedBytes
+	budget.bytes = archiveLimit("archive_extract_bytes")
 	n, err := writeExtractFile(sink, sink.target("empty.txt"), strings.NewReader(""), budget)
 	testutil.FailErr(t, "empty entry at exact byte cap", err)
 	if n != 0 {

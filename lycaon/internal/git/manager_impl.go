@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ func validateGitRef(value, label string) error {
 }
 
 type Manager struct {
+	CommandReader
 	histories immutableCache[[]GitFileCommit]
 	commits   immutableCache[CommitDetails]
 	reviews   immutableCache[commitReviewSnapshot]
@@ -305,23 +307,44 @@ func (m *Manager) LastTouchByPath(ctx context.Context, projectDir string) (map[s
 }
 
 func (m *Manager) Init(ctx context.Context, projectDir string) error {
-	dir, err := absProjectDir(projectDir)
-	if err != nil {
-		return err
-	}
-	release, err := gitlease.Path(ctx, dir)
-	if err != nil {
-		return err
-	}
-	defer release()
-	out, code, err := gitexec.Run(ctx, dir, []string{"init"}, hermeticOpts(0))
+	output, code, err := m.InitCommand(ctx, projectDir, "", nil, nil, io.Discard)
 	if err != nil {
 		return err
 	}
 	if code != 0 {
-		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(output)))
 	}
 	return nil
+}
+
+// InitCommand runs Git initialization under the path lease and returns its CLI result.
+func (m *Manager) InitCommand(ctx context.Context, projectDir, target string, config, options []string, stdout io.Writer) ([]byte, int, error) {
+	dir, err := absProjectDir(projectDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	leaseDir := dir
+	if target != "" {
+		leaseDir, err = absProjectDir(target)
+		if err != nil {
+			return nil, -1, err
+		}
+	}
+	release, err := gitlease.Path(ctx, leaseDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer release()
+	args := make([]string, 0, len(config)*2+len(options)+2)
+	for _, override := range config {
+		args = append(args, "-c", override)
+	}
+	args = append(args, "init")
+	args = append(args, options...)
+	if target != "" {
+		args = append(args, target)
+	}
+	return gitexec.RunTo(ctx, dir, args, hermeticOpts(0), stdout)
 }
 
 func (m *Manager) Clone(ctx context.Context, url, destDir string) error {

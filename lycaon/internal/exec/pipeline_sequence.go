@@ -238,7 +238,7 @@ func (s *sequenceRun) stageFailed(group StageGroup, i int) bool {
 }
 
 func (s *sequenceRun) expectedConsumerClosure(group StageGroup, i int) bool {
-	return !group.Final(i) && killedBySIGPIPE(s.waitErrs[i])
+	return (!group.Final(i) || s.opts.HostConsumer) && killedBySIGPIPE(s.waitErrs[i])
 }
 
 func (s *sequenceRun) stopped() bool {

@@ -33,7 +33,7 @@ type PreparedProgramFailure struct {
 	operation     toolcontract.BoundOperation
 	progress      bool
 	identity      tools.InvocationIdentity
-	memory        ProgramStateAdmission
+	memory        *toolcontract.ProgramMemory
 	policy        *toolfeedback.ProgramPolicyBlock
 	release       func()
 	mu            sync.Mutex
@@ -82,7 +82,7 @@ func (p *PreparedProgramFailure) Diagnostic() (toolcontract.NativeValue, error) 
 // PrepareProgramFailure supplements an actual native rejection. External output
 // and ordinary utility failures are never converted into host policy codes.
 // The introducing command entry calls this after the existing owner settles.
-func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
@@ -173,7 +173,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 
 // PrepareProgramProgressFailure supplements a progress-envelope refusal from
 // PrepareProgramEnvelope or ApplyProgramProgress after receipt settlement.
-func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, frame ProgramFrame, tc tools.ToolContext, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, frame ProgramFrame, tc tools.ToolContext, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
@@ -250,7 +250,7 @@ func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLe
 	return &PreparedProgramFailure{progress: true, policy: policy, Rejection: &clone, diagnostic: diagnostic, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag() }}, nil
 }
 
-func prepareFeedbackDiagnostic(ctx context.Context, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, ownerData map[string]any) (toolcontract.NativeValue, map[string]any, func(), error) {
+func prepareFeedbackDiagnostic(ctx context.Context, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, ownerData map[string]any) (toolcontract.NativeValue, map[string]any, func(), error) {
 	if ownerData == nil {
 		ownerData = map[string]any{}
 	}

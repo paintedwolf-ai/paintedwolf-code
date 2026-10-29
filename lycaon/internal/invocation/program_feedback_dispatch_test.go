@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -90,7 +91,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
 	parent := read.Invocation()
 	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 	testutil.FailErr(t, "capture actual program envelope", err)
 	defer frame.Close()
@@ -131,13 +132,13 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
-	baseline := memory.calls
-	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
+	baseline := memory.Reservations()
+	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.Reservations() != baseline {
 		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
 	}
 	prepared.Close()
 	frame.Close()
-	if memory.active != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
 	}
 }
@@ -156,7 +157,7 @@ func TestProgramProgressEnvelopeRefusalFeedbackThroughRealEntry(t *testing.T) {
 	executor.Rejections.SetBlockPlane(stockFeedbackBlockPlane(t))
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "fixture", SessionID: f.session, ToolCallID: "actual-model-call"}}
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 	testutil.FailErr(t, "freeze frame", err)
 	defer frame.Close()
@@ -183,7 +184,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	testutil.FailErr(t, "readonly command effects", err)
 	plane := stockFeedbackBlockPlane(t)
 
-	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, error, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *feedbackMemory) {
+	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, error, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *toolcontract.ProgramMemory) {
 		t.Helper()
 		executor := toolexecution.NewExecutor(&dispatchPolicy{effects: effects}, tools.NewDefaultRegistry(), profile)
 		executor.Rejections.SetBlockPlane(plane)
@@ -192,7 +193,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: profile, SessionID: f.session, ToolCallID: "actual-model-call"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: offered}}
 		parent := bound.Invocation()
 		parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-		memory := &feedbackMemory{}
+		memory := feedbackMemory(t, 64<<20)
 		frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 		testutil.FailErr(t, "freeze frame", err)
 		t.Cleanup(frame.Close)
@@ -201,7 +202,9 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			Stage:     toolcontract.ExecutionStage{ExecutionID: bound.Invocation().Identity.ExecutionID, OperationID: bound.Definition().Facts().Identity, Argv: argv},
 			Arguments: map[string]any{"path": "input"},
 			PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: ownerFn}, nil
+				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					return ownerFn(ctx, tc)
+				}}, nil
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
@@ -209,7 +212,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		return res, invokeErr, executor, frame, tc, memory
 	}
 
-	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *feedbackMemory, state, wantCode string) (*guidance.Refusal, string) {
+	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *toolcontract.ProgramMemory, state, wantCode string) (*guidance.Refusal, string) {
 		t.Helper()
 		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: res.Producer, OwnerInvoked: res.OwnerInvoked, DetailReference: "output:child"}))
 		testutil.FailErr(t, "settle program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: state, StopCode: wantCode, DetailReference: "output:program"}))

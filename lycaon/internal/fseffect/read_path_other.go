@@ -16,3 +16,7 @@ func OpenMetadataRoot(string) (*MetadataRoot, error)           { return nil, Err
 func (*MetadataRoot) Path() string                             { return "" }
 func (*MetadataRoot) OpenExact(string, bool) (*os.File, error) { return nil, ErrUnsupported }
 func (*MetadataRoot) Close() error                             { return ErrUnsupported }
+
+func (*ReadRoot) Stat(string, bool, func(string) error) (EntryStat, error) {
+	return EntryStat{}, ErrUnsupported
+}

@@ -107,9 +107,9 @@ because the new parser accepts a form, or remove a recognizer while one of these
 consumers still uses it. Their replacement and obsolete-path cleanup accompany
 the introducing runtime integration.
 
-The syntax adapter reserves parser scratch before parsing and meters the selected
-upstream parser's allocations and recursive frames. Brace classification and
-static quote removal share that allocation pool; admission never invokes general
+The syntax adapter charges parser scratch to the enclosing program before each
+allocation and meters the selected upstream parser's allocations and recursive
+frames. Brace classification and static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
 allocation; temporary parser wrappers remain scratch. This clarifies the
@@ -118,9 +118,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `NewProgramParser` with working and retained
-state admission. Retained source/plan storage is charged to `program_state_bytes`
-before host-plan insertion; closing parser scratch does not release that state.
+materialization. Execution constructs `NewProgramParser` before capture and
+admits an initial working chunk; parser growth uses that same incremental
+account up to `evaluation_memory_bytes`. Capture and its byte-copy overlap
+reserve bounded `program_state_bytes` capacity before materialization. Successful
+lowering transfers the captured bytes into the retained plan/snapshot envelope;
+closing parser scratch does not release that state.
+
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
@@ -131,7 +135,6 @@ progress update to this unit without treating an inspection copy or a caller's
 boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
-
 
 ### Complete byte streams
 
@@ -194,6 +197,105 @@ state stays held and no other draft is saved. Each operation pins its own
 inputs, so a later statement captures newer revisions and sees earlier
 published writes; there is no whole-program snapshot. Program receipts retain
 the pins per execution.
+
+### Literal content and metadata commands
+
+`internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
+wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
+outline, summarize and repo-map built-ins. Argv binds through the catalog
+binder; each command runs under its catalog operation identity (`read`, `wc`,
+`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
+operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+each file as exact stream bytes before any output: the accepted document encoded
+in its recorded encoding, BOM and newline policy, or the published file. The pin
+names that representation separately from disk. An input above the read budget,
+or output above the stream ceiling, refuses; nothing is truncated or summarized
+in its place.
+
+Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
+`base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
+representations itself: wc separates values with one space, `file` answers from
+the versioned signature corpus, and `ls -l` prints owner and group names
+(decimal ids under `-n` or when the account database has no name) and UTC
+long-ISO times after GNU's block total, and bare `stat` prints the catalog's
+GNU multi-line default. Ordinary operand failures (missing,
+directory, permission) go to stderr with the utility's status and later operands
+still run; authority, budget and platform refusals stop with their typed code.
+Only diff's complete status 1 is a publishable comparison. Literal windows and
+reversible numbering record exact source mappings when the output endpoint
+implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
+record none. The command never delivers a conversational read; only exact mapped
+output that the delivery owner later delivers can qualify an edit base.
+
+### Search commands
+
+`grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select
+records with `internal/textsearch`, the line-search operation the structured
+`grep` tool also scans with. grep's default BRE and `-E` ERE use POSIX
+leftmost-longest matching, with GNU back references, `\<`, `\>`, `\b`, `\w` and
+`\s` over fixed ASCII classes. `-P` is P01's bounded `pcre-common-v1` grammar
+on the bounded backtracking engine; it is never RE2. A construct outside a
+dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
+default dialect is RE2. Each record search is metered against the catalog
+regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+
+Traversal walks the invocation's held roots in unsigned byte order. Every
+listed name counts against `traversal_visits`, and every file read is pinned
+through execution revisions before it is searched. grep recursion visits
+hidden entries and applies no ignore file. rg skips hidden entries and applies
+the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
+every entry and never follows a link. All of them skip entries the read
+boundary protects. A file holding NUL bytes prints GNU's
+`grep: PATH: binary file matches` once on stderr. A complete search without
+matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
+typed stop, never a no-match. `find -exec` dispatches each child through the
+evaluator frame as an ordinary program child. `find -delete` removes entries
+only through the recoverable removal owner.
+
+### Stream queries and format-aware edits
+
+`internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
+the real tool's results.
+
+jq compiles one gojq program per execution through `nativejq.CompileProgram`,
+the same compilation the structured jq and jq_edit tools use. The vendored
+gojq ([third_party/README.md](../third_party/README.md#jq-engine)) behaves as
+jq 1.8: objects keep input key order, unmodified number literals print as
+written (`2.0`, `1E+3`), arithmetic is double arithmetic, and runtime errors use
+jq's wording and `jq: error (at FILE:LINE)` positions. Statuses are jq's: 5 for
+a runtime error in the last input or input that is not JSON, 3 for a compile
+error, 2 for an unreadable operand, and `-e`'s 1 and 4. Complete input values
+stream through the program in operand order, and the same iterator backs
+`input` and `inputs`, so a file is captured and pinned only when the query
+reaches it; `--slurpfile` and `--rawfile` files are pinned the same way. `$ENV`
+and `env` present the program's exported environment. No module loader or
+other file access exists. `query_depth`, `query_outputs`, `query_value_bytes`,
+`query_cpu_ms` and `stream_bytes` refuse rather than truncate. gojq exposes no
+instruction counter, so the evaluation deadline is the work bound.
+
+yq is mikefarah yq v4 on its own library: yq expression syntax, `eval` per
+document and `eval-all` over every document, `-p`/`-o` formats, and YAML output
+that keeps comments, key order and styles. `-i` evaluates into the first file
+and publishes the result at the captured revisions through the pinned write
+door. The library's environment, `load` and system operators are disabled, and
+evaluations run one at a time because the library keeps process-wide state.
+YAML alias expansion and the expression evaluator have no work counter; input
+size and `stream_bytes` bound them.
+
+Spellings are not dialect-exclusive. jq also accepts gojq's and jq's newer
+forms (`--args`, `--jsonargs`, `$ARGS`, `-f`, `--raw-output0`, `--stream`,
+`--yaml-input`, `--yaml-output`), runs `.` without a filter, and reports
+command-line errors with jq's message and status 2. A python yq spelling
+(`-y`, `-c`, `-s`, `-S`, `--arg` and the rest of jq's options) selects python
+yq: the jq program over each file's YAML documents, JSON output unless `-y`,
+and `-i` rewriting each file through the write door. Every other yq command
+is mikefarah yq; spellings the two share mean the same in both.
+
+A jq redirect re-serializes the document. jq-edit is the format-aware edit for
+JSON, YAML and TOML: it runs `nativejq.Edit` over the pinned accepted text and
+publishes the result through the pinned write door at its captured destination
+revision. A rewrite that would drop comments, tags or literals refuses with
+`JQ_EDIT_LOSSY`.
 
 ### Platform adapter evidence
 

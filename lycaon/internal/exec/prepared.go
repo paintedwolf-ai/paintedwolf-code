@@ -23,10 +23,12 @@ type preparedLifecycle struct {
 
 var preparedLifecycles sync.Map
 
-func prepareNativeCommand(ctx context.Context, name string, args []string, opts ExecOpts, stageEnv map[string]string, terminal bool) (*exec.Cmd, func(), error) {
+// launchEnvironment builds the final child environment and the captured cwd
+// a launch with opts selects its program from.
+func launchEnvironment(opts ExecOpts, stageEnv map[string]string, terminal bool) (*exec.Cmd, string, error) {
 	final := &exec.Cmd{}
 	if err := configureStageCmdEnv(final, opts, stageEnv); err != nil {
-		return nil, nil, err
+		return nil, "", err
 	}
 	if final.Env == nil {
 		final.Env = os.Environ()
@@ -39,15 +41,37 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 		var err error
 		cwd, err = os.Getwd()
 		if err != nil {
-			return nil, nil, err
+			return nil, "", err
 		}
 	}
 	if !filepath.IsAbs(cwd) {
 		parent, err := os.Getwd()
 		if err != nil {
-			return nil, nil, err
+			return nil, "", err
 		}
 		cwd = parent + string(filepath.Separator) + cwd
+	}
+	return final, cwd, nil
+}
+
+// LaunchLookup reports the program a launch with opts would select for name:
+// the same final PATH, captured cwd and not-found refusal, without starting
+// anything. opts.Dir must be the absolute directory the launch would use.
+func LaunchLookup(name string, opts ExecOpts) (string, error) {
+	if !filepath.IsAbs(opts.Dir) {
+		return "", fmt.Errorf("launch lookup requires the absolute launch directory")
+	}
+	final, cwd, err := launchEnvironment(opts, nil, false)
+	if err != nil {
+		return "", err
+	}
+	return resolveLaunchEntry(name, cwd, final.Env)
+}
+
+func prepareNativeCommand(ctx context.Context, name string, args []string, opts ExecOpts, stageEnv map[string]string, terminal bool) (*exec.Cmd, func(), error) {
+	final, cwd, err := launchEnvironment(opts, stageEnv, terminal)
+	if err != nil {
+		return nil, nil, err
 	}
 	paths := opts.Launch.PathAuthority
 	if paths == nil {

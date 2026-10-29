@@ -32,15 +32,16 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	programs := migrations.ProgramReceipts(current)
+	nativeGaps := migrations.ProgramNativeGap(current)
+	programs := migrations.ProgramReceipts(nativeGaps.From)
 	effectPermits := migrations.EffectPermitIdentity(programs.From)
 	away := migrations.VaultUnlockAway(effectPermits.From)
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.SourceManifestLayout(away.From), away, effectPermits, programs,
+		migrations.SourceManifestLayout(away.From), away, effectPermits, programs, nativeGaps,
 	}
-	return migrations.New(current, append(released, effectPermits.From, programs.From), steps)
+	return migrations.New(current, append(released, effectPermits.From, programs.From, nativeGaps.From), steps)
 }
 
 // CurrentBaseline identifies the fresh-install schema.

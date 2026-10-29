@@ -102,6 +102,22 @@ type WhileLoop struct {
 
 func (WhileLoop) commandNode() {}
 
+// CaseStatement runs the body of the first item with a glob pattern matching
+// the word. Every item ends with ;; (no fallthrough).
+type CaseStatement struct {
+	SyntaxLocation
+	Word  DeferredWord
+	Items []CaseItem
+}
+
+type CaseItem struct {
+	SyntaxLocation
+	Patterns []DeferredWord
+	Body     []Statement
+}
+
+func (CaseStatement) commandNode() {}
+
 // ForLoop distinguishes omitted in from an explicitly empty iteration list.
 type ForLoop struct {
 	SyntaxLocation
@@ -198,13 +214,31 @@ type DoubleQuotedPart struct {
 
 func (DoubleQuotedPart) wordNode() {}
 
+// ParameterPart is $name, ${name}, ${#name}, or ${name OP word}. Operator is
+// one of -, :-, +, :+, ?, :?, #, ##, %, %%, ^, ^^, ",", ",,", /, //, /# or
+// /%; Argument is its word or pattern and Replacement the replacement of a
+// substitution operator.
 type ParameterPart struct {
 	SyntaxLocation
-	Name   string
-	Length bool
+	Name        string
+	Length      bool
+	Operator    string
+	Argument    *DeferredWord
+	Replacement *DeferredWord
 }
 
 func (ParameterPart) wordNode() {}
+
+// Words lists the operator words nested in the parameter.
+func (p ParameterPart) Words() []DeferredWord {
+	var out []DeferredWord
+	for _, word := range []*DeferredWord{p.Argument, p.Replacement} {
+		if word != nil {
+			out = append(out, *word)
+		}
+	}
+	return out
+}
 
 type SubstitutionPart struct {
 	SyntaxLocation

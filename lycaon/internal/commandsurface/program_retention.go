@@ -6,12 +6,6 @@ import (
 	"sync"
 )
 
-// ProgramStateAdmission refuses an aggregate state allocation before insertion.
-// It must not wait for this same program to relinquish memory to make room.
-type ProgramStateAdmission interface {
-	ReserveProgramState(context.Context, int64) (release func(), err error)
-}
-
 // ProgramSnapshotLease owns one detached execution snapshot's accounting.
 // Keep the lease until every consumer has released the snapshot and its strings.
 type ProgramSnapshotLease struct {
@@ -25,8 +19,8 @@ func (s *ProgramSnapshotLease) Close() error {
 	return nil
 }
 
-func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, admission ProgramStateAdmission) (*ProgramSnapshotLease, error) {
-	if ctx == nil || admission == nil {
+func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, memory ProgramStateAdmission) (*ProgramSnapshotLease, error) {
+	if ctx == nil || memory == nil {
 		return nil, fmt.Errorf("execution snapshot requires context and state admission")
 	}
 	if err := ctx.Err(); err != nil {
@@ -38,7 +32,7 @@ func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, admission Progra
 	if closed {
 		return nil, fmt.Errorf("parsed program is closed")
 	}
-	release, err := admission.ReserveProgramState(ctx, bound)
+	release, err := memory.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return nil, err
 	}

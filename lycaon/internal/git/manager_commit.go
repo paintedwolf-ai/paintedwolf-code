@@ -17,6 +17,9 @@ type GitCommitOpts struct {
 	Message string
 	Paths   []string
 	Amend   bool
+	// IdentityName and IdentityEmail, when set, replace the resolved author
+	// and committer fields.
+	IdentityName, IdentityEmail string
 }
 
 // Commit stages paths and creates or amends a commit.
@@ -27,9 +30,6 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 	}
 	if strings.TrimSpace(opts.Message) == "" {
 		return "", fmt.Errorf("commit message is required")
-	}
-	if opts.Amend && len(opts.Paths) == 0 {
-		return "", fmt.Errorf("amend requires explicit paths")
 	}
 	release, err := gitlease.Repository(ctx, dir)
 	if err != nil {
@@ -46,10 +46,14 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 		}
 	}()
 	addArgs := []string{"add"}
-	if len(opts.Paths) == 0 {
+	switch {
+	case opts.Amend && len(opts.Paths) == 0:
+		// A message-only amend stages nothing.
+		addArgs = nil
+	case len(opts.Paths) == 0:
 		// No explicit paths: stage every change.
 		addArgs = append(addArgs, "-A")
-	} else {
+	default:
 		// Treat explicit paths as literal pathspecs.
 		addArgs = append(addArgs, "--")
 		for _, p := range opts.Paths {
@@ -58,12 +62,20 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 			}
 		}
 	}
-	if _, code, err := gitexec.Run(ctx, dir, addArgs, hermeticOpts(0)); err != nil {
-		return "", err
-	} else if code != 0 {
-		return "", fmt.Errorf("git add failed")
+	if addArgs != nil {
+		if _, code, err := gitexec.Run(ctx, dir, addArgs, hermeticOpts(0)); err != nil {
+			return "", err
+		} else if code != 0 {
+			return "", fmt.Errorf("git add failed")
+		}
 	}
 	identity := commitIdentity(ctx, dir)
+	if opts.IdentityName != "" {
+		identity.Name = opts.IdentityName
+	}
+	if opts.IdentityEmail != "" {
+		identity.Email = opts.IdentityEmail
+	}
 	out, code, err := gitexec.Run(ctx, dir, commitArgs(opts), gitexec.Opts{Profile: gitexec.ProfileHermetic, Identity: &identity})
 	if err != nil {
 		return "", err
@@ -76,12 +88,18 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 	return hash, err
 }
 
+// commitArgs commits only the selected paths, so unrelated staged work stays
+// staged and out of the commit; a message-only amend rewords HEAD.
 func commitArgs(opts GitCommitOpts) []string {
 	args := []string{"commit", "-m", opts.Message}
 	if opts.Amend {
-		// Amend only the selected paths, leaving unrelated staged work in the index.
-		args = append(args, "--amend", "--only", "--")
-		args = append(args, opts.Paths...)
+		args = append(args, "--amend")
+	}
+	if len(opts.Paths) > 0 || opts.Amend {
+		args = append(args, "--only")
+	}
+	if len(opts.Paths) > 0 {
+		args = append(append(args, "--"), opts.Paths...)
 	}
 	return args
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	terminaltool "github.com/lycaon/lycaon/internal/tools/native/terminal"
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,8 +31,20 @@ type CommandTool struct {
 	Background      *bgprocess.Registry
 	FailureTracker  *CommandFailureTracker
 	WriteRootGate   SandboxWriteRootGate
+	// Programs is the v1 program entry every non-capture call runs through.
+	Programs *ProgramRuntime
 }
 
+// CaptureInvocation reports the retained one-shot capture interactions,
+// terminal_capture and snapshot_capture, which keep their reviewed confined
+// runner. Every other command call is a v1 program.
+func CaptureInvocation(args map[string]any) bool {
+	_, terminal := args["terminal_capture"]
+	_, snapshot := args["snapshot_capture"]
+	return terminal || snapshot
+}
+
+// Run executes a v1 program through the program entry, or one retained capture.
 func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 	tctx.Execution.VerificationCheck = VerificationRequested(args)
 	if t.DeclaredCommand != nil {
@@ -46,8 +57,11 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 	if t.FailureTracker == nil {
 		t.FailureTracker = NewCommandFailureTracker()
 	}
-	if toolkit.BoolArg(args, "background", false) {
-		return RunBackground(ctx, t.Background, t.Runner, t.Boundary, args, tctx, t.confined().SessionWriteRoots(ctx, tctx), "command")
+	if !CaptureInvocation(args) {
+		if t.Programs == nil {
+			return "", fmt.Errorf("command program runtime is not configured")
+		}
+		return t.Programs.Run(ctx, args, tctx)
 	}
 	res, outcome, err := t.confined().Run(ctx, args, tctx)
 	if err != nil {

@@ -57,16 +57,18 @@ The portable command host uses the selected syntax parser, never the interpreter
 P04 adds bounded parser, brace-classification and static quote-removal operations:
 allocation and recursive-entry reservations precede parser growth. Exact selected-tree node/depth admission stays
 in the host before constructing its plan; transient parser wrappers are scratch.
-The host reserves the full scratch allowance against its aggregate budget before
-parsing. An exhausted scratch budget returns a typed refusal with no partial tree.
+`NewAdmittedAllocationBudget` charges ledger growth to the host aggregate in
+64 KiB chunks before the ledger admits it; an aggregate refusal is a
+`BudgetError` whose `Cause` is the host's typed refusal. An exhausted scratch
+budget returns a typed refusal with no partial tree.
 The modifications are recorded in [mvdan-sh.patch](mvdan-sh.patch). Only
 `syntax.Parse` activates `WithBudget(Budget{MaxBytes: ...})` or the shared
 `WithBudget(Budget{Pool: ...})`; other parser entry
-points explicitly refuse that option. The host's selected allowance is 32 MiB
-from `evaluation_memory_bytes`, reserved before constructing the parser. All
-active parse calls, retained state and old/new host-plan overlap must fit the
-host aggregate reservation; a successful parse does not independently grant
-memory or effects.
+points explicitly refuse that option. The host's per-unit ceiling is 32 MiB
+from `evaluation_memory_bytes`; the aggregate holds only the ledger's admitted
+high-water mark and is released after lowering. All active parse calls,
+retained state and old/new host-plan overlap must fit the host aggregate; a
+successful parse does not independently grant memory or effects.
 
 The meter reserves payload/backing capacities before `new`, `make`, slice growth,
 byte-to-string conversion and diagnostic formatting. It conservatively rounds
@@ -113,6 +115,12 @@ escape-removal walker, including Unicode escapes and double-quote distinctions;
 the host does not implement a second quote grammar. The new fixtures cover a
 1 MiB escaped word, malformed brace amplification, detached output, parser reuse,
 and a shared parse/quote/lowering allocation at its exact ceiling and one byte over.
+
+`RemoveQuotes` exports that walker for unquoted, double-quoted and here-document
+text, reporting which pieces a backslash quoted. The host's program expansion
+uses it for quote removal over detached plan words, so escaped glob characters
+stay literal; it has no environment, account, filesystem or substitution access.
+The general `Config` expander and its pathname expansion remain unused by the host.
 
 To reproduce or update this copy, verify the complete release archive against the
 module checksum above, extract it into a clean directory, and apply
@@ -198,6 +206,24 @@ It does not select the P13 PCRE grammar or expose additional regex syntax.
 Existing upstream text parser/matcher entry points retain their behavior.
 The patch and exact metering contract are recorded alongside the selected source.
 
+P13 extends the same bounded entry for the command search dialects without
+selecting any wider grammar. `CompileMarkedBounded` compiles a host-validated
+standard tree once, with numbered captures, Unicode simple case folding for
+`FoldCase` literals and host markers: private-use scalars from U+10FF00 that
+lower to back references and ASCII-class word assertions (GNU `\<`, `\>`,
+`\b`, `\B` and grep `-w` edges) the standard tree cannot spell. Without the
+marked lowering every scalar stays literal, so predicate matching is
+unchanged. `CompilePatternTextBounded` compiles text the host has already
+validated against its declared grammar (pcre-common-v1 for `-P`); it is not a
+qualification of the engine's own syntax. A `BoundedSession` meters one
+record's steps, time and allocation across every search of that record, and
+`Find` returns leftmost-first spans or, in longest mode, the POSIX
+leftmost-longest match with POSIX subexpression offsets: `Stop` keeps the
+preferred capture vector (farthest group-0 end, then per group in order a set
+group, the earliest start and the farthest end) and keeps backtracking, so
+each start explores every path. The metered writer emits no
+prefix or atomicity optimizations, which keeps that exploration exhaustive.
+
 The predicate grammar adapter also retains the selected Go1.26.4
 `regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
 under `regexp2/syntax/posix/`. Their exact upstream hashes and tag are recorded
@@ -228,6 +254,102 @@ translator's range checks use the actual normalized endpoints. The opt-in change
 is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
 are recorded in `go-posix.patch`.
 
+## AWK interpreter
+
+`goawk/` contains the runtime source subset of `github.com/benhoyt/goawk`
+v1.32.0, commit `f59bf0db58a7dd3bebcdd64c9bd75ae2ea10932e`, the version the
+command language catalog pins for `awk`. The release archive was verified
+against its Go module checksum before extraction:
+`h1:CK/mnBxGsNqX8hdghPIctl2aGIcwfnhT6sv+9M/bY7w=`. The module metadata
+checksum is `h1:jXTQxBxtQ0VsjFqc8dw7tIJj3SDzQN8kcdMq7r83/ZA=`. The upstream
+license remains in the module directory. The snapshot omits the command-line
+entry point (`goawk.go`), upstream tests, `testdata/`, `docs/` and `scripts/`;
+the runtime packages `interp`, `parser`, `lexer` and `internal/...` are complete.
+
+The host embeds the interpreter through `interp.New` and `ExecuteContext` with
+no environment, no command execution, no file writes and a file system that
+serves only pinned operand captures. [goawk.patch](goawk.patch) adds two
+host-facing entry points:
+
+- `parser.(*Program).Constructs` lists `system()` calls, command pipes in either
+  direction, `getline` from a file, output redirection and regex literals with
+  their statement positions, so the host refuses them before execution.
+- `interp.Config.Budget` meters work and allocation. `Step` runs before every
+  backward jump, `for`-`in` iteration and user function call, which bounds every
+  unbounded execution path; loops test their condition at the bottom, so `n`
+  iterations take `n-1` steps. `Allocate` runs before concatenation,
+  `sprintf`/`printf` (bounded by literal bytes, widths, precisions and argument
+  sizes before formatting), `sub`/`gsub` results, `toupper`/`tolower`, `split`
+  and new array elements. The meter is cumulative created bytes, not live heap.
+
+GoAWK regexes use Go's RE2 syntax with leftmost-longest matching (`Longest()`
+on every compiled regex, upstream). That is not POSIX ERE: the host refuses
+regex literals that use RE2-only syntax (Perl classes and assertions, `(?`
+groups and flags, lazy quantifiers, `\Q`/`\E`, `\C`, `\x`), and dynamic regex
+strings follow the same RE2 grammar. Submatch choice within a leftmost-longest
+match follows Go, not POSIX subexpression rules; `awk` exposes only `RSTART`
+and `RLENGTH`, which are whole-match facts.
+
+To update this copy, verify the release archive against the module checksum,
+extract the same runtime subset into a clean directory and apply `goawk.patch`
+with `patch -p1`. The patch carries every modified file and the added budget,
+inspection and test files; regenerate it against the verified subset whenever
+owned files change. Review the pin, `lycaon/go.mod` replacement and this record
+together, then run `./task test:digest -- github.com/benhoyt/goawk/interp
+github.com/benhoyt/goawk/parser ./internal/tools/native/textutil/`.
+
+## jq engine
+
+`gojq/` contains the library source of `github.com/itchyny/gojq` v0.12.19,
+the engine behind the structured `jq` and `jq_edit` tools and the `jq`
+command. Upstream module checksum:
+`h1:ttXA0XCLEMoaLOz5lSeFOZ6u6Q3QxmG46vfgI4O0DEs=`; module metadata checksum:
+`h1:5galtVPDywX8SPSOrqjGxkBeDhSxEW1gSxoy7tn1iZY=`. The upstream license
+remains in the module directory. The snapshot omits the command-line
+packages (`cli/`, `cmd/`), `_gojq`, `_tools`, the Docker and Make files,
+`go.dev.mod`/`go.dev.sum`, hidden files, and the upstream tests that build
+query inputs from Go maps (`compare`, `compiler`, `encoder`, `option`,
+`option_module_loader`, `preview`, `query` and `type` tests); the remaining
+upstream tests run unchanged. `go.mod` lists only the library's dependency.
+
+Upstream gojq sorts object keys, normalizes numbers and words errors its own
+way. The command language promises jq's results, so
+[gojq.patch](gojq.patch) makes the library behave as jq 1.8 does:
+
+- Objects are `*OrderedObject` values that keep insertion order. Parsing,
+  construction, `+`, `*`, assignment and `to_entries` follow it; `keys`,
+  comparison, `unique` and `-S` output still order keys by codepoint.
+  `keys_unsorted` is added. `FromGo` and `ToGo` convert Go JSON values at the
+  host boundary (sorted keys for Go maps, whose order is unstated).
+- `Decoder` reads JSON input keeping key order and each number's literal in
+  decNumber's canonical form, so an unmodified `2.0` prints as `2.0` and `1e3`
+  as `1E+3`. Program literals whose text is not their integer's stay literals
+  too. Arithmetic is jq's double arithmetic: integer results past 2^53 and
+  large literals become doubles, and doubles print in jq's shortest form
+  (`1e-05`, `1e+17`, `12345678901234567000`).
+- Runtime error messages use jq's wording and its 11-byte value previews
+  (`Cannot index number with string "a"`, `Cannot iterate over null (null)`,
+  `number (1) and string ("a") cannot be added`). Indexing a string with a
+  number is an error, as in jq.
+- `MarshalWith` adds jq's output options: pretty layout with any indent
+  (including `--indent 0`), `--sort-keys` and `--ascii-output`.
+
+The host adds `debug`, `stderr`, `input_filename` and `input_line_number`
+through `gojq.WithFunction` and never configures a module or file loader.
+Neither `gojq` nor `github.com/mikefarah/yq/v4/pkg/yqlib` exposes a VM
+instruction/step counter hook (`gojq` checks `ctx.Done()` at the top of each
+bytecode instruction in `execute.go`), so the host meters host-observable input
+and output value transitions against `query_work_steps` and bounds internal VM
+evaluation within a single value with the `query_cpu_ms` context deadline.
+
+To update this copy, verify the release against the module checksum, extract
+the same library subset into a clean directory and apply `gojq.patch` with
+`patch -p1`; regenerate the patch against that subset whenever owned files
+change. Review the pin, the `lycaon/go.mod` replacement and this record
+together, then run `./task test:digest -- github.com/itchyny/gojq
+./internal/tools/native/jq/ ./internal/tools/native/query/`. The query
+package's jq goldens were recorded from jq 1.8.1 and its differential test
+re-runs them through any installed jq.
 ## MLX build inputs
 
 `mlx/` holds checksummed MLX C++ dependency archives. The complete locked
