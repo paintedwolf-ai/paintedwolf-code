@@ -117,7 +117,7 @@ func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
 
 // validateStoreIntegrity checks the whole file at once, page accounting
 // included. Startup paths that hold the store alone use it.
-func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
+func validateStoreIntegrity(ctx context.Context, sqlDB DBTX) error {
 	if err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check"); err != nil {
 		return err
 	}

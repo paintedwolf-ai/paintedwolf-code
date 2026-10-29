@@ -73,6 +73,7 @@ type Plan struct {
 	steps                   []Step
 	scratchBytes            uint64
 	retainedStoragePrepared bool
+	retainedEntryRows       uint64
 }
 
 // Required reports whether the store needs transformation.

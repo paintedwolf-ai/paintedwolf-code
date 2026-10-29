@@ -103,10 +103,12 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 			return fmt.Errorf("migration %s: %w", step.ID, err)
 		}
 	}
-	if err := checkIntegrity(ctx, tx); err != nil {
-		return err
-	}
-	if err := checkForeignKeys(ctx, tx); err != nil {
+	if err := WithIntegrityCache(ctx, conn, func() error {
+		if err := checkIntegrity(ctx, tx); err != nil {
+			return err
+		}
+		return checkForeignKeys(ctx, tx)
+	}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

@@ -23,22 +23,23 @@ func (p Plan) PrepareRetainedStorage(ctx context.Context, database DBTX) (Plan, 
 	if pageBytes == 0 || pages > math.MaxUint64/pageBytes {
 		return p, fmt.Errorf("invalid retained source size")
 	}
-	scratch, err := retainedSortBytes(ctx, database, pages*pageBytes, pageBytes)
+	scratch, entries, err := retainedSortBytes(ctx, database, pages*pageBytes, pageBytes)
 	if err != nil {
 		return p, err
 	}
 	p.scratchBytes, err = storageSum(p.scratchBytes, scratch)
 	p.retainedStoragePrepared = err == nil
+	p.retainedEntryRows = entries
 	return p, err
 }
 
 // retainedSortBytes covers the reviewed revision-4 route and retained-copy
 // index builds. dbstat reads each source B-tree once, independent of how many
 // snapshots share its rows. No migration or snapshot serialization runs here.
-func retainedSortBytes(ctx context.Context, database DBTX, storeBytes, pageBytes uint64) (uint64, error) {
+func retainedSortBytes(ctx context.Context, database DBTX, storeBytes, pageBytes uint64) (uint64, uint64, error) {
 	cells, indexRecord, manifestRecord, manifestCells, err := retainedInventory(ctx, database)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	// The released shape has UNIQUE(snapshot_id,chunk_id). Retained copying
 	// reconstructs that constraint before conversion, so each physical entry
@@ -46,18 +47,18 @@ func retainedSortBytes(ctx context.Context, database DBTX, storeBytes, pageBytes
 	rootRows := manifestCells
 	indexBytes, err := storageSum(storeBytes, storeBytes)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	indexRecord, err = storageSum(indexRecord, indexRecord, 80)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	manifestRecord, err = storageSum(manifestRecord, manifestRecord, 80)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if rootRows != 0 && manifestRecord > math.MaxUint64/rootRows {
-		return 0, fmt.Errorf("root sorter bound overflows")
+		return 0, 0, fmt.Errorf("root sorter bound overflows")
 	}
 	// Existing index keys already occur in source pages. The new evidence key
 	// takes disjoint JSON subtrees plus the source primary key; twice the source
@@ -65,7 +66,8 @@ func retainedSortBytes(ctx context.Context, database DBTX, storeBytes, pageBytes
 	// their later index maintenance uses capped main pages, never bulk sorting.
 	// Later populated index rebuilds concern unchanged source tables only.
 	// This is specific to the registered v4 route.
-	return sorterStorageBytes(max(indexBytes, rootRows*manifestRecord), max(cells, rootRows), max(indexRecord, manifestRecord), pageBytes)
+	scratch, err := sorterStorageBytes(max(indexBytes, rootRows*manifestRecord), max(cells, rootRows), max(indexRecord, manifestRecord), pageBytes)
+	return scratch, manifestCells, err
 }
 
 // sorterStorageBytes follows the pinned SQLite single-threaded PMA sorter:
@@ -118,4 +120,9 @@ func storageSum(values ...uint64) (uint64, error) {
 		out += v
 	}
 	return out, nil
+}
+
+// RetainedSourceEntries is the measured primary-row count for the frozen v4 shape.
+func (p Plan) RetainedSourceEntries() (uint64, bool) {
+	return p.retainedEntryRows, p.BoundedRetainedStorage()
 }

@@ -18,7 +18,7 @@ type UpgradeStorage struct {
 
 // InspectUpgradeStorage measures the retained replacement and its sort work.
 // staged excludes recovery clone divergence when an archive is the recovery point.
-func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, staged bool) (UpgradeStorage, error) {
+func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, staged, sharedOriginal bool) (UpgradeStorage, error) {
 	var pages, pageBytes uint64
 	if err := database.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
 		return UpgradeStorage{}, err
@@ -26,10 +26,12 @@ func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, stag
 	if err := database.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageBytes); err != nil {
 		return UpgradeStorage{}, err
 	}
-	cloned := false
+	cloned := sharedOriginal
 	var err error
 	if !staged {
-		cloned, err = fileclone.SupportedAt(filepath.Dir(path))
+		var supported bool
+		supported, err = fileclone.SupportedAt(filepath.Dir(path))
+		cloned = cloned || supported
 		if err != nil {
 			return UpgradeStorage{}, err
 		}
