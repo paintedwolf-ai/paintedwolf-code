@@ -34,9 +34,19 @@ func (p Plan) reviewedRetainedRoute() bool {
 			return false
 		}
 		if step.Checksum != reviewed[i][1] {
-			// The reviewed unreleased correction only dispatches each retained
-			// authority kind to its own decoder; SQL and allocation work are unchanged.
-			if step.ID != "native-child-once-authority" || step.Checksum != "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5" {
+			switch step.ID {
+			case "native-child-once-authority":
+				// Decoder dispatch changes no SQL, indexes or allocation work.
+				if step.Checksum != "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5" {
+					return false
+				}
+			case "source-manifest-layout":
+				// The reviewed64-row VALUES writer streams with no ephemeral
+				// tree; reads, sorts, target rows and chunk identities are unchanged.
+				if step.Checksum != "046635199cf698cecc77b7f59fe03b92a9874b1b1789025472f44e0af6b8931e" {
+					return false
+				}
+			default:
 				return false
 			}
 		}

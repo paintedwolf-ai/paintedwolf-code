@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -15,9 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// An empty, well-formed secondary tree models an omitted index entry without
-// damaging its primary row or making structural checks fail.
-func omitSecondaryRows(t *testing.T, path, name string) {
+func rewriteSecondaryLeaf(t *testing.T, path, name string, rewrite func([]byte)) {
 	t.Helper()
 	database, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open secondary-index fixture", err)
@@ -37,11 +36,19 @@ func omitSecondaryRows(t *testing.T, path, name string) {
 	if block[0] != 0x0a {
 		t.Fatal("fixture requires a single index leaf")
 	}
-	clear(block)
-	block[0] = 0x0a
-	binary.BigEndian.PutUint16(block[5:7], uint16(size%65536))
+	rewrite(block)
 	_, err = file.WriteAt(block, (page-1)*size)
 	testutil.FailErr(t, "omit only secondary rows", err)
+}
+
+// An empty, well-formed secondary tree exposes the primary-cursor decision.
+func omitSecondaryRows(t *testing.T, path, name string) {
+	t.Helper()
+	rewriteSecondaryLeaf(t, path, name, func(block []byte) {
+		clear(block)
+		block[0] = 0x0a
+		binary.BigEndian.PutUint16(block[5:7], uint16(len(block)%65536))
+	})
 }
 
 func TestMigrationActivationDefersSecondaryAuditWithoutLosingItsObligation(t *testing.T) {
@@ -61,7 +68,16 @@ func TestMigrationActivationDefersSecondaryAuditWithoutLosingItsObligation(t *te
 	testutil.FailErr(t, "identify activation destination", err)
 	testutil.FailErr(t, "retain source schema", tx.Rollback())
 	testutil.FailErr(t, "close sealed activation source", database.Close())
-	omitSecondaryRows(t, path, "history_body")
+	// Keep the same number of valid cells while substituting an equal-size key.
+	// quick_check may count cells, but only the full audit checks correspondence.
+	rewriteSecondaryLeaf(t, path, "history_body", func(block []byte) {
+		original := []byte("the original text")
+		changed := []byte("the modified text")
+		if len(original) != len(changed) || bytes.Count(block, original) != 1 {
+			t.Fatal("fixture requires one equal-size secondary key")
+		}
+		copy(block[bytes.Index(block, original):], changed)
+	})
 	database, err = sql.Open("sqlite", path)
 	testutil.FailErr(t, "open unaudited activation source", err)
 	defer database.Close()
