@@ -29,7 +29,7 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 		SourceName: unitID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
 	})
 	if err != nil {
-		return signal{}, f.sourceRefusal(ctx, run, s, err)
+		return signal{}, f.sourceRefusal(ctx, run, s, "eval", err)
 	}
 	lease, err := parsed.SnapshotWithMemory(ctx, f.e.ports.Memory)
 	_ = parsed.Close()
