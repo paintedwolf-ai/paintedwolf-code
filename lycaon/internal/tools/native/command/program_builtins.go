@@ -155,6 +155,12 @@ func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 		code = argvErr.Code
 		data["word"], data["expected"] = argvErr.Word, argvErr.Expected
 		data["source_start_byte"], data["source_end_byte"], data["source_line"], data["source_column"] = argvErr.Span.StartByte, argvErr.Span.EndByte, argvErr.Span.Line, argvErr.Span.Column
+	} else if owner := toolrejection.AsToolReject(cause); owner != nil {
+		// An owner's own operand rule keeps its code and facts.
+		code = owner.Code
+		for key, value := range owner.Data {
+			data[key] = value
+		}
 	}
 	return toolrejection.RejectInvalidArguments(code, data)
 }

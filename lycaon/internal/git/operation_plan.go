@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,11 +32,26 @@ func planOperation(ctx context.Context, dir string, req OperationRequest) (opera
 	var err error
 	switch req.Kind {
 	case "checkout":
-		err = p.checkout(ctx, dir)
+		switch req.Action {
+		case "paths":
+			err = p.checkoutPaths(ctx, dir)
+		case "detach":
+			err = p.detach(ctx, dir)
+		default:
+			err = p.checkout(ctx, dir)
+		}
 	case "merge":
 		err = p.merge(ctx, dir)
 	case "stash":
 		err = p.stash(ctx, dir)
+	case "add":
+		err = p.add()
+	case "reset":
+		err = p.reset(ctx, dir)
+	case "clean":
+		err = p.clean()
+	case "cherry-pick", "revert", "rebase":
+		err = p.sequence(ctx, dir)
 	default:
 		err = operationRefusal("unknown_operation")
 	}
@@ -188,6 +204,9 @@ func (p *operationPlan) run(ctx context.Context, dir string) ([]byte, int, error
 		if err != nil || code != 0 {
 			return out, code, err
 		}
+	}
+	if p.request.Kind == "add" {
+		return gitexec.RunTo(ctx, dir, p.args, p.opts, io.Discard)
 	}
 	return gitexec.Run(ctx, dir, p.args, p.opts)
 }
