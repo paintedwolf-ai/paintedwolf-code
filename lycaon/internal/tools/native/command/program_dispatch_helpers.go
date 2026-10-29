@@ -96,7 +96,7 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 	if d.run.recorder == nil {
 		return nil
 	}
-	locations := commandsurface.ExecutionLocations(plan.Statements)
+	locations := programNodes(plan.Statements)
 	nodes := make([]toolcontract.ProgramNode, 0, len(locations))
 	for _, loc := range locations {
 		nodes = append(nodes, toolcontract.ProgramNode{ID: string(loc.ID), SourceUnitID: unitID, Span: loc.Span})
@@ -382,35 +382,6 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 		return spec.Effects[0].Mode
 	}
 	return ""
-}
-
-// programPublicationTool is offered to programs with its structured
-// definition, because accepted document publication binds that definition.
-const programPublicationTool = "write"
-
-// offeredProgramDefinition is the exact definition a program surface offers
-// for a registered tool, so a child bound through it passes surface admission.
-func offeredProgramDefinition(tool string, definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	if tool == programPublicationTool {
-		return definition
-	}
-	return programOperationDefinition(definition)
-}
-
-func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	facts := definition.Facts()
-	// A command child retains its structured owner's identity, while the
-	// enclosing command may request file authority for that child's paths.
-	// These two capabilities are carried only on this program definition.
-	facts.Contract.Capabilities |= toolcontract.CapabilityReadPath | toolcontract.CapabilityWriteRoot
-	if facts.ProgressGate != toolcontract.ProgressNotRequired {
-		facts.ProgressGate = toolcontract.ProgressNotRequired
-	}
-	updated, err := toolcontract.NewOperationDefinition(facts)
-	if err != nil {
-		return definition
-	}
-	return updated
 }
 
 func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {

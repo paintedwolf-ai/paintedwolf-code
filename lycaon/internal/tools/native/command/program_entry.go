@@ -296,11 +296,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:      memory,
-		Clock:       r.clock(),
-		Environment: run.baseEnv,
-		ScratchDir:  tc.Host.SessionScratchDir,
-		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:         memory,
+		Clock:          r.clock(),
+		ResourceLimits: confineLimits{},
+		Environment:    run.baseEnv,
+		ScratchDir:     tc.Host.SessionScratchDir,
+		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	// Evaluation writes the call's effects privately until its result belongs
 	// to the call; a parked program's later effects never reach the call.
@@ -427,10 +428,10 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		}
 	}
 	active := []toolcontract.OperationDefinition{external}
-	if write, ok := r.Registry.Definition(programPublicationTool); ok {
-		active = append(active, offeredProgramDefinition(programPublicationTool, write.Operation))
+	if write, ok := r.Registry.Definition("write"); ok {
+		active = append(active, write.Operation)
 	}
-	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, programPublicationTool: true}
+	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, "write": true}
 	for _, operation := range owners.Natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
@@ -438,13 +439,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 			}
 			seen[tool] = true
 			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, offeredProgramDefinition(tool, definition.Operation))
-			} else if spec, ok := run.catalogCommand(tool); ok {
-				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				active = append(active, definition)
+				active = append(active, definition.Operation)
 			}
 		}
 	}
@@ -462,17 +457,6 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	definitions, err := run.controlDefinitions()
 	if err != nil {
 		return nil, nil, nil, err
-	}
-	for _, name := range []string{"cd", "realpath", "readlink", "native_path"} {
-		spec, ok := run.catalogCommand(name)
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("path command %s missing from catalog", name)
-		}
-		definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		definitions[name] = definition
 	}
 	hostCommands := make([]string, 0, len(definitions))
 	for name := range definitions {
@@ -597,8 +581,8 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 				rejection = &copy
 			}
 			enrichProgramReject(rejection, evaluationRefusal.Command, span)
-			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" && dispatcher.claimStopLine() {
-				writeLimitRefusal(stderr, "command", "", rejection)
+			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
+				writeLimitRefusal(commandprogram.Streams{Error: stderr}, "command", rejection)
 			}
 		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
 			enrichProgramReject(rejection, "", run.root.Span)
@@ -698,7 +682,6 @@ func (b *boundedBuffer) Bytes() []byte {
 	return append([]byte(nil), b.data...)
 }
 
-
 var compiledCommandIndex = sync.OnceValues(func() (map[string]toolcontract.CommandSpecification, error) {
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
@@ -761,7 +744,7 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 
 // nativeArguments attaches any call-level capability declarations that the
 // bound native operation contract accepts.
-func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract, loopbackPorts []uint16) map[string]any {
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
 	arguments := make(map[string]any, len(base)+len(r.envelope))
 	for k, v := range base {
 		arguments[k] = v
@@ -775,26 +758,6 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 		}
 		if len(supported) > 0 {
 			arguments["capability_request"] = supported
-		}
-	}
-	foreignPorts := make([]uint16, 0, len(loopbackPorts))
-	for _, port := range loopbackPorts {
-		if !slices.Contains(r.tc.Local.OwnedLoopbackPorts, port) {
-			foreignPorts = append(foreignPorts, port)
-		}
-	}
-	if len(foreignPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
-		request, _ := arguments["capability_request"].(map[string]any)
-		if request == nil {
-			request = map[string]any{}
-			arguments["capability_request"] = request
-		}
-		if _, explicit := request["loopback_connect"]; !explicit {
-			ports := make([]any, len(foreignPorts))
-			for i, port := range foreignPorts {
-				ports[i] = int(port)
-			}
-			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
 	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {

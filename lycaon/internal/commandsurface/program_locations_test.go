@@ -17,6 +17,8 @@ if $(echo cond); then echo then; else echo else; fi
 while $(echo loop); do break; done
 helper() { echo $(echo function); }
 { echo grouped; } && ( echo isolated ) | cat
+time echo $(echo timed) | cat
+echo {$(echo brace),plain}
 `
 	locations := commandsurface.ExecutionLocations(parseProgram(t, source).Statements)
 	texts := make([]string, 0, len(locations))
@@ -41,10 +43,21 @@ helper() { echo $(echo function); }
 		"$(echo loop)", "break;",
 		"$(echo function)", "echo function",
 		"echo grouped;", "echo isolated", "cat",
+		"echo $(echo timed)", "$(echo timed)", "echo timed",
 	} {
 		if !slices.Contains(texts, want) {
 			t.Fatalf("no location for %q in %q", want, texts)
 		}
+	}
+	// Brace alternative nodes retain their containing word's source span.
+	count := 0
+	for _, text := range texts {
+		if text == "{$(echo brace),plain}" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("brace alternative execution starts = %d, want substitution and statement", count)
 	}
 	if got := commandsurface.ExecutionLocations(nil); len(got) != 0 {
 		t.Fatalf("empty program locations = %v", got)
