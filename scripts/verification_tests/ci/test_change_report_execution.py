@@ -52,6 +52,22 @@ class ChangeScopeTests(unittest.TestCase):
         git(self.root, "rm", "-q", "dir/old.ts")
         self.assertEqual(change_report.added_and_removed(self.root, scope.base), (["dir/new.ts"], ["dir/old.ts"]))
 
+    def test_revision_range_ignores_the_working_tree(self):
+        base = subprocess.check_output(["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True).strip()
+        (self.root / "kept.go").write_text("a\nB\nc\nd\n")
+        (self.root / "dir" / "new.ts").write_text("1\n2\n3\n")
+        git(self.root, "rm", "-q", "dir/old.ts")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-qm", "edit")
+        head = subprocess.check_output(["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True).strip()
+        (self.root / "dir" / "new.ts").write_text("working tree\n")
+        (self.root / "untracked.go").write_text("x\n")
+        paths = change_report.changed_paths(self.root, base, head)
+        self.assertEqual(paths, ["dir/new.ts", "dir/old.ts", "kept.go"])
+        self.assertEqual(change_report.changed_lines(self.root, base, paths, head),
+                         {"kept.go": {2}, "dir/new.ts": {1, 2, 3}})
+        self.assertEqual(change_report.added_and_removed(self.root, base, head), (["dir/new.ts"], ["dir/old.ts"]))
+
     def test_explicit_base_must_be_a_commit(self):
         with patch.dict(os.environ, {change_report.BASE_ENV: "no-such-ref"}):
             with self.assertRaisesRegex(RuntimeError, "is not a commit"):
