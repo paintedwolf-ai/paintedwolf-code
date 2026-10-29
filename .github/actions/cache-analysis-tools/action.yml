@@ -34,6 +34,7 @@ runs:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
           ${{ steps.paths.outputs.bin }}/deadcode
+          ${{ steps.paths.outputs.bin }}/actionlint
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
 
     - if: inputs.save != 'true' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
@@ -57,6 +58,7 @@ runs:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
           ${{ steps.paths.outputs.bin }}/deadcode
+          ${{ steps.paths.outputs.bin }}/actionlint
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
 
     - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')

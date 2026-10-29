@@ -67,7 +67,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
 | **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 15 |
-| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 63 |
+| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 65 |
 
 ---
 
@@ -109,11 +109,11 @@ Policy files retain every declared entry, package rating, rationale, and verific
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
 | Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
-| Development, build, and verification tools | 8 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
+| Development, build, and verification tools | 10 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 5 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
 | Backend Go modules (`lycaon`) | 73 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
-| Tauri shell crates (`lycaon-den/src-tauri`) | 45 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 47 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |
