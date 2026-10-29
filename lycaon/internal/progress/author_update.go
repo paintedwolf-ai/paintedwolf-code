@@ -26,7 +26,7 @@ func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 	if content == "" {
 		return AuthorUpdate{}, fmt.Errorf("content is required")
 	}
-	if code, data, ok := ValidateAuthorProgress(content); !ok {
+	if code, data, ok := validateAuthorProgressStructure(content); !ok {
 		return AuthorUpdate{}, &AuthorUpdateRejection{Code: code, Data: data}
 	}
 	return AuthorUpdate{content: content}, nil
@@ -48,6 +48,9 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 		return AuthorUpdateResult{}, fmt.Errorf("prepared progress and store required")
 	}
 	prev := store.Get(ctx, root)
+	if code, data, ok := ValidateAuthorProgress(prev, u.content); !ok {
+		return AuthorUpdateResult{}, &AuthorUpdateRejection{Code: code, Data: data}
+	}
 	if strings.TrimSpace(prev) == u.content {
 		return AuthorUpdateResult{}, nil
 	}

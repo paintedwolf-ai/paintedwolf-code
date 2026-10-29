@@ -3,7 +3,6 @@ package wiring
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -43,7 +42,7 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 	}()
 
 	var checkpointID, selectedHunk string
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, listErr := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if listErr != nil || len(pending) != 1 || pending[0].ContentApply == nil || len(pending[0].ContentApply.Hunks) != 2 {
 			return false

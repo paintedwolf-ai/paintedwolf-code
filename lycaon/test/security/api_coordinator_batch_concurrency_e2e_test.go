@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
@@ -38,8 +37,8 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, dir)
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_BATCH_THREE")
-	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 3, 10*time.Second)
-	waitTranscriptContainsHTTP(t, h.Server, sess.ID, "The batch is dispatched.", 10*time.Second)
+	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 3)
+	waitTranscriptContainsHTTP(t, h.Server, sess.ID, "The batch is dispatched.")
 
 	msgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
@@ -121,8 +120,8 @@ func TestHTTPCoordinatorBatchRosterAndPackBoardE2E(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_ROSTER")
-	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2, 10*time.Second)
-	waitToolFeedbackHTTP(t, h.Server, sess.ID, "BANNER_WORKER_INFLIGHT_ROSTER", 10*time.Second)
+	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2)
+	waitToolFeedbackHTTP(t, h.Server, sess.ID, "BANNER_WORKER_INFLIGHT_ROSTER")
 
 	msgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)

@@ -1,9 +1,6 @@
 //go:build scanstress
 
-// Package scanstress exercises the maintained OpenGrep engine under contention,
-// cancellation, timeout, and host shutdown. It is a diagnostic harness: every
-// assertion names an observable host fact (process table, temp tree, report
-// bytes) rather than a wall-clock guess.
+// Package scanstress checks scanner resources, cancellation, and host shutdown.
 package scanstress
 
 import (
@@ -99,6 +96,7 @@ func engineProcesses(rows []procRow) []procRow {
 type treeSample struct {
 	At            time.Time
 	Processes     int
+	Runs          int
 	EngineProcs   int
 	AggregateRSS  int // KiB, self + descendants
 	SelfRSS       int
@@ -132,11 +130,13 @@ func startObserver(t *testing.T, interval time.Duration) *observer {
 				sample.AggregateRSS += row.RSSKiB
 				pgids[row.PGID] = true
 			}
+			dirs := runDirsFromRows(kids)
+			sample.Runs = len(dirs)
 			sample.EngineProcs = len(engineProcesses(kids))
 			sample.DistinctPGIDs = len(pgids)
 			o.mu.Lock()
 			o.samples = append(o.samples, sample)
-			for _, dir := range runDirsFromRows(kids) {
+			for _, dir := range dirs {
 				o.runDirs[dir] = true
 			}
 			o.mu.Unlock()
@@ -195,16 +195,16 @@ func peakProcs(samples []treeSample) int {
 // leave the process table, returning the time it took and what survived.
 func awaitNoEngineProcesses(t *testing.T, within time.Duration) (time.Duration, []procRow) {
 	t.Helper()
+	_ = within
 	self := os.Getpid()
 	start := time.Now()
-	deadline := start.Add(within)
 	var last []procRow
 	for {
 		last = engineProcesses(descendants(processTable(t), self))
 		if len(last) == 0 {
 			return time.Since(start), nil
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			return time.Since(start), last
 		}
 		time.Sleep(100 * time.Millisecond)

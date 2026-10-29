@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
@@ -36,16 +35,14 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	ready := func() *wire.SourceTreeView {
 		t.Helper()
 		var state *wire.SourceTreeView
-		testutil.WaitFor(t, 10*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			state = readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, project.ID, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})
 		return state
 	}
-	next := func(quiet time.Duration) (wire.SourceViewEvent, bool) {
+	awaitEvent := func(wantProjection string) wire.SourceViewEvent {
 		t.Helper()
-		timer := time.NewTimer(quiet)
-		defer timer.Stop()
 		for {
 			select {
 			case envelope := <-stream:
@@ -54,18 +51,27 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 				}
 				var event wire.SourceViewEvent
 				testutil.FailErr(t, "decode source view event", json.Unmarshal(envelope.Data, &event))
-				if event.ViewID == created.ID {
-					return event, true
+				if event.ViewID != created.ID {
+					continue
 				}
-			case <-timer.C:
-				return wire.SourceViewEvent{}, false
+				if wantProjection != "" && event.ProjectionRevision != wantProjection {
+					continue
+				}
+				return event
+			case <-t.Context().Done():
+				t.Fatal("timed out waiting for source view event")
+				return wire.SourceViewEvent{}
 			}
 		}
 	}
 	settled := ready()
+	awaitEvent(settled.ProjectionRevision)
+drainSettled:
 	for {
-		if _, announced := next(time.Second); !announced {
-			break
+		select {
+		case <-stream:
+		default:
+			break drainSettled
 		}
 	}
 
@@ -73,18 +79,31 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	testutil.FailErr(t, "pin tree view", err)
 	defer release()
 	for range 5 {
+		server.Views.publishSourceView(view)
 		view.notifier.Notify(true)
-		time.Sleep(20 * time.Millisecond)
 	}
-	if event, announced := next(time.Second); announced {
-		t.Fatalf("unchanged snapshot announced: %+v", event)
+checkUnchanged:
+	for {
+		select {
+		case envelope := <-stream:
+			if envelope.Topic != wire.EventTopicSourceView {
+				continue
+			}
+			var event wire.SourceViewEvent
+			testutil.FailErr(t, "decode source view event", json.Unmarshal(envelope.Data, &event))
+			if event.ViewID == created.ID {
+				t.Fatalf("unchanged snapshot announced: %+v", event)
+			}
+		default:
+			break checkUnchanged
+		}
 	}
 
 	update := wire.SourceTreeViewUpdate{Kind: "tree", OperationID: uuid.NewString(), ExpectedIntentRevision: settled.IntentRevision,
 		Command: wire.SourceTreeCommand{Disclose: &wire.SourceTreeDisclose{Kind: "disclose", Disclosures: []wire.SourceTreeDisclosure{{Address: wire.SourceTreeAddress{RootID: project.Roots[0].ID, Path: "src"}, Open: true}}}}}
 	readSourceViewResponse(t, callSourceViewHandler(t, server.Trees.HandleApplySourceViewIntent, project.ID, created.ID, update), http.StatusOK)
-	event, announced := next(10 * time.Second)
-	if !announced || event.IntentRevision == settled.IntentRevision {
-		t.Fatalf("intent change announced=%v event=%+v", announced, event)
+	event := awaitEvent("")
+	if event.IntentRevision == settled.IntentRevision {
+		t.Fatalf("intent change event=%+v", event)
 	}
 }
