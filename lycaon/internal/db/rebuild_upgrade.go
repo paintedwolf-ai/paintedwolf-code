@@ -42,6 +42,10 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if !staged && hooks.Before == nil {
 		return fmt.Errorf("schema upgrade requires installation recovery capture")
 	}
+	plan, err = plan.PrepareRetainedStorage(ctx, source)
+	if err != nil {
+		return err
+	}
 	record, err := beginRebuild(path)
 	if err != nil {
 		return err
@@ -76,7 +80,7 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err := captureRetainedRecovery(ctx, replacement, plan, hooks, staged); err != nil {
 		return err
 	}
-	if err := executeUpgrade(ctx, replacement, plan, hooks.Progress, registry); err != nil {
+	if err := executeRetainedRoute(ctx, replacement, plan, hooks.Progress, registry, staged); err != nil {
 		return err
 	}
 	if err := sealRebuiltStore(ctx, replacement); err != nil {
