@@ -2,7 +2,7 @@
 
 ## Identify by shape
 
-Query the top-level keys first (native `jq` with query `keys` for files at most 64 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
+Query the top-level keys first (`jq keys path` in `command` within the whole-input limit; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
 
 | Shape you see | Format | Producer |
 |---|---|---|
@@ -127,7 +127,7 @@ Exclude the pseudo-frames `(idle)`, `(program)`, `(root)`, and `(garbage collect
 
 ## Gecko / Firefox Profiler
 
-Times are **milliseconds**; sampling interval is `meta.interval`. Often gzipped: decompress with Python's `gzip` module in the script; native `jq` cannot read it.
+Times are **milliseconds**; sampling interval is `meta.interval`. Often gzipped: decompress with Python's `gzip` module in the script; native JSON queries need decompressed input.
 
 The format is column-oriented: every "table" is an object of parallel arrays plus a `length`. Resolving one frame means three hops.
 

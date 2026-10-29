@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -119,7 +120,11 @@ func New(t testing.TB, options Options) *Fixture {
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range append([]string{"write", "read"}, options.Tools...) {
-		if _, exists := registry.Definition(name); exists {
+		if _, exists := registry.Operation(name); exists {
+			continue
+		}
+		if toolcontract.IsCommandOperation(name) {
+			testutil.FailErr(t, "register "+name+" operation", registry.RegisterOperation(name))
 			continue
 		}
 		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -149,13 +154,15 @@ func New(t testing.TB, options Options) *Fixture {
 	if options.Publication != nil {
 		publication = options.Publication(dir)
 	}
+	ports, err := hostprocess.New()
+	testutil.FailErr(t, "host process service", err)
 	scratchDir := fspath.CanonicalPath(t.TempDir())
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{fixture: f},
+		Sessions: sessions{fixture: f}, Ports: ports,
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},
@@ -173,9 +180,14 @@ func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Se
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {
 	t.Helper()
+	return f.CallArgs(t, ctx, map[string]any{"command": source})
+}
+
+// CallArgs runs one command call with the model's complete arguments.
+func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]any) (string, error) {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
-	args := map[string]any{"command": source}
 	contract, _ := toolcontract.Lookup("command")
 	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)

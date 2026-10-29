@@ -34,7 +34,7 @@ func (d *ProgramDispatcher) publishDocuments(ctx context.Context, parent toolcon
 	if !d.run.surface.AllowsEffects(mutation) {
 		return nil
 	}
-	write, ok := d.run.registry.Definition("write")
+	write, ok := d.run.registry.Operation("write")
 	if !ok {
 		return fmt.Errorf("accepted document publication requires the write owner")
 	}

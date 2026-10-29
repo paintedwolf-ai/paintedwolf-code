@@ -4,7 +4,7 @@
 
 ## Workflow
 
-1. **Build the repeatable measurement.** A benchmark, a timed command, a request with a fixed payload. Fix the input, the machine, the power state, and the cache condition, and write them down — they are part of the number.
+1. **Build the repeatable measurement.** A benchmark, a timed command (`time -p CMD` reports real, user and sys seconds on stderr), a request with a fixed payload. Fix the input, the machine, the power state, and the cache condition, and write them down — they are part of the number.
 2. **Measure the noise floor before trusting any comparison.** Run it at least 5 times *on the same commit* and record the spread:
 
    ```text
@@ -15,7 +15,7 @@
 
    If the spread is comparable to the regression you are chasing, **stop and reduce noise or increase the workload.** Bisecting inside the noise floor follows randomness to a confident wrong answer.
 3. **Locate before explaining.** Profile the slow path. CPU, allocation, and wall-clock are different profiles answering different questions, and the most useful early signal is whether wall-clock grew while CPU did not — that means *waiting*, so look at I/O, a lock, or a network call rather than at algorithmic cost.
-4. **Bisect with the measurement as the predicate.** Set the threshold from step 2's noise floor, not from a round number:
+4. **Bisect with the measurement as the predicate.** Set the threshold from step 2's noise floor, not from a round number. Run it in a separate worktree (`git worktree add @scratch/bisect HEAD`) when the main tree has changes, and end with `git bisect reset`:
 
    ```bash
    git bisect start <slow-rev> <fast-rev>

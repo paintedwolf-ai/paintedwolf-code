@@ -178,6 +178,8 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 		"f() { while x=1; do continue; done; }; f":  "loop_iterations",
 		"while :; do :; done; echo never":           "loop_iterations",
 		"while echo a; do echo b; done; echo never": "loop_iterations",
+		"until false; do :; done; echo never":       "loop_iterations",
+		"until [ -f ready ]; do :; done; echo never": "loop_iterations",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)

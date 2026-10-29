@@ -28,7 +28,8 @@ func runEdit(inv *invocation) error {
 		return inv.usage(inv.name(), "--new-string TEXT")
 	}
 	if oldString == newString {
-		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"detail": "old_string and new_string must differ", "conflict": true}}
+		return native.EditArgsConflict("old_string and new_string must differ")
+
 	}
 	bound, err := inv.bind(path, true)
 	if err != nil {

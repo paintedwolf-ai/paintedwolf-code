@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -43,14 +44,17 @@ func (o *Owners) Resolve(argv commandprogram.Fields) (string, bool) {
 }
 
 // PrepareGit serves the git umbrella command: it resolves the subcommand
-// and binds it, or refuses a Git form these owners do not run.
-func (o *Owners) PrepareGit(paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
+// and binds it, or refuses a Git form these owners do not run. nested runs
+// git bisect run's check as a child of this request; nil disables run.
+func (o *Owners) PrepareGit(paths *projectpaths.ProgramPaths, filesystem *mutation.Owners, nested commandprogram.NestedCommand, request commandprogram.OperationRequest) (Prepared, error) {
 	name, ok := o.Resolve(request.Argv)
 	if _, served := o.specs[name]; !ok || !served {
 		return Prepared{}, o.unsupported(name, request)
 	}
 	request.OperationID = name
-	return o.Prepare(paths, request)
+	prepared, err := o.Prepare(paths, filesystem, request)
+	prepared.nested = nested
+	return prepared, err
 }
 
 // unsupported refuses a Git form with the forms this command language runs.

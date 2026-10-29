@@ -16,10 +16,11 @@ func newPaths(inv *invocation) (*projectpaths.ProgramPaths, error) {
 	return projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
 }
 
-// openDestination stages one sed -i file or uniq OUTPUT through the program's
-// redirect owner, which pins the destination at the execution's next
-// position and later publishes exact bytes at that pin. A destination that
-// moved since capture is COMMAND_REVISION_CONFLICT; nothing reruns.
+// openDestination stages one sed -i file, sort or iconv -o, or uniq OUTPUT
+// through the program's redirect owner, which pins the destination at the
+// execution's next position and later publishes exact bytes at that pin. A
+// destination that moved since capture is COMMAND_REVISION_CONFLICT; nothing
+// reruns.
 func (inv *invocation) openDestination(operand commandprogram.Field) (commandprogram.StagedOutput, error) {
 	if writer, ok := operand.ProcessSubstitution().OpenWriter(); ok {
 		return commandprogram.NewProcessSubstitutionStagedOutput(writer), nil
@@ -76,12 +77,12 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 	return inv.settleStage(stage, run(nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))))
 }
 
-// effectMode names the catalog mode of commands with several: sort -o and
-// uniq OUTPUT write; every other form reads. sed's mode is resolved by its
-// admitted prepared plan.
+// effectMode names the catalog mode of commands with several: sort -o,
+// iconv -o and uniq OUTPUT write; every other form reads. sed's mode is
+// resolved by its admitted prepared plan.
 func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
 	switch argv.Command {
-	case "sort":
+	case "sort", "iconv":
 		if argvFlag(argv, "-o") {
 			return "-o"
 		}

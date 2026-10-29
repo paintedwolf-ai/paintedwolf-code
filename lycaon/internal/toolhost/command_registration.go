@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -34,11 +35,12 @@ func registerCommandTools(
 		return err
 	}
 	ft := command.NewCommandFailureTracker()
-	hostUtilities, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
+	hostUtilities, err := hostenv.NewOwners(hostos.Host{}, time.Now, boundary)
+
 	if err != nil {
 		return err
 	}
-	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate,
+	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate, Ports: service,
 		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
 			return hostUtilities.Builtins(tc, nested, bound)
 		}}

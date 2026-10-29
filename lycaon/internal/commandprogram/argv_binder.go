@@ -247,11 +247,17 @@ func (r ArgvReview) Arguments() map[string]any {
 	}
 	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
 	if r.PathTargets != nil {
-		targets := make([]any, 0, len(r.PathTargets))
+		// Grouped by direction, each target is one captured value, so a command
+		// at the operand limit stays within the input capture's node bound.
+		reads, writes := []any{}, []any{}
 		for _, target := range r.PathTargets {
-			targets = append(targets, map[string]any{"path": target.Path, "write": target.Write})
+			if target.Write {
+				writes = append(writes, target.Path)
+			} else {
+				reads = append(reads, target.Path)
+			}
 		}
-		result["path_targets"] = targets
+		result["path_targets"] = map[string]any{"read": reads, "write": writes}
 	}
 	return result
 }
@@ -640,9 +646,24 @@ func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, wo
 	return nil
 }
 
-// delimited consumes words through ";" or a "+" that directly follows "{}".
+// delimited consumes a value list: words through ";" or a "+" that directly
+// follows "{}" (find -exec), or words up to the next option word or the end
+// (zip -x PATTERN ...).
 func (b *argvBinding) delimited(form toolcontract.OptionForm, spelling string, word Field) error {
-	if form.Consumption != "through-semicolon-or-plus" {
+	switch form.Consumption {
+	case "through-semicolon-or-plus":
+	case "through-next-option":
+		values := Fields{}
+		for b.index < len(b.argv) && !optionWord(b.argv[b.index].Value) {
+			values = append(values, b.argv[b.index])
+			b.index++
+		}
+		if len(values) == 0 {
+			return b.fail(argvOperandInvalid, word, form.ValueRole+" values for "+spelling)
+		}
+		b.record(form, spelling, word, values, "")
+		return nil
+	default:
 		return b.fail(argvOptionUnsupported, word, "catalogued consumption for "+spelling)
 	}
 	values := Fields{}

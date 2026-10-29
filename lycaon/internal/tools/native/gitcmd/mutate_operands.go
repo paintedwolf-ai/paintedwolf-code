@@ -15,6 +15,17 @@ var mutateForms = map[string]operandRule{
 	"git stash": stashOperands, "git reset": resetOperands, "git clean": cleanOperands,
 	"git worktree": worktreeOperands, "git fetch": anyOperands, "git pull": pullOperands,
 	"git push": anyOperands, "git ls-remote": anyOperands, "git clone": cloneOperands,
+	"git apply": applyOperands, "git rm": removeOperands, "git mv": moveOperands,
+	"git bisect": bisectOperands, "git bisect start": bisectOperands, "git bisect skip": bisectOperands,
+	"git bisect run": bisectOperands, "git bisect reset": bisectOperands, "git bisect log": bisectOperands,
+	"git bisect terms": bisectOperands, "git bisect visualize": bisectOperands, "git bisect view": bisectOperands,
+}
+
+func applyOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	if has(bound, "--index") && has(bound, "--cached") {
+		return operandInvalid(spec, "--cached", "either --index or --cached, not both")
+	}
+	return nil
 }
 
 func initOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
@@ -229,6 +240,11 @@ func cloneOperands(spec toolcontract.CommandSpecification, bound commandprogram.
 
 func effectMode(spec toolcontract.CommandSpecification, c *command, bound commandprogram.BoundArgv) string {
 	switch spec.Name {
+	case "git rm", "git mv":
+		if has(bound, "-n") {
+			return "dry-run"
+		}
+		return "mutation"
 	case "git restore":
 		if has(bound, "-S") && !has(bound, "-W") {
 			return "staged-only"
@@ -266,6 +282,11 @@ func effectMode(spec toolcontract.CommandSpecification, c *command, bound comman
 			return "add"
 		}
 		return "remove-or-prune"
+	case "git apply":
+		if (has(bound, "--check") || has(bound, "--stat") || has(bound, "--numstat") || has(bound, "--summary")) && !has(bound, "--index") && !has(bound, "--cached") && !has(bound, "-3") {
+			return "read-only"
+		}
+		return "mutation"
 	case "git push":
 		if has(bound, "--delete") || has(bound, "--force-with-lease") {
 			return "delete-or-lease"

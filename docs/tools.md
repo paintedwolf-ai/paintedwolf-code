@@ -45,6 +45,50 @@ qualify conversational edit evidence, while internal execution reads do not.
 Diff reuses the existing engine; complete stream bounds are independent from
 structured preview and context caps.
 
+`patch` and `git apply` share one hunk applier over parsed unified and Git
+diffs: offset search, GNU fuzz for `patch` (`-F`, default 2), exact context
+for `git apply`, reversal and Git binary patches (`git apply` only). Both
+capture every touched file before the first write and publish each file through
+the pinned write door; `patch` publishes files whose hunks applied and reports
+failed hunks on stderr and in receipt evidence without writing `.rej` or `.orig`
+files, while `git apply` changes nothing unless every section applies.
+`git apply --index` and `--cached` change the index through one reviewed Git
+operation with `git add`'s session-staging rules, and `--3way` merges from the
+preimage blob with Git's merge-file, reporting conflicted paths and index stages.
+
+`git rm` and `git mv` compose recoverable filesystem deletion or movement with
+the same Git stage operation. `git rm --cached` changes only the index. Both
+commands support dry runs, preserve unrelated staging, and include affected
+paths in session staging. Ordinary Git safety checks precede removal; force
+does not change host authority. `git rm` removes the directories a removal
+leaves empty, each through the same recoverable delete, and keeps the
+repository root and the command directory. If index staging fails after a
+filesystem change, the result retains the completed effect and its source
+recovery. A following `git commit` builds its tree in a private index seeded
+from `HEAD`, so staged deletions, both sides of a rename and the selected
+paths are committed while unrelated staged work stays staged.
+
+`git grep` searches a revision's tree, the index or the tracked working tree
+with the same native regex engines as `grep` (basic by default, `-E`, `-F`,
+`-P`) and prints Git's `REV:PATH:LINE` layout with paths relative to the
+command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
+`git cat-file`, `git show-ref` and `git for-each-ref` run through the Git
+owner's read door with their catalogued options; `git shortlog` without a
+revision summarizes `HEAD`. Batch object reads, reflog maintenance and
+signature format atoms are refused.
+
+`git bisect` runs natively on the Git owner. Sessions live in the repository's
+`BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
+own `git bisect` and `git status` see the same session, and every step checks
+out through the Git owner's checkout operation. `git bisect start` refuses a
+tree with tracked changes with `GIT_BISECT_DIRTY_TREE`; a separate worktree
+keeps that tree untouched. `git bisect run` dispatches its check as an ordinary
+child of the program: status 0 marks the commit old, 125 skips it, 1 to 127
+marks it new, and any other status stops the run. An interrupted run leaves
+the session recorded at the commit under test and names the `git bisect reset`
+to run. `git bisect visualize` and `view` are limited to `--oneline`, and
+`replay` is refused because `git bisect log` is the session record.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete
@@ -222,11 +266,11 @@ unavailable, output remains delivered and a later edit needs a fresh read.
 ### Literal content and metadata commands
 
 `internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
-wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
-outline, summarize and repo-map built-ins. Argv binds through the catalog
-binder; each command runs under its catalog operation identity (`read`, `wc`,
-`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
-operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+wc, ls, stat, du, df, diff, cmp, file, xxd, hexdump, od, strings, the checksum
+family, base64 and the outline, summarize and repo-map built-ins. Argv binds
+through the catalog binder; each command runs under its catalog operation
+identity (`read`, `wc`, `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`)
+over the same typed operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
 each file as exact published stream bytes before any output, retaining its
 encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
 or output above the stream ceiling, refuses; nothing is truncated or summarized
@@ -241,11 +285,39 @@ long-ISO times after GNU's block total, and bare `stat` prints the catalog's
 GNU multi-line default. Ordinary operand failures (missing,
 directory, permission) go to stderr with the utility's status and later operands
 still run; authority, budget and platform refusals stop with their typed code.
-Only diff's complete status 1 is a publishable comparison. Literal windows and
-reversible numbering record exact source mappings when the output endpoint
-implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
-record none. The command never delivers a conversational read; only exact mapped
+Only diff's and cmp's complete status 1 is a publishable comparison. du walks
+through the same bounded held-root directory reads as `ls -R` and refuses a walk
+over `traversal_visits` rather than print a short total; df reads statfs through
+each bound path, defaulting to the attached folders and session scratch.
+Literal windows, strings runs and reversible numbering record exact source
+mappings when the output endpoint implements
+`commandprogram.SourceMappingRecorder`; notation, encodings and stdin record
+none. The command never delivers a conversational read; only exact mapped
 output that the delivery owner later delivers can qualify an edit base.
+
+`tree` runs in the search frontend over the same walk as find and rg, so the
+read boundary and visit budget apply and `--gitignore` uses the project ignore
+owner. `iconv` and `envsubst` run with the text utilities: iconv converts
+through `golang.org/x/text/encoding` and stages `-o` like a redirect; envsubst
+reads the statement's exported environment, where a managed secret stays its
+reference token.
+
+diff `-N` compares an absent file, and under `-r` an absent directory, as
+empty; `-x` and `-X` skip directory entries by base-name glob; and
+`--strip-trailing-cr` drops CR before each newline. Archives keep every
+extraction guard across gzip, bzip2, xz and zstd: tar `--exclude`, `-X` and
+`--exclude-vcs` patterns match any run of whole name components and prune
+excluded directories before their entries are examined, zip and unzip `-x`
+match the whole stored name, and every xz block's dictionary is checked
+against a 64 MiB ceiling before decoding.
+
+One date package (`internal/tools/native/datetext`) reads the `date -d`
+grammar, renders `+FORMAT`, parses `-j -f` strptime formats and applies `-v`
+adjustments. `date`, `touch -d`/`-t` and `find -newerXY` share it and read
+times in `TZ` from the program frame, UTC when unset. realpath resolves links
+before `..`, canonicalizes under `-e`, the default or `-m`, and projects
+`--relative-to`/`--relative-base`; an operand that does not resolve is an
+ordinary status-one failure and later operands still run.
 
 ### Search commands
 
@@ -710,7 +782,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -849,6 +921,8 @@ For a known command, `wait(until_complete=true, conditions=[{"kind":"process_don
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
 
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A call whose next wake falls more than ten seconds after it started, or whose program still waits only on jobs at that point, settles as `parked` with the waiting statement as its reason. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
+
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 
 ### Verify verdicts
@@ -927,11 +1001,29 @@ The registry publishes one immutable operation declaration with the existing sch
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
 Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
+
+### Command schema and guidance
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Domain source tools remain loadable where the profile offers them; routine operations run only through command. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+
+The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. `timeout` and `nohup` dispatch their command exactly as a reached command, with its own receipt and confinement. `timeout` expiry signals the external process through program supervision (KILL after `-k`) or interrupts a native operation, and returns 124; the call's `timeout_ms` stays the outer bound. `time` and `time -p` report on stderr with processor time from reaped external children; a report that counted native operations as zero sets `cpu_time_unmeasured` in the result. `ulimit` reports the limits external children receive and sets soft and hard limits for later children of the same call only, from the per-resource capabilities the platform's resource-limit owner declares; a limit the platform does not provide is refused. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+When every live evaluator activity is blocked, `sleep`, shell `wait` (`wait`, `wait %N`, `wait PID`), `timeout` and `read -t` report their timer deadlines and exact job handles to the shared wait lease, so a long wait parks the call as described under wait leases. Polling loops run each probe between full sleep intervals; no readiness event wakes a sleep early. A timed read keeps its partial input and returns 142 on expiry, and `read -t 0` reports whether input is ready without consuming it.
+
+| Surface | Source |
+|---|---|
+| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
+| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
+| Per-call guidance | `platform/shared/partials/command-surface.md` |
+| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+
+OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
+
 ---
 
 ## Portable command cutover inventory
 
-[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 80 retained domain tools, six structured tools also available as command forms, and 32 routine-schema replacements. `process_list` and `process_signal` are in the last group for session job commands, while their separate host-process capabilities remain structured and approval-gated.
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 79 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
 
 The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 
@@ -942,7 +1034,7 @@ The current command entry parses and admits ordinary bash programs, dispatches c
 | Results and receipts | Invocation records identify program and child executions, source pins, delivered ranges, effects, completeness, and host-stop facts. An incomplete result cannot become successful evidence merely because one child exited zero. |
 | Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
 | Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
-| Routine tools | `command` is on the routine floor. Some older schemas are still loadable by exact name, and some remain on specialized floors. P29 removes those routine offers while retaining named compatibility and history decoding for durable public names. The six dual-surface edit and analysis tools and domain tools keep their structured contracts. |
+| Routine tools | `command` is on the routine floor. Routine file, search, query, Git inspection and HTTP operations have no callable registration or profile offer. Their contracts remain available for command admission, receipts, approvals and historical decoding. Domain tools and conversational edits keep their structured surfaces. |
 
 ### Source-index behavior
 
@@ -950,6 +1042,6 @@ A ready index accelerates the parts of a query it can prove current. The native 
 
 ### Qualification and default cutover
 
-The focused implementation receipts belong to their exact PR trees. The isolated run-3 report is historical diagnostic evidence: it identified the state-retention, refusal, native-form, Git, guidance, and approval gaps addressed by the subsequent PRs. The conformance corpus in #1238 and workflow evidence in #1229 must be reviewed on their final trees. The final merge-only composition still needs its exact-tree checks and an isolated live GLM Flash run with current prompts and recommended approval options. Until those results exist, this inventory records implementation and focused evidence, not final milestone qualification.
+The stock profiles and coordinator surfaces use the command environment for routine work. Its disable control refuses new program dispatch and settles its live work; it never sends a program to a shell as a fallback. Named operation contracts retain their authority, approval and history meanings after their standalone schemas leave the offered roster.
 
-P29 can make `command` the default after the dependent PRs are ready and the rebuilt composition demonstrates the complete command path: natural bash, native utilities, confined external programs, accurate results and receipts, designed approvals, shell-voice OAR, partial-index/live reconciliation, workflow behavior, and the final conformance corpus. The remaining platform limit is Windows-host qualification; shared code keeps Windows-capable seams. No release is part of this cutover.
+Focused tests establish the changed registry, catalog and runtime contracts on their recorded source. GitHub CI checks each PR; a local composition supports direct human command testing and application validation with the shipped prompts. Historical run-3 results remain diagnostic evidence. A local development build does not establish installed macOS/Linux qualification, and Windows-host qualification remains pending. No release is part of this cutover.

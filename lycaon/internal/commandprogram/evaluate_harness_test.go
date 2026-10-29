@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,6 +28,7 @@ type dispatchCall struct {
 	external    bool
 	execution   toolcontract.ExecutionIdentity
 	sourceUnit  string
+	process     ChildProcess
 	err         error
 }
 
@@ -37,6 +39,8 @@ type dispatchLog struct {
 	started  chan string
 	forks    int
 	released int
+	// clock, when set, advances while the burn fixture runs.
+	clock *manualClock
 }
 
 func (l *dispatchLog) add(c dispatchCall) {
@@ -107,7 +111,9 @@ func (d *fakeDispatch) Invoke(ctx context.Context, request OperationRequest, str
 		return toolcontract.ProducerResult{}, err
 	}
 	argv := request.Argv.Values()
-	call := dispatchCall{operation: request.OperationID, argv: argv, environment: request.Environment, cwd: d.cwd, execution: request.Invocation.Identity, sourceUnit: request.Invocation.SourceUnitID}
+	// Like the host dispatcher, an in-process owner's time is not its own.
+	request.Process.Times.Unmeasured()
+	call := dispatchCall{operation: request.OperationID, argv: argv, environment: request.Environment, cwd: d.cwd, execution: request.Invocation.Identity, sourceUnit: request.Invocation.SourceUnitID, process: request.Process}
 	if d.log.started != nil {
 		d.log.started <- argv[0]
 	}
@@ -253,13 +259,20 @@ func (d *fakeDispatch) Launch(ctx context.Context, request OperationRequest, str
 		return toolcontract.ProducerResult{}, err
 	}
 	argv := request.Argv.Values()
-	call := dispatchCall{operation: request.OperationID, argv: argv, environment: request.Environment, cwd: d.cwd, external: true, execution: request.Invocation.Identity, sourceUnit: request.Invocation.SourceUnitID}
+	call := dispatchCall{operation: request.OperationID, argv: argv, environment: request.Environment, cwd: d.cwd, external: true, execution: request.Invocation.Identity, sourceUnit: request.Invocation.SourceUnitID, process: request.Process}
 	defer func() { d.log.add(call) }()
 	program := argv
 	if argv[0] == "external" {
 		program = argv[2:]
 	}
 	switch program[0] {
+	case "burn":
+		// A process that reports processor time when reaped.
+		if d.log.clock != nil {
+			d.log.clock.advance(1500 * time.Millisecond)
+		}
+		request.Process.Times.Add(2500*time.Millisecond, 250*time.Millisecond)
+		return completed(0), nil
 	case "fail":
 		status, _ := strconv.Atoi(program[1])
 		return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectCompleted}, nil
@@ -363,11 +376,14 @@ type fakeJobs struct {
 func (j *fakeJobs) RunProgram(ctx context.Context, _ toolcontract.OperationInvocation, run func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	return run(ctx)
 }
-func (j *fakeJobs) StartJob(_ context.Context, _ toolcontract.OperationInvocation, run func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error) {
+func (j *fakeJobs) StartJob(_ context.Context, _ toolcontract.OperationInvocation, run func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.runs = append(j.runs, run)
-	return fmt.Sprintf("job-%d", len(j.runs)), nil
+	handle := fmt.Sprintf("job-%d", len(j.runs)+1)
+	j.runs = append(j.runs, func(ctx context.Context, streams Streams) (toolcontract.ProducerResult, error) {
+		return run(ctx, handle, streams)
+	})
+	return handle, nil
 }
 
 type evalFixture struct {

@@ -11,8 +11,9 @@ Use this workflow when a command needs something off this machine. Egress is med
 
 | You need | Carried by | What you do |
 |----------|-----------|-------------|
-| **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | `http_request` | Declare it as the call: method, URL, headers, body (`body_json`/`body_form`), `auth`, `cookie_jar`, `response_path`, or `unix_socket`. Loopback needs `capability_request.loopback_connect`. A run-command line of HTTP requests comes back as equivalent `http_request` calls |
-| **Reading a web page or documentation** | `fetch_url` | Pass the URL. The default `mode=text` returns readable markdown and pages long documents with `offset` and `limit`; `http_request` would return the raw HTML |
+| **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | Native `curl` in `command` | Declare the URL, method, headers and body with curl flags. Use `-o` to save output. Loopback needs `capability_request.loopback_connect` on the command call. |
+| The same exchange as a `curl` line in a `command` program — internal CA, client certificate, upload, a local server under its production name | `curl` on the host's HTTP client | `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` to upload, `--resolve host:port:127.0.0.1` or `--connect-to` with `loopback_connect` for the local server, `-v` to see the exchange. Never `external -- curl` |
+| **Reading a web page or documentation** | `fetch_url` | Pass the URL. The default `mode=text` returns readable markdown and pages long documents with `offset` and `limit`; `curl` returns the response bytes |
 | HTTP(S) from a process that must speak it itself — a package manager, a build, a test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |
 | Any other TCP — Postgres, Redis, Kafka, raw TCP | Mediated SOCKS5 `CONNECT` (`ALL_PROXY`) | Pass `socks_proxy: true` on that `command` / `verify` / `terminal_open` |
 | Git over SSH | Host SOCKS connector (`LYCAON_SOCKS_PROXY` via Git) | Nothing — already wired under mediation |
@@ -28,7 +29,7 @@ Default confinement injects the **HTTP** front door only. Co-injecting SOCKS int
 
 ## Workflow
 
-1. **Name the protocol before requesting anything.** An HTTP(S) exchange you would compose yourself is `http_request`, not a runner client; reading a web page or documentation is `fetch_url`. HTTP(S) from a process is already carried. Other TCP needs `socks_proxy: true` so the client sees `ALL_PROXY`. Requesting direct IP for Postgres is a needless escalation.
+1. **Name the protocol before requesting anything.** Compose an HTTP(S) exchange with native `curl` in `command`; reading a web page or documentation is `fetch_url`. HTTP(S) from a process is already carried. Other TCP needs `socks_proxy: true` so the client sees `ALL_PROXY`. Requesting direct IP for Postgres is a needless escalation.
 2. **The other reason for direct IP is a client that ignores proxy variables** — not the protocol. If a tool refuses `HTTPS_PROXY` / `ALL_PROXY` even after `socks_proxy: true`, direct IP is the fallback even for TCP.
 3. **When you request direct IP, declare your destinations.** `declared_destinations` takes `host:port` with an optional `tcp://` or `udp://` scheme. Declaring narrows the sandbox to those transports — `udp://time.nist.gov:123` permits UDP/123 and refuses everything else. Declaring nothing leaves every protocol and port open, which is a larger request for the same work. Do not combine `socks_proxy` with `direct_ip`.
 4. **Get the format right or you lose the narrowing.** Parsing is all-or-nothing: an entry without a port, or a scheme like `https://` that only implies one, drops narrowing for the whole request.
@@ -62,7 +63,7 @@ Application errors are clues, not host decisions. Read `command_output`’s stru
 - **Do not partially strip proxy environment variables** to "fix" mediation. Clearing only some of `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and their lowercase forms) leaves the others and reproduces the same failure. Prefer `socks_proxy` for SOCKS clients, or disable env trust in the HTTP client when the process must ignore mediation.
 - **Do not retry the same call unchanged.** A boundary refusal is deterministic; the second attempt fails identically.
 - **Do not request direct IP for TCP that mediation already carries** (HTTP via default env, other TCP via `socks_proxy: true`).
-- **Do not run a shell HTTP client for an exchange `http_request` represents.** Readiness is `wait` with `http_ready` / `port_ready`, not a request loop.
+- **Use native `curl` for HTTP exchanges; never retry with `external -- curl` to evade a host refusal.** Readiness is `wait` with `http_ready` / `port_ready`, not a request loop.
 - **Do not request direct IP just to run a server.** `local_listen` covers the bind while egress stays mediated — a strictly smaller request than unobserved direct networking.
 - **Do not use direct IP for loopback.** `loopback_connect` leaves external egress unchanged.
 - **Do not describe a declared destination as restricting *where* you connected.** It bounds protocol and port. The host cannot restrict the peer and does not claim to.

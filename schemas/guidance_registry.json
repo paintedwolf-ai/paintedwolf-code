@@ -549,16 +549,16 @@
       "summary": "The job reference names no job of this session."
     },
     "COMMAND_LIMIT_EXCEEDED": {
-      "branch_instruction": "Check the result before retrying commands that change files.",
+      "branch_instruction": "Check the recorded results before retrying the remaining work.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "command: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }})."
+      "summary": "This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }})."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
+      "branch_instruction": "Use a supported command form.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
-      "summary": "The requested native form was refused before its effect attempt."
+      "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}"
     },
     "COMMAND_NOT_ARGV": {
       "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
@@ -585,10 +585,10 @@
       "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
-      "branch_instruction": "Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.",
+      "branch_instruction": "Use {{ paintedwolf.expected_form }}.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details."
+      "summary": "{{ paintedwolf.command }} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}that option{% endif %}{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}."
     },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
@@ -648,7 +648,7 @@
       "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+      "summary": "This shell form is not supported at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
     "COMMAND_TLS_VERIFICATION_REQUIRED": {
       "branch_instruction": "Send the request without -k; do not retry through an external program.",
@@ -1162,6 +1162,12 @@
       "emit": "guard:find",
       "summary": "find walk root {{ paintedwolf.path }} does not exist."
     },
+    "GIT_BISECT_DIRTY_TREE": {
+      "branch_instruction": "Leave the current changes in place; commit or stash them only if that is part of the task.",
+      "category": "recoverable",
+      "emit": "guard:git_bisect_dirty_tree",
+      "summary": "git bisect start needs a working tree without tracked changes."
+    },
     "GIT_COMMIT_BULK_DENIED": {
       "branch_instruction": "Resolve staging scope and commit intent before retrying",
       "category": "recoverable",
@@ -1319,7 +1325,7 @@
       "summary": "The request named a cookie the jar does not carry for this URL, so nothing was sent."
     },
     "HTTP_REQUEST_FAILED": {
-      "branch_instruction": "Keep the method, headers, body, and destination explicit in `http_request` when retrying",
+      "branch_instruction": "Keep the method, headers, body, and destination explicit in native `curl` in `command` when retrying",
       "category": "recoverable",
       "emit": "guard:http_request",
       "summary": "The HTTP request did not complete.{% if paintedwolf.http_requests_started %} The host started {{ paintedwolf.http_requests_started }} exchange attempts for {{ paintedwolf.http_method }}.{% endif %}{% if paintedwolf.http_responses_received %} It received {{ paintedwolf.http_responses_received }} responses; the last status was {{ paintedwolf.http_last_status }}.{% endif %}"
@@ -1355,10 +1361,10 @@
       "summary": "The request named a token reference that the token jar does not carry, so nothing was sent."
     },
     "HTTP_REQUEST_WEB_PAGE": {
-      "branch_instruction": "Keep http_request when you need the exact markup, headers, or status of this endpoint",
+      "branch_instruction": "Keep native curl when you need the exact markup, headers, or status of this endpoint",
       "category": "informational",
       "emit": "guard:http_request",
-      "summary": "http_request returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup."
+      "summary": "curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup."
     },
     "IMAGE_BYTES_EXCEEDED": {
       "branch_instruction": "Branch on Code IMAGE_BYTES_EXCEEDED; view a smaller copy of the image",
@@ -2743,7 +2749,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use `write`/`edit` for blueprint files until approval/handoff",
+      "branch_instruction": "Use command redirects or `edit` for blueprint files until approval/handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2792,13 +2798,13 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use `write`/`edit` on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Use command redirects or `edit` on the blueprint file; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
     },
     "SPEC_POSTURE_STUB_REQUIRED": {
-      "branch_instruction": "Write blueprint stub with write before Task researchers",
+      "branch_instruction": "Write blueprint stub with a staged command redirect before Task researchers",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Phase 1 plan stub required before Task(plan-writer)"

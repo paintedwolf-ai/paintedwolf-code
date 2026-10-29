@@ -196,6 +196,10 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		}
 	}
 	spec, native := d.run.commands[request.Argv[0].Value]
+	if native && spec.Name != "external" && !prefixCommands[spec.Name] {
+		// An in-process owner's processor time is the host's, not its own.
+		request.Process.Times.Unmeasured()
+	}
 	switch {
 	case !native || spec.Name == "external":
 		return d.invokeExternal(ctx, request, streams)
@@ -222,6 +226,13 @@ func (d *ProgramDispatcher) pathOperation(spec toolcontract.CommandSpecification
 		}
 		review := bound.Review(spec.Name)
 		for _, path := range bound.Operands().Values() {
+			if spec.Name == "cd" && path == "-" {
+				previous, ok := frame.PreviousDirectory()
+				if !ok {
+					continue
+				}
+				path = previous
+			}
 			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: path})
 		}
 		return NativePrepared{Review: review, Tool: spec.Name, Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -243,7 +254,10 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 		}
 	}
 	return d.InvokeEvaluator(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		noteJobNative(ctx, request.Argv.Values())
+		if !prefixCommands[spec.Name] {
+			// A prefix's nested command notes the job's own process.
+			noteJobNative(ctx, request.Argv.Values())
+		}
 		return builtin.Invoke(ctx, request, streams)
 	})
 }
@@ -378,7 +392,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
 	var operationDef toolcontract.OperationDefinition
-	if definition, ok := d.run.registry.Definition(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
+	if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
 		operationDef = offeredProgramDefinition(tool, definition.Operation)
 	} else if tool == spec.Name {
 		var err error

@@ -54,6 +54,15 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	defer run.close(ctx)
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	activities := make([]*ExecutionWait, len(stages))
+	for i := range activities {
+		activities[i], _ = f.wait.Fork()
+	}
+	defer func() {
+		for _, a := range activities {
+			a.finish()
+		}
+	}()
 	pipes := make([]*BytePipe, len(stages)-1)
 	defer func() {
 		for _, pipe := range pipes {
@@ -85,6 +94,8 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 			return f.stateRefusal(s.SyntaxLocation, err)
 		}
 		releases = append(releases, release)
+		g.wait = activities[i]
+		g.io.wait = g.wait
 		g.parent, g.loops, g.returnable = run.inv, 0, false
 		g.io.streams = f.io.streams
 		g.io.setWriter(2, stderr)
@@ -97,12 +108,18 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 		frames[i] = g
 	}
+	unblock, err := f.wait.Block(ctx, WaitState{})
+	if err != nil {
+		return err
+	}
+	defer unblock()
 	results := make([]stageResult, len(stages))
 	var wg sync.WaitGroup
 	for i := range stages {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			defer frames[i].wait.finish()
 			results[i] = frames[i].stage(pctx, stages[i])
 			if i < len(pipes) {
 				_ = pipes[i].CloseProducer(results[i].incomplete())

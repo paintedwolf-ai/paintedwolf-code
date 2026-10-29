@@ -25,8 +25,10 @@ type Condition struct {
 	StatusMax int      `json:"status_max,omitempty"`
 	Host      string   `json:"host,omitempty"`
 	Port      uint16   `json:"port,omitempty"`
-	// Report is the host's account of a settled process wake: how the job
-	// ended, or what the kernel refused it while it runs.
+	// ProgramID names the command program a parked call waits on.
+	ProgramID string `json:"program_id,omitempty"`
+	// Report is the host's account of a settled wake: how a job or a parked
+	// program ended, or what the kernel refused a job while it runs.
 	Report string `json:"report,omitempty"`
 }
 

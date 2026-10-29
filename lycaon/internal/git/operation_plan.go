@@ -46,6 +46,8 @@ func planOperation(ctx context.Context, dir string, req OperationRequest) (opera
 		err = p.stash(ctx, dir)
 	case "add":
 		err = p.add()
+	case "stage":
+		err = p.stageEntries()
 	case "reset":
 		err = p.reset(ctx, dir)
 	case "clean":
@@ -78,7 +80,7 @@ func (p *operationPlan) checkout(ctx context.Context, dir string) error {
 		return err
 	}
 	ref := "refs/heads/" + r.Branch
-	oid, err := optionalObject(ctx, dir, ref)
+	oid, err := ResolveOptionalObject(ctx, dir, ref)
 	if err != nil {
 		return err
 	}
@@ -205,8 +207,11 @@ func (p *operationPlan) run(ctx context.Context, dir string) ([]byte, int, error
 			return out, code, err
 		}
 	}
-	if p.request.Kind == "add" {
+	switch p.request.Kind {
+	case "add":
 		return gitexec.RunTo(ctx, dir, p.args, p.opts, io.Discard)
+	case "stage":
+		return p.runStage(ctx, dir)
 	}
 	return gitexec.Run(ctx, dir, p.args, p.opts)
 }
@@ -216,7 +221,7 @@ func (p *operationPlan) validateRefs(ctx context.Context, dir string) error {
 		var current string
 		var err error
 		if strings.HasPrefix(ref, "refs/heads/") {
-			current, err = optionalObject(ctx, dir, ref)
+			current, err = ResolveOptionalObject(ctx, dir, ref)
 		} else {
 			current, err = resolveCommit(ctx, dir, ref)
 		}
@@ -283,7 +288,7 @@ func (m *Manager) ListStashes(ctx context.Context, dir string, offset, limit int
 // readStashes with no window reads the whole stash reflog, so selector checks see every entry.
 func readStashes(ctx context.Context, dir string, window ...string) ([]StashEntry, error) {
 	entries := []StashEntry{}
-	oid, err := optionalObject(ctx, dir, "refs/stash")
+	oid, err := ResolveOptionalObject(ctx, dir, "refs/stash")
 	if err != nil || oid == "" {
 		return entries, err
 	}

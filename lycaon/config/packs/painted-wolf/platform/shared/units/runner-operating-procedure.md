@@ -7,7 +7,7 @@ order: 10
 attaches: [command, verify, terminal_open]
 hosts: [coordinator, worker]
 ---
-{% if profile_command_mutation != false or profile_has_verify or profile_has_terminal_open %}HTTP(S) uses `HTTP_PROXY` / `HTTPS_PROXY` automatically; other TCP needs `socks_proxy: true`. Git over SSH is preconfigured.{% if profile_has_http_request %} Use `http_request` for APIs, webhooks and development services; use command networking only for other protocols.{% endif %}{% if profile_has_capture_page %} Static `capture_page` in `project_dir` mode needs no server.{% endif %}
+{% if profile_command_mutation != false or profile_has_verify or profile_has_terminal_open %}HTTP(S) uses `HTTP_PROXY` / `HTTPS_PROXY` automatically; other TCP needs `socks_proxy: true`. Git over SSH is preconfigured.{% if profile_has_command %} When this surface permits network egress, use native `curl` in `command` for APIs, webhooks and development services.{% endif %}{% if profile_has_capture_page %} Static `capture_page` in `project_dir` mode needs no server.{% endif %}
 
 {% include "partials/capability-request-grammar.md" %}
 

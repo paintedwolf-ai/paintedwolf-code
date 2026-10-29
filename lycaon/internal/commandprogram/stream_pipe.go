@@ -37,15 +37,13 @@ func (consumerClosedError) Is(target error) bool {
 }
 
 // BytePipe carries exact producer bytes without a display projection or an
-// intermediate buffer. io.Pipe provides backpressure even for slow consumers.
+// intermediate buffer. Writes return only after consumption or stream closure.
 type BytePipe struct {
 	identity      *consumerEndpointIdentity
-	reader        *io.PipeReader
-	writer        *io.PipeWriter
+	stream        *pipeRendezvous
 	budget        *ByteBudget
 	done          chan struct{}
 	once          sync.Once
-	writeMu       sync.Mutex
 	mu            sync.Mutex
 	digest        hash.Hash
 	completion    StreamCompletion
@@ -56,8 +54,8 @@ func NewBytePipe(ctx context.Context, budget *ByteBudget) (*BytePipe, error) {
 	if ctx == nil || budget == nil {
 		return nil, errors.New("byte pipe requires context and ingress budget")
 	}
-	r, w := io.Pipe()
-	p := &BytePipe{identity: &consumerEndpointIdentity{marker: 1}, reader: r, writer: w, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}}
+	stream := newPipeRendezvous(ctx)
+	p := &BytePipe{identity: &consumerEndpointIdentity{marker: 1}, stream: stream, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}}
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -69,7 +67,11 @@ func NewBytePipe(ctx context.Context, budget *ByteBudget) (*BytePipe, error) {
 }
 
 func (p *BytePipe) Read(b []byte) (int, error) {
-	n, err := p.reader.Read(b)
+	return p.read(p.stream.lifetime, b, nil)
+}
+
+func (p *BytePipe) read(ctx context.Context, b []byte, activity *ExecutionWait) (int, error) {
+	n, err := p.stream.read(ctx, b, activity)
 	return n, p.pipeError(err)
 }
 
@@ -88,9 +90,13 @@ func (p *BytePipe) pipeError(err error) error {
 // Write charges all attempted ingress before any byte can reach the consumer.
 // The caller must screen bytes before this boundary; raw secrets are never
 // supplied here for retrospective redaction.
-func (p *BytePipe) Write(b []byte) (int, error) {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
+func (p *BytePipe) Write(b []byte) (int, error) { return p.write(b, nil) }
+
+func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
+	if err := p.stream.acquireWriter(activity); err != nil {
+		return 0, err
+	}
+	defer p.stream.releaseWriter()
 	p.mu.Lock()
 	terminal, terminalErr := p.completion.Termination, p.terminalError
 	p.mu.Unlock()
@@ -110,7 +116,7 @@ func (p *BytePipe) Write(b []byte) (int, error) {
 	p.mu.Lock()
 	p.completion.InputBytes += int64(len(b))
 	p.mu.Unlock()
-	n, err := p.writer.Write(b)
+	n, err := p.stream.write(b, activity)
 	p.mu.Lock()
 	_, _ = p.digest.Write(b[:n])
 	p.completion.EmittedBytes += int64(n)
@@ -122,8 +128,10 @@ func (p *BytePipe) Write(b []byte) (int, error) {
 // complete stream. Utility exit status and publication eligibility remain in
 // ProducerResult; neither is inferred from this close.
 func (p *BytePipe) CloseProducer(err error) error {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
+	if waitErr := p.stream.acquireWriter(nil); waitErr != nil {
+		return waitErr
+	}
+	defer p.stream.releaseWriter()
 	if err != nil {
 		p.finish(StreamIncomplete, err)
 	} else {
@@ -145,12 +153,26 @@ func (p *BytePipe) ConsumerClosed() bool {
 }
 
 // ConsumerEnd is the stdin endpoint for Streams.Input; Close is CloseConsumer.
-func (p *BytePipe) ConsumerEnd() io.ReadCloser { return pipeConsumer{p} }
+func (p *BytePipe) ConsumerEnd() io.ReadCloser { return pipeConsumer{pipe: p} }
 
-type pipeConsumer struct{ pipe *BytePipe }
+type pipeConsumer struct {
+	pipe *BytePipe
+	wait *ExecutionWait
+}
 
-func (c pipeConsumer) Read(b []byte) (int, error) { return c.pipe.Read(b) }
-func (c pipeConsumer) Close() error               { return c.pipe.CloseConsumer() }
+func (c pipeConsumer) Read(b []byte) (int, error) {
+	return c.pipe.read(c.pipe.stream.lifetime, b, c.wait)
+}
+func (c pipeConsumer) ReadContext(ctx context.Context, b []byte) (int, error) {
+	return c.pipe.read(ctx, b, c.wait)
+}
+func (c pipeConsumer) InputReady() bool {
+	p := c.pipe.stream
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.data) > 0 || p.closed
+}
+func (c pipeConsumer) Close() error { return c.pipe.CloseConsumer() }
 
 func (p *BytePipe) finish(termination StreamTermination, err error) {
 	p.once.Do(func() {
@@ -158,11 +180,8 @@ func (p *BytePipe) finish(termination StreamTermination, err error) {
 		p.completion.Termination = termination
 		p.terminalError = err
 		p.mu.Unlock()
-		// Close both ends so neither an idle writer nor a blocked reader leaks.
-		_ = p.writer.CloseWithError(err)
-		if termination != StreamEOF {
-			_ = p.reader.CloseWithError(err)
-		}
+		// Wake blocked endpoints after recording the terminal stream facts.
+		p.stream.close(err)
 		close(p.done)
 	})
 }

@@ -2,7 +2,6 @@
 name: evolve-a-system
 description: Review failure, retry, and idempotency policies; design state machines and concurrency; evolve APIs or fix systemic defects.
 optional_tools:
-  - http_request
 metadata:
   paintedwolf.template_resources: references/finish_a_surface.md|references/raise_the_fix_altitude.md|references/evolve_an_api_contract.md|references/design_a_state_machine.md|references/review_failure_and_retry_semantics.md|references/design_concurrent_code.md|references/find_a_concurrency_bug.md
 ---
@@ -21,4 +20,4 @@ Use the request and observed project/environment to choose the matching procedur
 
 ## Boundaries
 
-Follow project policy and the user’s requested scope. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.
+Follow project policy and the user’s requested scope. Apply a reviewed or received unified diff in `command` with `git apply --check` and then `git apply` (or `patch -p1`); these keep review, revision capture and recovery, which `external --` skips. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.

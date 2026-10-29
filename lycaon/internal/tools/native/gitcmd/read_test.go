@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -43,6 +44,13 @@ type harness struct {
 	owners   *Owners
 	paths    *projectpaths.ProgramPaths
 	tc       tools.ToolContext
+	// filesystem is the staged publication git apply uses; nil unless a test
+	// wires it.
+	filesystem *mutation.Owners
+	// stdin feeds the next exec.
+	stdin string
+	// nested runs git bisect run's check.
+	nested commandprogram.NestedCommand
 }
 
 func newHarness(t *testing.T) *harness {
@@ -139,12 +147,12 @@ func (h *harness) exec(words ...string) run {
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
 	request := commandprogram.OperationRequest{Invocation: inv, OperationID: "git", Statement: statement, Argv: argv}
-	prepared, err := h.owners.PrepareGit(h.paths, request)
+	prepared, err := h.owners.PrepareGit(h.paths, h.filesystem, h.nested, request)
 	if err != nil {
 		return run{err: err, result: toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.NoEffect}}
 	}
 	var stdout, stderr bytes.Buffer
-	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &stdout, Error: &stderr})
+	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(h.stdin)), Output: &stdout, Error: &stderr})
 	if invalid := result.Validate(); invalid != nil {
 		h.t.Fatalf("%v produced an invalid result %+v: %v", words, result, invalid)
 	}
@@ -292,7 +300,8 @@ func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
 		{[]string{"git", "-c", "diff.external=evil", "diff"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{[]string{"git", "diff", "--no-index", "a.txt", "new.txt"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{[]string{"git", "log", "--output=leak.txt"}, "COMMAND_OPTION_UNSUPPORTED"},
-		{[]string{"git", "bisect"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+		{[]string{"git", "bisect"}, "COMMAND_OPERAND_INVALID"},
+		{[]string{"git", "bisect", "replay", "log"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
 		{[]string{"git", "gc"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
 		{[]string{"git", "-C", "/etc", "status"}, ""},
 	} {

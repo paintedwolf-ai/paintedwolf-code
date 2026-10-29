@@ -4,7 +4,7 @@ description: >-
   reconciling worker results, and closing delivered work.
 slot: procedures
 order: 5
-attaches: [update_progress, task, delegate_dispatch, delegate_decompose, write, edit, replace_lines, restore_version, jq_edit]
+attaches: [update_progress, task, delegate_dispatch, delegate_decompose, command, edit, replace_lines, restore_version, jq_edit]
 hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…)`; checklist text in an assistant reply does not update it.

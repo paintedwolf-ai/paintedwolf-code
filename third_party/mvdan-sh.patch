@@ -548,7 +548,7 @@
 +func (b *AllocationBudget) releaseFrame(bytes int64) { b.used -= bytes }
 --- /dev/null
 +++ b/syntax/allocation_budget_test.go
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,156 @@
 +package syntax_test
 +
 +import (
@@ -607,6 +607,52 @@
 +	}
 +}
 +
++func TestSplitBracesBoundedReturnsDetachedSplitAndRefusesMixedRanges(t *testing.T) {
++	for _, fixture := range []struct {
++		word   string
++		braces int
++		err    error
++	}{
++		{"x{a,b}{1,2}", 2, nil}, {"{01..10..2}", 1, nil}, {"{a..z..0}", 1, nil},
++		{"x{a", 0, nil}, {`"{a,b}"`, 0, nil}, {"x{1..2..3..4}", 0, nil},
++		{"x{1..a}", 0, syntax.ErrBraceMixedRange}, {"{a,{b..2}}", 0, syntax.ErrBraceMixedRange},
++	} {
++		pool, err := syntax.NewAllocationBudget(scratchCeiling)
++		if err != nil {
++			t.Fatalf("create ledger: %v", err)
++		}
++		file, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader(": "+fixture.word), "fixture.pw")
++		if err != nil {
++			t.Fatalf("parse %q: %v", fixture.word, err)
++		}
++		word := file.Stmts[0].Cmd.(*syntax.CallExpr).Args[1]
++		original := len(word.Parts)
++		before := pool.UsedBytes()
++		split, err := syntax.SplitBracesBounded(word, pool)
++		if !errors.Is(err, fixture.err) || (fixture.err == nil && err != nil) {
++			t.Fatalf("split %q error = %v; want %v", fixture.word, err, fixture.err)
++		}
++		if len(word.Parts) != original {
++			t.Fatalf("split %q mutated the word", fixture.word)
++		}
++		if fixture.braces == 0 {
++			if split != nil {
++				t.Fatalf("split %q = %d parts; want no expansion", fixture.word, len(split.Parts))
++			}
++			continue
++		}
++		braces := 0
++		for _, part := range split.Parts {
++			if _, ok := part.(*syntax.BraceExp); ok {
++				braces++
++			}
++		}
++		if braces != fixture.braces || pool.UsedBytes() <= before {
++			t.Fatalf("split %q has %d brace parts; want %d charged", fixture.word, braces, fixture.braces)
++		}
++	}
++}
++
 +func TestSharedLedgerRefusesBeforeAllocationAndRetainsUsage(t *testing.T) {
 +	pool, err := syntax.NewAllocationBudget(160)
 +	if err != nil {
@@ -661,109 +707,138 @@
 +}
 --- a/syntax/braces.go
 +++ b/syntax/braces.go
-@@ -29 +29,3 @@
+@@ -29 +29,5 @@
 -func SplitBraces(word *Word) bool {
-+func SplitBraces(word *Word) bool { return splitBraces(word, nil) }
++func SplitBraces(word *Word) bool { return splitBraces(word, nil, nil) }
 +
-+func splitBraces(word *Word, budget *AllocationBudget) bool {
-@@ -37 +39 @@
++// splitBraces reports in mixed, when it is non-nil, a sequence left literal only
++// because one endpoint is an integer and the other a letter.
++func splitBraces(word *Word, budget *AllocationBudget, mixed *bool) bool {
+@@ -37 +41 @@
 -	top := &Word{}
 +	top := braceNode(budget, Word{})
-@@ -55 +57 @@
+@@ -55 +59 @@
 -		acc.Parts = append(acc.Parts, lit)
 +		acc.Parts = braceAppend[WordPart](budget, acc.Parts, lit)
-@@ -61 +63 @@
+@@ -61 +65 @@
 -			acc.Parts = append(acc.Parts, wp)
 +			acc.Parts = braceAppend[WordPart](budget, acc.Parts, wp)
-@@ -72 +74 @@
+@@ -72 +76 @@
 -				addLit(&l2)
 +				addLit(braceNode(budget, l2))
-@@ -80,3 +82,3 @@
+@@ -80,3 +84,3 @@
 -				acc = &Word{}
 -				cur = &BraceExp{Elems: []*Word{acc}}
 -				open = append(open, cur)
 +				acc = braceNode(budget, Word{})
 +				cur = braceNode(budget, BraceExp{Elems: braceAppend(budget, []*Word(nil), acc)})
 +				open = braceAppend(budget, open, cur)
-@@ -93,2 +95,2 @@
+@@ -93,2 +97,2 @@
 -						merged.Parts = append(merged.Parts, litDots)
 -						merged.Parts = append(merged.Parts, elem.Parts...)
 +						merged.Parts = braceAppend[WordPart](budget, merged.Parts, litDots)
 +						merged.Parts = braceAppend[WordPart](budget, merged.Parts, elem.Parts...)
-@@ -100,2 +102,2 @@
+@@ -100,2 +104,2 @@
 -				acc = &Word{}
 -				cur.Elems = append(cur.Elems, acc)
 +				acc = braceNode(budget, Word{})
 +				cur.Elems = braceAppend(budget, cur.Elems, acc)
-@@ -115,2 +117,2 @@
+@@ -115,2 +119,2 @@
 -				acc = &Word{}
 -				cur.Elems = append(cur.Elems, acc)
 +				acc = braceNode(budget, Word{})
 +				cur.Elems = braceAppend(budget, cur.Elems, acc)
-@@ -127 +129 @@
+@@ -127 +131 @@
 -					acc.Parts = append(acc.Parts, br.Elems[0].Parts...)
 +					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br.Elems[0].Parts...)
-@@ -132 +134 @@
+@@ -132 +136 @@
 -					acc.Parts = append(acc.Parts, br)
 +					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
-@@ -138 +140 @@
+@@ -138 +142 @@
 -					val := elem.Lit()
 +					val := braceLiteral(elem, budget)
-@@ -149 +151 @@
+@@ -149 +153 @@
 -					val := br.Elems[2].Lit()
 +					val := braceLiteral(br.Elems[2], budget)
-@@ -164 +166 @@
+@@ -160,0 +165,3 @@
++					if !broken && mixed != nil {
++						*mixed = true
++					}
+@@ -164 +171 @@
 -					acc.Parts = append(acc.Parts, br)
 +					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
-@@ -173 +175 @@
+@@ -173 +180 @@
 -					acc.Parts = append(acc.Parts, elem.Parts...)
 +					acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
-@@ -186 +188 @@
+@@ -186 +193 @@
 -			addLit(&left)
 +			addLit(braceNode(budget, left))
-@@ -201 +203 @@
+@@ -201 +208 @@
 -			acc.Parts = append(acc.Parts, elem.Parts...)
 +			acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
 --- /dev/null
 +++ b/syntax/braces_budget.go
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,122 @@
 +package syntax
 +
 +import (
++	"errors"
 +	"fmt"
 +	"math"
 +	"unsafe"
 +)
 +
++// ErrBraceMixedRange reports a {x..y} sequence with one integer and one letter
++// endpoint, which SplitBraces leaves literal.
++var ErrBraceMixedRange = errors.New("brace sequence endpoints mix an integer and a letter")
++
 +// ClassifyBraces reports a real unquoted brace expansion without mutating word.
 +// It uses SplitBraces' selected algorithm and charges its temporary allocations
 +// before they occur. Malformed braces retain their ordinary literal semantics.
 +func ClassifyBraces(word *Word, pool *AllocationBudget) (expanded bool, err error) {
++	split, err := splitBracesBounded(word, pool, nil)
++	return split != nil, err
++}
++
++// SplitBracesBounded returns a copy of word with its brace expansions as
++// BraceExp parts, or nil when the word has none; word is not mutated. It
++// charges the same allocations as ClassifyBraces and refuses a mixed-type
++// sequence with ErrBraceMixedRange instead of leaving it literal.
++func SplitBracesBounded(word *Word, pool *AllocationBudget) (*Word, error) {
++	mixed := false
++	split, err := splitBracesBounded(word, pool, &mixed)
++	if err == nil && mixed {
++		return nil, ErrBraceMixedRange
++	}
++	return split, err
++}
++
++func splitBracesBounded(word *Word, pool *AllocationBudget, mixed *bool) (split *Word, err error) {
 +	if pool == nil {
-+		return false, fmt.Errorf("brace classification requires an allocation budget")
++		return nil, fmt.Errorf("brace classification requires an allocation budget")
 +	}
 +	if word == nil {
-+		return false, nil
++		return nil, nil
 +	}
 +	defer func() {
 +		if value := recover(); value != nil {
 +			if abort, ok := value.(budgetAbort); ok {
-+				expanded, err = false, abort.err
++				split, err = nil, abort.err
 +				return
 +			}
 +			panic(value)
 +		}
 +	}()
 +	copy := *word
-+	if !splitBraces(&copy, pool) {
-+		return false, nil
++	if !splitBraces(&copy, pool, mixed) {
++		return nil, nil
 +	}
 +	for _, part := range copy.Parts {
 +		if _, ok := part.(*BraceExp); ok {
-+			return true, nil
++			return braceNode(pool, copy), nil
 +		}
 +	}
-+	return false, nil
++	return nil, nil
 +}
 +
 +func braceReserve(pool *AllocationBudget, bytes int64) {

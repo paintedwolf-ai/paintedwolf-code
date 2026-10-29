@@ -20,7 +20,7 @@ Then draft once.
 
 | Tool | Why |
 |------|-----|
-| `write`, `edit`, `replace_lines`, `restore_version`, `code_rewrite`, `chmod`, `delete` | Product mutations — done on investigate/dispatch via workers |
+| command mutations, `edit`, `replace_lines`, `restore_version`, `code_rewrite`, `chmod` | Product mutations — done on investigate/dispatch via workers |
 | `verify` | Execution checks — done before wrapup |
 | `task`, `worker_cancel`, `wait` | Delegation and orchestration — workers are idle |
 | `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
