@@ -63,9 +63,41 @@ pub(super) fn linux_package_engine_layout(install_root: &Path) -> Option<Bundled
     })
 }
 
-pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
-    let layout = if crate::linux_install::installed().is_some() {
-        linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+pub(crate) fn setup_bundled_engine_layout(
+    app: &tauri::AppHandle,
+) -> Result<(), crate::protected_launch::GenerationError> {
+    let layout = select_layout(crate::protected_launch::generation(), || {
+        unprotected_engine_layout(app)
+    })?;
+    let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    #[cfg(target_os = "linux")]
+    super::captured_engine::setup();
+    Ok(())
+}
+
+fn select_layout(
+    generation: Result<
+        Option<crate::protected_launch::Generation>,
+        crate::protected_launch::GenerationError,
+    >,
+    unprotected: impl FnOnce() -> Option<BundledEngineLayout>,
+) -> Result<Option<BundledEngineLayout>, crate::protected_launch::GenerationError> {
+    match generation? {
+        Some(generation) => linux_package_engine_layout(&generation.logical_root)
+            .map(Some)
+            .ok_or(crate::protected_launch::GenerationError::LayoutUnavailable),
+        None => Ok(unprotected()),
+    }
+}
+
+fn unprotected_engine_layout(app: &tauri::AppHandle) -> Option<BundledEngineLayout> {
+    if let Ok(Some(generation)) = crate::linux_generation::running() {
+        generation.engine_root().ok().and_then(|engine_root| {
+            generation.helper("pw").ok().map(|_| BundledEngineLayout {
+                binary: generation.root.join("bin/pw"),
+                engine_root,
+            })
+        })
     } else {
         std::env::current_exe()
             .ok()
@@ -78,15 +110,30 @@ pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
             .and_then(|(exe, resources)| {
                 bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
             })
-    };
-    let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    }
 }
 
+/// Package ownership is resolved per use, so a database that has not answered yet
+/// selects no engine rather than falling back to the bundle-resource layout.
 pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {
-    BUNDLED_ENGINE_LAYOUT.get().cloned().flatten()
+    if matches!(crate::protected_launch::generation(), Ok(Some(_))) {
+        return BUNDLED_ENGINE_LAYOUT.get().cloned().flatten();
+    }
+    use crate::linux_install::{Ownership, PackageFamily};
+    match crate::linux_install::installed() {
+        Ownership::Package(package) if package.family != PackageFamily::Nix => {
+            linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+        }
+        Ownership::Package(_) | Ownership::Unpackaged => BUNDLED_ENGINE_LAYOUT.get().cloned().flatten(),
+        Ownership::Unknown(_) => None,
+    }
 }
 
 pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {
+    if let Some(generation) = crate::linux_generation::running()? {
+        generation.engine_root()?;
+        return Ok(generation.root.join("bin/pw"));
+    }
     if let Some(layout) = bundled_engine_layout() {
         return Ok(layout.binary);
     }
@@ -104,4 +151,66 @@ pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {
         }
     }
     Err("bundled engine helper not found in the app".into())
+}
+
+#[cfg(test)]
+mod protected_tests {
+    use super::*;
+    use crate::protected_launch::{Generation, GenerationError};
+
+    #[test]
+    fn protected_layout_uses_selected_generation_without_package_discovery() {
+        let root = crate::test_support::TempDir::new("protected-engine-layout");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::create_dir_all(root.join("engine-root/schemas/oar")).unwrap();
+        for path in [
+            "bin/pw",
+            "bin/pw-logs",
+            "engine-root/schemas/oar/oar.schema.json",
+        ] {
+            std::fs::write(root.join(path), b"fixture").unwrap();
+        }
+        let selected = Generation {
+            logical_root: root.to_path_buf(),
+        };
+        let layout = select_layout(Ok(Some(selected)), || panic!("package discovery ran"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(layout.binary, root.join("bin/pw"));
+        assert_eq!(layout.engine_root, root.join("engine-root"));
+    }
+
+    #[test]
+    fn protected_refusal_never_tries_resources_or_development_discovery() {
+        assert!(matches!(
+            select_layout(Err(GenerationError::FrameUnavailable), || panic!(
+                "fallback ran"
+            )),
+            Err(GenerationError::FrameUnavailable)
+        ));
+        let root = crate::test_support::TempDir::new("missing-protected-engine");
+        assert!(matches!(
+            select_layout(
+                Ok(Some(Generation {
+                    logical_root: root.to_path_buf()
+                })),
+                || panic!("fallback ran")
+            ),
+            Err(GenerationError::LayoutUnavailable)
+        ));
+    }
+
+    #[test]
+    fn unprotected_launch_keeps_existing_discovery_result() {
+        let layout = select_layout(Ok(None), || {
+            Some(BundledEngineLayout {
+                binary: "/development/pw".into(),
+                engine_root: "/development/engine-root".into(),
+            })
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(layout.binary, Path::new("/development/pw"));
+        assert!(select_layout(Ok(None), || None).unwrap().is_none());
+    }
 }

@@ -12,6 +12,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      contains(fromJSON('["push","merge_group","workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

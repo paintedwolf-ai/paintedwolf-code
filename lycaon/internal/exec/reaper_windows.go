@@ -14,6 +14,8 @@ import (
 // temporary-file policy.
 func StartReaper(string, ...string) error { return nil }
 
+func ensureReaper() error { return nil }
+
 func track(byte, string) func() { return func() {} }
 
 // RunReaper exists only so the shared entrypoint builds; StartReaper never launches it here.

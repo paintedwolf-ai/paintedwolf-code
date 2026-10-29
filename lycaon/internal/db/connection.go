@@ -7,10 +7,12 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"modernc.org/sqlite"
@@ -64,12 +66,19 @@ func Open(dbPath string) (*Store, error) {
 // The caller holds the installation lease throughout recovery, upgrading, and serving.
 func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opts StoreOptions) (*Store, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- local SQLite store dir
 		return nil, fmt.Errorf("create db directory: %w", err)
+	}
+	if err := ResumeStoreUpgrade(dbPath); err != nil {
+		return nil, err
+	}
+
+	if err := CheckStoreHealth(dbPath); err != nil {
+		return nil, err
 	}
 
 	created := false
-	if info, err := os.Stat(dbPath); err != nil {
+	if info, err := os.Stat(dbPath); err != nil { // #nosec G703 -- local SQLite store path
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("inspect database: %w", err)
 		}
@@ -83,33 +92,32 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 
 	if !created {
 		if err := upgradeExisting(ctx, dbPath, hooks, false); err != nil {
-			return nil, classifyStoreOpenFailure(err)
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 
 	writer, err := openWriter(ctx, dbPath, opts)
 	if err != nil {
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 
 	if created {
 		if err := prepareStoreSchema(ctx, writer, true); err != nil {
 			_ = writer.Close()
-			return nil, classifyStoreOpenFailure(err)
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 
 	auditDue := false
 	if !created {
-		clean, err := lastShutdownWasClean(ctx, writer)
+		auditDue, err = integrityAuditNeeded(ctx, writer)
 		if err != nil {
 			_ = writer.Close()
-			return nil, fmt.Errorf("read shutdown state: %w", err)
+			return nil, fmt.Errorf("read integrity audit obligation: %w", err)
 		}
-		auditDue = !clean
 		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
-			return nil, storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, err.Error())
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 	if err := markShutdownState(ctx, writer, false); err != nil {
@@ -118,24 +126,29 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	}
 	if err := recordAppVersion(ctx, writer, created); err != nil {
 		_ = writer.Close()
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 
 	if created {
-		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil {
+		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil { // #nosec G703 -- local SQLite store path
 			_ = writer.Close()
 			return nil, fmt.Errorf("chmod database: %w", err)
 		}
 	} else {
-		_ = os.Chmod(dbPath, defaultDBFileMode)
+		_ = os.Chmod(dbPath, defaultDBFileMode) // #nosec G703 -- local SQLite store path
 	}
 
 	reader, err := openReader(ctx, dbPath)
 	if err != nil {
 		_ = writer.Close()
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 	store := newStore(writer, reader)
+	if err := bindStoreHealth(store, dbPath); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, ClassifyStoreFailure(err)
+	}
 	if filepath.IsAbs(dbPath) {
 		store.dataDir = filepath.Dir(dbPath)
 	}
@@ -150,7 +163,7 @@ const UpgradeRecoveryDirName = "upgrade-recovery"
 // Recovery artifacts make a zero-byte store ambiguous.
 func emptyStoreHasRecoveryArtifacts(dbPath string) bool {
 	for _, artifact := range []string{dbPath + "-wal", dbPath + "-shm", filepath.Join(filepath.Dir(dbPath), UpgradeRecoveryDirName)} {
-		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) {
+		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) { // #nosec G703
 			return true
 		}
 	}
@@ -177,34 +190,32 @@ func openReader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	return sqlDB, nil
 }
 
-// unservableStoreCodes identifies storage faults that require recovery.
-var unservableStoreCodes = map[int]struct{}{
-	sqlite3.SQLITE_CORRUPT:  {},
-	sqlite3.SQLITE_NOTADB:   {},
-	sqlite3.SQLITE_CANTOPEN: {},
-	sqlite3.SQLITE_IOERR:    {},
-	sqlite3.SQLITE_PERM:     {},
-	sqlite3.SQLITE_READONLY: {},
-	sqlite3.SQLITE_FULL:     {},
-}
-
-// classifyStoreOpenFailure maps storage faults to recovery mode.
-func classifyStoreOpenFailure(err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, ErrStoreIncompatible) {
+// ClassifyStoreFailure preserves the distinction between damaged bytes and
+// an operation that cannot currently access or write them.
+func ClassifyStoreFailure(err error) error {
+	if err == nil || errors.Is(err, ErrStoreIncompatible) {
 		return err
+	}
+	var space *InsufficientSpaceError
+	if errors.As(err, &space) {
+		return &StoreIncompatibleError{Reason: RecoveryReasonInsufficientSpace, Detail: space.Error(), Space: space}
 	}
 	var se *sqlite.Error
 	if errors.As(err, &se) {
-		if _, unservable := unservableStoreCodes[se.Code()&0xff]; unservable {
+		switch se.Code() & 0xff {
+		case sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB:
 			return storeIncompatible(RecoveryReasonIntegrityFailed, 0, err.Error())
+		case sqlite3.SQLITE_FULL:
+			return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
+		case sqlite3.SQLITE_CANTOPEN, sqlite3.SQLITE_IOERR, sqlite3.SQLITE_PERM, sqlite3.SQLITE_READONLY:
+			return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 		}
-		return err
 	}
-	if errors.Is(err, fs.ErrPermission) {
-		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, err.Error())
+	if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
+		return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
+	}
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EROFS) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.ENOSYS) || errors.Is(err, fseffect.ErrUnsupported) {
+		return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 	}
 	return err
 }
@@ -231,6 +242,12 @@ func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB,
 	if _, err := sqlDB.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("configure wal journal: %w", err)
+	}
+	// A WAL that grew while a reader pinned it shrinks back to this size the
+	// next time a write restarts it after a complete checkpoint.
+	if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA journal_size_limit=%d`, walSizeLimitBytes)); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("configure wal size limit: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(writerOpenConns)
 	sqlDB.SetMaxIdleConns(writerOpenConns)

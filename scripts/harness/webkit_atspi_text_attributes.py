@@ -160,30 +160,11 @@ def describe(node) -> str:
         return f"<unreadable: {error}>"
 
 
-def enable_accessibility_bus() -> None:
-    """Asks toolkits on this session to expose their accessibility trees, as a running screen reader does."""
-    from gi.repository import Gio, GLib
-
-    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-    for _ in range(50):
-        try:
-            bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
-                          GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
-                          None, Gio.DBusCallFlags.NONE, 2000, None)
-            return
-        except GLib.Error:
-            time.sleep(0.2)
-    raise RuntimeError("org.a11y.Bus did not answer")
-
-
 def run_scan(url: str) -> int:
-    import gi
-
-    gi.require_version("Atspi", "2.0")
-    from gi.repository import Atspi
+    from atspi_client import enable_accessibility_bus, load_atspi
 
     # Large text objects answer slowly; a crash still ends the call at once.
-    Atspi.set_timeout(60_000, 60_000)
+    Atspi = load_atspi(60_000, 60_000)
     try:
         enable_accessibility_bus()
     except RuntimeError as error:
