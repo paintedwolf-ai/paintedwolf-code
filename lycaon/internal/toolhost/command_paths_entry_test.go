@@ -196,6 +196,12 @@ cat @api/go.mod`)
 	if got != want {
 		t.Fatalf("stdout =\n%s\nwant\n%s", got, want)
 	}
+	// A program starts without OLDPWD.
+	out, err := f.Call(t, t.Context(), "cd -")
+	testutil.FailErr(t, "run cd - without OLDPWD", err)
+	if outcome := decodeProgramOutcome(t, out); outcome.Status != 1 || outcome.Refusal != nil || outcome.Stderr != "cd: OLDPWD not set\n" {
+		t.Fatalf("cd - without OLDPWD: status %d stderr %q refusal %+v", outcome.Status, outcome.Stderr, outcome.Refusal)
+	}
 	// Each program starts again at the session folder.
 	if got := f.stdout(t, `pwd; echo_dir=$PWD; `+f.echo(`"$echo_dir"`)); got != lines(f.api.Path, "cwd="+f.api.Path, "pwd="+f.api.Path, "tmpdir="+f.scratch, "arg="+f.api.Path) {
 		t.Fatalf("next program = %q", got)

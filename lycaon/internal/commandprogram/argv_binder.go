@@ -247,11 +247,17 @@ func (r ArgvReview) Arguments() map[string]any {
 	}
 	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
 	if r.PathTargets != nil {
-		targets := make([]any, 0, len(r.PathTargets))
+		// Grouped by direction, each target is one captured value, so a command
+		// at the operand limit stays within the input capture's node bound.
+		reads, writes := []any{}, []any{}
 		for _, target := range r.PathTargets {
-			targets = append(targets, map[string]any{"path": target.Path, "write": target.Write})
+			if target.Write {
+				writes = append(writes, target.Path)
+			} else {
+				reads = append(reads, target.Path)
+			}
 		}
-		result["path_targets"] = targets
+		result["path_targets"] = map[string]any{"read": reads, "write": writes}
 	}
 	return result
 }
