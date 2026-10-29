@@ -16,6 +16,9 @@ type UpgradeStorage struct {
 	CloneBytes       uint64
 }
 
+// UpgradeSharing records immutable readers that share current replacement pages.
+type UpgradeSharing struct{ OriginalClone, RecoveryClone bool }
+
 // InspectUpgradeStorage measures the retained replacement and its sort work.
 // staged excludes recovery clone divergence when an archive is the recovery point.
 func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, staged, sharedOriginal bool) (UpgradeStorage, error) {
@@ -26,27 +29,27 @@ func InspectUpgradeStorage(ctx context.Context, database DBTX, path string, stag
 	if err := database.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageBytes); err != nil {
 		return UpgradeStorage{}, err
 	}
-	cloned := sharedOriginal
+	sharing := UpgradeSharing{OriginalClone: sharedOriginal}
 	var err error
 	if !staged {
 		var supported bool
 		supported, err = fileclone.SupportedAt(filepath.Dir(path))
-		cloned = cloned || supported
+		sharing.RecoveryClone = supported
 		if err != nil {
 			return UpgradeStorage{}, err
 		}
 	}
-	return BoundUpgradeStorage(pages, pageBytes, cloned)
+	return BoundUpgradeStorage(pages, pageBytes, sharing)
 }
 
 // BoundUpgradeStorage reserves divergence of a verified recovery clone.
 // The disposable replacement has no journal; failed work is discarded.
-func BoundUpgradeStorage(pages, pageBytes uint64, cloned bool) (UpgradeStorage, error) {
+func BoundUpgradeStorage(pages, pageBytes uint64, sharing UpgradeSharing) (UpgradeStorage, error) {
 	out := UpgradeStorage{Pages: pages, PageBytes: pageBytes}
 	if pages == 0 || pageBytes < 512 || pageBytes > 65536 || pageBytes&(pageBytes-1) != 0 || pages > math.MaxUint64/pageBytes {
 		return out, fmt.Errorf("invalid SQLite storage geometry")
 	}
-	if cloned {
+	if sharing.OriginalClone || sharing.RecoveryClone {
 		out.CloneBytes = pages * pageBytes
 	}
 	return out, nil

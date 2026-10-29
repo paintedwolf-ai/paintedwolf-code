@@ -14,7 +14,7 @@ func TestSourceCloneProbeLeavesSourceAndTargetUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := t.TempDir()
-	if _, err := SupportedFrom(source, target); err != nil {
+	if _, err := SupportedFrom(t.Context(), source, target); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.ReadFile(source)
@@ -31,11 +31,25 @@ func TestSourceCloneProbeLeavesSourceAndTargetUntouched(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("capability probe leaked files: %v", entries)
 	}
-	if _, err := SupportedFrom(filepath.Join(t.TempDir(), "missing"), target); err == nil {
+	if _, err := SupportedFrom(t.Context(), filepath.Join(t.TempDir(), "missing"), target); err == nil {
 		t.Fatal("missing source was reported cloneable")
 	}
 	entries, err = os.ReadDir(target)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("failed source probe leaked files: %v %v", entries, err)
+	}
+}
+
+func TestVolumeCloneProbeOwnsItsTemporaryFiles(t *testing.T) {
+	root := t.TempDir()
+	if _, err := SupportedAt(root); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("volume probe leaked files: %v %v", entries, err)
+	}
+	if _, err := SupportedAt(filepath.Join(root, "missing")); err == nil {
+		t.Fatal("missing probe volume was accepted")
 	}
 }

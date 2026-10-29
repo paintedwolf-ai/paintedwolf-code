@@ -145,11 +145,13 @@ func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations
 }
 
 func rebuildIntegrityFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		children := joined.Unwrap()
+	switch cause := err.(type) {
+	case *StoreIncompatibleError:
+		return cause.Reason == RecoveryReasonIntegrityFailed
+	case *sqlite.Error:
+		return cause.Code()&0xff == sqlite3.SQLITE_CORRUPT || cause.Code()&0xff == sqlite3.SQLITE_NOTADB
+	case interface{ Unwrap() []error }:
+		children := cause.Unwrap()
 		if len(children) == 0 {
 			return false
 		}
@@ -159,11 +161,9 @@ func rebuildIntegrityFailure(err error) bool {
 			}
 		}
 		return true
+	case interface{ Unwrap() error }:
+		return rebuildIntegrityFailure(cause.Unwrap())
+	default:
+		return err == migrations.ErrIntegrity
 	}
-	var damage *StoreIncompatibleError
-	if errors.As(err, &damage) && damage.Reason == RecoveryReasonIntegrityFailed {
-		return true
-	}
-	var failure *sqlite.Error
-	return errors.Is(err, migrations.ErrIntegrity) || (errors.As(err, &failure) && (failure.Code()&0xff == sqlite3.SQLITE_CORRUPT || failure.Code()&0xff == sqlite3.SQLITE_NOTADB))
 }

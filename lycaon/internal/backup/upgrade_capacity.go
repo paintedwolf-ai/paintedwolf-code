@@ -239,7 +239,7 @@ func recoveryPayloadEstimate(ctx context.Context, root string, databaseBytes uin
 }
 
 // The retained replacement has no live writers. Its actual SQLite allocation
-// is capped after capture, with separate rollback and clone reservations.
+// is capped after capture, with separate temporary-work and sharing reservations.
 func preflightRetainedUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan, capture bool) error {
 	available, known, err := availableUpgradeBytes(opts.ConfigDir)
 	if err != nil || !known {
@@ -262,17 +262,25 @@ func preflightRetainedUpgrade(ctx context.Context, opts CreateOpts, plan migrati
 		if err != nil {
 			return err
 		}
-		snapshotClone, err := fileclone.SupportedFrom(opts.DBPath, opts.ConfigDir)
+		snapshotClone, err := fileclone.SupportedFrom(ctx, opts.DBPath, opts.ConfigDir)
 		if err != nil {
 			return err
 		}
-		if snapshotClone {
-			payload -= storage.Pages * storage.PageBytes
-		}
-		needed, err = sumSpace(needed, payload)
+		needed, err = retainedCaptureBytes(needed, payload, storage.Pages*storage.PageBytes, snapshotClone)
 		if err != nil {
 			return err
 		}
 	}
 	return requireUpgradeSpace(needed, available)
+}
+
+// Snapshot-copy allocation is independent of already shared original pages.
+func retainedCaptureBytes(reserved, payload, database uint64, snapshotClone bool) (uint64, error) {
+	if snapshotClone {
+		if payload < database {
+			return 0, fmt.Errorf("recovery payload is smaller than its database")
+		}
+		payload -= database
+	}
+	return sumSpace(reserved, payload)
 }
