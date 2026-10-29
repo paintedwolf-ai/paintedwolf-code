@@ -224,11 +224,12 @@
         "./internal/scan/installed",
         "./internal/scan/integration",
         "./internal/toolexecution",
+        "./internal/tools/native/command",
         "./internal/webresearch",
         "./test/contract/security"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata)$"
       ],
       "bundled": true
     },
@@ -874,12 +875,6 @@
       ],
       "workers": 1
     },
-    "release:publish:aur-recipe": {
-      "locks": [
-        "aur-delivery"
-      ],
-      "workers": 1
-    },
     "release:live-test": {
       "locks": [
         "*"
@@ -1326,7 +1321,6 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
-      "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
       "linux-desktop-environment-rehearsal.yml": 1,
       "linux-installed-desktop-rehearsal.yml": 1,

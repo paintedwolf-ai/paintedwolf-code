@@ -1,6 +1,9 @@
 name: Cache document compiler build
-description: Restore prepared document dependencies and publish them within the cache budget
+description: Restore prepared document dependencies
 inputs:
+  lookup-only:
+    description: Check the exact native cache identity without restoring payloads
+    default: 'false'
   save:
     description: Publish the prepared cache on main
     default: 'false'
@@ -19,32 +22,19 @@ runs:
         if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
         printf 'target=%s/document-core\n' "$(python3 scripts/artifact_paths.py compiler-cache "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
         printf 'prefix=document-core-v1-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
-    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
-      id: restore
+    - id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
         key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/documentcore/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/build-document-core.sh', 'scripts/toolchain/rust-path-remap.sh') }}
-        restore-keys: ${{ steps.paths.outputs.prefix }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      id: budget
-      uses: ./.github/actions/cache-budget
-      with:
-        path: |
-          ${{ steps.paths.outputs.target }}
-          !${{ steps.paths.outputs.target }}/**/incremental
-        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/documentcore/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/build-document-core.sh', 'scripts/toolchain/rust-path-remap.sh') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && steps.paths.outputs.prefix || '' }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
         key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/documentcore/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/build-document-core.sh', 'scripts/toolchain/rust-path-remap.sh') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
-      uses: ./.github/actions/cache-budget
-      with:
-        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/documentcore/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/build-document-core.sh', 'scripts/toolchain/rust-path-remap.sh') }}
-        record: ${{ steps.budget.outputs.record }}

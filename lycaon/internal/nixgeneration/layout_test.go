@@ -1,4 +1,4 @@
-package configlayout
+package nixgeneration
 
 import (
 	"bytes"
@@ -41,17 +41,17 @@ func TestNixGenerationUsesTheRunningImageAfterProfileSwitch(t *testing.T) {
 	first := nixFixture(t, filepath.Join(root, "store", "generation-A"), []byte("image A"))
 	second := nixFixture(t, filepath.Join(root, "store", "generation-B"), []byte("image B"))
 	// The kernel supplies the real ELF path; changing a profile cannot alter it.
-	layout, err := nixLayout(first, bytes.NewReader([]byte("image A")))
+	layout, err := readLayout(first, bytes.NewReader([]byte("image A")))
 	testutil.FailErr(t, "resolve running generation", err)
 	if layout == nil || filepath.Join(layout.Root, "bin", "pw") != first {
 		t.Fatalf("wrong generation: %+v", layout)
 	}
-	if _, err := nixLayout(second, bytes.NewReader([]byte("image A"))); err == nil {
+	if _, err := readLayout(second, bytes.NewReader([]byte("image A"))); err == nil {
 		t.Fatal("accepted old descriptor against new generation")
 	}
 }
 
-func TestNixLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
+func TestLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
 	executable := nixFixture(t, filepath.Join(t.TempDir(), "custom-store", "output"), []byte("image"))
 	root := filepath.Dir(filepath.Dir(executable))
 	testutil.FailErr(t, "make receipt replaceable", os.Chmod(filepath.Join(root, "nix-layout.json"), 0o600))
@@ -63,12 +63,12 @@ func TestNixLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
 		strings.Repeat(" ", 16385),
 	} {
 		testutil.FailErr(t, "replace receipt", os.WriteFile(filepath.Join(root, "nix-layout.json"), []byte(receipt), 0o600))
-		if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
+		if _, err := readLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
 			t.Fatal("invalid present receipt became developer fallback")
 		}
 	}
 	testutil.FailErr(t, "remove receipt", os.Remove(filepath.Join(root, "nix-layout.json")))
-	layout, err := nixLayout(executable, bytes.NewReader([]byte("image")))
+	layout, err := readLayout(executable, bytes.NewReader([]byte("image")))
 	if err != nil || layout != nil {
 		t.Fatalf("store-looking paths must not classify ownership: %+v %v", layout, err)
 	}
@@ -76,11 +76,11 @@ func TestNixLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
 
 func TestNixGenerationRefusesChangedImageAndMalformedManifest(t *testing.T) {
 	executable := nixFixture(t, filepath.Join(t.TempDir(), "generation"), []byte("image"))
-	if _, err := nixLayout(executable, bytes.NewReader([]byte("changed"))); err == nil {
+	if _, err := readLayout(executable, bytes.NewReader([]byte("changed"))); err == nil {
 		t.Fatal("changed image accepted")
 	}
 	root := filepath.Dir(filepath.Dir(executable))
-	if _, err := nixLayout(filepath.Join(root, "bin", "unlisted"), bytes.NewReader([]byte("image"))); err == nil {
+	if _, err := readLayout(filepath.Join(root, "bin", "unlisted"), bytes.NewReader([]byte("image"))); err == nil {
 		t.Fatal("unlisted executable accepted")
 	}
 	testutil.FailErr(t, "make manifest replaceable", os.Chmod(filepath.Join(root, "manifest.json"), 0o600))
@@ -89,11 +89,11 @@ func TestNixGenerationRefusesChangedImageAndMalformedManifest(t *testing.T) {
 		return string(b)
 	}(), `"painted-wolf-code"`, `"other-package"`, 1)
 	testutil.FailErr(t, "write wrong package manifest", os.WriteFile(filepath.Join(root, "manifest.json"), []byte(wrongPkg), 0o600))
-	if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
+	if _, err := readLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
 		t.Fatal("foreign package manifest accepted")
 	}
 	testutil.FailErr(t, "corrupt manifest", os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{}"), 0o600))
-	if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
+	if _, err := readLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
 		t.Fatal("unknown manifest accepted")
 	}
 }

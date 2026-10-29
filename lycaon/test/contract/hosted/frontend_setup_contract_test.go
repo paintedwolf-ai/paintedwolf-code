@@ -29,7 +29,7 @@ func TestFrontendSetupSkipsGoCachesAndProvisionsNativeInputs(t *testing.T) {
 		if step.Uses == "./.github/actions/cache-go" {
 			cacheSkipped = step.If == "inputs.setup != 'frontend'"
 		}
-		if step.If == "inputs.setup == 'frontend'" &&
+		if step.If == "inputs.lookup-only != 'true' && (inputs.setup == 'frontend')" &&
 			strings.Contains(step.Run, "./task --version") &&
 			strings.Contains(step.Run, "cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml") {
 			nativeInputs = true

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 )
 
 const (
@@ -31,7 +33,7 @@ func nixStorageStat(path string) nixStorageFact {
 	return nixStorageFact{kind: st.Mode & unix.S_IFMT, mode: st.Mode, uid: st.Uid}
 }
 
-func runningNixRegistrar(layout *NixLayout) (nixRegistrar, error) {
+func runningNixRegistrar(layout *nixgeneration.Layout) (nixRegistrar, error) {
 	if filepath.Dir(layout.Output) != nixPhysicalStore {
 		return nixRegistrar{}, errors.New("nix retention requires an explicitly supported physical store")
 	}
