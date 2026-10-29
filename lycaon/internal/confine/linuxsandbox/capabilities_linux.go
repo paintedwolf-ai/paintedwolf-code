@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"golang.org/x/sys/unix"
 )
 
@@ -177,7 +177,7 @@ func appArmorDenied(detail string) *Unavailability {
 }
 
 // runningNix reports the running Nix package generation, if any.
-var runningNix = configlayout.RunningNix
+var runningNix = nixgeneration.Running
 
 // nixEngineProfile is the user-namespace grant a running Nix generation ships for
 // its exact engine executable, or "" outside a Nix generation.

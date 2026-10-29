@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 
 	"golang.org/x/sys/unix"
 )
@@ -57,8 +57,8 @@ func TestNixGenerationsNameTheirExactEngineGrant(t *testing.T) {
 	t.Cleanup(func() { runningNix = previous })
 	output := "/nix/store/" + strings.Repeat("0", 32) + "-painted-wolf-code-1.0.2"
 	root := output + "/lib/painted-wolf-code"
-	runningNix = func() (*configlayout.NixLayout, error) {
-		return &configlayout.NixLayout{Output: output, Root: root}, nil
+	runningNix = func() (*nixgeneration.Layout, error) {
+		return &nixgeneration.Layout{Output: output, Root: root}, nil
 	}
 	sum := sha256.Sum256([]byte(root + "/bin/pw"))
 	want := Unavailability{Code: UnavailableUserNamespacesAppArmor, Detail: "restricted", Remedy: RemedyLoadEngineProfile,
@@ -66,9 +66,9 @@ func TestNixGenerationsNameTheirExactEngineGrant(t *testing.T) {
 	if got := appArmorDenied("restricted"); *got != want {
 		t.Fatalf("nix generation: %+v, want %+v", *got, want)
 	}
-	for name, layout := range map[string]func() (*configlayout.NixLayout, error){
-		"native package":    func() (*configlayout.NixLayout, error) { return nil, nil },
-		"malformed receipt": func() (*configlayout.NixLayout, error) { return nil, errors.New("malformed") },
+	for name, layout := range map[string]func() (*nixgeneration.Layout, error){
+		"native package":    func() (*nixgeneration.Layout, error) { return nil, nil },
+		"malformed receipt": func() (*nixgeneration.Layout, error) { return nil, errors.New("malformed") },
 	} {
 		runningNix = layout
 		if got := appArmorDenied("restricted"); got.Remedy != RemedyInstallPackage || got.Profile != AppArmorProfile {
