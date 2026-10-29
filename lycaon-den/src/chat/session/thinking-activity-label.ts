@@ -266,10 +266,9 @@ function userTurnStartIndex(messages: readonly Message[]): number {
   return 0;
 }
 
-/** Latest running call in this turn, excluding parked and hidden tools. */
+/** Latest in-flight tool in the current user turn (skips orientation-only tools). */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
-  activities: readonly ActivityEvent[] = [],
 ): ToolPartView | undefined {
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
@@ -282,11 +281,6 @@ export function findLatestRunningToolInTurn(
       const toolName = call.name?.trim();
       if (!toolName) continue;
       if (isCoordinatorInternalTool(toolName)) continue;
-      if (activities.some((activity) =>
-        activity.status === "active" && activity.kind === "awaiting_wake" &&
-        activity.tool_call_id?.trim() === call.id.trim() &&
-        activity.tool_name?.trim().toLowerCase() === toolName.toLowerCase()
-      )) continue;
 
       const result = findToolResult(messages, msg.id, call.id);
       const part = toolPartFromCall(call, result, msg.id, undefined, {
@@ -304,9 +298,8 @@ export function findLatestRunningToolInTurn(
 
 function runningToolCandidate(
   messages: readonly Message[],
-  activities: readonly ActivityEvent[] = [],
 ): ActivityLabelCandidate | undefined {
-  const part = findLatestRunningToolInTurn(messages, activities);
+  const part = findLatestRunningToolInTurn(messages);
   if (!part) return undefined;
   return {
     label: thinkingToolRunningLabel(part),
@@ -332,7 +325,7 @@ function toolPartForActivity(
     ) ?? -1;
     const call = index >= 0 ? msg.tool_calls?.[index] : undefined;
     if (call) {
-      return toolPartFromCall(call, findToolResult(messages, msg.id, call.id), msg.id, undefined, {
+      return toolPartFromCall(call, undefined, msg.id, undefined, {
         message: msg,
         index,
       });
@@ -397,13 +390,9 @@ function hostActivityCandidate(
     };
   }
   if (activity.kind === "awaiting_wake") {
-    // Only the host arms program_done; it is not a wait-tool condition.
-    const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
-    const part = command ? toolPartForActivity(activity, messages) : undefined;
-    const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
-    const named = command ? WAIT_CONDITION_LABELS.process_done : waitConditionsLabel(activity.wait_triggers ?? []);
+    const named = waitConditionsLabel(activity.wait_triggers ?? []);
     return {
-      label: reason ? `Waiting · ${reason}` : named ?? WAIT_CONDITION_LABELS.timer,
+      label: named ?? WAIT_CONDITION_LABELS.timer,
       weight: named
         ? ACTIVITY_LABEL_WEIGHTS.awaitingWake
         : ACTIVITY_LABEL_WEIGHTS.awaitingWakeUnnamed,
@@ -635,7 +624,7 @@ export function collectThinkingActivityCandidates(
   const activity = hostActivityCandidate(input.activities, messages);
   if (activity) candidates.push(activity);
 
-  const tool = runningToolCandidate(messages, input.activities);
+  const tool = runningToolCandidate(messages);
   if (tool) candidates.push(tool);
 
   const closeout = provisionalCloseoutCandidate(input);
