@@ -101,8 +101,7 @@ owner rather than flattening the program into a process pipeline.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
-frames. Brace classification and
-static quote removal share that allocation pool; admission never invokes general
+frames. Brace classification and static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
 allocation; temporary parser wrappers remain scratch. This clarifies the
@@ -111,13 +110,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `ParseAdmitted` with working and retained state
-admission. Parser scratch grows the program's working account in 64 KiB chunks
-up to the per-unit `evaluation_memory_bytes` ceiling and is released when
-lowering returns, so a `source` parse shares the account with background job
-streams rather than holding the whole ceiling. Retained source/plan storage is
-charged to `program_state_bytes` before host-plan insertion; releasing scratch
-does not release that state.
+materialization. Execution constructs `NewProgramParser` before capture and
+admits an initial working chunk; parser growth uses that same incremental
+account up to `evaluation_memory_bytes`. Capture and its byte-copy overlap
+reserve bounded `program_state_bytes` capacity before materialization. Successful
+lowering transfers the captured bytes into the retained plan/snapshot envelope;
+closing parser scratch does not release that state.
+
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
@@ -128,7 +127,6 @@ progress update to this unit without treating an inspection copy or a caller's
 boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
-
 
 ### Complete byte streams
 
@@ -179,89 +177,6 @@ Unseen retained bytes and printed source-like text establish no model read base.
 A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
-
-### Platform adapter evidence
-
-`fseffect.Replace` reports whether replacement, directory durability and byte
-verification actually occurred, even when a later step fails. Staged byte counts
-alone do not prove publication. Source mutation settlement preserves the same
-journal and reports committed publication separately from a later completion
-error. Ownership changes return an explicit capability and applied result;
-unsupported platforms never claim that metadata changed.
-
-Native TCP observations carry exact endpoints, an opaque socket resource identity
-and the holder's process incarnation. Fresh inherited-descriptor checks establish
-lineage membership. Session pairing additionally requires complete observation
-of every relevant holder: inaccessible process/socket tables produce
-`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
-ordinary connection admission. These are observations for mediated admission,
-not grants; mediated admission must recheck current identities at each required
-boundary.
-
-Portable external launch uses one prepared lifecycle through the existing
-`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
-process producers. Final sanitized environment, PATH selection, real cwd and
-literal argv are captured before helper construction. The helper receives the
-selected native executable path and held cwd, and never resolves a prepared
-command through PATH a second time. A current invocation path owner may supply
-its checked metadata handles; a held handle never grants source-read or execution
-authority. Host-managed native producers retain their existing OS authority. Agent command
-launches without an explicit scoped path port require their current initiating
-execution-authority callback: it revalidates the actual live action, actor/root
-identity, confinement and worker branch without consuming once-use permits twice.
-This admits execution metadata only and never grants source-read authority.
-Explicit strict confinement remains strict when the platform cannot apply it.
-
-Selection captures metadata identity without reading executable contents or
-preparsing shebangs. Execution-only files and directories retain their native
-permission semantics. Before start and at the actual helper handoff, the initiating
-owner rechecks current authority and captured entry/cwd identity. Existing process
-or process-tree supervision registers before release. Guard registration only
-establishes ownership; group, pipeline and PTY launch sites then require the
-captured handoff explicitly. Missing or concurrently released capture refuses. The helper then uses
-ordinary native pathname execution with the original literal argv, held cwd and
-frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
-rules. The absolute metadata selection is separate from the native filename sent
-to the kernel: relative slash operands and relative/empty PATH entries preserve
-that spelling under captured cwd. Discovery without cwd facts retains its explicit
-absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
-Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
-tracer, descriptor pathname or extra no-new-privileges restriction. Existing
-confinement still applies its own required restrictions.
-
-These are captured selection and current handoff checks. Native pathname lookup
-is not atomic with the final identity check, and mutable executable/interpreter
-contents are not immutable historical bytes. A stopped postexec image, credential,
-cwd or kernel-expanded argv snapshot is not a universal launch requirement.
-Available native process observations remain separate truthful facts, and absent
-observations never become successful enforcement claims. Exec transport EOF is
-not completed output, effects or recovery proof. Changed identity, current
-authority refusal, cancellation and actual native exec failures stop this launch;
-none selects another execution mechanism or automatically retries it.
-
-Synchronous and retained asynchronous groups share `ProcessGroup`: native Wait,
-tree cleanup and guard release settle once, and Stop ignores a settled invocation.
-Both managed browser postures use this lifecycle and the existing executor reaper;
-Chromium keeps its own sandbox when no host boundary is selected. Browser URL
-readiness stays separate from process admission, and both postures use the reduced
-environment. SDK transports retain their own native pipe and Wait lifecycle inside
-the prepared start callback; a failed handoff closes their terminal reader after
-native settlement.
-
-Complete macOS/Linux managed native fixtures, caller lifecycle regressions and
-installed-platform qualification remain required. Component fixtures and native
-helper success do not establish a connected command runtime or installed release.
-
-Windows qualification requires actual filesystem replacement while handles are
-open, reparse-point and exact-name identity checks, journal/error settlement,
-metadata capability results, typed null operands, executable alias resolution
-and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
-cancellation that preserves unrelated processes, and observed confinement and
-network enforcement. Packaging must deliver and verify the required executable,
-helper and security prerequisites on the installed target. Cross-compilation,
-Unix fixtures and unsupported results do not qualify those capabilities. The
-same native macOS/Linux runtime and installed-platform qualification obligations
-remain; individual adapter tests do not qualify the complete command evaluator.
 
 Program operations pin execution revisions from published disk. Native utilities,
 input redirections, Git, and external programs all read the saved file. After a
@@ -360,6 +275,31 @@ before `..`, canonicalizes under `-e`, the default or `-m`, and projects
 `--relative-to`/`--relative-base`; an operand that does not resolve is an
 ordinary status-one failure and later operands still run.
 
+### Search commands
+
+`grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select
+records with `internal/textsearch`, the line-search operation the structured
+`grep` tool also scans with. grep's default BRE and `-E` ERE use POSIX
+leftmost-longest matching, with GNU back references, `\<`, `\>`, `\b`, `\w` and
+`\s` over fixed ASCII classes. `-P` is P01's bounded `pcre-common-v1` grammar
+on the bounded backtracking engine; it is never RE2. A construct outside a
+dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
+default dialect is RE2. Each record search is metered against the catalog
+regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+
+Traversal walks the invocation's held roots in unsigned byte order. Every
+listed name counts against `traversal_visits`, and every file read is pinned
+through execution revisions before it is searched. grep recursion visits
+hidden entries and applies no ignore file. rg skips hidden entries and applies
+the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
+every entry and never follows a link. All of them skip entries the read
+boundary protects. A file holding NUL bytes prints GNU's
+`grep: PATH: binary file matches` once on stderr. A complete search without
+matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
+typed stop, never a no-match. `find -exec` dispatches each child through the
+evaluator frame as an ordinary program child. `find -delete` removes entries
+only through the recoverable removal owner.
+
 ### Stream queries and format-aware edits
 
 `internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
@@ -407,6 +347,89 @@ JSON, YAML and TOML: it runs `nativejq.Edit` over the pinned accepted text and
 publishes the result through the pinned write door at its captured destination
 revision. A rewrite that would drop comments, tags or literals refuses with
 `JQ_EDIT_LOSSY`.
+
+### Platform adapter evidence
+
+`fseffect.Replace` reports whether replacement, directory durability and byte
+verification actually occurred, even when a later step fails. Staged byte counts
+alone do not prove publication. Source mutation settlement preserves the same
+journal and reports committed publication separately from a later completion
+error. Ownership changes return an explicit capability and applied result;
+unsupported platforms never claim that metadata changed.
+
+Native TCP observations carry exact endpoints, an opaque socket resource identity
+and the holder's process incarnation. Fresh inherited-descriptor checks establish
+lineage membership. Session pairing additionally requires complete observation
+of every relevant holder: inaccessible process/socket tables produce
+`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
+ordinary connection admission. These are observations for mediated admission,
+not grants; mediated admission must recheck current identities at each required
+boundary.
+
+Portable external launch uses one prepared lifecycle through the existing
+`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
+process producers. Final sanitized environment, PATH selection, real cwd and
+literal argv are captured before helper construction. The helper receives the
+selected native executable path and held cwd, and never resolves a prepared
+command through PATH a second time. A current invocation path owner may supply
+its checked metadata handles; a held handle never grants source-read or execution
+authority. Host-managed native producers retain their existing OS authority. Agent command
+launches without an explicit scoped path port require their current initiating
+execution-authority callback: it revalidates the actual live action, actor/root
+identity, confinement and worker branch without consuming once-use permits twice.
+This admits execution metadata only and never grants source-read authority.
+Explicit strict confinement remains strict when the platform cannot apply it.
+
+Selection captures metadata identity without reading executable contents or
+preparsing shebangs. Execution-only files and directories retain their native
+permission semantics. Before start and at the actual helper handoff, the initiating
+owner rechecks current authority and captured entry/cwd identity. Existing process
+or process-tree supervision registers before release. Guard registration only
+establishes ownership; group, pipeline and PTY launch sites then require the
+captured handoff explicitly. Missing or concurrently released capture refuses. The helper then uses
+ordinary native pathname execution with the original literal argv, held cwd and
+frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
+rules. The absolute metadata selection is separate from the native filename sent
+to the kernel: relative slash operands and relative/empty PATH entries preserve
+that spelling under captured cwd. Discovery without cwd facts retains its explicit
+absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
+Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
+tracer, descriptor pathname or extra no-new-privileges restriction. Existing
+confinement still applies its own required restrictions.
+
+These are captured selection and current handoff checks. Native pathname lookup
+is not atomic with the final identity check, and mutable executable/interpreter
+contents are not immutable historical bytes. A stopped postexec image, credential,
+cwd or kernel-expanded argv snapshot is not a universal launch requirement.
+Available native process observations remain separate truthful facts, and absent
+observations never become successful enforcement claims. Exec transport EOF is
+not completed output, effects or recovery proof. Changed identity, current
+authority refusal, cancellation and actual native exec failures stop this launch;
+none selects another execution mechanism or automatically retries it.
+
+Synchronous and retained asynchronous groups share `ProcessGroup`: native Wait,
+tree cleanup and guard release settle once, and Stop ignores a settled invocation.
+Both managed browser postures use this lifecycle and the existing executor reaper;
+Chromium keeps its own sandbox when no host boundary is selected. Browser URL
+readiness stays separate from process admission, and both postures use the reduced
+environment. SDK transports retain their own native pipe and Wait lifecycle inside
+the prepared start callback; a failed handoff closes their terminal reader after
+native settlement.
+
+Complete macOS/Linux managed native fixtures, caller lifecycle regressions and
+installed-platform qualification remain required. Component fixtures and native
+helper success do not establish a connected command runtime or installed release.
+
+Windows qualification requires actual filesystem replacement while handles are
+open, reparse-point and exact-name identity checks, journal/error settlement,
+metadata capability results, typed null operands, executable alias resolution
+and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
+cancellation that preserves unrelated processes, and observed confinement and
+network enforcement. Packaging must deliver and verify the required executable,
+helper and security prerequisites on the installed target. Cross-compilation,
+Unix fixtures and unsupported results do not qualify those capabilities. The
+same native macOS/Linux runtime and installed-platform qualification obligations
+remain; individual adapter tests do not qualify the complete command evaluator.
 
 ## Altitude
 

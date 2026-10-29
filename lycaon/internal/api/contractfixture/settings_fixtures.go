@@ -90,6 +90,7 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 		opt(&deps)
 	}
 	srv := hostapi.NewServer(RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
+	StopBackgroundOnCleanup(t, srv)
 	return srv, StartTestHTTPServer(t, srv), reg
 }
 

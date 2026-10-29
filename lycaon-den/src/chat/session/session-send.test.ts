@@ -37,6 +37,17 @@ describe("sendChatPrompt", () => {
     });
   }
 
+  it("delivers external references through the session send boundary", async () => {
+    const appStore = createAppStore();
+    appStore.actions.setCurrentSession(idle);
+    const client = promptClient();
+    const references = [{ kind: "external-file" as const, project_id: "proj-1", path: "/outside/notes.txt" },
+      { kind: "external-folder" as const, project_id: "proj-1", path: "/outside/folder" }];
+    await sendChatPrompt(appStore, stalledRecents(), async () => client,
+      "sess-1", "proj-1", "/tmp/p", emptyProjects, "Edit these", undefined, references);
+    expect(client.sendPrompt).toHaveBeenCalledWith("sess-1", expect.objectContaining({ references }));
+  });
+
   it("sends recovery identity without expanding its visible text", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession(idle);

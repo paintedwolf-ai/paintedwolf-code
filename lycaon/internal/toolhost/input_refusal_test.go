@@ -108,8 +108,22 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 				t.Fatalf("continuation ran: %v", err)
 			}
 			details := result.Refusal.Details
-			if details["limit_id"] != limitID || details["maximum"] != float64(maximum) || details["observed"] != float64(maximum+1) || details["source_line"] != float64(2) || details["source_column"] != float64(7) || details["source_start_byte"] != float64(strings.Index(source, "input")) || details["native_operation"] != nil {
+			if details["limit_id"] != limitID || details["maximum"] != float64(maximum) || details["observed"] != float64(maximum+1) || details["source_line"] != float64(2) || details["source_column"] != float64(7) || details["source_start_byte"] != float64(strings.Index(source, "input")) || details["native_operation"] != "read" || details["native_command"] != "cat" {
 				t.Fatalf("serialized screened facts changed: %+v", details)
+			}
+			if details["operation_source_start_byte"] != float64(strings.Index(source, "cat")) || details["operation_source_end_byte"] != float64(strings.Index(source, "\nprintf after")) || details["operation_source_line"] != float64(2) || details["operation_source_column"] != float64(1) {
+				t.Fatalf("admitted operation span changed: %+v", details)
+			}
+			stopped, ok := details["program_stopped_details"].([]any)
+			if !ok || len(stopped) != 1 {
+				t.Fatalf("missing stopped redirect receipt: %+v", details["program_stopped_details"])
+			}
+			redirect, ok := stopped[0].(map[string]any)
+			if !ok || redirect["command"] != "< input" || redirect["stop_code"] != observed.Code || redirect["owner_invoked"] != false || redirect["effect_certainty"] != "none" || redirect["complete"] != false || redirect["publication_eligible"] != false {
+				t.Fatalf("refused redirect effect facts: %+v", redirect)
+			}
+			if redirect["source_start_byte"] != float64(strings.Index(source, "< input")) || redirect["source_end_byte"] != float64(strings.Index(source, "\nprintf after")) || redirect["source_line"] != float64(2) || redirect["source_column"] != float64(5) {
+				t.Fatalf("stopped redirect span changed: %+v", redirect)
 			}
 			t.Logf("Actual %s input refusal:\n%s", account, result.Refusal.Feedback)
 			// Output retention may retain its bounded per-program index; feedback's

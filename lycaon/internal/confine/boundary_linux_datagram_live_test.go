@@ -380,23 +380,27 @@ func TestLinuxLocalListenDatagramGrantIsReachableFromTheHost(t *testing.T) {
 		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = append(probeEnv("udpserve"), linuxProbePathsEnv+"="+addr)
-		var out strings.Builder
+		var out terminalWatch
 		cmd.Stdout, cmd.Stderr = &out, &out
 		testutil.FailErr(t, "start server", cmd.Start())
 		cleanup()
+		out.await(t, "listening ")
 		reached := ""
-		deadline := time.Now().Add(10 * time.Second)
-		for time.Now().Before(deadline) && reached == "" {
+		if granted {
+			for t.Context().Err() == nil && reached == "" {
+				reached = askDatagram(addr)
+			}
+		} else {
 			reached = askDatagram(addr)
 		}
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		cancel()
 		if granted && reached != "served" {
-			t.Fatalf("granted datagram listener not reachable from the host (got %q):\n%s", reached, out.String())
+			t.Fatalf("granted datagram listener not reachable from the host (got %q):\n%s", reached, out.text())
 		}
 		if !granted && reached != "" {
-			t.Fatalf("ungranted datagram listener reachable from the host (got %q):\n%s", reached, out.String())
+			t.Fatalf("ungranted datagram listener reachable from the host (got %q):\n%s", reached, out.text())
 		}
 	}
 }
