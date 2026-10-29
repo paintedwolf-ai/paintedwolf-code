@@ -16,6 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -134,9 +135,23 @@ type hostEffects struct {
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
 	settle func(context.Context)
+	// projectDir is the watched fixture tree whose change pipeline must drain.
+	projectDir string
 }
 
-func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub) *hostEffects {
+// watcherQuietGrace is how long the fixture tree's change debouncer must stay
+// idle before the host counts as settled: two coalesce windows, so a write
+// that reached the platform stream late still lands in the same measurement.
+const watcherQuietGrace = 2 * repochange.DefaultDebounce
+
+// watcherQuietBound caps one quiet wait so a continuously changing tree fails
+// the read it interferes with instead of hanging the sweep.
+const watcherQuietBound = 10 * time.Second
+
+// settlePasses bounds the convergence loop against continuous producers.
+const settlePasses = 64
+
+func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub, projectDir string) *hostEffects {
 	t.Helper()
 	ctx := t.Context()
 	database, err := db.OpenReadOnly(ctx, h.DatabasePath())
@@ -150,7 +165,7 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground}
+	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
@@ -172,15 +187,27 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 	return changes, nil
 }
 
-// quiesce waits for detached work and outbox delivery, then flushes debounced events.
+// quiesce waits until the host is still: the fixture tree's change debouncer
+// is idle, detached work has drained, the outbox is empty, and a whole pass
+// committed nothing. A filesystem change travels platform stream → debounce
+// timer → watcher batch → ledger and outbox commits, and only the last legs
+// are joined by WaitForBackground, so one pass can finish while a flush is
+// still due; a second pass that moves nothing proves the pipeline is empty.
 func (e *hostEffects) quiesce(ctx context.Context) {
-	for {
+	version, _ := e.dataVersion(ctx)
+	for pass := 0; pass < settlePasses; pass++ {
+		repochange.WaitQuiet(ctx, e.projectDir, watcherQuietGrace, watcherQuietBound)
 		e.settle(ctx)
 		var pending int64
-		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err != nil || pending == 0 {
+		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		next, err := e.dataVersion(ctx)
+		if err != nil || next == version {
 			break
 		}
-		time.Sleep(time.Millisecond)
+		version = next
 	}
 	e.hub.FlushDebounced()
 }
