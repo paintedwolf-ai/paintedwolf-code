@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -150,15 +149,13 @@ func New(t testing.TB, options Options) *Fixture {
 	if options.Publication != nil {
 		publication = options.Publication(dir)
 	}
-	ports, err := hostprocess.New()
-	testutil.FailErr(t, "host process service", err)
 	scratchDir := fspath.CanonicalPath(t.TempDir())
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{fixture: f}, Ports: ports,
+		Sessions: sessions{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},

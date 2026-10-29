@@ -7,19 +7,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct pw_socket_row {
+struct pw_tcp_row {
  uint64_t socket_handle, pcb_handle, generation;
  unsigned char local[16], remote[16];
  uint16_t local_port, remote_port;
- unsigned char ipv4, listening, udp;
+ unsigned char ipv4, listening;
 };
 
-// One native descriptor walk serves listener, port-holder and exact
-// connected-peer queries. TCP rows listen in TSI_S_LISTEN; UDP rows listen
-// while bound and unconnected.
+// One native descriptor walk serves listener and exact connected-peer queries.
 // The caller checks process incarnation around this snapshot. Kernel observation
 // failure is returned, never interpreted as an empty set of foreign holders.
-static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
+static int pw_tcp_rows(int pid, struct pw_tcp_row **rows, int *count) {
  *rows = NULL;
  *count = 0;
  errno = 0;
@@ -38,7 +36,7 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
  }
  int fdcount = n / (int)sizeof(struct proc_fdinfo);
  if (fdcount == 0) { free(fds); return 0; }
- struct pw_socket_row *out = calloc((size_t)fdcount, sizeof(struct pw_socket_row));
+ struct pw_tcp_row *out = calloc((size_t)fdcount, sizeof(struct pw_tcp_row));
  if (out == NULL) { free(fds); return ENOMEM; }
  int error = 0;
  for (int i = 0; i < fdcount; i++) {
@@ -53,33 +51,20 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   if (got < (int)(offsetof(struct socket_fdinfo, psi.soi_kind) + sizeof(info.psi.soi_kind))) {
    error = EIO; continue;
   }
-  struct in_sockinfo *in;
-  unsigned char udp = 0;
-  if (info.psi.soi_kind == SOCKINFO_TCP) {
-   if (got < (int)(offsetof(struct socket_fdinfo, psi.soi_proto.pri_tcp) + sizeof(struct tcp_sockinfo))) {
-    error = EIO;
-    continue;
-   }
-   in = &info.psi.soi_proto.pri_tcp.tcpsi_ini;
-  } else if (info.psi.soi_kind == SOCKINFO_IN && info.psi.soi_protocol == IPPROTO_UDP) {
-   if (got < (int)(offsetof(struct socket_fdinfo, psi.soi_proto.pri_in) + sizeof(struct in_sockinfo))) {
-    error = EIO;
-    continue;
-   }
-   in = &info.psi.soi_proto.pri_in;
-   udp = 1;
-  } else {
+  if (info.psi.soi_kind != SOCKINFO_TCP) continue;
+  if (got < (int)(offsetof(struct socket_fdinfo, psi.soi_proto.pri_tcp) + sizeof(struct tcp_sockinfo))) {
+   error = EIO;
    continue;
   }
   if (info.psi.soi_family != AF_INET && info.psi.soi_family != AF_INET6) continue;
-  struct pw_socket_row *row = &out[(*count)++];
-  row->udp = udp;
+  struct in_sockinfo *in = &info.psi.soi_proto.pri_tcp.tcpsi_ini;
+  struct pw_tcp_row *row = &out[(*count)++];
   row->socket_handle = info.psi.soi_so;
   row->pcb_handle = info.psi.soi_pcb;
   row->generation = in->insi_gencnt;
   row->local_port = ntohs((uint16_t)in->insi_lport);
   row->remote_port = ntohs((uint16_t)in->insi_fport);
-  row->listening = udp ? row->local_port != 0 && row->remote_port == 0 : info.psi.soi_proto.pri_tcp.tcpsi_state == TSI_S_LISTEN;
+  row->listening = info.psi.soi_proto.pri_tcp.tcpsi_state == TSI_S_LISTEN;
   row->ipv4 = info.psi.soi_family == AF_INET;
   if (row->ipv4) {
    memcpy(row->local, &in->insi_laddr.ina_46.i46a_addr4, 4);

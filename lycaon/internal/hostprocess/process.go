@@ -35,11 +35,9 @@ type Process struct {
 	Instance   string `json:"instance"`
 	// Owned reports descent from a launch this session made. Only an owned
 	// process carries a reference, so only an owned process can be signaled.
-	Owned bool `json:"owned"`
-	// Listeners holds the sockets a listener query matched for this process.
-	Listeners  []ListeningSocket `json:"listeners,omitempty"`
-	StartOrder uint64            `json:"-"`
-	Stats      ProcessStats      `json:"-"`
+	Owned      bool         `json:"owned"`
+	StartOrder uint64       `json:"-"`
+	Stats      ProcessStats `json:"-"`
 }
 
 // ProcessStats holds observed kernel counters for the read-only ps view.
@@ -132,12 +130,10 @@ type Service struct {
 	key [32]byte
 	// members reports the processes descended from the session's launches.
 	members func(session string) (map[int]struct{}, error)
-	// listeners reads the host's listening sockets and their holders.
-	listeners func(lineage.ListenerQuery) ([]lineage.Listener, error)
 }
 
 func New() (*Service, error) {
-	s := &Service{members: lineage.SessionMembers, listeners: lineage.Listeners}
+	s := &Service{members: lineage.SessionMembers}
 	if _, err := rand.Read(s.key[:]); err != nil {
 		return nil, fmt.Errorf("process reference key: %w", err)
 	}

@@ -31,6 +31,7 @@ var approvedHostLaunches = map[string]string{
 	"library scanner worker":           "resident tree-sitter AST worker process for crash and leak containment",
 	"user_path_probe":                  "probes interactive login shell to recover user PATH on GUI launch",
 	"user_account_shell":               "resolves the Linux account shell through configured NSS providers with bounded getent execution",
+	"loopback_listener_probe":          "probes system listening ports and TCP socket process owners via lsof",
 	"toolchain_version_probe":          "probes installed compilers and runtimes for version detection",
 	"desktop_proxy_settings":           "reads the GNOME proxy schema through the desktop's gsettings tool, the schema's supported reader",
 	"nix_generation_retention":         "registers the running Nix store closure as an indirect GC root via the package-owned nix-store binary",
@@ -42,7 +43,6 @@ var forbiddenHostLaunchSubjects = map[string]string{
 	"browser_quarantine_clear":                     "must use native unix.Removexattr instead of xattr CLI",
 	"macOS idle-sleep assertion":                   "must use native IOKit IOPMAssertion instead of caffeinate",
 	"account_shell_lookup":                         "must use native getpwuid_r instead of dscacheutil",
-	"loopback_listener_probe":                      "must use native lineage.Listeners kernel socket tables instead of lsof",
 }
 
 // forbiddenCommandBinaries identifies external CLI binaries that must not be invoked for host operations.

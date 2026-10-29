@@ -679,7 +679,7 @@
       "aliases": [],
       "family": "process",
       "owner": "processes",
-      "argv": "lsof [-nPt] [-i :PORT|-iTCP:PORT|-iUDP:PORT] [-sTCP:LISTEN]",
+      "argv": "lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
       "forms": [
         {
           "spellings": [
@@ -704,39 +704,9 @@
           "sample_values": [
             "TCP:LISTEN"
           ]
-        },
-        {
-          "spellings": [
-            "-t"
-          ],
-          "arity": 0,
-          "value_role": "boolean",
-          "fixture_id": "lsof-option-t",
-          "consumption": "fixed",
-          "sample_values": []
-        },
-        {
-          "spellings": [
-            "-n"
-          ],
-          "arity": 0,
-          "value_role": "boolean",
-          "fixture_id": "lsof-option-n",
-          "consumption": "fixed",
-          "sample_values": []
-        },
-        {
-          "spellings": [
-            "-P"
-          ],
-          "arity": 0,
-          "value_role": "boolean",
-          "fixture_id": "lsof-option-P",
-          "consumption": "fixed",
-          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-nPt] [-i :PORT|-iTCP:PORT|-iUDP:PORT] [-sTCP:LISTEN]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -784,15 +754,13 @@
           }
         }
       },
-      "notes": "Listening TCP sockets and bound, unconnected UDP sockets from the kernel socket tables. Rows print COMMAND PID USER TYPE NAME (-t prints PIDs only; -n and -P are accepted, output is always numeric). This session's listeners are always listed and carry their job identity. For a named port, listeners held outside the session are listed after the host process inspection approval process_list uses; without it, stderr says those holders were not inspected. A holder the host cannot read shows its port with PID unknown. Read-only: kill and pkill still refuse processes this session did not start.",
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
       "reuse": {
-        "implementation": "lycaon/internal/hostprocess/listeners.go",
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
         "tests": [
-          "lycaon/internal/hostprocess/listeners_test.go",
-          "lycaon/internal/lineage/proc_listeners_test.go",
-          "lycaon/internal/tools/native/command/program_lsof_test.go"
+          "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse the hostprocess port-holder owner behind process_list over the lineage kernel socket tables; no lsof binary, no host-global signal authority.",
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
@@ -807,10 +775,7 @@
         "lsof-operands-valid",
         "lsof-rejection",
         "lsof-option-i",
-        "lsof-option-s",
-        "lsof-option-t",
-        "lsof-option-n",
-        "lsof-option-P"
+        "lsof-option-s"
       ]
     },
     {
