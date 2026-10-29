@@ -2140,7 +2140,7 @@
       ],
       "example": {
         "program": "which -- cat",
-        "stdout": "cat: native\n",
+        "stdout": "cat\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {

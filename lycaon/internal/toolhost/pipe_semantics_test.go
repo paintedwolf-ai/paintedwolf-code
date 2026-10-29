@@ -83,7 +83,7 @@ func TestProgramDiscoveryReportsWiredNativeUtilities(t *testing.T) {
 	testutil.FailErr(t, "install jq", os.WriteFile(filepath.Join(bin, "jq"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	env.Configure = func(tc *tools.ToolContext) { tc.Host.HostResourcePathExtra = []string{bin} }
 	for source, want := range map[string]string{
-		"which jq":      "jq: native\n",
+		"which jq":      "jq\n",
 		"type jq":       "jq is a native built-in\n",
 		"command -v jq": "jq\n",
 	} {
