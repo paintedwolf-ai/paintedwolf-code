@@ -405,10 +405,12 @@ tasks:
 
   test:conformance:live:
     desc: 'Corpus and seeded programs against the verified reference userlands (Docker; --generated-only --seed N --programs N selects generated cases)'
+    dir: '{{.GO_DIR}}'
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/conformance-live.py --validate {{.CLI_ARGS}}
+      - go run ./test/commandconformance/cmd/conformance live --validate {{.CLI_ARGS}}
       - task: userlands:build
-      - python3 {{.SCRIPTS_DIR}}/conformance-live.py {{.CLI_ARGS}}
+        vars: {CLI_ARGS: ''}
+      - go run ./test/commandconformance/cmd/conformance live {{.CLI_ARGS}}
 
   conformance:capture:
     desc: 'Run the command conformance corpus in its verified reference userlands and store the snapshots (Docker; optional -git-seed and case IDs)'
