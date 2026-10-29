@@ -63,11 +63,11 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 		t.Fatalf("retained session owner reopened: %v", err)
 	}
 	root.Identity.ProgramID = "late-program"
-	if _, err := supervisor.RunProgram(admitted, root, func(context.Context) (toolcontract.ProducerResult, error) {
+	if result, err := supervisor.RunProgram(admitted, root, func(context.Context) (toolcontract.ProducerResult, error) {
 		t.Error("pre-disposal admission reopened after index removal")
 		return toolcontract.ProducerResult{}, nil
-	}); !errors.Is(err, ErrProgramStopped) {
-		t.Fatalf("stale admission token = %v", err)
+	}); !errors.Is(err, ErrProgramStopped) || result.Terminal != toolcontract.ProducerInterrupted || result.Status != 130 || result.StopCode == "" {
+		t.Fatalf("stale admission token = %v, result=%+v", err, result)
 	}
 	if len(supervisor.sessions) != 1 || supervisor.sessions["sibling"] != sibling || len(supervisor.programs) != 0 {
 		t.Fatal("disposal retained owned state or disturbed sibling state")

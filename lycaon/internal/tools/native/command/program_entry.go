@@ -272,12 +272,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
-	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
-		return "", err
-	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	ctx, err = jobs.BeginProgram(ctx)
 	if err != nil {
+		return "", err
+	}
+	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
 	builtins := jobBuiltins(jobs, run.commands)
@@ -423,7 +423,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 // overrides it with the interruption RunProgram reported.
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
-	if stopped {
+	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
 		status := 130
 		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode
 	}

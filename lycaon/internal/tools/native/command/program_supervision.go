@@ -112,13 +112,13 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	program.sessionJobs = s.sessions[root.SessionID]
 	if admitted, ok := ctx.Value(sessionJobsKey{}).(*SessionJobs); ok && admitted != program.sessionJobs {
 		s.mu.Unlock()
-		return toolcontract.ProducerResult{}, ErrProgramStopped
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
 	}
 	if program.sessionJobs != nil {
 		closed := program.sessionJobs.closed.Load()
 		if closed {
 			s.mu.Unlock()
-			return toolcontract.ProducerResult{}, ErrProgramStopped
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
 		}
 	}
 	s.programs[root.Identity.ProgramID] = program
