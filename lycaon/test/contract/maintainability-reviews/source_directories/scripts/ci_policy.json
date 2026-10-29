@@ -4,14 +4,21 @@
   "kind": "module",
   "workstream": "ci-throughput",
   "disposition": "retain",
-  "reason": "The 42 modules own hosted verification planning, execution, recovery, and observation. Queue batching remains a separate subpackage. Admission and native execution have distinct contracts; job and delivery accounting share one observational module. Retain this bounded directory without adding a second scheduler or policy state owner.",
-  "reviewed_commit": "4abb13f929e3510f25810fad41e2b9a88d3a8eb3",
+  "reason": "The 42 modules own hosted verification planning, execution, recovery, and observation. Immutable release-source binding is distinct from daily nightly observation; source and attempt receipts preserve publication authority. Stateless compiler payload preparation and native SDK lookup aggregation share the existing cache boundary. Queue batching remains a separate subpackage. Retain this bounded directory without adding a second scheduler or policy state owner.",
+  "reviewed_commit": "aa55057184bf6cc384acf61d2793e5ae18ed8269",
   "ceiling": 42,
-  "reviewed_shape": "9eb0f750e0fbc7bb9e5299553f58d43b8af93462c214d6398b98cead47374a08",
+  "reviewed_shape": "7af8e6b50b9a976b2a06a7727bba3d38222a2b3f149ff241368267c85056ad1e",
   "boundaries": {
-    "scripts/verification_tests/ci/test_hosted_plan_execution.py": "372d2e74fd4f111ff1174107ec1e522fcac3728d7671a38680b2baf1975a1a8a",
-    "scripts/verification_tests/ci/test_hosted_schedule_execution.py": "7b909c4495cd7bb3afb6f47daa7fd8ad98519d961136e7f7be5d0b10563fa60c",
+    "scripts/verification_tests/ci/test_hosted_plan_execution.py": "b8c0292423ec6c39fd77acbeef69c23669703be17305f4f7cfe4146432e0f6cd",
+    "scripts/verification_tests/ci/test_hosted_schedule_execution.py": "020b506df7cb1e0cb3e2f821c6fc24426be627df00bf4702aeaf14b29d16c014",
+    "scripts/verification_tests/ci/test_qualification_source_execution.py": "c867b97851d03b54cd4777e23333435586a4242f6ddf7fef64a8f9b4bb9e0607",
+    "scripts/verification_tests/ci/test_verification_verdict_execution.py": "f4f14f5572d0581a65784b339e40ce0256f5bfa3e1f1cbfed9c754dbf3a432ab",
+    "scripts/verification_tests/ci/test_budget_reconciliation_execution.py": "a72289d85d8e8c6260eb663b6214dc1a166d7d05b2c523fbbe73015fe5c6143b",
+    "scripts/verification_tests/ci/test_nightly_history_execution.py": "29b2ce9727ccbfb49c212bf0e4832f2f7af0febde3528b38f9a6613b7bf94cfa",
     "scripts/verification_tests/ci/test_retry_evidence_execution.py": "0f65e345aae47f2afb2f338c2ec164e352f323024216a02d0144ddf338f00d5b",
-    "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc"
+    "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc",
+    "scripts/verification_tests/ci/test_cache_payload_execution.py": "06b161615190d65a8fcfc6a38deda03da9756f63d33721e7e6f352ba767596ab",
+    "lycaon/test/contract/hosted/hosted_cache_contract_test.go": "1121f8a392057d883923f9678277acf905e3dcae400e0b3abae73c3b1bd6a815",
+    "lycaon/test/contract/hosted/cache_publication_contract_test.go": "326de5c13f3ce9c86e012ab1275515d29f3a5e2d4d5826126cda1d83d2381e9d"
   }
 }

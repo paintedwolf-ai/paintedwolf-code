@@ -41,6 +41,10 @@ func EffectivePathValue() string {
 	return os.Getenv("PATH")
 }
 
+// lookExecutable checks one candidate path. The protected Linux launch replaces
+// it, because programs it starts execute outside the namespace this engine runs in.
+var lookExecutable = osexec.LookPath
+
 // ErrNotInPath reports that no directory of the searched PATH holds the executable.
 var ErrNotInPath = errors.New("executable not found in PATH")
 
@@ -55,7 +59,7 @@ func LookPathIn(name, pathValue string) (string, error) {
 			continue
 		}
 		// A path with a separator is checked directly, including Windows PATHEXT.
-		if found, err := osexec.LookPath(filepath.Join(dir, name)); err == nil {
+		if found, err := lookExecutable(filepath.Join(dir, name)); err == nil {
 			return found, nil
 		}
 	}
@@ -93,7 +97,7 @@ func LookPathAt(name, pathValue, cwd string) (string, error) {
 // EffectivePathValue.
 func LookPath(name string) (string, error) {
 	if strings.ContainsRune(name, filepath.Separator) || strings.ContainsRune(name, '/') {
-		return osexec.LookPath(name)
+		return lookExecutable(name)
 	}
 	return LookPathIn(name, EffectivePathValue())
 }

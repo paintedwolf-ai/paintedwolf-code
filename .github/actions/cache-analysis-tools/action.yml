@@ -1,12 +1,25 @@
 name: Cache Go analysis tools
 description: Restore pinned verification and analysis tools warmed by trusted main builds
 inputs:
+  lookup-only:
+    description: Check exact native cache identities without restoring payloads
+    default: 'false'
   tools:
     description: Tool set (none, base, lint, vulnerabilities, all)
     required: true
   save:
     description: Publish prepared tools from main; the default restores only
     default: 'false'
+outputs:
+  base-cache-hit:
+    description: Whether the exact base tool cache exists
+    value: ${{ steps.base.outputs.cache-hit }}
+  lint-cache-hit:
+    description: Whether the exact lint tool cache exists
+    value: ${{ steps.lint.outputs.cache-hit }}
+  vulnerabilities-cache-hit:
+    description: Whether the exact vulnerabilities tool cache exists
+    value: ${{ steps.vulnerabilities.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -20,47 +33,50 @@ runs:
         printf 'lint=%s\n' "$(python3 scripts/analysis_tools.py key lint)" >> "${GITHUB_OUTPUT}"
         printf 'vulnerabilities=%s\n' "$(python3 scripts/analysis_tools.py key vulnerabilities)" >> "${GITHUB_OUTPUT}"
 
-    - if: inputs.save != 'true'
+    - id: base
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/task
           ${{ steps.paths.outputs.bin }}/sqlc
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.base }}
-
-    - if: inputs.save != 'true' && (inputs.tools == 'lint' || inputs.tools == 'all')
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.base.outputs.cache-hit != 'true' && (inputs.tools == 'base' || inputs.tools == 'all')
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.bin }}/task
+          ${{ steps.paths.outputs.bin }}/sqlc
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.base }}
+    - id: lint
+      if: inputs.tools == 'lint' || inputs.tools == 'all'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
           ${{ steps.paths.outputs.bin }}/deadcode
+          ${{ steps.paths.outputs.bin }}/actionlint
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
-
-    - if: inputs.save != 'true' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.lint.outputs.cache-hit != 'true' && (inputs.tools == 'lint' || inputs.tools == 'all')
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.bin }}/golangci-lint
+          ${{ steps.paths.outputs.bin }}/deadcode
+          ${{ steps.paths.outputs.bin }}/actionlint
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
+    - id: vulnerabilities
+      if: inputs.tools == 'vulnerabilities' || inputs.tools == 'all'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ steps.paths.outputs.bin }}/govulncheck
+        path: |
+          ${{ steps.paths.outputs.bin }}/govulncheck
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}
-
-    # Publication runs after preparation, with resolved paths in the current action scope.
-    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'base' || inputs.tools == 'all')
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.vulnerabilities.outputs.cache-hit != 'true' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
-          ${{ steps.paths.outputs.bin }}/task
-          ${{ steps.paths.outputs.bin }}/sqlc
-        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.base }}
-
-    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'lint' || inputs.tools == 'all')
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ${{ steps.paths.outputs.bin }}/golangci-lint
-          ${{ steps.paths.outputs.bin }}/deadcode
-        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
-
-    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ steps.paths.outputs.bin }}/govulncheck
+          ${{ steps.paths.outputs.bin }}/govulncheck
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}

@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -163,5 +164,50 @@ func TestAttentionLifecycleTopic(t *testing.T) {
 	}
 	if AttentionLifecycleTopic(api.EventTopicAttention) || AttentionLifecycleTopic(api.EventTopicMessage) {
 		t.Fatal("attention and message must not loop a rebuild")
+	}
+}
+
+// Rebuilds that start while a settle waits extend the wait instead of
+// corrupting it: the in-flight count goes to zero and back under one mutex.
+func TestSettleAttentionSurvivesConcurrentRebuilds(t *testing.T) {
+	pub := &Publisher{Hub: NewMemoryHub(), Attention: staticAttention{sessionID: "live"}}
+	ctx := context.Background()
+	const publishers, flushesEach, settlers = 8, 400, 4
+
+	var publishing, settling sync.WaitGroup
+	for range publishers {
+		publishing.Add(1)
+		go func() {
+			defer publishing.Done()
+			for range flushesEach {
+				pub.PublishAttention(ctx)
+				pub.FlushAttention(ctx)
+			}
+		}()
+	}
+	publishersDone := make(chan struct{})
+	for range settlers {
+		settling.Add(1)
+		go func() {
+			defer settling.Done()
+			for {
+				pub.SettleAttention(ctx)
+				select {
+				case <-publishersDone:
+					return
+				default:
+				}
+			}
+		}()
+	}
+	publishing.Wait()
+	close(publishersDone)
+	settling.Wait()
+
+	pub.SettleAttention(ctx)
+	pub.attentionMu.Lock()
+	defer pub.attentionMu.Unlock()
+	if pub.attentionInFlight != 0 || pub.attentionTimer != nil {
+		t.Fatalf("after settle: in-flight = %d, timer pending = %t", pub.attentionInFlight, pub.attentionTimer != nil)
 	}
 }

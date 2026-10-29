@@ -97,7 +97,7 @@ func stageGeneration(t *testing.T, base, staging string, manifest []byte) genera
 	testutil.FailErr(t, "place generation", os.Rename(staging, directory))
 	return generationFixture{
 		directory: directory,
-		policy:    GenerationPolicy{Version: 1, GenerationRoot: directory, ManifestSHA256: digest, LogicalInstallRoot: filepath.Join(base, "install")},
+		policy:    GenerationPolicy{Version: 1, GenerationRoot: directory, ManifestSHA256: digest, LogicalInstallRoot: filepath.Join(base, "install"), LibraryRoots: []string{fixtureLibraryRoot}},
 	}
 }
 

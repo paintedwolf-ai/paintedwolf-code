@@ -13,8 +13,16 @@ from ci_policy import budget_history as history
 
 def run():
     return dict(id=42, run_attempt=1, repository={'full_name': 'owner/repo'},
-                path='.github/workflows/qualification.yml', event='push', head_branch='main',
+                path='.github/workflows/nightly.yml', event='schedule', head_branch='main',
                 status='completed', conclusion='failure', created_at='2026-10-09T12:00:00Z', head_sha='a' * 40)
+
+
+def advanced(main, paths=(), records=()):
+    def observe(_root, _source):
+        changes = history.MainChanges.__new__(history.MainChanges)
+        changes.main, changes.paths, changes.records = main, frozenset(paths), set(records)
+        return changes
+    return observe
 
 
 def zipped(value, duplicate=False):
@@ -27,11 +35,11 @@ def zipped(value, duplicate=False):
 
 
 class EvidenceTests(unittest.TestCase):
-    def test_only_current_qualification_limits_receipt_supplies_snapshot(self):
+    def test_only_current_nightly_limits_receipt_supplies_snapshot(self):
         raw = zipped(report())
-        artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=len(raw))
+        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
         ignored = [{**artifact, 'id': 2, 'name': 'receipt-verification-integration-limits-1'},
-                   {**artifact, 'id': 3, 'name': 'receipt-verification-check-limits-2'}]
+                   {**artifact, 'id': 3, 'name': 'receipt-verification-nightly-limits-2'}]
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                 patch.object(evidence, 'pages', return_value=ignored + [artifact]), \
                 patch.object(evidence.subprocess, 'check_output', return_value=raw) as download:
@@ -41,7 +49,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(download.call_args.args[0][-1], 'repos/owner/repo/actions/artifacts/1/zip')
 
     def test_missing_expired_ambiguous_or_oversized_receipts_fail_closed(self):
-        artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=100)
+        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=100)
         for artifacts in [[], [{**artifact, 'expired': True}], [artifact, artifact],
                           [{**artifact, 'size_in_bytes': evidence.MAX_ARCHIVE_BYTES + 1}]]:
             with self.subTest(artifacts=artifacts), patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
@@ -56,7 +64,7 @@ class EvidenceTests(unittest.TestCase):
         invalid['tracking']['complete'] = False
         values.append(zipped(invalid))
         for raw in values:
-            artifact = dict(id=1, name='receipt-verification-check-limits-1', expired=False, size_in_bytes=len(raw))
+            artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
             with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(evidence, 'pages', return_value=[artifact]), \
                     patch.object(evidence.subprocess, 'check_output', return_value=raw):
@@ -71,12 +79,10 @@ class ReconciliationTests(unittest.TestCase):
     def setUp(self):
         self.pull = dict(number=7, merged_at='date', base={'ref': 'main', 'repo': {'full_name': 'owner/repo'}})
 
-    def invoke(self, current=None, pulls=None, existing=None, snapshot=None, dry_run=False):
+    def invoke(self, current=None, pulls=None, existing=None, snapshot=None, dry_run=False, main=None):
         value = snapshot if snapshot is not None else report()
         parsed = validate(value, 'a' * 40, 'b' * 40)
         def api(path, method='GET', body=None):
-            if path.endswith('/git/ref/heads/main'):
-                return {'object': {'sha': 'a' * 40}}
             if '/git/commits/' in path:
                 return {'tree': {'sha': 'b' * 40}}
             if method == 'GET' and '/issues/' in path:
@@ -89,11 +95,15 @@ class ReconciliationTests(unittest.TestCase):
                 patch.object(tracker, 'read_snapshot', return_value=parsed) as read, \
                 patch.object(tracker, 'checkpoint', return_value=None), \
                 patch.object(tracker, 'intake', return_value=set(parsed[1])), \
+                patch.object(tracker, 'MainChanges', side_effect=main or advanced('a' * 40)), \
                 patch.object(tracker.time, 'sleep'):
             result = tracker.reconcile(current or run(), dry_run)
         return result, calls, read
 
-    def test_failed_qualification_creates_issue_for_merged_warning(self):
+    def writes(self, calls):
+        return [call for call in calls.call_args_list if len(call.args) > 1]
+
+    def test_failed_nightly_creates_issue_for_merged_warning(self):
         result, calls, read = self.invoke()
         writes = [call for call in calls.call_args_list if len(call.args) > 1]
         self.assertEqual(len(writes), 1)
@@ -116,8 +126,8 @@ class ReconciliationTests(unittest.TestCase):
             read.assert_not_called()
             self.assertFalse(any(len(call.args) > 1 for call in calls.call_args_list))
 
-    def test_only_completed_repository_qualification_pushes_are_eligible(self):
-        mutations = [dict(event='pull_request'), dict(event='merge_group'), dict(event='workflow_dispatch'),
+    def test_only_completed_repository_nightly_observations_are_eligible(self):
+        mutations = [dict(event='pull_request'), dict(event='merge_group'), dict(event='push'),
                      dict(head_branch='feature'), dict(repository={'full_name': 'foreign/repo'}),
                      dict(path='.github/workflows/ci.yml'), dict(status='in_progress'), dict(head_sha='invalid'),
                      dict(conclusion='cancelled'), dict(conclusion='timed_out'), dict(conclusion='neutral'),
@@ -129,49 +139,63 @@ class ReconciliationTests(unittest.TestCase):
             api.assert_not_called()
             read.assert_not_called()
         self.assertTrue(tracker.eligible({**run(), 'conclusion': 'success'}, 'owner/repo'))
+        self.assertTrue(tracker.eligible({**run(), 'event': 'workflow_dispatch'}, 'owner/repo'))
         self.assertTrue(tracker.eligible({**run(), 'conclusion': 'failure'}, 'owner/repo'))
-
-    def test_stale_run_and_main_advance_abort_writes(self):
-        for states in [[False], [True, False], [True, True, False]]:
-            with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
-                    patch.object(tracker, 'current_main', side_effect=states), \
-                    patch.object(tracker, 'api', return_value={'tree': {'sha': 'b' * 40}}) as api, \
-                    patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
-                    patch.object(tracker, 'pages', return_value=[]), \
-                    patch.object(tracker, 'read_snapshot', return_value=validate(report(), 'a' * 40, 'b' * 40)), \
-                    patch.object(tracker, 'checkpoint', return_value=None), \
-                    patch.object(tracker, 'intake', return_value=set(validate(report(), 'a' * 40, 'b' * 40)[1])):
-                result = tracker.reconcile(run())
-            self.assertTrue('skipped' in result or 'stopped' in result)
-            self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
 
     def test_unavailable_snapshot_cannot_resolve_existing_issues(self):
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
-                patch.object(tracker, 'current_main', return_value=True), \
                 patch.object(tracker, 'api', return_value={'tree': {'sha': 'b' * 40}}) as api, \
                 patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
                 patch.object(tracker, 'read_snapshot', side_effect=ValueError('missing receipt')), self.assertRaises(ValueError):
             tracker.reconcile(run())
         self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
 
-    def test_main_advance_during_throttle_prevents_stale_issue_write(self):
-        current = True
-        def advance(_seconds):
-            nonlocal current
-            current = False
-        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
-                patch.object(tracker, 'current_main', side_effect=lambda _sha: current), \
-                patch.object(tracker, 'api', return_value={'tree': {'sha': 'b' * 40}}) as api, \
-                patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
-                patch.object(tracker, 'pages', return_value=[]), \
-                patch.object(tracker, 'read_snapshot', return_value=validate(report(), 'a' * 40, 'b' * 40)), \
-                patch.object(tracker, 'checkpoint', return_value=None), \
-                patch.object(tracker, 'intake', return_value=set(validate(report(), 'a' * 40, 'b' * 40)[1])), \
-                patch.object(tracker.time, 'sleep', side_effect=advance):
-            result = tracker.reconcile(run())
-        self.assertEqual(result['stopped'], 'main advanced during reconciliation')
+    def test_unchanged_artifact_on_advanced_main_writes_its_issue(self):
+        result, calls, _ = self.invoke(main=advanced('e' * 40, {'pkg/other.go', 'pkg/nested/server.go'}))
+        self.assertEqual([call.args[:2] for call in self.writes(calls)], [('repos/owner/repo/issues', 'POST')])
+        self.assertEqual(result['planned_main_sha'], 'e' * 40)
+        self.assertEqual(result['held'], [])
+        self.assertIn('checkpoint', result)
+
+    def test_changed_artifact_is_held_with_both_commits(self):
+        from ci_policy.budget_snapshot import key
+        held = [{'category': 'source_files', 'id': 'pkg/server.go', 'report_source': 'a' * 40, 'main': 'e' * 40}]
+        for main in [advanced('e' * 40, {'pkg/server.go'}),
+                     advanced('e' * 40, {history.POLICY}),
+                     advanced('e' * 40, records={key('source_files', 'pkg/server.go')})]:
+            with self.subTest(main=main):
+                result, calls, _ = self.invoke(main=main)
+                self.assertEqual(self.writes(calls), [])
+                self.assertEqual(result['operations'], [])
+                self.assertEqual(result['held'], held)
+                self.assertEqual(result['waiting_intake'], [{'category': 'source_files', 'id': 'pkg/server.go'}])
+                self.assertNotIn('checkpoint', result)
+
+    def test_held_artifact_already_listed_does_not_withhold_the_checkpoint(self):
+        first, _, _ = self.invoke()
+        current = issue(body=first['operations'][0]['body']['body'])
+        result, calls, _ = self.invoke(existing=[current], main=advanced('e' * 40, {'pkg/server.go'}))
+        self.assertEqual(self.writes(calls), [])
+        self.assertEqual(len(result['held']), 1)
+        self.assertEqual(result['waiting_intake'], [])
+        self.assertIn('checkpoint', result)
+
+    def test_non_ancestor_source_and_untied_artifacts_refuse_reconciliation(self):
+        def diverged(_root, _source):
+            raise ValueError('the report source is not an ancestor of main')
+        for main, snapshot in [(diverged, None), (None, report([{**row(), 'sources': ['pkg/elsewhere.go']}]))]:
+            with self.subTest(main=main), self.assertRaises(ValueError):
+                self.invoke(main=main, snapshot=snapshot)
+
+    def test_main_advance_during_throttle_holds_newly_changed_areas(self):
+        commits = iter([advanced('a' * 40), advanced('e' * 40, {'pkg/server.go'})])
+        result, calls, _ = self.invoke(main=lambda root, source: next(commits)(root, source))
+        self.assertEqual(self.writes(calls), [])
+        self.assertEqual(result['applied_operations'], 0)
+        self.assertEqual(result['held_operations'], 1)
+        self.assertEqual(result['held'], [{'category': 'source_files', 'id': 'pkg/server.go',
+                                           'report_source': 'a' * 40, 'main': 'e' * 40}])
         self.assertNotIn('checkpoint', result)
-        self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
 
     def test_applied_create_is_idempotent_on_repeated_run(self):
         first, _, _ = self.invoke()
@@ -205,7 +229,7 @@ class ReconciliationTests(unittest.TestCase):
         current = issue()
         from ci_policy.budget_snapshot import validate
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
-                patch.object(tracker, 'current_main', return_value=True), \
+                patch.object(tracker, 'MainChanges', side_effect=advanced('a' * 40)), \
                 patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
                 patch.object(tracker, 'read_snapshot', return_value=validate(report([]), 'a' * 40, 'b' * 40)), \
                 patch.object(tracker, 'checkpoint', return_value=None), \

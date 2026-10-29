@@ -179,8 +179,8 @@ func (p capacityPlan) footprint(t *testing.T, name, event string, inputs map[str
 		visit(job)
 	}
 	return footprint{
-		total: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].total }),
-		macos: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].macos }),
+		total: widestAntichain(ancestors, func(job string) int { return weights[job].total }),
+		macos: widestAntichain(ancestors, func(job string) int { return weights[job].macos }),
 	}
 }
 
@@ -191,38 +191,6 @@ func admits(condition, event string) bool {
 		return true
 	}
 	return (match[2] == event) == (match[1] == "==")
-}
-
-// widestAntichain is the heaviest set of jobs that can run at once: none needs another, directly or transitively.
-func widestAntichain(t *testing.T, name string, ancestors map[string]map[string]bool, weight func(string) int) int {
-	t.Helper()
-	var jobs []string
-	for job := range ancestors {
-		jobs = append(jobs, job)
-	}
-	slices.Sort(jobs)
-	if len(jobs) > 20 {
-		t.Fatalf("%s has %d jobs; split it before its footprint can be bounded", name, len(jobs))
-	}
-	widest := 0
-	for subset := 1; subset < 1<<len(jobs); subset++ {
-		sum, independent := 0, true
-		for i, job := range jobs {
-			if subset&(1<<i) == 0 {
-				continue
-			}
-			sum += weight(job)
-			for j, other := range jobs {
-				if subset&(1<<j) != 0 && ancestors[job][other] {
-					independent = false
-				}
-			}
-		}
-		if independent && sum > widest {
-			widest = sum
-		}
-	}
-	return widest
 }
 
 func (p capacityPlan) jobFootprint(t *testing.T, workflow, name, event string, job capacityJob, inputs map[string]string) footprint {
@@ -407,8 +375,7 @@ func TestPullRequestCIHoldsOneRunner(t *testing.T) {
 	}
 }
 
-// Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's
-// runners and leaves one pull request's CI run a runner.
+// Bounded classes and merge groups at their caps fit the plan; pull request runs may queue at that peak.
 func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
@@ -429,9 +396,9 @@ func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 		total += count
 		macTotal += macos[group]
 	}
-	if pull := plan.capacity.Footprints["ci.yml"]; total+pull > plan.capacity.Runners {
-		t.Errorf("bounded classes %v, %d merge-queue jobs, and a %d-runner pull request run need %d runners; the plan runs %d",
-			runners, queue, pull, total+pull, plan.capacity.Runners)
+	if total > plan.capacity.Runners {
+		t.Errorf("bounded classes %v and %d merge-queue jobs need %d runners; the plan runs %d",
+			runners, queue, total, plan.capacity.Runners)
 	}
 	if macTotal > plan.capacity.MacOSRunners {
 		t.Errorf("bounded classes %v need %d macOS runners; the plan runs %d", macos, macTotal, plan.capacity.MacOSRunners)

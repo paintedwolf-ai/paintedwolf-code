@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/confine/boundary_linux_live_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-performer-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the Linux confinement live suite within 950 code-bearing lines and its existing file count. The terminal and performer-loss contracts share the applied sandbox and process fixtures with the existing boundary checks. Keep those end-to-end contracts together: Ctrl-C preserves an allowed create, and ending the exact stopped performer returns EACCES for the exit-time create while recording an incomplete witness. Metadata and standard-stream contracts live in their own focused suites, and the outside-root write check asserts the typed EROFS floor result instead of shell wording.",
+  "reviewed_commit": "4b34d9f06163184516f76399f2ad6b095810cad5",
+  "ceiling": 950,
+  "boundaries": {
+    "lycaon/internal/confine/boundary_linux_live_test.go": "4376a979c00ada86828691905cc8b97900e5670d9dca07c22da5f007f7680353",
+    "lycaon/internal/confine/linuxsandbox/performer_linux_test.go": "0b21081e718e8d5fb222da8f96c4e681ef0e31b0f4c1ebc0273f89d142028653"
+  }
+}

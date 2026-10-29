@@ -34,7 +34,7 @@ func TestVerificationSandboxGrantsCoverEngineExecutables(t *testing.T) {
 			continue
 		}
 		foundAction = true
-		if step.If != "runner.os == 'Linux'" {
+		if step.If != "inputs.lookup-only != 'true' && (runner.os == 'Linux')" {
 			t.Error("AppArmor setup must run only on Linux")
 		}
 		for _, required := range []string{

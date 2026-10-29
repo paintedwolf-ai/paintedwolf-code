@@ -331,7 +331,7 @@ func loopbackConnectAuthority(c *Confinement) func(uint16) bool {
 }
 
 // ForgetEgressAction expires every verdict for one completed action.
-// Ordinary session+host decisions are retained.
+// Other actions' verdicts are retained.
 func ForgetEgressAction(sessionID, actionID string) {
 	egressBroker.mu.Lock()
 	egressBroker.forgetActionLocked(sessionID, actionID)
@@ -344,36 +344,37 @@ func (b *egressBrokerT) forgetActionLocked(sessionID, actionID string) {
 	if sessionID == "" || actionID == "" {
 		return
 	}
-	prefixes := []string{
-		"host\x00" + sessionID + "\x00" + actionID + "\x00",
-		"socks\x00" + sessionID + "\x00" + actionID + "\x00",
-		"declared\x00" + sessionID + "\x00" + actionID + "\x00",
-		"detection\x00" + sessionID + "\x00" + actionID + "\x00",
-	}
-	for key := range b.verdict.Snapshot() {
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(key, prefix) {
-				b.verdict.Delete(key)
-				break
-			}
-		}
-	}
+	b.forgetVerdictsLocked(sessionID + "\x00" + actionID + "\x00")
 }
 
 // ForgetEgressSession releases completed decisions for a session.
 func ForgetEgressSession(sessionID string) {
+	egressBroker.mu.Lock()
+	egressBroker.forgetSessionLocked(sessionID)
+	egressBroker.mu.Unlock()
+}
+
+func (b *egressBrokerT) forgetSessionLocked(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return
 	}
-	egressBroker.mu.Lock()
-	defer egressBroker.mu.Unlock()
-	for key := range egressBroker.verdict.Snapshot() {
-		if strings.HasPrefix(key, "host\x00"+sessionID+"\x00") ||
-			strings.HasPrefix(key, "socks\x00"+sessionID+"\x00") ||
-			strings.HasPrefix(key, "declared\x00"+sessionID+"\x00") ||
-			strings.HasPrefix(key, "detection\x00"+sessionID+"\x00") {
-			egressBroker.verdict.Delete(key)
+	b.forgetVerdictsLocked(sessionID + "\x00")
+}
+
+// verdictKeyKinds are the shapes egressVerdictKey writes; each continues with
+// the session and action that own the verdict.
+var verdictKeyKinds = [...]string{"endpoint", "declared", "detection"}
+
+// forgetVerdictsLocked drops every verdict of every shape whose
+// session-and-action scope starts with scope.
+func (b *egressBrokerT) forgetVerdictsLocked(scope string) {
+	for key := range b.verdict.Snapshot() {
+		for _, kind := range verdictKeyKinds {
+			if strings.HasPrefix(key, kind+"\x00"+scope) {
+				b.verdict.Delete(key)
+				break
+			}
 		}
 	}
 }
