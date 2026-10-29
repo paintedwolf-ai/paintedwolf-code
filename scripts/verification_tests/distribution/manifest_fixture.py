@@ -19,7 +19,7 @@ def generate(base, architecture):
     target = ARCHITECTURES[architecture]
     tauri = source / 'lycaon-den/src-tauri'
     elf = (FIXTURE / (architecture + '.elf')).read_bytes()
-    for name in ['painted-wolf-code', *PRODUCER.HELPERS]:
+    for name in ['painted-wolf-code', *PRODUCER.HELPERS, PRODUCER.BOOTSTRAP['name']]:
         path = (tauri / 'target' / target / 'release' / name if name == 'painted-wolf-code'
                 else tauri / 'binaries' / (name + '-' + target))
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,6 +36,8 @@ def generate(base, architecture):
     (resources / 'current').symlink_to('settings.json')
     (source / 'VERSION').write_bytes((FIXTURE / 'payload/release-version').read_bytes())
     (tauri / 'THIRD-PARTY-NOTICES.md').write_bytes((FIXTURE / 'payload/THIRD-PARTY-NOTICES.md').read_bytes())
+    launch_catalog = source / 'packaging/linux' / PRODUCER.LAUNCH_CATALOG
+    shutil.copyfile(ROOT / 'packaging/linux' / PRODUCER.LAUNCH_CATALOG, launch_catalog)
     manifest = base / 'generated.json'
     PRODUCER.generate(SimpleNamespace(root=source, target=target, version='1.2.3', output=manifest))
     install = stage / PRODUCER.INSTALL_ROOT.lstrip('/')
@@ -45,6 +47,10 @@ def generate(base, architecture):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(elf)
         path.chmod(0o755)
+    bootstrap = stage / PRODUCER.BOOTSTRAP['path'].lstrip('/')
+    bootstrap.parent.mkdir(parents=True, exist_ok=True)
+    bootstrap.write_bytes(elf)
+    bootstrap.chmod(0o755)
     for name in PRODUCER.ENTRY_POINTS:
         path = stage / 'usr/bin' / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,6 +58,7 @@ def generate(base, architecture):
         path.chmod(0o755)
     shutil.copyfile(source / 'VERSION', install / 'release-version')
     shutil.copyfile(tauri / 'THIRD-PARTY-NOTICES.md', install / 'THIRD-PARTY-NOTICES.md')
+    shutil.copyfile(launch_catalog, install / PRODUCER.LAUNCH_CATALOG)
     shutil.copyfile(manifest, install / 'manifest.json')
     for path in stage.rglob('*'):
         if path.is_dir() and not path.is_symlink():
