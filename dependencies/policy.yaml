@@ -37,4 +37,3 @@ sections:
   - decision-engine.yaml
   - document-core.yaml
   - commentlint.yaml
-  - reference-userlands.yaml

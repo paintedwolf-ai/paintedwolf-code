@@ -18,7 +18,6 @@ How Painted Wolf Code proves v1 behavior.
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
 | Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
-| Reference userlands | `lycaon/test/referenceuserland/` | Pinned GNU, BSD and busybox container images and the runner command conformance compares with ([Reference userlands](#reference-userlands)) |
 | Verification runner | `scripts/verification_tests/` (`scheduler`, `ci`, `distribution`, `evidence`) | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
 | Coordinator benchmark | `scripts/coordinator-benchmark/` | Opt-in paid runs of candidate models through the real application, graded on environment outcomes — [Coordinator benchmark](coordinator-benchmark.md) |
 
@@ -133,62 +132,6 @@ and client parsing), and the `catalogfixture`, `toolfixture`, `workflowfixture`,
 and `guidancescan` fixtures. Keep a scanner with the contract it proves and use
 shared support for cross-domain mechanics. Source assertions follow subpackages
 and import manifests, so a split file never leaves them inspecting an empty entry.
-
-## Reference userlands
-
-Command conformance compares the command language with real userlands rather
-than with expectations written by hand. `lycaon/test/referenceuserland` defines
-three Linux container images and the one runner every consumer uses:
-
-| Userland | Contents | Shell |
-|----------|----------|-------|
-| `gnu` | Debian 13 slim with GNU coreutils, sed, grep, findutils, gawk, tar, gzip, diffutils, patch and procps, util-linux's `column`, `hexdump` and `rev`, and the shared tools | bash |
-| `bsd` | The same Debian base and archive snapshot with the GNU packages that FreeBSD replaces removed, and chimerautils (FreeBSD 15.1's utilities ported to Linux) installed in their place, including FreeBSD awk, sed, grep, find, xargs, diff, patch, gzip and `/bin/sh`; `tar` is libarchive's bsdtar | bash |
-| `busybox` | The upstream busybox image (musl build) and nothing else | busybox sh |
-
-The shared tools (bash, jq, yq, git, ripgrep, file, curl, xxd, zip, unzip,
-bzip2, xz, perl's `shasum` and lsof) are the same builds in `gnu` and `bsd`, so
-a difference between those two comes from the BSD utilities. A command FreeBSD
-lacks, such as `tac`, is not found in `bsd`, as on FreeBSD.
-
-**Pinned and reproduced.** `userlands.json` pins each base image by digest,
-each package to an exact version from one Debian archive snapshot (with the
-versions the archive rebuilt for one architecture), and each source archive by
-SHA-256; the Containerfiles take nothing else and build without a context. Each
-userland also records, per architecture, the digest of its image's file tree:
-every path, type, permission, owner and content, apart from the files a
-container runtime provides. `./task userlands:build` builds the missing images
-and tags one only when its tree matches the recorded digest, so a tagged image
-is the reproduced one. After changing a pin, `./task userlands:record` rebuilds
-without any cache and records the new digest; record each architecture on a
-native host, because emulated builds are not dependable.
-
-**One fixed environment.** A batch of programs runs in one new container with
-no network. Before each program the driver resets the workspace, home and
-temporary directories, seeds the workspace with fixed times and owner, and runs
-the program as an unprivileged user with a fixed environment, the same in every
-userland; when the shell exits, whatever it left running is killed. The package
-documentation lists the environment. A result carries the status, both output
-streams as exact bytes, and the final state of each tracked path.
-
-**BSD coverage.** chimerautils ports FreeBSD's own sources, so options, error
-text and statuses are FreeBSD's. What it cannot carry over:
-
-- Regular expressions, `printf` and `strftime` formatting, and locale data come
-  from glibc, not FreeBSD's libc. For example, glibc accepts `\+`, `\?` and `\|`
-  in basic regular expressions.
-- FreeBSD's process tools (`ps`, `pgrep`, `pkill`), `bc` and `dc` are not
-  ported, so `bsd` has none of them.
-- FreeBSD features without a Linux counterpart are removed, such as `chmod -h`,
-  file flags and NFSv4 ACLs.
-- macOS ships its own, older FreeBSD-derived tools with Apple changes. A
-  spelling only macOS implements, such as `base64 -D` or `-b`, is covered by
-  golden tests rather than by this userland.
-
-`./task test:userlands` verifies the images and runs the runner's contract in
-all three: the fixed environment, the identity of each userland's tools, exact
-result bytes, isolation between programs, and repeatable results. The ordinary
-suites never need Docker; they compare with stored snapshots.
 
 ## Size budgets and changed coverage
 
@@ -911,12 +854,6 @@ pinned browser under confinement) runs on both. Platform qualification's
 `ubuntu-24.04-arm` nightly, in qualification, and in the merge queue when the
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
-
-The `reference-userlands` lane runs `test:userlands` in the merge queue for
-broad changes, which include every change to the userland definitions and their
-runner, and nightly and in qualification. Setup restores the verified images
-that main's build-caches run publishes, builds any that are missing, and
-verifies each by its recorded digest before the lane goes offline.
 
 The `nix` lane runs `nix:check` nightly. It informs and gates no merge or
 release. A lane's `arguments` reach its single target. Setup installs the pinned

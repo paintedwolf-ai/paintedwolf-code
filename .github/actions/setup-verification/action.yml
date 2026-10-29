@@ -33,9 +33,6 @@ inputs:
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
     default: 'false'
-  userlands:
-    description: Provision the verified reference userland images before a lane runs test:userlands
-    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -240,10 +237,6 @@ runs:
       if: inputs.nix == 'true'
       shell: bash
       run: ./task nix:check -- --prepare
-
-    - name: Set up reference userland images
-      if: inputs.userlands == 'true'
-      uses: ./.github/actions/setup-reference-userlands
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

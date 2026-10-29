@@ -445,12 +445,6 @@
     ],
     "release:rehearse:pacman-construction": [
       "release:rehearse:pacman-construction"
-    ],
-    "userlands:build": [
-      "userlands:build"
-    ],
-    "test:userlands": [
-      "test:userlands"
     ]
   },
   "private": [
@@ -493,8 +487,7 @@
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
-    "release:rehearse:pacman-construction": "passthrough",
-    "userlands:build": "passthrough"
+    "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -912,22 +905,6 @@
         "pacman-substrate"
       ],
       "workers": 1
-    },
-    "userlands:build": {
-      "locks": [
-        "reference-userlands"
-      ],
-      "workers": 1
-    },
-    "test:userlands": {
-      "locks": [
-        "go",
-        "reference-userlands"
-      ],
-      "workers": "shared",
-      "shared_locks": [
-        "go"
-      ]
     }
   },
   "environment": {
@@ -955,10 +932,7 @@
       "NODE_OPTIONS",
       "NODE_EXTRA_CA_CERTS",
       "SSL_CERT_FILE",
-      "SSL_CERT_DIR",
-      "DOCKER_HOST",
-      "DOCKER_CONTEXT",
-      "DOCKER_CONFIG"
+      "SSL_CERT_DIR"
     ],
     "prefixes": [
       "LC_",
@@ -1195,20 +1169,6 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
-      "platform": "linux"
-    },
-    "reference-userlands": {
-      "targets": [
-        "test:userlands"
-      ],
-      "minutes": 45,
-      "profiles": [
-        "integration",
-        "nightly",
-        "release"
-      ],
-      "suite": "behavior",
-      "setup": "verification",
       "platform": "linux"
     },
     "nix": {
