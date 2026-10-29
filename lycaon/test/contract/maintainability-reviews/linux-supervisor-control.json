@@ -5,11 +5,11 @@
   "workstream": "unix-socket-grants",
   "disposition": "retain",
   "reason": "The supervisor owns one command lifetime, target notifications and descriptor transport. A focused socketReferences owner retires retained destinations and duplicates each admitted operation under a lock; notification workers remain in the existing supervisor lifecycle. Keep decision and performed syscall together so late workers cannot reach a recycled descriptor. Freeze this reviewed shape at 473 lines; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
   "ceiling": 473,
   "boundaries": {
     "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "60da39c003d211d5be4b674fa95dcc64fc96e19b65c5c64c791bbec5a2b437f9",
-    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "f8fb3dc0f435878df4d23e020baf98d40e8c5aa57c741459cb230e23872c5c63",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "a8ed4a436b1554875bb9468d0e9312eb75296ac0045fc33de3bf2d714782936c",
     "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
     "lycaon/internal/confine/linuxsandbox/socket_reference_linux_test.go": "ed52e4f0723a36228dbe8200552b7ac94c5e8180c3a2fcf8256b575bba55fa47"
   },
