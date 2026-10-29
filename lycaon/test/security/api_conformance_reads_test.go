@@ -16,6 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -134,9 +135,23 @@ type hostEffects struct {
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
 	settle func(context.Context)
+	// projectDir is the watched fixture tree whose change pipeline must drain.
+	projectDir string
 }
 
-func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub) *hostEffects {
+// watcherQuietGrace is how long the fixture tree's change debouncer must stay
+// idle before the host counts as settled: two coalesce windows, so a write
+// that reached the platform stream late still lands in the same measurement.
+const watcherQuietGrace = 2 * repochange.DefaultDebounce
+
+// watcherQuietBound caps one quiet wait so a continuously changing tree fails
+// the read it interferes with instead of hanging the sweep.
+const watcherQuietBound = 10 * time.Second
+
+// settlePasses bounds the convergence loop against continuous producers.
+const settlePasses = 64
+
+func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub, projectDir string) *hostEffects {
 	t.Helper()
 	ctx := t.Context()
 	database, err := db.OpenReadOnly(ctx, h.DatabasePath())
@@ -150,7 +165,7 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground}
+	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
@@ -172,15 +187,27 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 	return changes, nil
 }
 
-// quiesce waits for detached work and outbox delivery, then flushes debounced events.
+// quiesce waits until the host is still: the fixture tree's change debouncer
+// is idle, detached work has drained, the outbox is empty, and a whole pass
+// committed nothing. A filesystem change travels platform stream → debounce
+// timer → watcher batch → ledger and outbox commits, and only the last legs
+// are joined by WaitForBackground, so one pass can finish while a flush is
+// still due; a second pass that moves nothing proves the pipeline is empty.
 func (e *hostEffects) quiesce(ctx context.Context) {
-	for {
+	version, _ := e.dataVersion(ctx)
+	for pass := 0; pass < settlePasses; pass++ {
+		repochange.WaitQuiet(ctx, e.projectDir, watcherQuietGrace, watcherQuietBound)
 		e.settle(ctx)
 		var pending int64
-		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err != nil || pending == 0 {
+		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		next, err := e.dataVersion(ctx)
+		if err != nil || next == version {
 			break
 		}
-		time.Sleep(time.Millisecond)
+		version = next
 	}
 	e.hub.FlushDebounced()
 }
@@ -246,6 +273,64 @@ func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events
 			writeBarrier(step)
 		case <-deadline:
 			t.Fatal("the source watcher did not report the barrier file")
+		}
+	}
+}
+
+// TestConformanceEffectsSettleLandedWritesBeforeMark proves a filesystem
+// change that landed before mark is never charged to the read that follows.
+// The watcher delivers a write through a debounce timer and a batch queue that
+// WaitForBackground does not join, so a mark taken right after the write must
+// wait for that pipeline to drain, or a slow read observes the source_changed
+// event and the ledger commits as its own side effects.
+func TestConformanceEffectsSettleLandedWritesBeforeMark(t *testing.T) {
+	h := wiring.BuildForTest(t)
+	hub := h.MemoryHub()
+	if hub == nil {
+		t.Fatal("the effects observer needs the in-memory event hub")
+	}
+	projectDir := h.ProjectDir(t, "effects")
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("effects\n"), 0o644))
+	createTestProjectHTTP(t, h.Server, projectDir)
+	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
+	ctx := t.Context()
+	published, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to source changes", err)
+	defer unsubscribe()
+	effects := openConformanceEffects(t, h, hub, projectDir)
+
+	const landed = "landed.txt"
+	for step := range 3 {
+		testutil.FailErr(t, "write the landed file",
+			os.WriteFile(filepath.Join(projectDir, landed), []byte{byte('a' + step), '\n'}, 0o644))
+		mark, err := effects.mark(ctx)
+		testutil.FailErr(t, "mark host state", err)
+		changes, err := effects.since(ctx, mark)
+		testutil.FailErr(t, "observe host state", err)
+		if len(changes) > 0 {
+			t.Fatalf("step %d: a write that landed before mark was charged to the read: %v", step, changes)
+		}
+	}
+	if !sourceChangeNamed(published, landed) {
+		t.Fatal("the watcher never reported the landed file, so the settle was not exercised")
+	}
+}
+
+// sourceChangeNamed reports whether an already delivered source_changed event
+// names path, so a passing settle proves draining rather than a blind watcher.
+func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
+	for {
+		select {
+		case envelope := <-published:
+			var changed wire.SourceChangesEvent
+			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
+				continue
+			}
+			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == path }) {
+				return true
+			}
+		default:
+			return false
 		}
 	}
 }

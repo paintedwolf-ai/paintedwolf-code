@@ -164,10 +164,9 @@ func TestLinuxPackageKeyStaysInSigningCustody(t *testing.T) {
 	if !slices.Equal(holders, []string{"build-release", "linux-pacman-repositories", "linux-repositories"}) {
 		t.Fatalf("Linux package key holders = %v", holders)
 	}
-	for _, path := range []string{".github/workflows/release-halt.yml", ".github/workflows/release-aur-delivery.yml"} {
-		if strings.Contains(contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), path), "LINUX_PACKAGE_SIGNING_KEY") {
-			t.Fatalf("%s must reuse retained signed generations, not the package key", path)
-		}
+	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
+	if strings.Contains(halt, "LINUX_PACKAGE_SIGNING_KEY") {
+		t.Fatal("release halt must reuse retained signed generations, not the package key")
 	}
 }
 
@@ -282,4 +281,74 @@ func TestReleaseHaltWithdrawsLinuxRepositories(t *testing.T) {
 	if !prepared || !applied || halt.Environment != "release-publication" {
 		t.Fatal("release halt must prepare Linux withdrawal in dry runs and apply it only when publishing")
 	}
+}
+
+// The cache key reaches only its protected publisher after the shared release gates.
+func TestNixCacheCredentialReachesOnlyItsGatedPublisher(t *testing.T) {
+	t.Parallel()
+	release := parseLane(t, ".github/workflows/release.yml")
+	caller := release.Jobs["linux-delivery"]
+	ancestors := release.ancestors("linux-delivery")
+	for _, gate := range []string{"ship-gates", "publish-immutable", "publish-linux-repositories"} {
+		if !ancestors[gate] {
+			t.Errorf("Linux delivery runs before %s", gate)
+		}
+	}
+	for _, condition := range []string{"needs.classify.outputs.publish == 'true'", "needs.classify.outputs.linux_public == 'true'",
+		"needs.publish-linux-repositories.result == 'success'"} {
+		if !strings.Contains(caller.If, condition) {
+			t.Errorf("Linux delivery must require %s", condition)
+		}
+	}
+	const credential = "secrets.NIX_CACHE_SIGNING_KEY"
+	for _, name := range sortedJobs(release) {
+		if strings.Contains(release.Jobs[name].text(), credential) {
+			t.Errorf("release.yml %s holds the cache key outside the delivery workflow", name)
+		}
+	}
+	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
+	var holders []string
+	for _, name := range sortedJobs(delivery) {
+		if strings.Contains(delivery.Jobs[name].text(), credential) {
+			holders = append(holders, name)
+		}
+	}
+	if !slices.Equal(holders, []string{"publish-nix-cache"}) {
+		t.Fatalf("cache key holders = %v, want only publish-nix-cache", holders)
+	}
+	job := delivery.Jobs["publish-nix-cache"]
+	var rechecks bool
+	for _, step := range job.Steps {
+		rechecks = rechecks || (strings.Contains(step.Run, "scripts.nix_cache.release_lane publish") && step.Env["GH_TOKEN"] == "${{ github.token }}")
+	}
+	if job.Environment != "release-publication" || !rechecks {
+		t.Error("the cache publisher must reread Qualification in release-publication")
+	}
+	for _, name := range sortedJobs(delivery) {
+		job := delivery.Jobs[name]
+		for _, credential := range storageCredentials {
+			if strings.Contains(job.text(), credential) && job.Environment != "release-publication" {
+				t.Errorf("%s writes release storage outside release-publication", name)
+			}
+		}
+	}
+	checks := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-secrets-check.yml")
+	if !strings.Contains(checks, credential) {
+		t.Error("release secrets check must validate the cache key")
+	}
+}
+
+// A halt withdraws Nix cache availability in the same protected run as the repositories.
+func TestReleaseHaltWithdrawsNixCacheAvailability(t *testing.T) {
+	t.Parallel()
+	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
+	for _, step := range halt.Steps {
+		if strings.Contains(step.Run, "scripts.nix_cache.release_lane withdraw") {
+			if !strings.Contains(step.If, "!inputs.dry_run") {
+				t.Fatal("Nix cache withdrawal must apply only outside dry runs")
+			}
+			return
+		}
+	}
+	t.Fatal("release halt must withdraw the halted release's Nix cache availability")
 }

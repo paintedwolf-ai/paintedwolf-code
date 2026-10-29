@@ -85,6 +85,8 @@ func TestBundleScriptPinsDeploymentTarget(t *testing.T) {
 	for _, want := range []string{
 		"export MACOSX_DEPLOYMENT_TARGET=",
 		"export CGO_ENABLED=1",
+		"export CGO_ENABLED=0",
+		"assert_static()",
 		"BUILD_ARGS=(-trimpath",
 	} {
 		if !strings.Contains(stageScript, want) {

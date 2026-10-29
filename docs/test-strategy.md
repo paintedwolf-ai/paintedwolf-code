@@ -182,13 +182,27 @@ metric and artifact. Module workstream issues keep the individual findings and s
 evidence together so one architectural review can address related measurements.
 
 [`maintainability-issues.yml`](../.github/workflows/maintainability-issues.yml)
-reconciles cleanup issues after a completed nightly observation on main. It checks
-that the commit is the current main tip and is associated with a PR merged into
-this repository's main branch. Only scheduled and manual nightly observations
-from this repository are eligible. Successful and failed runs can retain the
-limits receipt needed to validate the complete inventory. Failure in another
-lane does not hide maintainability debt already merged. A run whose source is
-no longer current main defers reconciliation until a current observation.
+reconciles cleanup issues from the report of a completed nightly observation on
+main. The report's source commit must be associated with a PR merged into this
+repository's main branch. Only scheduled and manual nightly observations from
+this repository are eligible. Successful and failed runs can retain the limits
+receipt needed to validate the complete inventory. Failure in another lane does
+not hide maintainability debt already merged.
+
+Issues come from the nightly report for artifacts unchanged on main. Main
+usually advances while the nightly runs, so each artifact is compared
+separately. Its measurement inputs are its measured paths (the file itself, or
+the immediate entries of a measured directory or a Go type's package
+directory), its review and exception records, and the threshold policy. An
+artifact whose inputs are identical at the report source and current main takes
+its tracking from the report. A changed artifact is held. The report never
+admits it; an open area issue that already lists it keeps it, with the
+report's measurement at the linked source commit. An area whose held artifact
+would leave or reopen it is not written. The plan's `held` list records each
+held artifact's category, ID, report source, and main commit, and
+`waiting_intake` lists admissions a hold withheld. A report source that is not
+an ancestor of main, and an artifact whose reported sources lie outside its
+measured paths, refuse reconciliation.
 
 The maintainability report contains a complete inventory of every artifact above
 `warn`, including untouched artifacts and artifacts admitted by an exception.
@@ -243,19 +257,20 @@ issue intake, stale closure, and locking. Human copies are never mutated.
 
 The workflow serializes reconciliation across runs. It reads one bounded current-
 attempt limits receipt, validates the entire snapshot and plan before writing,
-and checks main before each mutation. A concurrently edited issue stops the run
+and compares each area's artifacts with main again before its mutation; an area
+with a newly changed artifact is held. A concurrently edited issue stops the run
 rather than overwriting the edit. Repeated observations produce no writes. A later
 complete snapshot converges a partially applied run. Checkpoints are retained for
 90 days; expiration or an unavailable current receipt requires explicit replay/backfill.
 
 To preview or recover, dispatch **Maintainability cleanup** with `run_id` set to
-a completed nightly run for the current main tip. `dry_run` defaults to
+a completed nightly run on main. `dry_run` defaults to
 true. `backfill` defaults to false; setting it true includes untouched baseline
 debt and establishes a fresh checkpoint after a successful apply. Review the
 retained `maintainability-issues.json` plan and category counts before applying a
 backfill. Each apply creates at most 25 new area issues, spaces mutations one second
-apart, and records applied/deferred counts. Deferred intake does not advance the
-checkpoint; later runs or another explicit backfill dispatch continue it. As details grow, module summaries rank effective-cap breaches and renewed reviews
+apart, and records applied/deferred counts. Deferred and withheld intake do not
+advance the checkpoint; later runs or another explicit backfill dispatch continue it. As details grow, module summaries rank effective-cap breaches and renewed reviews
 first. Summary and detail sections have separate byte bounds; overflow links to the
 complete report without creating more issues. The 60,000-byte issue bound still fails closed before
 any write if even the summary and bounded inventory cannot fit. The workflow never runs downloaded code or changes admission limits.
@@ -1125,7 +1140,10 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 [`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
-more declares its own ceiling with a tracking issue.
+more declares its own ceiling with a tracking issue. A race build gets
+`race_scale` times its ceiling, the way its timeouts are scaled: the detector's
+shadow memory and instrumented heap are overhead the ordinary ceiling does not
+describe, and the largest contract packages reach 1.1 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 ceiling, so the collector reclaims garbage before the ceiling instead of letting
 the heap reach twice its live size, and the guard measures retained memory
@@ -1245,6 +1263,11 @@ executable under a publication lock. Hosted lanes restore the bounded document
 compiler family; only the main warmer publishes it. Source changes invalidate
 workspace compilation without discarding dependency builds.
 
+The Go lint targets validate every `.yml` and `.yaml` file in `.github/workflows/`
+with pinned actionlint, including dispatch-only workflows. Workflow validation
+checks GitHub Actions structure and expression contexts. Verification setup also
+prepares actionlint for the runner suite's offline workflow regression fixtures.
+
 Go analysis lanes provision only the pinned Go module graphs and their selected
 analyzers. They do not restore native compiler caches, install frontend packages,
 or download runtime engines. The lane catalog rejects runtime checks assigned
@@ -1300,10 +1323,12 @@ release class's existing two-runner footprint without entering maintenance.
 Weekly, manual, and ready packaging pull requests into `main` share the
 maintenance class's single runner through `linux-candidate-requests.yml`. Its
 path filter includes packaging, native setup, release builders, and toolchain
-inputs. A pull request into another branch builds nothing: its head cannot land,
-and each push would hold the shared executor for a full package build while the
-health report waits behind it. Queue batching serializes independently so maintenance
-cannot replace its pending reconciliation. Pending standalone
+inputs. Queue entry compares these inputs between the retained candidate source
+and the current merge source; changed or uncertain inputs build again. The
+read-only selection job and native builds run in turn. Pull requests into
+another branch build only by explicit dispatch. Queue batching serializes
+independently so maintenance cannot replace its pending reconciliation. Pending
+standalone
 requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 
