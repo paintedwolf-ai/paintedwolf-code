@@ -114,14 +114,22 @@ func checkPrivateMountPipeline(directory, uidText, gidText string) error {
 		return err
 	}
 	var retired []unix.PollFd
+	defer func() {
+		for _, pin := range retired {
+			_ = unix.Close(int(pin.Fd))
+		}
+	}()
 	for _, role := range view.pidfds {
 		pin, err := unix.Dup(int(role.Fd()))
 		if err != nil {
 			return err
 		}
-		defer func() { _ = unix.Close(pin) }()
-		// #nosec G115 -- duplicated descriptors are bounded by the process limit.
-		retired = append(retired, unix.PollFd{Fd: int32(pin), Events: unix.POLLIN})
+		pollFD, err := guardianPollDescriptor(uintptr(pin))
+		if err != nil {
+			_ = unix.Close(pin)
+			return err
+		}
+		retired = append(retired, unix.PollFd{Fd: pollFD, Events: unix.POLLIN})
 	}
 	view.abort()
 	settled = true

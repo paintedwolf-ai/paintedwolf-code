@@ -131,7 +131,11 @@ func verifyGuardianPIDFD(fd int, expected int) error {
 			return errors.New("registered pidfd differs from selected protected role")
 		}
 		if pid == -1 {
-			polls := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+			pollFD, err := guardianPollDescriptor(uintptr(fd))
+			if err != nil {
+				return err
+			}
+			polls := []unix.PollFd{{Fd: pollFD, Events: unix.POLLIN}}
 			if _, err := unix.Poll(polls, 0); err != nil || polls[0].Revents&unix.POLLIN == 0 || polls[0].Revents&(unix.POLLERR|unix.POLLNVAL) != 0 {
 				return errors.New("unbound registered pidfd is not exited")
 			}

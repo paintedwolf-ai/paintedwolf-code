@@ -70,7 +70,7 @@ func checkGuardianExecFailure(directory, probePath, uidText, gidText, home, dige
 		}
 		var status unix.WaitStatus
 		if pid, err := unix.Wait4(-1, &status, unix.WNOHANG, nil); pid != -1 || !errors.Is(err, unix.ECHILD) {
-			return fmt.Errorf("bootstrap left an owned adopted child after %s: pid=%d status=%d err=%v", mode, pid, status, err)
+			return fmt.Errorf("bootstrap left an owned adopted child after %s: pid=%d status=%d err=%w", mode, pid, status, err)
 		}
 		if err := lockFree(filepath.Join(directory, "locks", digest+".lock")); err != nil {
 			return fmt.Errorf("generation custody survived settled %s: %w", mode, err)

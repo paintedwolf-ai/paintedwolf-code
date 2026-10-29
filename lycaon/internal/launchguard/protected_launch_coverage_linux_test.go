@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -152,8 +153,8 @@ func TestProtectedLaunchCoverageOverlayReachesExecutableCalls(t *testing.T) {
 		"-cover", "-covermode=atomic", "-coverpkg=github.com/lycaon/lycaon/internal/launchguard,github.com/lycaon/lycaon/cmd/pw-launch",
 		"-overlay="+overlay, launchCoverageTool(t, overlay))
 	output, err := exec.Command(binary).CombinedOutput()
-	status, ok := err.(*exec.ExitError)
-	if !ok || status.ExitCode() != 23 || len(output) != 0 {
+	var status *exec.ExitError
+	if !errors.As(err, &status) || status.ExitCode() != 23 || len(output) != 0 {
 		t.Fatalf("covered real executable did not use overlay: error=%v output=%q", err, output)
 	}
 	metadata, err := filepath.Glob(filepath.Join(directory, "coverage", "covmeta.*"))

@@ -57,6 +57,7 @@ func RunGuardian() (int, error) {
 		return 1, err
 	}
 	var subreaper int32
+	// #nosec G103 -- PR_GET_CHILD_SUBREAPER writes one kernel int into this live int32; x/sys has no typed pointer-output owner.
 	if err := unix.Prctl(unix.PR_GET_CHILD_SUBREAPER, uintptr(unsafe.Pointer(&subreaper)), 0, 0, 0); err != nil || subreaper != 1 {
 		return 1, errors.New("guardian is not the protected lineage subreaper")
 	}
@@ -176,6 +177,10 @@ func (state *protectedGuardian) run() int {
 }
 
 func (state *protectedGuardian) admit() error {
+	controlPoll, err := guardianPollDescriptor(state.control.Fd())
+	if err != nil {
+		return err
+	}
 	if !state.registeredAlive() {
 		return errors.New("protected role exited before guardian admission")
 	}
@@ -194,7 +199,7 @@ func (state *protectedGuardian) admit() error {
 		if remaining <= 0 {
 			return errors.New("guardian admission deadline exceeded")
 		}
-		polls := []unix.PollFd{{Fd: int32(state.control.Fd()), Events: unix.POLLIN}}
+		polls := []unix.PollFd{{Fd: controlPoll, Events: unix.POLLIN}}
 		_, err := unix.Poll(polls, int((remaining+time.Millisecond-1)/time.Millisecond))
 		if errors.Is(err, unix.EINTR) {
 			continue

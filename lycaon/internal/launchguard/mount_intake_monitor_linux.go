@@ -220,6 +220,8 @@ func MountIntakeExitStatus(err error) int {
 				return 100 + int(topology.predicate)
 			case intakeFailureReconcile:
 				return 110 + int(topology.predicate)
+			case intakeFailurePoll, intakeFailureControl, intakeFailureMountInfo, intakeFailureHeartbeat, intakeFailureWatchdog:
+				// Other phases retain their typed fallback status below.
 			}
 		}
 		var reconcile *intakeReconcileFailure

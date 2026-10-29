@@ -5,6 +5,7 @@ package launchguard
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -78,6 +79,9 @@ func selectStructuralObject(name string, magic int64, selected map[int]bool) err
 	if err != nil {
 		return err
 	}
+	if id == 0 || id > math.MaxInt {
+		return errors.New("structural mount identity exceeds native width")
+	}
 	selected[int(id)] = true
 	return nil
 }
@@ -95,6 +99,9 @@ func structuralNullDevice(selected map[int]bool) error {
 	id, err := mountID(fd)
 	if err != nil {
 		return err
+	}
+	if id == 0 || id > math.MaxInt {
+		return errors.New("structural mount identity exceeds native width")
 	}
 	selected[int(id)] = true
 	return nil

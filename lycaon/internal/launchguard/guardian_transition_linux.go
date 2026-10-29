@@ -66,7 +66,7 @@ func sealGuardianTransition(roles [guardianTransitionRoles]*os.File, caller Iden
 	if _, err = file.Write(raw); err != nil {
 		return nil, err
 	}
-	if err = file.Chmod(0400); err != nil {
+	if err := file.Chmod(0400); err != nil {
 		return nil, err
 	}
 	_, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, entrySeals)

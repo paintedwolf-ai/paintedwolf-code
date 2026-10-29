@@ -155,11 +155,11 @@ func observeTimeoutMountNamespace(name string, namespace *os.File, target, lateF
 	row.Name, row.BeginNS = name, lifecycleMonotonicNS()
 	defer func() { row.EndNS = lifecycleMonotonicNS() }()
 	var ns unix.Stat_t
-	if err = unix.Fstat(int(namespace.Fd()), &ns); err != nil {
+	if err := unix.Fstat(int(namespace.Fd()), &ns); err != nil {
 		return row, err
 	}
 	row.NamespaceDevice, row.NamespaceInode = uint64(ns.Dev), ns.Ino
-	if err = unix.Setns(int(namespace.Fd()), unix.CLONE_NEWNS); err != nil {
+	if err := unix.Setns(int(namespace.Fd()), unix.CLONE_NEWNS); err != nil {
 		return row, err
 	}
 	_, entries, err := readCurrentMountTopology()
@@ -177,7 +177,7 @@ func observeTimeoutMountNamespace(name string, namespace *os.File, target, lateF
 			return row, err
 		}
 		var fs unix.Statfs_t
-		if err = unix.Fstatfs(fd, &fs); err != nil {
+		if err := unix.Fstatfs(fd, &fs); err != nil {
 			return row, err
 		}
 		row.Flags = fs.Flags

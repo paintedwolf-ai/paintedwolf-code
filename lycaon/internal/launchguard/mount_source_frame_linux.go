@@ -70,7 +70,7 @@ func sealSourceTopology(raw []byte) (_ *os.File, err error) {
 	if _, err = file.Write(encoded); err != nil {
 		return nil, err
 	}
-	if err = file.Chmod(0o400); err != nil {
+	if err := file.Chmod(0o400); err != nil {
 		return nil, err
 	}
 	_, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, entrySeals)

@@ -129,7 +129,7 @@ func (guardianDiagnosticStderr) Write(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	if err := unix.Fstat(fd, &opened); err != nil {
 		return 0, err
 	}

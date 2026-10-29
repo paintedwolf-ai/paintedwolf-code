@@ -73,7 +73,7 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 				}
 			case <-time.After(2 * time.Second):
 				_ = server.Process.Kill()
-				_ = <-done
+				<-done
 				t.Error("own FUSE server did not settle after unmount")
 			}
 		})

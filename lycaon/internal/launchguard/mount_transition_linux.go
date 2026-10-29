@@ -54,7 +54,7 @@ func sealMountTransition(roles [7]*os.File) (_ *os.File, err error) {
 	if _, err = frame.Write(raw); err != nil {
 		return nil, err
 	}
-	if err = frame.Chmod(0o400); err != nil {
+	if err := frame.Chmod(0o400); err != nil {
 		return nil, err
 	}
 	_, err = unix.FcntlInt(frame.Fd(), unix.F_ADD_SEALS, entrySeals)

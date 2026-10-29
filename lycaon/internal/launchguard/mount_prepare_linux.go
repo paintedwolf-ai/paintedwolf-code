@@ -83,10 +83,10 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 			view.close()
 		}
 	}()
-	if err = unix.Unshare(unix.CLONE_NEWNS); err != nil {
+	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
 		return nil, err
 	}
-	if err = unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
 		return nil, err
 	}
 	stagingRaw, staging, err := readCurrentMountTopology()
@@ -114,17 +114,17 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 		return nil, err
 	}
 	defer opener.close()
-	if err = view.prepareInitialLeases(opener, staging, structural); err != nil {
+	if err := view.prepareInitialLeases(opener, staging, structural); err != nil {
 		return nil, err
 	}
 	view.guardian, err = opener.guardianNamespace(origin)
 	if err != nil {
 		return nil, err
 	}
-	if err = opener.finish(); err != nil {
+	if err := opener.finish(); err != nil {
 		return nil, err
 	}
-	if err = projectModuleCodeRoots(code); err != nil {
+	if err := projectModuleCodeRoots(code); err != nil {
 		return nil, err
 	}
 	// Preparation prunes children first; attachment restores parents first.

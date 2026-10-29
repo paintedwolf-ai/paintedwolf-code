@@ -37,7 +37,7 @@ func TestMountLateNestedSubtreeRefreshPreservesSafeVisibility(t *testing.T) {
 // This fixture is root only inside its own private source namespace. The real
 // setuid bootstrap starts with the original caller's complete credentials.
 func checkLateNestedMounts(directory string) (err error) {
-	if err = enterOwnedPrivateTopologyNamespace(); err != nil {
+	if err := enterOwnedPrivateTopologyNamespace(); err != nil {
 		return err
 	}
 	uid, uidErr := strconv.ParseUint(os.Getenv(fixtureUIDEnv), 10, 32)
@@ -47,7 +47,7 @@ func checkLateNestedMounts(directory string) (err error) {
 		return errors.New("invalid captured nested fixture caller")
 	}
 	root := filepath.Join(directory, "late-nested")
-	if err = os.Mkdir(root, 0755); err != nil {
+	if err := os.Mkdir(root, 0755); err != nil {
 		return err
 	}
 	cleanupAllowed := true
@@ -63,7 +63,7 @@ func checkLateNestedMounts(directory string) (err error) {
 			err = errors.Join(err, fmt.Errorf("owned nested cleanup incomplete; retained root %s", root))
 		}
 	}()
-	if err = shareOwnedNestedRoot(root); err != nil {
+	if err := shareOwnedNestedRoot(root); err != nil {
 		return err
 	}
 	if underlay, err = prepareNestedMountFixture(root, int(uid), int(gid)); err != nil {
@@ -121,7 +121,7 @@ func checkLateNestedMounts(directory string) (err error) {
 		"PW_FIXTURE_DESKTOP_START": strconv.FormatUint(launch.facts.ProcessStarts[launch.facts.PID], 10),
 		"PW_FIXTURE_BOOTSTRAP_PID": strconv.Itoa(launch.cmd.Process.Pid),
 	} {
-		if err = os.Setenv(key, value); err != nil {
+		if err := os.Setenv(key, value); err != nil {
 			return err
 		}
 	}
@@ -129,7 +129,7 @@ func checkLateNestedMounts(directory string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = nestedRolesAlive(pins); err != nil {
+	if err := nestedRolesAlive(pins); err != nil {
 		return err
 	}
 	desktopBefore, err := lifecycleBirth(launch.facts.PID)
@@ -153,12 +153,24 @@ func checkLateNestedMounts(directory string) (err error) {
 		return err
 	}
 	defer sourceNS.Close()
+	ownedUnderlay := underlay
+	underlay = -1
+	return checkNestedTopologyChanges(directory, root, ownedUnderlay, pins, sourceNS, desktopNS, deadline)
+}
+
+// This phase owns its held source root while exercising live arrival, replacement and removal.
+func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixtureLifecyclePins, sourceNS, desktopNS *os.File, deadline time.Time) (err error) {
+	defer func() {
+		if underlay >= 0 {
+			err = errors.Join(err, unix.Close(underlay))
+		}
+	}()
 	target := filepath.Join(root, "target")
-	if err = nestedExpectUnderlying(sourceNS, desktopNS, target); err != nil {
+	if err := nestedExpectUnderlying(sourceNS, desktopNS, target); err != nil {
 		return err
 	}
 	began := lifecycleMonotonicNS()
-	if err = unix.Mount(filepath.Join(root, "source"), target, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
+	if err := unix.Mount(filepath.Join(root, "source"), target, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
 		return err
 	}
 	probe, err := probeNestedSingleTree(directory, pins)
@@ -198,7 +210,7 @@ func checkLateNestedMounts(directory string) (err error) {
 		}
 	}
 	began = lifecycleMonotonicNS()
-	if err = mountNestedPayload(filepath.Join(target, "added"), "added"); err != nil {
+	if err := mountNestedPayload(filepath.Join(target, "added"), "added"); err != nil {
 		return err
 	}
 	added, err := awaitNestedView(sourceNS, desktopNS, pins, target, 3, first, group, began, deadline)
@@ -219,7 +231,7 @@ func checkLateNestedMounts(directory string) (err error) {
 		}
 	}
 	began = lifecycleMonotonicNS()
-	if err = unix.Unmount(filepath.Join(target, "added"), 0); err != nil {
+	if err := unix.Unmount(filepath.Join(target, "added"), 0); err != nil {
 		return err
 	}
 	if _, err = awaitNestedView(sourceNS, desktopNS, pins, target, 2, added, group, began, deadline); err != nil {
@@ -232,14 +244,14 @@ func checkLateNestedMounts(directory string) (err error) {
 			return closeErr
 		}
 	}
-	if err = checkNestedHiddenAndSymlink(sourceNS, desktopNS, pins, root, hiddenCover); err != nil {
+	if err := checkNestedHiddenAndSymlink(sourceNS, desktopNS, pins, root, hiddenCover); err != nil {
 		return err
 	}
 	// The recursive publication owns the visible child separately in this namespace.
-	if err = unix.Unmount(filepath.Join(target, "child"), 0); err != nil {
+	if err := unix.Unmount(filepath.Join(target, "child"), 0); err != nil {
 		return err
 	}
-	if err = unix.Unmount(target, 0); err != nil {
+	if err := unix.Unmount(target, 0); err != nil {
 		return err
 	}
 	for time.Now().Before(deadline) {
@@ -336,7 +348,7 @@ func probeNestedSingleTree(directory string, pins *fixtureLifecyclePins) (proof 
 	if err != nil {
 		return proof, fmt.Errorf("actual SINGLE probe: %w: %s", err, output)
 	}
-	if err = json.Unmarshal(output, &proof); err != nil {
+	if err := json.Unmarshal(output, &proof); err != nil {
 		return proof, err
 	}
 	after, err = lifecycleBirth(intake.PID)

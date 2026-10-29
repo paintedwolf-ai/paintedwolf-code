@@ -126,7 +126,7 @@ func receiveMountTransfer(socket int) (message mountTransfer, tree int, err erro
 		return message, -1, errors.New("invalid mount transfer frame")
 	}
 	message = mountTransfer{kind: packet[1], sequence: binary.LittleEndian.Uint64(packet[4:]), id: binary.LittleEndian.Uint64(packet[12:]), path: string(packet[mountTransferHeader:n])}
-	if err = message.validate(); err != nil {
+	if err := message.validate(); err != nil {
 		return message, -1, err
 	}
 	wantFD := 0

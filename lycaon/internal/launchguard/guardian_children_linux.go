@@ -107,7 +107,7 @@ func terminateOwnedLaunchChild(proc *os.File, pid int, allowedUIDs []uint32) err
 				}
 				if index == 0 {
 					selected = uint32(uid)
-				} else if uint32(uid) != selected {
+				} else if uid != uint64(selected) {
 					return errors.New("owned setup child has mixed kernel identities")
 				}
 			}

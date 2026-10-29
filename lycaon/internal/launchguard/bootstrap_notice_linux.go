@@ -26,12 +26,16 @@ func startBootstrapNotice(image *os.File, caller Identity) (_ int, _ *os.File, e
 	if err := rootRegular(image); err != nil {
 		return 0, nil, err
 	}
-	raw := make([]byte, 24+4*len(caller.Groups))
+	groupCount := len(caller.Groups)
+	if groupCount > 65536 {
+		return 0, nil, errors.New("too many setup diagnostic groups")
+	}
+	raw := make([]byte, 24+4*groupCount)
 	copy(raw, "PWNOTIC1")
 	binary.LittleEndian.PutUint32(raw[8:], 1)
 	binary.LittleEndian.PutUint32(raw[12:], caller.UID)
 	binary.LittleEndian.PutUint32(raw[16:], caller.GID)
-	binary.LittleEndian.PutUint32(raw[20:], uint32(len(caller.Groups)))
+	binary.LittleEndian.PutUint32(raw[20:], uint32(groupCount))
 	for index, group := range caller.Groups {
 		if group == ^uint32(0) {
 			return 0, nil, errors.New("invalid setup diagnostic group")

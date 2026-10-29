@@ -68,9 +68,10 @@ func TestMountSourceTransferIsBoundedBySealedSelectionAndSequence(t *testing.T) 
 				_ = unix.Close(pair[1])
 			}()
 			request := mountTransfer{kind: mountTransferOpen, sequence: 1, id: uint64(root.id), path: root.mountPoint}
-			if mode == "unselected" {
+			switch mode {
+			case "unselected":
 				request.id++
-			} else if mode == "out of order" {
+			case "out of order":
 				request.sequence++
 			}
 			testutil.FailErr(t, "request selected source", sendMountTransfer(pair[0], request, -1))

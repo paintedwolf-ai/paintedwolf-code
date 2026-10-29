@@ -92,7 +92,7 @@ func guardianThreadProfile(raw []byte, caller Identity) error {
 			}
 			for _, field := range fields {
 				actual, err := strconv.ParseUint(field, 10, 32)
-				if err != nil || uint32(actual) != expected {
+				if err != nil || actual != uint64(expected) {
 					return errors.New("guardian kept another thread identity")
 				}
 			}

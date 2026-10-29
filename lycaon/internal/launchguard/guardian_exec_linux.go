@@ -88,5 +88,6 @@ func (slots *guardianExecSlots) execute(roles [guardianTransitionRoles]*os.File,
 	if err := unix.Dup3(int(image.Fd()), guardianIncomingImage, 0); err != nil {
 		return err
 	}
+	// #nosec G204 -- fixed fd86 holds the authenticated root-controlled transition image; argv is fixed and environment empty, with no PATH lookup.
 	return syscall.Exec("/proc/self/fd/"+strconv.Itoa(guardianIncomingImage), []string{"pw-mount-intake-transition"}, []string{})
 }

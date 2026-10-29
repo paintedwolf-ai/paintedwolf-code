@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -293,8 +294,8 @@ func retainGTKVolumeComponent(t *testing.T, desktop, module string) {
 	}
 	root = filepath.Join(root, "manual-components")
 	testutil.FailErr(t, "prepare component artifact owner", os.MkdirAll(root, 0700))
-	directory, err := os.MkdirTemp(root, "gtk-volume-")
-	testutil.FailErr(t, "create distinct retained component", err)
+	directory := filepath.Join(root, "gtk-volume-"+rand.Text())
+	testutil.FailErr(t, "create distinct retained component", os.Mkdir(directory, 0700))
 	files := map[string]string{}
 	for name, source := range map[string]string{"gtk-volume-desktop": desktop, "module.so": module} {
 		raw, err := os.ReadFile(source)

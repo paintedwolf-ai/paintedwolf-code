@@ -268,7 +268,7 @@ func nestedDesktopSample(source, desktop *os.File, target string) (state nestedV
 	if err != nil {
 		return state, false, err
 	}
-	if err = unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
+	if err := unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
 		return state, false, err
 	}
 	state, changed, err = observeNestedView(target)
@@ -349,14 +349,14 @@ func nestedExpectUnderlying(source, desktop *os.File, target string) error {
 }
 
 func checkNestedHiddenAndSymlink(source, desktop *os.File, pins *fixtureLifecyclePins, root string, expected int) (err error) {
-	if err = nestedRolesAlive(pins); err != nil {
+	if err := nestedRolesAlive(pins); err != nil {
 		return err
 	}
 	_, before, err := readCurrentMountTopology()
 	if err != nil {
 		return err
 	}
-	if err = unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
+	if err := unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, unix.Setns(int(source.Fd()), unix.CLONE_NEWNS)) }()
@@ -378,7 +378,7 @@ func checkNestedHiddenAndSymlink(source, desktop *os.File, pins *fixtureLifecycl
 	if observeErr != nil || changed || redirected.members != 0 || len(redirected.payloads) != 0 {
 		return errors.Join(observeErr, errors.New("symlink control acquired an alternate mount or payload"))
 	}
-	if err = unix.Setns(int(source.Fd()), unix.CLONE_NEWNS); err != nil {
+	if err := unix.Setns(int(source.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
 	}
 	_, after, err := readCurrentMountTopology()
@@ -392,14 +392,14 @@ func checkNestedHiddenAndSymlink(source, desktop *os.File, pins *fixtureLifecycl
 // replacement. It is closed before source unmount and is not leak/latency evidence.
 func pinNestedViewRoot(source, desktop *os.File, pins *fixtureLifecyclePins, target string, expected int) (fd int, err error) {
 	fd = -1
-	if err = nestedRolesAlive(pins); err != nil {
+	if err := nestedRolesAlive(pins); err != nil {
 		return fd, err
 	}
 	birth, err := lifecycleBirth(pins.roles[0].PID)
 	if err != nil || birth.Start != pins.roles[0].Start || birth.Parent != pins.roles[0].Parent {
 		return -1, errors.New("desktop birth differs before view pin")
 	}
-	if err = unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
+	if err := unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
 		return -1, err
 	}
 	defer func() {
@@ -477,7 +477,7 @@ func publishNestedHiddenArrival(source, desktop *os.File, pins *fixtureLifecycle
 	}
 	defer func() { err = errors.Join(err, unix.Close(fd)) }()
 	var object unix.Stat_t
-	if err = unix.Fstat(fd, &object); err != nil {
+	if err := unix.Fstat(fd, &object); err != nil {
 		return 0, err
 	}
 	if object.Uid != 0 || object.Mode&unix.S_IFMT != unix.S_IFDIR {

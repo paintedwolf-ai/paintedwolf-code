@@ -81,7 +81,7 @@ func TestGuardianDiagnosticTransportRefusesForeignNoncanonicalAndAuthorityPacket
 		pair := guardianMetadataPair(t, credentials)
 		pipe := make([]int, 2)
 		testutil.FailErr(t, "create injected diagnostic descriptor", unix.Pipe2(pipe, unix.O_CLOEXEC|unix.O_NONBLOCK))
-		defer unix.Close(pipe[0])
+		t.Cleanup(func() { _ = unix.Close(pipe[0]) })
 		_, err := unix.SendmsgN(pair[0], append([]byte(guardianDiagnosticMagic), raw...), unix.UnixRights(pipe[1]), nil, unix.MSG_NOSIGNAL)
 		_ = unix.Close(pipe[1])
 		testutil.FailErr(t, "inject descriptor into diagnostic namespace", err)

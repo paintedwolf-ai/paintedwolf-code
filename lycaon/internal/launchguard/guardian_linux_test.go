@@ -5,6 +5,7 @@ package launchguard
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"os/exec"
 	"testing"
 
@@ -106,4 +107,25 @@ func TestGuardianRealLaunchWithStoreInsideLogicalInstallRoot(t *testing.T) {
 		t.Fatalf("native nested generation launch: %v\n%s", err, output)
 	}
 	testutil.FailErr(t, "nested generation launch fully settled", sudoFixture(t, "lock-free", fixture.dir, fixtureHash+"="+fixture.digest))
+}
+
+func TestGuardianPollDescriptorPreservesABIIdentity(t *testing.T) {
+	for _, fd := range []uintptr{0, 15, math.MaxInt32} {
+		actual, err := guardianPollDescriptor(fd)
+		testutil.FailErr(t, "encode exact poll descriptor", err)
+		if uintptr(actual) != fd {
+			t.Fatalf("poll descriptor changed: %d -> %d", fd, actual)
+		}
+	}
+	for _, fd := range []uintptr{math.MaxInt32 + 1, ^uintptr(0)} {
+		if actual, err := guardianPollDescriptor(fd); err == nil || actual != -1 {
+			t.Fatalf("unrepresentable descriptor admitted: %d -> %d, %v", fd, actual, err)
+		}
+	}
+}
+
+func TestMountDescriptorIdentityRejectsNegativeFD(t *testing.T) {
+	if _, _, err := mountDescriptorIdentity(-1); err == nil {
+		t.Fatal("negative descriptor selected proc fdinfo")
+	}
 }

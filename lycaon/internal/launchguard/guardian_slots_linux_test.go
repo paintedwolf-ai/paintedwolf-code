@@ -115,7 +115,7 @@ func runGuardianSlotFixture(mode string) error {
 			}
 			image := os.NewFile(uintptr(fd), "invalid-executable")
 			defer image.Close()
-			if _, err := image.Write([]byte("not an executable\n")); err != nil {
+			if _, err := image.WriteString("not an executable\n"); err != nil {
 				return err
 			}
 			if err := image.Chmod(0500); err != nil {

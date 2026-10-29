@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 
 	"golang.org/x/sys/unix"
 )
@@ -53,7 +54,7 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 	raw := make([]byte, limit+1)
 	control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
 	for {
-		n, oobn, flags, _, err := unix.Recvmsg(fd, raw[:], control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
+		n, oobn, flags, _, err := unix.Recvmsg(fd, raw, control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
@@ -107,4 +108,12 @@ func decodeGuardianNotice(raw []byte) (guardianNotice, error) {
 		return guardianNotice{}, errors.New("invalid guardian handoff status")
 	}
 	return guardianNotice{phase: phase, status: status}, nil
+}
+
+// guardianPollDescriptor preserves descriptor identity across the kernel poll ABI.
+func guardianPollDescriptor(fd uintptr) (int32, error) {
+	if fd > math.MaxInt32 {
+		return -1, errors.New("guardian descriptor exceeds poll ABI width")
+	}
+	return int32(fd), nil
 }

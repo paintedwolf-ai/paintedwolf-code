@@ -50,10 +50,16 @@ func encodeModuleViewPlan(plan moduleViewPlan) ([]byte, error) {
 	cursor += copy(raw[cursor:], plan.source)
 	cursor += copy(raw[cursor:], plan.staging)
 	for _, id := range plan.structural {
+		if id <= 0 {
+			return nil, errors.New("invalid structural mount identity")
+		}
 		binary.LittleEndian.PutUint64(raw[cursor:], uint64(id))
 		cursor += 8
 	}
 	for _, item := range plan.initial {
+		if item.mountID <= 0 {
+			return nil, errors.New("invalid initial mount identity")
+		}
 		binary.LittleEndian.PutUint64(raw[cursor:], item.lease)
 		binary.LittleEndian.PutUint64(raw[cursor+8:], uint64(item.mountID))
 		binary.LittleEndian.PutUint64(raw[cursor+16:], item.inode)

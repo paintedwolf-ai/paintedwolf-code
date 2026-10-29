@@ -151,6 +151,13 @@ func checkGuardianCTransition(directory, probePath, uidText, gidText string) err
 	f.keep(gateW)
 	var pids [3]int
 	var pins [3]*os.File
+	var commands []*exec.Cmd
+	defer func() {
+		for _, command := range commands {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
 	for index := range pids {
 		child := exec.Command("/bin/sleep", "30")
 		fd := -1
@@ -158,7 +165,7 @@ func checkGuardianCTransition(directory, probePath, uidText, gidText string) err
 		if err := child.Start(); err != nil {
 			return err
 		}
-		defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
+		commands = append(commands, child)
 		pids[index] = child.Process.Pid
 		pins[index] = f.keep(os.NewFile(uintptr(fd), "C-owned-child-pidfd"))
 	}
@@ -395,7 +402,7 @@ func (f *guardianCFixture) run(name string, alternate *os.File) error {
 		waited = true
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) || exit.ExitCode() != 125 || output.Len() != 0 {
-			return fmt.Errorf("C refusal status=%v output=%q", err, output.String())
+			return fmt.Errorf("C refusal status=%w output=%q", err, output.String())
 		}
 		buffer := make([]byte, 161)
 		n, _, _, _, e := unix.Recvmsg(int(parent.Fd()), buffer, nil, unix.MSG_DONTWAIT)
@@ -434,7 +441,7 @@ func (f *guardianCFixture) run(name string, alternate *os.File) error {
 	err = command.Wait()
 	waited = true
 	if err != nil || output.Len() != 0 {
-		return fmt.Errorf("C positive completion=%v output=%q", err, output.String())
+		return fmt.Errorf("C positive completion=%w output=%q", err, output.String())
 	}
 	return nil
 }

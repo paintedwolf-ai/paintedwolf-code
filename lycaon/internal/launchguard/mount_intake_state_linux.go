@@ -86,6 +86,9 @@ func verifyIntakeRoot(fd int, entry mountEntry) (uint64, error) {
 	if err != nil {
 		return 0, &intakeIdentityError{err}
 	}
+	if entry.id <= 0 {
+		return 0, errors.New("invalid intake mount identity")
+	}
 	if id != uint64(entry.id) {
 		return 0, errIntakeEpochChanged
 	}

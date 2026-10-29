@@ -130,7 +130,7 @@ func verifyFixtureBirth(directory, pid int, start uint64, uid uint32) error {
 		found = true
 		for _, field := range values {
 			actual, err := strconv.ParseUint(field, 10, 32)
-			if err != nil || uint32(actual) != uid {
+			if err != nil || actual != uint64(uid) {
 				return errors.New("fixture process has another kernel identity")
 			}
 		}

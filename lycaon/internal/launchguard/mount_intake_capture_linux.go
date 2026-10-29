@@ -44,7 +44,7 @@ func captureIntakeLease(root mountEntry, forest mountForest, current []mountEntr
 			_ = unix.Close(prepared)
 		}
 	}()
-	if err = lockDetachedMount(tree); err != nil {
+	if err := lockDetachedMount(tree); err != nil {
 		return lease, -1, err
 	}
 	_, after, err := readCurrentMountTopology()

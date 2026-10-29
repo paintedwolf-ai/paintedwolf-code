@@ -12,6 +12,14 @@ import (
 )
 
 func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Identity, origin *os.File) error {
+	controlPoll, err := guardianPollDescriptor(control.Fd())
+	if err != nil {
+		return err
+	}
+	stagePoll, err := guardianPollDescriptor(uintptr(stageFD))
+	if err != nil {
+		return err
+	}
 	if err := unix.SetNonblock(int(control.Fd()), true); err != nil {
 		return err
 	}
@@ -21,7 +29,7 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 		if remaining <= 0 {
 			return errors.New("protected setup did not hand off before its deadline")
 		}
-		polls := []unix.PollFd{{Fd: int32(control.Fd()), Events: unix.POLLIN}, {Fd: int32(stageFD), Events: unix.POLLIN}}
+		polls := []unix.PollFd{{Fd: controlPoll, Events: unix.POLLIN}, {Fd: stagePoll, Events: unix.POLLIN}}
 		_, err := unix.Poll(polls, int((remaining+time.Millisecond-1)/time.Millisecond))
 		if errors.Is(err, unix.EINTR) {
 			continue
@@ -43,7 +51,7 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 			if err := verifyGuardianProfile(stagePID, caller, origin); err != nil {
 				return err
 			}
-			alive := []unix.PollFd{{Fd: int32(stageFD), Events: unix.POLLIN}}
+			alive := []unix.PollFd{{Fd: stagePoll, Events: unix.POLLIN}}
 			if _, err := unix.Poll(alive, 0); err != nil || alive[0].Revents != 0 {
 				return errors.New("guardian exited during profile verification")
 			}
@@ -59,6 +67,8 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 // roles. Stop the sole creator first; after it exits all remaining children
 // are directly owned. No ordinary broker request could have run behind it.
 func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity, transition *os.File) {
+	// An invalid pin cannot establish exit; keep pre-admission custody held.
+	stagePoll, _ := guardianPollDescriptor(uintptr(stageFD))
 	noticePID, notice, _ := startBootstrapNotice(transition, caller)
 	noticeDeadline := time.Now().Add(time.Second)
 	if notice != nil {
@@ -68,7 +78,7 @@ func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity,
 	stageExited := false
 	for {
 		expireBootstrapNotice(notice, noticeDeadline)
-		polls := []unix.PollFd{{Fd: int32(stageFD), Events: unix.POLLIN}}
+		polls := []unix.PollFd{{Fd: stagePoll, Events: unix.POLLIN}}
 		if _, err := unix.Poll(polls, 0); err == nil && polls[0].Revents&unix.POLLIN != 0 {
 			stageExited = true
 		}
@@ -171,7 +181,11 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 	stageExited, noChildren := false, false
 	reports := guardianSupervisorReports{}
 	for {
-		socket := int32(control.Fd())
+		socket, descriptorErr := guardianPollDescriptor(control.Fd())
+		if descriptorErr != nil {
+			reports.controlClosed = true
+			reports.notified = notifyGuardianFailure(reports.notified)
+		}
 		if reports.controlClosed {
 			socket = -1
 		}

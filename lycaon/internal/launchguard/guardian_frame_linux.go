@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -27,6 +28,9 @@ func sealGuardianRoots(roots guardianRoots) (_ *os.File, err error) {
 	if os.Getuid() != 0 || os.Geteuid() != 0 {
 		return nil, errors.New("guardian roots require initial-root stage")
 	}
+	if roots.stage <= 1 || roots.stage > math.MaxInt32 || roots.leader <= 1 || roots.leader > math.MaxInt32 || roots.leader != roots.stage {
+		return nil, errors.New("invalid guardian stage identity")
+	}
 	raw := make([]byte, guardianRootsBytes)
 	copy(raw, "PWGROOT1")
 	binary.LittleEndian.PutUint32(raw[8:], 1)
@@ -34,6 +38,9 @@ func sealGuardianRoots(roots guardianRoots) (_ *os.File, err error) {
 	binary.LittleEndian.PutUint64(raw[16:], roots.sequence)
 	binary.LittleEndian.PutUint32(raw[48:], uint32(roots.leader))
 	for index, pid := range roots.pids {
+		if pid <= 1 || pid > math.MaxInt32 {
+			return nil, errors.New("invalid registered protected root")
+		}
 		binary.LittleEndian.PutUint64(raw[24+8*index:], uint64(pid))
 	}
 	if decoded, err := decodeGuardianRoots(raw); err != nil || decoded != roots {
@@ -52,7 +59,7 @@ func sealGuardianRoots(roots guardianRoots) (_ *os.File, err error) {
 	if _, err = file.Write(raw); err != nil {
 		return nil, err
 	}
-	if err = file.Chmod(0400); err != nil {
+	if err := file.Chmod(0400); err != nil {
 		return nil, err
 	}
 	_, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, entrySeals)
