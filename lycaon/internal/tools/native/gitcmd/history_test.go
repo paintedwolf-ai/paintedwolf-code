@@ -71,7 +71,7 @@ func TestHistoryQueriesMatchBundledGit(t *testing.T) {
 		"git reflog -n 5",
 		"git reflog show --oneline -3 main",
 		"git shortlog -sn v1.0..HEAD",
-		"git shortlog -s -e -- src",
+		"git shortlog -s -e HEAD -- src",
 		"git ls-tree -r --name-only HEAD",
 		"git ls-tree -r -l HEAD src",
 		"git ls-tree -d HEAD",
@@ -113,8 +113,11 @@ func TestHistoryQueryRequiredFacts(t *testing.T) {
 	if got := h.exec("git", "reflog", "-n", "5").stdout; !strings.Contains(got, temporary+" HEAD@{1}: commit: temporary") || !strings.Contains(got, "HEAD@{0}: reset: moving to HEAD~1") {
 		t.Fatalf("reflog %q lacks the entry before the reset", got)
 	}
-	if got := h.exec("git", "shortlog", "-sn", "v1.0..HEAD").stdout; got != "     2\tBob\n     2\tAnn\n" {
+	if got := h.exec("git", "shortlog", "-sn", "v1.0..HEAD").stdout; got != "     2\tAnn\n     2\tBob\n" {
 		t.Fatalf("shortlog %q", got)
+	}
+	if got, want := h.exec("git", "shortlog", "-s").stdout, h.git("shortlog", "-s", "HEAD"); got != want {
+		t.Fatalf("shortlog without a revision %q, want the HEAD summary %q", got, want)
 	}
 	if got := h.exec("git", "ls-tree", "-r", "--name-only", "HEAD").stdout; got != "bin.dat\ndocs/guide.md\nsrc/main.go\nsrc/util.go\n" {
 		t.Fatalf("ls-tree %q", got)

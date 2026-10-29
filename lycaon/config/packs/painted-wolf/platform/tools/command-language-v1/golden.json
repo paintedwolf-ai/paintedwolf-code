@@ -1834,7 +1834,7 @@
     },
     {
       "id": "predicate-ere-scalar-collation",
-      "program": "[[ \u00e9 =~ [[.\u00e9.]] ]]",
+      "program": "[[ é =~ [[.é.]] ]]",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -2075,26 +2075,27 @@
     },
     {
       "id": "git-tracked-move-and-remove",
-      "program": "git init -q; git add -- input; git mv -- input renamed; git rm -f -- renamed",
+      "program": "git init -q; git add -- input other; git commit -q -m base; git mv -- input renamed; git status --short; git commit -q -m rename; git rm -- other; git commit -q -m remove; git ls-files",
       "setup": {
         "files": {
-          "input": "alpha\nbeta\n"
+          "input": "alpha\nbeta\n",
+          "other": "gamma\n"
         },
         "host_facts": {},
         "helpers": {}
       },
       "expected": {
-        "stdout": "rm 'renamed'\n",
+        "stdout": "R  input -> renamed\nrm 'other'\nrenamed\n",
         "stderr": "",
         "status": 0,
         "diagnostic": null,
         "source_span": null,
         "semantic_effects": [
           {
-            "kind": "git-index-stage",
+            "kind": "git-commit",
             "paths": [
               "input",
-              "renamed"
+              "other"
             ]
           },
           {
@@ -2103,8 +2104,21 @@
             "path": "renamed"
           },
           {
+            "kind": "git-commit",
+            "paths": [
+              "input",
+              "renamed"
+            ]
+          },
+          {
             "kind": "filesystem-delete",
-            "path": "renamed"
+            "path": "other"
+          },
+          {
+            "kind": "git-commit",
+            "paths": [
+              "other"
+            ]
           }
         ],
         "receipts": {
