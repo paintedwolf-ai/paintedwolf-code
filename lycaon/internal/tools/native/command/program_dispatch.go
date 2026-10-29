@@ -100,6 +100,9 @@ type dispatchShared struct {
 	definitions map[string]toolcontract.OperationDefinition
 	rejected    *nativeRejection
 	evaluated   map[string]evaluatedChild
+	// stopWritten records that a stopped statement's stderr already carries
+	// its resource refusal line.
+	stopWritten bool
 }
 
 // evaluatedChild is a recorded execution the evaluator runs itself.
@@ -139,6 +142,21 @@ func (d *ProgramDispatcher) firstRejection() *nativeRejection {
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
 	return d.shared.rejected
+}
+
+func (d *ProgramDispatcher) markStopWritten() {
+	if d.shared == nil {
+		return
+	}
+	d.shared.mu.Lock()
+	d.shared.stopWritten = true
+	d.shared.mu.Unlock()
+}
+
+func (d *ProgramDispatcher) stopWritten() bool {
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	return d.shared.stopWritten
 }
 
 var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)

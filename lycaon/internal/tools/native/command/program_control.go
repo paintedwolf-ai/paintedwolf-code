@@ -169,6 +169,7 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	}
 	if programResourceRefusal(reject) {
 		writeLimitRefusal(w, report.Operation, report.Operand, reject)
+		d.markStopWritten()
 		return
 	}
 	copy := *reject
