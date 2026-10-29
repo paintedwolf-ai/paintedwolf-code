@@ -177,17 +177,20 @@ func (p *ProgramPaths) Rebind(ctx context.Context, tc tools.ToolContext) (*Progr
 	if err != nil {
 		return nil, err
 	}
-	// The logical directory may have been selected by a prior cd. Its bound
-	// descriptor keeps that directory address, while new child file access uses
-	// the newly admitted context held by frame.
-	frame.cwd, frame.cwdInfo = p.cwd, p.cwdInfo
+	// The directory and OLDPWD may come from earlier cds. Their bound
+	// descriptors keep those addresses, while new child file access uses the
+	// newly admitted context held by frame.
+	frame.adoptDirectories(p)
 	return frame, nil
 }
 
-// AdoptCwd retains an approved cd's logical directory for later commands.
+// AdoptCwd retains an approved cd's directory and OLDPWD for later commands.
 // The original invocation directory remains the target of a bare cd.
-func (p *ProgramPaths) AdoptCwd(frame *ProgramPaths) {
-	p.cwd, p.cwdInfo = frame.cwd, frame.cwdInfo
+func (p *ProgramPaths) AdoptCwd(frame *ProgramPaths) { p.adoptDirectories(frame) }
+
+func (p *ProgramPaths) adoptDirectories(from *ProgramPaths) {
+	p.cwd, p.cwdInfo = from.cwd, from.cwdInfo
+	p.previous, p.previousInfo, p.hasPrevious = from.previous, from.previousInfo, from.hasPrevious
 }
 
 // ToolContext returns the path authority bound to this program frame.
