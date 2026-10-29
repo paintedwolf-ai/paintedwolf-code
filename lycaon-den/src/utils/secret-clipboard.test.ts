@@ -1,5 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SECRET_COPY_LIFETIME_MS, secretClipboardLease } from "./secret-clipboard.ts";
+
+const isTauriRuntime = vi.fn(() => false);
+const invoke = vi.fn();
+
+vi.mock("../platform/runtime.ts", () => ({
+  isTauriRuntime: () => isTauriRuntime(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+}));
+
+import {
+  SECRET_COPY_LIFETIME_MS,
+  clearSecretClipboardText,
+  secretClipboardLease,
+  writeSecretClipboardText,
+} from "./secret-clipboard.ts";
 
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
@@ -55,5 +72,29 @@ describe("secret clipboard lease", () => {
     await expect(lease.write("second")).rejects.toThrow("refused");
     await vi.advanceTimersByTimeAsync(SECRET_COPY_LIFETIME_MS);
     expect(adapter.clear.mock.calls).toEqual([[1]]);
+  });
+});
+
+describe("secret clipboard commands", () => {
+  afterEach(() => {
+    isTauriRuntime.mockReturnValue(false);
+    invoke.mockReset();
+  });
+
+  it("writes and clears through the host commands in the desktop shell", async () => {
+    isTauriRuntime.mockReturnValue(true);
+    invoke.mockResolvedValueOnce(7).mockResolvedValueOnce(undefined);
+    await expect(writeSecretClipboardText("private")).resolves.toBe(7);
+    await clearSecretClipboardText(7);
+    expect(invoke.mock.calls).toEqual([
+      ["write_secret_text", { text: "private" }],
+      ["clear_secret_text", { copy: 7 }],
+    ]);
+  });
+
+  it("refuses to write and skips clearing outside the desktop shell", async () => {
+    await expect(writeSecretClipboardText("private")).rejects.toThrow("Secret clipboard is unavailable");
+    await expect(clearSecretClipboardText(1)).resolves.toBeUndefined();
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
