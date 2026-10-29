@@ -23,7 +23,7 @@ Two disk traps worth knowing:
 
 **Memory.** For a killed process, correlate exit code `137` with `dmesg`/journal OOM evidence, the container's `.State.OOMKilled`, orchestrator events, and cgroup memory counters. No application error or stack trace is consistent with an abrupt kill but does not identify OOM by itself. Check the cgroup limit and node pressure before concluding the app leaks.
 
-**File descriptors.** Errors read `EMFILE`, `ENFILE`, or "too many open files", and they surface as *whatever failed next* — a network dial, a file watcher that stops firing, a database connection refused. `ulimit -n` for the soft limit and the process's own `/proc/<pid>/fd` (or `lsof -p`) for what it holds. Unclosed files, sockets, and filesystem watchers are the usual leaks; a watcher leak in particular presents as "the tool stopped noticing changes" rather than as an error.
+**File descriptors.** Errors read `EMFILE`, `ENFILE`, or "too many open files", and they surface as *whatever failed next* — a network dial, a file watcher that stops firing, a database connection refused. `ulimit -n` for the soft limit the commands you start receive, and the process's own `/proc/<pid>/fd` (or `lsof -p`) for what it holds. `ulimit -n 64` before a command in the same call lowers its limit, which reproduces the failure on demand. Unclosed files, sockets, and filesystem watchers are the usual leaks; a watcher leak in particular presents as "the tool stopped noticing changes" rather than as an error.
 
 **Processes and threads.** Fork failures and "resource temporarily unavailable" under a thread or PID limit, common with runaway parallelism in a build.
 
