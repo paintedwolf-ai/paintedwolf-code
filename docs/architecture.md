@@ -431,6 +431,24 @@ and native desktop and installed-artifact qualification in
 [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) and
 [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457).
 
+### Nix generation ownership
+
+Nix installations resolve the running ELF through `/proc/self/exe`. The private
+`lib/painted-wolf-code/nix-layout.json` receipt names its immutable output and
+Nix executable; the final-content manifest binds the desktop and private helper
+images to that output. Native `linux_generation` and Go `configlayout` own these
+layout facts. Helpers and engine resources stay in the running generation after
+a profile switch; the profile entry point on PATH is used only to report CLI
+installation status. No application command repairs or writes Nix-owned files.
+
+Go `configlayout` owns indirect-root registration under the private XDG cache,
+with one locked root per running CLI or shell. The shell retains a captured
+engine child through `internal-nix-retain`; its private stdin lifetime releases
+the root. A registration failure refuses startup. Recovery removes only this
+application's unlocked stale session roots, preserving live and foreign roots.
+The application never lowers dump protection to help a garbage collector scan
+its processes. See [Nix garbage collector roots](https://nix.dev/manual/nix/2.35/package-management/garbage-collector-roots.html).
+
 ### Organizing code
 
 A maintainer should find a feature, see where its state lives, what it depends

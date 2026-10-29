@@ -1,9 +1,10 @@
 ### Update automation
 
-`.github/dependabot.yml` is generated from the policy. Each manifest section becomes one weekly
-ecosystem block with the configured cooldown. Minor and patch version updates share a group;
-major updates remain individual PRs. Security updates remain independent of that group and
-the version-update cooldown. A 0.x minor update can still be breaking and needs review.
+`.github/dependabot.yml` is generated from the policy. Manifest sections sharing an ecosystem
+and group coalesce into one monthly ecosystem block with the configured cooldown. Minor and
+patch library updates share a group while major library updates remain individual PRs; GitHub
+Actions updates group all semver levels together. Security updates remain independent of that
+group and the version-update cooldown. A 0.x minor update can still be breaking and needs review.
 A package's `updates` value becomes an
 ignore rule: `hold` ignores every update, `no-major` ignores major releases, and `patch-only`
 ignores major and minor releases. Ignore rules also suppress Dependabot security updates for
@@ -39,10 +40,10 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
      `lycaon/govulncheck-allowlist.yaml`, following the existing `docker/docker` entries.
 3. **Respond to engine CVEs.**
    * **Git:** follow the [bump procedure](../dependencies.md#bump-procedure) with a fixed
-     dugite release.
+     dugite-native and `paintedwolf-git` release.
    * **Chrome:** update the version and hashes in
      `lycaon/internal/browserengine/chrome_pin.go`. Provision with `./task browser:ensure`, then
-     re-verify confinement with `./task test:seatbelt`.
+     re-verify confinement with `./task test:seatbelt` and `./task test:confine:linux`.
    * **Opengrep:** cut a fork release, authenticate it with `./task scan:opengrep:select`, then
      run `./task test:scanners`.
 
@@ -59,7 +60,7 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
   1. Read the upstream changelog to see whether it fixes natively what the local patch covers.
   2. Rebase the patch onto the candidate version and update the `patchedDependencies` key.
   3. Run `./task den:test`. Then run `./task den:stage-engine` followed by
-     `./task e2e:den:desktop` on macOS to catch scroll and layout regressions in WebKit.
+     `./task e2e:den:desktop` on macOS and `./task den:webkit:atspi` on Linux to catch scroll, layout, and accessibility regressions in WebKit.
 * **`yjs` and `yrs`:** held. Bump both in one change and test end to end against the WASM
   core.
 * **`gotreesitter`:** follow [`third_party/README.md`](../../third_party/README.md), and drop

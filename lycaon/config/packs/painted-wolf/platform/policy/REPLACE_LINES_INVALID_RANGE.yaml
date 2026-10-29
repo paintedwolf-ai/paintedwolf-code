@@ -22,7 +22,8 @@ copy:
     }} — {{ paintedwolf.rejection_reason }}.
   cause: start_line and end_line are 1-based inclusive; end_line must be >= start_line.
   why: Line-range edits need a valid window before splicing file content.
-  fix: Re-read with offset/limit, then pass start_line and end_line from the numbered read content.
+  fix: Re-read with offset at the first intended line and limit covering the range; its source block starts
+    at offset. Pass start_line and end_line from that block's line range.
   instead: Branch on Code; fix the line range and retry replace_lines
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:replace_lines

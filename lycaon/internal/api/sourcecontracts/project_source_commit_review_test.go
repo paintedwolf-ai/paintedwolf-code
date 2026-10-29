@@ -173,7 +173,10 @@ func TestCommitReviewBeforeFirstCommitAndChangedHead(t *testing.T) {
 func TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation(t *testing.T) {
 	_, root := contractfixture.NestedRootRepo(t)
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
+	// The successor written below must stay unseen by the ledger: a live inventory would
+	// reconcile it as an external effect before the review reads the file.
+	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger,
+		contractfixture.WithPassiveSourceInventory)
 	p := contractfixture.CreateProjectForTest(t, srv, root)
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
