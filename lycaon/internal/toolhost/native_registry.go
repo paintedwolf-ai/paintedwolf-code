@@ -22,15 +22,15 @@ import (
 )
 
 type buildDeps struct {
-	boundary       *sandbox.Boundary
-	git            *git.Manager
-	statusCache    *statusCacheBinding
-	command        *hostcmd.Runner
-	nativeConfig   nativemanifest.Config
-	toolSchemas    *toolschema.Config
-	surveyCatalog  *survey.Catalog
-	fileAge        *fileage.Provider
-	rerank         decide.Reranker
+	boundary      *sandbox.Boundary
+	git           *git.Manager
+	statusCache   *statusCacheBinding
+	command       *hostcmd.Runner
+	nativeConfig  nativemanifest.Config
+	toolSchemas   *toolschema.Config
+	surveyCatalog *survey.Catalog
+	fileAge       *fileage.Provider
+	rerank        decide.Reranker
 }
 
 type nativeToolServices struct {

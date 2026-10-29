@@ -34,3 +34,16 @@ func TestDefaultRegistryKeepsOperationsOutsideTheToolRoster(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandEntryBindsRetiredOperationsWithoutCallableTools(t *testing.T) {
+	fixture := newComposedProgramFixture(t)
+	for _, name := range []string{"read", "write"} {
+		if _, found := fixture.Runtime.Registry.Definition(name); found {
+			t.Fatalf("operation %s has a callable definition", name)
+		}
+	}
+	outcome := callComposedProgram(t, fixture, "printf 'alpha\\nbeta\\n' > sample.txt; cat sample.txt | wc -l")
+	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "2\n" || outcome.CompletedEffects == 0 {
+		t.Fatalf("native operation binding failed: %+v", outcome)
+	}
+}
