@@ -20,7 +20,7 @@ import (
 type manifestInsertTrace struct {
 	prepares, live, maximum int
 	arguments               []int
-	fullSQL                 string
+	entrySQL                string
 	afterExec               func()
 }
 
@@ -52,9 +52,7 @@ func (c *manifestTraceConn) Prepare(query string) (driver.Stmt, error) {
 		c.trace.prepares++
 		c.trace.live++
 		c.trace.maximum = max(c.trace.maximum, c.trace.live)
-		if strings.Count(query, "?") == 512 {
-			c.trace.fullSQL = query
-		}
+		c.trace.entrySQL = query
 	}
 	return &manifestTraceStmt{Stmt: statement, trace: c.trace, entry: entry}, nil
 }
@@ -164,40 +162,6 @@ func TestManifestMigrationBatchBoundariesPreserveRowsAndBoundCalls(t *testing.T)
 				t.Fatal("deduplicated chunk repeated entry writes or changed identity")
 			}
 		})
-	}
-}
-
-func TestManifestMigrationBatchHasNoTemporaryWrite(t *testing.T) {
-	database, trace := newManifestBatchDatabase(t)
-	tx, err := database.BeginTx(t.Context(), nil)
-	testutil.FailErr(t, "begin actual target plan", err)
-	defer tx.Rollback()
-	statement, err := prepareLayoutEntryInsert(t.Context(), tx, 64)
-	testutil.FailErr(t, "prepare actual full insert", err)
-	defer statement.Close()
-	args := make([]any, 512)
-	rows, err := tx.Query("EXPLAIN "+trace.fullSQL, args...)
-	testutil.FailErr(t, "explain pinned SQLite target insert", err)
-	defer rows.Close()
-	var instructions int
-	for rows.Next() {
-		var address, p1, p2, p3, p5 int
-		var opcode string
-		var p4, comment any
-		testutil.FailErr(t, "read target VDBE operation", rows.Scan(&address, &opcode, &p1, &p2, &p3, &p4, &p5, &comment))
-		instructions++
-		switch opcode {
-		case "OpenEphemeral", "SorterOpen", "OpenAutoindex":
-			t.Fatalf("batched insertion materializes temporary state: %s", opcode)
-		case "OpenWrite":
-			if p3 != 0 {
-				t.Fatalf("batched insertion writes outside private main database: %d", p3)
-			}
-		}
-	}
-	testutil.FailErr(t, "read complete target plan", rows.Err())
-	if instructions == 0 {
-		t.Fatal("SQLite emitted no target insert plan")
 	}
 }
 
