@@ -42,8 +42,6 @@ var readForms = map[string]operandRule{
 	"git blame": blameOperands, "git branch": branchOperands, "git tag": tagOperands, "git rev-parse": anyOperands,
 	"git rev-list": revListOperands, "git merge-base": mergeBaseOperands, "git remote": remoteOperands,
 	"git config": configOperands, "git stash list": noOperands, "git worktree list": noOperands, "git ls-files": anyOperands,
-	"git grep": grepOperands, "git describe": anyOperands, "git reflog": reflogOperands, "git shortlog": anyOperands,
-	"git ls-tree": lsTreeOperands, "git cat-file": catFileOperands, "git show-ref": anyOperands, "git for-each-ref": anyOperands,
 }
 
 // Owners holds the Git read, mutation and network frontends.
@@ -200,11 +198,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
-	run := p.run
-	if p.command.spec.Name == "git grep" {
-		run = p.grep
-	}
-	status, err := run(ctx, streams)
+	status, err := p.run(ctx, streams)
 	if err == nil {
 		err = ctx.Err()
 	}

@@ -20,10 +20,6 @@ An isolated write leg works in a copy that carries no repository metadata, so no
 | Which commits differ between branches? | `git_compare(base_ref=…, head_ref=…)` | `git_log(ref="base..head", limit=…, offset=…)` for commits; `git_diff(base_ref=…, head_ref=…)` for contents |
 | What does a branch or tag name resolve to? | `git_ref(refs=[…])` | Show the resolved commit |
 | What did a known commit change? | `git_show(ref=…)` | Read current code before claiming present behavior |
-| Where did text exist at an older revision? | `command`: `git grep -n PATTERN REV -- PATH` | `git show REV:PATH` for the whole file |
-| Which release contains a commit? | `command`: `git describe --tags --always REV` | `git log` between the named tags |
-| Where did a branch point before a reset or rebase? | `command`: `git reflog -n 20 [REF]` | `git show` the earlier entry before restoring anything |
-| Which files or objects exist at a revision? | `command`: `git ls-tree -r --name-only REV`, `git cat-file -t`/`-p REV:PATH` | Read the current file before comparing |
 
 Use `git_branches` only to discover local branch names. Do not infer remote state, PR status, review intent, or CI state from local refs; use the GitHub workflow when that is the question.
 
