@@ -381,7 +381,7 @@
       "summary": "Requested viewport {{ paintedwolf.viewport_width }} × {{ paintedwolf.viewport_height }} is outside the supported range: each edge must be between {{ paintedwolf.viewport_min_edge }} and {{ paintedwolf.viewport_max_edge }}."
     },
     "CHMOD_BULK_DENIED": {
-      "branch_instruction": "Branch on Code; reduce paths[] length",
+      "branch_instruction": "Branch on Code; reduce the explicit target batch",
       "category": "recoverable",
       "emit": "guard:chmod",
       "summary": "chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call."
@@ -393,7 +393,7 @@
       "summary": "chmod mode {{ paintedwolf.mode }} is not in the bundled allowlist."
     },
     "CHMOD_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; confirm path or remove from paths[]",
+      "branch_instruction": "Branch on Code; confirm the target or remove the unintended target",
       "category": "recoverable",
       "emit": "guard:chmod",
       "summary": "The target for chmod path {{ paintedwolf.path }} does not exist."

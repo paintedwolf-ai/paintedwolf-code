@@ -165,6 +165,10 @@ func (e *HintEntry) projectOARFields() {
 	e.Tools = stringList(e.Selector["tool"])
 }
 
+// Operations is the rule's paintedwolf.operation selector: the bound native
+// operation beneath command, or the structured tool of that name.
+func (e HintEntry) Operations() []string { return stringList(e.Selector["paintedwolf.operation"]) }
+
 func stringList(v any) []string {
 	items, ok := v.([]any)
 	if !ok {

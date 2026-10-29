@@ -112,7 +112,7 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 	// phase, which screens exact argv values before it returns them for Run.
 	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/executor_impl.go")
 	resolveAt := strings.Index(boundary, "e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)")
-	dispatchAt := strings.Index(boundary, "e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc)")
+	dispatchAt := strings.Index(boundary, "e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc, nil)")
 	invokeAt := strings.Index(boundary, "e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)")
 	dispatch := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/owner_dispatch.go")
 	phaseAt := strings.Index(dispatch, "func (e *Executor) prepareOwnerDispatch(")
