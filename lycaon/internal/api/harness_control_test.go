@@ -199,10 +199,11 @@ func manualHarnessRequest(s *Server, method, path, body string, authorized bool)
 func TestHarnessManualRoutesProtectAndPreservePendingRequest(t *testing.T) {
 	server, provider := manualHarnessServer(t)
 	calls := []wire.ToolCall{{ID: "call-1", Name: "inspect"}}
-	messages := []wire.Message{{Role: wire.MessageRoleAssistant, Content: "Inspect this", ToolCalls: calls}}
+	messages := []wire.Message{{Role: wire.MessageRoleAssistant, Content: "Inspect this", ToolCalls: calls, ToolResult: &wire.ToolResult{ToolCallID: "prior-call", Content: "observed result"}}}
+	schema := map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}}
 	stream, err := provider.Stream(t.Context(), modelcall.CompletionRequest{
 		Model: "fixture-model", Debug: modelcall.RequestDebug{SessionID: "session-1"},
-		Messages: messages, Tools: []tools.ToolMeta{{Name: "inspect"}},
+		Messages: messages, Tools: []tools.ToolMeta{{Name: "inspect", Description: "Inspect a path", ArgsSchema: schema}},
 	})
 	testutil.FailErr(t, "start manual request", err)
 	pending, ok := provider.Pending(t.Context(), "session-1", 0)
@@ -227,6 +228,9 @@ func TestHarnessManualRoutesProtectAndPreservePendingRequest(t *testing.T) {
 	testutil.FailErr(t, "decode pending response", json.Unmarshal(response.Body.Bytes(), &dto))
 	if response.Code != http.StatusOK || !dto.Pending || dto.ID != pending.ID || dto.SessionID != "session-1" || dto.Model != "fixture-model" || !reflect.DeepEqual(dto.Tools, []string{"inspect"}) || len(dto.Messages) != 1 || dto.Messages[0].Content != messages[0].Content || dto.Messages[0].Role != "assistant" || !reflect.DeepEqual(dto.Messages[0].ToolCalls, calls) {
 		t.Fatalf("pending request lost provider facts: status=%d dto=%+v", response.Code, dto)
+	}
+	if !reflect.DeepEqual(dto.Messages, messages) || len(dto.ToolSchemas) != 1 || dto.ToolSchemas[0].Name != "inspect" || dto.ToolSchemas[0].Description != "Inspect a path" || !reflect.DeepEqual(dto.ToolSchemas[0].Schema, schema) {
+		t.Fatalf("pending request lost model-visible results or schemas: %+v", dto)
 	}
 	absent := manualHarnessRequest(server, http.MethodGet, "/harness/llm/pending?session_id=other", "", true)
 	if absent.Code != http.StatusOK || strings.TrimSpace(absent.Body.String()) != `{"pending":false}` {

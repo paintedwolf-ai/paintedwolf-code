@@ -151,7 +151,9 @@ harness_up() {
   esac
 
   if [[ "${1:-}" == "--interactive" ]]; then
-    (cd "${ROOT}" && ./task den:harness -- --prepare)
+    if [[ "${2:-}" != "--reuse-built" ]]; then
+      (cd "${ROOT}" && ./task den:harness -- --prepare)
+    fi
     bash "${SCRIPTS}/e2e-sidecar-bg.sh" --reuse-built
   else
     bash "${SCRIPTS}/e2e-sidecar-bg.sh"
@@ -306,6 +308,7 @@ harness_banner() {
 
 EOF
   if [[ "${HARNESS_MODE}" == "manual" ]]; then
+    echo "  Terminal command testing: python3 scripts/harness/manual.py --url ${LYCAON_E2E_API_URL}" >&2
     cat >&2 <<'EOF'
   Play both sides — you author the assistant's turns:
     await __harness.llm.manual()                 // stop auto-replying
