@@ -653,11 +653,11 @@
           "sample_values": []
         }
       ],
-      "operands": "LIMIT is a decimal number in the resource's unit, unlimited, soft or hard. It sets the soft limit for external children started later in the same program.",
+      "operands": "LIMIT is a decimal number in the resource's unit, unlimited, soft or hard. It sets the soft limit, with -H the hard limit and with -H -S both, for external children started later in the same program. A limit the platform does not provide is refused.",
       "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
       "statuses": {
         "0": "Reported or set the limits.",
-        "1": "Invalid number, or a value above the hard limit.",
+        "1": "Invalid number, a value above the hard limit, or a hard limit below the soft limit.",
         "2": "Too many arguments."
       },
       "effects": [

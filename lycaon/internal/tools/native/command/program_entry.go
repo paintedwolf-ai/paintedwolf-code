@@ -279,11 +279,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:      memory,
-		Clock:       r.clock(),
-		Environment: run.baseEnv,
-		ScratchDir:  tc.Host.SessionScratchDir,
-		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:         memory,
+		Clock:          r.clock(),
+		ResourceLimits: confineLimits{},
+		Environment:    run.baseEnv,
+		ScratchDir:     tc.Host.SessionScratchDir,
+		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {

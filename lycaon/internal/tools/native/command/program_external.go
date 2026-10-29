@@ -68,7 +68,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
-	opts.Child = confine.ProcessAttributes{Limits: request.Process.Limits, IgnoreHangup: request.Process.IgnoreHangup}
+	opts.Child = confine.ProcessAttributes{Limits: childLimits(request.Process.Limits), IgnoreHangup: request.Process.IgnoreHangup}
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}

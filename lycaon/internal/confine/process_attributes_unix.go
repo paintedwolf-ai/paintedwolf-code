@@ -22,6 +22,9 @@ func ReadResourceLimit(resource string) (ResourceLimit, error) {
 	if !ok {
 		return ResourceLimit{}, fmt.Errorf("unknown resource %q", resource)
 	}
+	if ResourceLimitCapability(resource)&LimitQuery == 0 {
+		return ResourceLimit{}, ErrLimitUnsupported
+	}
 	var raw syscall.Rlimit
 	if err := syscall.Getrlimit(id, &raw); err != nil {
 		return ResourceLimit{}, err

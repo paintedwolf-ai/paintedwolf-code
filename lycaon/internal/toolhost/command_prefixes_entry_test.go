@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -324,21 +323,13 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	}
 }
 
-func TestCommandEntryUlimitHardChangeRefuses(t *testing.T) {
+// A lowered hard limit reaches later external children of the same program.
+func TestCommandEntryUlimitHardLimitReachesLaterChildren(t *testing.T) {
 	f := newPathsFixture(t)
-	raw, err := f.Call(t, t.Context(), "mkdir ./before; ulimit -H -n 64; mkdir ./never")
-	if rejected := toolrejection.AsToolReject(err); rejected != nil || err != nil {
-		t.Fatalf("hard change rejected the whole program instead of stopping at it: %v", err)
-	}
-	got := decodeProgramOutcome(t, raw)
-	if got.Refusal == nil || got.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" || got.Refusal.Details["word"] != "-H" || !strings.Contains(got.Stderr, "[COMMAND_OPTION_UNSUPPORTED]") {
-		t.Fatalf("hard change outcome: %+v", got)
-	}
-	if _, statErr := os.Stat(filepath.Join(f.Dir, "before")); statErr != nil {
-		t.Fatalf("the statement before the refusal did not run: %v", statErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(f.Dir, "never")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatal("a statement after the refusal ran")
+	raw, err := f.Call(t, t.Context(), `ulimit -S -n 64; ulimit -H -n 64; external -- /bin/sh -c 'ulimit -Hn; ulimit -Sn'`)
+	testutil.FailErr(t, "lower the hard limit", err)
+	if got := decodeProgramOutcome(t, raw); got.Status != 0 || got.Refusal != nil || got.Stdout != "64\n64\n" {
+		t.Fatalf("hard limit outcome: %+v", got)
 	}
 }
 
@@ -366,7 +357,7 @@ func TestCatalogGoldenProgramsForProgramPrefixes(t *testing.T) {
 	ran := map[string]bool{}
 	for _, golden := range contract.Golden {
 		switch golden.ID {
-		case "timeout-prefix", "time-pipeline", "nohup-prefix", "nohup-output-refused", "ulimit-lower-soft", "ulimit-hard-refused":
+		case "timeout-prefix", "time-pipeline", "nohup-prefix", "nohup-output-refused", "ulimit-lower-soft", "ulimit-hard-lowered":
 		default:
 			continue
 		}
