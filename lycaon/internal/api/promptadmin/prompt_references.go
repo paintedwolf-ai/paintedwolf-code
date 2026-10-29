@@ -3,14 +3,18 @@ package promptadmin
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/promptattach"
+	"github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -28,6 +32,7 @@ func (s *References) ReferenceDeps(ctx context.Context, sess *wire.Session) prom
 	}
 	return promptattach.ReferenceDeps{
 		SessionProjectID: projectID,
+		MaxImageBytes:    s.Caps.Transport.MaxImage.Int64(),
 		ResolvePath: func(refProjectID, rootID, path string) (string, wire.NavigationTarget, error) {
 			return s.resolveReferencePath(ctx, refProjectID, rootID, path)
 		},
@@ -40,7 +45,64 @@ func (s *References) ReferenceDeps(ctx context.Context, sess *wire.Session) prom
 		ReadLines: func(refProjectID, rootID, path string, startLine, endLine int) (string, error) {
 			return s.readReferenceLines(ctx, refProjectID, rootID, path, startLine, endLine)
 		},
+		ReadImage: func(refProjectID, rootID, path string) ([]byte, string, error) {
+			return s.readReferenceImage(ctx, refProjectID, rootID, path)
+		},
 	}
+}
+
+func (s *References) readReferenceImage(ctx context.Context, projectID, rootID, path string) ([]byte, string, error) {
+	p, err := s.Projects.Get(ctx, strings.TrimSpace(projectID))
+	if err != nil || p == nil {
+		return nil, "", fmt.Errorf("project not found")
+	}
+	roots := project.RootRefsFrom(p)
+	abs, _, err := projectroot.ResolveAbs(roots, rootID, path)
+	if err != nil {
+		return nil, "", err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, "", fmt.Errorf("stat: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("a regular image file is required")
+	}
+	if info.Size() > s.Caps.Transport.MaxImage.Int64() {
+		return nil, "", fmt.Errorf("image exceeds maximum image byte cap")
+	}
+	peek := make([]byte, format.PeekBytes)
+	f, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(abs), Rel: filepath.Base(abs)})
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
+		return nil, "", err
+	}
+	if !opened.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("a regular image file is required")
+	}
+	n, _ := io.ReadFull(f, peek)
+	detected := format.Detect(filepath.Base(abs), "", peek[:n])
+	if detected.Kind != format.KindImage {
+		return nil, "", fmt.Errorf("not an image")
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, "", err
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, s.Caps.Transport.MaxImage.Int64()+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if int64(len(raw)) > s.Caps.Transport.MaxImage.Int64() {
+		return nil, "", fmt.Errorf("image exceeds maximum image byte cap")
+	}
+	if err := visual.RejectUnsafeUserImage(detected.MIME, raw); err != nil {
+		return nil, "", err
+	}
+	return raw, detected.MIME, nil
 }
 
 // readReferenceLines prefers the open document containing the selection.

@@ -16,7 +16,18 @@ func ProgressTemplateVars() map[string]any {
 }
 
 // ValidateAuthorProgress runs structural update_progress guards before a checklist write lands.
-func ValidateAuthorProgress(content string) (code string, data map[string]any, ok bool) {
+func ValidateAuthorProgress(prev, content string) (code string, data map[string]any, ok bool) {
+	if code, data, ok := validateAuthorProgressStructure(content); !ok {
+		return code, data, false
+	}
+	if ProgressMissing(prev) && !HasOpenSteps(content) {
+		return "PROGRESS_NO_OPEN_STEP", map[string]any{}, false
+	}
+	// Long labels pass; parseChecklist clamps them for display.
+	return "", nil, true
+}
+
+func validateAuthorProgressStructure(content string) (code string, data map[string]any, ok bool) {
 	if n := PlanChecklistLineCount(content); n > MaxAuthorProgressLines {
 		return "PROGRESS_TOO_MANY_LINES", map[string]any{
 			"line_count": n,
@@ -33,7 +44,6 @@ func ValidateAuthorProgress(content string) (code string, data map[string]any, o
 			"label": PreviewLabel(label),
 		}, false
 	}
-	// Long labels pass; parseChecklist clamps them for display.
 	return "", nil, true
 }
 

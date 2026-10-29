@@ -3,7 +3,6 @@ package queue
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -34,7 +33,7 @@ func TestPendingReadDuringEveryReceiptCommit(t *testing.T) {
 						return fmt.Errorf("pending hold = %v, want committed %v", got, held)
 					}
 					return nil
-				case <-time.After(time.Second):
+				case <-t.Context().Done():
 					return fmt.Errorf("pending read blocked behind receipt commit")
 				}
 			}

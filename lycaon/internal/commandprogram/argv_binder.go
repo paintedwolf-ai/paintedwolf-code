@@ -121,8 +121,7 @@ func (f Fields) Values() []string {
 	return out
 }
 
-// ArgvBinder binds a complete argv to one catalog command's typed forms.
-// Utilities share it so option grammar comes only from the frozen catalog.
+// ArgvBinder binds argv to the selected command's catalog forms.
 type ArgvBinder interface {
 	Bind(toolcontract.CommandSpecification, Fields) (BoundArgv, error)
 }
@@ -193,8 +192,7 @@ func (b BoundArgv) scoped(key string, global bool) []BoundOption {
 	return out
 }
 
-// ArgvReview is the approval projection: the shared operation identity plus
-// this form's bound options, rather than a legacy tool's JSON schema.
+// ArgvReview carries the selected form's options and operands for approval.
 type ArgvReview struct {
 	OperationID string           `json:"operation_id"`
 	Command     string           `json:"command"`

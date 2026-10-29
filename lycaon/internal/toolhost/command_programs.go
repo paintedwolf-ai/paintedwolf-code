@@ -78,14 +78,14 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		literalProgram, searchProgram, queryProgram, mutationProgram, textProgram := *literalOwners, *searchOwners, *queryOwners, *mutationOwners, *textOwners
-		literalProgram.Revisions.Memory = memory
+		literalProgram := literalOwners.ForProgram(memory)
+		searchProgram, queryProgram, mutationProgram, textProgram := *searchOwners, *queryOwners, *mutationOwners, *textOwners
 		searchProgram.Revisions.Memory = memory
 		searchProgram.Admission = admission
 		queryProgram.Revisions.Memory = memory
 		mutationProgram.Revisions.Memory = memory
 		textProgram.Revisions.Memory = memory
-		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
+		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		barrier := &native.PublicationBarrier{}
 		httpNative, err := t.httpOperation(services.HTTP, mutationOwners, barrier)
 		if err != nil {

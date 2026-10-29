@@ -1701,7 +1701,7 @@ paths:
       operationId: lockVault
       x-person-action: none
       summary: Lock every chat when the person steps away
-      description: The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+      description: The desktop shell calls this when the screen locks, the computer sleeps, the app quits, or, on a Linux desktop whose screen lock cannot be observed, the person's input stays idle for the unlock idle period (`away`). Locking can only take authority away, so any authenticated caller may request it.
       requestBody:
         required: true
         content:
@@ -1966,7 +1966,7 @@ paths:
         - projects
       operationId: createProjectRemoval
       x-person-action: record
-      summary: Delete a project and settle reviewed optional extension cleanup
+      summary: Accept project deletion and reviewed optional extension cleanup
       parameters:
         - $ref: '#/components/parameters/ProjectId'
       requestBody:
@@ -1977,7 +1977,7 @@ paths:
               $ref: '#/components/schemas/ProjectRemovalRequest'
       responses:
         '202':
-          description: Host-owned removal evidence or outcome
+          description: Durably accepted operation with live progress, or its settled outcome
           content:
             application/json:
               schema:
@@ -2005,7 +2005,7 @@ paths:
       tags:
         - projects
       operationId: getProjectRemoval
-      summary: Read the recorded project removal outcome
+      summary: Read live progress or the recorded project removal outcome
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - name: operation_id
@@ -14570,13 +14570,25 @@ components:
           enum:
             - integrity_failed
             - schema_mismatch
-          description: Closed reason the store cannot be served. Present when status is recovery.
+            - insufficient_space
+            - storage_unavailable
+          description: Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
         recovery_detail:
           type: string
           description: Human-readable sentence matching the recovery reason. Present when status is recovery.
         recovery_snapshot_available:
           type: boolean
           description: Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health.
+        recovery_space_needed_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+        recovery_space_available_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
         recovery_snapshot_at:
           type: string
           format: date-time
@@ -19768,18 +19780,22 @@ components:
     PromptReferenceKind:
       type: string
       description: |
-        Attachment-reference family. Path kinds are jailed under an attached project root; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet. Never carries bytes or a server-opened absolute path.
+        Attachment-reference family. Path kinds are jailed under an attached project root; external path kinds resolve absolute paths outside attached roots with host-authoritative confinement and explicit human grants; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet.
       enum:
         - path-file
         - path-folder
+        - external-file
+        - external-folder
         - artifact
         - search-hit
     PromptReferencePart:
       description: |
-        A pointer to something already on disk (under an attached project root), an existing visual artifact, or a stored search hit. Carries jailed coordinates only — never bytes and never an absolute filesystem path the server opens. The host fences path/folder refs so the agent reads them in place with its own jailed tools.
+        A pointer to something already on disk (under an attached project root or an explicitly granted external path), an existing visual artifact, or a stored search hit. The host fences references and enforces confinement and explicit human grants so the agent reads and edits them with its own tools.
       oneOf:
         - $ref: '#/components/schemas/PromptReferencePathFile'
         - $ref: '#/components/schemas/PromptReferencePathFolder'
+        - $ref: '#/components/schemas/PromptReferenceExternalFile'
+        - $ref: '#/components/schemas/PromptReferenceExternalFolder'
         - $ref: '#/components/schemas/PromptReferenceArtifact'
         - $ref: '#/components/schemas/PromptReferenceSearchHit'
       discriminator:
@@ -19787,6 +19803,8 @@ components:
         mapping:
           path-file: '#/components/schemas/PromptReferencePathFile'
           path-folder: '#/components/schemas/PromptReferencePathFolder'
+          external-file: '#/components/schemas/PromptReferenceExternalFile'
+          external-folder: '#/components/schemas/PromptReferenceExternalFolder'
           artifact: '#/components/schemas/PromptReferenceArtifact'
           search-hit: '#/components/schemas/PromptReferenceSearchHit'
     PromptAcceptedResponse:
@@ -26414,6 +26432,8 @@ components:
       enum:
         - path_file
         - path_folder
+        - external_file
+        - external_folder
         - search_hit
     MessageContentPart:
       x-go-generate: true
@@ -26439,6 +26459,10 @@ components:
         media_type:
           type: string
           description: Optional MIME type for this text projection.
+        artifact_id:
+          type: string
+          format: uuid
+          description: Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
         blob_id:
           type: string
           pattern: ^[0-9a-f]{64}$
@@ -29463,6 +29487,52 @@ components:
         path:
           type: string
           description: Project-relative folder path; never absolute; jailed under root_id.
+    PromptReferenceExternalFile:
+      type: object
+      required:
+        - kind
+        - project_id
+        - path
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/PromptReferenceKind'
+          enum:
+            - external-file
+        project_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: Absolute filesystem path outside attached roots, explicitly granted by human drop.
+        start_line:
+          type: integer
+          minimum: 1
+          description: Inclusive 1-based start line for a selection range.
+        end_line:
+          type: integer
+          minimum: 1
+          description: Inclusive 1-based end line; defaults to start_line.
+    PromptReferenceExternalFolder:
+      type: object
+      required:
+        - kind
+        - project_id
+        - path
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/PromptReferenceKind'
+          enum:
+            - external-folder
+        project_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: Absolute folder path outside attached roots, explicitly granted by human drop.
     PromptReferenceArtifact:
       type: object
       required:
@@ -29832,8 +29902,7 @@ components:
         - macos_user_presence
         - windows_user_presence
         - linux_user_presence
-        - linux_app_password
-      description: 'User-presence verifier that confirmed the person before the shell signed: the operating system''s own prompt, or on Linux without a polkit agent, the shell''s native app-password dialog.'
+      description: User-presence verifier that confirmed the person before the shell signed after fresh authentication through the operating system's native prompt. Unavailable system authentication refuses the operation.
     PresenceProof:
       x-go-generate: true
       type: object
@@ -29935,6 +30004,7 @@ components:
           enum:
             - screen_locked
             - sleep
+            - away
             - app_quit
     LockVaultResponse:
       x-go-generate: true
@@ -30203,6 +30273,30 @@ components:
             type: string
         force:
           type: boolean
+    ProjectRemovalProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Live host-owned progress; absent once the recorded operation settles.
+      required:
+        - phase
+        - completed
+        - total
+      properties:
+        phase:
+          type: string
+          enum:
+            - preparing
+            - chats
+            - project_data
+            - files
+            - extensions
+        completed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     ProjectRemovalResult:
       x-go-generate: true
       type: object
@@ -30220,6 +30314,11 @@ components:
         - workers
         - overlays
       properties:
+        progress:
+          x-go-type: '*ProjectRemovalProgress'
+          oneOf:
+            - $ref: '#/components/schemas/ProjectRemovalProgress'
+            - type: 'null'
         assessment:
           x-go-type: '*ProjectRemovalAssessment'
           oneOf:

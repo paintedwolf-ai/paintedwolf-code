@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -63,7 +62,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	if !ok {
 		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.Sessions.Checkpoints)
 	}
-	if !testutil.WaitForNoFatal(15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		if task, ok := h.Delegations.Queue.Get(dispatched.WorkerID); ok {
 			childSessionID = task.ChildSessionID
 		}
@@ -98,11 +97,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			}
 		}
 		return false
-	}) {
-		parentMessages, _ := mgr.Runner.Transcript.GetMessages(ctx, parentID)
-		t.Fatalf("worker card timed out: child_session_id=%q approvals_resolved=%d approval_err=%v parent_messages=%+v model_requests=%d",
-			childSessionID, approvalsResolved, approvalErr, parentMessages, len(rec.AllRequests()))
-	}
+	})
 	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parentID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	var foundWorkerCard bool
