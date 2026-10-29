@@ -49,7 +49,7 @@
     },
     {
       "id": "pacman",
-      "package_owner": "pacman, including packages built through AUR/yay",
+      "package_owner": "pacman",
       "vault_mode": "new or reopened app sessions require a system service; stored credentials preserved",
       "issues": [
         940,

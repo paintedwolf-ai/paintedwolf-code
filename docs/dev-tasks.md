@@ -1022,7 +1022,7 @@ Cache use remains an explicit choice. After a release publishes its dedicated Ni
 
 `./task release:live-test -- --local-nix-cache` uses disposable keys, private stores and owned loopback HTTP to rehearse complete closure copying, cold import, wrong trust, altered NARs/metadata, missing dependencies, key overlap, interrupted upload retry, ordinary-URL cached misses, withdrawal and debris collection. It makes no R2 calls and changes no daemon trust. Cache layout/signing follow [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html); conditional writes and custom-domain caching follow [R2](https://developers.cloudflare.com/r2/reference/consistency/). Actual production delivery and both architecture installed application substitution remain unperformed until the qualified release is selected.
 
-`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production cache credentials and controller admission remain unchanged.
+`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production delivery belongs to the release lane's `publish-nix-cache` job.
 The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
 
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
@@ -1195,7 +1195,17 @@ When the two Linux rows in [`packaging/release-platforms.json`](../packaging/rel
 - **Withdrawal generations.** Each assembled offer is paired with a signed empty generation for the same channel and architectures: valid apt, dnf and pacman metadata that offers no package. `publish-linux-repositories` retains it under `linux/generations/` and indexes it at `linux/withdrawal-generations/<family>/<channel>/<architecture or all>/<version>.json` before the offer activates, so a halt never needs the signing key.
 - **Withdrawal.** `release-halt` prepares `scripts.linux_release.repository_withdrawal` in every run. Every channel that offers the halted version gets the existing `withdraw` operation and its permanent markers. If an earlier Linux release exists and `last_good_version` names it, that retained generation is restored; any other named version refuses. A first Linux release, or a halt with no `last_good_version`, activates the halted release's empty generation instead. Installs and upgrades stop, and installed packages stay untouched. An empty generation offers no version, so the next release publishes over it normally.
 
-AUR and the Nix binary cache use the same admission: `aur_release_authority.authorize` and `nix_cache.release_authority.authorize` bind the selected release and read the Qualification record at authorization time. `release-aur-delivery` prepares the AUR recipe. The repository declares no AUR deploy credential or production Nix cache key and trust policy, so the release lane publishes neither.
+- **Nix cache.** After the release is announced and mirrored, `release.yml` calls [`release-linux-delivery.yml`](../.github/workflows/release-linux-delivery.yml). The call requires the Linux repository activation to have succeeded. Its `nix-closures` job builds the application closure on each native runner in turn, without credentials. `publish-nix-cache` then imports both closures and signs them with `NIX_CACHE_SIGNING_KEY` (key name `paintedwolf-cache-1`). It publishes them to `downloads.paintedwolf.dev/nix-cache` through `scripts.nix_cache.release_lane`. Each system's publication rereads the Qualification record through `nix_cache.release_authority.authorize`. The job first validates [`nix-cache-trust.json`](../packaging/linux/nix-cache-trust.json) against the provisioned cache identity.
+- **Halt.** `release-halt` also withdraws the halted release's Nix cache availability record. The closure, its NARs and old pins stay published.
+
+The cache job skips while the Linux catalog rows are `candidate`. Once the rows are `public`, a missing secret or an invalid trust policy fails the job. `release-secrets-check` validates the cache credential and only warns while Linux is a candidate.
+
+#### Provisioning Linux delivery credentials
+
+We generate the cache key offline and never commit private material.
+
+**Nix cache.** Store the existing private key corresponding to the committed `paintedwolf-cache-1` public identity as `NIX_CACHE_SIGNING_KEY` in the `release-publication` environment. Run the release secrets check to confirm that its public half matches `packaging/linux/nix-cache-trust.json`.
+
 
 #### Installed qualification lane
 
@@ -1426,21 +1436,19 @@ keep predecessor public keys and generations for skipped-release recovery. This 
 origin rehearsal does not establish custom-domain CDN convergence; production publication
 verifies public bytes and cache roles itself.
 
-**Pacman repositories and AUR recipe rehearsal.**
+**Pacman repository rehearsal.**
 `./task release:rehearse:pacman-repositories -- --receipt /absolute/path/result.json`
 runs on an Arch-family environment with `makepkg`, `repo-add`, `bsdtar`, `gpg`,
-`fakeroot`, `git`, `yay`, and passwordless sudo for disposable installation roots. It builds three
-tiny native fixtures, checks signed databases and embedded package signatures, then
-generates and builds release-pinned AUR recipes and checks actual pacman ownership
-and N-to-N+1 upgrades in separate native, AUR and yay roots. Yay consumes a clean local
-Git recipe origin with isolated configuration, signing trust and package database. It neither installs the
-application on the desktop nor publishes to AUR or R2. Assembly, database and signature
-admission, publication, recovery/withdrawal, recipe generation and AUR Git delivery
-refusals are exercised directly by `./task test:runner` against committed signed
-fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
-tests require `bsdtar`, `makepkg` and `gpg` and fail rather than skip when one is
-missing. Assembly needs `repo-add --include-sigs` (pacman 6.1 or later), so the
-committed generations are regenerated on Arch and the rehearsal qualifies assembly.
+`fakeroot`, `git`, and passwordless sudo for disposable installation roots. It builds
+three tiny native fixtures, checks signed databases and embedded package signatures,
+and checks actual pacman ownership and N-to-N+1 upgrades in isolated roots. It
+neither installs the application on the desktop nor publishes to R2. Assembly,
+database and signature admission, publication, and recovery/withdrawal refusals
+are exercised by `./task test:runner` against committed signed fixtures under
+`scripts/verification_tests/distribution/testdata/`. On Linux those tests require
+`bsdtar`, `makepkg` and `gpg` and fail when a required tool is missing. Assembly needs
+`repo-add --include-sigs` (pacman 6.1 or later); committed generations are regenerated
+on Arch and the rehearsal qualifies assembly.
 
 For an owned SSH VM, `./task release:rehearse:pacman-vm` takes `--ssh-host`, `--ssh-port`, `--ssh-identity`, `--ssh-known-hosts`, and `--receipt`.
 It requires strict known-host verification, transfers only the admitted Python
@@ -1451,32 +1459,19 @@ installing missing build tools. Do not use partial system upgrades.
 `python3 -m scripts.linux_release.pacman_repository` creates a signed generation;
 `pacman_validation.admit` verifies every selected byte, both database archives and
 their aliases, embedded signatures, native identity, architecture and referenced
-packages. `python3 -m scripts.linux_release.aur_recipe` takes repeated `--generation`
-directories plus `--destination`, `--base-url`, and `--catalog`. Production generation
-requires both architectures with the same source, version, channel, dependencies and
-lifecycle. It emits `PKGBUILD`, generated `.SRCINFO`, and the authenticated native
-install script when present. Sources pin native package hashes and full signing
-fingerprints. The AUR package provides/conflicts with the native application package;
-the actual file owner remains the `-bin` package. The candidate AUR names are
-`painted-wolf-code-bin` and `painted-wolf-code-preview-bin`; name availability is not
-a reservation. No AUR recipe has been published by this implementation.
+packages.
 
 Repository setup is explicit: verify the catalog's full key fingerprint independently,
 import and locally trust the reviewed key with `pacman-key`, then add only the desired
 Stable or Preview repository. Keep `SigLevel = Required DatabaseRequired`; never use
 `TrustAll` or `SigLevel = Never`. A generation-pinned `Server` is appropriate for
 recovery, but does not automatically follow new releases. Run `sudo pacman -Syu`
-for ordinary configured-repository upgrades. For a reviewed local AUR recipe, first
-perform the full system upgrade, verify its upstream signing key, inspect `PKGBUILD`
-and `.SRCINFO`, then use `makepkg --verifysource` and `makepkg -si`. A future published
-AUR entry can be consumed by yay; yay is not an application runtime dependency.
-AUR publication and binary repository activation are separate delivery events, and
-neither an upstream release nor an enabled config proves a source offers that version.
-Keep package holds, stale databases, source unavailability and channel choice visible.
-Removing an offer changes future availability; it does not uninstall packages or erase
-mutable data. Retain signed generations and keys for explicit manual recovery.
-The fixture rehearsal covers the local yay recipe client; public AUR availability,
-Artix services, arm64 and installed application workflows require their own evidence.
+for ordinary configured-repository upgrades. An upstream release or enabled
+configuration does not prove a source offers that version. Keep package holds,
+stale databases, source unavailability and channel choice visible. Removing an
+offer changes future availability; it does not uninstall packages or erase mutable
+data. Retain signed generations and keys for explicit manual recovery. Artix
+services, arm64 and installed application workflows require their own evidence.
 
 `python3 -m scripts.linux_release.pacman_publication` accepts the selected generation,
 local `--store`, `--base-url`, trust `--catalog`, and reviewed `--expected-generation`.
@@ -1487,7 +1482,7 @@ after both no-store objects converge recovers. Preserve packages referenced by o
 cached databases. `--operation recover` selects a previously retained healthy index and does not
 change an installed package. The native rehearsal exercises configured `pacman -Syu`,
 a deliberately mismatched database/signature refusal, restoration and retained-index
-recovery, plus the separate AUR-built package upgrades. Cache immutable generation and
+recovery. Cache immutable generation and
 package objects; use no-store metadata and zero negative-cache TTL.
 
 The protected Python API requires a keyword-only `authorize` callback returning
@@ -1530,55 +1525,7 @@ whose callback binds the exact source and final public package digests. Protecte
 serialization owns cross-host publishers; expected-generation checks before and after
 upload refuse stale competing plans. `test:runner` covers ordering, interrupted pairs
 and retries against a real local generation and an in-memory object store. Real CDN
-convergence remains a separate credentialed qualification. Neither the generated recipe nor these tools
-publish an AUR Git repository. AUR availability has a separate delivery owner and never becomes atomic with binary
-publication. The separate `release-aur-delivery` workflow takes a successful main
-`release.yml` dispatch, its exact source commit and the channel. Its `inputs` job calls
-`./task release:publish:aur-recipe -- request` to check the run identity, source commit
-and operation before reading anything, then `-- provenance`, which admits the controller
-run record only when its head commit is the selected source. `-- collect` reads the
-active x86_64 and aarch64 generations from the published pacman repository at the
-`PACMAN_REPOSITORY_URL` repository variable, refuses channel state or manifests for any
-other source commit and objects that differ from their generation inventory, and
-inventories the controller run's `release-public-artifacts`. It retains the bundle as
-the `linux-aur-delivery-inputs` artifact: `delivery.json` selects source, HTTPS base URL
-and relative generation directories, and `final-artifacts.json` binds the final file
-inventory to the same source. The `recipe` job downloads that artifact from its own run
-and calls `-- prepare`, which validates native generations and emits exact
-recipe/source/signer/generation bindings. It stages only generated
-`PKGBUILD`, `.SRCINFO` and the native lifecycle declaration; it never includes binary
-packages or private key material in an AUR Git commit.
-
-The Git transport uses a normal fast-forward push, reviewed predecessor commit and
-independent clone/readback; stale or modified recipes refuse. An interrupted delivery
-can replay the same exact recipe plan and predecessor without creating another commit.
-Binary publication can succeed while recipe delivery remains unavailable: inspect the
-retained plan and remote commit before retrying and report each source's actual state.
-Do not label a prepared recipe as published. Public transport requires owner-only SSH
-identity/known-host files and strict host verification. The protected controller must
-call `aur_release_authority.authorize`, which binds the selected release, its final file
-inventory and every published pacman generation and signer, then reads the exact-source
-Qualification record. A caller-provided accepted JSON receipt is insufficient. The public CLI remains closed
-until that controller integration supplies separate `publish-aur` authorization; no
-AUR workflow or external push is invoked by the fixture rehearsal.
-
-A signed distribution document may advertise an AUR recipe only after a separate
-read-only `aur_observation.observe` operation. The protected caller selects the
-channel-specific package and exact Git commit; `ReadOnlyOrigin` accepts only its
-fixed HTTPS AUR origin. It fetches a bounded shallow snapshot, compares the publisher
-plan and every regular recipe blob, re-reads the branch, and repeats complete release
-admission. A saved publication or observation report cannot replace this callback.
-The observer never pushes, executes a PKGBUILD, changes a package source or installs
-trust. Fixture origins are explicitly nonproduction and cannot authorize public facts.
-
-In the AUR document fields, `source_sha256` hashes the canonical recipe-object
-inventory: rows sorted by path, each containing `path`, `sha256` and `size`, encoded
-as JSON with sorted keys, two-space indentation and a final newline.
-`package_sha256` hashes the exact complete `final-artifacts.json` bytes across both
-CPUs; it is not the hash of one package archive. Individual download links retain
-their own archive hashes. The exact Git commit independently pins the complete recipe.
-Stable and Preview select distinct maintained `-bin` and `-preview-bin` origins;
-preparing either recipe does not reserve a name or establish public availability.
+convergence remains a separate credentialed qualification.
 
 For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
 then use `sudo pacman-key --add /path/to/package-key.asc`, inspect
@@ -1587,8 +1534,8 @@ with `sudo pacman-key --lsign-key <full-fingerprint>`. Add the reviewed reposito
 configuration afterward and run a full system upgrade. To remove the application,
 close it and use `pacman -Qo` on its executable to identify the actual owning package,
 then `sudo pacman -R <owning-package>`. Package removal does not request a mutable-data
-wipe. Keep Artix's actual service/dependency choice; the AUR recipe preserves the
-verified shared native install script rather than inventing a systemd-only lifecycle.
+wipe. Keep Artix's actual service/dependency choice and the verified shared native
+install script.
 Both manifest families bind their selected signing generation/fingerprint, source,
 final package hashes and canonical object inventory identity for release admission.
 

@@ -111,6 +111,11 @@ jobs:
         run: |
           PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal apply \
             --file "${RUNNER_TEMP}/linux-withdrawal.json" --base-url "${DOWNLOAD_BASE_URL}"
+      - name: Withdraw the Nix cache availability record
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        env:
+          BAD_VERSION: ${{ inputs.bad_version }}
+        run: PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane withdraw --bad "${BAD_VERSION}"
       - name: Withdraw package and website discovery
         if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
         run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"

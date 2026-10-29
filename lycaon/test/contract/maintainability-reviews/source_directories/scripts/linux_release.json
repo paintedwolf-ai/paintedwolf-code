@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts/linux_release",
+  "kind": "module",
+  "workstream": "linux-release-distribution",
+  "disposition": "retain",
+  "reason": "The 63 modules keep package-format assembly, native repository effects and qualification adapters explicit while sharing signing, inventories, publication authority and recovery contracts. Retain this bounded membership with each lifecycle at its existing owner; the Nix cache has its own package.",
+  "reviewed_commit": "fb94c47eb9145b640bad4151ea0e7ca0078b66c7",
+  "ceiling": 63,
+  "reviewed_shape": "e6cc4b7095ca27769261cd686ece71029f83ee08b481ac29871bd604141aaabb",
+  "boundaries": {
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "280137748c1ad4df793c0d7282546e4057604ce8fa053a163907bfd46512848a",
+    "scripts/verification_tests/distribution/test_linux_repository_withdrawal_execution.py": "348813ad65ae5c238ad2c6f8824d7a1207814fa67532fd5bc00bfbb5e4038400",
+    "scripts/verification_tests/distribution/nix_cache/test_nix_cache_release_lane_execution.py": "84dfee8e8dc3257278a1c4366338f872505a26ed0cd122af437fb1f3487ebeb0",
+    "scripts/verification_tests/distribution/pacman/test_pacman_rehearsal_contract_execution.py": "46d3d1c3847982ff91c72400f83282681de3afd7dd40f9d7543dc46695e249cc"
+  }
+}

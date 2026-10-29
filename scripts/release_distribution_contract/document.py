@@ -12,7 +12,7 @@ from .document_schema import PLATFORMS, exact, require, validate
 from .platforms import parse_platforms
 
 REQUEST = {"mode", "version", "origin", "source_commit", "source_tree", "controller_commit", "signing_generation",
-           "package_content_types", "repositories", "nix", "aur"}
+           "package_content_types", "repositories", "nix"}
 
 
 def snapshot(path, *, retain=False, limit=64 << 30):
@@ -72,7 +72,7 @@ def construct(request, catalog: Path, updater_manifest: Path, artifacts: Path, *
                    "tree": selected["source_tree"], "catalog_sha256": catalog_identity["sha256"]},
         "controller_commit": selected["controller_commit"], "updater_manifest_sha256": updater_identity["sha256"],
         "signing_generation": selected["signing_generation"], "platforms": packages,
-        "repositories": selected["repositories"], "nix": selected["nix"], "aur": selected["aur"]})
+        "repositories": selected["repositories"], "nix": selected["nix"]})
     binding = {"document": copy.deepcopy(document), "catalog": catalog, "updater_manifest": updater_manifest,
                "artifacts": artifacts, "request": selected}
     require(authorize(binding) is True, "fresh release admission refused distribution facts")

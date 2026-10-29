@@ -78,14 +78,13 @@ describe("update settings", () => {
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
     expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
   });
-  it("shows pacman package identity and leaves the AUR workflow explicit", async () => {
+  it("shows pacman package identity and package-manager ownership", async () => {
     const state = packageFixture();
     state.package = { ...state.package!, family: "pacman", update_command: "sudo pacman -Syu" };
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
     expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (pacman)");
     const upgrade = await screen.findByTestId("updates-package-upgrade");
     expect(upgrade.querySelector("code")).toBeNull();
-    expect(screen.getByText(/For an AUR installation/).textContent).toContain("workflow you selected");
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {

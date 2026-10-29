@@ -874,12 +874,6 @@
       ],
       "workers": 1
     },
-    "release:publish:aur-recipe": {
-      "locks": [
-        "aur-delivery"
-      ],
-      "workers": 1
-    },
     "release:live-test": {
       "locks": [
         "*"
@@ -1326,7 +1320,6 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
-      "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
       "linux-desktop-environment-rehearsal.yml": 1,
       "linux-installed-desktop-rehearsal.yml": 1,
