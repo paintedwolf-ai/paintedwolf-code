@@ -63,6 +63,58 @@ are distinct from executing native owners, live model qualification and installe
 platform evidence. macOS/Linux execution and installed qualification remain
 required; Windows-shaped paths and compile results never qualify native Windows.
 
+### Complete syntax units
+
+[`commandsurface.ParseProgram`](../lycaon/internal/commandsurface/program_parse.go)
+parses a submitted UTF-8 unit before exposing its typed plan. Original byte
+coordinates and a source digest survive quote removal; words retain literals,
+quotes, parameters and deferred substitutions. The private parsed tree returns
+detached snapshots. Parsing grants no operation capability and invokes no shell,
+filesystem operation, expansion or upstream interpreter.
+
+[`commandprogram.LoadSourceUnit`](../lycaon/internal/commandprogram/source_unit.go)
+captures an explicitly reached script through the source port. It requires the
+owner's exact UTF-8 representation, revision, complete range and byte digest, and
+validates the entire captured unit before any of its statements can be dispatched.
+A malformed script supplies no proof that earlier parent effects did not occur.
+Typed syntax diagnostics carry byte ranges, line/column, expected forms and
+resource measurements through the existing rejection/OAR pipeline. They never
+guess missing source contents or create executable replacement calls.
+
+The new plan is separate from the existing process-stage plan. Retained verify,
+PTY, process launch, detection, secret inspection and command-identity consumers
+still require that process representation. The current command executor remains
+its consumer until the runtime integration replaces it. Do not flatten functions,
+loops or substitutions into process stages, broaden a retained surface merely
+because the new parser accepts a form, or remove a recognizer while one of these
+consumers still uses it. Their replacement and obsolete-path cleanup accompany
+the introducing runtime integration.
+
+The syntax adapter reserves parser scratch before parsing and meters the selected
+upstream parser's allocations and recursive frames. Brace classification and
+static quote removal share that allocation pool; admission never invokes general
+field expansion or its account/environment/glob callbacks. The 8,192-node and
+64-edge limits count the completed selected syntax tree before host-plan
+allocation; temporary parser wrappers remain scratch. This clarifies the
+catalog's former generic “before allocation” wording without changing either
+threshold. Host lowering reserves a conservative typed-node, slice-growth,
+cloned-text and frame envelope against the same pool before allocating its plan.
+
+Source capture receives an explicit byte ceiling and representation before
+materialization. Execution uses `NewProgramParser` with working and retained
+state admission. Retained source/plan storage is charged to `program_state_bytes`
+before host-plan insertion; closing parser scratch does not release that state.
+Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
+while the original parsed program is released. `ParseProgram`, `Snapshot` and
+`Source` are bounded inspection helpers and do not grant execution authority;
+execution callers must retain the applicable leases while values remain reachable.
+`ValidatedProgramIdentity` supplies a zero-copy source/catalog identity only while
+that validated execution lease remains live. Admission can bind a whole-envelope
+progress update to this unit without treating an inspection copy or a caller's
+boolean as validation proof; the identity check itself applies no progress.
+Local parser tests do not qualify the later command dispatch, native utilities,
+publication or installed-platform wiring.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
