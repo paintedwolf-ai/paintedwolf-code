@@ -9,8 +9,8 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_UNRESOLVED"
 effect: block
 copy:
   cause: Establish spec posture via /plan or write a blueprint file first
-  why: Use write on `${overlay_dir}/blueprints/<slug>.md` or run /plan
-  fix: Use write on `${overlay_dir}/blueprints/<slug>.md` or run /plan
+  why: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
+  fix: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
   instead: Establish spec posture before high-risk tools
   what: Establish spec posture via /plan or write a blueprint file first
 x-paintedwolf-category: recoverable
