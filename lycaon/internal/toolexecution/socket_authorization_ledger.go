@@ -39,11 +39,15 @@ func (e *Capabilities) recordCapabilityDecision(ctx context.Context, tc tools.To
 		action = authzledger.ActionCapabilityDenied
 		outcome = authzledger.OutcomeDenied
 	}
+	resolvedBy := authzledger.ResolvedByHuman
+	if authSource == authzledger.AuthorizationSourcePolicy || authSource == authzledger.AuthorizationSourceNeverAsk {
+		resolvedBy = authzledger.ResolvedByPolicy
+	}
 	_ = e.Approvals.authzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
 		SessionID:           tc.Identity.SessionID,
 		Action:              action,
 		Outcome:             outcome,
-		ResolvedBy:          authzledger.ResolvedByHuman,
+		ResolvedBy:          resolvedBy,
 		Tool:                tool,
 		AuthorizationSource: authSource,
 		Sockets: []authzledger.CapabilitySocket{{

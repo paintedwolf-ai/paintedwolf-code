@@ -42,6 +42,15 @@ func GrantKey(action ProposedAction) string {
 		strings.Join(hostResources, "\x1f") + "\x00" +
 		strings.Join(families, "\x1f") + "\x00" + string(boundary) + "\x00" +
 		packageIdentity
+	// Bind reviewed socket authority independently of applied profile overlays.
+	if len(action.Sockets.SocketGrants) != 0 {
+		sockets := make([]string, 0, len(action.Sockets.SocketGrants))
+		for _, grant := range action.Sockets.SocketGrants {
+			sockets = append(sockets, grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key())
+		}
+		sort.Strings(sockets)
+		identity += "\x00socket_authority:" + strings.Join(sockets, "\x1f")
+	}
 	if action.Execution.ProcessAccess != "" {
 		raw, err := json.Marshal(action.Execution.ProcessTargets)
 		if err != nil {

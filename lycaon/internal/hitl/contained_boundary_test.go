@@ -9,34 +9,34 @@ import (
 
 func TestGrantKeyVariesWithSocketAndDirectBoundary(t *testing.T) {
 	base := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true,
-			Egress:   hitl.ContainedEgressProxy,
-			Roots:    []string{"/proj"},
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
 		},
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectDir: "/proj",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true,
+				Egress:   hitl.ContainedEgressProxy,
+				Roots:    []string{"/proj"},
+			},
+		},
+	}
 	k0 := hitl.GrantKey(base)
 
 	withSockets := base
 	withSockets.Execution.Contained.SocketPathsDigest = "digest-a"
 	withSockets.Execution.Contained.SocketCount = 1
-	if hitl.GrantKey(withSockets) != k0 {
-		t.Fatal("socket overlay changed GrantKey")
+	if hitl.GrantKey(withSockets) == k0 {
+		t.Fatal("socket boundary must change GrantKey")
 	}
 
 	otherSocket := withSockets
 	otherSocket.Execution.Contained.SocketPathsDigest = "digest-b"
-	if hitl.GrantKey(otherSocket) != hitl.GrantKey(withSockets) {
-		t.Fatal("socket overlay changed GrantKey")
+	if hitl.GrantKey(otherSocket) == hitl.GrantKey(withSockets) {
+		t.Fatal("a different socket boundary must change GrantKey")
 	}
 
 	direct := base

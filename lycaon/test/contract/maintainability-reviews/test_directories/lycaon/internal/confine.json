@@ -2,11 +2,11 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "linux-future-path-floors",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Retain the measured 68-file confinement test directory. Shared admission, filesystem policy, floor contracts such as the key-material store floor, and applied platform boundaries stay beside their existing probe process and grant fixtures. Metadata and standard-stream contracts are two live suites under the same real command launch; they cover outside-root EROFS, exact allow-backs, original mount flags, unchanged source metadata, byte delivery, the null stream for closed input and descendant cleanup. The original-mount-flag contract joined the metadata suite rather than adding a file when the key-material floor contract arrived. The shared Linux probe remains bounded while new concerns have their own suites. Repackaging these tests would expose internal setup without creating a new authority boundary.",
-  "reviewed_commit": "2f1efac63043523bfcf5da741c0c8834a7476b21",
-  "ceiling": 68,
+  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. Freeze this reviewed shape at 67 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available. Delegated-daemon refusal is split into a separate dependent PR so the retained-object prerequisite lands first.",
+  "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
+  "ceiling": 67,
   "boundaries": {
     "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
     "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
@@ -14,8 +14,11 @@
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/socket_reference_darwin_test.go": "f2e56004fff513c948a301181581a0e9dab358b81dba985cfe307d75d326c6ce",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b",
     "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
     "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
   },
-  "reviewed_shape": "bc2bdbad2a34a327f3687208dfa31eab97dfd90cf88b15cb6cfe09ed931cb187"
+  "reviewed_shape": "ed6768204ff8ea4ed55849713565f9c38ecb0ca559612584a9a0e9847564cb82"
 }

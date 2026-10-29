@@ -271,7 +271,7 @@ type ApprovalGrant struct {
 	ID       string                `json:"id"`
 	Scope    ApprovalGrantScope    `json:"scope"`
 	Category ApprovalGrantCategory `json:"category"`
-	// Searchable host label. For socket_path this mirrors approved_path; authority matching uses approved_path and resolved_path. Secret releases expose only a count label; their fingerprints stay host-only.
+	// Searchable host label. For socket_path this mirrors approved_path; authority matching also checks the host-owned enforcement mode and live socket binding. Secret releases expose only a count label; their fingerprints stay host-only.
 	Pattern string `json:"pattern"`
 	// Host-rendered bounded-lease label.
 	Title string `json:"title"`
@@ -286,7 +286,7 @@ type ApprovalGrant struct {
 	ProjectID string `json:"project_id,omitempty"`
 	// A folder the lease was granted from, for display only. Absent for a project with no folders attached.
 	ProjectDir string `json:"project_dir,omitempty"`
-	// True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket. Display and bulk-clear only; never auto-revoked.
+	// True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket, or whose retained binding is unavailable after replacement or engine restart. Saved intent is preserved until renewed or revoked.
 	Unavailable bool `json:"unavailable,omitempty"`
 	// Number of exact actions an action_set lease covers. Exact action identities are host-only opaque digests and never cross the wire.
 	ActionCount int `json:"action_count,omitempty"`
@@ -309,7 +309,7 @@ type ApprovalGrant struct {
 	ChatSessionID string `json:"chat_session_id,omitempty"`
 	// Chat title on chat-scoped rows, for grouping in Settings.
 	SessionTitle string `json:"session_title,omitempty"`
-	// Host copy for revoke consequences. Socket grants use "Applies to the next command or terminal. Already-running processes retain access."
+	// Host copy for revoke consequences. Socket grants use "Applies to the next local-service operation. Already-running processes and admitted requests retain access."
 	RevokeAppliesTo string `json:"revoke_applies_to,omitempty"`
 }
 

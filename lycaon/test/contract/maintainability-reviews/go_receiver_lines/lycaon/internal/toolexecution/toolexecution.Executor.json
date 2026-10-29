@@ -2,15 +2,18 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/toolexecution/toolexecution.Executor",
   "kind": "runtime_service",
-  "workstream": "approval-intent-lifecycle",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Executor settles one invocation across validation, canonical arguments, confinement, prepared approval, dispatch, and secret effects. Domain collaborators own their behavior; retain the ordered operation and carry constituent review keys with its compiled plan.",
-  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
-  "ceiling": 567,
+  "reason": "Executor settles one invocation across validation, canonical arguments, confinement, approval, dispatch and secret effects. Its transient socket scope spans that complete operation and transfers shares before permit consumption. Existing collaborators keep their domain authority; retain this ordered lifetime instead of adding another executor. Freeze this reviewed shape at 602 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 602,
   "boundaries": {
     "lycaon/internal/toolexecution/executor_settled_join_test.go": "eb332fa82834d7eaf0305862aca9143e473512cb621eb1ff43621af261494c00",
     "lycaon/internal/toolexecution/approval_identity_test.go": "0bfda5fdc0a03359333c67eaa9f6aa368cc8bb778c54e1cebe00342b3f21356e",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "9b31a80db071a85866026f0099eb1d4947f1abbbda314310e11998a45bf8184c",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/session/approvalstate/socket_ownership_test.go": "eec9245bb3313966f1cbb81d1c945b8cf4c15b2fbba892bf75cd64b58d9a1597"
   },
-  "reviewed_shape": "a7209809bf61729626e7c8f7e936e3c11f7d747cf16c359d43a24eb322ab2f73"
+  "reviewed_shape": "c87e1ef1105ba484530af6cb5db485f6a3f3367ba38026d0adc50b76280a0c81"
 }

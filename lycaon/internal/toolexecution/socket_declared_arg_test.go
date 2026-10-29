@@ -28,11 +28,13 @@ func httpRequestSocketContext(t *testing.T, dir string) tools.ToolContext {
 }
 
 func TestDeclaredSocketArgumentUsesExistingGrantWithoutAsking(t *testing.T) {
+	ctx := socketInvocationContext(t)
 	dir := shortTempDir(t)
 	sock := filepath.Join(dir, "daemon.sock")
 	_ = listenUnixSocket(t, sock)
 	grant, err := confine.ResolveSocketRequest(sock)
 	testutil.FailErr(t, "resolve socket", err)
+	grant = retainedTestSocket(t, grant)
 	executor := func() *Executor {
 		e := NewExecutor(nil, nil, "")
 		e.Capabilities.socketRuntime = &memorySocketRuntime{task: []confine.SocketGrant{grant}}
@@ -40,27 +42,29 @@ func TestDeclaredSocketArgumentUsesExistingGrantWithoutAsking(t *testing.T) {
 	}()
 	tc := httpRequestSocketContext(t, dir)
 
-	result, err := executor.Capabilities.preflightSocketCapability(t.Context(), "http_request", map[string]any{"url": "http://localhost/", "unix_socket": sock}, tc)
+	result, err := executor.Capabilities.preflightSocketCapability(ctx, "http_request", map[string]any{"url": "http://localhost/", "unix_socket": sock}, tc)
 	testutil.FailErr(t, "preflight granted socket", err)
 	if result == nil || len(result.SocketGrants) != 1 || result.SocketGrants[0] != grant {
 		t.Fatalf("preflight = %+v, want the granted socket", result)
 	}
 	tc.Socket.SocketGrants, tc.Socket.SocketCapabilityRuntime = result.SocketGrants, executor.Capabilities.socketRuntime
-	claimed, reject := tools.ClaimDeclaredSocket(t.Context(), tc, sock)
+	claimed, reject := tools.ClaimDeclaredSocket(ctx, tc, sock)
 	if reject != nil || claimed.ResolvedPath != grant.ResolvedPath {
 		t.Fatalf("claim = %+v %v", claimed, reject)
 	}
-	if _, reject := tools.ClaimDeclaredSocket(t.Context(), tc, filepath.Join(dir, "other.sock")); reject == nil {
+	if _, reject := tools.ClaimDeclaredSocket(ctx, tc, filepath.Join(dir, "other.sock")); reject == nil {
 		t.Fatal("an unreviewed socket was claimable")
 	}
 }
 
 func TestSocketPreflightWorkerChildFindsRootLease(t *testing.T) {
+	ctx := socketInvocationContext(t)
 	dir := shortTempDir(t)
 	sock := filepath.Join(dir, "daemon.sock")
 	_ = listenUnixSocket(t, sock)
 	grant, err := confine.ResolveSocketRequest(sock)
 	testutil.FailErr(t, "resolve socket", err)
+	grant = retainedTestSocket(t, grant)
 
 	rt := &memorySocketRuntime{task: []confine.SocketGrant{grant}}
 	executor := func() *Executor { e := NewExecutor(nil, nil, ""); e.Capabilities.socketRuntime = rt; return e }()
@@ -69,7 +73,7 @@ func TestSocketPreflightWorkerChildFindsRootLease(t *testing.T) {
 	tc.Identity.SessionID = "worker-child-session"
 	tc.Identity.RootSessionID = "root-chat-session"
 
-	result, err := executor.Capabilities.preflightSocketCapability(t.Context(), "http_request", map[string]any{"url": "http://localhost/", "unix_socket": sock}, tc)
+	result, err := executor.Capabilities.preflightSocketCapability(ctx, "http_request", map[string]any{"url": "http://localhost/", "unix_socket": sock}, tc)
 	testutil.FailErr(t, "preflight worker child", err)
 	if result == nil || len(result.SocketGrants) != 1 || result.SocketGrants[0] != grant {
 		t.Fatalf("worker child preflight = %+v, want the root's granted socket", result)

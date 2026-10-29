@@ -31,6 +31,7 @@ type EventPublisher interface {
 
 // announceResolved skips events staged by the outbox and always refreshes attention.
 func (m *Checkpoints) announceResolved(ctx context.Context, row StoredCheckpoint, viaOutbox bool) {
+	m.socketOwners.release(row.ID)
 	if !viaOutbox {
 		m.publishEvent(ctx, row)
 		return
@@ -161,17 +162,17 @@ func approvalRecordInput(row StoredCheckpoint, status DecisionStatus) authzledge
 
 func proposedActionFromCheckpoint(row StoredCheckpoint) ProposedAction {
 	return ProposedAction{
-Invocation: ActionInvocation{
-Tool: row.ToolName,
-Args: cloneArgs(row.Args),
-Files: append([]string(nil), row.Files...),
-},
-Scope: ActionScope{
-ProjectID: row.ProjectID,
-ProjectDir: row.ProjectDir,
-SessionID: row.SessionID,
-},
-}
+		Invocation: ActionInvocation{
+			Tool:  row.ToolName,
+			Args:  cloneArgs(row.Args),
+			Files: append([]string(nil), row.Files...),
+		},
+		Scope: ActionScope{
+			ProjectID:  row.ProjectID,
+			ProjectDir: row.ProjectDir,
+			SessionID:  row.SessionID,
+		},
+	}
 }
 
 // Ensure Manager implements CheckpointManager.

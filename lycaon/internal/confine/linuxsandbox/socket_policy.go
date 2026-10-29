@@ -17,9 +17,8 @@ const (
 
 // SocketRequest is what the supervisor read about one notified syscall: the
 // socket as it was when the supervisor took its own descriptor for it, and
-// the address from the supervisor's own copy. The supervisor performs the call
-// on that descriptor with that copy, so nothing the target changes afterwards
-// reaches the kernel.
+// the address from the supervisor's own copy. A Unix pathname only selects an
+// approved retained destination; it is never replayed for the kernel connect.
 type SocketRequest struct {
 	Op SocketOp
 	// Unix is a path-socket address, already resolved to its real path.
@@ -30,6 +29,8 @@ type SocketRequest struct {
 	IP netip.AddrPort
 	// Stream is true for SOCK_STREAM.
 	Stream bool
+	// Seqpacket is true for SOCK_SEQPACKET pathname connections.
+	Seqpacket bool
 	// HostSocket reports that the socket lives in the host's network namespace
 	// because the supervisor put it there.
 	HostSocket bool
@@ -61,6 +62,8 @@ const (
 // its destination, the refusal to report.
 type Decision struct {
 	Action Action
+	// SocketFD is the retained destination for an admitted pathname connect.
+	SocketFD int
 	// Bind is the host address a granted listener binds.
 	Bind netip.AddrPort
 	// Relay asks for a relay inside the sandbox to the host's loopback service
@@ -108,11 +111,15 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 		return Decision{Action: Perform}
 	case r.Op == OpBind:
 		return refuse("network-bind", r.Unix)
-	case slices.Contains(n.SocketPaths, filepath.Clean(r.Unix)):
-		return Decision{Action: Perform}
-	default:
+	case !r.Stream && !r.Seqpacket:
 		return refuse("network-outbound", r.Unix)
 	}
+	for _, grant := range n.SocketGrants {
+		if grant.Path == filepath.Clean(r.Unix) {
+			return Decision{Action: Perform, SocketFD: grant.FD}
+		}
+	}
+	return refuse("network-outbound", r.Unix)
 }
 
 func (n Network) decideOutbound(r SocketRequest) Decision {

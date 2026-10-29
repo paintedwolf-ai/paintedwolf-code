@@ -121,7 +121,7 @@ func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, b
 }
 
 func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd, sock int, info socketInfo) (int64, unix.Errno) {
-	req := SocketRequest{Stream: info.typ == unix.SOCK_STREAM}
+	req := SocketRequest{Stream: info.typ == unix.SOCK_STREAM, Seqpacket: info.typ == unix.SOCK_SEQPACKET}
 	cookie, _ := unix.GetsockoptUint64(sock, unix.SOL_SOCKET, unix.SO_COOKIE)
 	req.HostSocket, req.HostListener = s.host.lookup(cookie)
 
@@ -195,9 +195,12 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return bind()
 	default:
 		if req.Unix != "" {
-			// The resolved path is what the grant names and what is connected.
-			sa := &unix.SockaddrUnix{Name: req.Unix}
-			return 0, errnoOf(unix.Connect(sock, sa), 0)
+			// Only the retained destination reaches connect. The selector may
+			// have been replaced after the decision without redirecting this call.
+			if decision.SocketFD < SocketReferenceFD {
+				return 0, unix.EACCES
+			}
+			return 0, s.connectUnix(sock, decision.SocketFD)
 		}
 		if len(raw) == 0 {
 			return 0, unix.EINVAL
@@ -272,9 +275,8 @@ func indexByte(b []byte, c byte) int {
 	return -1
 }
 
-// errUnresolvedSocketPath marks a relative path-socket address whose working
-// directory the supervisor could not read.
-var errUnresolvedSocketPath = errors.New("relative socket path has no readable working directory")
+// errUnresolvedSocketPath marks a pathname the supervisor could not resolve.
+var errUnresolvedSocketPath = errors.New("socket destination cannot be resolved")
 
 // resolveSocketPath gives a path-socket address the meaning the target's
 // working directory gives it, with symbolic links resolved, so a grant matches
@@ -288,10 +290,8 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 		}
 		path = filepath.Join(cwd, path)
 	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved, true
-	}
-	return filepath.Clean(path), true
+	resolved, err := filepath.EvalSymlinks(path)
+	return resolved, err == nil
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's

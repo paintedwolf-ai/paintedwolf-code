@@ -1,15 +1,18 @@
 {
   "category": "source_files",
   "artifact": "lycaon/internal/confine/confine.go",
-  "kind": "module",
-  "workstream": "required-confinement-admission",
+  "kind": "construction",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Admission policy switches and required versus applied state now live in admission.go. The remaining shared boundary declarations, request construction, launch construction and profile rendering continue to compose the same confinement input; retain that bounded core while the focused request and admission contracts protect its authority. No Confinement fields or dependency authority changed.",
-  "reviewed_commit": "1cd785fe9899dfdee9a950ea7ab845027c627227",
-  "ceiling": 500,
+  "reason": "The shared command boundary validates inputs, renders the platform profile and hands off owned descriptors with rollback cleanup. Socket duplication has a focused platform helper; keeping command construction here preserves a single launch and cleanup transaction. No additional permission resolver is introduced. Freeze this reviewed shape at 520 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 520,
   "boundaries": {
     "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
     "lycaon/internal/confine/admission_linux_test.go": "b55f2b5f1756e1982590809c9774ef382300ecd5bd3ed55ee0204cd670f34a49",
-    "lycaon/internal/confine/request_test.go": "0755e0f537c5662ef0531eefc47054559528290a7f435e844b591821f52d857e"
+    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/socket_reference_darwin_test.go": "f2e56004fff513c948a301181581a0e9dab358b81dba985cfe307d75d326c6ce",
+    "lycaon/internal/tools/confine_request_parity_test.go": "e3ef7aaf4e072f73092a108cc26c28ae38eedd32e5f53569176af6cf4a5aaefa"
   }
 }

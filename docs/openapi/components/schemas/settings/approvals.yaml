@@ -246,7 +246,8 @@ components:
           type: string
           description: >
             Searchable host label. For socket_path this mirrors approved_path;
-            authority matching uses approved_path and resolved_path. Secret
+            authority matching also checks the host-owned enforcement mode and live
+            socket binding. Secret
             releases expose only a count label; their fingerprints stay host-only.
         title:
           type: string
@@ -283,8 +284,9 @@ components:
           description: >
             True when the granted target no longer exists on this host — a
             write_root whose path fails Lstat, or a socket_path whose approved
-            path no longer resolves to a usable socket. Display and bulk-clear
-            only; never auto-revoked.
+            path no longer resolves to a usable socket, or whose retained binding
+            is unavailable after replacement or engine restart. Saved intent is
+            preserved until renewed or revoked.
         action_count:
           type: integer
           minimum: 1
@@ -334,7 +336,7 @@ components:
           type: string
           description: >
             Host copy for revoke consequences. Socket grants use
-            "Applies to the next command or terminal. Already-running processes retain access."
+            "Applies to the next local-service operation. Already-running processes and admitted requests retain access."
     ApprovalGrantScope:
       type: string
       enum:

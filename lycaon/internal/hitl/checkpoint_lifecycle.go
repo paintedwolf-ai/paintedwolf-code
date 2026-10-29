@@ -16,6 +16,7 @@ type Checkpoints struct {
 	expiryFor       func() time.Duration
 	resolutionLocks keyedMutex
 	expiries        expiryTimers
+	socketOwners    checkpointSocketOwners
 }
 
 type checkpointSettlement interface {

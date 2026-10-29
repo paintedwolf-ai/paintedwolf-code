@@ -80,7 +80,7 @@ func (b *serveBuilder) loadConfig() error {
 	if _, err := tsparse.LoadConfig(); err != nil {
 		return fmt.Errorf("source parsing: %w", err)
 	}
-	if err := b.settings.Load(b.startup.cfg); err != nil {
+	if err := b.settings.Load(b.startup.cfg, b.startup.resources); err != nil {
 		return err
 	}
 	b.security.BindTrust(b.settings.Service.TrustSurfaces)

@@ -12,8 +12,7 @@ import (
 // Recipient identity includes routing overrides that can change the service reached.
 func requestDestination(spec requestSpec) (id, label string) {
 	if spec.socket != "" {
-		label = "unix:" + spec.socket
-		return secretmatch.DestinationKey(label, "unix", spec.socket), label
+		return secretmatch.UnixDestination(spec.socket, spec.socketBinding.Key())
 	}
 	id, label = secretmatch.HTTPDestination(spec.target)
 	overrides := spec.recipientOverrides()
