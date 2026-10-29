@@ -56,18 +56,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	workspace := filepath.Join(root, "workspace")
 	testutil.FailErr(t, "cookie workspace", os.Mkdir(workspace, 0700))
 	path := filepath.Join(root, "service")
-	original, err := net.Listen("unix", path)
-	testutil.FailErr(t, "cookie issuer listener", err)
-	var originalCookieRequests atomic.Int64
-	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if cookie, err := req.Cookie("session"); err == nil && cookie.Value == value {
-			originalCookieRequests.Add(1)
-		}
-		http.SetCookie(w, &http.Cookie{Name: "session", Value: value, Path: "/private", HttpOnly: true, SameSite: http.SameSiteLaxMode})
-		w.WriteHeader(http.StatusNoContent)
-	})}
-	go func() { _ = server.Serve(original) }()
-	defer server.Close()
+	server, originalCookieRequests := startCookieIssuer(t, path, value)
 	database := testdbfixture.Open(t, "cookie-owner.db")
 	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, workspace)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
@@ -200,6 +189,24 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	testLegacyCookieIssuer(t, ctx, service, jarRequest, args, invoke, value)
 
 	testOrdinaryCookieTransport(t, ctx, executor, review, &tc, args, invoke, decoyServer.Handler, observed, &reissue, value)
+}
+
+// startCookieIssuer owns the original endpoint and counts cookies returned to it.
+func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.Int64) {
+	t.Helper()
+	listener, err := net.Listen("unix", path)
+	testutil.FailErr(t, "cookie issuer listener", err)
+	requests := &atomic.Int64{}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if cookie, err := req.Cookie("session"); err == nil && cookie.Value == value {
+			requests.Add(1)
+		}
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: value, Path: "/private", HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		w.WriteHeader(http.StatusNoContent)
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+	return server, requests
 }
 
 // The journal records the authenticated human disclosure, not a socket lease
