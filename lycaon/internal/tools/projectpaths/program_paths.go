@@ -68,17 +68,17 @@ func (p BoundPath) Open() (*os.File, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer func() { _ = root.Close() }()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			_ = file.Close()
-			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil

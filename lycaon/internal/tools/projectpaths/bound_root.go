@@ -38,7 +38,8 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	return root, nil
 }
 
-func pathOperationError(operand string, err error) error {
+// PathOperationError preserves typed causes while classifying adapter and confinement failures.
+func PathOperationError(operand string, err error) error {
 	var reject *toolrejection.ToolReject
 	var pathErr *PathError
 	if errors.As(err, &reject) || errors.As(err, &pathErr) {
@@ -64,7 +65,7 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	}
 	root, err := fseffect.OpenMetadataRoot(p.Resolved.Root.Path)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	held, err := root.OpenExact(".", true)
@@ -84,12 +85,12 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	}
 	file, err := root.OpenExact(p.exactRelative, directory)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			_ = file.Close()
-			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil
