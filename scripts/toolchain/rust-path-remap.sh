@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Shipped Rust binaries must not carry the builder's home, toolchain or checkout
-# paths in panic locations and debug strings. Sourced by every Rust build entry
-# point; it extends CARGO_ENCODED_RUSTFLAGS, which cargo prefers over RUSTFLAGS,
-# so paths containing spaces stay single arguments. C and C++ that build scripts
-# compile through cc receive the same maps as -ffile-prefix-map.
-#
-#   rust_path_remap ROOT
+# Keep builder paths out of Rust and native dependency binaries.
 rust_path_remap() {
-  local root="$1"
+  local root="${PW_SOURCE_ROOT_ORIGINAL:-$1}"
+  local snapshots="${PW_TEST_SNAPSHOT_ROOT:-/tmp/paintedwolf-source-snapshots-${UID}}"
   local separator=$'\x1f'
   local flags="${CARGO_ENCODED_RUSTFLAGS:-}"
   if [[ -z "${flags}" && -n "${RUSTFLAGS:-}" ]]; then
@@ -24,8 +19,14 @@ rust_path_remap() {
     cargo="${cargo:-${home}/.cargo}"
   fi
   # rustc applies the last matching prefix, so broader directories come first.
+  # Capture slots share a stable parent. Mapping that parent keeps Cargo's
+  # build-script environment identical when admission chooses another slot.
+  local source_prefix="${root%/}"
+  if [[ -n "${PW_SOURCE_SNAPSHOT_COMMIT:-}" ]]; then
+    source_prefix="$(dirname "${root%/}")"
+  fi
   local mapping
-  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${root%/}=/source"; do
+  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${snapshots%/}=/source-snapshots" "${source_prefix}=/source"; do
     [[ "${mapping%%=*}" == /?* ]] || continue
     case "${separator}${flags}${separator}" in
       *"${separator}--remap-path-prefix=${mapping}${separator}"*) continue ;;

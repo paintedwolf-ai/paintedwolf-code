@@ -129,17 +129,10 @@ pub async fn fetch_with_deadline(
     let deadline = tokio::time::Instant::now() + deadline;
     let running = semver::Version::parse(running_version)
         .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?;
-    let client = crate::http_transport::client_builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(CHECK_REQUEST_TIMEOUT)
-        .build()
-        .map_err(|e| UpdateError::new(Failure::CheckFailed, e))?;
     let endpoint = channel.endpoint();
     let (manifest, signature) = tokio::time::timeout_at(deadline, async {
-        let manifest = fetch_bytes(&client, &endpoint, MAX_MANIFEST_BYTES).await?;
-        let signature =
-            fetch_bytes(&client, &format!("{endpoint}.sig"), MAX_SIGNATURE_BYTES).await?;
+        let manifest = fetch_bytes(&endpoint, MAX_MANIFEST_BYTES).await?;
+        let signature = fetch_bytes(&format!("{endpoint}.sig"), MAX_SIGNATURE_BYTES).await?;
         Ok::<_, UpdateError>((manifest, signature))
     })
     .await
@@ -177,11 +170,9 @@ pub async fn fetch_with_deadline(
     .map_err(Into::into)
 }
 
-async fn fetch_bytes(
-    client: &reqwest::Client,
-    url: &str,
-    cap: u64,
-) -> Result<Vec<u8>, UpdateError> {
+async fn fetch_bytes(url: &str, cap: u64) -> Result<Vec<u8>, UpdateError> {
+    let client = crate::http_transport::update_client(url, CHECK_REQUEST_TIMEOUT).await
+        .map_err(|error| UpdateError::new(Failure::CheckFailed, error))?;
     let response = client
         .get(url)
         .header("Cache-Control", "no-cache, no-store")

@@ -242,7 +242,7 @@ func TestConfinementIntegrityForeignVarFoldersWriteDenied(t *testing.T) {
 	}
 }
 
-func TestConfinementIntegrityProjectRootFilesystemAccepted(t *testing.T) {
+func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
 	body := `{"roots":[{"path":"/"}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
@@ -250,8 +250,13 @@ func TestConfinementIntegrityProjectRootFilesystemAccepted(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("POST project root /: status=%d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("state ancestor root was admitted: status=%d body=%s", w.Code, w.Body.String())
+	}
+	var refusal map[string]any
+	testutil.FailErr(t, "decode root refusal", json.Unmarshal(w.Body.Bytes(), &refusal))
+	if refusal["code"] != "invalid_path" {
+		t.Fatalf("root refusal lost typed code: %v", refusal)
 	}
 
 	okDir := t.TempDir()

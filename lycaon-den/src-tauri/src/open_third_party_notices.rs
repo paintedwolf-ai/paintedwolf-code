@@ -5,6 +5,7 @@
 //! Dev: repo-root `THIRD-PARTY-NOTICES.md` (produced by `./task licenses:notices`).
 
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
 use tauri::{AppHandle, Manager};
@@ -25,7 +26,10 @@ pub fn open_third_party_notices(app: AppHandle) -> Result<(), String> {
 }
 
 fn resolve_notices_path(app: &AppHandle) -> Result<PathBuf, String> {
-    if crate::linux_install::installed().is_some() {
+    if let Some(generation) = crate::linux_generation::running()? {
+        return Ok(generation.root.join(NOTICES_NAME));
+    }
+    if crate::linux_install::installed().package().is_some() {
         let candidate = Path::new(crate::linux_install::INSTALL_ROOT).join(NOTICES_NAME);
         if candidate.is_file() {
             return Ok(candidate);
@@ -84,11 +88,7 @@ fn spawn_open(path: &Path) -> Result<(), String> {
     }
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
-            .arg(path)
-            .spawn()
-            .map_err(|e| format!("xdg-open notices: {e}"))?;
-        return Ok(());
+        return crate::files::linux_desktop_open::open_file(path).map(|_| ());
     }
     #[cfg(target_os = "windows")]
     {

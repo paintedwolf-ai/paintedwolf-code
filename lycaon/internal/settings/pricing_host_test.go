@@ -231,10 +231,8 @@ func TestPricingHostAutoRefreshRetriesFailedSource(t *testing.T) {
 	defer cancel()
 	host.StartAutoRefresh(ctx)
 
-	deadline := time.Now().Add(5 * time.Second)
 	for pricingSourceStatus(host, "litellm") != string(pricing.StatusOK) {
-
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("litellm never recovered; status = %q", pricingSourceStatus(host, "litellm"))
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -274,7 +272,7 @@ func TestPricingHostApplySettingsDoesNotWaitForFetch(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "ApplySettings", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		close(fetcher.release)
 		t.Fatal("ApplySettings waited on the feed fetch")
 	}
@@ -319,7 +317,6 @@ func (g *gatedFetcher) Get(ctx context.Context, _ string) ([]byte, error) {
 
 func waitPricingSettled(t *testing.T, host *settings.PricingHost) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
 	for {
 		busy := false
 		for _, m := range host.AvailableSources() {
@@ -328,7 +325,7 @@ func waitPricingSettled(t *testing.T, host *settings.PricingHost) {
 		if !busy {
 			return
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("pricing fetches never settled")
 		}
 		time.Sleep(5 * time.Millisecond)
