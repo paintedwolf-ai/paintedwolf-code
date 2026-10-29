@@ -53,13 +53,6 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   invalidate a batch; failed batches fall back to individual checks. Keep the
   originals open until the exact recorded heads land. A human draft decision
   remains a handoff; never undo it automatically.
-- **Cancel superseded background Qualification when its source is obsolete.**
-  The hosted supersession controller may cancel queued or running background
-  main-push Qualification after validating source ancestry and rechecking run
-  identity. Preserve explicit candidate and release Qualification. Releases still
-  require passing Qualification on their exact source commit. This cancellation
-  policy needs no additional approval; local verification cancellation follows
-  the stuck-verification rules below.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is
@@ -97,8 +90,9 @@ owner's engine you stop and why.
 **Use GitHub CI by default.** Push work in progress to its draft PR; drafts run
 no CI, and local tests are not a prerequisite. A ready PR runs the fast tier;
 once its `check` passes, auto-merge adds it to the merge queue, which runs the
-affected-scope integration gate on the exact landing commit. Main receives full
-qualification separately; releases require qualification on the exact commit.
+affected-scope integration gate on the exact landing commit. The nightly
+qualifies main daily; releases require manually dispatched qualification on the
+exact commit.
 Do not run these gates locally first or repeat checks CI passed for the same
 commit. Report the PR without waiting on or polling CI.
 

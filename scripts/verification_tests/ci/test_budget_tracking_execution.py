@@ -159,7 +159,7 @@ class WorkstreamTests(unittest.TestCase):
         ops, _ = self.groups.plan([], self.artifacts(*entries), observation())
         self.assertEqual(len(ops), 1)
         self.assertLess(len(ops[0]['body']['body'].encode()), 60000)
-        self.assertIn('linked complete qualification report', ops[0]['body']['body'])
+        self.assertIn('linked complete nightly report', ops[0]['body']['body'])
         self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 500)
 
     def test_not_planned_dismissal_is_bounded_by_intake_and_facts(self):
@@ -198,7 +198,7 @@ class WorkstreamTests(unittest.TestCase):
         self.assertEqual(len(state['evidence_digest']), 64)
         self.assertTrue(all(set(r) == {'category', 'id'} for r in state['artifacts']))
         self.assertIn('module1999', body)
-        self.assertIn('additional modules are listed in the complete qualification report', body)
+        self.assertIn('additional modules are listed in the complete nightly report', body)
 
     def test_area_evidence_change_renews_the_shared_review(self):
         first, second = row('pkg/a.go'), row('pkg/b.go')

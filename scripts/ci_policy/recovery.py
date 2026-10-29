@@ -1,4 +1,4 @@
-"""Recover proven runner faults and propose attributable main reversions.
+"""Retry proven runner faults on admitted verification requests.
 
 This runs only from the default branch. Artifacts are bounded JSON data, never
 executed or extracted; fork code never runs with this workflow's write token.
@@ -7,7 +7,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import zipfile
 
@@ -44,56 +43,8 @@ def evidence(run):
     return records, failures
 
 
-def qualified(sha):
-    from .verification_verdict import qualified_run
-    return qualified_run(os.environ['GITHUB_REPOSITORY'], sha) is not None
-
-
-def revert_candidate(run, commit, pulls, parent_qualified, main):
-    if (run.get('path') != '.github/workflows/qualification.yml' or run.get('event') != 'push'
-            or run.get('head_branch') != 'main' or run.get('conclusion') != 'failure'
-            or main != run.get('head_sha') or len(commit.get('parents', [])) != 1 or not parent_qualified):
-        return None
-    matches = [p for p in pulls if p.get('merged_at') and p.get('base', {}).get('ref') == 'main'
-               and p.get('merge_commit_sha') == run['head_sha']]
-    return matches[0] if len(matches) == 1 else None
-
-
-def propose_revert(run, failures):
-    sha = run['head_sha']
-    if not re.fullmatch('[0-9a-f]{40}', sha):
-        raise ValueError('invalid failed commit identity')
-    commit = api(f'{repository()}/commits/{sha}')
-    pulls = list(pages(f'{repository()}/commits/{sha}/pulls'))
-    main = api(f'{repository()}/git/ref/heads/main')['object']['sha']
-    parent = commit.get('parents', [])
-    candidate = revert_candidate(run, commit, pulls, len(parent) == 1 and qualified(parent[0]['sha']), main)
-    description = '\n'.join(f"- `{f.get('stage', '')}` / `{f.get('subject', '')}`: {', '.join(f.get('tests', []))}"
-                            for f in failures[:30])
-    if not candidate or not any(f.get("status") == "failed" for f in failures):
-        return
-    branch = 'automation/revert-' + sha[:12]
-    existing = list(pages(f"{repository()}/pulls?state=all&head={os.environ['GITHUB_REPOSITORY'].split('/')[0]}:{branch}"))
-    if existing:
-        return
-    # A new hosted checkout is disposable. Never rewrite an existing remote branch.
-    subprocess.run(['git', 'switch', '-c', branch, sha], check=True)
-    result = subprocess.run(['git', 'revert', '--no-commit', sha], capture_output=True, text=True)
-    if result.returncode:
-        print('Revert conflicts; inspect the qualification run for manual resolution.')
-        return
-    subprocess.run(['git', '-c', 'user.name=github-actions[bot]', '-c',
-                    'user.email=41898282+github-actions[bot]@users.noreply.github.com',
-                    'commit', '-s', '-m', f"Revert #{candidate['number']} after qualification failure"], check=True)
-    subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/' + branch], check=True)
-    api(f'{repository()}/pulls', 'POST', {'title': f"Revert #{candidate['number']} after qualification failure",
-        'head': branch, 'base': 'main', 'draft': True,
-        'body': f"Proposed recovery for [qualification run]({run['html_url']}).\n\n{description}\n\n"
-                "The immediate parent passed qualification. Review failure attribution and mark ready to run admission."})
-
-
 def recover(run):
-    if run.get('conclusion') != 'failure' or run.get('event') not in {'push', 'merge_group', 'workflow_dispatch'}:
+    if run.get('conclusion') != 'failure' or run.get('event') not in {'merge_group', 'workflow_dispatch'}:
         return
     if run.get('path') not in {'.github/workflows/ci.yml', '.github/workflows/qualification.yml'}:
         return
@@ -101,13 +52,11 @@ def recover(run):
         return
     if (run.get('head_repository') or {}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
         return
-    records, failures = evidence(run)
+    records, _ = evidence(run)
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))
     if permits_retry(run, records, jobs) and current_group(run):
         api(f"{repository()}/actions/runs/{run['id']}/rerun-failed-jobs", 'POST')
         return
-    if run.get('path') == '.github/workflows/qualification.yml':
-        propose_revert(run, failures)
 
 
 def main():

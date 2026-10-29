@@ -1,4 +1,4 @@
-"""Partial qualification receipts cannot delay a shard behind timeout estimates."""
+"""Partial nightly receipts cannot delay a shard behind timeout estimates."""
 import copy
 import unittest
 
@@ -6,7 +6,7 @@ from ci_policy import hosted_plan, hosted_schedule
 
 
 class HostedScheduleTests(unittest.TestCase):
-    def test_cancelled_qualification_uses_one_basis_for_the_whole_matrix(self):
+    def test_incomplete_nightly_uses_one_basis_for_the_whole_matrix(self):
         measured = {"lanes": {"behavior 1/2": 1287.2, "limits": 226.1, "lint": 822.5}}
         original = copy.deepcopy(measured)
         rows = hosted_plan.matrix("integration", timings=measured)["include"]
@@ -46,7 +46,7 @@ class HostedScheduleTests(unittest.TestCase):
         summary = hosted_schedule.summarize(matrix, measured)
         self.assertIn("Estimate basis: `catalog-budget`", summary)
         self.assertIn("`behavior 2/2`", summary)
-        self.assertIn("Qualification timing sources: 30, 20", summary)
+        self.assertIn("Nightly timing sources: 30, 20", summary)
         self.assertIn("| 3 | behavior | 1/2 | critical | 9000 |", summary)
 
     def test_compile_promotion_preserves_work_and_predicted_completion(self):

@@ -2,8 +2,6 @@ name: Qualification
 run-name: Qualification ${{ inputs.source-sha || github.sha }}
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       source-sha:
@@ -14,8 +12,7 @@ on:
 permissions:
   contents: read
 
-# One executor preserves explicit candidates; the supersession controller cancels
-# obsolete push runs. Selection also drops pushes superseded before admission.
+# One executor preserves explicit release candidates.
 concurrency:
   group: qualification
   queue: max
@@ -23,14 +20,12 @@ concurrency:
 
 # The stages run in turn, so one run holds at most three runners.
 jobs:
-  select:
+  source:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: write
     outputs:
-      admitted: ${{ steps.source.outputs.admitted }}
       source-sha: ${{ steps.source.outputs.source-sha }}
       record: ${{ steps.source.outputs.record }}
     steps:
@@ -38,17 +33,16 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           fetch-depth: 0
-      - name: Select qualification source
+      - name: Bind qualification source
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           QUALIFICATION_SOURCE: ${{ inputs.source-sha }}
           PYTHONPATH: scripts
-        run: python3 -m ci_policy.qualification_requests
+        run: python3 -m ci_policy.qualification_source
 
   verification:
-    needs: select
-    if: needs.select.outputs.admitted == 'true'
+    needs: source
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -57,18 +51,18 @@ jobs:
     with:
       profile: check
       reuse-merge-proof: true
-      source-sha: ${{ needs.select.outputs.source-sha }}
+      source-sha: ${{ needs.source.outputs.source-sha }}
 
   platform:
-    needs: [select, verification]
+    needs: [source, verification]
     uses: ./.github/workflows/platform-verification.yml
     with:
-      source-sha: ${{ needs.select.outputs.source-sha }}
+      source-sha: ${{ needs.source.outputs.source-sha }}
 
   # Release's platform lanes, such as arm64 confinement, one at a time beside the platform gates;
   # the check run above covers the rest of release.
   platform-lanes:
-    needs: [select, verification]
+    needs: [source, verification]
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -76,19 +70,19 @@ jobs:
       actions: read
     with:
       profile: release
-      source-sha: ${{ needs.select.outputs.source-sha }}
+      source-sha: ${{ needs.source.outputs.source-sha }}
       platform: true
 
   e2e:
-    needs: [select, platform, platform-lanes]
+    needs: [source, platform, platform-lanes]
     uses: ./.github/workflows/e2e-verification.yml
     with:
       web-parallel: 2
-      source-sha: ${{ needs.select.outputs.source-sha }}
+      source-sha: ${{ needs.source.outputs.source-sha }}
 
   qualification:
-    if: ${{ !cancelled() && needs.select.outputs.admitted == 'true' }}
-    needs: [select, verification, platform, platform-lanes, e2e]
+    if: ${{ !cancelled() }}
+    needs: [source, verification, platform, platform-lanes, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -98,7 +92,7 @@ jobs:
       - name: Require exact-commit qualification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          QUALIFICATION_RECORD: ${{ needs.select.outputs.record }}
+          QUALIFICATION_RECORD: ${{ needs.source.outputs.record }}
           PYTHONPATH: scripts
         run: python3 -m ci_policy.qualification_receipt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

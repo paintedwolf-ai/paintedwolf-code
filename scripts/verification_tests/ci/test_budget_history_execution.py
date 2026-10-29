@@ -1,4 +1,4 @@
-"""Warning intake survives superseded qualification/reconciliation runs."""
+"""Warning intake survives superseded nightly/reconciliation runs."""
 import io
 import json
 import unittest

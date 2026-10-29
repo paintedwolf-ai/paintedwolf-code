@@ -59,7 +59,7 @@ jobs:
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
-          # Reads main's qualification receipts; without actions read access the plan uses lane budgets.
+          # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then

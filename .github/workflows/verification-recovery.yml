@@ -5,8 +5,7 @@ on:
     types: [completed]
 permissions:
   actions: write
-  contents: write
-  pull-requests: write
+  contents: read
 concurrency:
   group: verification-recovery-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
@@ -14,7 +13,7 @@ jobs:
   recover:
     if: >-
       github.event.workflow_run.conclusion == 'failure' &&
-      contains(fromJSON('["push","merge_group","workflow_dispatch"]'), github.event.workflow_run.event) &&
+      contains(fromJSON('["merge_group","workflow_dispatch"]'), github.event.workflow_run.event) &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15

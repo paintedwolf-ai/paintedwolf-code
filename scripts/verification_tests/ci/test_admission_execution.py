@@ -134,16 +134,6 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(evidence.failure_signature(first), evidence.failure_signature(second))
         self.assertNotEqual(evidence.failure_signature(first), evidence.failure_signature({**first, 'subject': 'other'}))
 
-    def test_revert_requires_exact_unique_introduction_and_qualified_parent(self):
-        run = dict(path='.github/workflows/qualification.yml', event='push', head_branch='main', head_sha='a', conclusion='failure')
-        commit = {'parents': [{'sha': 'b'}]}
-        pull = {'merged_at': 'date', 'base': {'ref': 'main'}, 'merge_commit_sha': 'a', 'number': 1}
-        self.assertEqual(recovery.revert_candidate(run, commit, [pull], True, 'a'), pull)
-        for args in [(run, commit, [pull], False, 'a'), (run, commit, [pull], True, 'new'),
-                     (run, commit, [pull, pull], True, 'a'), (run, {'parents': []}, [pull], True, 'a'),
-                     ({**run, 'event': 'pull_request'}, commit, [pull], True, 'a')]:
-            self.assertIsNone(recovery.revert_candidate(*args))
-
     def test_package_memory_guard_attributes_own_process(self):
         monitor = resources.Monitor(123, 100)
         with patch.object(resources, 'resident_bytes', return_value=101):

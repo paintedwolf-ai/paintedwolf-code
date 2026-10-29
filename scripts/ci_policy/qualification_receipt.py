@@ -9,7 +9,7 @@ import zipfile
 
 from ci_policy.github import pages
 
-CHECKS = {"select", "verification", "platform", "platform-lanes", "e2e"}
+CHECKS = {"source", "verification", "platform", "platform-lanes", "e2e"}
 MAX_BYTES = 64 * 1024
 IDENTITY = {"version", "repository", "event", "run_id", "run_attempt", "source_sha", "source_tree", "controller_sha"}
 
@@ -17,7 +17,7 @@ IDENTITY = {"version", "repository", "event", "run_id", "run_attempt", "source_s
 def valid_identity(record):
     return (isinstance(record, dict) and type(record.get("version")) is int and record["version"] == 1
             and isinstance(record.get("repository"), str)
-            and record.get("event") in {"push", "workflow_dispatch"}
+            and record.get("event") == "workflow_dispatch"
             and all(type(record.get(key)) is int and record[key] > 0 for key in ("run_id", "run_attempt"))
             and all(isinstance(record.get(key), str) and re.fullmatch(r"[0-9a-f]{40}", record[key])
                     for key in ("source_sha", "source_tree", "controller_sha")))
@@ -25,19 +25,19 @@ def valid_identity(record):
 
 def complete(record, results, environment):
     from ci_policy.verification_verdict import require_success
-    if not valid_identity(record) or set(record) != IDENTITY | {"admitted", "reason"} or record.get("admitted") is not True:
-        raise ValueError("qualification source selection is missing or was not admitted")
+    if not valid_identity(record) or set(record) != IDENTITY:
+        raise ValueError("qualification source binding is missing or invalid")
     attempt = int(environment["GITHUB_RUN_ATTEMPT"])
     expected = {"repository": environment["GITHUB_REPOSITORY"], "run_id": int(environment["GITHUB_RUN_ID"]),
                 "controller_sha": environment["GITHUB_WORKFLOW_SHA"],
                 "event": environment["GITHUB_EVENT_NAME"]}
-    # Failed-job reruns retain successful selection outputs from an earlier attempt.
+    # Failed-job reruns retain successful source outputs from an earlier attempt.
     if record["run_attempt"] > attempt or any(record.get(key) != value for key, value in expected.items()):
-        raise ValueError("qualification source selection belongs to another workflow attempt")
+        raise ValueError("qualification source binding belongs to another workflow attempt")
     if not isinstance(results, dict) or set(results) != CHECKS:
         raise ValueError("qualification requires the complete declared stage set")
     require_success(results)
-    return {key: value for key, value in record.items() if key not in {"admitted", "reason"}} | {
+    return record | {
         "run_attempt": attempt, "checks": {name: results[name]["result"] for name in sorted(CHECKS)}}
 
 
