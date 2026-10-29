@@ -160,7 +160,8 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	}
 	// This envelope bounds the selected host representations, including boxed
 	// union values, old/new slice backing storage, node IDs and cloned strings.
-	hostBytes := c.nodeCount*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
+	// Split brace nodes are lowered alongside the parsed tree.
+	hostBytes := (c.nodeCount+c.braces.nodes)*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
 	var releaseState func()
 	retained := false
 	if memory != nil {
@@ -244,7 +245,7 @@ type programCompiler struct {
 	nodePrefix        string
 	sequence          int
 	literalContext    map[*syntax.Word]bool
-	testWords         map[*syntax.Word]bool
+	braces            braceContexts
 	arithmeticIndexes map[*syntax.ParamExp]bool
 	staticProof       map[*syntax.Word]bool
 	traps             map[*syntax.CallExpr]*syntax.File

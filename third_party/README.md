@@ -105,7 +105,9 @@ process RSS, allocator-global metadata and the host's retained-program ledger.
 
 `ClassifyBraces` runs the same selected `SplitBraces` algorithm with guarded
 allocation. It reports actual unquoted expansion without mutating the input;
-malformed and quoted braces retain their literal semantics. Existing upstream
+malformed and quoted braces retain their literal semantics. `SplitBracesBounded`
+returns that split copy for host lowering under the same charges, and refuses a
+sequence whose endpoints mix an integer and a letter. Existing upstream
 `SplitBraces` consumers remain for the general expansion API and its fixtures.
 `StaticLiteral` admits only literal and ordinary single/double-quoted parts;
 parameters, substitutions, dollar quotes and tilde/brace expansion are deferred.
