@@ -6,29 +6,12 @@ command_effects: [read_only]
 tools:
   command: sticky
   recall: sticky
-  read: true
   view_image: sticky
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
-  grep: true
-  find: true
   summarize: sticky
-  jq: true
-  list_dir: true
-  stat: sticky
-  wc: sticky
-  git_status: sticky
-  git_diff: sticky
-  diff: sticky
-  git_log: sticky
-  git_show: sticky
-  git_blame: sticky
   source_history: sticky
-  git_ref: sticky
-  git_branches: sticky
-  git_compare: sticky
-  git_stash_list: sticky
   wait: sticky
   held_result: true
   held_stop: true

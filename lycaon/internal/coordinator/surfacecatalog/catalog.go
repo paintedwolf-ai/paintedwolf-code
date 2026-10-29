@@ -146,6 +146,9 @@ func normalizeNames(surfaceID, field string, names []string) ([]string, error) {
 		if seen[name] {
 			return nil, fmt.Errorf("coordinator surface %q: %s repeats %q", surfaceID, field, name)
 		}
+		if toolcontract.IsCommandOperation(name) {
+			return nil, fmt.Errorf("coordinator surface %q: %s offers %q, which runs only through command", surfaceID, field, name)
+		}
 		seen[name] = true
 		out = append(out, name)
 	}

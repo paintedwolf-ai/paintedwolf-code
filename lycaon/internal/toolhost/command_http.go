@@ -12,13 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// RegisterHTTP binds structured requests and command requests to the same owners.
+// RegisterHTTP binds the HTTP owner that serves command requests.
 func (r *Runtime) RegisterHTTP(deps httpaction.Deps) error {
-	if r == nil {
-		return fmt.Errorf("HTTP registration requires a host")
-	}
-	if err := httpaction.Register(r.Registry, deps); err != nil {
-		return err
+	if r == nil || deps.Boundary == nil {
+		return fmt.Errorf("HTTP registration requires a host and a sandbox boundary")
 	}
 	if r.Commands != nil {
 		r.Commands.owners.http = deps
