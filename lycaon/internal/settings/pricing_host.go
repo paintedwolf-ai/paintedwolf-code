@@ -114,9 +114,10 @@ func (h *PricingHost) teardownLocked() {
 	h.refreshing = nil
 }
 
-// Close stops the refresh loop, cancels active fetches, and waits for both;
-// a closed host starts no more.
-func (h *PricingHost) Close() {
+// Close stops the refresh loop, cancels active fetches, and waits for both
+// within ctx; a closed host starts no more. A fetch still running when ctx
+// ends keeps the host for a later Close.
+func (h *PricingHost) Close(ctx context.Context) error {
 	h.mu.Lock()
 	h.closed = true
 	if h.stopAuto != nil {
@@ -127,10 +128,17 @@ func (h *PricingHost) Close() {
 		h.cancel = nil
 	}
 	h.mu.Unlock()
-	h.refreshWg.Wait()
+	drained := make(chan struct{})
+	go func() { h.refreshWg.Wait(); close(drained) }()
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	h.mu.Lock()
 	h.teardownLocked()
 	h.mu.Unlock()
+	return nil
 }
 
 func (h *PricingHost) ensureRegistryLocked(ctx context.Context) error {

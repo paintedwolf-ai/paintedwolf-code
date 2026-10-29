@@ -66,7 +66,7 @@ func WithTestPricingHost(t *testing.T) TestDeps {
 		testutil.FailErr(t, "SyncFromStore", host.SyncFromStore(t.Context()))
 		d.Host.Pricing = host
 		t.Cleanup(func() {
-			host.Close()
+			testutil.FailErr(t, "close pricing host", host.Close(context.Background()))
 		})
 	}
 }
