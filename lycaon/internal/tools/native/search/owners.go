@@ -1,4 +1,5 @@
-// Package search is the command frontend for grep, egrep, fgrep, rg and find.
+// Package search is the command frontend for grep, egrep, fgrep, rg, find
+// and tree.
 // Each utility binds argv through the catalog, walks the invocation's held
 // roots, pins every read through execution revisions and selects records with
 // the shared textsearch operation the structured grep tool also uses.
@@ -85,7 +86,7 @@ type Owners struct {
 
 type utility func(*invocation) error
 
-var utilities = map[string]utility{"grep": runGrep, "rg": runRg, "find": runFind}
+var utilities = map[string]utility{"grep": runGrep, "rg": runRg, "find": runFind, "tree": runTree}
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, remover Remover) (*Owners, error) {

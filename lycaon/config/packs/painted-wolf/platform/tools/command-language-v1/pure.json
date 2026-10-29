@@ -4510,6 +4510,247 @@
         "nproc-option-all",
         "nproc-option-ignore"
       ]
+    },
+    {
+      "name": "iconv",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "iconv [-c] [-f FROM] [-t TO] [-o OUTPUT] [--] [PATH ...] | iconv -l",
+      "forms": [
+        {
+          "spellings": [
+            "-f",
+            "--from-code"
+          ],
+          "arity": 1,
+          "value_role": "encoding",
+          "fixture_id": "iconv-option-f-fromcode",
+          "consumption": "fixed",
+          "sample_values": [
+            "latin1"
+          ]
+        },
+        {
+          "spellings": [
+            "-t",
+            "--to-code"
+          ],
+          "arity": 1,
+          "value_role": "encoding",
+          "fixture_id": "iconv-option-t-tocode",
+          "consumption": "fixed",
+          "sample_values": [
+            "utf-8"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "iconv-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "iconv-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "iconv-option-o-output",
+          "consumption": "fixed",
+          "sample_values": [
+            "out.txt"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. iconv [-c] [-f FROM] [-t TO] [-o OUTPUT] [--] [PATH ...] | iconv -l",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-o"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'caf\\351' | iconv -f latin1 -t utf-8",
+        "stdout": "café",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Character set conversion through golang.org/x/text/encoding over pinned inputs or standard input; FROM and TO default to UTF-8 and accept IANA names and common spellings (latin1, utf8, ascii, cp1252, utf-16le, utf-32). UTF-16 and UTF-32 read a BOM and otherwise big-endian, and write a BOM with little-endian, as glibc does. //TRANSLIT approximates unencodable characters (accents removed, then ?); -c and //IGNORE omit them. An invalid or unencodable character stops with iconv: illegal input sequence at position N and status 1; with -c the output completes and the status is still 1. -l lists the supported names. -o stages pinned publication like a redirect.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/textutil/iconv.go",
+        "tests": [
+          "lycaon/internal/tools/native/textutil/iconv_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "iconv-operands-valid",
+        "iconv-rejection",
+        "iconv-option-f-fromcode",
+        "iconv-option-t-tocode",
+        "iconv-option-c",
+        "iconv-option-l-list",
+        "iconv-option-o-output"
+      ]
+    },
+    {
+      "name": "envsubst",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "envsubst [-v] [SHELL-FORMAT]",
+      "forms": [
+        {
+          "spellings": [
+            "-v",
+            "--variables"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "envsubst-option-v-variables",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. envsubst [-v] [SHELL-FORMAT]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'h=$HOST\\n' | HOST=web envsubst '$HOST'",
+        "stdout": "h=web\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU envsubst over standard input from the statement's exported environment: $NAME and ${NAME} references are replaced, unset names become empty, and other text (including ${NAME:-word}) is copied. With SHELL-FORMAT only the names it references are replaced; -v prints those names one per line in order of appearance. Managed secret references substitute as their references and resolve only at declared sinks.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/textutil/envsubst.go",
+        "tests": [
+          "lycaon/internal/tools/native/textutil/envsubst_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "envsubst-operands-valid",
+        "envsubst-rejection",
+        "envsubst-option-v-variables"
+      ]
     }
   ]
 }
