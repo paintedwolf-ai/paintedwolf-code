@@ -258,6 +258,23 @@ through `golang.org/x/text/encoding` and stages `-o` like a redirect; envsubst
 reads the statement's exported environment, where a managed secret stays its
 reference token.
 
+diff `-N` compares an absent file, and under `-r` an absent directory, as
+empty; `-x` and `-X` skip directory entries by base-name glob; and
+`--strip-trailing-cr` drops CR before each newline. Archives keep every
+extraction guard across gzip, bzip2, xz and zstd: tar `--exclude`, `-X` and
+`--exclude-vcs` patterns match any run of whole name components and prune
+excluded directories before their entries are examined, zip and unzip `-x`
+match the whole stored name, and every xz block's dictionary is checked
+against a 64 MiB ceiling before decoding.
+
+One date package (`internal/tools/native/datetext`) reads the `date -d`
+grammar, renders `+FORMAT`, parses `-j -f` strptime formats and applies `-v`
+adjustments. `date`, `touch -d`/`-t` and `find -newerXY` share it and read
+times in `TZ` from the program frame, UTC when unset. realpath resolves links
+before `..`, canonicalizes under `-e`, the default or `-m`, and projects
+`--relative-to`/`--relative-base`; an operand that does not resolve is an
+ordinary status-one failure and later operands still run.
+
 ### Search commands
 
 `grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select

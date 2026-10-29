@@ -2155,6 +2155,185 @@
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "diff-new-file-tree",
+      "program": "diff -rqN -x '*.o' a b",
+      "setup": {
+        "files": {
+          "a/same": "x\n",
+          "b/same": "x\n",
+          "a/removed": "gone\n",
+          "b/added": "new\n",
+          "a/x.o": "o\n",
+          "b/x.o": "p\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "Files a/added and b/added differ\nFiles a/removed and b/removed differ\n",
+        "stderr": "",
+        "status": 1,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "diff-strip-trailing-cr",
+      "program": "diff --strip-trailing-cr ./crlf ./lf",
+      "setup": {
+        "files": {
+          "crlf": "x\r\ny\r\n",
+          "lf": "x\ny\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "date-relative-day",
+      "program": "date -u -d '2026-10-26 +1 day' +%F",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "2026-10-27\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "date-bsd-parse",
+      "program": "date -j -u -f %Y-%m-%d 2026-10-26 '+%F %a'",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "2026-10-26 Mon\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "realpath-relative-to",
+      "program": "realpath --relative-to=src src/a/b",
+      "setup": {
+        "files": {
+          "src/a/b/keep": ""
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "a/b\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "basename-suffix-multiple",
+      "program": "basename -s .go a.go dir/b.go",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "tar-exclude-vcs",
+      "program": "tar -czf out.tgz --exclude=node_modules --exclude-vcs README src && tar -tzf out.tgz",
+      "setup": {
+        "files": {
+          "README": "r\n",
+          "src/main.go": "package main\n",
+          "src/node_modules/m.js": "x\n",
+          "src/.git/HEAD": "ref\n",
+          "src/.gitignore": "x\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "README\nsrc/\nsrc/main.go\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     }
   ]
 }
