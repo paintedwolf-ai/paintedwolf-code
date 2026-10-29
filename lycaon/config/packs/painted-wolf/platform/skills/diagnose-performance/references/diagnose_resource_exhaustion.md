@@ -25,6 +25,8 @@ Two disk traps worth knowing:
 
 **File descriptors.** Errors read `EMFILE`, `ENFILE`, or "too many open files", and they surface as *whatever failed next* — a network dial, a file watcher that stops firing, a database connection refused. `ulimit -n` for the soft limit the commands you start receive, and the process's own `/proc/<pid>/fd` (or `lsof -p`) for what it holds. `ulimit -n 64` before a command in the same call lowers its limit, which reproduces the failure on demand. Unclosed files, sockets, and filesystem watchers are the usual leaks; a watcher leak in particular presents as "the tool stopped noticing changes" rather than as an error.
 
+**Ports.** "Address already in use" means another socket already holds the port, often a server left running by an earlier task. `lsof -iTCP:PORT -sTCP:LISTEN` (or `-iUDP:PORT`) names the holder; report it and let the user decide rather than stopping it.
+
 **Processes and threads.** Fork failures and "resource temporarily unavailable" under a thread or PID limit, common with runaway parallelism in a build.
 
 ## Do not
