@@ -25,6 +25,7 @@ import change_report
 from change_report import Finding
 import coverage_policy
 import python_coverage
+from toolchain import python_tools
 import verification_plan
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -362,7 +363,7 @@ def main(arguments):
         if options.language != "python":
             parser.error("--provision applies to python")
         for requirements in python_coverage.requirement_files(ROOT, coverage_policy.python_suites()):
-            python_coverage.provision(requirements)
+            python_tools.provision(requirements)
         return 0
     title, run = LANGUAGES[options.language]
     scope = change_report.resolve(ROOT)

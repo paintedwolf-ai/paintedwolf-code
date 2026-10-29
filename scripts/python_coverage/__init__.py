@@ -8,16 +8,14 @@ credited to the source it copied: a measured file counts for a changed source
 when its path ends with that source's repository path.
 """
 
-import hashlib
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import sysconfig
 import venv
 
-from artifact_paths import bin_dir
+from toolchain import python_tools
 
 REQUIREMENTS = Path(__file__).resolve().with_name("requirements.txt")
 # The same test-code rule the maintainability inventory applies.
@@ -53,28 +51,6 @@ def sources(root, paths):
 
 def requirement_files(root, suites):
     return [REQUIREMENTS, *(Path(root) / suite["requirements"] for suite in suites.values() if suite.get("requirements"))]
-
-
-def provision(requirements):
-    """The pinned packages of one requirements file for this interpreter, installed once (the network once)."""
-    identity = hashlib.sha256(requirements.read_bytes() + sys.version.encode() + sysconfig.get_platform().encode())
-    target = bin_dir() / f"python-tools-{identity.hexdigest()[:16]}"
-    if (target / "ready").exists():
-        return target
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with (target.parent / f"{target.name}.lock").open("a") as lock:
-        if os.name != "nt":
-            import fcntl
-            fcntl.flock(lock, fcntl.LOCK_EX)
-        if not (target / "ready").exists():
-            staging = target.with_name(f"{target.name}.{os.getpid()}")
-            shutil.rmtree(staging, ignore_errors=True)
-            subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
-                            "--no-deps", "--target", str(staging), "-r", str(requirements)], check=True)
-            shutil.rmtree(target, ignore_errors=True)
-            os.replace(staging, target)
-            (target / "ready").write_text(requirements.read_text())
-    return target
 
 
 def environment(work, tools, files):
@@ -137,7 +113,7 @@ def measure(root, files, suites, work):
     """{path: Measurement, or the error that kept it from being read} under every suite whose tree holds a changed
     source; None when a suite fails."""
     root = Path(root)
-    tools = [provision(requirements) for requirements in requirement_files(root, suites)]
+    tools = [python_tools.provision(requirements) for requirements in requirement_files(root, suites)]
     shutil.rmtree(work, ignore_errors=True)
     python, data = environment(work, tools, files)
     env = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}

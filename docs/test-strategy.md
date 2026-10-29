@@ -1263,6 +1263,11 @@ executable under a publication lock. Hosted lanes restore the bounded document
 compiler family; only the main warmer publishes it. Source changes invalidate
 workspace compilation without discarding dependency builds.
 
+The Go lint targets validate every `.yml` and `.yaml` file in `.github/workflows/`
+with pinned actionlint, including dispatch-only workflows. Workflow validation
+checks GitHub Actions structure and expression contexts. Verification setup also
+prepares actionlint for the runner suite's offline workflow regression fixtures.
+
 Go analysis lanes provision only the pinned Go module graphs and their selected
 analyzers. They do not restore native compiler caches, install frontend packages,
 or download runtime engines. The lane catalog rejects runtime checks assigned
