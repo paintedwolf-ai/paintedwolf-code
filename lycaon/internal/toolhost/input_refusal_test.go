@@ -3,7 +3,6 @@ package toolhost
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -99,9 +98,8 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 			if observed.Data["limit_id"] != limitID || observed.Data["maximum"] != maximum || observed.Data["observed"] != maximum+1 || observed.Data["source_start_byte"] != strings.Index(source, "input") || observed.Data["source_line"] != 2 || observed.Data["source_column"] != 7 {
 				t.Fatalf("actual stop facts changed: %+v", observed.Data)
 			}
-			stderr := fmt.Sprintf("<: input: This command reached its %s limit (%d bytes; maximum %d) [COMMAND_LIMIT_EXCEEDED]\n", limitID, maximum+1, maximum)
-			if result.Refusal == nil || result.Refusal.Code != observed.Code || result.StopCode != observed.Code || result.Status == 0 || result.State == "completed" || result.Stderr != stderr || result.Stdout != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
-				t.Fatalf("wire result lost actual refusal/effects: %+v, want stderr %q", result, stderr)
+			if result.Refusal == nil || result.Refusal.Code != observed.Code || result.StopCode != observed.Code || result.Status == 0 || result.State == "completed" || result.Stderr != "" || result.Stdout != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
+				t.Fatalf("wire result lost actual refusal/effects: %+v", result)
 			}
 			if kept, err := os.ReadFile(filepath.Join(env.Dir, "kept")); err != nil || string(kept) != "before" {
 				t.Fatalf("prior publication %q %v", kept, err)

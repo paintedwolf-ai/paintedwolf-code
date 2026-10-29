@@ -245,9 +245,6 @@ type GitCommitRequest struct {
 	// Staged are paths this session staged through git add.
 	Staged []string
 	Amend  bool
-	// IdentityName and IdentityEmail override the recorded author and
-	// committer for this commit, as git -c user.name/user.email does.
-	IdentityName, IdentityEmail string
 }
 
 // Commit admits, records and creates or amends one commit.
@@ -278,8 +275,7 @@ func (m GitMutations) Commit(ctx context.Context, tc tools.ToolContext, request 
 	if historyErr != nil {
 		return "", git.CommitStaging{}, historyErr
 	}
-	hash, err := m.Git.Commit(ctx, cwd, git.GitCommitOpts{Message: request.Message, Paths: staged, Amend: request.Amend,
-		IdentityName: request.IdentityName, IdentityEmail: request.IdentityEmail})
+	hash, err := m.Git.Commit(ctx, cwd, git.GitCommitOpts{Message: request.Message, Paths: staged, Amend: request.Amend})
 	return hash, staging, err
 }
 

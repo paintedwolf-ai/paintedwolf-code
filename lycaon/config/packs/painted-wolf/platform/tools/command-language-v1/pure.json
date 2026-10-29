@@ -2140,7 +2140,7 @@
       ],
       "example": {
         "program": "which -- cat",
-        "stdout": "cat\n",
+        "stdout": "/bin/cat\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -2238,7 +2238,7 @@
       ],
       "example": {
         "program": "command -v -- cat",
-        "stdout": "cat\n",
+        "stdout": "/bin/cat\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {

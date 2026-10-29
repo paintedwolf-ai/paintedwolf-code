@@ -3,7 +3,6 @@ package commandprogram
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -90,7 +89,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		f.e.recordSource(run.inv.Identity.ExecutionID, captured.Pin)
 	}
 	if err != nil {
-		return f.sourceRefusal(ctx, run, s, "source", err)
+		return f.sourceRefusal(ctx, run, s, err)
 	}
 	lease, err := parsed.SnapshotWithMemory(ctx, f.e.ports.Memory)
 	_ = parsed.Close()
@@ -129,13 +128,12 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	return err
 }
 
-func (f *frame) sourceRefusal(ctx context.Context, run *childRun, s commandsurface.Statement, command string, err error) error {
+func (f *frame) sourceRefusal(ctx context.Context, run *childRun, s commandsurface.Statement, err error) error {
 	var diagnostic *commandsurface.SyntaxDiagnostic
 	var integrity *SourceIntegrityError
 	switch {
 	case errors.As(err, &diagnostic):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: diagnostic.Code, EffectCertainty: toolcontract.NoEffect}, err)
-		f.hostRefusal(command, fmt.Sprintf("line %d", diagnostic.Span.Line), diagnostic.Expected, diagnostic.Code)
 		return f.refuse(s.SyntaxLocation, diagnostic.Code, diagnostic.Expected, err)
 	case errors.As(err, &integrity):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_OPERAND_INVALID", EffectCertainty: toolcontract.NoEffect}, err)

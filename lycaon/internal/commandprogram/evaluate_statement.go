@@ -131,8 +131,6 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
 	case commandsurface.ArithmeticCommand:
 		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "((", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, runArithmeticCommand(ctx, g, s, c) }}).invoke(ctx)
-	case commandsurface.TimedCommand:
-		return runTimed(ctx, f, s, c)
 	case commandsurface.TrapCommand:
 		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "trap", Span: s.Span}}, body: func(_ context.Context, g *frame) (signal, error) { return signal{}, runTrapCommand(g, s, c) }}).invoke(ctx)
 	case nil:

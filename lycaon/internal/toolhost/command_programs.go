@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -83,7 +82,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
 		return nil, err
 	}
-	hostenvOwners, err := hostenv.NewOwners(hostos.Host{}, time.Now)
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
 	if err != nil {
 		return nil, err
 	}

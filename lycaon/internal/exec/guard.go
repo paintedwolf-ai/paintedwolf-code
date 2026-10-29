@@ -2,7 +2,6 @@ package exec
 
 import (
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -22,7 +21,5 @@ type runGuard interface {
 	terminate(*exec.Cmd)
 	// kill ends the whole tree at once.
 	kill(*exec.Cmd)
-	// relay delivers one signal to the tree without terminating it.
-	relay(*exec.Cmd, syscall.Signal) bool
 	release()
 }

@@ -3,10 +3,12 @@
 package hostenv
 
 import (
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/hostos"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestIdentityAndSystemUtilities(t *testing.T) {
@@ -57,7 +59,7 @@ func TestMissingHostFactsRefuseWithoutSubstitutes(t *testing.T) {
 		}
 	}
 	h.run("id -gn").expectOutput(t, "id -gn", "staff\n", "", 0)
-	missing := newHarness(t, fixtureHost{err: hostos.ErrUnsupported})
+	missing := newHarness(t, fixtureHost{err: ErrHostFactUnavailable})
 	for _, source := range []string{"uname", "hostname", "whoami", "id"} {
 		missing.run(source).expectRefusal(t, source, "COMMAND_PLATFORM_UNAVAILABLE")
 	}
@@ -108,5 +110,21 @@ func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 	var unprepared Prepared
 	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {
 		t.Fatalf("unprepared invocation ran: %+v", result)
+	}
+}
+
+// OSHost reads the actual platform; its answers agree with the process.
+func TestOSHostReportsTheRunningProcess(t *testing.T) {
+	system, err := OSHost{}.System(t.Context())
+	testutil.FailErr(t, "system facts", err)
+	hostname, err := os.Hostname()
+	testutil.FailErr(t, "hostname", err)
+	if system.Nodename != hostname || system.Sysname == "" || system.Machine == "" {
+		t.Fatalf("system facts %+v, hostname %q", system, hostname)
+	}
+	identity, err := OSHost{}.Identity(t.Context())
+	testutil.FailErr(t, "identity facts", err)
+	if identity.UID != os.Getuid() || identity.GID != os.Getgid() || len(identity.Groups) == 0 {
+		t.Fatalf("identity facts %+v for uid %s", identity, strconv.Itoa(os.Getuid()))
 	}
 }

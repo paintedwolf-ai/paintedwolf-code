@@ -29,12 +29,7 @@ type Variables struct {
 	pipeStatus        []int
 	background        string
 	hasJob            bool
-	// ifsUnset records an explicit unset IFS; until then IFS reads as its
-	// default without holding program state.
-	ifsUnset bool
 }
-
-const defaultIFS = " \t\n"
 
 type variable struct {
 	value    string
@@ -64,8 +59,7 @@ func NewVariables(ctx context.Context, memory *toolcontract.ProgramMemory, progr
 	}
 	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
-		// IFS is never taken from the environment.
-		if !ok || name == "" || name == "IFS" {
+		if !ok || name == "" {
 			continue
 		}
 		if err := v.store(ctx, name, variable{value: value, set: true, exported: true}); err != nil {
@@ -114,9 +108,6 @@ func (v *Variables) Export(ctx context.Context, name string) error {
 
 // Unset removes a variable and its export mark; expanding it is then empty.
 func (v *Variables) Unset(name string) {
-	if name == "IFS" {
-		v.ifsUnset = true
-	}
 	if current, ok := v.values[name]; ok {
 		current.release()
 		delete(v.values, name)
@@ -174,7 +165,7 @@ func (v *Variables) Clone(ctx context.Context) (*Variables, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, status: v.status, pipeStatus: v.pipeStatus, background: v.background, hasJob: v.hasJob, ifsUnset: v.ifsUnset}
+	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, status: v.status, pipeStatus: v.pipeStatus, background: v.background, hasJob: v.hasJob}
 	if err := clone.SetPositional(ctx, v.positional); err != nil {
 		return nil, err
 	}
@@ -230,10 +221,7 @@ func (v *Variables) SetBackground(job string) {
 }
 
 func (v *Variables) Variable(name string) (string, bool) {
-	entry, ok := v.values[name]
-	if !ok && name == "IFS" && !v.ifsUnset {
-		return defaultIFS, true
-	}
+	entry := v.values[name]
 	if entry.array {
 		val, ok := entry.elements[0]
 		return val, ok

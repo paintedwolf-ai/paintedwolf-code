@@ -317,7 +317,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -591,7 +591,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -949,7 +949,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -1167,7 +1167,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -1339,7 +1339,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -1556,7 +1556,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -1694,7 +1694,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -1913,7 +1913,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2110,7 +2110,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2245,7 +2245,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2375,7 +2375,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2542,7 +2542,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2664,7 +2664,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2793,7 +2793,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [
@@ -2994,7 +2994,7 @@
           }
         }
       },
-      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
+      "notes": "Bundled Git's own output and status through the Git owner's read door: hooks, pager, editor, external diff, textconv and fsmonitor are disabled per invocation and GIT_OPTIONAL_LOCKS=0; global -C, --no-pager and allowlisted -c only (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false). PATH operands and -C bind through program paths; the repository must lie inside the program's roots. Config reads never write; remote show and other network reads are not read forms.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
         "tests": [

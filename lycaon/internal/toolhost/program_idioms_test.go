@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gitengine"
@@ -23,9 +24,7 @@ func callComposedProgram(t *testing.T, f *programtest.Fixture, source string) co
 	return outcome
 }
 
-// Discovery answers a native name with the name dispatch binds, so a printed
-// name runs natively; an absolute path still launches the installed program.
-func TestComposedProgramDiscoveryAgreesWithDispatch(t *testing.T) {
+func TestComposedProgramDiscoveryUsesExecutablePathsAndNormalDispatch(t *testing.T) {
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "require pinned Git", err)
 	// Both discovery and launch select a declared executable without relying on
@@ -38,9 +37,16 @@ func TestComposedProgramDiscoveryAgreesWithDispatch(t *testing.T) {
 		t.Fatalf("initialize fixture with pinned Git: %v: %s", err, output)
 	}
 	outcome := callComposedProgram(t, f, `which git; command -v git; type git; command -V git; git status --porcelain`)
-	want := "git\ngit\ngit is a native built-in\ngit is a native built-in\n"
+	want := bin + "\n" + bin + "\ngit is a native built-in\ngit is a native built-in\n"
 	if outcome.Stdout != want || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
 		t.Fatalf("discovery outcome: %+v", outcome)
+	}
+	for _, selected := range strings.Split(strings.TrimSuffix(outcome.Stdout, "\n"), "\n")[:2] {
+		info, err := os.Stat(selected)
+		testutil.FailErr(t, "stat selected executable", err)
+		if !filepath.IsAbs(selected) || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+			t.Fatalf("selected path is not executable: %q", selected)
+		}
 	}
 	if got := f.Executions(t)["git status"]; got != "completed;" {
 		t.Fatalf("native Git receipts: %q", got)
@@ -48,19 +54,12 @@ func TestComposedProgramDiscoveryAgreesWithDispatch(t *testing.T) {
 	f.Runtime.ExternalHidden = true
 	outcome = callComposedProgram(t, f, `BIN=$(which git); "$BIN" status --porcelain; printf 'status=%d\n' "$?"`)
 	if outcome.Stdout != "status=0\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
-		t.Fatalf("printed name outcome: %+v", outcome)
-	}
-	if got := f.Executions(t)["git status"]; got != "completed;completed;" {
-		t.Fatalf("printed name did not run native Git: %q", got)
-	}
-	outcome = callComposedProgram(t, f, strconv.Quote(bin)+` status --porcelain; printf 'status=%d\n' "$?"`)
-	if outcome.Stdout != "status=0\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
-		t.Fatalf("absolute path launch outcome: %+v", outcome)
+		t.Fatalf("printed path launch outcome: %+v", outcome)
 	}
 	var launched int
 	testutil.FailErr(t, "read external launch receipt", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND operation_id='command' AND native_command='external' AND state='completed' AND owner_invoked=1`, outcome.ProgramID).Scan(&launched))
 	if launched != 1 {
-		t.Fatalf("absolute path external launch receipts: %d", launched)
+		t.Fatalf("printed path external launch receipts: %d", launched)
 	}
 	outcome = callComposedProgram(t, f, "external -- "+strconv.Quote(bin)+" status --porcelain")
 	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" {

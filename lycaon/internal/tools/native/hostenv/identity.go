@@ -6,22 +6,21 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/hostos"
 )
 
 // runPwd delegates to the path owner that also serves cd and native_path, in
 // a frame bound to the request's directory; it prints the logical cwd.
-func (inv *invocation) system() (hostos.System, error) {
+func (inv *invocation) system() (SystemFacts, error) {
 	facts, err := inv.owners.Host.System(inv.ctx)
-	if errors.Is(err, hostos.ErrUnsupported) {
+	if errors.Is(err, ErrHostFactUnavailable) {
 		return facts, inv.unavailable("system identity", err)
 	}
 	return facts, err
 }
 
-func (inv *invocation) identity() (hostos.Identity, error) {
+func (inv *invocation) identity() (IdentityFacts, error) {
 	facts, err := inv.owners.Host.Identity(inv.ctx)
-	if errors.Is(err, hostos.ErrUnsupported) {
+	if errors.Is(err, ErrHostFactUnavailable) {
 		return facts, inv.unavailable("process identity", err)
 	}
 	return facts, err

@@ -180,9 +180,6 @@ type Confinement struct {
 	LoopbackConnectPorts []uint16
 	// Browser permits local listeners independently of LocalListen.
 	Browser bool
-	// Process sets resource limits and signal dispositions the target
-	// starts with; they narrow the process, never the boundary.
-	Process ProcessAttributes
 }
 
 // DefaultConfinement builds the boundary for a valid rooted request.
