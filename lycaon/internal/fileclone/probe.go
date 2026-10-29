@@ -1,7 +1,9 @@
 package fileclone
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fssync"
 )
@@ -32,22 +34,11 @@ func SupportedAt(root string) (bool, error) {
 
 // SupportedFrom tests this source file and destination volume. It never falls
 // back to a streamed copy, so large sources cost only clone metadata here.
-func SupportedFrom(source, root string) (bool, error) {
-	placeholder, err := os.CreateTemp(root, ".clone-source-probe-")
+func SupportedFrom(source, root string) (supported bool, err error) {
+	directory, err := os.MkdirTemp(root, ".clone-source-probe-")
 	if err != nil {
 		return false, err
 	}
-	path := placeholder.Name()
-	if err := placeholder.Close(); err != nil {
-		_ = os.Remove(path)
-		return false, err
-	}
-	if err := os.Remove(path); err != nil {
-		return false, err
-	}
-	cloned, err := Clone(source, path)
-	if cloned {
-		defer func() { _ = os.Remove(path) }()
-	}
-	return cloned, err
+	defer func() { err = errors.Join(err, os.RemoveAll(directory)) }()
+	return Clone(source, filepath.Join(directory, "probe"))
 }
