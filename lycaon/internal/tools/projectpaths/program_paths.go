@@ -42,7 +42,6 @@ type BoundPath struct {
 	rootInfo      os.FileInfo
 	exactRelative string
 	admitRead     func(string) error
-	admitEntry    func(string) error
 	admitMutation func(string) (Resolved, error)
 }
 
@@ -208,26 +207,6 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		}
 		_, err = ResolveRead(ctx, p.boundary, p.context, authority)
 		return err
-	}
-	// Entry metadata is admitted at the entry's own address: the held walk
-	// enforces containment, so only read scope applies and a link is never
-	// followed to decide whether its own metadata may be read.
-	bound.admitEntry = func(actual string) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
-		if err != nil {
-			return err
-		}
-		scope := projectroot.ScopeRel(resolved.Root, authority)
-		if scope == "." || scope == "" {
-			return bound.admitRead(actual)
-		}
-		if p.boundary == nil {
-			return nil
-		}
-		return p.boundary.AssertReadGlobs(ctx, filepath.ToSlash(scope), p.context.ProfileID())
 	}
 	if write {
 		bound.admitMutation = func(actual string) (Resolved, error) {
