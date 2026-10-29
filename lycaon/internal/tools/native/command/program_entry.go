@@ -703,6 +703,8 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 				words(node.Words())
 			case commandsurface.ArithmeticPart:
 				words(node.Words())
+			case commandsurface.BracePart:
+				words(node.Alternatives)
 			}
 		}
 	}
