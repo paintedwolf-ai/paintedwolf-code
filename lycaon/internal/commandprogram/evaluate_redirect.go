@@ -268,6 +268,8 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			words(c.Words())
 		case commandsurface.TrapCommand:
 			statements(c.Statements)
+		case commandsurface.TimedCommand:
+			statements(c.Pipeline)
 		}
 	}
 	statements = func(items []commandsurface.Statement) {

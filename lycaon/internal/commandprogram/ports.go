@@ -208,6 +208,8 @@ type OperationRequest struct {
 	// Gap is set when a native name's form has no native owner and the
 	// launch would run the installed program; dispatch decides whether it may.
 	Gap *toolcontract.NativeGap
+	// Process is what an external launch for this request starts with.
+	Process ChildProcess
 }
 
 // Validate binds the plan node to the child invocation it is dispatched as.

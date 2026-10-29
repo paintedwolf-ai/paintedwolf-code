@@ -33,6 +33,8 @@ type frameState struct {
 	options    shellOptions
 	directory  string
 	exitTrap   []commandsurface.Statement
+	// limits are what ulimit reported or set for later external children.
+	limits *childLimits
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -56,7 +58,9 @@ type frame struct {
 	substs       *substitutionStatus
 	procSubst    *procSubstScope
 	producerPipe *BytePipe
-	loops        int
+	// times is the account of the innermost time clause this frame runs in.
+	times      *ProcessTimes
+	loops      int
 	functions  int
 	sources    int
 	returnable bool
@@ -112,7 +116,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
+	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch, limits: &childLimits{}}
 	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
 	if dir, ok := e.ports.Dispatch.(DirectoryFrame); ok {
 		state.directory = dir.Directory()
@@ -161,7 +165,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options, directory: f.state.directory}
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options, directory: f.state.directory, limits: f.state.limits.clone()}
 	g.publish, g.prefix, g.substs, g.procSubst, g.producerPipe = newEligibility(), nil, nil, nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
