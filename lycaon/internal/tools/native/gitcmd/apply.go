@@ -210,7 +210,7 @@ func (r *applyRun) parse(inputs []applyInput) ([]*applySection, error) {
 	for _, input := range inputs {
 		parsed, err := patchapply.Parse(input.data)
 		if errors.Is(err, patchapply.ErrNoPatch) {
-			writeLine(r.stderr, `error: No valid filesystem in input (allow with "--allow-empty")`)
+			writeLine(r.stderr, `error: No valid patches in input (allow with "--allow-empty")`)
 			r.status = 128
 			return nil, nil
 		}

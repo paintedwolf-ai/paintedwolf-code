@@ -60,8 +60,22 @@ preimage blob with Git's merge-file, reporting conflicted paths and index stages
 the same Git stage operation. `git rm --cached` changes only the index. Both
 commands support dry runs, preserve unrelated staging, and include affected
 paths in session staging. Ordinary Git safety checks precede removal; force
-does not change host authority. If index staging fails after a filesystem
-change, the result retains the completed effect and its source recovery.
+does not change host authority. `git rm` removes the directories a removal
+leaves empty, each through the same recoverable delete, and keeps the
+repository root and the command directory. If index staging fails after a
+filesystem change, the result retains the completed effect and its source
+recovery. A following `git commit` builds its tree in a private index seeded
+from `HEAD`, so staged deletions, both sides of a rename and the selected
+paths are committed while unrelated staged work stays staged.
+
+`git grep` searches a revision's tree, the index or the tracked working tree
+with the same native regex engines as `grep` (basic by default, `-E`, `-F`,
+`-P`) and prints Git's `REV:PATH:LINE` layout with paths relative to the
+command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
+`git cat-file`, `git show-ref` and `git for-each-ref` run through the Git
+owner's read door with their catalogued options; `git shortlog` without a
+revision summarizes `HEAD`. Batch object reads, reflog maintenance and
+signature format atoms are refused.
 
 `git bisect` runs natively on the Git owner. Sessions live in the repository's
 `BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's

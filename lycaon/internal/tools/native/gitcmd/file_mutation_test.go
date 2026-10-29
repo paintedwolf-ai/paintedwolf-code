@@ -199,10 +199,14 @@ func TestMoveForceAndSymbolicLink(t *testing.T) {
 	if target != "a.txt" || !strings.HasPrefix(h.git("ls-files", "--stage", "--", "moved-link"), "120000 ") {
 		t.Fatal("symbolic link type changed")
 	}
-	got = h.exec("git", "rm", "--", "moved-link")
-	testutil.FailErr(t, "remove link", got.err)
-	if got.result.Status != 0 || !h.absent("moved-link") || h.absent("a.txt") {
-		t.Fatalf("remove link %+v %q", got.result, got.stderr)
+	h.exec("git", "rm", "-f", "--", "moved-link").refused(t, "remove link", "COMMAND_NATIVE_FORM_UNSUPPORTED")
+	if h.absent("moved-link") || !strings.HasPrefix(h.git("ls-files", "--stage", "--", "moved-link"), "120000 ") {
+		t.Fatal("refused link removal changed the link or index")
+	}
+	got = h.exec("git", "rm", "-q", "--cached", "--", "moved-link")
+	testutil.FailErr(t, "untrack link", got.err)
+	if got.result.Status != 0 || h.absent("moved-link") || h.git("ls-files", "--", "moved-link") != "" {
+		t.Fatalf("untrack link %+v %q", got.result, got.stderr)
 	}
 }
 
@@ -415,7 +419,7 @@ func TestRemovePrunesEmptiedDirectoriesUpToTheWorkingDirectory(t *testing.T) {
 	if got.result.Status != 0 || h.absent("cwd/inner") || !h.absent("cwd/inner/leaf") {
 		t.Fatalf("remove %+v %q; working directory removed=%v", got.result, got.stderr, h.absent("cwd/inner"))
 	}
-	if staged := h.git("diff", "--cached", "--name-status"); staged != "D\tcwd/inner/leaf\nD\tdeep/a/b/leaf\nD\tdeep/a/kept/other\nA\tstaged.txt\n" {
+	if staged := h.git("diff", "--cached", "--name-status"); staged != "D\tcwd/inner/leaf\nD\tdeep/a/b/leaf\nD\tdeep/a/kept/other\n" {
 		t.Fatalf("staged %q", staged)
 	}
 }
