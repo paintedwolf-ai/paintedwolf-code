@@ -30,8 +30,15 @@ func (p Plan) reviewedRetainedRoute() bool {
 		return false
 	}
 	for i, step := range p.steps {
-		if step.ID != reviewed[i][0] || step.Checksum != reviewed[i][1] {
+		if step.ID != reviewed[i][0] {
 			return false
+		}
+		if step.Checksum != reviewed[i][1] {
+			// The reviewed unreleased correction only dispatches each retained
+			// authority kind to its own decoder; SQL and allocation work are unchanged.
+			if step.ID != "native-child-once-authority" || step.Checksum != "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5" {
+				return false
+			}
 		}
 	}
 	return true

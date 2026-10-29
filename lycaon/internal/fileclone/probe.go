@@ -29,3 +29,25 @@ func SupportedAt(root string) (bool, error) {
 	}
 	return Clone(path, path+".clone")
 }
+
+// SupportedFrom tests this source file and destination volume. It never falls
+// back to a streamed copy, so large sources cost only clone metadata here.
+func SupportedFrom(source, root string) (bool, error) {
+	placeholder, err := os.CreateTemp(root, ".clone-source-probe-")
+	if err != nil {
+		return false, err
+	}
+	path := placeholder.Name()
+	if err := placeholder.Close(); err != nil {
+		_ = os.Remove(path)
+		return false, err
+	}
+	if err := os.Remove(path); err != nil {
+		return false, err
+	}
+	cloned, err := Clone(source, path)
+	if cloned {
+		defer func() { _ = os.Remove(path) }()
+	}
+	return cloned, err
+}

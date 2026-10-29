@@ -71,7 +71,7 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Migrating)
 	}
-	prepared, err := copyRetainedStore(ctx, path, replacement, plan)
+	prepared, err := copyRetainedStore(ctx, path, replacement, plan, hooks.Progress)
 	if err != nil {
 		return err
 	}

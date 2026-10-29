@@ -23,7 +23,7 @@ type retainedCopyResult struct {
 // A complete selection preserves every source byte, including shadow rows and
 // counters. Full validation of this same image establishes index trust before
 // the candidate predicates can authorize recovery capture.
-func copyWholeRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (retainedCopyResult, bool, error) {
+func copyWholeRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan, progress func(migrations.Phase)) (retainedCopyResult, bool, error) {
 	var result retainedCopyResult
 	reader, err := openReader(ctx, source)
 	if err != nil {
@@ -72,7 +72,7 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 	}
 	result.sharedOriginal = cloned
 	result.wholeFile = true
-	err = prepareWholeRetainedStore(ctx, destination, plan, cloned)
+	err = prepareWholeRetainedStore(ctx, destination, plan, cloned, progress)
 	if rebuildIntegrityFailure(err) {
 		// A damaged secondary index can be reconstructed from primary rows by
 		// the existing path. Operational failures never trigger an expensive retry.
@@ -98,7 +98,7 @@ func retentionComplete(ctx context.Context, source DBTX, plan migrations.Plan) (
 	return !staging && !omitted && declared == entries, err
 }
 
-func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations.Plan, cloned bool) (err error) {
+func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations.Plan, cloned bool, progress func(migrations.Phase)) (err error) {
 	writer, err := openRetainedUpgradeWriter(ctx, path)
 	if err != nil {
 		return err
@@ -137,6 +137,9 @@ func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations
 	}
 	if actual != plan.Source {
 		return fmt.Errorf("whole-store copy changed the released schema")
+	}
+	if progress != nil {
+		progress(migrations.Validating)
 	}
 	return validateUpgradeIntegrity(ctx, writer)
 }
