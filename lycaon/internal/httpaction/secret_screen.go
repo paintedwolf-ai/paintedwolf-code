@@ -11,10 +11,11 @@ import (
 )
 
 type outboundRequest struct {
-	url       string
-	headers   []outboundhttp.Header
-	body      []byte
-	protected map[int][]string
+	url        string
+	hostHeader string
+	headers    []outboundhttp.Header
+	body       []byte
+	protected  map[int][]string
 	// redacted reports that the sent bytes differ everywhere the screen matched.
 	redacted bool
 	receipt  string
@@ -28,11 +29,12 @@ type requestField struct {
 }
 
 func (r outboundRequest) fields() []requestField {
-	fields := make([]requestField, 0, len(r.headers)+2)
+	fields := make([]requestField, 0, len(r.headers)+3)
 	fields = append(fields, requestField{value: r.url})
 	for _, header := range r.headers {
 		fields = append(fields, requestField{label: header.Name, value: header.Value})
 	}
+	fields = append(fields, requestField{label: "Host", value: r.hostHeader})
 	fields = append(fields, requestField{value: string(r.body)})
 	for i := range fields {
 		fields[i].protected = r.protected[i]
@@ -44,10 +46,11 @@ func (r outboundRequest) fields() []requestField {
 func (r outboundRequest) redact(ctx context.Context, matcher *secretmatch.Matcher) outboundRequest {
 	fields := r.fields()
 	out := outboundRequest{
-		url:       redactField(ctx, matcher, fields[0]),
-		headers:   make([]outboundhttp.Header, len(r.headers)),
-		body:      []byte(redactField(ctx, matcher, fields[len(fields)-1])),
-		protected: r.protected,
+		url:        redactField(ctx, matcher, fields[0]),
+		hostHeader: redactField(ctx, matcher, fields[len(fields)-2]),
+		headers:    make([]outboundhttp.Header, len(r.headers)),
+		body:       []byte(redactField(ctx, matcher, fields[len(fields)-1])),
+		protected:  r.protected,
 	}
 	for i, header := range r.headers {
 		out.headers[i] = outboundhttp.Header{
@@ -72,16 +75,6 @@ func screenField(ctx context.Context, matcher *secretmatch.Matcher, field reques
 
 func redactField(ctx context.Context, matcher *secretmatch.Matcher, field requestField) string {
 	return secretmatch.RedactEvidence(field.value, screenField(ctx, matcher, field))
-}
-
-// requestDestination identifies the recipient: the reviewed socket when the
-// request travels over one, otherwise the URL origin.
-func requestDestination(spec requestSpec) (id, label string) {
-	if spec.socket != "" {
-		label = "unix:" + spec.socket
-		return secretmatch.DestinationKey(label, "unix", spec.socket), label
-	}
-	return secretmatch.HTTPDestination(spec.target)
 }
 
 // primaryMatch selects the card's highest-severity finding.
@@ -170,6 +163,11 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
 	}
 	rewritten := requestWire(rebuilt, redactedArgs, tc.Effects.Secrets).redact(ctx, deps.SecretMatcher)
+	if rewritten.hostHeader != "" && rewritten.hostHeader != spec.hostHeader {
+		if _, err := outboundhttp.NormalizeURL(spec.target.Scheme + "://" + rewritten.hostHeader); err != nil {
+			return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
+		}
+	}
 	// A receipt may only claim what the rewrite actually removed.
 	if len(screenFields(ctx, deps.SecretMatcher, rewritten.fields())) > 0 {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
