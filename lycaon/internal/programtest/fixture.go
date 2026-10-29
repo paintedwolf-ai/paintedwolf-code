@@ -176,9 +176,14 @@ func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Se
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {
 	t.Helper()
+	return f.CallArgs(t, ctx, map[string]any{"command": source})
+}
+
+// CallArgs runs one command call with the model's complete arguments.
+func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]any) (string, error) {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
-	args := map[string]any{"command": source}
 	contract, _ := toolcontract.Lookup("command")
 	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)

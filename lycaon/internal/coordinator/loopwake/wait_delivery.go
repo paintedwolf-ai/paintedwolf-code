@@ -51,3 +51,19 @@ func processWakeReport(wake anchor.ID, env anchor.Envelope) string {
 		return ""
 	}
 }
+
+// WaitEndedText is how a wait's end reaches the turn that follows it: the
+// winning condition, its outcome and code, and the report it carries.
+func WaitEndedText(winner awaitstore.Condition) string {
+	text := "Wait ended: " + strings.TrimSpace(winner.Kind)
+	if outcome := strings.TrimSpace(winner.Outcome); outcome != "" {
+		text += " (" + outcome + ")"
+	}
+	if code := strings.TrimSpace(winner.Code); code != "" {
+		text += ". Code: " + code
+	}
+	if report := strings.TrimSpace(winner.Report); report != "" {
+		text += "\n\n" + report
+	}
+	return text
+}

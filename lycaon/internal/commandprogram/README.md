@@ -119,6 +119,12 @@ dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the
 receipt owner's aggregate record.
 
+When every live statement and job is blocked, the evaluator reports a
+`WaitState` through `EvaluationPorts.Waits`: the waiting statement's text, the
+earliest timer wake on the program's `Clock`, and the exact job handles whose
+settlement wakes it. The host uses it to park the call and to refuse, before
+blocking, a wait that cannot complete within the call's bound.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv
