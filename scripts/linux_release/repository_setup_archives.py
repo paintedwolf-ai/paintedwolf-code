@@ -129,6 +129,9 @@ def rpm(package, version, release, expected, config):
         raise ValueError("setup RPM contains scripts or triggers: " + repr(present))
     requirements = command(["rpm", "-qp", "--qf", "[%{REQUIRENAME}\n]", str(package)]).decode().splitlines()
     allowed = {"rpmlib(CompressedFileNames)", "rpmlib(FileDigests)", "rpmlib(PayloadFilesHavePrefix)"}
+    # rpmbuild records tilde ordering support exactly when a prerelease version carries a tilde.
+    if "~" in f"{version}-{release}":
+        allowed.add("rpmlib(TildeInVersions)")
     if len(requirements) != len(set(requirements)) or set(requirements) != allowed:
         raise ValueError("setup RPM contains an unexpected dependency relationship")
     provides = command(["rpm", "-qp", "--qf", "[%{PROVIDENAME}\t%{PROVIDEFLAGS}\t%{PROVIDEVERSION}\n]", str(package)])
