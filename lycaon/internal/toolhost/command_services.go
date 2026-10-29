@@ -17,8 +17,6 @@ import (
 
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
-	owners            programOwnerTools
-	ownersErr         error
 	bgRegistry        *bgprocess.Registry
 	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
@@ -136,11 +134,6 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) {
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
 	programs.Progress, programs.Sessions = services.Progress, services.Sessions
 	programs.Supervisor.Interrupter = services.Recorder
-	if owners, err := r.owners.compose(services.Recorder); err == nil {
-		programs.Owners = owners
-	} else {
-		r.ownersErr = err
-	}
 }
 
 // setProgramExecutor binds the executor that admits each native child.

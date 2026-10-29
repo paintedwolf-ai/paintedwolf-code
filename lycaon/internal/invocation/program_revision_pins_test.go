@@ -177,28 +177,3 @@ func TestProgramReceiptsPinAWalkAtTheVisitLimit(t *testing.T) {
 		t.Fatalf("corrupt segment read: %v", err)
 	}
 }
-
-// Independent owners of one execution append without assigning ordinals:
-// a redirect destination, a second destination and a later source capture.
-func TestProgramReceiptsAppendRevisionPinsInCaptureOrder(t *testing.T) {
-	f := newProgramReceiptFixture(t)
-	execution := f.childFor(t, "write").Invocation().Identity.ExecutionID
-	pins := revisionPinsFixture()
-	for _, pin := range []toolcontract.ExecutionRevision{pins[1], pins[1], pins[0]} {
-		testutil.FailErr(t, "append capture", f.recorder.AppendRevisionPin(t.Context(), execution, pin))
-	}
-	testutil.FailErr(t, "resubmit the recorded prefix", f.recorder.RecordRevisionPins(t.Context(), execution, 0, []toolcontract.ExecutionRevision{pins[1]}))
-	got, err := f.recorder.RevisionPins(t.Context(), f.session, execution)
-	testutil.FailErr(t, "read appended pins", err)
-	if len(got) != 3 || got[0] != pins[1] || got[1] != pins[1] || got[2] != pins[0] {
-		t.Fatalf("pins = %+v", got)
-	}
-	invalid := pins[0]
-	invalid.Role = ""
-	if err := f.recorder.AppendRevisionPin(t.Context(), execution, invalid); err == nil {
-		t.Fatal("invalid capture appended")
-	}
-	if err := f.recorder.AppendRevisionPin(t.Context(), "", pins[0]); err == nil {
-		t.Fatal("capture appended without an execution")
-	}
-}

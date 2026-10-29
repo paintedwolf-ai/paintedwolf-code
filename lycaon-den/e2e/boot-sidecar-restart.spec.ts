@@ -15,7 +15,7 @@ import {
 } from "./helpers.ts";
 import type { Message } from "../src/api/types.ts";
 
-webE2e("interrupted tool settles after restart and preserves the unsent draft", async ({ page, context, request }) => {
+webE2e("interrupted tool settles after restart and preserves the unsent draft", async ({ page, context, request }, testInfo) => {
   webE2e.setTimeout(360_000);
   await bootstrapChatSession(page, request);
   const sessionId = await settledChatSessionId(page);
@@ -34,11 +34,19 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
   expect(pending.session_id).toBe(sessionId);
   await apiJson(request, "POST", "/harness/llm/respond", {
     id: pending.id, tool_calls: [{ id: "bounded-command", name: "command", args: {
-      command: "node -e \"console.log('recovery started'); setTimeout(() => console.log('recovery finished'), 90000)\"",
+      command: "printf 'recovery started\\n'; sleep 90; printf 'recovery finished\\n'",
       timeout_ms: 120000,
     } }],
   });
-  await expect(liveChatStage(page)).toContainText("Running command ·", { timeout: 30_000 });
+  try {
+    await expect(liveChatStage(page)).toContainText("Running command ·", { timeout: 30_000 });
+  } catch (error) {
+    const transcript = await apiJson<{ messages: Message[] }>(request, "GET", `/v1/sessions/${sessionId}/messages`);
+    await testInfo.attach("restart-command-startup", {
+      body: JSON.stringify(transcript, null, 2), contentType: "application/json",
+    });
+    throw error;
+  }
   const draft = "Unsent recovery draft — café 🌱";
   await composer.fill(draft);
   await page.evaluate(async () => {

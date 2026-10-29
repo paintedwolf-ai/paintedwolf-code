@@ -30,68 +30,44 @@ func (t *ExtractArchiveTool) Run(ctx context.Context, args map[string]any, tctx 
 	if err != nil {
 		return "", err
 	}
-	resp, err := t.Extract(ctx, ExtractInput{Archive: archivePath, Dest: destPath, Overwrite: true}, tctx)
-	if err != nil {
-		return "", err
-	}
-	raw, err := surveyjson.Marshal(resp)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-// ExtractInput is one complete extraction. Format is "zip", "tar", "tar.gz"
-// or "tar.bz2"; empty selects it from the archive name. StripComponents drops
-// leading entry path components, Members limits extraction to named entries,
-// and without Overwrite an existing destination file is skipped and reported.
-type ExtractInput struct {
-	Archive         string
-	Dest            string
-	Format          string
-	StripComponents int
-	Members         []string
-	Overwrite       bool
-}
-
-// Extract writes each entry through the reviewed, recoverable stream door
-// under the catalog's entry, byte and expansion-ratio ceilings, refusing
-// traversal, links and governed destinations before they are written.
-func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx tools.ToolContext) (ExtractResult, error) {
 	prof := tctx.ProfileID()
-	format := in.Format
-	if format == "" {
-		var err error
-		if format, err = archiveFormat(in.Archive); err != nil {
-			return ExtractResult{}, err
-		}
-	}
-	archive, relArchive, size, err := t.loadArchive(ctx, tctx, in.Archive, prof)
+	format, err := archiveFormat(archivePath)
 	if err != nil {
-		return ExtractResult{}, err
+		return "", err
 	}
-	dest, relDest, err := t.prepareDest(ctx, tctx, in.Dest, prof)
+	archive, relArchive, err := t.loadArchive(ctx, tctx, archivePath, prof)
 	if err != nil {
-		return ExtractResult{}, err
+		return "", err
 	}
-	budget, err := newExtractBudget(size)
+	dest, relDest, err := t.prepareDest(ctx, tctx, destPath, prof)
 	if err != nil {
-		return ExtractResult{}, err
+		return "", err
 	}
-	sink := extractSink{ctx: ctx, tctx: tctx, dest: resolvedMutationTarget(dest), strip: in.StripComponents, overwrite: in.Overwrite, members: in.Members}
+	budget := &extractBudget{out: make([]extractEntryResult, 0, 16)}
+	guard := entryGuard(protectedEntryGuard)
+	sink := extractSink{ctx: ctx, tctx: tctx, dest: resolvedMutationTarget(dest)}
 	switch format {
 	case "zip":
-		err = extractZipFile(sink, archive.EffectLocation(), budget, protectedEntryGuard)
-	case "tar", "tar.gz", "tar.bz2":
-		err = extractTarFile(sink, archive.EffectLocation(), format, budget, protectedEntryGuard)
+		err = extractZipFile(sink, archive.EffectLocation(), budget, guard)
+	case "tar.gz":
+		err = extractTarGzFile(sink, archive.EffectLocation(), budget, guard)
 	default:
-		err = &toolrejection.ToolReject{Code: "EXTRACT_FORMAT_UNSUPPORTED", Data: map[string]any{"path": relArchive}}
+		err = &toolrejection.ToolReject{
+			Code: "EXTRACT_FORMAT_UNSUPPORTED",
+			Data: map[string]any{"path": relArchive},
+		}
 	}
 	if err != nil {
 		afterSuccessfulMutation(ctx, tctx, relDest)
-		return ExtractResult{}, extractionFailure(err, relArchive, relDest, budget)
+		return "", extractionFailure(err, relArchive, relDest, budget)
 	}
-	resp := ExtractResult{Path: relArchive, Dest: relDest, Extracted: budget.out, Entries: budget.entries, Bytes: budget.bytes, Skipped: budget.skipped}
+	resp := extractArchiveResponse{
+		Path:      relArchive,
+		Dest:      relDest,
+		Extracted: budget.out,
+		Entries:   budget.entries,
+		Bytes:     budget.bytes,
+	}
 	mutPaths := make([]string, 0, 1+len(budget.out))
 	mutPaths = append(mutPaths, relDest)
 	for _, e := range budget.out {
@@ -100,7 +76,11 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 		}
 	}
 	afterSuccessfulMutation(ctx, tctx, mutPaths...)
-	return resp, nil
+	raw, err := surveyjson.Marshal(resp)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 // Failed extraction retains the paths and byte counts already committed.
@@ -164,31 +144,37 @@ func parseExtractArchiveArgs(args map[string]any) (path, dest string, err error)
 	return path, dest, nil
 }
 
-func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolContext, relPath, profileID string) (projectpaths.Resolved, string, int64, error) {
+func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolContext, relPath, profileID string) (projectpaths.Resolved, string, error) {
 	if sandbox.HasParentTraversal(relPath) {
-		return projectpaths.Resolved{}, "", 0, toolkit.PathEscapeReject(relPath)
+		return projectpaths.Resolved{}, "", toolkit.PathEscapeReject(relPath)
 	}
 	resolved, err := projectpaths.ResolveRead(ctx, t.Boundary, tctx, relPath)
 	if err != nil {
-		return projectpaths.Resolved{}, "", 0, err
+		return projectpaths.Resolved{}, "", err
 	}
 	relSlash := filepath.ToSlash(resolved.DisplayPath)
 	f, err := fseffect.OpenRead(resolved.EffectLocation())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return projectpaths.Resolved{}, "", 0, &toolrejection.ToolReject{Code: "EXTRACT_NOT_FOUND", Data: map[string]any{"path": relSlash}}
+			return projectpaths.Resolved{}, "", &toolrejection.ToolReject{
+				Code: "EXTRACT_NOT_FOUND",
+				Data: map[string]any{"path": relSlash},
+			}
 		}
-		return projectpaths.Resolved{}, "", 0, fmt.Errorf("extract_archive %s: %w", relPath, err)
+		return projectpaths.Resolved{}, "", fmt.Errorf("extract_archive %s: %w", relPath, err)
 	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
-		return projectpaths.Resolved{}, "", 0, err
+		return projectpaths.Resolved{}, "", err
 	}
 	if info.IsDir() {
-		return projectpaths.Resolved{}, "", 0, &toolrejection.ToolReject{Code: "EXTRACT_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
+		return projectpaths.Resolved{}, "", &toolrejection.ToolReject{
+			Code: "EXTRACT_IS_DIRECTORY",
+			Data: map[string]any{"path": relSlash},
+		}
 	}
-	return resolved, relSlash, info.Size(), nil
+	return resolved, relSlash, nil
 }
 
 func (t *ExtractArchiveTool) prepareDest(ctx context.Context, tctx tools.ToolContext, relPath, profileID string) (projectpaths.Resolved, string, error) {

@@ -23,6 +23,7 @@ class FeedPublicationTests(unittest.TestCase):
                 directory.mkdir()
             for name in ["release-r2-publish-pointer.sh", "release-validate-updater-manifest.sh", "release_pointer_headers.py", "feed_signature.py", "feed_signing.py", "update_keys.py", "release_semver.py", "semver-compare.py", "updater_signature.py"]:
                 shutil.copyfile(root / "scripts" / name, scripts / name)
+            shutil.copytree(root / "scripts/release_distribution_contract", scripts / "release_distribution_contract")
             # Fix the registry at one open generation independently of future rotations.
             keys = load_registry()
             keys.update(signing_generation=1, embedded_generation=1)

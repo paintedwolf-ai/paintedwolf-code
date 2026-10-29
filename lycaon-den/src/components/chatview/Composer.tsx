@@ -37,7 +37,7 @@ import {
   attachmentTurnBytes,
   countsAsImage,
   fileToComposerAttachment,
-  filesFromClipboard,
+  attachPastedFiles,
   formatAttachmentBytes,
   isAllowedImageMime,
   isAllowedVideoMime,
@@ -85,6 +85,7 @@ import {
 } from "../../chat/composer/prompt-recall.ts";
 import { externalContentSearchQuery } from "../../chat/untrusted/untrusted-content-copy.ts";
 import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { revealTextareaCaret } from "../../platform/scrolling/textarea-caret-reveal.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { appBootPreparation } from "../../platform/connection/app-boot-readiness.ts";
@@ -222,7 +223,7 @@ function rejectChipFor(name: string): ComposerPendingAttachment {
 
 function chipTitle(att: ComposerPendingAttachment): string {
   if (att.kind === "reject") return att.rejectMessage || att.name;
-  if (att.kind === "path-file" || att.kind === "path-folder") {
+  if (att.kind === "path-file" || att.kind === "path-folder" || att.kind === "external-file" || att.kind === "external-folder") {
     return `${attachmentChipLabel(att)} · ${att.path}`;
   }
   if (att.kind === "artifact") return att.name;
@@ -342,6 +343,7 @@ export function Composer(props: Props) {
   let footerRef: HTMLElement | undefined;
   let bodyRef: HTMLDivElement | undefined;
   let scrollRef: HTMLDivElement | undefined;
+  let viewportRef: HTMLDivElement | undefined;
   let composerHeight: HeightFollow | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   // Plain prompts overlap; decision sends serialize.
@@ -447,6 +449,9 @@ export function Composer(props: Props) {
   const clearDraft = () => sizeDraft(clearDraftHeight, "snap");
   /** Conversation switches resize the draft without animation. */
   const snapDraft = () => sizeDraft(fitDraftHeight, "snap");
+  const revealCaret = () => {
+    if (inputRef && viewportRef) revealTextareaCaret(inputRef, viewportRef);
+  };
 
   const resizeChrome = (mutate: () => void) => {
     if (composerHeight) composerHeight.change(HEIGHT_TOGGLE_TIMING, mutate);
@@ -517,6 +522,7 @@ export function Composer(props: Props) {
       if (!inputRef) return;
       growDraft();
       inputRef.setSelectionRange(inputRef.value.length, inputRef.value.length);
+      revealCaret();
     });
     return true;
   };
@@ -539,7 +545,7 @@ export function Composer(props: Props) {
     setActiveSlashSuggestion((index) => Math.min(index, count - 1));
   });
 
-  const imageCount = () => attachments().filter((a) => countsAsImage(a.kind)).length;
+  const imageCount = () => attachments().filter((a) => countsAsImage(a)).length;
   const byteAttachmentCount = () =>
     attachments().filter((a) => isByteAttachmentKind(a.kind)).length;
   const hasByteAttachments = () => attachments().some(isPayloadAttachment);
@@ -557,6 +563,7 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       growDraft();
       focusComposerInput(inputRef);
+      revealCaret();
     });
   };
 
@@ -695,6 +702,7 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       el.selectionStart = el.selectionEnd = start + 1;
       growDraft();
+      revealCaret();
     });
   };
 
@@ -1033,7 +1041,7 @@ export function Composer(props: Props) {
                 >
                   <Show
                     when={
-                      (att.kind === "image" || att.kind === "artifact") && att.previewUrl
+                      "previewUrl" in att && att.previewUrl
                         ? att.previewUrl
                         : undefined
                     }
@@ -1114,7 +1122,14 @@ export function Composer(props: Props) {
           </AnchoredSurface>
         </Show>
         <div class="den-composer-row">
-          <Scrollport ref={(el) => { scrollRef = el; }} class="den-composer-scroll">
+          <Scrollport class="den-composer-scroll"
+            ref={(el) => {
+              scrollRef = el;
+            }}
+            viewportRef={(el) => {
+              viewportRef = el;
+            }}
+          >
             <textarea
               ref={(el) => {
                 inputRef = el;
@@ -1140,6 +1155,22 @@ export function Composer(props: Props) {
                   updateComposerDocumentDraft(destination(), value);
                 });
                 growDraft();
+                revealCaret();
+              }}
+              onClick={() => revealCaret()}
+              onKeyUp={(event) => {
+                if (
+                  event.key === "ArrowUp" ||
+                  event.key === "ArrowDown" ||
+                  event.key === "ArrowLeft" ||
+                  event.key === "ArrowRight" ||
+                  event.key === "Home" ||
+                  event.key === "End" ||
+                  event.key === "PageUp" ||
+                  event.key === "PageDown"
+                ) {
+                  revealCaret();
+                }
               }}
               onFocus={() => {
                 setInputFocused(true);
@@ -1165,12 +1196,7 @@ export function Composer(props: Props) {
                 }
               }}
               onPaste={(e) => {
-                const files = filesFromClipboard(e.clipboardData?.items);
-                if (files.length > 0) {
-                  e.preventDefault();
-                  void addFiles(files);
-                  return;
-                }
+                if (attachPastedFiles(e, addFiles, (error) => setComposerError(destination(), error instanceof Error ? error.message : String(error)))) return;
                 const pasted = e.clipboardData?.getData("text/plain") ?? "";
                 if (
                   interceptTextPaste(

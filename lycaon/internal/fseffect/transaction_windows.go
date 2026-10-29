@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -573,8 +572,6 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 // platformChown is unsupported on this platform.
 func platformChown(Location, int, int) error { return ErrUnsupported }
 
-func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
-
 // MkdirAll creates and flushes directories through held handles.
 func MkdirAll(loc Location, _ os.FileMode) error {
 	clean, err := cleanLocation(loc)
@@ -620,5 +617,3 @@ func MkdirAll(loc Location, _ os.FileMode) error {
 	}
 	return flushHandle(handle)
 }
-
-func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }

@@ -55,6 +55,9 @@ func (t *ReplaceLinesTool) Run(ctx context.Context, args map[string]any, tctx to
 			if os.IsNotExist(err) {
 				return "", sourceview.PathNotFound("replace_lines", path, fullPath)
 			}
+			if toolrejection.AsToolReject(err) != nil {
+				return "", err
+			}
 			return "", fmt.Errorf("read failed: %w", err)
 		}
 		old := st.Content
@@ -383,20 +386,4 @@ func replaceLinesBeyondEOF(path string, startLine, endLine, totalLines int) erro
 			"total_lines": totalLines,
 		},
 	}
-}
-
-// ReplaceLineRange validates and applies a single 1-based inclusive line replacement.
-func ReplaceLineRange(path, content string, startLine, endLine int, newContent string) (string, error) {
-	ops := []lineOperation{{Kind: "replace", StartLine: startLine, EndLine: endLine, NewContent: newContent}}
-	if err := validateLineOperations(path, ops, toolkit.CountLines(content)); err != nil {
-		return "", err
-	}
-	replaced, err := applyLineOperations(path, content, ops)
-	if err != nil {
-		return "", err
-	}
-	if err := guardMutationContent("replace_lines", path, replaced); err != nil {
-		return "", err
-	}
-	return replaced, nil
 }

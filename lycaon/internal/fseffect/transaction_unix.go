@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/fssync"
@@ -580,29 +579,6 @@ func platformChown(loc Location, uid, gid int) error {
 	}
 	if err := unix.Fchownat(int(parent.file.Fd()), parent.name, uid, gid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return &fs.PathError{Op: "chown effect target", Path: parent.name, Err: err}
-	}
-	return nil
-}
-
-// platformTimes sets times on a target reached without symlink traversal.
-func platformTimes(loc Location, access, modify *time.Time) error {
-	parent, err := openParent(loc, false, 0)
-	if err != nil {
-		return err
-	}
-	defer parent.close()
-	if err := refuseSymlinkTarget(parent); err != nil {
-		return err
-	}
-	spec := func(t *time.Time) unix.Timespec {
-		if t == nil {
-			return unix.Timespec{Nsec: utimeOmit}
-		}
-		return unix.NsecToTimespec(t.UnixNano())
-	}
-	times := []unix.Timespec{spec(access), spec(modify)}
-	if err := unix.UtimesNanoAt(int(parent.file.Fd()), parent.name, times, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return &fs.PathError{Op: "timestamp effect target", Path: parent.name, Err: err}
 	}
 	return nil
 }

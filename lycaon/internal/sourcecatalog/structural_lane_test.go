@@ -152,7 +152,7 @@ func TestCollapseBoundariesStopAtCollapsedTrees(t *testing.T) {
 	boundaries := func(dir string) []string {
 		t.Helper()
 		var found []string
-		testutil.WaitFor(t, 20*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			got, ready, err := c.Directories.CollapseBoundaries(t.Context(), "p", root, dir)
 			testutil.FailErr(t, "list collapse boundaries", err)
 			found = got
