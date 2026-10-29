@@ -1,16 +1,20 @@
 {
-  "reviewed_commit": "2f1efac63043523bfcf5da741c0c8834a7476b21",
-  "disposition": "retain",
   "category": "source_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "module",
-  "workstream": "linux-metadata-and-stream-authority",
-  "reason": "Retain the unchanged 59 production files that own confinement policy, rendering and platform composition. This change adds adjacent kernel and stream contracts, not another production authority or cross-package dependency. DefaultConfinement and its ordered filesystem facts remain the policy source; the Linux helper renders those facts into mounts and Landlock, while the common launch guarantees byte-only regular standard streams, and a standard descriptor the caller closed reaches the target as the runtime null stream. The typed floor and applied command contracts support retaining this bounded module.",
-  "ceiling": 59,
-  "reviewed_shape": "a9fc6679cbc75644044d6eb59588fee92240a32f520ef8ee14799aac64bab13a",
+  "workstream": "confinement-platform-root-ownership",
+  "disposition": "retain",
+  "reason": "Confinement composes native cache/data conventions, bounded package stores, toolchain state and explicit grants through one policy calculation. Linux first-use preparation consumes the same filesystem verdict and never widens authority for missing optional stores. Retain these contracts beside the shared admission and applied Linux metadata/stream boundary fixtures. Platform owner extraction is separated into a dependent PR after this prerequisite lands. Prior ceiling and shape remain pending combined membership measurement and focused hosted contract verification; no hard limit changes.",
+  "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
+  "ceiling": 63,
   "boundaries": {
+    "lycaon/internal/confine/package_cache_roots_test.go": "048764f12085435079e6e454cd37b0d21ae10816c241807efa53121120fb0e9b",
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
+    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef",
+    "lycaon/internal/confine/package_cache_roots.go": "45afa487f58b197dde2088df728c092038750cbf362e6757b031324ddc439b02",
     "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
     "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
     "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
-  }
+  },
+  "reviewed_shape": "e0d5c96c6ea1f8ab9ded6ed9eebcd1da3de795c0b1069a1b0808bf279c2647a4"
 }

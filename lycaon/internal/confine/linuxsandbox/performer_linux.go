@@ -132,7 +132,7 @@ func startPerformer(fs Filesystem) error {
 		return fmt.Errorf("performer stdio: %w", err)
 	}
 	_, err = syscall.ForkExec("/proc/self/exe", []string{"pw-confine-performer", PerformerFlag}, &syscall.ProcAttr{
-		Env:   []string{},
+		Env:   coverageEnvironment(),
 		Files: []uintptr{uintptr(devnull), uintptr(devnull), 2, uintptr(pair[1])},
 		Sys:   &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL},
 	})
