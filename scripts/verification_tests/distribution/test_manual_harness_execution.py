@@ -155,6 +155,51 @@ class ManualDriverTests(unittest.TestCase):
         client = Mock()
         with patch.object(manual, "Client", return_value=client), patch.object(manual, "open_session", return_value={"id": SESSION, "project_id": PROJECT}) as opened, patch.object(manual, "repl") as repl, contextlib.redirect_stdout(io.StringIO()):
             manual.main(["--url", "http://127.0.0.1:1234"])
-            client.pending.assert_called_once_with("manual-driver-preflight")
+            client.pending.assert_called_once_with("manual-driver-preflight", wait=0)
             opened.assert_called_once_with(client, None, None)
             repl.assert_called_once()
+
+
+class HarnessPreparedStartupTests(unittest.TestCase):
+    def test_reuse_flag_preserves_interactive_runtime_without_preparation(self):
+        import os
+        import shlex
+        import shutil
+        import subprocess
+        import tempfile
+
+        source = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            (scripts / "harness").mkdir(parents=True)
+            (scripts / "e2e").mkdir()
+            shutil.copy2(source / "harness/lib.sh", scripts / "harness/lib.sh")
+            (scripts / "e2e/env.sh").write_text(":\n")
+            log = root / "calls"
+            (scripts / "e2e-sidecar-bg.sh").write_text('printf "%s\\n" "$*" >> "$PROBE_LOG"\n')
+            (root / "task").write_text('#!/bin/sh\necho preparation >> "$PROBE_LOG"\n')
+            (root / "task").chmod(0o700)
+            env = {**os.environ, "LYCAON_E2E_ADDR": "127.0.0.1:23451", "LYCAON_E2E_VITE_PORT": "23452", "LYCAON_E2E_STATE_DIR": str(root / "state"), "PROBE_LOG": str(log)}
+            script = 'source ' + shlex.quote(str(scripts / "harness/lib.sh")) + '\n' + '''
+_harness_require_free_port() { :; }
+harness_reap_stale_states() { :; }
+harness_claim_state() { :; }
+_harness_seed_project() { :; }
+harness_up --interactive --reuse-built
+harness_up --interactive
+'''
+            result = subprocess.run(["bash", "-ec", script], env=env, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), ["--reuse-built", "preparation", "--reuse-built"])
+
+    def test_missing_runtime_and_unknown_arguments_refuse_before_start(self):
+        import os
+        import subprocess
+
+        source = Path(__file__).resolve().parents[2]
+        env = {key: value for key, value in os.environ.items() if key != "LYCAON_E2E_STATE_DIR"}
+        for arguments, message in ((["--reuse-built"], "prepared runtime"), (["--unknown"], "unknown harness arguments")):
+            result = subprocess.run(["bash", str(source / "den-harness.sh"), *arguments], env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn(message, result.stderr)

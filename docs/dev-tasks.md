@@ -265,6 +265,8 @@ ends before the sidecar and Vite start; the interactive session holds no queue
 slot. A queue pause delays preparation but does not stop an already running
 session. Run the interactive target separately from other targets.
 `den:harness:test` and `den:harness:canary` retain queued execution throughout.
+After preparation, `HARNESS_KEEP_STATE=1 LYCAON_E2E_STATE_DIR=DIR ./task den:harness -- --reuse-built` restarts the prepared runtime without compiling. Keep that state directory after shutdown and prepare again when its source changes. A missing executable is refused before startup.
+
 Preparation writes into the harness's private runtime directory and uses
 exclusive admission for shared engine staging; it does not produce a test receipt.
 

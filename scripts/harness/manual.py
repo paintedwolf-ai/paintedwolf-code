@@ -32,8 +32,8 @@ class Client:
         except urllib.error.HTTPError as error:
             raise RuntimeError(f"{req.method} {path}: HTTP {error.code}: {error.read().decode(errors='replace')}") from error
 
-    def pending(self, session):
-        query = urllib.parse.urlencode({"session_id": session, "wait": 30000})
+    def pending(self, session, wait=30000):
+        query = urllib.parse.urlencode({"session_id": session, "wait": wait})
         return self.request("/harness/llm/pending?" + query)
 
     def respond(self, pending, **response):
@@ -81,7 +81,7 @@ class Driver:
                 self.last = pending
                 return pending
             state = self.client.request("/v1/sessions/" + self.session)
-            if state["status"] in ("idle", "error"):
+            if state["status"] in ("idle", "error") and not state.get("prompt_pending"):
                 raise RuntimeError("turn ended before a model request; inspect the chat transcript")
             self.output("Waiting for the host. Resolve any approval or question in Den; Ctrl-C stops this session.")
 
@@ -179,7 +179,7 @@ def main(argv=None):
     token = args.token_file.read_text().strip() if args.token_file else os.environ.get("LYCAON_E2E_TOKEN", "e2e-playwright-token")
     client = Client(args.url, token)
     # Prove the manual-only endpoint exists before creating any project.
-    client.pending(args.session or "manual-driver-preflight")
+    client.pending(args.session or "manual-driver-preflight", wait=0)
     session = open_session(client, args.session, args.project)
     print("Project:", session["project_id"], "\nSession:", session["id"], "\nWorkspace:", session.get("workspace_path", "(see project roots in Den)"))
     print("Open this project/chat in the harness Den window to answer approvals.")
