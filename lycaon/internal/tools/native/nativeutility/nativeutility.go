@@ -97,11 +97,14 @@ func Unsupported(spec toolcontract.CommandSpecification, word commandprogram.Fie
 	})
 }
 
-// Output meters one stdout endpoint against stream_bytes before each write.
-// Bytes already written stay written; a refusal makes the result incomplete.
+// Output meters one stdout endpoint against stream_bytes before each write and
+// records exact source mappings when the endpoint retains them. Bytes already
+// written stay written; a refusal makes the result incomplete.
 type Output struct {
 	ctx              context.Context
 	w                io.Writer
+	mappings         commandprogram.SourceMappingRecorder
+	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
 	limitID          string
 }
@@ -110,7 +113,9 @@ func NewOutput(ctx context.Context, w io.Writer, limitID string, maximum int64) 
 	if w == nil {
 		w = io.Discard
 	}
-	return &Output{ctx: ctx, w: w, limitID: limitID, maximum: maximum}
+	o := &Output{ctx: ctx, w: w, limitID: limitID, maximum: maximum}
+	o.mappings, _ = w.(commandprogram.SourceMappingRecorder)
+	return o
 }
 
 func (o *Output) Write(p []byte) (int, error) {
@@ -128,5 +133,50 @@ func (o *Output) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// WriteLiteral writes bytes taken verbatim from a pinned source at offset and
+// maps them when the endpoint retains mappings. Adjacent windows of one source
+// coalesce into a single mapping.
+func (o *Output) WriteLiteral(pin *toolcontract.SourcePin, p []byte, offset int64) error {
+	if len(p) == 0 {
+		return nil
+	}
+	outStart := o.written
+	if _, err := o.Write(p); err != nil {
+		return err
+	}
+	if o.mappings == nil || pin == nil {
+		return nil
+	}
+	next := toolcontract.StreamSourceMapping{Source: *pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written}
+	if last := o.pending; last != nil && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
+		last.SourceEndByte, last.OutputEndByte = next.SourceEndByte, next.OutputEndByte
+		return nil
+	}
+	if err := o.Flush(); err != nil {
+		return err
+	}
+	o.pending = &next
+	return nil
+}
+
+// Flush records the mapping still being extended.
+func (o *Output) Flush() error {
+	if o.pending == nil {
+		return nil
+	}
+	pending := *o.pending
+	o.pending = nil
+	return o.mappings.RecordSourceMapping(pending)
+}
+
 // Written reports the bytes accepted so far.
 func (o *Output) Written() int64 { return o.written }
+
+// RecordSourceMapping forwards source-mapping spans when the underlying writer
+// records them.
+func (o *Output) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {
+	if recorder, ok := o.w.(commandprogram.SourceMappingRecorder); ok {
+		return recorder.RecordSourceMapping(m)
+	}
+	return nil
+}

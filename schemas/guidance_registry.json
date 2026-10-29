@@ -549,10 +549,10 @@
       "summary": "The job reference names no job of this session."
     },
     "COMMAND_LIMIT_EXCEEDED": {
-      "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
+      "branch_instruction": "Check the result before retrying commands that change files.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
+      "summary": "command: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }})."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
@@ -596,6 +596,12 @@
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
     },
+    "COMMAND_OUTPUT_READ_UNAVAILABLE": {
+      "branch_instruction": "Preserve earlier results and retry the output read",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
+    },
     "COMMAND_PLATFORM_UNAVAILABLE": {
       "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
       "category": "recoverable",
@@ -609,10 +615,10 @@
       "summary": "Command programs are turned off on this host, so this program did not start."
     },
     "COMMAND_PUBLICATION_PENDING": {
-      "branch_instruction": "Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit",
+      "branch_instruction": "Do not repeat the accepted write or save other drafts",
       "category": "recoverable",
-      "emit": "guard:command_publication_barrier",
-      "summary": "The dependent process did not start: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
+      "emit": "guard:command_write_publication",
+      "summary": "This command stopped after accepting its edit: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
     },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",
@@ -627,10 +633,10 @@
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
     },
     "COMMAND_REVISION_CONFLICT": {
-      "branch_instruction": "Branch on Code; keep the concurrent change and do not replay the stale transform",
+      "branch_instruction": "{% if paintedwolf.unsaved_draft %}Keep the unsaved editor changes{% else %}Keep the newer file; do not run the same write again{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_revision_pin",
-      "summary": "{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish."
+      "summary": "{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved changes in the editor, so this operation did not write there.{% else %}{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish.{% endif %}"
     },
     "COMMAND_SYNTAX_INVALID": {
       "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
@@ -1235,10 +1241,10 @@
       "summary": "Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete."
     },
     "GREP_MATCH_BUDGET": {
-      "branch_instruction": "Repair the pattern itself before retrying",
+      "branch_instruction": "Use a fixed string search when regular expressions are unnecessary.",
       "category": "recoverable",
       "emit": "guard:grep",
-      "summary": "{% if paintedwolf.grep_nested_repeat %}grep rejected nested repetition in the regex pattern.{% else %}grep pattern length exceeds the {{ paintedwolf.max_len }}-byte limit.{% endif %}"
+      "summary": "{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}"
     },
     "GREP_PATH_NOT_FOUND": {
       "branch_instruction": "Branch on Code; pick an existing path before retrying grep",
@@ -1470,10 +1476,10 @@
       "summary": "jq format {{ paintedwolf.format }} is not supported — allowed {{ paintedwolf.allowed }}."
     },
     "JQ_INPUT_TOO_LARGE": {
-      "branch_instruction": "Branch on Code; reduce the input before retrying jq",
+      "branch_instruction": "Use a streaming filter to select a smaller input first.",
       "category": "recoverable",
       "emit": "guard:jq",
-      "summary": "jq could not load {{ paintedwolf.path }} within the {{ paintedwolf.max_bytes }}-byte input budget.{% if paintedwolf.bytes %} Measured input is at least {{ paintedwolf.bytes }} bytes.{% endif %}"
+      "summary": "jq: input limit exceeded for {{ paintedwolf.path }} (maximum {{ paintedwolf.max_bytes }} bytes).{% if paintedwolf.bytes %} Input is at least {{ paintedwolf.bytes }} bytes.{% endif %}"
     },
     "JQ_PARSE": {
       "branch_instruction": "Branch on Code; fix format or use read",
@@ -2182,6 +2188,12 @@
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the closing synthesis while the active review_loop phase's evidence gate is still open."
     },
+    "ROOT_NOT_ATTACHED": {
+      "branch_instruction": "Address the folder by its current absolute path or @label",
+      "category": "recoverable",
+      "emit": "guard:path",
+      "summary": "{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}; it was attached at {{ paintedwolf.former_path }}."
+    },
     "SANDBOX_APPROVAL_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; do not report the requested effect as forbidden",
       "category": "recoverable",
@@ -2597,6 +2609,12 @@
       "category": "recoverable",
       "emit": "guard:security",
       "summary": "Security scanners are disabled for this device."
+    },
+    "SESSION_OUTPUT_UNAVAILABLE": {
+      "branch_instruction": "Keep the delivered result until output storage is available",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This call has no session output folder, so {{ paintedwolf.path }} cannot resolve."
     },
     "SESSION_SCRATCH_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; never re-create scratch files inside an attached folder",

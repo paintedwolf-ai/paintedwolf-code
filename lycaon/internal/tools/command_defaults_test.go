@@ -69,7 +69,7 @@ func TestStockCommandDefaultsKeepGitRedirects(t *testing.T) {
 				if !ok {
 					t.Fatalf("%s default bypassed redirect", field)
 				}
-				calls, ok := toolcommand.ExactCommandReplacement(t.Context(), envelope.Command, t.TempDir(), "")
+				calls, ok := toolcommand.ExactCommandReplacement(t.Context(), envelope.Command, t.TempDir(), "", "")
 				if !ok || len(calls) != 1 || calls[0].Tool != "git_commit" || calls[0].Args["amend"] != true {
 					t.Fatalf("amend replacement = %#v, ok=%v", calls, ok)
 				}
@@ -101,12 +101,12 @@ func TestCommandReplacementChecksDeclaredWorkingDirectory(t *testing.T) {
 			if !parsed {
 				t.Fatal("command with cwd did not parse")
 			}
-			calls, ok := env.Replacements(t.Context(), root, "")
+			calls, ok := env.Replacements(t.Context(), root, "", "")
 			if !ok || len(calls) != 1 || calls[0].Args["path"] != filepath.ToSlash(filepath.Join(cwd, "cwd-file")) {
 				t.Fatalf("cwd %q command %q: calls=%+v ok=%v", cwd, env.Command, calls, ok)
 			}
 			env.Command = program + " root-file"
-			if calls, ok := env.Replacements(t.Context(), root, ""); ok {
+			if calls, ok := env.Replacements(t.Context(), root, "", ""); ok {
 				t.Fatalf("cwd directory classified using active-root file: %+v", calls)
 			}
 		}

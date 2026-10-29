@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -46,6 +47,7 @@ type Owners struct {
 	Revisions  native.ExecutionRevisions
 	Pins       PinRecorder
 	Operations Operations
+	Admission  tooloutput.SpillAdmission
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -140,12 +142,9 @@ type Prepared struct {
 	run       utility
 }
 
-// Program is one invocation's logical cwd and publication barrier. Every
-// write the program's utilities and redirects accept is tracked on Barrier so
-// a dependent external launch waits for it.
+// Program is one invocation's logical cwd.
 type Program struct {
-	Paths   *projectpaths.ProgramPaths
-	Barrier *native.PublicationBarrier
+	Paths *projectpaths.ProgramPaths
 }
 
 // Prepare binds a reached command through the catalog option grammar. It
@@ -156,7 +155,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	}
 	command := request.Argv[0].Value
 	spec, ok := o.specs[command]
-	if !ok || program.Paths == nil || program.Barrier == nil {
+	if !ok || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a mutation command", command)
 	}
 	if request.OperationID != command {

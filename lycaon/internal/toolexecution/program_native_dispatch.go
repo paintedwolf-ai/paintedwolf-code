@@ -93,7 +93,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
@@ -246,6 +246,13 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 	return result
 }
 
+func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) bool {
+	if bound.Publication() != toolcontract.NoPublication {
+		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
+	}
+	return stageMatchesCommand(bound.Command(), argv)
+}
+
 // stageMatchesCommand checks the stage against its catalog command. A confined
 // external launch runs the launched program's own argv, so its stage starts
 // with that program rather than the external selector.
@@ -320,7 +327,7 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		}
 		return nil
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir); reject != nil {
 		return reject
 	}
 	var schema map[string]any

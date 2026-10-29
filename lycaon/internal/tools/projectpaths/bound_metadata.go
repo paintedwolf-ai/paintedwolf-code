@@ -17,7 +17,7 @@ func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
 	if err != nil {
 		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	admit := p.admitRead
 	if !follow {
 		admit = p.admitEntry
@@ -36,7 +36,7 @@ func (p BoundPath) ReadDir() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
@@ -77,7 +77,7 @@ func (p BoundPath) Readlink() (string, error) {
 	if err != nil {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }

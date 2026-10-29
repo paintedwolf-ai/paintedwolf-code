@@ -27,6 +27,7 @@ type documentText struct{ literal, stripTabs, lineStart bool }
 // with fixed space/tab/LF splitting of unquoted expansions; scalar and pattern
 // modes keep one value.
 type expansionRun struct {
+	ctx      context.Context
 	expander *WordExpander
 	scope    ExpansionScope
 	span     toolcontract.SourceSpan
@@ -46,7 +47,7 @@ func (r *expansionRun) word(ctx context.Context, parts []commandsurface.WordNode
 		var err error
 		switch part := part.(type) {
 		case commandsurface.LiteralPart:
-			err = r.literalPart(ctx, part.Value, i == 0)
+			err = r.literalPart(ctx, part.Value, i == 0, len(parts) == 1)
 		case commandsurface.SingleQuotedPart:
 			err = r.assembly.add(part.Value, true)
 		case commandsurface.DoubleQuotedPart:
@@ -67,9 +68,15 @@ func (r *expansionRun) word(ctx context.Context, parts []commandsurface.WordNode
 	return nil
 }
 
-func (r *expansionRun) literalPart(ctx context.Context, text string, first bool) error {
+func (r *expansionRun) literalPart(ctx context.Context, text string, first, whole bool) error {
 	if r.document != nil {
 		return r.documentLiteral(ctx, text)
+	}
+	if first {
+		var err error
+		if text, err = r.address(text, whole); err != nil {
+			return err
+		}
 	}
 	if first && strings.HasPrefix(text, "~") && (len(text) == 1 || text[1] == '/') {
 		// Only ~ and ~/ reach evaluation; account lookup is refused at parse.
@@ -88,11 +95,7 @@ func (r *expansionRun) literal(ctx context.Context, text string, quote expand.Qu
 	var err error
 	expand.RemoveQuotes(text, quote, func(piece string, escaped bool) {
 		if err == nil && piece != "" {
-			if !escaped && quote == expand.UnquotedText && r.mode == modeFields && r.document == nil {
-				err = r.assembly.split(piece)
-			} else {
-				err = r.assembly.add(piece, escaped || quote != expand.UnquotedText)
-			}
+			err = r.emit(ctx, piece, escaped || quote != expand.UnquotedText)
 		}
 	})
 	return err

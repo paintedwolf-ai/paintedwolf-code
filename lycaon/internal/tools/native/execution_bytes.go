@@ -58,32 +58,17 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 
 func (e ExecutionRevisions) captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, func(), error) {
 	root, rel := revisionLocation(resolved)
-	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
-	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
+	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
+		return nil, revision, nil, err
+	}
+	content, release, err := e.readCapturedBytes(ctx, resolved, maxBytes)
 	if err != nil {
 		return nil, revision, nil, err
 	}
-	var content []byte
-	var release func()
-	if open {
-		release, err = e.reserveCapture(ctx, 4*int64(len(doc.Text))+(64<<10))
-		if err == nil {
-			content, err = sourceview.DocumentBytes(doc, resolved, maxBytes)
-		}
-		revision.Mode, revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = toolcontract.AcceptedDocumentRevision, doc.ID, doc.Revision, doc.BaseSHA256
-	} else {
-		content, release, err = e.readCapturedBytes(ctx, resolved, maxBytes)
-		revision.Mode = toolcontract.PublishedDiskRevision
-		revision.DiskSHA256 = textfile.SHA256(content)
-	}
-	if err != nil {
-		if release != nil {
-			release()
-		}
-		return nil, revision, nil, err
-	}
-	revision.ContentSHA256, revision.ContentBytes = textfile.SHA256(content), int64(len(content))
-	if err = revision.Validate(); err != nil {
+	revision.DiskSHA256 = textfile.SHA256(content)
+	revision.ContentSHA256, revision.ContentBytes = revision.DiskSHA256, int64(len(content))
+	if err := revision.Validate(); err != nil {
 		release()
 		return nil, revision, nil, err
 	}
@@ -118,23 +103,22 @@ func (e ExecutionRevisions) PinOpened(ctx context.Context, resolved projectpaths
 	return captured.revision, true, nil
 }
 
-// OpenStream pins one input before streaming its bytes. Open editor drafts
-// and credential files materialize through CaptureBytes; regular and compressed
-// disk inputs verify captured block hashes before delivering bytes.
+// OpenStream pins published disk bytes before streaming. Credential inputs
+// use the bounded capture owner; regular and compressed inputs verify captured
+// block hashes before delivering bytes.
 func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolContext, path string, maxBytes int64) (ExecutionStream, error) {
 	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
 	if err != nil {
 		return ExecutionStream{}, err
 	}
-	_, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
-	if err != nil {
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
 		return ExecutionStream{}, err
 	}
 	classified := resolved.Abs
 	if _, rel, ok := tctx.SourceLocation(resolved.Abs); ok {
 		classified = rel
 	}
-	if open || (tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified)) {
+	if tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified) {
 		return e.captureStream(ctx, tctx, resolved, maxBytes)
 	}
 	if resolved.Compressed {

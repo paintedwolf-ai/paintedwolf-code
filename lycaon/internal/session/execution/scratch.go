@@ -2,24 +2,24 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"log/slog"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ScratchDir prepares the session's own scratch folder for one
-// iteration's tools. A failure leaves the context without scratch, so
-// @scratch refuses with SESSION_SCRATCH_UNAVAILABLE; the cause is logged here.
-func (m *Lifetime) ScratchDir(ctx context.Context, sess *api.Session) string {
+// SessionDirectories prepares the writable scratch and host-owned output
+// capabilities before the iteration can launch a command.
+func (m *Lifetime) SessionDirectories(ctx context.Context, sess *api.Session) scratch.Directories {
 	if m == nil || m.scratch == nil || sess == nil {
-		return ""
+		return scratch.Directories{}
 	}
-	dir, err := m.scratch.Ensure(sess.ID)
+	dirs, err := m.scratch.Ensure(sess.ID)
 	if err != nil {
-		slog.ErrorContext(ctx, "prepare session scratch", "session_id", sess.ID, "error", err)
-		return ""
+		slog.ErrorContext(ctx, "prepare session folders", "session_id", sess.ID, "error", err)
+		return scratch.Directories{}
 	}
-	return dir
+	return dirs
 }
 
 // ReclaimScratch clears every idle session's scratch. A session with a turn in

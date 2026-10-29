@@ -71,7 +71,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 			return err
 		}
 	}
-	stderr := &syncWriter{w: f.streams.Error}
+	stderr := &syncWriter{w: f.io.streams.Error}
 	frames := make([]*frame, len(stages))
 	releases := make([]func(), 0, len(stages))
 	defer func() {
@@ -86,12 +86,12 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 		releases = append(releases, release)
 		g.parent, g.loops, g.returnable = run.inv, 0, false
-		g.streams = Streams{Input: f.streams.Input, Output: f.streams.Output, Error: stderr}
+		g.io.streams = Streams{Input: f.io.streams.Input, Output: f.io.streams.Output, Error: stderr}
 		if i > 0 {
-			g.streams.Input = pipes[i-1].ConsumerEnd()
+			g.io.setInput(pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
-			g.streams.Output = pipes[i]
+			g.io.setOutput(pipes[i])
 		}
 		frames[i] = g
 	}
@@ -106,7 +106,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 				_ = pipes[i].CloseProducer(results[i].incomplete())
 			}
 			if i > 0 {
-				_ = frames[i].streams.Input.Close()
+				_ = frames[i].io.streams.Input.Close()
 			}
 		}(i)
 	}

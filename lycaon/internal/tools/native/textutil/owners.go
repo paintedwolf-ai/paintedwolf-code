@@ -275,6 +275,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	}
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)
+	if err == nil {
+		err = inv.out.Flush()
+	}
 	if err == nil && inv.stoppedBatch == nil {
 		err = ctx.Err()
 	}
@@ -287,6 +290,10 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	}
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
+	}
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
 	}
 	err = tools.CommandResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)

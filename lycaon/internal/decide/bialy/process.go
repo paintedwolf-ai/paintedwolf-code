@@ -69,7 +69,7 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		return nil, fmt.Errorf("decide: engine stdout: %w", err)
 	}
 	cmd.Stderr = stderrLogger{}
-	if err := execpkg.StartPrepared(cmd); err != nil {
+	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("decide: start engine: %w", err)
 	}

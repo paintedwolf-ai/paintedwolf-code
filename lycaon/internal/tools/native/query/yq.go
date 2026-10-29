@@ -9,13 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -47,9 +45,7 @@ type yqRun struct {
 
 // runYq evaluates a yq expression with the yq v4 library. Errors print
 // "Error: ..." and exit 1, as yq does; -i publishes the first file's result
-// at its captured revisions. Like gojq, yqlib exposes no internal VM step
-// counter hook, so evaluation is bounded by query_cpu_ms on the output stream
-// while read/printed documents meter query_work_steps.
+// at its captured revisions.
 func runYq(inv *invocation) error {
 	if inv.pythonYq() {
 		return runPythonYq(inv)
@@ -64,10 +60,6 @@ func runYq(inv *invocation) error {
 	}
 	yqEvaluation.Lock()
 	defer yqEvaluation.Unlock()
-	budget := time.Duration(inv.owners.limit("query_elapsed_ms")) * time.Millisecond
-	ctx, cancel := context.WithTimeout(inv.ctx, budget)
-	defer cancel()
-	inv.out.ctx = ctx
 	if inv.flag("-i") {
 		return run.inPlace()
 	}
@@ -180,10 +172,6 @@ func (inv *invocation) regularFile(operand string) bool {
 // fail reports an ordinary yq error; typed refusals and interruption stop
 // the run instead.
 func (r *yqRun) fail(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil {
-		maximum := r.inv.owners.limit("query_elapsed_ms")
-		return tools.CommandLimitExceeded("query_elapsed_ms", maximum, maximum+1)
-	}
 	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, commandprogram.ErrConsumerClosed) {
 		return err
 	}
@@ -270,9 +258,6 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 	documents := list.New()
 	var processed uint
 	for index, file := range r.files {
-		if err := r.inv.step(); err != nil {
-			return err
-		}
 		reader, label, err := r.reader(file)
 		if err != nil {
 			return err

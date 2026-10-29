@@ -68,7 +68,7 @@ func (in *inputs) openStream(operand string) {
 		in.rawReader = bufio.NewReader(tracked)
 		in.rawOffset = 0
 	} else {
-		in.stream = nativejq.NewValueStream(tracked)
+		in.stream = nativejq.NewValueStream(bufio.NewReader(tracked))
 	}
 }
 

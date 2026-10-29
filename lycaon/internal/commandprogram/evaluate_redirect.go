@@ -2,52 +2,12 @@ package commandprogram
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
-
-// redirected binds a statement's descriptors left to right, runs it, then
-// publishes every staged output only when all producers under it were typed
-// eligible and no host stop latched; otherwise staged bytes are abandoned.
-func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run func(*frame) (signal, error)) (signal, error) {
-	if len(s.Redirects) == 0 {
-		return run(f)
-	}
-	g := *f
-	g.publish = newEligibility()
-	var staged []*stagedRedirect
-	settleStaged := func(publish bool) error {
-		var first error
-		for _, out := range staged {
-			if err := out.finish(ctx, publish && first == nil); err != nil && first == nil {
-				first = err
-			}
-		}
-		return first
-	}
-	for _, r := range s.Redirects {
-		out, failed, err := g.bind(ctx, r)
-		if out != nil {
-			staged = append(staged, out)
-		}
-		if err != nil || failed {
-			_ = settleStaged(false)
-			return signal{}, err
-		}
-	}
-	sig, err := run(&g)
-	_, stopped := f.state.latch.Stop()
-	eligible := err == nil && !stopped && g.publish.eligible()
-	f.publish.mark(eligible)
-	if publishErr := settleStaged(eligible); publishErr != nil && err == nil {
-		err = publishErr
-	}
-	return sig, err
-}
 
 // stagedRedirect is one opened output destination and its own execution.
 type stagedRedirect struct {
@@ -68,7 +28,9 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	published, err := o.output.Publish(ctx)
 	if err != nil {
 		result := ownerResult(err)
-		writeRedirectRefusal(o.errorStream, o.operator, o.target, result.StopCode)
+		if report := o.frame.e.ports.Refusals; report != nil {
+			report(o.errorStream, RefusalReport{Operation: o.operator, Operand: o.target, Code: result.StopCode, Span: o.run.inv.Span, Cause: err})
+		}
 		return o.frame.settle(ctx, o.run, result, err)
 	}
 	certainty := toolcontract.EffectCompleted
@@ -79,104 +41,75 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	return nil
 }
 
-// bind applies one redirect to g.streams. failed reports an ordinary failure
+// bind applies one redirect to g.io.streams. failed reports an ordinary failure
 // (for example a failed target substitution or a refused open) after which the
 // command is not run; err reports a host stop.
-func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
+func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.ProgramRedirect, field Field) (*stagedRedirect, bool, error) {
 	switch r.Operator {
 	case ">&":
 		if r.Descriptor == 2 {
-			g.streams.Error = g.streams.Output
+			g.io.streams.Error = g.io.streams.Output
 		} else {
-			g.streams.Output = g.streams.Error
+			g.io.streams.Output = g.io.streams.Error
 		}
 		return nil, false, nil
-	case "<<", "<<-":
-		return g.hereDocument(ctx, r)
 	}
-	var target string
-	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
-		var err error
-		target, err = g.e.expander.ExpandScalar(ctx, scope, r.Target)
-		return err
-	})
-	if prevented || err != nil {
-		return nil, true, err
+	var child *childRun
+	var err error
+	if r.Operator == "<" {
+		child, err = g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
+	} else {
+		child, err = g.begin(r.SyntaxLocation, r.Operator)
 	}
-	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	if err != nil {
 		return nil, false, err
 	}
 	child.producer = false
-	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
-		inputs, _ := g.redirections()
-		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
+		input, err := s.input.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			return nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
+			if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
+				return nil, true, stop
+			}
+			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 		}
-		g.streams.Input = input
+		s.inputs = append(s.inputs, input)
+		g.io.streams.Input = io.NopCloser(input)
 		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, false, nil
 	}
-	_, outputs := g.redirections()
-	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
+	staged, err := s.output.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
-		return nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
+		if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
+			return nil, true, stop
+		}
+		return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 	}
-	errorStream := g.streams.Error
+	errorStream := g.io.streams.Error
 	switch r.Operator {
 	case "&>", "&>>":
-		g.streams.Output, g.streams.Error = staged, staged
+		g.io.streams.Output, g.io.streams.Error = staged, staged
 	default:
 		if r.Descriptor == 2 {
-			g.streams.Error = staged
+			g.io.streams.Error = staged
 		} else {
-			g.streams.Output = staged
+			g.io.streams.Output = staged
 		}
 	}
-	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, false, nil
+	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: field.Value, errorStream: errorStream, output: staged}, false, nil
 }
 
 // redirectFailure records a refused open: owner stops latch, other failures
 // leave an ordinary status 1 and the command unrun.
 func (g *frame) redirectFailure(ctx context.Context, child *childRun, operator, target string, err error) error {
 	result := ownerResult(err)
-	writeRedirectRefusal(g.streams.Error, operator, target, result.StopCode)
+	if report := g.e.ports.Refusals; report != nil {
+		report(g.io.streams.Error, RefusalReport{Operation: operator, Operand: target, Code: result.StopCode, Span: child.inv.Span, Cause: err})
+	}
 	if settleErr := g.settle(ctx, child, result, err); settleErr != nil {
 		return settleErr
 	}
 	return nil
-}
-
-func writeRedirectRefusal(w io.Writer, operator, target, code string) {
-	if w == nil || code == "" || code == codeLimitExceeded {
-		return
-	}
-	detail := "not supported here"
-	switch code {
-	case "SURVEY_PATH_ESCAPE":
-		detail = "path is outside the project root; use a relative path inside the workspace"
-	case "COMMAND_REVISION_CONFLICT":
-		detail = "destination changed since capture; re-read before writing"
-	}
-	_, _ = fmt.Fprintf(w, "redirect %s: %s: %s [%s]\n", operator, target, detail, code)
-}
-
-// hereDocument expands the body once through the expander's document rules
-// (bounded by here_document_bytes) and supplies it as stdin.
-func (g *frame) hereDocument(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
-	var body string
-	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
-		var err error
-		body, err = g.e.expander.ExpandDocument(ctx, scope, r)
-		return err
-	})
-	if prevented || err != nil {
-		return nil, true, err
-	}
-	g.streams.Input = io.NopCloser(strings.NewReader(body))
-	return nil, false, nil
 }
 
 // preflight refuses, before the first statement, every reachable construct

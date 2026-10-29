@@ -21,14 +21,14 @@ type ReplacementCall struct {
 	Args map[string]any `json:"args"`
 }
 
-func ExactCommandReplacement(ctx context.Context, command, projectDir, sessionScratch string) ([]ReplacementCall, bool) {
+func ExactCommandReplacement(ctx context.Context, command, projectDir, sessionScratch, sessionOutput string) ([]ReplacementCall, bool) {
 	elements, err := argv.SplitSequence(strings.TrimSpace(command))
 	if err != nil || len(elements) == 0 {
 		return nil, false
 	}
 	for _, el := range elements {
 		// Native tools route no output to files, so a redirection has no lossless translation.
-		if len(el.Redirects) > 0 || globsMatch(ctx, el, projectDir, sessionScratch) {
+		if len(el.Redirects) > 0 || globsMatch(ctx, el, projectDir, sessionScratch, sessionOutput) {
 			return nil, false
 		}
 	}
@@ -49,14 +49,14 @@ func ExactCommandReplacement(ctx context.Context, command, projectDir, sessionSc
 
 // globsMatch reports an unquoted pattern the command boundary would expand.
 // An unmatched pattern stays literal, so its translation is still exact.
-func globsMatch(ctx context.Context, el argv.SequenceElement, projectDir, sessionScratch string) bool {
+func globsMatch(ctx context.Context, el argv.SequenceElement, projectDir, sessionScratch, sessionOutput string) bool {
 	if len(el.Globs) == 0 {
 		return false
 	}
 	_, expanded, err := commandsurface.ExpandGlobs(ctx,
 		[]exec.Stage{{Name: el.Name, Args: el.Args, Globs: el.Globs}},
 		commandsurface.GlobScope{Dir: projectDir, Readable: func(abs string) bool {
-			return !confine.ControlPlanePathDenied(abs, false, sessionScratch)
+			return !confine.ControlPlanePathDenied(abs, false, sessionScratch, sessionOutput)
 		}})
 	return expanded || err != nil
 }

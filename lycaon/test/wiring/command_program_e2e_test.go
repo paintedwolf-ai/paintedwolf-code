@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -29,10 +29,20 @@ import (
 type commandProgramSession struct {
 	h       *Harness
 	dir     string
+	project string
 	session string
 }
 
+// newCommandProgramSession is an implementer session with a recorded progress
+// checklist, so project writes pass the progress gate.
 func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
+	t.Helper()
+	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	return s
+}
+
+func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
@@ -61,12 +71,40 @@ func newCommandProgramSession(t *testing.T, program, approvals string) *commandP
 		Key:           string(wire.GateUnobservedChannel) + ":unconfined",
 	}, 0)
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
-	return &commandProgramSession{h: h, dir: dir, session: sess.ID}
+	return &commandProgramSession{h: h, dir: dir, project: sess.ProjectID, session: sess.ID}
 }
 
 func (s *commandProgramSession) prompt(ctx context.Context) error {
 	_, err := s.h.Sessions.Manager.Submissions.Prompt(ctx, s.session, "run the program")
 	return err
+}
+
+// promptUntilApproval starts the prompt and returns the first pending tool
+// approval the host announces for this session, with the prompt's result.
+func (s *commandProgramSession) promptUntilApproval(t *testing.T) (wire.CheckpointEvent, <-chan error) {
+	t.Helper()
+	stream, unsubscribe, err := s.h.Events.Subscribe(t.Context(), events.Subscription{Project: s.project, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to checkpoints", err)
+	defer unsubscribe()
+	done := make(chan error, 1)
+	go func() { done <- s.prompt(t.Context()) }()
+	for {
+		select {
+		case err := <-done:
+			t.Fatalf("prompt ended before an approval was announced: %v", err)
+		case env := <-stream:
+			if env.Topic != wire.EventTopicCheckpoint {
+				continue
+			}
+			raw, err := json.Marshal(env.Data)
+			testutil.FailErr(t, "encode checkpoint event", err)
+			var checkpoint wire.CheckpointEvent
+			testutil.FailErr(t, "decode checkpoint event", json.Unmarshal(raw, &checkpoint))
+			if checkpoint.SessionID == s.session && checkpoint.Status == wire.CheckpointStatusPending && checkpoint.Kind == wire.CheckpointKindToolApproval {
+				return checkpoint, done
+			}
+		}
+	}
 }
 
 func (s *commandProgramSession) result(t *testing.T) string {
@@ -170,19 +208,8 @@ func TestCommandProgramRedirectWritesFromStatementDirectory(t *testing.T) {
 func TestCommandProgramApprovalRequiredExternalRunsAfterApproval(t *testing.T) {
 	s := newCommandProgramSession(t, "go env GOOS", "  - category: command\n    pattern: \"go env*\"\n    effect: ask\n")
 	ctx := t.Context()
-	done := make(chan error, 1)
-	go func() { done <- s.prompt(ctx) }()
-	var checkpointID string
-	kind := wire.CheckpointKindToolApproval
-	testutil.WaitFor(t, 30*time.Second, func() bool {
-		pending, err := s.h.Sessions.Checkpoints.ListPending(ctx, s.session, &kind)
-		if err == nil && len(pending) == 1 {
-			checkpointID = pending[0].ID
-			return true
-		}
-		return false
-	})
-	_, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(s.h.OwnerCtx(t, ctx), s.session, checkpointID, "approve_current_action")
+	checkpoint, done := s.promptUntilApproval(t)
+	_, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(s.h.OwnerCtx(t, ctx), s.session, checkpoint.ID, "approve_current_action")
 	testutil.FailErr(t, "approve launch", err)
 	testutil.FailErr(t, "prompt", <-done)
 	if result := s.result(t); !strings.Contains(result, "darwin") && !strings.Contains(result, "linux") {
@@ -204,18 +231,8 @@ func TestCommandProgramRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing
 			credential := filepath.Join(s.dir, c.target)
 			testutil.FailErr(t, "seed credential", os.WriteFile(credential, []byte("TOKEN=SECRET\n"), 0o600))
 			ctx := t.Context()
-			done := make(chan error, 1)
-			go func() { done <- s.prompt(ctx) }()
 			kind := wire.CheckpointKindToolApproval
-			var checkpoint *wire.CheckpointEvent
-			testutil.WaitFor(t, 30*time.Second, func() bool {
-				pending, err := s.h.Sessions.Checkpoints.ListPending(ctx, s.session, &kind)
-				if err == nil && len(pending) == 1 {
-					checkpoint = &pending[0]
-					return true
-				}
-				return false
-			})
+			checkpoint, done := s.promptUntilApproval(t)
 			if approval := checkpoint.ToolApproval; approval == nil || !slices.Contains(approval.Plan.Reasons, wire.GateSensitiveLocation) {
 				t.Fatalf("redirect into %s asked without the sensitive location gate: %+v", c.target, checkpoint)
 			}
@@ -445,25 +462,53 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 	}
 }
 
-func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
-	s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
-	state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
-	testutil.FailErr(t, "progress state", err)
-	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
-		t.Fatal("expected root session to start without progress")
+// Redirects and tee publish through the same write door, so both stop at the
+// progress gate before touching the project and both publish once a checklist
+// is recorded.
+func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
+	for _, c := range []struct{ name, program, target, stop string }{
+		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "Stop: redirect > (redirected.txt) at 1:21"},
+		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "Stop: tee"},
+	} {
+		t.Run(c.name+" without progress", func(t *testing.T) {
+			s := newCommandProgramSessionWithoutProgress(t, c.program, "")
+			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
+			testutil.FailErr(t, "progress state", err)
+			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+				t.Fatal("expected root session to start without progress")
+			}
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			result := s.result(t)
+			for _, want := range []string{`"stop_code": "PROGRESS_MISSING"`, `"completed_effects": 0`, c.stop} {
+				if !strings.Contains(result, want) {
+					t.Fatalf("missing %q in result: %s", want, result)
+				}
+			}
+			if state := s.programState(t); state != "rejected" {
+				t.Fatalf("program state = %q, want rejected", state)
+			}
+			if _, err := os.Stat(filepath.Join(s.dir, c.target)); !os.IsNotExist(err) {
+				t.Fatalf("%s was written without progress: %v", c.target, err)
+			}
+		})
 	}
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
-	if strings.Contains(result, "PROGRESS_MISSING") {
-		t.Fatalf("unexpected PROGRESS_MISSING: %s", result)
-	}
-	redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
-	testutil.FailErr(t, "read redirected.txt", err)
-	teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
-	testutil.FailErr(t, "read teed.txt", err)
-	if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
-		t.Fatalf("redirected=%q teed=%q", redirected, teed)
-	}
+	t.Run("with progress", func(t *testing.T) {
+		s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
+		testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+		if result := s.result(t); strings.Contains(result, "PROGRESS_MISSING") || !strings.Contains(result, `"completed_effects": 2`) {
+			t.Fatalf("redirect and tee did not both publish: %s", result)
+		}
+		if state := s.programState(t); state != "completed" {
+			t.Fatalf("program state = %q, want completed", state)
+		}
+		redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
+		testutil.FailErr(t, "read redirected.txt", err)
+		teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
+		testutil.FailErr(t, "read teed.txt", err)
+		if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
+			t.Fatalf("redirected=%q teed=%q", redirected, teed)
+		}
+	})
 }
 
 func TestCommandProgramKillSignalStatusAndJobReferences(t *testing.T) {

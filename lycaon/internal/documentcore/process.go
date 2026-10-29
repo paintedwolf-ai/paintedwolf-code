@@ -109,7 +109,7 @@ func start(ctx context.Context, binary string) (*process, error) {
 		frames: make(chan []byte, 1), done: make(chan struct{}), stopping: make(chan struct{}),
 	}
 	cmd.Stderr = p.stderr
-	if err := execpkg.StartPrepared(cmd); err != nil {
+	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		release()
 		return nil, fmt.Errorf("document core start: %w", err)
 	}

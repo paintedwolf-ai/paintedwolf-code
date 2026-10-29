@@ -43,7 +43,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_OPERAND_INVALID")), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true)
@@ -51,10 +51,10 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_EXEC_DENIED"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
@@ -66,14 +66,14 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
-		return refusedResult("COMMAND_EXEC_DENIED"), err
+		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
 		}
-		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
 	select {
 	case <-async.Done():
@@ -103,7 +103,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra, l.ToolContext.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}
@@ -117,7 +117,7 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 func programEnvironment(tc tools.ToolContext) []string {
 	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
 	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
-	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra, tc.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra)
 	if err != nil {
 		return lycexec.ReducedEnviron()
 	}
@@ -141,6 +141,13 @@ func nonNilWriter(w io.Writer) io.Writer {
 		return io.Discard
 	}
 	return w
+}
+
+func externalLaunchFailure(err error, fallback toolcontract.ProducerResult) toolcontract.ProducerResult {
+	if rejection := toolrejection.AsToolReject(err); rejection != nil {
+		return refusedResult(rejection.Code)
+	}
+	return fallback
 }
 
 func refusedResult(code string) toolcontract.ProducerResult {

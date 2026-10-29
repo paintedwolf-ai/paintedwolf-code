@@ -62,7 +62,7 @@ func TestExactCommandReplacementBuildsStructuredCalls(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.command, func(t *testing.T) {
-			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "")
+			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "", "")
 			if !ok || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("replacement = %#v ok=%v, want %#v", got, ok, tc.want)
 			}
@@ -183,7 +183,7 @@ func TestExactCommandReplacementBuildsHTTPCalls(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.command, func(t *testing.T) {
-			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "")
+			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "", "")
 			if !ok || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("replacement = %#v ok=%v, want %#v", got, ok, tc.want)
 			}
@@ -204,7 +204,7 @@ func TestExactCommandReplacementBuildsSearchCalls(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.command, func(t *testing.T) {
-			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "")
+			got, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "", "")
 			if !ok || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("replacement = %#v ok=%v, want %#v", got, ok, tc.want)
 			}
@@ -290,7 +290,7 @@ func TestExactCommandReplacementRejectsInexactForms(t *testing.T) {
 	}
 	for _, command := range commands {
 		t.Run(command, func(t *testing.T) {
-			if got, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), ""); ok {
+			if got, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), "", ""); ok {
 				t.Fatalf("inexact command redirected to %#v", got)
 			}
 		})
@@ -348,7 +348,7 @@ func TestNonVerificationCommitRetainsNativeReplacement(t *testing.T) {
 		if !ok {
 			t.Fatalf("verification:false suppressed replacement for %q", command)
 		}
-		calls, ok := ExactCommandReplacement(t.Context(), envelope.Command, t.TempDir(), "")
+		calls, ok := ExactCommandReplacement(t.Context(), envelope.Command, t.TempDir(), "", "")
 		if !ok {
 			t.Fatalf("no replacement for %q", command)
 		}
@@ -512,17 +512,17 @@ func TestGitDiffReplacementResolvesBareOperandsByExistence(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	got, ok := ExactCommandReplacement(t.Context(), "git diff src/main.go docs", dir, "")
+	got, ok := ExactCommandReplacement(t.Context(), "git diff src/main.go docs", dir, "", "")
 	want := []ReplacementCall{{Tool: "git_diff", Args: map[string]any{"paths": []any{"src/main.go", "docs"}}}}
 	if !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("existing operands: got %#v ok=%v want %#v", got, ok, want)
 	}
-	got, ok = ExactCommandReplacement(t.Context(), "git diff main src/main.go", dir, "")
+	got, ok = ExactCommandReplacement(t.Context(), "git diff main src/main.go", dir, "", "")
 	want = []ReplacementCall{{Tool: "git_diff", Args: map[string]any{"base_ref": "main", "paths": []any{"src/main.go"}}}}
 	if !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("ref then path: got %#v ok=%v want %#v", got, ok, want)
 	}
-	if got, ok := ExactCommandReplacement(t.Context(), "git diff ../outside.go", dir, ""); ok {
+	if got, ok := ExactCommandReplacement(t.Context(), "git diff ../outside.go", dir, "", ""); ok {
 		t.Fatalf("parent traversal must stay a command, got %#v", got)
 	}
 }
@@ -553,7 +553,7 @@ func TestCommandEnvelopeNeverDropsDeclaredExecutionConstraints(t *testing.T) {
 
 func TestReplacementDeclinesTrimmedFilenameIdentity(t *testing.T) {
 	for _, command := range []string{"rm ' notes.txt '", "ls ' directory '", "cp ' source ' destination", "curl -o ' response.json ' https://example.test"} {
-		if got, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), ""); ok {
+		if got, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), "", ""); ok {
 			t.Fatalf("%q changed filename during redirect: %+v", command, got)
 		}
 	}
@@ -563,7 +563,7 @@ func TestNativeGitReplacementCannotChangeRepositoryThroughCwd(t *testing.T) {
 	for _, command := range []string{"git status", "git diff", "git log", "git show HEAD:a.go", "git blame a.go"} {
 		for _, cwd := range []string{"nested-repository", "/tmp/another-repository"} {
 			env := Envelope{Command: command, cwd: cwd}
-			if calls, ok := env.Replacements(t.Context(), t.TempDir(), ""); ok {
+			if calls, ok := env.Replacements(t.Context(), t.TempDir(), "", ""); ok {
 				t.Fatalf("%s with cwd %s lost repository identity: %v", command, cwd, calls)
 			}
 		}
@@ -573,14 +573,14 @@ func TestNativeGitReplacementCannotChangeRepositoryThroughCwd(t *testing.T) {
 func TestExactReplacementDeclinesPatternsTheShellWouldExpand(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed log", os.WriteFile(filepath.Join(dir, "a.log"), nil, 0o644))
-	if got, ok := ExactCommandReplacement(t.Context(), "rm *.log", dir, ""); ok {
+	if got, ok := ExactCommandReplacement(t.Context(), "rm *.log", dir, "", ""); ok {
 		t.Fatalf("a matching glob translated to %#v", got)
 	}
-	got, ok := ExactCommandReplacement(t.Context(), "find . -name '*.log'", dir, "")
+	got, ok := ExactCommandReplacement(t.Context(), "find . -name '*.log'", dir, "", "")
 	if !ok || got[0].Args["name_glob"] != "*.log" {
 		t.Fatalf("a quoted pattern lost its translation: %#v ok=%v", got, ok)
 	}
-	got, ok = ExactCommandReplacement(t.Context(), "curl -sS https://example.test/api?q=1", dir, "")
+	got, ok = ExactCommandReplacement(t.Context(), "curl -sS https://example.test/api?q=1", dir, "", "")
 	if !ok || got[0].Args["url"] != "https://example.test/api?q=1" {
 		t.Fatalf("an unmatched pattern is literal and still translates: %#v ok=%v", got, ok)
 	}

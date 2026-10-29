@@ -20,7 +20,7 @@ func TestRunInOwnGroupReportsACommandRemovedAfterPreparation(t *testing.T) {
 	testutil.FailErr(t, "prepare executable", err)
 	defer cleanup()
 	testutil.FailErr(t, "remove prepared executable", os.Remove(path))
-	if err := RunInOwnGroup(cmd); !errors.Is(err, os.ErrNotExist) {
+	if err := RunInOwnGroup(t.Context(), cmd); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("removed executable launch = %v", err)
 	}
 }
@@ -28,7 +28,7 @@ func TestRunInOwnGroupReportsACommandRemovedAfterPreparation(t *testing.T) {
 func TestHelperProbeGroupSharesSupervisedSettlement(t *testing.T) {
 	path, err := exec.LookPath("true")
 	testutil.FailErr(t, "locate synthetic probe", err)
-	if _, err := StartInOwnGroup(exec.Command(path)); err == nil {
+	if _, err := StartInOwnGroup(t.Context(), exec.Command(path)); err == nil {
 		t.Fatal("public group accepted an unprepared command")
 	}
 	testutil.FailErr(t, "settle fixed helper probe", runHelperProbeGroup(exec.CommandContext(t.Context(), path)))

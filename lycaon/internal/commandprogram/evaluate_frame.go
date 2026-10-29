@@ -31,6 +31,8 @@ type frameState struct {
 	last       *ChildRecord
 	pipeStatus []int
 	options    shellOptions
+	// directory is the dispatch frame's directory PWD last recorded.
+	directory string
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -44,7 +46,8 @@ type frame struct {
 	state      *frameState
 	parent     toolcontract.OperationInvocation
 	unit       string
-	streams    Streams
+	io         descriptorFrame
+	activeHost *childRun
 	publish    *eligibility
 	positional []string
 	// prefix holds a function call's NAME=value prefixes: visible to the body
@@ -108,7 +111,14 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 		return nil, nil, err
 	}
 	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
-	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, streams: e.ports.Streams.withDefaults(), publish: newEligibility()}
+	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
+	if dir, ok := e.ports.Dispatch.(DirectoryFrame); ok {
+		state.directory = dir.Directory()
+		if err := state.exportVariable(ctx, "PWD", state.directory); err != nil {
+			vars.Close()
+			return nil, nil, err
+		}
+	}
 	return f, vars.Close, nil
 }
 
@@ -149,12 +159,48 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options}
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options, directory: f.state.directory}
 	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
 
+// syncDirectory records a directory change of the frame's dispatch the way
+// cd does in a shell: OLDPWD takes the old directory and PWD the new one,
+// both exported. An assignment to PWD stays until the next change.
+func (s *frameState) syncDirectory(ctx context.Context, moved bool) error {
+	dir, ok := s.dispatch.(DirectoryFrame)
+	if !ok {
+		return nil
+	}
+	current := dir.Directory()
+	if !moved && current == s.directory {
+		return nil
+	}
+	previous := s.directory
+	s.directory = current
+	if err := s.exportVariable(ctx, "OLDPWD", previous); err != nil {
+		return err
+	}
+	return s.exportVariable(ctx, "PWD", current)
+}
+
+func (s *frameState) exportVariable(ctx context.Context, name, value string) error {
+	if err := s.vars.Assign(ctx, name, value); err != nil {
+		return err
+	}
+	return s.vars.Export(ctx, name)
+}
+
 // ExpansionScope implementation: expansion reads, never assigns.
+
+// Address converts an @label prefix through the frame's directory owner.
+func (f *frame) Address(ctx context.Context, label string) (string, bool, error) {
+	addresses, ok := f.state.dispatch.(LogicalAddresses)
+	if !ok {
+		return "", false, nil
+	}
+	return addresses.Address(ctx, label)
+}
 
 func (f *frame) Variable(name string) (string, bool) {
 	if value, ok := f.prefix[name]; ok {

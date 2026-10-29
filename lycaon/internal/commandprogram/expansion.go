@@ -153,7 +153,7 @@ func (e *WordExpander) begin(ctx context.Context, scope ExpansionScope, word com
 	if scope == nil {
 		return nil, errors.New("word expansion requires an invocation scope")
 	}
-	run := &expansionRun{expander: e, scope: scope, span: word.Span, mode: mode}
+	run := &expansionRun{ctx: ctx, expander: e, scope: scope, span: word.Span, mode: mode}
 	run.assembly = fieldAssembly{limits: &e.limits, span: word.Span, charge: func(n int64) error { return run.charge(ctx, n) }}
 	return run, nil
 }

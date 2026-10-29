@@ -104,6 +104,11 @@ type childRun struct {
 // groups, functions, substitutions, jobs, in-process builtins, redirections)
 // and records it, so every dispatched descendant has a recorded parent.
 func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLocation, command string) (*childRun, error) {
+	if f.activeHost != nil && f.activeHost.inv.Identity.NodeID == string(loc.ID) && f.activeHost.inv.SourceUnitID == f.unit {
+		child := f.activeHost
+		f.activeHost = nil
+		return child, nil
+	}
 	child, err := f.begin(loc, command)
 	if err != nil || f.e.ports.Executions == nil {
 		return child, err
@@ -208,6 +213,10 @@ func (f *frame) interrupt(err error) error {
 // Cancellation interrupts, typed owner rejections and resource ceilings stop
 // the program; anything else is an ordinary failure the program may handle.
 func ownerResult(err error) toolcontract.ProducerResult {
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult()
+	}
 	var coded interface{ MachineErrorCode() string }
 	var program *ProgramLimitError
 	var memory *toolcontract.ProgramMemoryLimitError

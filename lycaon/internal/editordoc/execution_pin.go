@@ -72,18 +72,3 @@ func (s *Service) admitExecutionPin(ctx context.Context, d *Document, in AgentEd
 	}
 	return nil
 }
-
-// PublishedThrough reports whether the file holds the given accepted revision,
-// as a save of it or of a later revision. It never saves anything.
-func (a *AgentService) PublishedThrough(ctx context.Context, projectID, documentID string, revision int64) (bool, *Document, error) {
-	d, err := a.s.checked(ctx, documentID, projectID)
-	if err != nil {
-		return false, nil, err
-	}
-	head, err := a.s.store.replicaHead(ctx, d.ID)
-	if err != nil {
-		return false, nil, err
-	}
-	d.PublishedRevision = head.PublishedRevision
-	return d.PublishedRevision >= revision && !d.Diverged && d.HeldAgentVersionID == "", d, nil
-}

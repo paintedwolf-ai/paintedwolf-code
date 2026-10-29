@@ -149,7 +149,7 @@ func (r *sedRun) config() (sedscript.Config, error) {
 	return sedscript.Config{
 		Quiet: inv.flag("-n") || r.program.Quiet(), Delimiter: delimiter,
 		SpaceLimit: inv.limit("record_bytes"), StepLimit: inv.limit("query_work_steps"), Reserve: inv.reserve,
-		Stdout: inv.out, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
+		Stdout: inv.out, WriteLiteral: inv.out.WriteLiteral, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
 	}, nil
 }
 

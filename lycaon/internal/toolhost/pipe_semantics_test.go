@@ -58,11 +58,11 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 		operations: ops,
 		git:        &git.Manager{},
 		registry:   f.Runtime.Registry,
-	}).compose(ProgramServices{Recorder: f.Recorder})
+	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	scratchDir := t.TempDir()
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir
 	}
 	return &pipeSemanticsEnv{Fixture: f, scratchDir: scratchDir}

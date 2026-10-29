@@ -54,9 +54,9 @@ func TestProgramReviewedInputCaptureScreensOriginalBytesAndRetainsIndependentPro
 	}
 	reader, err := outputs.Open(t.Context(), f.session, f.program, reference)
 	testutil.FailErr(t, "fetch actual retained inspection body", err)
-	body, err := io.ReadAll(reader)
+	body, err := io.ReadAll(reader.Reader)
 	testutil.FailErr(t, "read bounded fixture inspection body", err)
-	testutil.FailErr(t, "close inspection reader", reader.Close())
+	testutil.FailErr(t, "close inspection reader", reader.Reader.Close())
 	sum := sha256.Sum256(body)
 	inspection, releaseInspection, err := toolcontract.RestoreReviewedOperationInputs(t.Context(), quota, representation, hex.EncodeToString(sum[:]), string(body))
 	testutil.FailErr(t, "restore explicit screened inspection representation", err)
