@@ -315,8 +315,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		return
 	}
 	if programResourceRefusal(reject) {
-		// Resource refusals render once through settled program feedback, where
-		// the original limit facts and completed effects are available.
+		writeLimitRefusal(streams.Error, command, "", reject)
 		return
 	}
 	subject := command

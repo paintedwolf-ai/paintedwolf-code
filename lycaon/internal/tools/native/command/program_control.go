@@ -126,11 +126,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!result.OwnerInvoked || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeLimitRefusal(streams, spec.Name, reject)
-			} else {
-				writeRejectRefusal(streams, spec.Name, request, reject)
-			}
+			writeRejectRefusal(streams, spec.Name, request, reject)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -172,6 +168,7 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
 	if programResourceRefusal(reject) {
+		writeLimitRefusal(w, report.Operation, report.Operand, reject)
 		return
 	}
 	copy := *reject
