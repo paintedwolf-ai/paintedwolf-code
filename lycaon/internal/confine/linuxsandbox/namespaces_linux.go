@@ -13,12 +13,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Inside reports whether this process already runs in the namespaces the plan
-// expects: its user namespace differs from the host's.
+// Inside reports whether this process is the helper the outer helper
+// relaunched: the first process of the fresh PID namespace, whose user
+// namespace also differs from the engine's. The outer helper is never PID 1,
+// and its own user namespace need not be the engine's: under the protected
+// launch the broker starts it outside the engine's namespace.
 func Inside(plan Plan) bool {
 	host := plan.Attest.HostNamespaces[NamespaceUser]
 	own, err := os.Readlink("/proc/self/ns/" + NamespaceUser)
-	return err == nil && host != "" && own != host
+	return os.Getpid() == 1 && err == nil && host != "" && own != host
 }
 
 // mountProc gives the new PID namespace its own process table first, so any
@@ -81,10 +84,20 @@ func applyFilesystem(fs Filesystem) error {
 		ops = append(ops, mountOp{path: p, kind: opRestored, clone: fd})
 	}
 	sort.SliceStable(ops, func(i, j int) bool { return ops[i].path < ops[j].path })
-	hiddenFile := -1
+	var hiddenFiles *hiddenFileMask
+	for _, op := range ops {
+		if op.kind == opHidden && !isDir(op.path) {
+			var err error
+			hiddenFiles, err = newHiddenFileMask()
+			if err != nil {
+				return mountFailure("prepare private file mask", err)
+			}
+			break
+		}
+	}
 	defer func() {
-		if hiddenFile >= 0 {
-			_ = unix.Close(hiddenFile)
+		if hiddenFiles != nil {
+			_ = hiddenFiles.close()
 		}
 	}()
 	for _, op := range ops {
@@ -94,12 +107,10 @@ func applyFilesystem(fs Filesystem) error {
 			if isDir(op.path) {
 				err = hideDirectory(op.path)
 			} else {
-				if hiddenFile < 0 {
-					hiddenFile, err = newTmpfs("0755", maskTmpfsSize)
+				if hiddenFiles == nil {
+					return mountFailure(op.path, errors.New("filesystem entry changed kind during setup"))
 				}
-				if err == nil {
-					err = hideFile(hiddenFile, op.path)
-				}
+				err = hiddenFiles.hide(op.path)
 			}
 		case opReadOnly:
 			err = bindReadOnly(op.path)
@@ -109,6 +120,13 @@ func applyFilesystem(fs Filesystem) error {
 		}
 		if err != nil {
 			return mountFailure(op.path, err)
+		}
+	}
+	if hiddenFiles != nil {
+		err := hiddenFiles.close()
+		hiddenFiles = nil
+		if err != nil {
+			return mountFailure("close private file-mask descriptor", err)
 		}
 	}
 	// Hidden directories become read-only only after anything restored beneath
@@ -137,27 +155,6 @@ func hideDirectory(path string) error {
 	}
 	defer func() { _ = unix.Close(fd) }()
 	return unix.MoveMount(fd, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
-}
-
-// hideFile replaces a file with an empty, unreadable file from the shared tmpfs.
-func hideFile(tmpfs int, path string) error {
-	name := "hidden"
-	fd, err := unix.Openat(tmpfs, name, unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0)
-	if err != nil && !errors.Is(err, unix.EEXIST) {
-		return err
-	}
-	if err == nil {
-		_ = unix.Close(fd)
-	}
-	clone, err := unix.OpenTree(tmpfs, name, unix.OPEN_TREE_CLONE|unix.O_CLOEXEC)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = unix.Close(clone) }()
-	if err := unix.MountSetattr(clone, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY}); err != nil {
-		return err
-	}
-	return unix.MoveMount(clone, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
 }
 
 // bindReadOnly covers a path with a read-only copy of itself.

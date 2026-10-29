@@ -1,4 +1,6 @@
-# Parser dependency
+# Vendored dependencies
+
+## Parser dependency
 
 `gotreesitter/` contains the complete Go module source for
 `github.com/odvcencio/gotreesitter` v0.52.0, commit
@@ -251,3 +253,23 @@ consumers retain their prior behavior unless they select this mode. The
 translator's range checks use the actual normalized endpoints. The opt-in change
 is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
 are recorded in `go-posix.patch`.
+
+## MLX build inputs
+
+`mlx/` holds checksummed MLX C++ dependency archives. The complete locked
+`mlx-sys` 0.6.0 crate source (about 1 MiB) lives in the decision engine workspace
+at `lycaon/internal/decide/native/vendor/mlx-sys`, keeping Cargo dependency
+identity relative to that workspace. Its original crates.io archive SHA-256
+is `1848b6f1686114039e6e0adcf1578911e2e4d7707b9768ad61da074132319e1c`,
+matching the pre-replacement Cargo lock entry. Source commit and archive pins are
+recorded in `mlx/pin.json`; upstream source notices and both Rust crate licences
+remain in its directory.
+
+`mlx/mlx-sys.patch` records the build-script change: Cargo tracks repository
+inputs, and CMake source/toolchain files live in the crate's persistent output
+directory. Unchanged files retain their timestamps; stale entries are removed
+only inside that owned staging tree. The shared CMake policy verifies the
+current archives and version before FetchContent can run. No crate API or
+version changes. Update the crate copy, patch, pin, notices and its Cargo lockfile
+together; verify offline builds, fresh-snapshot object reuse and warmed-cache
+mismatched-pin refusal through the existing task targets.

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/installbinding"
 )
 
 type preparedLifecycle struct {
@@ -106,6 +107,9 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	if !filepath.IsAbs(metadataPath) {
 		metadataPath = cwd + string(filepath.Separator) + metadataPath
 	}
+	if err := installbinding.Verify(metadataPath); err != nil {
+		return nil, nil, err
+	}
 	inputs, err := confine.CaptureProcessInputs(ctx, metadataPath, paths, limits)
 	if err != nil {
 		return nil, nil, err
@@ -114,6 +118,11 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	ctx = ownedCtx
 	self, err := os.Executable()
 	if err != nil {
+		cancel()
+		_ = inputs.Close()
+		return nil, nil, err
+	}
+	if err := installbinding.Verify(self); err != nil {
 		cancel()
 		_ = inputs.Close()
 		return nil, nil, err
