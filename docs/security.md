@@ -306,6 +306,8 @@ The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user name
 
 Namespace creation failures distinguish exhausted per-user quotas (`namespace_limit_reached`, `review_namespace_limits`) from a host-policy denial (`user_namespaces_denied`, `review_host_policy`). Inspect the reported quota or host policy before choosing a narrowly scoped repair. Only a directly observed disabled namespace sysctl carries `enable_user_namespaces`; a permission error alone does not establish that cause. AppArmor-restricted hosts continue to name the packaged profile and its installation remedy. These diagnostics never retry the launch unconfined or change host policy.
 
+The key-material catalog covers GNOME keyrings (`~/.local/share/keyrings/`) and KWallet stores (`~/.local/share/kwalletd/`), including wallet and salt files. Both are read-denied and require exact-path approval for writes, even beneath an otherwise writable root.
+
 Individual read-denied files use empty, unreadable, read-only file mounts. The helper prepares their shared inode inside its private mount namespace, removes the temporary writable source before applying the filesystem plan, and clones subsequent masks from the first sealed file mount. This also supports kernels that cannot clone a file from a detached filesystem. Preparation or cleanup failure refuses the target; the original host files remain unchanged.
 
 On NixOS, the [declarative module](../packaging/nix/nixos.nix) adds an exact

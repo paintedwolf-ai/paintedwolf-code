@@ -1,15 +1,14 @@
 {
-  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
-  "disposition": "retain",
   "category": "test_files",
   "artifact": "lycaon/internal/confine/boundary_linux_live_test.go",
   "kind": "test_suite",
-  "workstream": "linux-metadata-and-stream-authority",
-  "reason": "Retain this existing shared Linux probe and applied-boundary suite at a ceiling of 804 measured lines, reduced from 810 by replacing the shell error wording assertion with a typed syscall result. It holds the common helper launch, capability admission and paired process/network/filesystem controls. New metadata and stream behaviors have their own focused suites rather than growing this probe. This bounded retention preserves the shipped helper contracts while avoiding a speculative reorganization in a security fix; the complete selected Linux contracts support it.",
-  "ceiling": 804,
+  "workstream": "linux-performer-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the Linux confinement live suite within 950 code-bearing lines and its existing file count. The terminal and performer-loss contracts share the applied sandbox and process fixtures with the existing boundary checks. Keep those end-to-end contracts together: Ctrl-C preserves an allowed create, and ending the exact stopped performer returns EACCES for the exit-time create while recording an incomplete witness. Metadata and standard-stream contracts live in their own focused suites, and the outside-root write check asserts the typed EROFS floor result instead of shell wording.",
+  "reviewed_commit": "4b34d9f06163184516f76399f2ad6b095810cad5",
+  "ceiling": 950,
   "boundaries": {
-    "lycaon/internal/confine/boundary_linux_live_test.go": "6711918efb3f1baca1b44e97c46c7248118deea19e8c9b073c0aef3c6e5ab8dc",
-    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5e4d71ec221fb2994442d7cd2fc6a50ced2c771d94a8c4d3b3a55f981a1a84d5",
-    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "1cffcf7c2956d907bc86a56a76183a053305c427774f414e38686a9e693224fd"
+    "lycaon/internal/confine/boundary_linux_live_test.go": "4376a979c00ada86828691905cc8b97900e5670d9dca07c22da5f007f7680353",
+    "lycaon/internal/confine/linuxsandbox/performer_linux_test.go": "0b21081e718e8d5fb222da8f96c4e681ef0e31b0f4c1ebc0273f89d142028653"
   }
 }
