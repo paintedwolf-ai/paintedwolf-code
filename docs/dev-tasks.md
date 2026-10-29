@@ -1575,13 +1575,23 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly, on ready pull requests into `main` that change
-packaging inputs, or by manual dispatch on the selected branch. Use
+and staging path. It runs weekly, when a packaging pull request into `main`
+opens ready or becomes ready, or by manual dispatch on the selected branch.
+Queue entry builds again when packaging inputs differ from the last successful
+candidate's source. Missing or uncertain retained source evidence also builds.
+Application-only pushes between readiness and queue entry do not rebuild
+packages; installed qualification still selects exact source and artifact bytes. Use
 `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
 request into another branch needs package artifacts. The release workflow calls the reusable
 [package build](../.github/workflows/linux-candidates.yml) directly with its exact
 selected source commit, within the release runner budget. Candidate
 artifacts include checksums and the source commit and are retained for 90 days.
+Installed rehearsals select a `linux-candidate-requests.yml` run from a main
+schedule or dispatch, or a pull request into `main`, by exact run, artifact,
+controller and source identities. For PR candidates, the API head identifies
+artifact provenance while the referenced reusable workflow identifies the built
+merge controller. Compact attempt-bound source metadata supports queue-entry
+comparison; it grants no installed or publication authority.
 The workflow has read-only repository access and no signing environment or
 publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
