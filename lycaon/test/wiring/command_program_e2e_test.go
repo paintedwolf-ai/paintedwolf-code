@@ -485,8 +485,8 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 // is recorded.
 func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 	for _, c := range []struct{ name, program, target, want, stop string }{
-		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "via_redirect\n", "Stop: redirect > (redirected.txt) at 1:21"},
-		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "via_tee\n", "Stop: tee"},
+		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "via_redirect\n", `"stderr": ">: redirected.txt: `},
+		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "via_tee\n", `"stderr": "tee: `},
 	} {
 		t.Run(c.name+" without progress", func(t *testing.T) {
 			s := newCommandProgramSessionWithoutProgress(t, c.program, "")
@@ -497,7 +497,7 @@ func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 			}
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 			result := s.result(t)
-			for _, want := range []string{`"stop_code": "PROGRESS_MISSING"`, `"completed_effects": 0`, c.stop} {
+			for _, want := range []string{`"stop_code": "PROGRESS_MISSING"`, `"completed_effects": 0`, c.stop, "[PROGRESS_MISSING]"} {
 				if !strings.Contains(result, want) {
 					t.Fatalf("missing %q in result: %s", want, result)
 				}
