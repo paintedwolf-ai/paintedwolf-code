@@ -14,6 +14,8 @@ fi
 source "${ROOT}/scripts/artifact-paths.sh"
 # shellcheck source=document-core-env.sh
 source "${ROOT}/scripts/document-core-env.sh"
+# shellcheck source=test-run-isolation.sh
+source "${ROOT}/scripts/test-run-isolation.sh"
 COUNT="${PERF_BENCH_COUNT:-6}"
 OUTPUT="${PERF_BENCH_OUTPUT:-${PW_ARTIFACT_ROOT}/perf/go-bench.json}"
 BASELINE="${PERF_BENCH_BASELINE:-}"
@@ -48,8 +50,18 @@ if [[ ${#PACKAGES[@]} -eq 0 ]]; then
 fi
 
 mkdir -p "$(dirname "${OUTPUT}")"
-RAW="$(mktemp "${TMPDIR:-/tmp}/painted-wolf-bench.XXXXXX")"
-trap 'rm -f "${RAW}"' EXIT
+# Benchmark binaries build under the leased run directory, where the verification
+# AppArmor profile grants the user namespaces the confinement benchmarks need.
+test_run_create_isolation "go-bench"
+RUN_DIR="${TEST_RUN_DIR}"
+test_run_export_isolation "${RUN_DIR}"
+RAW="$(mktemp "${TMPDIR}/painted-wolf-bench.XXXXXX")"
+cleanup() {
+  rm -f "${RAW}"
+  test_run_remove_isolation "${RUN_DIR}"
+  rmdir "${TEST_RUN_ROOT}" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 cd "${ROOT}/lycaon"
 LYCAON_LLM_MOCK=1 go test -run '^$' -bench . -benchmem -count "${COUNT}" -timeout 45m "${PACKAGES[@]}" | tee "${RAW}"

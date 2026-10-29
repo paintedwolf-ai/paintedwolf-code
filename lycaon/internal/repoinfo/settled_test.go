@@ -24,7 +24,7 @@ func TestSettledHookFiresAfterAnalysis(t *testing.T) {
 	})
 
 	p.Warm(dir)
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return len(settled) > 0

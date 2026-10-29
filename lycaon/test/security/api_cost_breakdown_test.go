@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
@@ -102,16 +101,13 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
-	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		if err != nil || st == nil {
 			return false
 		}
 		return st.Phase == wire.DelegationPhaseDone
-	}) {
-		status, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
-		t.Fatalf("worker delegation did not finish within %s: status=%+v error=%v", promptIdleBudget, status, err)
-	}
+	})
 
 	req := authedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
 	w := httptest.NewRecorder()
@@ -145,7 +141,7 @@ func TestCostSSEIncludesBreakdown(t *testing.T) {
 	}
 
 	var got wire.CostEvent
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok || envelope.Topic != wire.EventTopicCost {
