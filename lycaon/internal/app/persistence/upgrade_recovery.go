@@ -82,7 +82,11 @@ func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Stor
 	}
 	if _, err := os.Stat(recoveryDir); err == nil {
 		b.UpgradeReady = func() error {
-			err := backup.CompleteUpgradeRecovery(dataDir, version.Version)
+			pending, err := database.IntegrityAuditPending(context.WithoutCancel(ctx))
+			if err != nil || pending {
+				return err
+			}
+			err = backup.CompleteUpgradeRecovery(dataDir, version.Version)
 			var prune *backup.RecoveryPruneError
 			if errors.As(err, &prune) {
 				b.logger.WarnContext(ctx, "could not remove older recovery snapshots; cleanup deferred", "error", err)
