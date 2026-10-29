@@ -59,7 +59,7 @@ func retainedInventory(ctx context.Context, database DBTX) (cells, indexRecord, 
 			if tree.name == "source_manifest_entries" {
 				manifestRecord, manifestCells = tree.record, tree.cells
 			}
-			if tree.name == "evidence_records" {
+			if tree.name == "evidence_records" || tree.name == "source_snapshot_roots" {
 				indexRecord = max(indexRecord, tree.record)
 			}
 		} else {
