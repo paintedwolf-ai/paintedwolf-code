@@ -22,13 +22,41 @@ type command struct {
 	beforeDash, afterDash []string
 }
 
-// allowedConfig are the -c overrides a command may set: each only narrows
-// what Git runs or how it prints.
-var allowedConfig = map[string]map[string]bool{
-	"core.fsmonitor": {"false": true},
-	"core.pager":     {"cat": true},
-	"color.ui":       {"false": true, "never": true, "auto": true},
-	"core.quotepath": {"true": true, "false": true, "on": true, "off": true, "yes": true, "no": true, "1": true, "0": true},
+// allowedConfig are the -c overrides a command may set, keyed by lowercase
+// name: each narrows what Git runs or how it prints, or names the identity a
+// commit records or the branch a new repository starts on.
+var allowedConfig = map[string]func(string) bool{
+	"core.fsmonitor":     oneOf("false"),
+	"core.pager":         oneOf("cat"),
+	"color.ui":           oneOf("false", "never", "auto"),
+	"core.quotepath":     oneOf("true", "false", "on", "off", "yes", "no", "1", "0"),
+	"user.name":          nonEmpty,
+	"user.email":         nonEmpty,
+	"init.defaultbranch": nonEmpty,
+}
+
+func oneOf(values ...string) func(string) bool {
+	return func(value string) bool {
+		for _, allowed := range values {
+			if strings.EqualFold(value, allowed) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func nonEmpty(value string) bool { return value != "" }
+
+// configValue is the last -c override for key, as Git applies them in order.
+func (c *command) configValue(key string) string {
+	value := ""
+	for _, kv := range c.config {
+		if k, v, _ := strings.Cut(kv, "="); strings.EqualFold(k, key) {
+			value = v
+		}
+	}
+	return value
 }
 
 // parseCommand splits the bound argv into globals and the subcommand argv.
@@ -62,9 +90,9 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 	}
 	for _, kv := range c.config {
 		key, value, _ := strings.Cut(kv, "=")
-		if !allowedConfig[strings.ToLower(key)][strings.ToLower(value)] {
+		if allowed := allowedConfig[strings.ToLower(key)]; allowed == nil || !allowed(value) {
 			return nil, &toolrejection.ToolReject{Code: "COMMAND_OPTION_UNSUPPORTED", Data: map[string]any{
-				"command": spec.Name, "word": kv, "expected": "an allowlisted -c override (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false)", "expected_form": spec.Argv}}
+				"command": spec.Name, "word": kv, "expected": "an allowlisted -c override (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false)", "expected_form": spec.Argv}}
 		}
 	}
 	c.args = append(append([]string{}, names[1:]...), argv[i:].Values()...)
