@@ -345,9 +345,7 @@ print(json.dumps(p.environment))`
 	if _, err := os.Stat(filepath.Join(work, "github-effects")); !os.IsNotExist(err) {
 		t.Fatal("withdrawn mirror rerun reached the GitHub provider")
 	}
-	if err := os.Remove(filepath.Join(work, "objects/release-metadata/1.2.3/withdrawn.json")); err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "remove withdrawal metadata for mirror positive control", os.Remove(filepath.Join(work, "objects/release-metadata/1.2.3/withdrawn.json")))
 	if output, err := run(); err != nil {
 		t.Fatalf("unwithdrawn mirror positive control: %v\n%s", err, output)
 	}
