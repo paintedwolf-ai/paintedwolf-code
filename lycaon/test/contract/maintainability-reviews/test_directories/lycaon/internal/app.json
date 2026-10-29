@@ -1,0 +1,17 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/app",
+  "kind": "test_suite",
+  "workstream": "application-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain exactly 39 private application composition tests. These fixtures exercise ServeApp construction, adapters, ordered readiness and runner registration using their real domain dependencies. Moving them behind exported test helpers would obscure the private startup boundary. Joined contracts verify ordinary/resource runners remain available, pending audit cancellation retains custody, confirmed damage never finalizes recovery, and cleanup retry does not repeat exhaustive verification. Existing operation/editor and runner contracts remain. Further membership growth renews review.",
+  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
+  "ceiling": 39,
+  "boundaries": {
+    "lycaon/internal/app/command_operation_contract_test.go": "a20ae29d98fe211580d2f833e5c432e095cac9e6513add798606c8600952e5f8",
+    "lycaon/internal/app/editor_documents_adapter_test.go": "38027a6ca3d2029a4f085e46a45ed05300920fcad952dffa3d6fcb74522edb90",
+    "lycaon/internal/app/integrity_cleanup_test.go": "aebd5fe9a83b2b69a6b759c08fabbb1fec689a3aa31142ac97f0a488a97bb646",
+    "lycaon/internal/app/runners_test.go": "9dca3bf91458a878083c6ea3705267c49f3ff1503bc2f2e13e9bc1655be8b7b9"
+  },
+  "reviewed_shape": "4e3dbcf5d57794fce56fc83f76eda983a69dbb3ba6eab224f8d97ba3a494fea8"
+}
