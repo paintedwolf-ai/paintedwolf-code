@@ -181,10 +181,7 @@ func writeLogEntries(ctx context.Context, zw *zip.Writer, logDir string, redacto
 }
 
 func redactText(ctx context.Context, redactor *Redactor, text string) string {
-	if redactor != nil {
-		return redactor.RedactText(ctx, text)
-	}
-	return observability.RedactString(text)
+	return redactor.RedactText(ctx, text)
 }
 
 func isLogFile(name string) bool {
