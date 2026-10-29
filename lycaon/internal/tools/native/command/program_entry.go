@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
@@ -23,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -32,7 +30,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 // ProgramRuntime holds the host services every command program composes.
@@ -56,11 +53,21 @@ type ProgramRuntime struct {
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (ProgramOwners, error)
-	// Listeners observes session-owned listeners; nil uses process lineage.
-	Listeners SessionListeners
+	// Ports reads host listeners and their holders for lsof.
+	Ports PortInventory
 	// ExternalHidden refuses the explicit `external --` selector; native gap
 	// launches still run and are recorded.
 	ExternalHidden bool
+	// Parking parks a call whose program waits; nil keeps every program in
+	// the foreground.
+	Parking tools.ProgramParking
+	// ParkThreshold is how long a call holds its turn while its program waits;
+	// zero means DefaultParkThreshold.
+	ParkThreshold time.Duration
+	// Clock times program waits; nil is the system clock.
+	Clock commandprogram.Clock
+	// SourceRuns records a parked program's run evidence.
+	SourceRuns SourceRunRecorder
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -78,6 +85,21 @@ func (r *ProgramRuntime) SetDisabled(disabled bool) []string {
 		return nil
 	}
 	return r.Supervisor.StopAll()
+}
+
+func (r *ProgramRuntime) clock() commandprogram.Clock {
+	if r.Clock == nil {
+		return commandprogram.SystemClock()
+	}
+	return r.Clock
+}
+
+func (r *ProgramRuntime) parkThreshold() time.Duration {
+	if r.ParkThreshold <= 0 {
+		return DefaultParkThreshold
+	}
+	return r.ParkThreshold
+
 }
 
 // SessionOwners reads the session whose owner a program acts for.
@@ -135,7 +157,10 @@ type ProgramOutcome struct {
 	CompletedEffects int                              `json:"completed_effects"`
 	UncertainEffects int                              `json:"uncertain_effects"`
 	NativeGaps       int                              `json:"native_gaps,omitempty"`
-	ReplayAvailable  bool                             `json:"replay_available"`
+	// CPUTimeUnmeasured marks a time report whose user and sys count native
+	// operations as zero.
+	CPUTimeUnmeasured bool `json:"cpu_time_unmeasured,omitempty"`
+	ReplayAvailable   bool `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
@@ -162,11 +187,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if r != nil && r.disabled.Load() {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
 	}
-	if timeout := toolkit.ClampIntArg(args, "timeout_ms", 0, 0, 7200000); timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
-		defer cancel()
-	}
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
@@ -174,6 +194,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	callCtx, call := ctx, r.newProgramCall(ctx, args, catalog)
+	ctx = call.ctx
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			call.detach()
+			call.end()
+		}
+	}()
 	commands, err := compiledCommandIndex()
 	if err != nil {
 		return "", err
@@ -193,7 +222,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	// The plan and frame stay alive while & jobs still run under supervision;
 	// they are released when the program settles.
 	release := func() { _ = snapshot.Close(); _ = parsed.Close() }
-	handedOff := false
 	defer func() {
 		if !handedOff {
 			release()
@@ -267,54 +295,26 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:      memory,
-		Environment: run.baseEnv,
-		ScratchDir:  tc.Host.SessionScratchDir,
-		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:         memory,
+		Clock:          r.clock(),
+		ResourceLimits: confineLimits{},
+		Environment:    run.baseEnv,
+		ScratchDir:     tc.Host.SessionScratchDir,
+		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
-	var evaluated commandprogram.ProgramOutcome
-	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-		var err error
-		evaluated, err = r.Evaluate(ctx, snapshot.Plan, ports)
-		return evaluatedResult(evaluated), err
-	})
-	settled := make(chan error, 1)
+	// Evaluation writes the call's effects privately until its result belongs
+	// to the call; a parked program's later effects never reach the call.
+	callTC := tc
+	run.tc.Effects.Out = &tools.ToolInvocationOut{}
+	park := newProgramPark(r.clock(), call, r.parkThreshold())
+	ports.Waits = park
 	handedOff = true
-	lifetime := &programLifetime{release: release}
-	defer lifetime.callerDone()
-	r.Supervisor.AfterJobs(run.root.Identity.ProgramID, func(stopped bool) {
-		settled <- r.settleProgram(ctx, run, result, evaluated, stopped)
-		lifetime.settled()
+	return r.attend(callCtx, &programEvaluation{
+		run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
+		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope, documents: documents,
+		paths: paths, verification: verification, release: release, callTC: callTC,
 	})
-	var settleErr error
-	settledNow := false
-	select {
-	case settleErr = <-settled:
-		settledNow = true
-	default:
-		// & jobs still run under supervision; the program settles when they end.
-	}
-	refusal, releaseFeedback, feedbackErr := r.feedback(ctx, run, dispatcher, stderr, evalErr)
-	defer releaseFeedback()
-	if feedbackErr != nil || settleErr != nil {
-		return "", errors.Join(feedbackErr, settleErr)
-	}
-	// Settlement and bounded result projection survive cancellation; they cannot
-	// start another program operation.
-	outcome, err := r.outcome(context.WithoutCancel(ctx), run, outputs, result, stdout, stderr, scope)
-	if err != nil {
-		return "", err
-	}
-	outcome.Stderr = documents.appendNotes(outcome.Stderr)
-	outcome.Refusal = refusal
-	if settledNow {
-		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
-	}
-	out, err := surveyjson.Marshal(outcome)
-	if err != nil {
-		return "", fmt.Errorf("command program encode: %w", err)
-	}
-	return string(out), nil
+
 }
 
 // bindProgramFrame resolves addressed roots and the session owner before
@@ -394,13 +394,11 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
-	listeners := r.Listeners
-	if listeners == nil {
-		listeners = lineage.SessionListeners
-	}
-	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, jobs, r.Ports, tc.Execution.ProcessReview)
 	builtins["sleep"] = sleepBuiltin()
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	builtins["timeout"] = timeoutBuiltin(run.commands["timeout"], dispatcher, r.clock())
+	builtins["nohup"] = nohupBuiltin(run.commands["nohup"], dispatcher)
 	var publication commandprogram.OutputPublication
 	if owners.Publication != nil {
 		publication = owners.Publication(dispatcher.beginOutput)
@@ -731,34 +729,6 @@ func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, err
 	return compiledExternalDefinition()
 }
 
-// programLifetime releases a program's plan and frame once both the tool call
-// has finished with them and the program (with its & jobs) has settled.
-type programLifetime struct {
-	mu                     sync.Mutex
-	callerFinished, isDone bool
-	release                func()
-}
-
-func (l *programLifetime) callerDone() {
-	l.mu.Lock()
-	l.callerFinished = true
-	done := l.isDone
-	l.mu.Unlock()
-	if done {
-		l.release()
-	}
-}
-
-func (l *programLifetime) settled() {
-	l.mu.Lock()
-	l.isDone = true
-	finished := l.callerFinished
-	l.mu.Unlock()
-	if finished {
-		l.release()
-	}
-}
-
 // launchCapabilityFields are the call's declarations that every confined launch
 // it reaches is reviewed with: confinement capabilities, SOCKS injection and
 // managed-secret use.
@@ -898,26 +868,4 @@ func (r *programRun) childOutputs(request commandprogram.OperationRequest, strea
 			_ = r.retainOutput(context.WithoutCancel(ctx), execution, "stderr", data, !stderr.truncated)
 		}
 	}
-}
-
-// stampProgramRun states the settled program's run for verification evidence:
-// passed on status 0, failed otherwise, unverifiable when the host stopped it.
-// A program whose jobs still run states nothing.
-func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
-	if tc.Effects.Out == nil {
-		return
-	}
-	verdict := api.SourceVerdictPassed
-	switch {
-	case outcome.Refusal != nil || outcome.State == "interrupted":
-		verdict = api.SourceVerdictUnverifiable
-	case outcome.Status != 0:
-		verdict = api.SourceVerdictFailed
-	}
-	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
-	if tc.Execution.VerificationCheck && verification != nil {
-		identity := verification()
-		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
-	}
-	tc.Effects.Out.SourceRun = run
 }

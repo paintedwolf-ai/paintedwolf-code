@@ -10,8 +10,9 @@ import (
 )
 
 type xargsNext struct {
-	argv commandprogram.Fields
-	err  error
+	argv    commandprogram.Fields
+	err     error
+	release func()
 }
 
 // execute overlaps bounded input parsing with active children. Finished
@@ -23,20 +24,33 @@ func (x xargsRun) execute(input *xargsInput, plan xargsPlan) error {
 	}
 	ctx, cancel := context.WithCancel(x.inv.ctx)
 	input.ctx = ctx
-	next := make(chan xargsNext)
+	handoff := newXargsHandoff(x.inv.request.Wait)
+	next := handoff.next
+	parserActivity, finishParser := x.inv.request.Wait.Fork()
+	input.reader.Reset(x.inv.streams.WithActivity(parserActivity).Input)
 	var workers sync.WaitGroup
 	workers.Add(1)
 	go func() {
 		defer workers.Done()
-		defer close(next)
+		defer finishParser()
+		defer handoff.parsed()
 		for {
 			argv, err := batcher.next()
 			if errors.Is(err, io.EOF) {
 				return
 			}
-			select {
-			case next <- xargsNext{argv: argv, err: err}:
-			case <-ctx.Done():
+			var release func()
+			if err == nil {
+				size := int64(128 * len(argv))
+				for _, word := range argv {
+					size += int64(len(word.Value))
+				}
+				release, err = x.inv.ports.Memory.Reserve(ctx, size)
+			}
+			if sendErr := handoff.publish(ctx, parserActivity, xargsNext{argv: argv, err: err, release: release}); sendErr != nil {
+				if release != nil {
+					release()
+				}
 				return
 			}
 			if err != nil {
@@ -50,6 +64,11 @@ func (x xargsRun) execute(input *xargsInput, plan xargsPlan) error {
 		cancel()
 		_ = x.inv.streams.Input.Close()
 		workers.Wait()
+		for item := range handoff.next {
+			if item.release != nil {
+				item.release()
+			}
+		}
 		for _, run := range active {
 			held[run]()
 			if run.out != nil {
@@ -68,10 +87,17 @@ func (x xargsRun) execute(input *xargsInput, plan xargsPlan) error {
 		if len(active) > 0 {
 			done = active[0].done
 		}
+		unblock, err := handoff.block(ctx, incoming, done)
+		if err != nil {
+			return err
+		}
 		select {
 		case <-ctx.Done():
+			unblock()
 			return ctx.Err()
 		case item, open := <-incoming:
+			unblock()
+			handoff.received()
 			if !open {
 				next = nil
 				continue
@@ -81,34 +107,34 @@ func (x xargsRun) execute(input *xargsInput, plan xargsPlan) error {
 				continue
 			}
 			if x.inv.ports.Nested == nil {
+				if item.release != nil {
+					item.release()
+				}
 				return unsupported(x.inv, item.argv[0], "a program runtime that dispatches xargs batches")
 			}
-			size := int64(128 * len(item.argv))
-			for _, word := range item.argv {
-				size += int64(len(word.Value))
-			}
-			release, err := x.inv.ports.Memory.Reserve(ctx, size)
-			if err != nil {
-				return err
-			}
 			run := &batchRun{argv: item.argv, done: make(chan struct{})}
-			held[run] = release
+			held[run] = item.release
 			if plan.parallel > 1 {
 				run.out, run.err = newMeteredBuffer(x.inv), newMeteredBuffer(x.inv)
 			}
 			active = append(active, run)
+			childActivity, finishChild := x.inv.request.Wait.Fork()
+			parent := x.inv.request
+			parent.Wait = childActivity
 			workers.Add(1)
 			go func() {
 				defer workers.Done()
-				defer close(run.done)
+				defer finishChild()
+				defer handoff.childDone(run.done)
 				streams := commandprogram.Streams{Input: commandprogram.NullInput(), Output: x.inv.out, Error: x.inv.streams.Error}
 				if run.out != nil {
 					streams.Output, streams.Error = run.out, run.err
 				}
 				x.trace(streams.Error, run.argv)
-				run.result, run.failure = x.inv.ports.Nested.RunNested(ctx, x.inv.request, run.argv, x.environment(), streams)
+				run.result, run.failure = x.inv.ports.Nested.RunNested(ctx, parent, run.argv, x.environment(), streams.WithActivity(childActivity))
 			}()
 		case <-done:
+			unblock()
 			run := active[0]
 			stop, err := x.settle(run)
 			if err == nil && run.out != nil {

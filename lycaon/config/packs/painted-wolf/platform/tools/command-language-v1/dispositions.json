@@ -423,7 +423,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered on no surface or profile. Command programs bind this operation contract; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Implement comprehensive diff command frontend",
-      "behavior_change_or_retention": "Implement native diff (-u, -U N, -q, -w, -b, -B, -r) over document-aware sources with comparison statuses and binary handling; comparison status 1 can publish a typed complete result while remaining status 1",
+      "behavior_change_or_retention": "Implement native diff (-u, -U N, -q, -w, -b, -B, -r) over document-aware sources with comparison statuses and binary handling, and cmp (-s, -l, -b, -n, -i) over the same pinned inputs; comparison status 1 can publish a typed complete result while remaining status 1",
       "existing_semantic_difference": "Bounded two-file document-aware diff in structured result",
       "implementing_issues": [
         "P08",
@@ -433,7 +433,8 @@
       ],
       "existing_rejection_code": "USE_NATIVE_TOOL",
       "command_forms": [
-        "diff"
+        "diff",
+        "cmp"
       ]
     },
     {
@@ -1173,7 +1174,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered on no surface or profile. Command programs bind this operation contract; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Implement comprehensive ls and retain Bialy-loadable survey_repo",
-      "behavior_change_or_retention": "Implement literal ls (-l, -a, -A, -1, -d, -R, -h, -F, -t, -S, -r); retain survey_repo (repo_map) as a Bialy-loadable domain tool and command built-in",
+      "behavior_change_or_retention": "Implement literal ls (-l, -a, -A, -1, -d, -R, -h, -F, -t, -S, -r) and tree (-L, -a, -d, -f, -I, -P, --gitignore, --noreport, -J) over the search walk; retain survey_repo (repo_map) as a Bialy-loadable domain tool and command built-in",
       "existing_semantic_difference": "Targeted entries or unscoped repository map/orientation",
       "implementing_issues": [
         "P12",
@@ -1183,7 +1184,8 @@
       ],
       "existing_rejection_code": "USE_LIST_DIR_NATIVE",
       "command_forms": [
-        "ls"
+        "ls",
+        "tree"
       ]
     },
     {
@@ -1540,7 +1542,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered as a structured tool beside its command forms; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit host domain contract; also expose session-scoped ps and lsof -i :<port> inside command for session-owned background processes and loopback port probes",
+      "behavior_change_or_retention": "Keep explicit host domain contract, including listening_port/protocol holder filters; also expose ps and lsof -i :<port> inside command, where lsof lists session listeners with job identity and other holders of a named port after the same process inspection approval",
       "existing_semantic_difference": "Host-owned processes state and lifecycle; see current description",
       "implementing_issues": [
         "P21",
@@ -1615,7 +1617,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered on no surface or profile. Command programs bind this operation contract; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Implement comprehensive cat/head/tail/nl and outline built-in",
-      "behavior_change_or_retention": "Implement cat, head (including legacy -N), tail (including legacy -N and +N), nl, file (-b, -i), xxd (-l, -s, -p, -g), hexdump -C (-n, -s), checksums (shasum -a/-c, sha1sum, sha256sum, sha512sum, md5sum) and base64 (GNU -d/-w, BSD -D/-b) over shared-document snapshots and read-floor files without advancing conversational read bases; expose outline as a domain operation and command built-in; delivered exact command source windows carry revision/range evidence for later retained surgical edits",
+      "behavior_change_or_retention": "Implement cat, head (including legacy -N), tail (including legacy -N and +N), nl, file (-b, -i), xxd (-l, -s, -p, -g), hexdump -C (-n, -s), od (-A, -t, -N, -j, -v), strings (-n, -t, -e), checksums (shasum -a/-c, sha1sum, sha256sum, sha512sum, md5sum) and base64 (GNU -d/-w, BSD -D/-b) over shared-document snapshots and read-floor files without advancing conversational read bases; expose outline as a domain operation and command built-in; delivered exact command source windows carry revision/range evidence for later retained surgical edits",
       "existing_semantic_difference": "Document snapshots; ranges/symbols/outlines; numbered lines and automatic digests",
       "implementing_issues": [
         "P07",
@@ -1640,7 +1642,9 @@
         "sha1sum",
         "sha512sum",
         "md5sum",
-        "base64"
+        "base64",
+        "od",
+        "strings"
       ]
     },
     {
@@ -2096,7 +2100,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered on no surface or profile. Command programs bind this operation contract; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Implement dual GNU/BSD stat command frontend",
-      "behavior_change_or_retention": "Implement stat accepting both GNU -c and BSD -f format strings with explicit symlink behavior",
+      "behavior_change_or_retention": "Implement stat accepting both GNU -c and BSD -f format strings with explicit symlink behavior, du over bounded held-root walks and df over the volumes holding admitted paths",
       "existing_semantic_difference": "Lstat metadata and optional directory counts; structured fields",
       "implementing_issues": [
         "P05",
@@ -2106,7 +2110,9 @@
       ],
       "existing_rejection_code": "USE_STAT_NATIVE",
       "command_forms": [
-        "stat"
+        "stat",
+        "du",
+        "df"
       ]
     },
     {
@@ -2543,7 +2549,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
       "selected_disposition": "Retain event semantics plus timer alias",
-      "behavior_change_or_retention": "Implement in-process context-cancelable sleep <seconds> (including fractional seconds and s suffix) inside command; preserve event-driven wait tool for handle/condition parking",
+      "behavior_change_or_retention": "The wait tool and command programs share one park primitive. Native sleep waits its full timer interval; shell wait uses exact supervised job handles; timeout and read -t contribute deadlines. Long blocked programs release the turn and resume through the same wait lease.",
       "existing_semantic_difference": "Host-observed conditions and exact handles; timer subset",
       "implementing_issues": [
         "P22",

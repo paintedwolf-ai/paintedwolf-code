@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -325,33 +323,6 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	f.Runtime.SetDisabled(false)
 	if out, err := f.call(t, t.Context(), "external -- /bin/echo again"); err != nil || !strings.Contains(out, `"stdout":"again\n"`) {
 		t.Fatalf("re-enabled entry %s %v", out, err)
-	}
-}
-
-func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
-	f := newProgramFixture(t)
-	var asked []string
-	f.Runtime.Listeners = func(_ context.Context, session string) ([]lineage.SocketObservation, error) {
-		asked = append(asked, session)
-		return []lineage.SocketObservation{{Local: netip.MustParseAddrPort("127.0.0.1:8080"), Listening: true}}, nil
-	}
-	out, err := f.call(t, t.Context(), "lsof -i :8080 -sTCP:LISTEN")
-	testutil.FailErr(t, "lsof owned port", err)
-	if !strings.Contains(out, `"stdout":"8080 127.0.0.1:8080 LISTEN\n"`) || !strings.Contains(out, `"status":0`) {
-		t.Fatalf("lsof output %s", out)
-	}
-	out, err = f.call(t, t.Context(), "lsof -iTCP:9090")
-	testutil.FailErr(t, "lsof unowned port", err)
-	if !strings.Contains(out, `"stdout":""`) || !strings.Contains(out, `"status":1`) {
-		t.Fatalf("unowned port listed %s", out)
-	}
-	out, err = f.call(t, t.Context(), "lsof -i 8080")
-	testutil.FailErr(t, "lsof malformed endpoint", err)
-	if decodeOutcome(t, out).Refusal == nil {
-		t.Fatalf("malformed endpoint accepted: %s", out)
-	}
-	if len(asked) != 2 || asked[0] != f.Session || asked[1] != f.Session {
-		t.Fatalf("listener observation scope %v", asked)
 	}
 }
 

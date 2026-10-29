@@ -65,7 +65,7 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 	case *syntax.IfClause:
 		return c.conditional(v, loc)
 	case *syntax.WhileClause:
-		return WhileLoop{SyntaxLocation: loc, Condition: c.statements(v.Cond), Body: c.statements(v.Do)}
+		return WhileLoop{SyntaxLocation: loc, Condition: c.statements(v.Cond), Body: c.statements(v.Do), Until: v.Until}
 	case *syntax.ForClause:
 		iter := v.Loop.(*syntax.WordIter)
 		return ForLoop{SyntaxLocation: loc, Variable: strings.Clone(iter.Name.Value), Positional: !iter.InPos.IsValid(), Items: c.words(iter.Items), Body: c.statements(v.Do)}
@@ -81,6 +81,8 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 		return TestExpression{SyntaxLocation: loc, Expression: c.test(v.X)}
 	case *syntax.ArithmCmd:
 		return ArithmeticCommand{SyntaxLocation: loc, Expression: c.arithmetic(v.X)}
+	case *syntax.TimeClause:
+		return TimedCommand{SyntaxLocation: loc, POSIX: v.PosixFormat, Pipeline: c.statements(timedStatements(v))}
 	}
 	c.unsupported(cmd, "supported command syntax")
 	return nil
@@ -109,12 +111,26 @@ func (c *programCompiler) assignment(a *syntax.Assign) Assignment {
 		out.Value = c.word(a.Value)
 	}
 	if a.Array != nil {
-		out.Array = make([]DeferredWord, 0, len(a.Array.Elems))
-		for _, elem := range a.Array.Elems {
-			out.Array = append(out.Array, c.word(elem.Value))
-		}
+		out.Array = c.words(elementWords(a.Array.Elems))
 	}
 	return out
+}
+
+// elementWords are an array literal's element values in order.
+func elementWords(elems []*syntax.ArrayElem) []*syntax.Word {
+	out := make([]*syntax.Word, len(elems))
+	for i, elem := range elems {
+		out[i] = elem.Value
+	}
+	return out
+}
+
+// timedStatements is the pipeline after time; a bare time has none.
+func timedStatements(v *syntax.TimeClause) []*syntax.Stmt {
+	if v.Stmt == nil {
+		return nil
+	}
+	return []*syntax.Stmt{v.Stmt}
 }
 func (c *programCompiler) redirect(r *syntax.Redirect) ProgramRedirect {
 	fd := -1
@@ -139,7 +155,17 @@ func (c *programCompiler) word(w *syntax.Word) DeferredWord {
 	if w == nil {
 		return DeferredWord{}
 	}
-	return DeferredWord{SyntaxLocation: c.location(w), Parts: c.parts(w.Parts)}
+	loc := c.location(w)
+	split := c.braces.split[w]
+	if split == nil {
+		return DeferredWord{SyntaxLocation: loc, Parts: c.parts(w.Parts)}
+	}
+	// Split literals keep their whole original literal's offsets, so every
+	// node of a brace word carries the word's span.
+	prev := c.spanOverride
+	c.spanOverride = &loc.Span
+	defer func() { c.spanOverride = prev }()
+	return DeferredWord{SyntaxLocation: loc, Parts: c.parts(nonEmptyParts(split.Parts))}
 }
 func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 	out := make([]WordNode, 0, len(parts))
@@ -160,6 +186,8 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Backquotes: p.Backquotes, Statements: c.statements(p.Stmts)})
 		case *syntax.ProcSubst:
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Operator: p.Op.String(), Statements: c.statements(p.Stmts)})
+		case *syntax.BraceExp:
+			out = append(out, c.brace(p, loc))
 		}
 	}
 	return out

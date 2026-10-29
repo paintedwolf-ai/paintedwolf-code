@@ -2,8 +2,10 @@
 // command discovery and host identity utilities: env, printenv, which,
 // command, type, uname, nproc, whoami, id, hostname and date. Each binds argv
 // through the catalog and answers from the request's frozen environment, the
-// shared launch lookup and injected host facts. pwd belongs to the program's
-// directory frame (projectpaths). No utility launches a process or reads ambient shell state.
+// shared launch lookup and injected host facts; date -r reads one file's
+// metadata through read authority. pwd belongs to the program's directory
+// frame (projectpaths). No utility launches a process or reads ambient shell
+// state.
 package hostenv
 
 import (
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
@@ -25,6 +28,8 @@ type Owners struct {
 	Host HostFacts
 	// Clock is read once per date operation.
 	Clock func() time.Time
+	// Boundary is the read authority date -r resolves its reference file under.
+	Boundary *sandbox.Boundary
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -40,16 +45,16 @@ var utilities = map[string]utility{
 	"uname": runUname, "nproc": runNproc, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
 }
 
-// NewOwners binds the frozen catalog. Host and Clock are required.
-func NewOwners(host HostFacts, clock func() time.Time) (*Owners, error) {
-	if host == nil || clock == nil {
-		return nil, errors.New("host environment utilities require host facts and a clock")
+// NewOwners binds the frozen catalog. Every port is required.
+func NewOwners(host HostFacts, clock func() time.Time, boundary *sandbox.Boundary) (*Owners, error) {
+	if host == nil || clock == nil || boundary == nil {
+		return nil, errors.New("host environment utilities require host facts, a clock and a read boundary")
 	}
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Host: host, Clock: clock, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, natives: map[string]bool{}}
+	o := &Owners{Host: host, Clock: clock, Boundary: boundary, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, natives: map[string]bool{}}
 	for _, command := range catalog.Commands {
 		if strings.Contains(command.Name, " ") {
 			continue

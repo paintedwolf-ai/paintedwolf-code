@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -67,6 +68,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
+	opts.Child = confine.ProcessAttributes{Limits: childLimits(request.Process.Limits), IgnoreHangup: request.Process.IgnoreHangup}
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
@@ -93,12 +95,27 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
+	detach := request.Process.Signals.Attach(func(sig commandprogram.Signal) bool {
+		return async.Signal(syscall.Signal(sig.Number))
+	})
+	unblock, blockErr := async.ObserveWait(func() (func(), error) { return request.Wait.Process(ctx) })
+	if blockErr != nil {
+		async.Kill()
+		_, _ = async.Wait()
+		detach()
+		return ownerFailure(blockErr), blockErr
+	}
+	defer unblock()
 	select {
 	case <-async.Done():
 	case <-ctx.Done():
 		async.Kill()
 	}
 	run, waitErr := async.Wait()
+	detach()
+	if run != nil && len(run.Stages) == 1 {
+		request.Process.Times.Add(run.Stages[0].UserTime, run.Stages[0].SystemTime)
+	}
 	if ctx.Err() != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), waitErr)
 	}

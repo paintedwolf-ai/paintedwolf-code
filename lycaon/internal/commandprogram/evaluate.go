@@ -23,6 +23,8 @@ type EvaluationPorts struct {
 	Input       InputRedirection
 	Sources     SourceCapture
 	Supervision ProgramSupervision
+	// Waits receives the program's wait states; nil reports none.
+	Waits ProgramWaits
 	// Predicates supplies the filesystem and pattern ports for test, [ and [[.
 	// Expansion, scope and memory are bound per reached frame.
 	Predicates PredicateRuntime
@@ -36,6 +38,10 @@ type EvaluationPorts struct {
 	Environment []string
 	// ScratchDir is the session scratch directory used for process-substitution files.
 	ScratchDir string
+	// Clock times time reports; nil is the system clock.
+	Clock Clock
+	// ResourceLimits is the host's resource-limit owner; nil provides none.
+	ResourceLimits ResourceLimits
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -48,6 +54,9 @@ type ProgramOutcome struct {
 	Children []ChildRecord
 	Sources  []SourceRecord
 	Jobs     []string
+	// CPUTimeUnmeasured reports a time report that counted native
+	// operations, whose processor time the host does not attribute, as zero.
+	CPUTimeUnmeasured bool
 }
 
 // ChildRecord is one dynamic execution: a dispatched operation, an in-process
@@ -128,6 +137,9 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	e := &evaluation{ports: ports, limits: limits, programName: plan.SourceName}
+	ctx, cancelWait := context.WithCancelCause(ctx)
+	defer cancelWait(nil)
+	e.waits = newExecutionWaits(e.clock(), ports.Waits, cancelWait)
 	e.expander, err = NewWordExpander(ExpanderPorts{Substitutions: e, Files: ports.Files, Memory: ports.Memory})
 	if err != nil {
 		return ProgramOutcome{}, err
@@ -137,9 +149,19 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	defer release()
+	e.waits.cancel = func(cause error) {
+		_ = root.state.latch.Record(root.parent.Identity.ExecutionID, ownerResult(cause), true)
+		cancelWait(cause)
+	}
 	_, err = root.statements(ctx, plan.Statements)
 	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
 		err = trapErr
+	}
+	e.waits.mu.Lock()
+	waitErr := e.waits.err
+	e.waits.mu.Unlock()
+	if waitErr != nil {
+		err = waitErr
 	}
 	return e.outcome(root), err
 }

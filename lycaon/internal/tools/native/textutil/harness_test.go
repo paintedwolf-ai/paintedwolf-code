@@ -179,11 +179,11 @@ func (h *harness) run(source, stdin string) run {
 func (h *harness) runWith(ports Ports, source, stdin string) run {
 	h.t.Helper()
 	request, release := h.bind(source)
-	defer release()
 	argv := request.Argv
 	builtins := h.owners.Builtins(ports)
 	var stdout, stderr bytes.Buffer
 	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	release()
 	if validation := result.Validate(); validation != nil {
 		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
 	}
@@ -210,6 +210,8 @@ func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) 
 		testutil.FailErr(h.t, "expand", err)
 		argv = append(argv, fields...)
 	}
+	environment, releaseEnvironment, err := frame.Environment(h.t.Context(), nil)
+	testutil.FailErr(h.t, "environment", err)
 	h.runs++
 	execution := "child-" + strconv.Itoa(h.runs)
 	request := commandprogram.OperationRequest{
@@ -218,9 +220,12 @@ func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) 
 			ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"},
 			SourceUnitID: "inline", Span: statement.Span, CatalogDigest: toolcontract.LanguageCatalogDigest(),
 		},
-		OperationID: argv[0].Value, Statement: statement, Argv: argv,
+		OperationID: argv[0].Value, Statement: statement, Argv: argv, Environment: environment,
 	}
-	return request, frame.Close
+	return request, func() {
+		releaseEnvironment()
+		frame.Close()
+	}
 }
 
 type noSubstitution struct{}

@@ -103,7 +103,7 @@ func TestCatalogBinderBindsEveryCatalogOptionFragment(t *testing.T) {
 		}
 		option := bound.Items[0].Option
 		values := len(fixture.Words) - 1
-		if fixture.Arity == -2 {
+		if fixture.Arity == -2 && form.Consumption == "through-semicolon-or-plus" {
 			values--
 		}
 		optionWord := len(names)
@@ -177,6 +177,11 @@ func TestCatalogBinderOptionGrammar(t *testing.T) {
 		{name: "find primaries do not cluster", command: "find", argv: []string{"find", "-ao"}, code: argvOptionUnsupported},
 		{name: "find primaries take separate values", command: "find", argv: []string{"find", "-typef"}, code: argvOptionUnsupported},
 		{name: "listener option attached", command: "lsof", argv: []string{"lsof", "-iTCP:8080", "-sTCP:LISTEN"}, want: []string{"-i[TCP:8080]", "-s[TCP:LISTEN]"}},
+		{name: "list through next option", command: "zip", argv: []string{"zip", "-r", "out.zip", ".", "-x", "*.o", "node_modules/*", "-q"}, want: []string{"-r[]", "=out.zip", "=.", "-x[*.o,node_modules/*]", "-q[]"}},
+		{name: "list through the end", command: "unzip", argv: []string{"unzip", "a.zip", "-x", "docs/*"}, want: []string{"=a.zip", "-x[docs/*]"}},
+		{name: "list needs a value", command: "unzip", argv: []string{"unzip", "a.zip", "-x", "-o"}, code: argvOperandInvalid},
+		{name: "date adjustments attach", command: "date", argv: []string{"date", "-v-1d", "-v", "+1m", "-Iseconds", "+%F"}, want: []string{"-v[-1d]", "-v[+1m]", "-I[seconds]", "=+%F"}},
+		{name: "find newer date", command: "find", argv: []string{"find", ".", "-newermt", "2026-10-01"}, want: []string{"=.", "-newermt[2026-10-01]"}},
 		{name: "dual dialect spellings", command: "base64", argv: []string{"base64", "-D", "-b", "76"}, want: []string{"-d[]", "-b[76]"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

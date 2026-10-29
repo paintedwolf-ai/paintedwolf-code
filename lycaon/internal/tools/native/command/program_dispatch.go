@@ -196,6 +196,10 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		}
 	}
 	spec, native := d.run.commands[request.Argv[0].Value]
+	if native && spec.Name != "external" && !prefixCommands[spec.Name] {
+		// An in-process owner's processor time is the host's, not its own.
+		request.Process.Times.Unmeasured()
+	}
 	switch {
 	case !native || spec.Name == "external":
 		return d.invokeExternal(ctx, request, streams)
@@ -250,7 +254,10 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 		}
 	}
 	return d.InvokeEvaluator(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		noteJobNative(ctx, request.Argv.Values())
+		if !prefixCommands[spec.Name] {
+			// A prefix's nested command notes the job's own process.
+			noteJobNative(ctx, request.Argv.Values())
+		}
 		return builtin.Invoke(ctx, request, streams)
 	})
 }

@@ -16,7 +16,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval", "ulimit":
 		return true
 	}
 	return controlBuiltins[name]
@@ -220,7 +220,8 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
 	defer releaseEnvironment()
-	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap, StreamPreparation: f.io}
+	request := OperationRequest{Wait: f.wait, Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap, StreamPreparation: f.io,
+		Process: ChildProcess{Limits: f.state.limits.pinned(), Times: f.times}}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.io.streams)

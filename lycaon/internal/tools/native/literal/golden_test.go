@@ -125,7 +125,8 @@ func TestCatalogGoldenProgramsProduceExactBytes(t *testing.T) {
 		})
 		ran[golden.ID] = true
 	}
-	for _, id := range []string{"lf-byte-count", "stat-gnu-size", "stat-bsd-size", "base64-gnu", "base64-bsd", "binary-stream", "early-consumer", "unsupported-option"} {
+	for _, id := range []string{"lf-byte-count", "stat-gnu-size", "stat-bsd-size", "base64-gnu", "base64-bsd", "binary-stream", "early-consumer", "unsupported-option",
+		"du-apparent-total", "cmp-silent-different", "cmp-list-offsets", "od-hex-bytes", "strings-min-length"} {
 		if !ran[id] {
 			t.Errorf("golden program %s was not exercised", id)
 		}
