@@ -159,6 +159,10 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := relayThroughBroker(cmd); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	return cmd, cleanup, nil
 }
 
@@ -377,7 +381,7 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(ctx context.Context, wired []wiredStage) error {
+func startWiredStages(ctx context.Context, wired []wiredStage, started func(pid int)) error {
 	for i := range wired {
 		err := confine.ValidateProcessInputs(ctx, wired[i].cmd)
 		if err == nil {
@@ -402,6 +406,9 @@ func startWiredStages(ctx context.Context, wired []wiredStage) error {
 			reapWired(wired[:i+1])
 			releaseWired(wired[:i+1])
 			return err
+		}
+		if started != nil {
+			started(wired[i].cmd.Process.Pid)
 		}
 	}
 	// Parent pipe handles must close after every stage starts.

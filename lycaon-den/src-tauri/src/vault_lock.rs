@@ -2,10 +2,23 @@
 //!
 //! The engine ends idle unlocks itself; only the desktop sees the screen
 //! lock, sleep, a user switch, or quit. Locking only removes authority, so
-//! a lost request costs at most the rest of an unlock. Windows lock events
-//! are not observed yet.
+//! a lost request costs at most the rest of an unlock. Where a Linux
+//! desktop's screen lock cannot be observed, the display server's input idle
+//! for the unlock idle period counts as stepping away. Windows lock events are
+//! not observed yet.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+
+static STEP_AWAY_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) fn confirmation_generation() -> u64 {
+    STEP_AWAY_GENERATION.load(Ordering::Acquire)
+}
+
+pub(crate) fn confirmation_unchanged(generation: u64) -> bool {
+    confirmation_generation() == generation
+}
 
 use tauri::{AppHandle, Manager};
 
@@ -19,6 +32,9 @@ const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
 pub enum LockReason {
     ScreenLocked,
     Sleep,
+    /// The display server reported the person's input idle for the unlock
+    /// idle period, on a desktop whose screen lock cannot be observed.
+    Away,
     AppQuit,
 }
 
@@ -27,6 +43,7 @@ impl LockReason {
         match self {
             LockReason::ScreenLocked => "screen_locked",
             LockReason::Sleep => "sleep",
+            LockReason::Away => "away",
             LockReason::AppQuit => "app_quit",
         }
     }
@@ -35,6 +52,11 @@ impl LockReason {
 /// Asks the app-started engine to lock every chat. Best effort: an engine
 /// that is not running holds no unlocks.
 pub fn lock_now(state: &SidecarState, reason: LockReason) {
+    STEP_AWAY_GENERATION.fetch_add(1, Ordering::AcqRel);
+    request_lock(state, reason);
+}
+
+fn request_lock(state: &SidecarState, reason: LockReason) {
     let Some(sidecar) = state.cached_info() else {
         return;
     };
@@ -57,12 +79,31 @@ pub fn lock_now(state: &SidecarState, reason: LockReason) {
 /// Locks off the calling thread, so a notification handler never waits on
 /// the engine.
 fn lock_in_background(app: &AppHandle, reason: LockReason) {
+    STEP_AWAY_GENERATION.fetch_add(1, Ordering::AcqRel);
     let app = app.clone();
     std::thread::spawn(move || {
         if let Some(state) = app.try_state::<SidecarState>() {
-            lock_now(&state, reason);
+            request_lock(&state, reason);
         }
     });
+}
+
+/// Why presence cannot be confirmed now, when it cannot.
+#[cfg(target_os = "linux")]
+pub(crate) fn confirmation_refusal() -> Option<&'static str> {
+    linux::status().confirmation_refusal()
+}
+
+#[tauri::command]
+pub(crate) fn vault_lock_status() -> serde_json::Value {
+    #[cfg(target_os = "linux")]
+    {
+        serde_json::to_value(linux::status()).unwrap_or(serde_json::Value::Null)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        serde_json::Value::Null
+    }
 }
 
 /// Registers the step-away observers.
@@ -79,23 +120,6 @@ pub fn setup(app: AppHandle) -> Result<(), String> {
     {
         let _ = app;
         Ok(())
-    }
-}
-
-/// The lock a Linux desktop signal requests. logind announces the session
-/// lock and the coming sleep; desktops without a logind session lock signal
-/// announce their screensaver instead. Unlock and wake signals carry false
-/// and request nothing.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn lock_reason_for_signal(interface: &str, member: &str, active: bool) -> Option<LockReason> {
-    if !active {
-        return None;
-    }
-    match (interface, member) {
-        ("org.freedesktop.login1.Manager", "PrepareForSleep") => Some(LockReason::Sleep),
-        ("org.freedesktop.login1.Session", "Lock") => Some(LockReason::ScreenLocked),
-        ("org.freedesktop.ScreenSaver", "ActiveChanged") => Some(LockReason::ScreenLocked),
-        _ => None,
     }
 }
 
@@ -199,43 +223,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn linux_signals_map_to_lock_reasons() {
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", true),
-            Some(LockReason::Sleep)
-        );
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.login1.Session", "Lock", true),
-            Some(LockReason::ScreenLocked)
-        );
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", true),
-            Some(LockReason::ScreenLocked)
-        );
-        // Waking and unlocking request nothing; `Lock` carries no argument
-        // and is announced as active.
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", false),
-            None
-        );
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", false),
-            None
-        );
-        assert_eq!(
-            lock_reason_for_signal("org.freedesktop.login1.Session", "Unlock", true),
-            None
-        );
-        assert_eq!(
-            lock_reason_for_signal("org.example.Other", "Lock", true),
-            None
-        );
-    }
-
-    #[test]
     fn lock_reasons_use_the_engine_wire_names() {
         assert_eq!(LockReason::ScreenLocked.wire(), "screen_locked");
         assert_eq!(LockReason::Sleep.wire(), "sleep");
+        assert_eq!(LockReason::Away.wire(), "away");
         assert_eq!(LockReason::AppQuit.wire(), "app_quit");
     }
 }

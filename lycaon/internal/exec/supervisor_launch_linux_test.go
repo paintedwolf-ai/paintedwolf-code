@@ -64,7 +64,7 @@ func waitSignalled(t *testing.T, cmd *exec.Cmd, guard *unixGuard, want syscall.S
 	var err error
 	select {
 	case err = <-waited:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		guard.kill(cmd)
 		t.Fatal("supervised command did not stop")
 	}

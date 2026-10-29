@@ -31,10 +31,14 @@ function commandNames(source: string): Map<string, string> {
 
 function registeredCommands(): Set<string> {
   const lib = rustModuleSource([]);
-  const block = lib.match(/tauri::generate_handler!\[([\s\S]*?)\]/)?.[1];
+  const block = lib.match(/tauri::generate_handler!\[([\s\S]*?)\]\)/)?.[1];
   if (block === undefined) throw new Error("generate_handler! not found in lib.rs");
   const commands = new Set<string>();
-  const entries = block.replace(/\/\/.*$/gm, "").split(",").map((entry) => entry.trim());
+  const entries = block
+    .replace(/\/\/.*$/gm, "")
+    .replace(/#\[[^\]]*\]/g, "")
+    .split(",")
+    .map((entry) => entry.trim());
   for (const entry of entries.filter(Boolean)) {
     const path = entry.split("::");
     const fn = path.pop()!;

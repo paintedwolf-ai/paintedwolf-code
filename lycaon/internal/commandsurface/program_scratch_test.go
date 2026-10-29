@@ -67,3 +67,92 @@ func TestAdmittedParseRefusesExhaustedAggregateAndCancellation(t *testing.T) {
 		t.Fatalf("canceled parse leaked scratch: %+v", memory.InUse())
 	}
 }
+
+type parserAdmission struct {
+	*toolcontract.ProgramMemory
+	missingWorking int
+	workingCalls   int
+	missingState   bool
+}
+
+func (a *parserAdmission) Reserve(ctx context.Context, n int64) (func(), error) {
+	a.workingCalls++
+	if a.workingCalls == a.missingWorking {
+		return nil, nil
+	}
+	return a.ProgramMemory.Reserve(ctx, n)
+}
+func (a *parserAdmission) ReserveProgramState(ctx context.Context, n int64) (func(), error) {
+	if a.missingState {
+		return nil, nil
+	}
+	return a.ProgramMemory.ReserveProgramState(ctx, n)
+}
+
+func TestStagedParserRejectsMissingWorkingAndStateLeases(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		working int
+		state   bool
+	}{{"initial working", 1, false}, {"later growth", 2, false}, {"retained state", 0, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			memory := programMemory(t, 4<<20)
+			admission := &parserAdmission{ProgramMemory: memory, missingWorking: tc.working, missingState: tc.state}
+			parser, err := commandsurface.NewProgramParser(t.Context(), admission)
+			if tc.working == 1 {
+				if parser != nil || err == nil {
+					t.Fatal("missing initial lease admitted parser")
+				}
+			} else {
+				testutil.FailErr(t, "admit staged parser", err)
+				source := []byte(":")
+				if tc.working == 2 {
+					source = []byte(strings.Repeat("printf word; ", 128))
+				}
+				if parsed, err := parser.Parse(source, commandsurface.ParseOptions{}); parsed != nil || err == nil {
+					t.Fatal("missing growth/state lease admitted plan")
+				}
+				testutil.FailErr(t, "release refused parser", parser.Close())
+			}
+			if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+				t.Fatalf("refusal leaked leases: %+v", memory.InUse())
+			}
+		})
+	}
+}
+
+func TestStagedParserAdmissionAndSnapshotLifetimes(t *testing.T) {
+	memory := programMemory(t, 4<<20)
+	held, err := memory.Reserve(t.Context(), 16<<20)
+	testutil.FailErr(t, "retain another working user", err)
+	defer held()
+	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
+	testutil.FailErr(t, "admit initial parser chunk", err)
+	if usage := memory.InUse().Working; usage <= 16<<20 || usage >= 32<<20 {
+		t.Fatalf("initial scratch did not share account: %d", usage)
+	}
+	parsed, err := parser.Parse([]byte(":"), commandsurface.ParseOptions{Sourced: true})
+	testutil.FailErr(t, "parse beside another working lease", err)
+	if repeated, err := parser.Parse([]byte(":"), commandsurface.ParseOptions{}); repeated != nil || err == nil {
+		t.Fatal("consumed parser admitted another unit")
+	}
+	testutil.FailErr(t, "release parser scratch", parser.Close())
+	testutil.FailErr(t, "repeat scratch close", parser.Close())
+	if memory.InUse().Working != 16<<20 {
+		t.Fatalf("scratch outlived parse: %+v", memory.InUse())
+	}
+	missing := &parserAdmission{ProgramMemory: memory, missingState: true}
+	if snapshot, err := parsed.SnapshotWithMemory(t.Context(), missing); snapshot != nil || err == nil {
+		t.Fatal("snapshot accepted missing state release")
+	}
+	snapshot, err := parsed.SnapshotWithMemory(t.Context(), memory)
+	testutil.FailErr(t, "admit execution snapshot", err)
+	testutil.FailErr(t, "release original plan", parsed.Close())
+	if memory.InUse().State == 0 {
+		t.Fatal("snapshot lost its retained lease")
+	}
+	testutil.FailErr(t, "release detached snapshot", snapshot.Close())
+	if memory.InUse().State != 0 {
+		t.Fatalf("snapshot retained state: %+v", memory.InUse())
+	}
+}

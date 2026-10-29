@@ -20,20 +20,39 @@ func TestProgressPromptTracksChecklistWithinTurn(t *testing.T) {
 	eng.SetDeps(deps)
 	sess := &api.Session{ID: "progress-state", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
-	var previousKey string
+	var expectedKey string
+	var expectedStable string
 	for i, state := range []bool{true, false, true} {
 		missing = state
 		eng.Cache().LoadTurn(sess.ID).Iteration = i
-		if _, err := eng.BuildCompletionMessages(t.Context(), sess, nil, nil); err != nil {
+		msgs, err := eng.BuildCompletionMessages(t.Context(), sess, nil, nil)
+		if err != nil {
 			t.Fatalf("render progress state %v: %v", state, err)
 		}
 		turn := eng.Cache().LoadTurn(sess.ID)
-		if got := strings.Contains(turn.StablePrompt, "No checklist is stored"); got != state {
-			t.Fatalf("missing checklist guidance = %v, want %v", got, state)
+		if strings.Contains(turn.StablePrompt, "No checklist is stored") {
+			t.Fatal("stable prompt must not include turn-level checklist guidance")
 		}
-		if turn.StablePromptKey == previousKey {
-			t.Fatal("checklist state changed without invalidating the prompt cache")
+		if i == 0 {
+			expectedKey = turn.StablePromptKey
+			expectedStable = turn.StablePrompt
+		} else {
+			if turn.StablePromptKey != expectedKey {
+				t.Fatalf("stable prompt key changed across progress flips: got %q, want %q", turn.StablePromptKey, expectedKey)
+			}
+			if turn.StablePrompt != expectedStable {
+				t.Fatal("stable prompt bytes changed across progress flips")
+			}
 		}
-		previousKey = turn.StablePromptKey
+		tailContains := false
+		for _, m := range msgs[1:] {
+			if strings.Contains(m.Content, "No checklist is stored") {
+				tailContains = true
+				break
+			}
+		}
+		if tailContains != state {
+			t.Fatalf("tail checklist guidance present=%v, want %v", tailContains, state)
+		}
 	}
 }
