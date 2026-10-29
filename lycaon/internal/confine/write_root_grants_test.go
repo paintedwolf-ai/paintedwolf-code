@@ -505,7 +505,8 @@ func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *
 		t.Fatal("darwinUserRoots() returned no confstr roots on darwin")
 	}
 	t.Setenv("TMPDIR", t.TempDir())
-	roots := WriteRootsForBoundary("", nil, nil, "")
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	for _, root := range userRoots {
 		probe := filepath.Join(root, "xcrun_db-probe")
 		if !PathWithinWriteRoots(probe, roots) {
