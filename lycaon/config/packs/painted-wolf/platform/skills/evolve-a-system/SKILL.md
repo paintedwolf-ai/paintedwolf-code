@@ -1,6 +1,6 @@
 ---
 name: evolve-a-system
-description: Design or change production API contracts, state machines, retry and idempotency rules, or concurrency, or fix the defect class behind several related findings.
+description: Review failure, retry, and idempotency policies; design state machines and concurrency; evolve APIs or fix systemic defects.
 optional_tools:
   - http_request
 metadata:
