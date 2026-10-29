@@ -34,4 +34,8 @@ func TestSourceCloneProbeLeavesSourceAndTargetUntouched(t *testing.T) {
 	if _, err := SupportedFrom(filepath.Join(t.TempDir(), "missing"), target); err == nil {
 		t.Fatal("missing source was reported cloneable")
 	}
+	entries, err = os.ReadDir(target)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("failed source probe leaked files: %v %v", entries, err)
+	}
 }
