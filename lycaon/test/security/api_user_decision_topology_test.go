@@ -67,7 +67,7 @@ func TestUserDecisionAPIBlocksCasualChatAdvance(t *testing.T) {
 	run := startHarnessRun(t, h, sess.ID, "decision-api", "1.0.0")
 
 	acceptPromptHTTP(t, srv, sess.ID, "yes please")
-	waitTranscriptContainsHTTP(t, srv, sess.ID, "yes please", promptIdleBudget)
+	waitTranscriptContainsHTTP(t, srv, sess.ID, "yes please")
 
 	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
