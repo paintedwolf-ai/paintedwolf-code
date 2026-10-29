@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -38,7 +37,7 @@ func runCommandWithApprovals(t *testing.T, s *commandProgramSession, options ...
 	kind := wire.CheckpointKindToolApproval
 	var checkpoints []wire.CheckpointEvent
 	var runErr error
-	testutil.WaitFor(t, 30*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case runErr = <-done:
 			return true
