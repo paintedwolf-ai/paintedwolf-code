@@ -198,7 +198,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$"
+      "exclude": "/test/security$|/internal/launchguard$"
     },
     "seatbelt:confine": {
       "options": [
@@ -416,6 +416,24 @@
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ],
+    "release:rehearse:native-repositories": [
+      "release:rehearse:native-repositories"
+    ],
+    "release:rehearse:native-repositories-r2": [
+      "release:rehearse:native-repositories-r2"
+    ],
+    "release:rehearse:native-candidates": [
+      "release:rehearse:native-candidates"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
+    ],
     "release:live-test": [
       "release:live-test"
     ],
@@ -449,6 +467,8 @@
     "test:race": "go",
     "den:test:digest": "vitest",
     "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
@@ -458,6 +478,12 @@
     "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "test:linux:installed": "passthrough",
+    "release:rehearse:native-repositories": "passthrough",
+    "release:rehearse:native-repositories-r2": "passthrough",
+    "release:rehearse:native-candidates": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
@@ -810,6 +836,44 @@
       ],
       "workers": 1
     },
+    "release:rehearse:native-repositories": {
+      "locks": [
+        "native-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories-r2": {
+      "locks": [
+        "native-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-candidates": {
+      "locks": [
+        "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
     "release:live-test": {
       "locks": [
         "*"
@@ -885,6 +949,10 @@
   },
   "ci": {
     "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
       "targets": [
         "build",
         "lint:full",
@@ -895,7 +963,9 @@
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast"
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -919,11 +989,12 @@
       "minutes": 45,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "priority": "reject"
     },
     "build": {
       "targets": [
@@ -934,7 +1005,8 @@
       "minutes": 120,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -950,7 +1022,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -964,11 +1037,12 @@
       "minutes": 90,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "analysis",
-      "first": true,
+      "priority": "reject",
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
@@ -982,7 +1056,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "analysis"
@@ -994,7 +1069,8 @@
       "minutes": 60,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -1014,7 +1090,8 @@
       "setup": "verification",
       "workers": 3,
       "shards": 2,
-      "contract_first": true
+      "contract_first": true,
+      "priority": "critical"
     },
     "frontend": {
       "targets": [
@@ -1026,7 +1103,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "frontend"
@@ -1040,10 +1118,13 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
     },
     "webkit": {
       "targets": [
@@ -1236,11 +1317,12 @@
     "footprints": {
       "ci.yml": 1,
       "qualification.yml": 3,
-      "qualification-supersession.yml": 1,
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
       "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
@@ -1254,7 +1336,8 @@
       "issue-intake.yml": 1,
       "maintainability-issues.yml": 1,
       "verification-recovery.yml": 1,
-      "dco.yml": 1
+      "dco.yml": 1,
+      "dependent-update.yml": 1
     }
   }
 }

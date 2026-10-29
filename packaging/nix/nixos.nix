@@ -4,10 +4,12 @@ let
   inherit (lib) mkEnableOption mkIf mkOption types;
   cfg = config.services.painted-wolf-code;
   selected = [ cfg.package ] ++ cfg.additionalTrustedPackages;
+  attachmentGrammar = pkgs.writeTextDir "linux_release/apparmor_attachment.py"
+    (builtins.readFile ../../scripts/linux_release/apparmor_attachment.py);
   engineAppArmor = pkgs.runCommand "painted-wolf-code-selected-engine-apparmor" {
     nativeBuildInputs = [ pkgs.python3 pkgs.apparmor-parser ];
   } ''
-    python ${./apparmor.py} ${lib.escapeShellArgs (map toString selected)} > "$out"
+    PYTHONPATH=${attachmentGrammar} python ${./apparmor.py} ${lib.escapeShellArgs (map toString selected)} > "$out"
     apparmor_parser --skip-kernel-load --skip-cache \
       -I ${pkgs.apparmor-profiles}/etc/apparmor.d "$out"
   '';

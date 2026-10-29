@@ -78,6 +78,15 @@ describe("update settings", () => {
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
     expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
   });
+  it("shows pacman package identity and package-manager ownership", async () => {
+    const state = packageFixture();
+    state.package = { ...state.package!, family: "pacman", update_command: "sudo pacman -Syu" };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (pacman)");
+    const upgrade = await screen.findByTestId("updates-package-upgrade");
+    expect(upgrade.querySelector("code")).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
     const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });

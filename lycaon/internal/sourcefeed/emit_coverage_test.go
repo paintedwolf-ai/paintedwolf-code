@@ -26,8 +26,8 @@ var userMutationSites = []emitSite{
 
 var expectedEmitSites = map[sourcefeed.EmitDoor][]emitSite{
 	sourcefeed.DoorAgentMutation: {
-		{relFile: "internal/tools/native/source_write.go", fn: "commitAgentMutationTx", call: "EmitTx"},
-		{relFile: "internal/tools/native/source_write.go", fn: "commitAgentMutationWithoutStore", call: "Emit"},
+		{relFile: "internal/tools/native/source_mutation_record.go", fn: "commitAgentMutationTx", call: "EmitTx"},
+		{relFile: "internal/tools/native/source_mutation_record.go", fn: "commitAgentMutationWithoutStore", call: "Emit"},
 	},
 	sourcefeed.DoorEditorSave: {{relFile: "internal/editordoc/save_publication.go", fn: "commit", call: "EmitTx"}},
 	sourcefeed.DoorWorkerPromotion: {

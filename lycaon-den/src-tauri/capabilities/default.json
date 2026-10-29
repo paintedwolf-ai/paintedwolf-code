@@ -21,23 +21,6 @@
     "allow-den-notify-request-permission",
     "allow-den-notify-send",
     "allow-den-notify-cancel-sessions",
-    {
-      "identifier": "shell:allow-open",
-      "allow": [
-        {
-          "url": "https://*"
-        },
-        {
-          "url": "http://*"
-        },
-        {
-          "url": "mailto:*"
-        },
-        {
-          "url": "tel:*"
-        }
-      ]
-    },
     "allow-read-app-state",
     "allow-patch-app-state",
     "allow-document-outbox",
@@ -50,6 +33,8 @@
     "allow-read-clipboard-text",
     "allow-read-clipboard-image",
     "allow-write-clipboard-text",
+    "allow-write-secret-text",
+    "allow-clear-secret-text",
     "allow-paste-into-focused-view",
     "allow-path-kind",
     "allow-import-path-kind",
@@ -73,7 +58,6 @@
     "allow-restart-sidecar",
 		"allow-reset-credential-vault",
     "allow-vault-custody",
-    "allow-move-vault-custody",
     "allow-cancel-sidecar-start",
     "allow-attach-existing-daemon",
     "allow-sidecar-info",

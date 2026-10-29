@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/tokenest"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -72,6 +73,7 @@ func (r *RegistrySummarizer) utilityRequest(ctx context.Context, req modelcall.C
 
 // completeUtility stamps attribution and records one budgeted utility call.
 func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Provider, model string, req modelcall.CompletionRequest) (resp *modelcall.Completion, err error) {
+	defer func() { trainingcapture.ObserveUtility(ctx, r.Purpose, err) }()
 	req = r.utilityRequest(ctx, req)
 	class := r.utilityClass()
 	observe := r.observingLiteSlot(p)

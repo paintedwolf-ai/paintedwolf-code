@@ -58,7 +58,10 @@ func TestHandledAccessesGrowWithTheABI(t *testing.T) {
 	if handledAccesses(5)&unix.LANDLOCK_ACCESS_FS_IOCTL_DEV == 0 || handledAccesses(4)&unix.LANDLOCK_ACCESS_FS_IOCTL_DEV != 0 {
 		t.Fatal("ABI 5 handles device ioctls")
 	}
-	rules := landlockRules(Filesystem{WriteRoots: []string{"/proj"}, WriteFiles: []string{"/etc/x"}}, 3)
+	rules, err := landlockRules(Filesystem{WriteRoots: []string{"/proj"}, WriteFiles: []string{"/etc/x"}}, 3)
+	if err != nil {
+		t.Fatalf("landlock rules: %v", err)
+	}
 	byPath := map[string]uint64{}
 	for _, r := range rules {
 		byPath[r.path] = r.access
@@ -141,6 +144,18 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"unix raw datagram alias socketpair nonblocking", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_RAW|unix.SOCK_NONBLOCK, 0), eacces},
 		{"unix raw datagram alias socketpair cloexec nonblocking", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_RAW|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK, 0), eacces},
 		{"unix seqpacket socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_SEQPACKET, 0), allow},
+		{"openat with no flags", record(unix.SYS_OPENAT, 3, 0, 0), allow},
+		{"mkdirat", record(unix.SYS_MKDIRAT, 3, 0, 0), notify},
+		{"mknodat", record(unix.SYS_MKNODAT, 3, 0, 0), notify},
+		{"symlinkat", record(unix.SYS_SYMLINKAT, 0, 3, 0), notify},
+		{"linkat", record(unix.SYS_LINKAT, 3, 0, 0), notify},
+		{"renameat", record(unix.SYS_RENAMEAT, 3, 0, 0), notify},
+		{"renameat2", record(unix.SYS_RENAMEAT2, 3, 0, 0), notify},
+		{"openat2", record(unix.SYS_OPENAT2, 3, 0, 0), notify},
+		{"openat with O_CREAT", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_CREAT|unix.O_WRONLY), notify},
+		{"openat without O_CREAT", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_RDWR|unix.O_TRUNC), allow},
+		{"openat O_TMPFILE names nothing", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_TMPFILE|unix.O_RDWR), allow},
+		{"unlinkat", record(unix.SYS_UNLINKAT, 3, 0, 0), allow},
 		{"inet6 stream socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_STREAM, 0), allow},
 		{"netlink route socket", record(unix.SYS_SOCKET, unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, 0), allow},
 		{"vsock stream socket", record(unix.SYS_SOCKET, unix.AF_VSOCK, unix.SOCK_STREAM, 0), eafnosupport},

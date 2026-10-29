@@ -56,7 +56,7 @@ func (policy *StorePolicy) verifyMapping(stat func(string) (fileFacts, error), r
 	if err != nil {
 		return err
 	}
-	if !facts.mode.IsRegular() || facts.inode != region.inode {
+	if !facts.mode.IsRegular() || facts.inode != region.inode || facts.device != region.device {
 		return errors.New("selected mapping is no longer the mapped regular file")
 	}
 	return policy.verifyPath(stat, region.path)

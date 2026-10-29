@@ -1,5 +1,5 @@
 //! A fresh database attribution of the original installed executable path.
-use super::{command::{package_name, success, Reader}, PackageFamily, QueryReason};
+use super::{command::{success, Reader}, valid_package_name, PackageFamily, QueryReason};
 use std::path::Path;
 
 pub(super) fn read(family: PackageFamily, executable: &Path, reader: &mut impl Reader) -> Result<String, QueryReason> {
@@ -17,6 +17,6 @@ pub(super) fn read(family: PackageFamily, executable: &Path, reader: &mut impl R
 
 fn one_name(raw: &str) -> Result<String, QueryReason> {
     let name = raw.trim();
-    if !package_name(name) { return Err(QueryReason::InvalidResponse); }
+    if !valid_package_name(name) { return Err(QueryReason::InvalidResponse); }
     Ok(name.into())
 }
