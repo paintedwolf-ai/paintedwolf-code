@@ -64,6 +64,7 @@ LOGS_BIN="${BINARIES_DIR}/${LOGS_NAME}-${TARGET}${EXE_SUFFIX}"
 VAULT_IDENTITY_BIN="${BINARIES_DIR}/${VAULT_IDENTITY_NAME}-${TARGET}${EXE_SUFFIX}"
 LAUNCH_BIN="${BINARIES_DIR}/pw-launch-${TARGET}${EXE_SUFFIX}"
 LAUNCH_ENTRY_BIN="${BINARIES_DIR}/pw-launch-entry-${TARGET}${EXE_SUFFIX}"
+MOUNT_TRANSITION_BIN="${BINARIES_DIR}/pw-mount-intake-transition-${TARGET}${EXE_SUFFIX}"
 GENERATIONS_BIN="${BINARIES_DIR}/pw-generations-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/${DECIDE_NAME}-${TARGET}${EXE_SUFFIX}"
 DOCUMENT_CORE_BIN="${BINARIES_DIR}/${DOCUMENT_CORE_NAME}-${TARGET}${EXE_SUFFIX}"
@@ -108,6 +109,13 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   export CGO_ENABLED=1
 fi
 if [[ "${HOST_KIND}" == "linux" ]]; then
+  case "${TARGET}" in
+    x86_64-*) MOUNT_ARCH=amd64 ;;
+    aarch64-*) MOUNT_ARCH=arm64 ;;
+    *) echo "error: unsupported Linux intake transition architecture ${TARGET}" >&2; exit 1 ;;
+  esac
+  (cd "${ROOT}" && python3 -m scripts.linux_release.mount_intake \
+    --output "${MOUNT_TRANSITION_BIN}" --architecture "${MOUNT_ARCH}")
   # A static engine gives no dynamic loader a way into the process that
   # holds the decrypted vault; the manifest verifier hashes one file.
   export CGO_ENABLED=0
@@ -156,7 +164,7 @@ assert_static "${SIDECAR_BIN}"
 assert_static "${LOGS_BIN}"
 if [[ "${HOST_KIND}" == "linux" ]]; then
   chmod +x "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${GENERATIONS_BIN}"
-  for bin in "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${GENERATIONS_BIN}"; do
+  for bin in "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${MOUNT_TRANSITION_BIN}" "${GENERATIONS_BIN}"; do
     assert_static "${bin}"
   done
 fi

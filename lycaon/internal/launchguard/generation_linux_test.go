@@ -157,7 +157,7 @@ func TestCaptureGenerationAndPolicyRecheck(t *testing.T) {
 	var executables []pkgmanifest.Executable
 	var payload []pkgmanifest.PayloadEntry
 	payload = append(payload, pkgmanifest.PayloadEntry{Path: "bin", Kind: "directory", Mode: 0o755})
-	for _, name := range []string{"pw-launch-entry", "painted-wolf-code"} {
+	for _, name := range []string{"pw-launch-entry", "painted-wolf-code", "pw-mount-intake-transition"} {
 		content := []byte("#!/bin/sh\n")
 		target := filepath.Join(staging, "bin", name)
 		testutil.FailErr(t, "write "+name, os.WriteFile(target, content, 0o755))
@@ -242,6 +242,18 @@ func TestCaptureGenerationAndPolicyRecheck(t *testing.T) {
 		t.Fatal("CaptureGeneration succeeded while generation lock was exclusively held")
 	}
 	_ = lockFile.Close()
+
+	// The pre-runtime transition is a separate authenticated role, not a path
+	// that the privileged stage may substitute after selection.
+	transition := filepath.Join(genDir, "bin/pw-mount-intake-transition")
+	originalTransition, err := os.ReadFile(transition)
+	testutil.FailErr(t, "read transition role", err)
+	testutil.FailErr(t, "corrupt transition role", os.WriteFile(transition, []byte("foreign transition"), 0o755))
+	if candidate, err := CaptureGeneration(); err == nil {
+		candidate.Close()
+		t.Fatal("CaptureGeneration accepted a corrupted transition role")
+	}
+	testutil.FailErr(t, "restore transition role", os.WriteFile(transition, originalTransition, 0o755))
 
 	// Corrupted desktop binary in generation is refused by VerifyOpened.
 	desktopBin := filepath.Join(genDir, "bin/painted-wolf-code")

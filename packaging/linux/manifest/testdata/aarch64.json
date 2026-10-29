@@ -46,6 +46,11 @@
       "size": 64
     },
     {
+      "path": "/opt/painted-wolf-code/bin/pw-mount-intake-transition",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
       "path": "/opt/painted-wolf-code/bin/pw-vault-identity",
       "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
       "size": 64
@@ -141,6 +146,14 @@
     },
     {
       "path": "bin/pw-logs",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-mount-intake-transition",
       "kind": "file",
       "mode": 493,
       "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",

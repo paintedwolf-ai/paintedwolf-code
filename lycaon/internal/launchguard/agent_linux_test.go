@@ -8,7 +8,6 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,22 +17,12 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/lycaon/lycaon/internal/launchbroker"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 const wantWatcherCapHex = "0000000000200004"
 const wantZeroCapHex = "0000000000000000"
-
-func TestIsModuleViewWatcherRequiresRootAndPipe(t *testing.T) {
-	if os.Getuid() != 0 && isModuleViewWatcher() {
-		t.Fatal("isModuleViewWatcher accepted an unprivileged caller")
-	}
-}
 
 func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
 	t.Parallel()
@@ -98,7 +87,7 @@ func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
 	}
 }
 
-func checkScrubSingleMountRejectsSymlinksAndMagiclinks(t *testing.T) {
+func checkMountTargetRejectsSymlinksAndMagiclinks(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	realDir := filepath.Join(tmp, "real", "sub")
@@ -110,13 +99,13 @@ func checkScrubSingleMountRejectsSymlinksAndMagiclinks(t *testing.T) {
 		t.Fatalf("symlink parent: %v", err)
 	}
 	for _, bad := range []string{"relative/path", "/mnt/nul\x00byte"} {
-		if err := scrubSingleMount(bad); !errors.Is(err, unix.EINVAL) {
-			t.Fatalf("scrubSingleMount(%q) = %v, want EINVAL", bad, err)
+		if err := tightenFixtureMount(bad); !errors.Is(err, unix.EINVAL) {
+			t.Fatalf("tightenFixtureMount(%q) = %v, want EINVAL", bad, err)
 		}
 	}
 	for _, linkPath := range []string{filepath.Join(symParent, "sub"), symParent, "/proc/self/root"} {
-		if err := scrubSingleMount(linkPath); !errors.Is(err, unix.ELOOP) {
-			t.Fatalf("scrubSingleMount(%q) = %v, want ELOOP", linkPath, err)
+		if err := tightenFixtureMount(linkPath); !errors.Is(err, unix.ELOOP) {
+			t.Fatalf("tightenFixtureMount(%q) = %v, want ELOOP", linkPath, err)
 		}
 	}
 }
@@ -145,7 +134,7 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 			continue
 		}
 		cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-		if err != nil || !bytes.Equal(cmdline, []byte("pw-launch-entry\x00--broker-agent\x00")) {
+		if err != nil || !bytes.Equal(cmdline, []byte("pw-launch-entry\x00"+MountViewArgument+"\x00")) {
 			continue
 		}
 		if mnt, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/mnt", pid)); err == nil && mnt == desktopMnt {
@@ -320,8 +309,8 @@ func checkModuleWatcherSeal() error {
 	if dumpable != 0 {
 		return fmt.Errorf("sealed watcher dumpable = %d, want 0", dumpable)
 	}
-	if err := scrubSingleMount(probeDir); err != nil {
-		return fmt.Errorf("sealed watcher scrubSingleMount in initial user namespace: %w", err)
+	if err := tightenFixtureMount(probeDir); err != nil {
+		return fmt.Errorf("sealed watcher mount flags in initial user namespace: %w", err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
@@ -401,8 +390,8 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 	// Before unsharing M_view, mountPoint is owned by init_user_ns: the child
 	// user namespace has zero capabilities in init_user_ns, so mount_setattr
 	// is refused with EPERM even as uid 0 in the child user namespace.
-	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
-		t.Fatalf("scrubSingleMount(%q) on init_user_ns mount from child userns = %v, want EPERM", mountPoint, err)
+	if err := tightenFixtureMount(mountPoint); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("tightenFixtureMount(%q) on init_user_ns mount from child userns = %v, want EPERM", mountPoint, err)
 	}
 	// Unshare M_view inside the child user namespace so this userns owns M_view.
 	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
@@ -416,8 +405,8 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 		t.Fatalf("sealModuleWatcher in (U_view, M_view): %v", err)
 	}
 	// Inside M_view (owned by U_view), the sealed watcher can add NOEXEC|NOSUID|NODEV.
-	if err := scrubSingleMount(mountPoint); err != nil {
-		t.Fatalf("scrubSingleMount(%q) in watcher-owned M_view: %v", mountPoint, err)
+	if err := tightenFixtureMount(mountPoint); err != nil {
+		t.Fatalf("tightenFixtureMount(%q) in watcher-owned M_view: %v", mountPoint, err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
@@ -450,120 +439,12 @@ func startLockedWorkerThreads(count int) func() {
 	}
 }
 
-func checkInstrumentedBrokerAgent(t *testing.T, spec EntrySpec, frame *os.File) {
-	t.Helper()
-	server, peer, err := brokerPair()
-	testutil.FailErr(t, "instrumented broker socket", err)
-	defer peer.Close()
-	defer server.Close()
-	null, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
-	testutil.FailErr(t, "broker streams", err)
-	defer null.Close()
-	cmd := moduleFixtureCommand(t, "module-agent", Identity{UID: spec.UID, GID: spec.GID})
-	cmd.ExtraFiles = []*os.File{frame, server, null}
-	cmd.Stderr = os.Stderr
-	testutil.FailErr(t, "start instrumented broker", cmd.Start())
-	_ = server.Close()
-	channel, err := launchbroker.Send(peer, launchbroker.Request{Argv: []string{"/bin/true"}, Dir: "/", Environment: []string{"PATH=/usr/bin:/bin"}}, null, null, null)
-	testutil.FailErr(t, "instrumented broker request", err)
-	defer channel.Close()
-	started := moduleFixtureBrokerEvent(t, channel)
-	if started.Started <= 0 || started.Error != "" || started.Exited {
-		t.Fatalf("instrumented broker started event: %+v", started)
+// Exercise the production target resolver and flag primitive on a fixture mount.
+func tightenFixtureMount(name string) error {
+	fd, err := openMountPoint(name)
+	if err != nil {
+		return err
 	}
-	ended := moduleFixtureBrokerEvent(t, channel)
-	if !ended.Exited || ended.Code != 0 || ended.Error != "" {
-		t.Fatalf("instrumented broker exit event: %+v", ended)
-	}
-	_ = peer.Close()
-	testutil.FailErr(t, "instrumented broker ended", cmd.Wait())
-}
-
-func checkInstrumentedModuleWatcher(t *testing.T, dir string, spec EntrySpec, frame *os.File) {
-	t.Helper()
-	lifetimeR, lifetime, err := os.Pipe()
-	testutil.FailErr(t, "instrumented watcher lifetime", err)
-	defer lifetimeR.Close()
-	defer lifetime.Close()
-	ready, readyW, err := os.Pipe()
-	testutil.FailErr(t, "instrumented watcher readiness", err)
-	defer ready.Close()
-	defer readyW.Close()
-	image, err := os.Open(filepath.Join(spec.Generation.GenerationRoot, "bin/pw-launch-entry"))
-	testutil.FailErr(t, "watcher retained image", err)
-	defer image.Close()
-	cmd := moduleFixtureCommand(t, "module-agent", Identity{UID: spec.UID, GID: spec.GID})
-	cmd.ExtraFiles = []*os.File{frame, lifetimeR, readyW, image}
-	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
-		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
-		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
-		GidMappingsEnableSetgroups: true,
-	}
-	testutil.FailErr(t, "start instrumented watcher", cmd.Start())
-	_ = lifetimeR.Close()
-	_ = readyW.Close()
-	testutil.FailErr(t, "watcher ready deadline", ready.SetReadDeadline(moduleFixtureDeadline(t)))
-	var armed [1]byte
-	_, err = io.ReadFull(ready, armed[:])
-	testutil.FailErr(t, "instrumented watcher ready", err)
-	if armed[0] != 1 {
-		t.Fatalf("watcher ready byte = %v, want 1", armed)
-	}
-	uid := fmt.Sprintf("%d %d %d %d", spec.UID, spec.UID, spec.UID, spec.UID)
-	gid := fmt.Sprintf("%d %d %d %d", spec.GID, spec.GID, spec.GID, spec.GID)
-	testutil.FailErr(t, "instrumented watcher thread seal", verifyWatcherThreads(cmd.Process.Pid, uid, gid, strconv.Itoa(int(spec.GID))))
-	checkModuleWatcherPollAuthority(t, cmd.Process.Pid)
-	parentNS, err := os.Open("/proc/thread-self/ns/mnt")
-	testutil.FailErr(t, "fixture parent mount namespace", err)
-	defer parentNS.Close()
-	viewNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", cmd.Process.Pid))
-	testutil.FailErr(t, "instrumented watcher view", err)
-	defer viewNS.Close()
-	library := filepath.Join(dir, "actor-library-root")
-	baseline := filepath.Join(library, "baseline.so")
-	testutil.FailErr(t, "parent baseline module executable", canMapExecutable(baseline))
-	late, _, file, err := prepareLateMountPoint(filepath.Join(library, "instrumented-late"))
-	testutil.FailErr(t, "new module mount point", err)
-	testutil.FailErr(t, "new executable module mount", mountExecutableTmpfs(late, file))
-	testutil.FailErr(t, "parent module remains executable", canMapExecutable(file))
-	testutil.FailErr(t, "enter instrumented watcher view", unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS))
-	defer func() { _ = unix.Setns(int(parentNS.Fd()), unix.CLONE_NEWNS) }()
-	testutil.FailErr(t, "declared baseline library remains executable", canMapExecutable(baseline))
-	testutil.WaitFor(t, func() bool {
-		if !time.Now().Before(moduleFixtureDeadline(t)) {
-			t.Fatal("new module mount was not scrubbed before fixture cancellation")
-		}
-		var facts unix.Statfs_t
-		const flags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
-		return unix.Statfs(late, &facts) == nil && facts.Flags&flags == flags
-	})
-	if err := canMapExecutable(file); !errors.Is(err, unix.EPERM) {
-		t.Fatalf("new module executable mapping in watcher view = %v, want EPERM", err)
-	}
-	testutil.FailErr(t, "leave instrumented watcher view", unix.Setns(int(parentNS.Fd()), unix.CLONE_NEWNS))
-	testutil.FailErr(t, "parent module mount unchanged", canMapExecutable(file))
-	_ = lifetime.Close()
-	testutil.FailErr(t, "instrumented watcher ended", cmd.Wait())
-}
-
-func moduleFixtureBrokerEvent(t *testing.T, channel *os.File) launchbroker.Event {
-	t.Helper()
-	type result struct {
-		event launchbroker.Event
-		err   error
-	}
-	done := make(chan result, 1)
-	go func() { event, err := launchbroker.ReadEvent(channel); done <- result{event, err} }()
-	timer := time.NewTimer(time.Until(moduleFixtureDeadline(t)))
-	defer timer.Stop()
-	select {
-	case got := <-done:
-		testutil.FailErr(t, "module fixture broker event", got.err)
-		return got.event
-	case <-timer.C:
-		t.Fatal("module fixture canceled before broker event")
-		return launchbroker.Event{}
-	}
+	defer unix.Close(fd)
+	return lockDetachedMount(fd)
 }

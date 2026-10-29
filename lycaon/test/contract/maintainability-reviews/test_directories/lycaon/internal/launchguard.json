@@ -1,0 +1,18 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/launchguard",
+  "kind": "module",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain forty-one immediate test files after reviewing nine base-branch additions for real desktop artifact provenance/runtime custody, standard-stream ingress and execution reparenting. They test the same private launch transaction and fixed kernel roles, so moving them behind an exported testing API would conceal rather than separate authority. Existing topology, C-transition, fatal-lineage and GTK families remain distinct. The GTK watch lane proves readiness before a late volume and uses the native nested generation layout; artifact roots are explicit. Keep forty-one as the measured membership ceiling.",
+  "reviewed_commit": "3e89dc173aa9de7829f873d4f778416eed055dda",
+  "ceiling": 41,
+  "boundaries": {
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f30d39e7bc65a2aca45b4f14cdb99383811838cb94be060bd93a2ecaeb623b9",
+    "lycaon/internal/launchguard/guardian_c_linux_test.go": "f20ab553133afa1c8acd7cab89d3687a44b83b5929e4b241aac12666d3d70ec1",
+    "lycaon/internal/launchguard/mount_gtk_linux_test.go": "e4270cdde01cf40cd58eb0ba062170904d651cce65a27cb4a7a60f82fba9fba1",
+    "lycaon/internal/launchguard/guardian_lineage_linux_test.go": "6e69889d4730d8ee4e0efe4654bf3b1f316b2d5b902b36a5284df9fe8773009d",
+    "lycaon/internal/launchguard/protected_desktop_artifact_contract_linux_test.go": "9be6b5acf27a8a2ec915805bbf45138220d30efbc80d4399a5f658cc1ed8a8bf"
+  },
+  "reviewed_shape": "8f51b176f14853d9f1dc0d3fc4b4c88101a72164a1b61123dff036538d450eb5"
+}
