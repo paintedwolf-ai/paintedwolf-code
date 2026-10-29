@@ -64,3 +64,22 @@ func TestThinkingEvidencePrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestExplicitOffEffortMapping(t *testing.T) {
+	levels := modelinfo.ReasoningEffortLevels{Off: "none", Low: "low", Medium: "medium", High: "high"}
+	if err := levels.Validate(); err != nil {
+		t.Fatalf("validate explicit off mapping: %v", err)
+	}
+	mt := ModelThinking{EffortLevels: levels}
+	if got, ok := mt.EffortString(ThinkOff); !ok || got != "none" {
+		t.Fatalf("off maps to %q, %v", got, ok)
+	}
+	mt.AlwaysOn = true
+	if got, _ := mt.EffortString(ThinkOff); got != "low" {
+		t.Fatalf("always-on model disabled: %q", got)
+	}
+	levels.Off = "invalid token"
+	if levels.Validate() == nil {
+		t.Fatal("invalid disable token accepted")
+	}
+}

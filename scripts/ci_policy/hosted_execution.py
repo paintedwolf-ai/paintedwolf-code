@@ -62,7 +62,7 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-def run_lane(name, shard=""):
+def run_lane(name, shard="", merge_group=False):
     lane = hosted_plan.lanes()[name]
     count = lane.get("shards", 1)
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
@@ -76,17 +76,23 @@ def run_lane(name, shard=""):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "run.json"
     record = {"lane": name, "shard": shard, "targets": targets, "started_at": time.time(), "status": "running", "scope": scope}
+    record['identity'] = {'run': os.environ.get('GITHUB_RUN_ID', ''),
+                          'attempt': os.environ.get('GITHUB_RUN_ATTEMPT', ''),
+                          'sha': os.environ.get('GITHUB_SHA', '')}
+    try:
+        record['job_started_at'] = float(os.environ['PW_CI_JOB_STARTED_AT'])
+    except (KeyError, ValueError):
+        record['job_started_at'] = None
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
-    # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
+    # The hosted lane budget bounds Go runs.
     environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
     if scope and scope["base"]:
         environment["PW_CHANGE_BASE"] = scope["base"]
-    # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
+    # Memory-heavy lanes cap process parallelism.
     if "workers" in lane:
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
-    # Each shard of a split lane runs its slice of every Go stage's packages. The plan job resolved
-    # one set of measurements for the run, so the shards partition the selection the same way.
+    # Shards use the plan's shared package weights.
     measured = environment.pop("PW_CI_PACKAGE_TIMINGS", "")
     if shard:
         environment["PW_GO_SHARD"] = shard
@@ -94,19 +100,50 @@ def run_lane(name, shard=""):
             weights = directory / "package-weights.json"
             weights.write_text(measured)
             environment["PW_GO_TIMINGS"] = str(weights)
-    # A hosted runner that runs out of memory or disk vanishes without evidence; the live log keeps these lines.
+    # Resource samples survive runner loss in the live log.
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
     command = ["./task", *hosted_plan.invocation(targets)]
-    if scope and name == "behavior":
-        from ci_policy.impact import go_scope
-        packages = go_scope(scope)
-        if packages:
-            command += ["--", *packages]
-            record["packages"] = packages
+    if "arguments" in lane:
+        command += ["--", *lane["arguments"]]
+
     try:
-        code = subprocess.call(command, cwd=ROOT, env=environment)
+        code = 0
+        record["phases"] = []
+        packages = None
+        if scope and name == "behavior":
+            from ci_policy.impact import go_scope
+            packages = go_scope(scope)
+            if packages:
+                command += ["--", *packages]
+                record["packages"] = packages
+        if lane.get("preflight"):
+            preflight = ["./task", *lane["preflight"]]
+            record["preflight"] = {"command": preflight, "started_at": time.time()}
+            path.write_text(json.dumps(record, indent=2) + "\n")
+            code = subprocess.call(preflight, cwd=ROOT, env=environment)
+            record["preflight"].update(exit_code=code, finished_at=time.time())
+        commands = [command]
+        if name == 'ready':
+            from ci_policy.native_admission import commands as native_commands
+            commands = [*native_commands(scope), command]
+        if code == 0 and merge_group:
+            from ci_policy.merge_preflight import commands as ordered_commands
+            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
+        for command in commands:
+            if code != 0:
+                break
+            phase = {"command": command, "started_at": time.time()}
+            record["phases"].append(phase)
+            path.write_text(json.dumps(record, indent=2) + "\n")
+            code = subprocess.call(command, cwd=ROOT, env=environment)
+            phase.update(exit_code=code, finished_at=time.time())
+    except (subprocess.SubprocessError, OSError, ValueError) as error:
+        code = 2
+        record["execution_error"] = {"type": type(error).__name__, "message": str(error)}
+        if isinstance(error, subprocess.CalledProcessError):
+            record["execution_error"].update(command=error.cmd, exit_code=error.returncode, stderr=error.stderr)
     finally:
         stop.set()
     record["oom_after"] = oom_events()

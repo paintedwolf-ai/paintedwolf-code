@@ -1,6 +1,4 @@
-// Command codegen-dependency-inventory projects the dependency policy under
-// dependencies/, the pins in the tree, and the upstream snapshot into the
-// dependency inventory page and the Dependabot configuration.
+// Command codegen-dependency-inventory generates the dependency inventory page and Dependabot configuration.
 package main
 
 import (
@@ -47,8 +45,7 @@ func run(repo string, check, refresh bool) error {
 		return err
 	}
 	if check {
-		// The inventory page refreshes on its own schedule; only Dependabot's
-		// projection of the policy has to match what is committed.
+		// Only .github/dependabot.yml is checked here; the inventory page refreshes on schedule.
 		return verify(repo, dependabotRel, renderDependabot(p, sections))
 	}
 	if refresh {

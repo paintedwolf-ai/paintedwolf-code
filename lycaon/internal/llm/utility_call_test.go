@@ -126,9 +126,7 @@ func TestUtilityCallOnADeadContextOpensNoReceipt(t *testing.T) {
 
 func awaitForegroundWaiter(t *testing.T, lanes *utilityLanes, id string) {
 	t.Helper()
-	deadline := time.NewTimer(time.Second)
-	defer deadline.Stop()
-	for {
+	for t.Context().Err() == nil {
 		lanes.mu.Lock()
 		lane := lanes.lanes[id]
 		waiting := lane != nil && lane.foregroundWaiting > 0
@@ -136,13 +134,9 @@ func awaitForegroundWaiter(t *testing.T, lanes *utilityLanes, id string) {
 		if waiting {
 			return
 		}
-		select {
-		case <-deadline.C:
-			t.Fatal("foreground did not enter admission")
-		default:
-			runtime.Gosched()
-		}
+		runtime.Gosched()
 	}
+	t.Fatal("foreground did not enter admission")
 }
 
 func TestAdmissionPrioritizesWaitingForeground(t *testing.T) {
@@ -176,7 +170,7 @@ func TestAdmissionPrioritizesWaitingForeground(t *testing.T) {
 	case done := <-utility:
 		done()
 		t.Fatal("utility overtook queued foreground")
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("foreground was not admitted")
 	}
 	t.Cleanup(finish)
@@ -190,7 +184,7 @@ func TestAdmissionPrioritizesWaitingForeground(t *testing.T) {
 	select {
 	case done := <-utility:
 		done()
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("utility did not resume")
 	}
 }

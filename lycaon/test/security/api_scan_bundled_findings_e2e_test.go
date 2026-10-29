@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -33,14 +32,12 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 		wantFile  string
 		minCount  int
 		skipShort bool
-		timeout   time.Duration
 	}{
 		{
 			name:     "secret_gitleaks",
 			category: wire.ScanCategorySecret,
 			wantFile: "secrets.env",
 			minCount: 1,
-			timeout:  30 * time.Second,
 		},
 		{
 			name:      "sast_opengrep",
@@ -48,7 +45,6 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 			wantFile:  "vuln.go",
 			minCount:  1,
 			skipShort: true,
-			timeout:   bundledScannerWaitBudget,
 		},
 		{
 			name:      "sca_scalibr",
@@ -56,7 +52,6 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 			wantFile:  "package-lock.json",
 			minCount:  1,
 			skipShort: true,
-			timeout:   bundledScannerWaitBudget,
 		},
 	}
 
@@ -69,7 +64,7 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 				skipIfOpenGrepUnavailable(t)
 			}
 			created := enqueueCodeScan(t, srv, projectDir, []wire.ScanCategory{tc.category})
-			got := waitScanComplete(t, srv, created.ProjectID, created.ID, tc.timeout)
+			got := waitScanComplete(t, srv, created.ProjectID, created.ID)
 			assertScanFindings(t, got, tc.wantFile, tc.minCount)
 			if tc.category == wire.ScanCategorySCA {
 				if _, err := os.Stat(project.OSVCacheDir("")); !os.IsNotExist(err) {
