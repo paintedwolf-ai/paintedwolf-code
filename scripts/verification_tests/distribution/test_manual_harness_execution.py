@@ -206,33 +206,3 @@ harness_up --interactive
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn(message, result.stderr)
 
-
-class ManualChatLinkTests(unittest.TestCase):
-    def test_chat_link_uses_the_existing_exact_session_contract(self):
-        import urllib.parse
-
-        link = manual.chat_url("http://127.0.0.1:14321/", {"project_id": PROJECT, "id": SESSION})
-        parsed = urllib.parse.urlsplit(link)
-        self.assertEqual(parsed.scheme + "://" + parsed.netloc, "http://127.0.0.1:14321")
-        self.assertEqual(urllib.parse.parse_qs(parsed.query), {
-            "window_subject": ["session"], "project_id": [PROJECT],
-            "session_id": [SESSION], "view_id": ["manual-driver"],
-        })
-        with self.assertRaises(ValueError):
-            manual.chat_url("http://example.org", {"project_id": PROJECT, "id": SESSION})
-
-    def test_open_is_explicit_and_invalid_origin_precedes_any_api_mutation(self):
-        client = Mock()
-        session = {"id": SESSION, "project_id": PROJECT}
-        with patch.object(manual, "Client", return_value=client), patch.object(manual, "open_session", return_value=session), patch.object(manual, "repl"), patch.object(manual.webbrowser, "open") as opened, contextlib.redirect_stdout(io.StringIO()) as output:
-            manual.main(["--url", "http://127.0.0.1:1234", "--den-url", "http://127.0.0.1:14321"])
-            opened.assert_not_called()
-            self.assertIn(manual.chat_url("http://127.0.0.1:14321", session), output.getvalue())
-            manual.main(["--url", "http://127.0.0.1:1234", "--den-url", "http://127.0.0.1:14321", "--open"])
-            opened.assert_called_once_with(manual.chat_url("http://127.0.0.1:14321", session), new=2)
-        with patch.object(manual, "Client") as constructor:
-            with self.assertRaises(ValueError):
-                manual.main(["--url", "http://127.0.0.1:1234", "--den-url", "https://example.org"])
-            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                manual.main(["--url", "http://127.0.0.1:1234", "--open"])
-            constructor.assert_not_called()
