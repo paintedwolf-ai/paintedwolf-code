@@ -79,3 +79,10 @@ func TestUpgradeSharingOwnersReserveOneRemainingDivergence(t *testing.T) {
 		}
 	}
 }
+
+func TestUpgradeSourceFactsDoNotMasqueradeAsASQLOwner(t *testing.T) {
+	source := UpgradeSource{SharedOriginal: true}
+	if _, isSQL := any(source).(DBTX); isSQL {
+		t.Fatal("recovery facts implicitly expose SQL ownership")
+	}
+}

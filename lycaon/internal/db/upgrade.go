@@ -16,7 +16,7 @@ var releasedBaselinesJSON []byte
 
 // UpgradeSource identifies the held recovery reader and immutable block sharing.
 type UpgradeSource struct {
-	*sql.DB
+	DB             *sql.DB
 	SharedOriginal bool
 }
 
