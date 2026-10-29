@@ -139,6 +139,9 @@ func TestRegistryListDiscoversLocalProviderModels(t *testing.T) {
 	catalog, err := NewProviderCatalogAt(user)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(tmp+"/credential-vault.age"))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -198,6 +201,9 @@ func TestRegistryListUntypedCompatRequiresAllowlist(t *testing.T) {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
 	registry, err := NewRegistry(t.Context(), catalog, creds)
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -273,6 +279,9 @@ func TestRegistryListDiscoversConfiguredGeminiProvider(t *testing.T) {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
 	registry, err := NewRegistry(t.Context(), catalog, creds)
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 

@@ -91,6 +91,7 @@ func TestPreflightReflectsObservedUtilityFailureAndRecoveryWithoutChangingProvid
 	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	registry := &llm.Registry{}
+	registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register scripted utility transport", registry.Register(silentUtilityProvider{}))
 	ref := llm.ModelRef{ProviderID: "scripted-utility", Model: "scripted-model"}
 	service := &llm.Service{Registry: registry, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Coordinator: ref, Lite: ref}), Utility: llm.NewUtilityPlane()}

@@ -262,7 +262,7 @@ func TestOllamaDiscoveryToThinkingWireAndOverrideAdmission(t *testing.T) {
 	p, err := newProviderForEntry(t.Context(), entry, "", providerretry.ProviderHTTPRetry{}, nil, server.Client())
 	testutil.FailErr(t, "construct native adapter", err)
 	p = hydrateProviderModels(p, merged.Models)
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	reg.discovery = discovery.NewCache(nil)
 	reg.discovery.Put(discoveryCacheKey(entry.ID, p.Profile(), entry.BaseURL, ""), discovered, nil)
 	snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{

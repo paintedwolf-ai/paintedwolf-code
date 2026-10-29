@@ -164,6 +164,9 @@ func TestRegistryConfiguredFollowsCredentialMode(t *testing.T) {
 `)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	registry, err := NewRegistry(t.Context(), catalog, creds)
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 
 	if registry.IsConfigured("keyed") {

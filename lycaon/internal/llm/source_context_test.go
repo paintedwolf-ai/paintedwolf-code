@@ -22,7 +22,7 @@ func (sourceScreen) Screen(_ context.Context, _ ScreenDestination, req modelcall
 }
 
 func TestSourceCaptureUsesScreenedProviderRequest(t *testing.T) {
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "register provider", reg.Register(&namedStubProvider{id: "source", content: "a.go"}))
 	reg.SetOutboundSecretScreen(sourceScreen{})
 	provider, err := reg.Get("source")
