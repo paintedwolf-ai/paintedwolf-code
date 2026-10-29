@@ -63,6 +63,15 @@ paths in session staging. Ordinary Git safety checks precede removal; force
 does not change host authority. If index staging fails after a filesystem
 change, the result retains the completed effect and its source recovery.
 
+`git grep` searches a revision's tree, the index or the tracked working tree
+with the same native regex engines as `grep` (basic by default, `-E`, `-F`,
+`-P`) and prints Git's `REV:PATH:LINE` layout with paths relative to the
+command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
+`git cat-file`, `git show-ref` and `git for-each-ref` run through the Git
+owner's read door with their catalogued options; `git shortlog` without a
+revision summarizes `HEAD`. Batch object reads, reflog maintenance and
+signature format atoms are refused.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete
