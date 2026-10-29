@@ -16,6 +16,14 @@ var limitResourceIDs = map[string]int{
 	"cpu": unix.RLIMIT_CPU, "nproc": unix.RLIMIT_NPROC, "as": unix.RLIMIT_AS,
 }
 
+// declaredResourceLimits: macOS, Linux and the other Unix platforms query
+// each resource and start a launched program with a raised or lowered soft
+// limit or a lowered hard one.
+func declaredResourceLimits() map[string]LimitCapability {
+	full := LimitQuery | LimitSetSoft | LimitSetHard
+	return map[string]LimitCapability{"core": full, "fsize": full, "nofile": full, "stack": full, "cpu": full, "nproc": full, "as": full}
+}
+
 // ReadResourceLimit reports this process's current limit for resource.
 func ReadResourceLimit(resource string) (ResourceLimit, error) {
 	id, ok := limitResourceIDs[resource]

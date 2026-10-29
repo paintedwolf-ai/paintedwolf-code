@@ -15,3 +15,7 @@ func ReadResourceLimit(resource string) (ResourceLimit, error) {
 	}
 	return ResourceLimit{}, ErrLimitUnsupported
 }
+
+// declaredResourceLimits: Windows has no per-process resource limits, so every
+// resource is unsupported.
+func declaredResourceLimits() map[string]LimitCapability { return map[string]LimitCapability{} }
