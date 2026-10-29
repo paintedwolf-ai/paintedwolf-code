@@ -14,13 +14,14 @@ import (
 	"time"
 
 	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"golang.org/x/sys/unix"
 )
 
 // RetainRunningNix registers only this application's indirect root. The lock
 // separates live sessions from roots left by a crashed process.
 func RetainRunningNix(ctx context.Context) (*NixRetention, error) {
-	layout, err := RunningNix()
+	layout, err := nixgeneration.Running()
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func RetainRunningNix(ctx context.Context) (*NixRetention, error) {
 	return retainNix(ctx, layout, filepath.Join(cache, "paintedwolf", "nix-running"), registrar)
 }
 
-func retainNix(ctx context.Context, layout *NixLayout, directory string, registrar nixRegistrar) (*NixRetention, error) {
+func retainNix(ctx context.Context, layout *nixgeneration.Layout, directory string, registrar nixRegistrar) (*NixRetention, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}

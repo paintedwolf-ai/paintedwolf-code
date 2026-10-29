@@ -45,6 +45,9 @@ const (
 	// RemedyInstallPackage installs the Linux package, whose AppArmor profile
 	// permits the engine to create user namespaces.
 	RemedyInstallPackage Remedy = "install_package"
+	// RemedyLoadEngineProfile asks the administrator to load the AppArmor profile a
+	// Nix generation ships for its exact engine executable.
+	RemedyLoadEngineProfile Remedy = "load_engine_profile"
 	// RemedyEnableUserNamespaces asks the administrator to allow unprivileged
 	// user namespaces.
 	RemedyEnableUserNamespaces Remedy = "enable_user_namespaces"
@@ -66,7 +69,8 @@ type Unavailability struct {
 	Code   string `json:"code"`
 	Detail string `json:"detail,omitempty"`
 	Remedy Remedy `json:"remedy,omitempty"`
-	// Profile names the AppArmor profile that would lift the restriction.
+	// Profile names the AppArmor profile that would lift the restriction: the
+	// package profile, or the path of a Nix generation's engine profile.
 	Profile string `json:"profile,omitempty"`
 }
 
