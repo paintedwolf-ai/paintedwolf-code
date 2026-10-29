@@ -76,7 +76,8 @@ func repoRelPaths(ctx context.Context, p Prepared, dir, repoRoot string, rawPath
 			out = append(out, ".")
 			continue
 		}
-		bound, err := p.paths.Bind(ctx, target, true)
+		_, write := mutateForms[p.command.spec.Name]
+		bound, err := p.paths.Bind(ctx, target, write)
 		if err != nil {
 			return nil, err
 		}

@@ -3027,6 +3027,1713 @@
       ]
     },
     {
+      "name": "git grep",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] grep [-n] [-i] [-w] [-v] [-E|-F|-P|-G] [-l|-c|-q] [-h] [-z] [--cached] [-e PATTERN ...] [PATTERN] [REV ...] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git grep-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git grep-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--line-number"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-i",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-w",
+            "--word-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-w",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--invert-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-v",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E",
+            "--extended-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-E-extended",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fixed-strings"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-F-fixed",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P",
+            "--perl-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-P-perl",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-G",
+            "--basic-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-G-basic",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--files-with-matches",
+            "--name-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-l",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-c",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-h"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-h-nofilename",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--null"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-z",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git grep-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "git grep-option-e-pattern",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
+        }
+      ],
+      "operands": "The first operand is the pattern unless -e supplies patterns. Operands before -- that name revisions or trees are searched at that revision; others are paths. Without a revision the tracked working-tree files are searched, and --cached searches the index. Paths are relative to the command directory.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "a line matched",
+        "1": "no match",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git grep -n alpha HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Native search over Git objects: files come from the revision's tree, the index or the tracked working tree, and lines match with the shared native regex engines (basic by default, -E, -F, -P). Output follows Git's REV:PATH:LINE layout, with paths relative to the command directory and binary matches reported as one line. Status 1 means no match; 128 is a repository or revision failure.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/grep.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-grep-operands-valid",
+        "git-grep-rejection",
+        "git grep-option-C-global",
+        "git grep-option-c-global",
+        "git grep-option-nopager-global",
+        "git grep-option-n",
+        "git grep-option-i",
+        "git grep-option-w",
+        "git grep-option-v",
+        "git grep-option-E-extended",
+        "git grep-option-F-fixed",
+        "git grep-option-P-perl",
+        "git grep-option-G-basic",
+        "git grep-option-l",
+        "git grep-option-c",
+        "git grep-option-q",
+        "git grep-option-h-nofilename",
+        "git grep-option-z",
+        "git grep-option-cached",
+        "git grep-option-e-pattern"
+      ]
+    },
+    {
+      "name": "git describe",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] describe [--tags] [--all] [--always] [--abbrev=N] [--long] [--match PATTERN ...] [--exclude PATTERN ...] [--first-parent] [--dirty[=MARK]] [--] [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git describe-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git describe-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-all",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--always"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-always",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git describe-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "--long"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-long",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--match"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git describe-option-match",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "v*"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git describe-option-exclude",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*-rc*"
+          ]
+        },
+        {
+          "spellings": [
+            "--first-parent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git describe-option-firstparent",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--dirty"
+          ],
+          "arity": -1,
+          "value_role": "message",
+          "fixture_id": "git describe-option-dirty",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "-dirty"
+          ]
+        }
+      ],
+      "operands": "Optional commit-ish operands; --dirty describes the working tree and takes none.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git describe --always",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's describe through the Git owner's read door; --dirty reads working-tree state the way git status does, without writing the index.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-describe-operands-valid",
+        "git-describe-rejection",
+        "git describe-option-C-global",
+        "git describe-option-c-global",
+        "git describe-option-nopager-global",
+        "git describe-option-tags",
+        "git describe-option-all",
+        "git describe-option-always",
+        "git describe-option-abbrev",
+        "git describe-option-long",
+        "git describe-option-match",
+        "git describe-option-exclude",
+        "git describe-option-firstparent",
+        "git describe-option-dirty"
+      ]
+    },
+    {
+      "name": "git reflog",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] reflog [show] [-n N|-N] [--date=FORMAT] [--oneline] [REF]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git reflog-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git reflog-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reflog-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--max-count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git reflog-option-n-maxcount",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "5"
+          ],
+          "shorthand": "numeric"
+        },
+        {
+          "spellings": [
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "git reflog-option-date",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "iso"
+          ]
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reflog-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "An optional show followed by at most one REF; expire, delete and other reflog subcommands are not read forms.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git reflog -n 1",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's reflog listing through the Git owner's read door. Reflog maintenance subcommands change history and are refused.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-reflog-operands-valid",
+        "git-reflog-rejection",
+        "git reflog-option-C-global",
+        "git reflog-option-c-global",
+        "git reflog-option-nopager-global",
+        "git reflog-option-n-maxcount",
+        "git reflog-option-date",
+        "git reflog-option-oneline"
+      ]
+    },
+    {
+      "name": "git shortlog",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] shortlog [-s] [-n] [-e] [REV_RANGE ...] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git shortlog-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git shortlog-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--summary"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-s",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--numbered"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e",
+            "--email"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git shortlog-option-e",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Revision ranges, then paths after --. With no revision it summarizes HEAD; it never reads a log from standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git shortlog -sn",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's shortlog through the Git owner's read door, always over revisions.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-shortlog-operands-valid",
+        "git-shortlog-rejection",
+        "git shortlog-option-C-global",
+        "git shortlog-option-c-global",
+        "git shortlog-option-nopager-global",
+        "git shortlog-option-s",
+        "git shortlog-option-n",
+        "git shortlog-option-e"
+      ]
+    },
+    {
+      "name": "git ls-tree",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] ls-tree [-r] [-t] [-d] [-l|--long] [--name-only|--name-status] [--full-tree] [-z] [--abbrev[=N]] REV [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git ls-tree-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git ls-tree-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-r",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-t",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-d",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--long"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-l",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--name-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-nameonly",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--name-status"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-namestatus",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--full-tree"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-fulltree",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-tree-option-z",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git ls-tree-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        }
+      ],
+      "operands": "One tree-ish, then optional paths relative to the command directory.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git ls-tree --name-only HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's ls-tree through the Git owner's read door.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-ls-tree-operands-valid",
+        "git-ls-tree-rejection",
+        "git ls-tree-option-C-global",
+        "git ls-tree-option-c-global",
+        "git ls-tree-option-nopager-global",
+        "git ls-tree-option-r",
+        "git ls-tree-option-t",
+        "git ls-tree-option-d",
+        "git ls-tree-option-l",
+        "git ls-tree-option-nameonly",
+        "git ls-tree-option-namestatus",
+        "git ls-tree-option-fulltree",
+        "git ls-tree-option-z",
+        "git ls-tree-option-abbrev"
+      ]
+    },
+    {
+      "name": "git cat-file",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] cat-file (-t|-s|-p|-e) OBJECT",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git cat-file-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git cat-file-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-t-type",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-s-size",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-p-print",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cat-file-option-e-exists",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Exactly one of -t, -s, -p or -e and one object name. Batch modes are not supported; query one object per call.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git cat-file -t HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's cat-file through the Git owner's read door. Blob content is printed exactly, without text conversion.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-cat-file-operands-valid",
+        "git-cat-file-rejection",
+        "git cat-file-option-C-global",
+        "git cat-file-option-c-global",
+        "git cat-file-option-nopager-global",
+        "git cat-file-option-t-type",
+        "git cat-file-option-s-size",
+        "git cat-file-option-p-print",
+        "git cat-file-option-e-exists"
+      ]
+    },
+    {
+      "name": "git show-ref",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] show-ref [--heads|--branches] [--tags] [--verify] [-d|--dereference] [-s|--hash[=N]] [--abbrev[=N]] [-q|--quiet] [--] [PATTERN ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git show-ref-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git show-ref-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--heads",
+            "--branches"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-heads",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--verify"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-verify",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-d",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--hash"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git show-ref-option-s-hash",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "--abbrev"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "git show-ref-option-abbrev",
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": [
+            "7"
+          ]
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-ref-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Ref patterns, or full ref names with --verify.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git show-ref --heads",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's show-ref through the Git owner's read door.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-show-ref-operands-valid",
+        "git-show-ref-rejection",
+        "git show-ref-option-C-global",
+        "git show-ref-option-c-global",
+        "git show-ref-option-nopager-global",
+        "git show-ref-option-heads",
+        "git show-ref-option-tags",
+        "git show-ref-option-verify",
+        "git show-ref-option-d",
+        "git show-ref-option-s-hash",
+        "git show-ref-option-abbrev",
+        "git show-ref-option-q"
+      ]
+    },
+    {
+      "name": "git for-each-ref",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] for-each-ref [--format=FORMAT] [--sort=KEY ...] [--count=N] [--points-at REV] [--merged REV] [--no-merged REV] [--contains REV] [--no-contains REV] [PATTERN ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git for-each-ref-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git for-each-ref-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git for-each-ref-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "git for-each-ref-option-format",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "%(refname:short)"
+          ]
+        },
+        {
+          "spellings": [
+            "--sort"
+          ],
+          "arity": 1,
+          "value_role": "key",
+          "fixture_id": "git for-each-ref-option-sort",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "-committerdate"
+          ]
+        },
+        {
+          "spellings": [
+            "--count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git for-each-ref-option-count",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "3"
+          ]
+        },
+        {
+          "spellings": [
+            "--points-at"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-pointsat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--merged"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-merged",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-merged"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-nomerged",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--contains"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-contains",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-contains"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git for-each-ref-option-nocontains",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
+        }
+      ],
+      "operands": "Ref patterns; formats may not use signature atoms, which run a verification program.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git for-each-ref --format=%(refname) refs/heads",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bundled Git's for-each-ref through the Git owner's read door. Signature atoms are refused because they run a verification program.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/history_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-for-each-ref-operands-valid",
+        "git-for-each-ref-rejection",
+        "git for-each-ref-option-C-global",
+        "git for-each-ref-option-c-global",
+        "git for-each-ref-option-nopager-global",
+        "git for-each-ref-option-format",
+        "git for-each-ref-option-sort",
+        "git for-each-ref-option-count",
+        "git for-each-ref-option-pointsat",
+        "git for-each-ref-option-merged",
+        "git for-each-ref-option-nomerged",
+        "git for-each-ref-option-contains",
+        "git for-each-ref-option-nocontains"
+      ]
+    },
+    {
       "name": "git apply",
       "aliases": [],
       "family": "git",

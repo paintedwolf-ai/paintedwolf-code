@@ -79,6 +79,10 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 	if err := formatPlaceholders(spec, bound); err != nil {
 		return nil, err
 	}
+	if spec.Name == "git shortlog" && len(c.beforeDash) == 0 {
+		// Without a revision Git would read a log from standard input.
+		c.args = withDefaultRevision(c.args, "HEAD")
+	}
 	if spec.Name == "git config" {
 		// Repository configuration only: the hermetic invocation's own
 		// overrides are not the user's configuration.
@@ -202,13 +206,53 @@ func configOperands(spec toolcontract.CommandSpecification, bound commandprogram
 	return noOperands(spec, bound)
 }
 
+// reflogOperands admits the listing: an optional show and at most one REF.
+func reflogOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	operands := bound.Operands().Values()
+	if len(operands) > 0 && operands[0] == "show" {
+		operands = operands[1:]
+	}
+	if len(operands) > 1 {
+		return operandInvalid(spec, operands[0], "show and at most one REF")
+	}
+	if len(operands) == 1 && reflogSubcommands[operands[0]] {
+		return operandInvalid(spec, operands[0], "show and at most one REF")
+	}
+	return nil
+}
+
+// reflogSubcommands change or inspect reflogs other than by listing.
+var reflogSubcommands = map[string]bool{"expire": true, "delete": true, "drop": true, "exists": true, "list": true}
+
+func lsTreeOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	if len(bound.Operands()) == 0 {
+		return operandInvalid(spec, spec.Name, "a tree-ish REV")
+	}
+	return nil
+}
+
+// catFileOperands takes exactly one query and one object; batch modes are
+// not catalogued, so one call answers one object.
+func catFileOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
+	queries := 0
+	for _, key := range []string{"-t", "-s", "-p", "-e"} {
+		if has(bound, key) {
+			queries++
+		}
+	}
+	if queries != 1 || len(bound.Operands()) != 1 {
+		return operandInvalid(spec, spec.Name, "exactly one of -t, -s, -p or -e and one OBJECT")
+	}
+	return nil
+}
+
 // formatPlaceholders refuses signature placeholders, which make Git run a
 // verification program.
 func formatPlaceholders(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
 	for _, option := range bound.Options("--format") {
 		for _, value := range option.Values {
-			if strings.Contains(value.Value, "%G") {
-				return operandInvalid(spec, value.Value, "a format without %G signature placeholders")
+			if strings.Contains(value.Value, "%G") || strings.Contains(value.Value, "%(signature") {
+				return operandInvalid(spec, value.Value, "a format without signature placeholders")
 			}
 		}
 	}
@@ -288,4 +332,13 @@ func (o *meteredOutput) Write(p []byte) (int, error) {
 		o.err = err
 	}
 	return n, err
+}
+
+func withDefaultRevision(args []string, rev string) []string {
+	for i, arg := range args {
+		if arg == "--" {
+			return append(append(append([]string{}, args[:i]...), rev), args[i:]...)
+		}
+	}
+	return append(args, rev)
 }
