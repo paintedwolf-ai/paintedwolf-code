@@ -15,7 +15,7 @@ func (r *ReadRoot) Canonical(rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return file.Name(), nil
 }
 
@@ -34,7 +34,7 @@ func (r *ReadRoot) Readlink(rel string, admit func(string) error) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	if admit != nil {
 		if err := admit(filepath.Join(parent.Name(), name)); err != nil {
 			return "", err

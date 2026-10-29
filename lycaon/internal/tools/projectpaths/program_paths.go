@@ -70,14 +70,14 @@ func (p BoundPath) Open() (*os.File, error) {
 	if err != nil {
 		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
 		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
-			file.Close()
+			_ = file.Close()
 			return nil, pathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
@@ -159,7 +159,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err != nil {
 			return BoundPath{}, err
 		}
-		held.Close()
+		_ = held.Close()
 		if !filepath.IsAbs(operand) && !strings.HasPrefix(operand, "@") {
 			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
@@ -246,7 +246,7 @@ func directoryInfo(path BoundPath) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err

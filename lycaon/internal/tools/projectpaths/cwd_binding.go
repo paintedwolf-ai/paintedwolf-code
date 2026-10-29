@@ -12,7 +12,7 @@ func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (B
 	if err != nil {
 		return BoundPath{}, nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return BoundPath{}, nil, err
@@ -51,7 +51,7 @@ func (p *ProgramPaths) OpenCwd(ctx context.Context) (*os.File, error) {
 		err = invalidOperand(p.cwd.Resolved.DisplayPath, "invocation directory identity changed")
 	}
 	if err != nil {
-		file.Close()
+		_ = file.Close()
 		return nil, err
 	}
 	return file, nil
