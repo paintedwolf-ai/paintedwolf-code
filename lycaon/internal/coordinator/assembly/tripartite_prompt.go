@@ -2,15 +2,12 @@ package assembly
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +19,6 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,
 	history []api.Message,
-	templateRef, posture, settingsFP string,
 	turn *TurnAssemblyScratch,
 	vars map[string]any,
 ) (string, error) {
@@ -31,21 +27,49 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	if turn != nil {
 		turn.CurrentExecutionModeFamily = current
 	}
-	// Every gate the stable block renders keys it.
-	if frame.RequiresEvidence("verify") {
-		settingsFP += ";verify=1"
-	}
-	settingsFP += fmt.Sprintf(";verify_command=%s;overlay_promote=%t;progress_missing=%t", strings.TrimSpace(implState.VerifyCommand), len(implState.PendingOverlayIDs) > 0, implState.ProgressMissing)
 	webSearchEnabled := true
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
-	settingsFP += stableCapabilityFingerprint(vars, frame.Roster, webSearchEnabled)
-	// The standing tool set and omitted units change only at a turn boundary
-	// or on request_tools.
-	settingsFP += ";loaded=" + loadedFingerprint(e.loadedTools(sess))
-	settingsFP += ";omitted=" + loadedFingerprint(e.omittedUnits(sess))
-	stableKey := sessionPromptCacheKey(profile, templateRef, sess.AgentType, sess.WorkspacePath, posture, settingsFP, rootsFingerprint(vars), promptRevision)
+	rootCount := rootCountFromVars(vars)
+	roster := frame.Roster
+	if roster == nil {
+		declared := frame.RunContext.AllowedAgents
+		if len(declared) == 0 {
+			declared = spawn.AmbientAllowedAgents()
+		}
+		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
+		roster = &resolved
+	}
+	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
+	causes := []surface.ModeTransitionCause(nil)
+	if turn != nil {
+		causes = turn.ModeTransitionCauses
+	}
+	transition := surface.ComputeModeTransition(previous, current, causes)
+
+	in := standingPromptInputs{
+		PromptRevision: promptRevision,
+		Profile: standingProfileInputs{
+			SurfaceID:       profile.SurfaceID,
+			SurfaceTemplate: profile.SurfaceTemplate,
+			ModeRefs:        profile.ModeRefs,
+		},
+		Vars:             vars,
+		RootCount:        rootCount,
+		EffectiveAgents:  roster.Effective,
+		WebSearchEnabled: webSearchEnabled,
+		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
+		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
+		ExecutionMode:    transition.ExecutionMode,
+		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
+		WorkerToolBudget: e.workerToolBudget(ctx, sess),
+		catalogView:      e.sessionCatalogView(ctx, sess),
+	}
+	stableKey, err := in.cacheKey()
+	if err != nil {
+		return "", err
+	}
 	if cached, ok := e.cache.LoadStable(sess.ID, stableKey); ok {
 		if turn != nil {
 			turn.StablePrompt = cached
@@ -53,7 +77,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		}
 		return cached, nil
 	}
-	rendered, _, _, err := e.renderTripartiteCoordinatorPrompt(ctx, pe, sess, frame, history, surface.SurfaceSelectionUserPrompt(history), turn, vars)
+	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", err
 	}
@@ -63,18 +87,6 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		turn.StablePromptKey = stableKey
 	}
 	return rendered, nil
-}
-
-func stableCapabilityFingerprint(vars map[string]any, roster *inject.AgentRoster, webSearchEnabled bool) string {
-	vision := false
-	if caps, ok := vars["caps"].(map[string]any); ok {
-		vision, _ = caps["vision"].(bool)
-	}
-	effectiveAgents := ""
-	if roster != nil {
-		effectiveAgents = strings.Join(roster.Effective, ",")
-	}
-	return fmt.Sprintf(";vision=%t;web_search=%t;effective_agents=%s", vision, webSearchEnabled, effectiveAgents)
 }
 
 func (e *promptSurface) loadExecutionModeState(ctx context.Context, sessionID string) surface.ExecutionModeState {
@@ -97,44 +109,20 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	if e == nil || pe == nil {
 		return "", surface.TurnProfile{}, surface.TransitionVars{}, errPromptEngineNotConfigured
 	}
-	implState := e.implementSessionState(ctx, sess)
-	runCtx := frame.RunContext
-	profile := surface.ResolveTurnProfile(runCtx, sess, history, implState)
-
-	surfaceVars := map[string]any{}
-	copyPromptVarsSorted(surfaceVars, vars)
-	rootCount := 0
-	if v, ok := surfaceVars["root_count"].(int); ok {
-		rootCount = v
-	}
+	profile, implState := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	webSearchEnabled := true
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
+	rootCount := rootCountFromVars(vars)
 	roster := frame.Roster
 	if roster == nil {
-		// Fixture/dump paths render without an engine-stamped frame.
-		declared := runCtx.AllowedAgents
+		declared := frame.RunContext.AllowedAgents
 		if len(declared) == 0 {
 			declared = spawn.AmbientAllowedAgents()
 		}
 		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
 		roster = &resolved
-	}
-	if err := capability.MergeForTurn(surfaceVars, profile, rootCount, roster.Effective, webSearchEnabled); err != nil {
-		return "", profile, surface.TransitionVars{}, fmt.Errorf("capability vars: %w", err)
-	}
-	var toolProfiles []sandbox.ToolProfile
-	turnSurface := prompts.SurfaceTurn{Loaded: e.loadedTools(sess)}
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		toolProfiles = view.ToolProfiles
-		turnSurface.Schemas = view.ToolSchemas
-	}
-	if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {
-		return "", profile, surface.TransitionVars{}, fmt.Errorf("surface path vars: %w", err)
-	}
-	if !webSearchEnabled {
-		prompts.MergeWebResearchUnavailable(surfaceVars)
 	}
 	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
@@ -143,72 +131,29 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		causes = turn.ModeTransitionCauses
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
-	if err := prompts.MergeCoordinatorPromptVars(
-		profile.SurfaceID,
-		prompts.ExecutionModePromptTransition{
-			ExecutionMode:         transition.ExecutionMode,
-			ExecutionModePrevious: transition.ExecutionModePrevious,
-			ExecutionModeEntered:  transition.ExecutionModeEntered,
-			ExecutionModeLeft:     transition.ExecutionModeLeft,
-		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
-			ProgressMissing:       implState.ProgressMissing,
-			VerifyRequired:        frame.RequiresEvidence("verify"),
-			VerifyCommand:         implState.VerifyCommand,
-		},
-		surfaceVars,
-	); err != nil {
-		return "", profile, surface.TransitionVars{}, fmt.Errorf("surface prompt vars: %w", err)
-	}
-	if err := e.mergeUnitBlocks(ctx, pe, sess, profile.SurfaceID, rootCount, surfaceVars); err != nil {
-		return "", profile, transition, fmt.Errorf("unit blocks: %w", err)
-	}
-	policyVars := spawn.PolicyTemplateVars(e.workerToolBudget(ctx, sess))
-	keys := make([]string, 0, len(policyVars))
-	for k := range policyVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if _, exists := surfaceVars[k]; !exists {
-			surfaceVars[k] = policyVars[k]
-		}
-	}
-	if partial := surface.PartialWorkerSummaryJobIDs(history); len(partial) > 0 {
-		surfaceVars["partial_worker_jobs"] = partial
-	}
 
-	var parts []string
-	for _, ref := range []string{surface.CoordinatorCoreTemplate} {
-		chunk, err := pe.Render(ctx, ref, surfaceVars)
-		if err != nil {
-			return "", profile, transition, fmt.Errorf("render %q: %w", ref, err)
-		}
-		if trimmed := strings.TrimSpace(chunk); trimmed != "" {
-			parts = append(parts, trimmed)
-		}
+	in := standingPromptInputs{
+		Profile: standingProfileInputs{
+			SurfaceID:       profile.SurfaceID,
+			SurfaceTemplate: profile.SurfaceTemplate,
+			ModeRefs:        profile.ModeRefs,
+		},
+		Vars:             vars,
+		RootCount:        rootCount,
+		EffectiveAgents:  roster.Effective,
+		WebSearchEnabled: webSearchEnabled,
+		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
+		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
+		ExecutionMode:    transition.ExecutionMode,
+		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
+		WorkerToolBudget: e.workerToolBudget(ctx, sess),
+		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
-	for _, modeRef := range profile.ModeRefs {
-		ref := surface.ModeTemplateRef(modeRef)
-		chunk, err := pe.Render(ctx, ref, surfaceVars)
-		if err != nil {
-			return "", profile, transition, fmt.Errorf("render %q: %w", ref, err)
-		}
-		if trimmed := strings.TrimSpace(chunk); trimmed != "" {
-			parts = append(parts, trimmed)
-		}
+	rendered, err := renderStandingPrompt(ctx, pe, in)
+	if err != nil {
+		return "", profile, transition, err
 	}
-	if profile.SurfaceTemplate != "" {
-		chunk, err := pe.Render(ctx, profile.SurfaceTemplate, surfaceVars)
-		if err != nil {
-			return "", profile, transition, fmt.Errorf("render %q: %w", profile.SurfaceTemplate, err)
-		}
-		if trimmed := strings.TrimSpace(chunk); trimmed != "" {
-			parts = append(parts, trimmed)
-		}
-	}
-	return strings.Join(parts, "\n\n"), profile, transition, nil
+	return rendered, profile, transition, nil
 }
 
 func copyPromptVarsSorted(dst, src map[string]any) {
@@ -232,42 +177,14 @@ func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Ses
 	return e.deps.ImplementSessionState(ctx, sess)
 }
 
-func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, projectDir, posture, settingsHash, roots, promptRevision string) string {
-	modeKey := strings.Join(profile.ModeRefs, "+")
-	return strings.Join([]string{
-		strings.TrimSpace(templateRef),
-		strings.TrimSpace(agentType),
-		strings.TrimSpace(projectDir),
-		strings.TrimSpace(posture),
-		profile.SurfaceID,
-		modeKey,
-		settingsHash,
-		"prompts=" + strings.TrimSpace(promptRevision),
-		"roots=" + roots,
-	}, "|")
-}
-
-// rootsFingerprint keys the stable prompt by every root label and path it
-// renders, the scratch path, and command environment facts, so any change
-// re-renders it.
-func rootsFingerprint(vars map[string]any) string {
-	count, _ := vars["root_count"].(int)
-	out := []string{fmt.Sprint(count)}
-	if rows, ok := vars["workspace_roots"].([]map[string]any); ok {
-		for _, row := range rows {
-			out = append(out, fmt.Sprintf("%v=%v:%v", row["label"], row["path"], row["is_primary"]))
-		}
+func rootCountFromVars(vars map[string]any) int {
+	if vars == nil {
+		return 0
 	}
-	if scratch, ok := vars["session_scratch_dir"].(string); ok {
-		out = append(out, "scratch="+scratch)
+	if v, ok := vars["root_count"].(int); ok {
+		return v
 	}
-	if reviews, ok := vars["reviews_confined_writes"].(bool); ok {
-		out = append(out, fmt.Sprintf("reviews_confined_writes=%t", reviews))
-	}
-	if hidden, ok := vars["command_external_hidden"].(bool); ok {
-		out = append(out, fmt.Sprintf("command_external_hidden=%t", hidden))
-	}
-	return strings.Join(out, ";")
+	return 0
 }
 
 // loadedTools returns the turn ledger's loaded set for the session.
@@ -278,7 +195,10 @@ func (e *promptSurface) loadedTools(sess *api.Session) map[string]bool {
 	return e.deps.LoadedTools(sess.ID)
 }
 
-func loadedFingerprint(loaded map[string]bool) string {
+func sortedLoadedSet(loaded map[string]bool) []string {
+	if len(loaded) == 0 {
+		return nil
+	}
 	names := make([]string, 0, len(loaded))
 	for name, on := range loaded {
 		if on {
@@ -286,5 +206,5 @@ func loadedFingerprint(loaded map[string]bool) string {
 		}
 	}
 	sort.Strings(names)
-	return strings.Join(names, ",")
+	return names
 }

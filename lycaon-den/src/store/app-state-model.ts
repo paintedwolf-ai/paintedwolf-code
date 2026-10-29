@@ -279,6 +279,7 @@ export type AppStoreActions = {
   bumpProjectTrustRevision: () => void;
   setCoordinatorRunContext: (sessionId: string, epoch: number, ctx?: CoordinatorRunContext) => void;
   setSessionTitle: (sessionId: string, title: string) => void;
+  markSessionArchived: (sessionId: string, archived: boolean) => void;
   mergeSession: (event: SessionStatePatch) => void;
   updateWorker: (event: WorkerEvent) => void;
   addCodeScan: (event: CodeScanEvent) => void;

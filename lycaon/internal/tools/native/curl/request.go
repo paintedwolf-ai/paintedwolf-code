@@ -140,7 +140,7 @@ func (inv *invocation) readFile(operand string) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(data)) > maximum {
-		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(data))}}
+		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(data))}}
 	}
 	return data, nil
 }

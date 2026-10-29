@@ -23,6 +23,8 @@ func TestScenarioCompactsBetweenCompletedPrompts(t *testing.T) {
 					t.Error("missing fixture authorization")
 				}
 				switch {
+				case r.URL.Path == "/v1/events":
+					serveIdleEvents(w, r)
 				case strings.HasSuffix(r.URL.Path, "/compact"):
 					actions = append(actions, "compact")
 					if r.Method != http.MethodPost {

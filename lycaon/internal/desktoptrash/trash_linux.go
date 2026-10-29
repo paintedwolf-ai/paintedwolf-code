@@ -36,7 +36,7 @@ func platformMove(path string) (Receipt, error) {
 	}
 	name := uuid.NewString()
 	infoPath := filepath.Join(metadata, name+".trashinfo")
-	info, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	info, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) // #nosec G703 -- UUID name under the checked private trash directory.
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -45,10 +45,10 @@ func platformMove(path string) (Receipt, error) {
 		writeErr = fssync.File(info)
 	}
 	if err := errors.Join(writeErr, info.Close()); err != nil {
-		_ = os.Remove(infoPath)
+		_ = os.Remove(infoPath) // #nosec G703 -- Removes only the UUID metadata file created above.
 		return Receipt{}, err
 	}
-	directory, err := os.Open(metadata)
+	directory, err := os.Open(metadata) // #nosec G703 -- metadata was checked as a private directory above.
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -57,14 +57,18 @@ func platformMove(path string) (Receipt, error) {
 		return Receipt{}, syncErr
 	}
 	receipt := Receipt{Path: filepath.Join(files, name), Metadata: infoPath}
-	err = fseffect.RelocateGuarded(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: files, Rel: name}, identity)
+	err = relocateLinuxEntry(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: files, Rel: name}, identity)
 	if err != nil {
-		if _, statErr := os.Lstat(path); statErr == nil {
-			_ = os.Remove(infoPath)
+		if _, statErr := os.Lstat(path); statErr == nil { // #nosec G703 -- This checks the caller's selected source after a guarded move failed.
+			_ = os.Remove(infoPath) // #nosec G703 -- Removes only the UUID metadata file created above.
 		}
 		return receipt, err
 	}
 	return receipt, nil
+}
+
+func restoreEntry(receipt Receipt, destination fseffect.Location) error {
+	return relocateLinuxEntry(fseffect.Location{Root: filepath.Dir(receipt.Path), Rel: filepath.Base(receipt.Path)}, destination, receipt.Identity)
 }
 
 // File managers decode the recorded path as a URL, so every byte outside the
@@ -77,7 +81,7 @@ func encodeTrashPath(path string) string {
 	return strings.Join(segments, "/")
 }
 
-// Trash stays on the selected volume; crossing devices must never turn deletion into a copy.
+// Trash stays on the selected mount; crossing mounts must never turn deletion into a copy.
 func linuxTrashFor(path string) (string, string, error) {
 	home, err := resolveLinuxTrashDir()
 	if err != nil {
@@ -86,33 +90,60 @@ func linuxTrashFor(path string) (string, string, error) {
 	if err := os.MkdirAll(filepath.Dir(home), 0700); err != nil {
 		return "", "", err
 	}
-	same, err := fspath.SameFilesystem(path, filepath.Dir(home))
+	entryDir, err := resolveMountDir(filepath.Dir(path))
+	if err != nil {
+		return "", "", err
+	}
+	homeDir, err := resolveMountDir(filepath.Dir(home))
+	if err != nil {
+		return "", "", err
+	}
+	same, err := sameMount(entryDir, homeDir)
 	if err != nil {
 		return "", "", err
 	}
 	if same {
 		return home, path, nil
 	}
-	top, err := volumeTop(path)
+	resolvedPath := filepath.Join(entryDir, filepath.Base(path))
+	top, err := volumeTop(resolvedPath)
 	if err != nil {
 		return "", "", err
 	}
-	relative, err := filepath.Rel(top, path)
+	relative, err := filepath.Rel(top, resolvedPath)
 	if err != nil {
 		return "", "", err
 	}
 	return volumeTrashDir(top), relative, nil
 }
 
-// volumeTop walks up to the highest directory on the entry's filesystem.
+// volumeTop resolves the enclosing mount point from /proc/self/mountinfo
+// matched by STATX_MNT_ID, matching GIO/GVFS and KIO mount discovery.
 func volumeTop(path string) (string, error) {
-	top := filepath.Dir(path)
+	dir, err := resolveMountDir(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	mntID, ok, err := statxMountID(dir)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		if top, found := mountPointFromProc(mntID, dir); found {
+			return top, nil
+		}
+	}
+	return volumeTopWalk(dir)
+}
+
+func volumeTopWalk(dir string) (string, error) {
+	top := dir
 	for {
 		parent := filepath.Dir(top)
 		if parent == top {
 			return top, nil
 		}
-		same, err := fspath.SameFilesystem(top, parent)
+		same, err := sameMount(top, parent)
 		if err != nil {
 			return "", err
 		}
@@ -129,7 +160,7 @@ func volumeTop(path string) (string, error) {
 func volumeTrashDir(top string) string {
 	uid := os.Getuid()
 	shared := filepath.Join(top, ".Trash")
-	info, err := os.Lstat(shared)
+	info, err := os.Lstat(shared) // #nosec G703 -- shared is the fixed .Trash name at the resolved mount root.
 	if err == nil && info.IsDir() && info.Mode()&os.ModeSticky != 0 {
 		perUser := filepath.Join(shared, fmt.Sprint(uid))
 		if privateTrashDirectory(perUser) == nil {
@@ -144,11 +175,11 @@ func privateTrashDirectory(path string) error {
 	if uid < 0 || uid > math.MaxUint32 {
 		return fmt.Errorf("unsafe trash directory: %s", path)
 	}
-	mkdirErr := os.Mkdir(path, 0700)
+	mkdirErr := os.Mkdir(path, 0700) // #nosec G703 -- path is the selected home or mount Trash directory, created private.
 	if mkdirErr != nil && !os.IsExist(mkdirErr) {
 		return mkdirErr
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Lstat(path) // #nosec G703 -- Check ownership and mode of that exact directory without following its final link.
 	if err != nil {
 		return err
 	}
@@ -157,7 +188,7 @@ func privateTrashDirectory(path string) error {
 		return fmt.Errorf("unsafe trash directory: %s", path)
 	}
 	if mkdirErr == nil {
-		parent, err := os.Open(filepath.Dir(path))
+		parent, err := os.Open(filepath.Dir(path)) // #nosec G703 -- Sync the parent of the private directory just created.
 		if err != nil {
 			return err
 		}

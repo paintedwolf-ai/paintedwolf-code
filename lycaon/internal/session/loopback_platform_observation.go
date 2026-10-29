@@ -11,18 +11,22 @@ import (
 	"github.com/lycaon/lycaon/internal/lineage"
 )
 
-// ObserveSessionListener supplies current complete native holder evidence to
-// mediated connection admission. The returned identity grants no authority;
-// partial visibility retains ordinary approval rather than cached provenance.
+type nativeListenerObserver func(context.Context, string, netip.AddrPort) (string, bool, error)
+
+// ObserveSessionListener checks all port holders before using exact native or
+// recorded-container evidence for the requested endpoint.
 func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, sessionID string, endpoint netip.AddrPort) (string, bool, error) {
 	if p == nil {
 		return "", false, lineage.ErrObservationIncomplete
 	}
-	if p.listeners == nil {
-		return lineage.ObserveSessionListener(ctx, sessionID, endpoint)
-	}
 	if sessionID == "" || !endpoint.IsValid() || endpoint.Port() == 0 || !endpoint.Addr().Unmap().IsLoopback() {
 		return "", false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
+	if p.listeners == nil {
+		return "", false, lineage.ErrObservationIncomplete
 	}
 	current, err := p.listeners(ctx)
 	if err != nil {
@@ -48,6 +52,12 @@ func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, 
 		}
 		if len(endpointPIDs) == 0 {
 			return "", false, nil
+		}
+		if evidence.Method == ProvenanceLineage {
+			if p.observeNative == nil {
+				return "", false, lineage.ErrObservationIncomplete
+			}
+			return p.observeNative(ctx, sessionID, canonicalEndpoint)
 		}
 		return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, canonicalEndpoint, joinSortedPIDs(endpointPIDs)), true, nil
 	}

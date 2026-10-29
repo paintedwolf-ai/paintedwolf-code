@@ -140,5 +140,22 @@ pub fn read(input: &mut impl BufRead, previous: u64) -> io::Result<Option<Frame>
 }
 #[cfg(target_os = "linux")]
 pub mod process;
+
+/// Hardens the observer however it was started: no privilege gain through exec,
+/// and no descriptor beyond the standard streams, including the image descriptor
+/// a launcher executed it from.
+#[cfg(target_os = "linux")]
+pub fn harden() -> io::Result<()> {
+    // SAFETY: both calls take integer arguments and touch no memory.
+    unsafe {
+        if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests;

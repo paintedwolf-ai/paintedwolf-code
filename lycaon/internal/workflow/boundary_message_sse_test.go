@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -59,7 +58,6 @@ func TestStartBoundaryMessagesPublishMessageSSE(t *testing.T) {
 	}
 
 	var appendCount int
-	deadline := time.After(2 * time.Second)
 	for appendCount < 2 {
 		select {
 		case env, ok := <-ch:
@@ -80,7 +78,7 @@ func TestStartBoundaryMessagesPublishMessageSSE(t *testing.T) {
 				t.Fatalf("boundary SSE ord = %d want > 0 (stamped copy must ride PublishMessageAppend)", ev.Message.Ord)
 			}
 			appendCount++
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for boundary message SSE; got %d appends", appendCount)
 		}
 	}
