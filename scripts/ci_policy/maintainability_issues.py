@@ -20,6 +20,7 @@ def eligible(run, repo):
             and run.get('path') == '.github/workflows/qualification.yml'
             and run.get('event') == 'push' and run.get('head_branch') == 'main'
             and run.get('status') == 'completed' and isinstance(run.get('head_sha'), str)
+            and run.get('conclusion') in {'success', 'failure'}
             and SHA.fullmatch(run['head_sha']) is not None)
 
 

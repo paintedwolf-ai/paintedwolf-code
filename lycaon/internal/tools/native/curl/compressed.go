@@ -49,7 +49,7 @@ func decodeContent(headers []outboundhttp.Header, body []byte, maximum int64) ([
 			return nil, &curlFailure{code: 61, message: "Error while processing content unencoding: " + err.Error(), certainty: toolcontract.EffectCompleted, cause: err}
 		}
 		if int64(len(decoded)) > maximum {
-			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(decoded))}}
+			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(decoded))}}
 		}
 		body = decoded
 	}
