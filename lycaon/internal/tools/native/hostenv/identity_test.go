@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostos"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestIdentityAndSystemUtilities(t *testing.T) {
