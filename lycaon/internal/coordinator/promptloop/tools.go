@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -456,17 +455,7 @@ func (l *toolInvocations) settleInvocation(
 }
 
 func invocationIsolationOf(run toolInvocation) *api.InvocationIsolation {
-	if run.failure != nil {
-		if outcome, ok := isolation.Lookup(strings.TrimSpace(run.failure.Code)); ok {
-			return &api.InvocationIsolation{Code: outcome.Code, Disposition: string(outcome.Disposition)}
-		}
-	}
-	for _, code := range run.facts.Codes {
-		if outcome, ok := isolation.Lookup(strings.TrimSpace(code)); ok {
-			return &api.InvocationIsolation{Code: outcome.Code, Disposition: string(outcome.Disposition)}
-		}
-	}
-	return nil
+	return invocation.SettlementIsolation(run.failure, run.facts.Codes)
 }
 
 // recordSourceRunEvidence appends the subsystem owner's run to session evidence.
