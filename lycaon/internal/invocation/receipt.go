@@ -15,7 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -219,47 +218,6 @@ func (r *SQLRecorder) writeSettlement(ctx context.Context, id string, in Settlem
 		return nil, fmt.Errorf("settle invocation receipt: commit: %w", err)
 	}
 	return receipt, nil
-}
-
-func validateIsolationSettlement(in Settlement) error {
-	var boundaryOutcome isolation.Outcome
-	hasBoundary := in.Isolation != nil
-	if in.Isolation != nil {
-		outcome, ok := isolation.Lookup(strings.TrimSpace(in.Isolation.Code))
-		if !ok || string(outcome.Disposition) != strings.TrimSpace(in.Isolation.Disposition) {
-			return fmt.Errorf("isolation settlement has unregistered code/disposition: code=%q disposition=%q", in.Isolation.Code, in.Isolation.Disposition)
-		}
-		boundaryOutcome = outcome
-	}
-	if in.Failure == nil {
-		if hasBoundary && boundaryOutcome.Disposition != isolation.DispositionRetry {
-			return fmt.Errorf("terminal isolation outcome %q requires its rejection failure", boundaryOutcome.Code)
-		}
-		return nil
-	}
-	outcome, registered := isolation.Lookup(strings.TrimSpace(in.Failure.Code))
-	isolationClass := in.Failure.Class == api.FailureClassIsolationRejection
-	if registered != isolationClass {
-		return fmt.Errorf("isolation settlement code/class mismatch: code=%q class=%q", in.Failure.Code, in.Failure.Class)
-	}
-	if !registered {
-		if hasBoundary && boundaryOutcome.Disposition != isolation.DispositionRetry {
-			return fmt.Errorf("terminal isolation outcome %q requires its rejection failure", boundaryOutcome.Code)
-		}
-		return nil
-	}
-	if in.Isolation == nil || in.Isolation.Code != outcome.Code {
-		return fmt.Errorf("isolation failure %q is not bound to its receipt outcome", in.Failure.Code)
-	}
-	if in.Failure.Retryable != outcome.Retryable() {
-		return fmt.Errorf("isolation settlement retryability mismatch for %q", in.Failure.Code)
-	}
-	// Invoked stays the owner's fact: a review the owner raises at its effect
-	// seam stops an operation that already ran.
-	if outcome.Disposition != isolation.DispositionRetry && in.Status != api.InvocationStatusRejected {
-		return fmt.Errorf("terminal isolation outcome %q requires a rejected receipt", outcome.Code)
-	}
-	return nil
 }
 
 // ListSession returns receipts in invocation order.

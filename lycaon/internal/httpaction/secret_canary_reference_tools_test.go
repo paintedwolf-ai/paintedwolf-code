@@ -226,7 +226,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
 					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
 				}
-				if got := waitReceived(call.received); got != canaryValue {
+				if got := waitReceived(t, call.received); got != canaryValue {
 					t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
 				}
 				assertNoCanary(t, tool, call.scheme, out)
@@ -265,12 +265,14 @@ func openCanaryShell(t *testing.T, executor *toolexecution.Executor, root string
 }
 
 // waitReceived lets a pty-driven consumer finish writing what it saw.
-func waitReceived(received func() string) string {
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if got := received(); got == canaryValue || time.Now().After(deadline) {
+func waitReceived(t *testing.T, received func() string) string {
+	t.Helper()
+	var got string
+	for t.Context().Err() == nil {
+		if got = received(); got == canaryValue {
 			return got
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	return got
 }

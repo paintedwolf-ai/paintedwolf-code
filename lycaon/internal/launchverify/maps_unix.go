@@ -4,6 +4,7 @@ package launchverify
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"syscall"
 )
@@ -15,9 +16,13 @@ func lstatFacts(path string) (fileFacts, error) {
 	if err != nil {
 		return fileFacts{}, err
 	}
+	return factsOf(info)
+}
+
+func factsOf(info fs.FileInfo) (fileFacts, error) {
 	sys, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return fileFacts{}, errors.New("no ownership facts")
 	}
-	return fileFacts{inode: uint64(sys.Ino), uid: sys.Uid, mode: info.Mode()}, nil //nolint:unconvert // Ino is narrower on some platforms.
+	return fileFacts{device: uint64(sys.Dev), inode: uint64(sys.Ino), uid: sys.Uid, mode: info.Mode()}, nil //nolint:unconvert // Ino is narrower on some platforms.
 }

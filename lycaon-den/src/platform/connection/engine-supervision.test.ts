@@ -16,6 +16,12 @@ describe("engine supervision state", () => {
       .toEqual({ state: "stopped", exit, failure: "another engine is already serving this store" });
   });
 
+  it("preserves the native restart requirement", () => {
+    expect(parseEngineState({ state: "stopped", exit, restart_required: true }))
+      .toEqual({ state: "stopped", exit, restart_required: true });
+    expect(parseEngineState({ state: "stopped", exit, restart_required: "yes" })).toBeNull();
+  });
+
   it("refuses shapes the shell does not publish", () => {
     for (const value of [
       null,
