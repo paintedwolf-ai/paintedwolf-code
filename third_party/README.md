@@ -317,3 +317,56 @@ inspection and test files; regenerate it against the verified subset whenever
 owned files change. Review the pin, `lycaon/go.mod` replacement and this record
 together, then run `./task test:digest -- github.com/benhoyt/goawk/interp
 github.com/benhoyt/goawk/parser ./internal/tools/native/textutil/`.
+
+## jq engine
+
+`gojq/` contains the library source of `github.com/itchyny/gojq` v0.12.19,
+the engine behind the structured `jq` and `jq_edit` tools and the `jq`
+command. Upstream module checksum:
+`h1:ttXA0XCLEMoaLOz5lSeFOZ6u6Q3QxmG46vfgI4O0DEs=`; module metadata checksum:
+`h1:5galtVPDywX8SPSOrqjGxkBeDhSxEW1gSxoy7tn1iZY=`. The upstream license
+remains in the module directory. The snapshot omits the command-line
+packages (`cli/`, `cmd/`), `_gojq`, `_tools`, the Docker and Make files,
+`go.dev.mod`/`go.dev.sum`, hidden files, and the upstream tests that build
+query inputs from Go maps (`compare`, `compiler`, `encoder`, `option`,
+`option_module_loader`, `preview`, `query` and `type` tests); the remaining
+upstream tests run unchanged. `go.mod` lists only the library's dependency.
+
+Upstream gojq sorts object keys, normalizes numbers and words errors its own
+way. The command language promises jq's results, so
+[gojq.patch](gojq.patch) makes the library behave as jq 1.8 does:
+
+- Objects are `*OrderedObject` values that keep insertion order. Parsing,
+  construction, `+`, `*`, assignment and `to_entries` follow it; `keys`,
+  comparison, `unique` and `-S` output still order keys by codepoint.
+  `keys_unsorted` is added. `FromGo` and `ToGo` convert Go JSON values at the
+  host boundary (sorted keys for Go maps, whose order is unstated).
+- `Decoder` reads JSON input keeping key order and each number's literal in
+  decNumber's canonical form, so an unmodified `2.0` prints as `2.0` and `1e3`
+  as `1E+3`. Program literals whose text is not their integer's stay literals
+  too. Arithmetic is jq's double arithmetic: integer results past 2^53 and
+  large literals become doubles, and doubles print in jq's shortest form
+  (`1e-05`, `1e+17`, `12345678901234567000`).
+- Runtime error messages use jq's wording and its 11-byte value previews
+  (`Cannot index number with string "a"`, `Cannot iterate over null (null)`,
+  `number (1) and string ("a") cannot be added`). Indexing a string with a
+  number is an error, as in jq.
+- `MarshalWith` adds jq's output options: pretty layout with any indent
+  (including `--indent 0`), `--sort-keys` and `--ascii-output`.
+
+The host adds `debug`, `stderr`, `input_filename` and `input_line_number`
+through `gojq.WithFunction` and never configures a module or file loader.
+Neither `gojq` nor `github.com/mikefarah/yq/v4/pkg/yqlib` exposes a VM
+instruction/step counter hook (`gojq` checks `ctx.Done()` at the top of each
+bytecode instruction in `execute.go`), so the host meters host-observable input
+and output value transitions against `query_work_steps` and bounds internal VM
+evaluation within a single value with the `query_cpu_ms` context deadline.
+
+To update this copy, verify the release against the module checksum, extract
+the same library subset into a clean directory and apply `gojq.patch` with
+`patch -p1`; regenerate the patch against that subset whenever owned files
+change. Review the pin, the `lycaon/go.mod` replacement and this record
+together, then run `./task test:digest -- github.com/itchyny/gojq
+./internal/tools/native/jq/ ./internal/tools/native/query/`. The query
+package's jq goldens were recorded from jq 1.8.1 and its differential test
+re-runs them through any installed jq.

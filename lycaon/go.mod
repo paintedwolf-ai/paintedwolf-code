@@ -328,6 +328,9 @@ replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
 // Bounded awk execution; provenance and patch in third_party/README.md.
 replace github.com/benhoyt/goawk => ../third_party/goawk
 
+// jq key order, number literals and error text; provenance and patch in third_party/README.md.
+replace github.com/itchyny/gojq => ../third_party/gojq
+
 replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
 replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2
