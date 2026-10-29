@@ -235,6 +235,9 @@ func TestReleasePublicationCollectsEveryCurrentPublicPackage(t *testing.T) {
 		contractcheck.FailErr(t, "write public audit", os.WriteFile(filepath.Join(input, "opengrep", stem+".json"), audit, 0o644))
 		expected[stem+".opengrep.json"] = audit
 	}
+	if len(expected) == 0 {
+		t.Fatal("current public catalog produced no release objects to verify")
+	}
 	command := func(destination string) ([]byte, error) {
 		return exec.Command("python3", filepath.Join(root, "scripts/release-collect-public-artifacts.py"), "--catalog", filepath.Join(root, "packaging/release-platforms.json"), "--input", input, "--output", destination, "--version", "1.2.3").CombinedOutput()
 	}
