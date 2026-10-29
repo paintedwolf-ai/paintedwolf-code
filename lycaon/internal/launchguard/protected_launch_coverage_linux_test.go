@@ -11,6 +11,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -103,6 +104,71 @@ var fixtureCoverageCollector = fixturecoverage.New(fixtureCoverageDirectoryHex, 
 var fixtureExecWithCoverage = fixtureCoverageCollector.Exec
 var fixtureSendWithCoverage = fixtureCoverageCollector.Send
 `
+
+func launchCoverageTool(t *testing.T, overlay string) string {
+	t.Helper()
+	working, err := os.Getwd()
+	testutil.FailErr(t, "locate fixture cover adapter", err)
+	paths := []string{filepath.Join(working, "testdata", "fixturecoverage", "cover_exec.py"), overlay}
+	for index, path := range paths {
+		// Go's toolexec grammar accepts quotes but performs no unescaping.
+		if strings.Contains(path, `"`) {
+			if strings.Contains(path, "'") {
+				t.Fatal("fixture cover adapter path contains both quote forms")
+			}
+			paths[index] = "'" + path + "'"
+		} else {
+			paths[index] = `"` + path + `"`
+		}
+	}
+	return "-toolexec=python3 " + strings.Join(paths, " ")
+}
+
+func TestProtectedLaunchCoverageOverlayReachesExecutableCalls(t *testing.T) {
+	build, directory := t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "create regression collector", os.Mkdir(filepath.Join(directory, "coverage"), 0o700))
+	overlay, linked := launchCoverageOverlay(t, build, directory)
+	raw, err := os.ReadFile(overlay)
+	testutil.FailErr(t, "read regression overlay", err)
+	var config struct{ Replace map[string]string }
+	testutil.FailErr(t, "decode regression overlay", json.Unmarshal(raw, &config))
+	working, err := os.Getwd()
+	testutil.FailErr(t, "locate actual bootstrap main", err)
+	original := filepath.Clean(filepath.Join(working, "..", "..", "cmd", "pw-launch", "main_linux.go"))
+	source, err := os.ReadFile(original)
+	testutil.FailErr(t, "read actual bootstrap main", err)
+	const call = "os.Exit(run(os.Args, os.Stderr))"
+	if strings.Count(string(source), call) != 1 {
+		t.Fatal("covered overlay regression no longer names one actual executable call")
+	}
+	backing := filepath.Join(build, "main_linux.go")
+	testutil.FailErr(t, "write regression main", os.WriteFile(backing, []byte(strings.Replace(string(source), call, "os.Exit(23)", 1)), 0o600))
+	config.Replace[original] = backing
+	raw, err = json.Marshal(config)
+	testutil.FailErr(t, "encode regression overlay", err)
+	testutil.FailErr(t, "retain regression overlay", os.WriteFile(overlay, raw, 0o600))
+	binary := filepath.Join(build, "pw-launch")
+	goBuild(t, binary, "github.com/lycaon/lycaon/cmd/pw-launch", linked,
+		"-cover", "-covermode=atomic", "-coverpkg=github.com/lycaon/lycaon/internal/launchguard,github.com/lycaon/lycaon/cmd/pw-launch",
+		"-overlay="+overlay, launchCoverageTool(t, overlay))
+	output, err := exec.Command(binary).CombinedOutput()
+	status, ok := err.(*exec.ExitError)
+	if !ok || status.ExitCode() != 23 || len(output) != 0 {
+		t.Fatalf("covered real executable did not use overlay: error=%v output=%q", err, output)
+	}
+	metadata, err := filepath.Glob(filepath.Join(directory, "coverage", "covmeta.*"))
+	testutil.FailErr(t, "locate real regression metadata", err)
+	if len(metadata) == 0 {
+		t.Fatal("covered real executable emitted no metadata")
+	}
+	for _, path := range metadata {
+		raw, err := os.ReadFile(path)
+		testutil.FailErr(t, "read real regression metadata", err)
+		if strings.Contains(string(raw), "fixture_coverage_linux.go") || strings.Contains(string(raw), "/testdata/fixturecoverage") {
+			t.Fatal("fixture-only instrumentation acquired production coverage metadata")
+		}
+	}
+}
 
 func prepareLaunchCoverage(directory, uidText, gidText string) error {
 	uid, err := strconv.ParseUint(uidText, 10, 32)
