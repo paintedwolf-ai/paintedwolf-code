@@ -108,12 +108,14 @@ class ManualDriverTests(unittest.TestCase):
         driver.client.abort.assert_not_called()
         self.assertEqual(calls[-2].args, ("/harness/llm/auto", {"enabled": True}))
 
-    def test_unoffered_tool_is_not_dispatched_and_state_is_settled(self):
-        driver, _, _, output = self.fixture(offered=("request_tools",))
+    def test_unoffered_tool_is_submitted_for_the_host_to_reject(self):
+        driver, first, _, output = self.fixture(offered=("request_tools",))
         driver.invoke("command", {})
-        self.assertIn("not offered", output[0])
-        self.assertNotIn("tool_calls", driver.client.respond.call_args.kwargs)
-        driver.client.respond.assert_called_once()
+        submitted = driver.client.respond.call_args_list[0]
+        self.assertEqual(submitted.args, (first,))
+        self.assertEqual(submitted.kwargs["tool_calls"][0]["name"], "command")
+        self.assertEqual(driver.client.respond.call_count, 2)
+        self.assertTrue(output)
 
     def test_approval_wait_and_abort_are_session_scoped(self):
         driver, first, _, output = self.fixture()

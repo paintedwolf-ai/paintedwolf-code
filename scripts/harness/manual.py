@@ -93,11 +93,6 @@ class Driver:
                 "operation_id": str(uuid.uuid4()), "text": "Manually test the next assistant tool call.",
             })
             request = self.next_request()
-            if name not in request.get("tools", []):
-                self.output(f"{name} is not offered. Use :call request_tools followed by its JSON arguments, then retry.")
-                self.output("Offered: " + ", ".join(request.get("tools", [])))
-                self.client.respond(request, content="Manual test: no tool call supplied.")
-                return
             self.client.respond(request, tool_calls=[{"id": str(uuid.uuid4()), "name": name, "args": args}])
             reply = self.next_request()
             self.output(format_json(reply["messages"]))
