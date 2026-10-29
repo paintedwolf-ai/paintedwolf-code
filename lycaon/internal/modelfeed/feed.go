@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,7 @@ import (
 
 // Feed manages the process-wide model catalog document.
 type Feed struct {
-	mu        sync.RWMutex
-	refreshMu sync.Mutex
+	mu sync.RWMutex
 
 	url      string
 	cacheDir string
@@ -26,12 +26,21 @@ type Feed struct {
 
 	doc       *Document
 	fetchedAt time.Time
+	// inflight is the fetch concurrent refreshes join; mu guards it.
+	inflight *refreshFlight
 
 	getBytes func(ctx context.Context, url string) ([]byte, error)
 
 	now func() time.Time
 
 	listeners []func()
+}
+
+// refreshFlight is one fetch whose outcome every concurrent caller shares.
+type refreshFlight struct {
+	done chan struct{}
+	doc  *Document
+	err  error
 }
 
 // AddRefreshListener registers a hook for the feed lifetime.
@@ -154,10 +163,44 @@ func (f *Feed) Document(ctx context.Context) (*Document, error) {
 	return nil, err
 }
 
-// Refresh publishes the fetched document after writing it to disk.
+// Refresh publishes the fetched document after writing it to disk. A caller
+// that arrives while a fetch is running shares its outcome instead of queuing
+// a second fetch, and leaves with its own context's error when that ends first.
 func (f *Feed) Refresh(ctx context.Context) (*Document, error) {
-	f.refreshMu.Lock()
-	defer f.refreshMu.Unlock()
+	for {
+		flight, owner := f.joinRefresh()
+		if owner {
+			flight.doc, flight.err = f.fetch(ctx)
+			f.mu.Lock()
+			f.inflight = nil
+			f.mu.Unlock()
+			close(flight.done)
+			return flight.doc, flight.err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-flight.done:
+		}
+		// The owner giving up says nothing about this caller's request.
+		if errors.Is(flight.err, context.Canceled) {
+			continue
+		}
+		return flight.doc, flight.err
+	}
+}
+
+func (f *Feed) joinRefresh() (flight *refreshFlight, owner bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.inflight != nil {
+		return f.inflight, false
+	}
+	f.inflight = &refreshFlight{done: make(chan struct{})}
+	return f.inflight, true
+}
+
+func (f *Feed) fetch(ctx context.Context) (*Document, error) {
 	raw, err := f.getBytes(ctx, f.url)
 	if err != nil {
 		return nil, fmt.Errorf("modelfeed: refresh: %w", err)

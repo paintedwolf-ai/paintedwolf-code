@@ -4,7 +4,7 @@
   "kind": "test_suite",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. One live test file adds the delegated-service refusal through a real confined process, beside the shared probe and greeter fixtures it uses. Freeze this reviewed shape at 67 files; further growth requires renewed architectural review.",
+  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. One live test file adds the delegated-service refusal through a real confined process, beside the shared probe and greeter fixtures it uses. Freeze this reviewed shape at 67 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available.",
   "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
   "ceiling": 67,
   "boundaries": {
@@ -16,7 +16,9 @@
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
     "lycaon/internal/confine/socket_reference_darwin_test.go": "f2e56004fff513c948a301181581a0e9dab358b81dba985cfe307d75d326c6ce",
     "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
-    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b"
+    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
   },
   "reviewed_shape": "ed6768204ff8ea4ed55849713565f9c38ecb0ca559612584a9a0e9847564cb82"
 }
