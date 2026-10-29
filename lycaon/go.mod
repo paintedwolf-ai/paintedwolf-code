@@ -23,6 +23,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/vt v0.1.0
 	github.com/creack/pty v1.1.24
+	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
 	github.com/fatih/semgroup v1.3.0
 	github.com/flosch/pongo2/v6 v6.1.0
 	github.com/fsnotify/fsevents v0.2.0
@@ -151,7 +152,6 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dsoprea/go-exfat v0.0.0-20190906070738-5e932fbdb589 // indirect
 	github.com/dsoprea/go-logging v0.0.0-20200710184922-b02d349568dd // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
