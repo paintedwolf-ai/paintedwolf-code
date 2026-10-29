@@ -12,19 +12,20 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-type harnessPendingMessage struct {
-	Role      string          `json:"role"`
-	Content   string          `json:"content"`
-	ToolCalls []wire.ToolCall `json:"tool_calls,omitempty"`
+type harnessPendingTool struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Schema      map[string]any `json:"schema"`
 }
 
 type harnessPendingDTO struct {
-	Pending   bool                    `json:"pending"`
-	ID        string                  `json:"id,omitempty"`
-	SessionID string                  `json:"session_id,omitempty"`
-	Model     string                  `json:"model,omitempty"`
-	Tools     []string                `json:"tools,omitempty"`
-	Messages  []harnessPendingMessage `json:"messages,omitempty"`
+	Pending     bool                 `json:"pending"`
+	ID          string               `json:"id,omitempty"`
+	SessionID   string               `json:"session_id,omitempty"`
+	Model       string               `json:"model,omitempty"`
+	Tools       []string             `json:"tools,omitempty"`
+	Messages    []wire.Message       `json:"messages,omitempty"`
+	ToolSchemas []harnessPendingTool `json:"tool_schemas,omitempty"`
 }
 
 func (s *HarnessControl) handleHarnessLLMPending(w http.ResponseWriter, r *http.Request) {
@@ -42,14 +43,9 @@ func (s *HarnessControl) handleHarnessLLMPending(w http.ResponseWriter, r *http.
 	dto := harnessPendingDTO{Pending: true, ID: pend.ID, SessionID: pend.SessionID, Model: pend.Model}
 	for _, t := range pend.Tools {
 		dto.Tools = append(dto.Tools, t.Name)
+		dto.ToolSchemas = append(dto.ToolSchemas, harnessPendingTool{Name: t.Name, Description: t.Description, Schema: t.ArgsSchema})
 	}
-	for _, m := range pend.Messages {
-		dto.Messages = append(dto.Messages, harnessPendingMessage{
-			Role:      string(m.Role),
-			Content:   m.Content,
-			ToolCalls: m.ToolCalls,
-		})
-	}
+	dto.Messages = pend.Messages
 	httpio.WriteJSON(w, http.StatusOK, dto)
 }
 
