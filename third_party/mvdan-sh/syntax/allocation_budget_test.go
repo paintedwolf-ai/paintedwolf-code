@@ -56,52 +56,6 @@ func TestClassifyBracesMatchesSelectedExpansionWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestSplitBracesBoundedReturnsDetachedSplitAndRefusesMixedRanges(t *testing.T) {
-	for _, fixture := range []struct {
-		word   string
-		braces int
-		err    error
-	}{
-		{"x{a,b}{1,2}", 2, nil}, {"{01..10..2}", 1, nil}, {"{a..z..0}", 1, nil},
-		{"x{a", 0, nil}, {`"{a,b}"`, 0, nil}, {"x{1..2..3..4}", 0, nil},
-		{"x{1..a}", 0, syntax.ErrBraceMixedRange}, {"{a,{b..2}}", 0, syntax.ErrBraceMixedRange},
-	} {
-		pool, err := syntax.NewAllocationBudget(scratchCeiling)
-		if err != nil {
-			t.Fatalf("create ledger: %v", err)
-		}
-		file, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader(": "+fixture.word), "fixture.pw")
-		if err != nil {
-			t.Fatalf("parse %q: %v", fixture.word, err)
-		}
-		word := file.Stmts[0].Cmd.(*syntax.CallExpr).Args[1]
-		original := len(word.Parts)
-		before := pool.UsedBytes()
-		split, err := syntax.SplitBracesBounded(word, pool)
-		if !errors.Is(err, fixture.err) || (fixture.err == nil && err != nil) {
-			t.Fatalf("split %q error = %v; want %v", fixture.word, err, fixture.err)
-		}
-		if len(word.Parts) != original {
-			t.Fatalf("split %q mutated the word", fixture.word)
-		}
-		if fixture.braces == 0 {
-			if split != nil {
-				t.Fatalf("split %q = %d parts; want no expansion", fixture.word, len(split.Parts))
-			}
-			continue
-		}
-		braces := 0
-		for _, part := range split.Parts {
-			if _, ok := part.(*syntax.BraceExp); ok {
-				braces++
-			}
-		}
-		if braces != fixture.braces || pool.UsedBytes() <= before {
-			t.Fatalf("split %q has %d brace parts; want %d charged", fixture.word, braces, fixture.braces)
-		}
-	}
-}
-
 func TestSharedLedgerRefusesBeforeAllocationAndRetainsUsage(t *testing.T) {
 	pool, err := syntax.NewAllocationBudget(160)
 	if err != nil {

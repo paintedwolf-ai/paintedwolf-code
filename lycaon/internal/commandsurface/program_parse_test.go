@@ -41,8 +41,6 @@ func TestVersionOneGrammarIsLoweredWithoutExecution(t *testing.T) {
 		"a=(one two); a+=(three); a[0]=first; printf '%s' \"${a[@]}\" \"${a[*]}\" \"${#a[@]}\" \"${a[0]}\" \"${a:1:2}\"",
 		"trap 'printf done' EXIT; trap - EXIT; trap -- 'printf done' 0",
 		"cat 3> ./output; cat 2>&3; cat >&2; cat 0<&3",
-		"mkdir -p ./src/{api,cli}; for i in {1..3}; do a=(x{a,b}); done",
-		"until test -f ./ready; do sleep 1; done; wc -c <<< \"$value\"; : ${PORT:=8080} ${HOST=localhost}",
 	}
 	for _, source := range cases {
 		t.Run(source, func(t *testing.T) {
@@ -76,9 +74,9 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 	cases := []string{
 		"printf changed > ./output; if false; then echo 'unterminated; fi",
 		"echo $((i++))", "echo $((x=1))", "echo $((a[i++]))", "echo ${a[i++]}", "a=([k]=one)",
-		"echo ${1:=fallback}", "echo ${!name}", "echo $-", "echo $$",
-		"echo {1..a}", "case x in x) true;& esac", "select x in a; do :; done",
-		"cat > ./out{a,b}", "cat 10> ./output", "cat 2>&10", "cat 1<> ./input",
+		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
+		"echo {one,two}", "case x in x) true;& esac", "until false; do :; done",
+		"cat <<< value", "cat 10> ./output", "cat 2>&10", "cat 1<> ./input",
 		"echo $'escaped'", "echo $\"localized\"", "[[ -S ./sock ]]", "for ((i=0;i<1;i++)); do :; done",
 	}
 	for _, source := range cases {
@@ -201,10 +199,10 @@ func TestHereDocumentExpansionAndRedirectOrderStayStructured(t *testing.T) {
 }
 
 func TestTestExpressionBracesAreDeferredPatternAndRegexData(t *testing.T) {
-	for _, source := range []string{`[[ aaa =~ a{1,3} ]]`, `[[ '{a,b}' == {a,b} ]]`, `[[ aaa =~ a{2} && "$name" != {x,y} ]]`, `[[ aaa =~ $(echo {a,b}) ]]`} {
+	for _, source := range []string{`[[ aaa =~ a{1,3} ]]`, `[[ '{a,b}' == {a,b} ]]`, `[[ aaa =~ a{2} && "$name" != {x,y} ]]`} {
 		parseProgram(t, source)
 	}
-	for _, source := range []string{`[[ ~fixtureUser == x ]]`, `[[ aaa =~ $(echo {1..a}) ]]`} {
+	for _, source := range []string{`echo {a,b}`, `[[ aaa =~ $(echo {a,b}) ]]`, `[[ ~fixtureUser == x ]]`} {
 		if plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{}); plan != nil || err == nil {
 			t.Fatalf("unsupported expansion admitted: %s", source)
 		}

@@ -26,11 +26,9 @@ var (
 //
 // It does not return an error; malformed brace expansions are simply skipped.
 // For example, the literal word "a{b" is left unchanged.
-func SplitBraces(word *Word) bool { return splitBraces(word, nil, nil) }
+func SplitBraces(word *Word) bool { return splitBraces(word, nil) }
 
-// splitBraces reports in mixed, when it is non-nil, a sequence left literal only
-// because one endpoint is an integer and the other a letter.
-func splitBraces(word *Word, budget *AllocationBudget, mixed *bool) bool {
+func splitBraces(word *Word, budget *AllocationBudget) bool {
 	if !slices.ContainsFunc(word.Parts, func(part WordPart) bool {
 		lit, ok := part.(*Lit)
 		return ok && strings.Contains(lit.Value, "{")
@@ -162,9 +160,6 @@ func splitBraces(word *Word, budget *AllocationBudget, mixed *bool) bool {
 				// are start and end both chars or
 				// non-chars?
 				if chars[0] != chars[1] {
-					if !broken && mixed != nil {
-						*mixed = true
-					}
 					broken = true
 				}
 				if !broken {

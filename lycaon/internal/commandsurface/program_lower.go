@@ -65,7 +65,7 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 	case *syntax.IfClause:
 		return c.conditional(v, loc)
 	case *syntax.WhileClause:
-		return WhileLoop{SyntaxLocation: loc, Condition: c.statements(v.Cond), Body: c.statements(v.Do), Until: v.Until}
+		return WhileLoop{SyntaxLocation: loc, Condition: c.statements(v.Cond), Body: c.statements(v.Do)}
 	case *syntax.ForClause:
 		iter := v.Loop.(*syntax.WordIter)
 		return ForLoop{SyntaxLocation: loc, Variable: strings.Clone(iter.Name.Value), Positional: !iter.InPos.IsValid(), Items: c.words(iter.Items), Body: c.statements(v.Do)}
@@ -139,17 +139,7 @@ func (c *programCompiler) word(w *syntax.Word) DeferredWord {
 	if w == nil {
 		return DeferredWord{}
 	}
-	loc := c.location(w)
-	split := c.braces.split[w]
-	if split == nil {
-		return DeferredWord{SyntaxLocation: loc, Parts: c.parts(w.Parts)}
-	}
-	// Split literals keep their whole original literal's offsets, so every
-	// node of a brace word carries the word's span.
-	prev := c.spanOverride
-	c.spanOverride = &loc.Span
-	defer func() { c.spanOverride = prev }()
-	return DeferredWord{SyntaxLocation: loc, Parts: c.parts(nonEmptyParts(split.Parts))}
+	return DeferredWord{SyntaxLocation: c.location(w), Parts: c.parts(w.Parts)}
 }
 func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 	out := make([]WordNode, 0, len(parts))
@@ -170,8 +160,6 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Backquotes: p.Backquotes, Statements: c.statements(p.Stmts)})
 		case *syntax.ProcSubst:
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Operator: p.Op.String(), Statements: c.statements(p.Stmts)})
-		case *syntax.BraceExp:
-			out = append(out, c.brace(p, loc))
 		}
 	}
 	return out

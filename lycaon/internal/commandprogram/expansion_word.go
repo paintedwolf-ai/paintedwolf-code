@@ -80,11 +80,8 @@ func (r *expansionRun) literalPart(ctx context.Context, text string, first, whol
 			return err
 		}
 	}
-	if first && strings.HasPrefix(text, "~") && len(text) > 1 && text[1] != '/' {
-		// Admission refuses a written ~user; a brace word can still form one.
-		return &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "quoted literal paths or invocation-local variables; no named-user lookup"}
-	}
-	if first && strings.HasPrefix(text, "~") {
+	if first && strings.HasPrefix(text, "~") && (len(text) == 1 || text[1] == '/') {
+		// Only ~ and ~/ reach evaluation; account lookup is refused at parse.
 		if home, set := r.scope.Variable("HOME"); set {
 			if err := r.assembly.add(home, true); err != nil {
 				return err

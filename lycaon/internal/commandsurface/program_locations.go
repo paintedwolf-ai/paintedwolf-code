@@ -25,8 +25,6 @@ func ExecutionLocations(statements []Statement) []SyntaxLocation {
 				words(node.Words())
 			case ArithmeticPart:
 				words(node.Words())
-			case BracePart:
-				words(node.Alternatives)
 			}
 		}
 	}
