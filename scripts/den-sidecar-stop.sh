@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Stop engines that hold a dev-store lock, listen on LYCAON_ADDR, or match the
-# bundled binary name. The held lock is the authority: a bundled or ephemeral
-# bind has no fixed port.
+# Stop engines selected by this configuration's store locks or listen address.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,8 +12,6 @@ export LYCAON_DEV="${LYCAON_DEV:-1}"
 export LYCAON_CONFIG_DIR="${LYCAON_CONFIG_DIR:-$(lycaon_config_dir)}"
 export LYCAON_ADDR="${LYCAON_ADDR:-127.0.0.1:8787}"
 _port="${LYCAON_ADDR##*:}"
-# bundled externalBin name (sidecar.rs BUNDLED_SIDECAR_NAME)
-BUNDLED_SIDECAR_NAME="pw"
 
 if ! command -v lsof >/dev/null 2>&1; then
   echo "error: lsof required to find sidecar listener" >&2
@@ -66,18 +62,12 @@ else
     for pid in ${pids}; do
       if ! stop_engine_pid "${pid}" "listens on :${_port}"; then
         comm="$(ps -p "${pid}" -o comm= 2>/dev/null || true)"
-        echo "leaving ${comm} (pid ${pid}) — not a lycaon sidecar" >&2
+        echo "leaving ${comm} (pid ${pid}) — not a Painted Wolf Code engine" >&2
         foreign_listener=1
       fi
     done
   fi
 fi
-
-# Bundled binary, by executable name (not command-line text).
-bundled="$(pgrep -x "${BUNDLED_SIDECAR_NAME}" 2>/dev/null || true)"
-for pid in ${bundled}; do
-  stop_engine_pid "${pid}" "bundled ${BUNDLED_SIDECAR_NAME}" || true
-done
 
 # SIGTERM; wait past the engine drain budget so a following wipe sees a free store.
 if [[ -n "${stopped_pids}" ]]; then
@@ -119,10 +109,10 @@ if [[ "${foreign_lock_holder}" -eq 1 ]]; then
   exit 1
 fi
 if [[ "${foreign_listener}" -eq 1 ]]; then
-  echo "port ${_port} is held by something that is not a lycaon engine" >&2
+  echo "port ${_port} is held by something that is not a Painted Wolf Code engine" >&2
   exit 1
 fi
 
 if [[ "${stopped}" -eq 0 ]]; then
-  echo "no Painted Wolf Code engine running (dev store locks, port ${_port}, or bundled ${BUNDLED_SIDECAR_NAME})" >&2
+  echo "no Painted Wolf Code engine running (dev store locks or port ${_port})" >&2
 fi
