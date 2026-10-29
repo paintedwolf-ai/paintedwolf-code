@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import select
 from pathlib import Path
 import signal
 import subprocess
@@ -195,12 +196,24 @@ class TerminalProcessTests(TerminalFixture):
                 self.assertTrue(custody.holds(pid, cap.path, (info.st_dev, info.st_ino)))
                 with self.queue.locked():
                     self.assertTrue(reservations(self.queue, execution.lock_file), "exception released admission")
-                stop.touch()
-                for _ in range(1000):
-                    if not custody.holds(pid, cap.path, (info.st_dev, info.st_ino)):
-                        break
-                    threading.Event().wait(.01)
-                self.assertFalse(custody.holds(pid, cap.path, (info.st_dev, info.st_ino)))
+                pin = os.pidfd_open(pid) if hasattr(os, "pidfd_open") else None
+                try:
+                    stop.touch()
+                    if pin is not None:
+                        exited = select.poll()
+                        exited.register(pin, select.POLLIN)
+                        self.assertTrue(exited.poll(10000), "owned holder did not finish exiting")
+                    else:
+                        for _ in range(1000):
+                            if not custody.holds(pid, cap.path, (info.st_dev, info.st_ino)):
+                                break
+                            threading.Event().wait(.01)
+                        self.assertFalse(custody.holds(pid, cap.path, (info.st_dev, info.st_ino)))
+                finally:
+                    if pin is not None:
+                        os.close(pin)
+            with self.queue.locked():
+                self.assertEqual(reservations(self.queue, execution.lock_file), [])
 
     def test_unlocked_probe_still_has_live_owner_admission_guard(self):
         cap = self.capability()
