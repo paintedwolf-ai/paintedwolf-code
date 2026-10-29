@@ -22,8 +22,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        PYTHONPATH=scripts python3 -m ci_policy.cache_paths
         {
-          printf 'gocache=%s\n' "$(GOTOOLCHAIN=local go env GOCACHE)"
           printf 'key_prefix=go-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(PYTHONPATH=scripts python3 -c 'from analysis_tools import toolchain; print(toolchain())')"
         } >> "${GITHUB_OUTPUT}"
 
