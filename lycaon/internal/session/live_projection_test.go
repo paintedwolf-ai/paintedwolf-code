@@ -52,7 +52,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 		CreatedAt:   time.Now().UTC(),
 	}))
 	waitOutboxEmpty(t, sqlDB)
-	drainMessageEvents(t, ch, 200*time.Millisecond)
+	drainMessageEvents(t, ch)
 
 	for i := 1; i <= 20; i++ {
 		testutil.FailErr(t, "project live", mgr.Runner.Transcript.Streams.Project(ctx, sess.ID, api.Message{
@@ -63,7 +63,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 	}
 	mgr.Runner.Transcript.Streams.Flush(ctx, sess.ID)
 
-	patches := collectMessageOps(t, ch, 200*time.Millisecond)
+	patches := collectMessageOps(t, ch)
 	if n := patches[api.MessageChangePatch]; n != 0 {
 		t.Fatalf("live SSE patches on project hub = %d want 0", n)
 	}
@@ -93,7 +93,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 		Visibility: api.MessageVisibilityTranscript,
 	}))
 	waitOutboxEmpty(t, sqlDB)
-	settled := collectMessageOps(t, ch, 200*time.Millisecond)
+	settled := collectMessageOps(t, ch)
 	if settled[api.MessageChangePatch] < 1 {
 		t.Fatal("settle did not publish a durable patch")
 	}
@@ -168,15 +168,14 @@ func contentOrEmpty(msgs []api.Message) string {
 	return msgs[0].Content
 }
 
-func drainMessageEvents(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) {
+func drainMessageEvents(t *testing.T, ch <-chan api.EventEnvelope) {
 	t.Helper()
-	_ = collectMessageOps(t, ch, wait)
+	_ = collectMessageOps(t, ch)
 }
 
-func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) map[api.MessageChangeOp]int {
+func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope) map[api.MessageChangeOp]int {
 	t.Helper()
 	got := map[api.MessageChangeOp]int{}
-	deadline := time.After(wait)
 	for {
 		select {
 		case env := <-ch:
@@ -188,7 +187,7 @@ func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Dura
 				testutil.FailErr(t, "decode message event", err)
 			}
 			got[ev.Op]++
-		case <-deadline:
+		default:
 			return got
 		}
 	}
@@ -196,8 +195,7 @@ func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Dura
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		var count int
 		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
 			return

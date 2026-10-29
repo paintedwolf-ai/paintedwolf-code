@@ -364,11 +364,6 @@ func writePerfTarHeaders(tb testing.TB, path string, count int) {
 	testutil.FailErr(tb, "write tar", os.WriteFile(path, buf.Bytes(), 0o644))
 }
 
-// TestCommandProgramResourceCeilings exercises the declared resource limits
-// through the real command entry, verifying that memory, spill files, process
-// count and goroutines stay bounded, limit refusals fire at 1 past each bound,
-// and cleanup leaves nothing behind. Elapsed time is logged for manual
-// inspection; automated gates use deterministic resource counts.
 func seedResourceCeilingInputs(t *testing.T, f *perfFixture) {
 	t.Helper()
 	writeLines(t, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
@@ -393,6 +388,11 @@ func seedResourceCeilingInputs(t *testing.T, f *perfFixture) {
 
 }
 
+// TestCommandProgramResourceCeilings exercises the declared resource limits
+// through the real command entry, verifying that memory, spill files, process
+// count and goroutines stay bounded, limit refusals fire at 1 past each bound,
+// and cleanup leaves nothing behind. Elapsed time is logged for manual
+// inspection; automated gates use deterministic resource counts.
 func TestCommandProgramResourceCeilings(t *testing.T) {
 	f := newPerfFixture(t, nil)
 	seedResourceCeilingInputs(t, f)

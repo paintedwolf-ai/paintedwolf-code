@@ -89,3 +89,19 @@ func TestSelectedCommitBeforeTheFirstCommit(t *testing.T) {
 		t.Fatalf("status after first commit %q", got)
 	}
 }
+
+func TestSelectedCommitKeepsExplicitIdentity(t *testing.T) {
+	dir := selectedCommitFixture(t)
+	testutil.FailErr(t, "edit selected file", os.WriteFile(filepath.Join(dir, "kept.txt"), []byte("selected\n"), 0o644))
+	_, err := NewManager().Commit(t.Context(), dir, GitCommitOpts{
+		Message: "selected identity", Paths: []string{"kept.txt"},
+		IdentityName: "Selected author", IdentityEmail: "selected@example.invalid",
+	})
+	testutil.FailErr(t, "commit selected file", err)
+	if got := gittest.Run(t, dir, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); got != "Selected author <selected@example.invalid>|Selected author <selected@example.invalid>\n" {
+		t.Fatalf("commit identity = %q", got)
+	}
+	if got := gittest.Run(t, dir, "status", "--short"); got != "M  peer.txt\n" {
+		t.Fatalf("unrelated staged work = %q", got)
+	}
+}

@@ -19,6 +19,9 @@ type GitCommitOpts struct {
 	Message string
 	Paths   []string
 	Amend   bool
+	// IdentityName and IdentityEmail, when set, replace the resolved author
+	// and committer fields.
+	IdentityName, IdentityEmail string
 }
 
 // Commit stages paths and creates or amends a commit.
@@ -51,7 +54,7 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 		}
 	}
 	if len(paths) > 0 {
-		return commitSelected(ctx, dir, opts.Message, opts.Amend, paths)
+		return commitSelected(ctx, dir, opts, paths)
 	}
 	if !opts.Amend {
 		if _, code, err := gitexec.Run(ctx, dir, []string{"add", "-A"}, hermeticOpts(0)); err != nil {
@@ -60,14 +63,21 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 			return "", fmt.Errorf("git add failed")
 		}
 	}
-	return createCommit(ctx, dir, commitArgs(opts), hermeticOpts(0))
+	return createCommit(ctx, dir, commitArgs(opts), hermeticOpts(0), opts)
 }
 
-func createCommit(ctx context.Context, dir string, args []string, run gitexec.Opts) (string, error) {
+func createCommit(ctx context.Context, dir string, args []string, run gitexec.Opts, opts GitCommitOpts) (string, error) {
 	identity := commitIdentity(ctx, dir)
+	if opts.IdentityName != "" {
+		identity.Name = opts.IdentityName
+	}
+	if opts.IdentityEmail != "" {
+		identity.Email = opts.IdentityEmail
+	}
 	run.Profile = gitexec.ProfileHermetic
 	run.Identity = &identity
 	out, code, err := gitexec.Run(ctx, dir, args, run)
+
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +94,7 @@ func createCommit(ctx context.Context, dir string, args []string, run gitexec.Op
 // take their working-tree content, except a staged deletion, which wins even
 // when the file remains on disk. After the commit only the selected paths of
 // the live index are updated to the committed entries.
-func commitSelected(ctx context.Context, dir, message string, amend bool, paths []string) (string, error) {
+func commitSelected(ctx context.Context, dir string, opts GitCommitOpts, paths []string) (string, error) {
 	scratch, err := os.MkdirTemp("", "git-commit-index-*")
 	if err != nil {
 		return "", err
@@ -128,11 +138,11 @@ func commitSelected(ctx context.Context, dir, message string, amend bool, paths 
 	if err := publishIndexDelta(ctx, dir, private, added, selected); err != nil {
 		return "", err
 	}
-	args := []string{"commit", "-m", message}
-	if amend {
+	args := []string{"commit", "-m", opts.Message}
+	if opts.Amend {
 		args = append(args, "--amend")
 	}
-	hash, err := createCommit(ctx, dir, args, private)
+	hash, err := createCommit(ctx, dir, args, private, opts)
 	if err != nil {
 		return "", err
 	}

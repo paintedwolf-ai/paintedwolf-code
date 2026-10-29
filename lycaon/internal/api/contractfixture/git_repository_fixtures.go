@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/board"
@@ -77,8 +76,10 @@ func GitStatusViaAPI(t *testing.T, srv *hostapi.Server, projectID, repoID string
 		statusURL += "?session_id=" + sessionID
 		lens = "&session_id=" + sessionID
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	// Readiness waits on the host's refresh within the test's own deadline; a fixed
+	// wall-clock bound fails on loaded runners before the first status lands.
+	var snapshot GitStatusSnapshot
+	testutil.WaitFor(t, func() bool {
 		req := NewAuthedRequest(http.MethodGet, statusURL, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -89,21 +90,15 @@ func GitStatusViaAPI(t *testing.T, srv *hostapi.Server, projectID, repoID string
 		if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
 			t.Fatalf("decode status: %v", err)
 		}
-		if w.Code == http.StatusAccepted {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}
-		if summary.Refreshing {
-			time.Sleep(5 * time.Millisecond)
-			continue
+		if w.Code == http.StatusAccepted || summary.Refreshing {
+			return false
 		}
 		changesReq := NewAuthedRequest(http.MethodGet,
 			fmt.Sprintf("%s?revision=%d&limit=500%s", GitRepoURL(projectID, repoID, "changes"), summary.Revision, lens), nil)
 		changesW := httptest.NewRecorder()
 		srv.ServeHTTP(changesW, changesReq)
 		if changesW.Code == http.StatusAccepted {
-			time.Sleep(5 * time.Millisecond)
-			continue
+			return false
 		}
 		if changesW.Code != http.StatusOK {
 			t.Fatalf("git changes = %d body = %s", changesW.Code, changesW.Body.String())
@@ -113,12 +108,12 @@ func GitStatusViaAPI(t *testing.T, srv *hostapi.Server, projectID, repoID string
 			t.Fatalf("decode changes: %v", err)
 		}
 		if changes.Revision != summary.Revision {
-			continue
+			return false
 		}
-		return GitStatusSnapshot{GitStatusSummary: summary, Files: changes.Files}
-	}
-	t.Fatal("git status did not become ready")
-	return GitStatusSnapshot{}
+		snapshot = GitStatusSnapshot{GitStatusSummary: summary, Files: changes.Files}
+		return true
+	})
+	return snapshot
 }
 
 func InitCommittedRepo(t *testing.T) (string, func(args ...string)) {

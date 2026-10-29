@@ -61,10 +61,12 @@ type harness struct {
 	db      *db.Store
 	root    string
 	tc      tools.ToolContext
+	quota   *stagingQuota
 	owners  *Owners
 	pins    *pinLog
 	program Program
 	service *projectsource.SourceMutationService
+	walk    *sourceledger.Walk
 	project *project.Project
 }
 
@@ -110,15 +112,18 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "build owners", err)
+	quota := &stagingQuota{}
+	owners.Admission = quota
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: root, IsPrimary: true}}}
+
 	limits, memoryErr := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "load program memory limits", memoryErr)
 	memory, memoryErr := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "create program memory", memoryErr)
 	owners.Revisions.Memory = memory
-	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths}, service: service, project: p}
+	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, quota: quota, pins: pins, program: Program{Paths: paths}, service: service, walk: ledger.Walk, project: p}
 }
 
 // mutationBoundary admits every operation the frontend reaches for the default

@@ -152,8 +152,7 @@ func rationaleAttacher(t *testing.T, sum compaction.Summarizer, caps *patchCaptu
 
 func awaitPatch(t *testing.T, caps *patchCapture) string {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		caps.mu.Lock()
 		n := len(caps.calls)
 		text := ""
@@ -219,8 +218,7 @@ func TestApprovalRationale_attemptsOneShot(t *testing.T) {
 		Tool: "command",
 		Args: map[string]any{"command": "git push"},
 	})
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		caps.mu.Lock()
 		n := len(caps.calls)
 		caps.mu.Unlock()
@@ -258,8 +256,7 @@ func TestApprovalRationale_clearsPendingOnEmpty(t *testing.T) {
 		Tool: "command",
 		Args: map[string]any{"command": "git push"},
 	})
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		caps.mu.Lock()
 		clears := caps.clears
 		patches := len(caps.calls)
@@ -336,8 +333,7 @@ func TestApprovalRationale_mockStub(t *testing.T) {
 		Tool: "command",
 		Args: map[string]any{"command": "git push"},
 	})
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		caps.mu.Lock()
 		n := len(caps.calls)
 		text := ""

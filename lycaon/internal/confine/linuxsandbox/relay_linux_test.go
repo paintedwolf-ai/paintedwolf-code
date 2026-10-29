@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -53,9 +52,8 @@ func startSleeper(t *testing.T) *exec.Cmd {
 func TestRelayHoldsSignalsUntilReady(t *testing.T) {
 	t.Parallel()
 	child := startSleeper(t)
-	events := make(chan os.Signal, 1)
+	events := make(chan os.Signal)
 	ready := make(chan struct{})
-	events <- syscall.SIGTERM
 	done := make(chan struct{})
 	var code int
 	var sig syscall.Signal
@@ -64,15 +62,17 @@ func TestRelayHoldsSignalsUntilReady(t *testing.T) {
 		code, sig, held = relay(child.Process.Pid, child.Wait, events, ready)
 		close(done)
 	}()
+	events <- syscall.SIGTERM
+	events <- nil
 	select {
 	case <-done:
 		t.Fatal("the held signal reached the child before ready")
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 	close(ready)
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the signal was not forwarded once ready")
 	}
 	if sig != syscall.SIGTERM || code != 128+int(syscall.SIGTERM) || len(held) != 0 {
@@ -83,10 +83,10 @@ func TestRelayHoldsSignalsUntilReady(t *testing.T) {
 func TestRelayReturnsSignalsTheChildNeverTook(t *testing.T) {
 	t.Parallel()
 	child := startSleeper(t)
-	events := make(chan os.Signal, 1)
-	events <- syscall.SIGTERM
+	events := make(chan os.Signal)
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		events <- syscall.SIGTERM
+		events <- nil
 		_ = child.Process.Kill()
 	}()
 	_, sig, held := relay(child.Process.Pid, child.Wait, events, make(chan struct{}))

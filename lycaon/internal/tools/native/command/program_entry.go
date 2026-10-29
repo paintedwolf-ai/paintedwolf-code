@@ -112,6 +112,7 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+	nativeDefs    map[string]toolcontract.OperationDefinition
 	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.
@@ -424,10 +425,10 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		}
 	}
 	active := []toolcontract.OperationDefinition{external}
-	if write, ok := r.Registry.Definition("write"); ok {
-		active = append(active, write.Operation)
+	if write, ok := r.Registry.Definition(programPublicationTool); ok {
+		active = append(active, offeredProgramDefinition(programPublicationTool, write.Operation))
 	}
-	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, "write": true}
+	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, programPublicationTool: true}
 	for _, operation := range owners.Natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
@@ -435,7 +436,13 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 			}
 			seen[tool] = true
 			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, definition.Operation)
+				active = append(active, offeredProgramDefinition(tool, definition.Operation))
+			} else if spec, ok := run.catalogCommand(tool); ok {
+				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				active = append(active, definition)
 			}
 		}
 	}
@@ -453,6 +460,17 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	definitions, err := run.controlDefinitions()
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	for _, name := range []string{"cd", "realpath", "readlink", "native_path"} {
+		spec, ok := run.catalogCommand(name)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("path command %s missing from catalog", name)
+		}
+		definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		definitions[name] = definition
 	}
 	hostCommands := make([]string, 0, len(definitions))
 	for name := range definitions {
@@ -493,7 +511,7 @@ func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, sourc
 func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, plan commandsurface.ProgramSnapshot, scope captureprojection.Scope, screening captureprojection.StreamOptions) error {
 	sourceRef := "output:program-source:" + run.root.Identity.ProgramID
 	var nodes []toolcontract.ProgramNode
-	for _, location := range programNodes(plan.Statements) {
+	for _, location := range commandsurface.ExecutionLocations(plan.Statements) {
 		nodes = append(nodes, toolcontract.ProgramNode{ID: string(location.ID), SourceUnitID: "submitted", Span: location.Span})
 	}
 	start := toolcontract.ProgramStart{
@@ -577,8 +595,8 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 				rejection = &copy
 			}
 			enrichProgramReject(rejection, evaluationRefusal.Command, span)
-			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeLimitRefusal(commandprogram.Streams{Error: stderr}, "command", rejection)
+			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" && dispatcher.claimStopLine() {
+				writeLimitRefusal(stderr, "command", "", rejection)
 			}
 		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
 			enrichProgramReject(rejection, "", run.root.Span)
@@ -678,101 +696,6 @@ func (b *boundedBuffer) Bytes() []byte {
 	return append([]byte(nil), b.data...)
 }
 
-// programNodes lists every static location an execution can begin at:
-// statements (nested and inside substitutions), substitutions and redirections.
-func programNodes(statements []commandsurface.Statement) []commandsurface.SyntaxLocation {
-	var out []commandsurface.SyntaxLocation
-	var statement func(commandsurface.Statement)
-	var words func([]commandsurface.DeferredWord)
-	var parts func([]commandsurface.WordNode)
-	list := func(items []commandsurface.Statement) {
-		for _, item := range items {
-			statement(item)
-		}
-	}
-	parts = func(nodes []commandsurface.WordNode) {
-		for _, node := range nodes {
-			switch node := node.(type) {
-			case commandsurface.DoubleQuotedPart:
-				parts(node.Parts)
-			case commandsurface.SubstitutionPart:
-				out = append(out, node.SyntaxLocation)
-				list(node.Statements)
-			case commandsurface.ParameterPart:
-				words(node.Words())
-			case commandsurface.ArithmeticPart:
-				words(node.Words())
-			}
-		}
-	}
-	words = func(items []commandsurface.DeferredWord) {
-		for _, item := range items {
-			parts(item.Parts)
-		}
-	}
-	statement = func(s commandsurface.Statement) {
-		out = append(out, s.SyntaxLocation)
-		for _, redirect := range s.Redirects {
-			out = append(out, redirect.SyntaxLocation)
-			words([]commandsurface.DeferredWord{redirect.Target})
-		}
-		switch node := s.Command.(type) {
-		case commandsurface.SimpleCommand:
-			words(node.Words)
-			for _, assignment := range node.Assignments {
-				if assignment.Index != nil {
-					words(commandsurface.ArithmeticPart{Expression: assignment.Index}.Words())
-				}
-				words([]commandsurface.DeferredWord{assignment.Value})
-				words(assignment.Array)
-			}
-		case commandsurface.EnvironmentDeclaration:
-			words(node.Words)
-			for _, assignment := range node.Assignments {
-				words([]commandsurface.DeferredWord{assignment.Value})
-			}
-		case commandsurface.BinaryCommand:
-			statement(node.Left)
-			statement(node.Right)
-		case commandsurface.StatementGroup:
-			list(node.Statements)
-		case commandsurface.Conditional:
-			for branch := &node; branch != nil; branch = branch.Else {
-				list(branch.Condition)
-				list(branch.Then)
-			}
-		case commandsurface.WhileLoop:
-			list(node.Condition)
-			list(node.Body)
-		case commandsurface.ForLoop:
-			words(node.Items)
-			list(node.Body)
-		case commandsurface.CaseStatement:
-			words([]commandsurface.DeferredWord{node.Word})
-			for _, item := range node.Items {
-				words(item.Patterns)
-				list(item.Body)
-			}
-		case commandsurface.FunctionDeclaration:
-			statement(node.Body)
-		case commandsurface.ArithmeticCommand:
-			words(node.Words())
-		case commandsurface.TrapCommand:
-			list(node.Statements)
-		}
-	}
-	list(statements)
-	seen := map[commandsurface.NodeID]bool{}
-	unique := out[:0]
-	for _, location := range out {
-		if !seen[location.ID] {
-			seen[location.ID] = true
-			unique = append(unique, location)
-		}
-	}
-	return unique
-}
-
 var compiledCommandIndex = sync.OnceValues(func() (map[string]toolcontract.CommandSpecification, error) {
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
@@ -863,7 +786,7 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 
 // nativeArguments attaches any call-level capability declarations that the
 // bound native operation contract accepts.
-func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract, loopbackPorts []uint16) map[string]any {
 	arguments := make(map[string]any, len(base)+len(r.envelope))
 	for k, v := range base {
 		arguments[k] = v
@@ -877,6 +800,26 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 		}
 		if len(supported) > 0 {
 			arguments["capability_request"] = supported
+		}
+	}
+	foreignPorts := make([]uint16, 0, len(loopbackPorts))
+	for _, port := range loopbackPorts {
+		if !slices.Contains(r.tc.Local.OwnedLoopbackPorts, port) {
+			foreignPorts = append(foreignPorts, port)
+		}
+	}
+	if len(foreignPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
+		request, _ := arguments["capability_request"].(map[string]any)
+		if request == nil {
+			request = map[string]any{}
+			arguments["capability_request"] = request
+		}
+		if _, explicit := request["loopback_connect"]; !explicit {
+			ports := make([]any, len(foreignPorts))
+			for i, port := range foreignPorts {
+				ports[i] = int(port)
+			}
+			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
 	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {

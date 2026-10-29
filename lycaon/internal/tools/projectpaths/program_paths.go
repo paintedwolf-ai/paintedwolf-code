@@ -113,6 +113,7 @@ type ProgramPaths struct {
 	hasPrevious   bool
 	argumentLimit int64
 	outputLimit   int64
+	rootParents   map[string]struct{}
 }
 
 type catalogPathFacts struct {
@@ -151,7 +152,7 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(actionRootPaths(tc))}
 	if cwd == "" {
 		cwd = "."
 	}
@@ -169,6 +170,31 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	p.initialInfo = info
 	return p, nil
 }
+
+// Rebind gives one admitted child the same directory with its own path grants.
+func (p *ProgramPaths) Rebind(ctx context.Context, tc tools.ToolContext) (*ProgramPaths, error) {
+	frame, err := NewProgramPaths(ctx, p.boundary, tc, p.initial.Resolved.Abs)
+	if err != nil {
+		return nil, err
+	}
+	// The directory and OLDPWD may come from earlier cds. Their bound
+	// descriptors keep those addresses, while new child file access uses the
+	// newly admitted context held by frame.
+	frame.adoptDirectories(p)
+	return frame, nil
+}
+
+// AdoptCwd retains an approved cd's directory and OLDPWD for later commands.
+// The original invocation directory remains the target of a bare cd.
+func (p *ProgramPaths) AdoptCwd(frame *ProgramPaths) { p.adoptDirectories(frame) }
+
+func (p *ProgramPaths) adoptDirectories(from *ProgramPaths) {
+	p.cwd, p.cwdInfo = from.cwd, from.cwdInfo
+	p.previous, p.previousInfo, p.hasPrevious = from.previous, from.previousInfo, from.hasPrevious
+}
+
+// ToolContext returns the path authority bound to this program frame.
+func (p *ProgramPaths) ToolContext() tools.ToolContext { return p.context }
 
 // Bind resolves one exact native operand. A write binding checks mutation scope
 // but does not record a mutation before a complete operation actually runs.

@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -98,8 +99,9 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 			if observed.Data["limit_id"] != limitID || observed.Data["maximum"] != maximum || observed.Data["observed"] != maximum+1 || observed.Data["source_start_byte"] != strings.Index(source, "input") || observed.Data["source_line"] != 2 || observed.Data["source_column"] != 7 {
 				t.Fatalf("actual stop facts changed: %+v", observed.Data)
 			}
-			if result.Refusal == nil || result.Refusal.Code != observed.Code || result.StopCode != observed.Code || result.Status == 0 || result.State == "completed" || result.Stderr != "" || result.Stdout != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
-				t.Fatalf("wire result lost actual refusal/effects: %+v", result)
+			stderr := fmt.Sprintf("<: input: This command reached its %s limit (%d bytes; maximum %d) [COMMAND_LIMIT_EXCEEDED]\n", limitID, maximum+1, maximum)
+			if result.Refusal == nil || result.Refusal.Code != observed.Code || result.StopCode != observed.Code || result.Status == 0 || result.State == "completed" || result.Stderr != stderr || result.Stdout != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
+				t.Fatalf("wire result lost actual refusal/effects: %+v, want stderr %q", result, stderr)
 			}
 			if kept, err := os.ReadFile(filepath.Join(env.Dir, "kept")); err != nil || string(kept) != "before" {
 				t.Fatalf("prior publication %q %v", kept, err)
@@ -108,8 +110,22 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 				t.Fatalf("continuation ran: %v", err)
 			}
 			details := result.Refusal.Details
-			if details["limit_id"] != limitID || details["maximum"] != float64(maximum) || details["observed"] != float64(maximum+1) || details["source_line"] != float64(2) || details["source_column"] != float64(7) || details["source_start_byte"] != float64(strings.Index(source, "input")) || details["native_operation"] != nil {
+			if details["limit_id"] != limitID || details["maximum"] != float64(maximum) || details["observed"] != float64(maximum+1) || details["source_line"] != float64(2) || details["source_column"] != float64(7) || details["source_start_byte"] != float64(strings.Index(source, "input")) || details["native_operation"] != "read" || details["native_command"] != "cat" {
 				t.Fatalf("serialized screened facts changed: %+v", details)
+			}
+			if details["operation_source_start_byte"] != float64(strings.Index(source, "cat")) || details["operation_source_end_byte"] != float64(strings.Index(source, "\nprintf after")) || details["operation_source_line"] != float64(2) || details["operation_source_column"] != float64(1) {
+				t.Fatalf("admitted operation span changed: %+v", details)
+			}
+			stopped, ok := details["program_stopped_details"].([]any)
+			if !ok || len(stopped) != 1 {
+				t.Fatalf("missing stopped redirect receipt: %+v", details["program_stopped_details"])
+			}
+			redirect, ok := stopped[0].(map[string]any)
+			if !ok || redirect["command"] != "< input" || redirect["stop_code"] != observed.Code || redirect["owner_invoked"] != false || redirect["effect_certainty"] != "none" || redirect["complete"] != false || redirect["publication_eligible"] != false {
+				t.Fatalf("refused redirect effect facts: %+v", redirect)
+			}
+			if redirect["source_start_byte"] != float64(strings.Index(source, "< input")) || redirect["source_end_byte"] != float64(strings.Index(source, "\nprintf after")) || redirect["source_line"] != float64(2) || redirect["source_column"] != float64(5) {
+				t.Fatalf("stopped redirect span changed: %+v", redirect)
 			}
 			t.Logf("Actual %s input refusal:\n%s", account, result.Refusal.Feedback)
 			// Output retention may retain its bounded per-program index; feedback's

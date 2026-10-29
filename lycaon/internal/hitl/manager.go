@@ -53,7 +53,15 @@ type ActionInvocation struct {
 	Args          map[string]any
 	Files         []string
 	ResolvedFiles []string
-	ActionID      string
+	// NativePathTargets are the bound command owner's file operands. A present
+	// empty slice means the native form has no file operand.
+	NativePathTargets []NativePathTarget
+	ActionID          string
+}
+
+type NativePathTarget struct {
+	Path  string
+	Write bool
 }
 
 // ActionScope binds an action to its project and session context.

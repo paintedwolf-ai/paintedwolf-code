@@ -76,10 +76,10 @@ func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error)
 		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	parentHasRecovery := strings.Contains(p.Resolved.Abs, ".paintedwolf")
+	parentHasRecovery := strings.Contains(p.Resolved.Abs, settingsoverlay.DirName())
 	kept := names[:0]
 	for _, name := range names {
-		if parentHasRecovery || name == ".paintedwolf" || name == settingsoverlay.RecoveryDirName {
+		if parentHasRecovery || name == settingsoverlay.DirName() || name == settingsoverlay.RecoveryDirName {
 			childAbs := p.Resolved.Abs + string(filepath.Separator) + name
 			if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
 				continue

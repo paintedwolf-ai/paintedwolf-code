@@ -121,6 +121,20 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 		return io.NopCloser(strings.NewReader("")), nil, nil
 	}
 	tc := inv.ports.ToolContext
+	if inv.preparing {
+		captured, err := inv.owners.Revisions.CaptureSource(inv.ctx, tc, bound.Resolved.Abs)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := inv.reserve(int64(len(captured.Content))); err != nil {
+			return nil, nil, err
+		}
+		if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
+			return nil, nil, err
+		}
+		inv.sed.pins = append(inv.sed.pins, captured.Revision)
+		return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
+	}
 	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, tc, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, nil, err

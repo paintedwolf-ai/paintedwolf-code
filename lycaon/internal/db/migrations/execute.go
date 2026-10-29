@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -56,7 +57,24 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 	if !planned.Required() {
 		return nil
 	}
-	tx, err := database.BeginTx(ctx, nil)
+	conn, err := database.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open schema upgrade connection: %w", err)
+	}
+	defer conn.Close()
+	for _, step := range planned.steps {
+		if step.RebuildTables {
+			if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+				return fmt.Errorf("prepare table rebuild: %w", err)
+			}
+			defer func() {
+				_, restoreErr := conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys=ON`)
+				err = errors.Join(err, restoreErr)
+			}()
+			break
+		}
+	}
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema upgrade: %w", err)
 	}
@@ -84,6 +102,9 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 		if err := applyStep(ctx, tx, step, inspect, progress); err != nil {
 			return fmt.Errorf("migration %s: %w", step.ID, err)
 		}
+	}
+	if err := checkIntegrity(ctx, tx); err != nil {
+		return err
 	}
 	if err := checkForeignKeys(ctx, tx); err != nil {
 		return err
@@ -132,6 +153,29 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 	defer func() { _ = rows.Close() }()
 	if rows.Next() {
 		return fmt.Errorf("upgraded store contains a foreign key violation")
+	}
+	return rows.Err()
+}
+
+// ErrIntegrity means SQLite found damaged data, rather than an interrupted check.
+var ErrIntegrity = errors.New("upgraded store failed integrity verification")
+
+// Check the final state while rollback is still possible. Obsolete tables do
+// not need an expensive index audit before the migration removes them.
+func checkIntegrity(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA integrity_check`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return err
+		}
+		if result != "ok" {
+			return fmt.Errorf("%w: %s", ErrIntegrity, result)
+		}
 	}
 	return rows.Err()
 }

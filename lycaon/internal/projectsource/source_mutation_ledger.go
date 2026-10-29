@@ -23,6 +23,8 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 	}
 	if p.EntryKind == SourceEntryFolder {
 		in.EntryKind = sourceledger.EntryKindDirectory
+	} else if p.EntryKind == SourceEntryLink {
+		in.EntryKind = sourceledger.EntryKindLink
 	}
 	if p.NativeTrash != nil && (p.Kind == "delete" || p.Kind == "restore") {
 		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.NativeTrash.RecoveryKey, Restore: p.Kind == "restore"}
