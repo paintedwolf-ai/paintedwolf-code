@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -181,7 +180,7 @@ func TestDelegationEndToEndComplete(t *testing.T) {
 		}
 		return st
 	}
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return readDelegation().Phase == wire.DelegationPhaseDone
 	})
 

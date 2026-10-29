@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 	"net"
 	"net/netip"
+	"net/url"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/egress"
@@ -47,6 +49,13 @@ func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() boo
 		}
 		return nil, err
 	}
+	scheme := "https"
+	if ep.Transport == TransportHTTPRequest {
+		scheme = "http"
+	}
+	// Opaque CONNECT/SOCKS streams use the HTTPS tunneling policy, with the
+	// original host/port retained for exceptions and the endpoint's lease.
+	target := &url.URL{Scheme: scheme, Host: ep.DialAddr(), Path: ep.RequestPath}
 	var lastErr error
 	for _, ip := range ips {
 		if authorized != nil && !authorized() {
@@ -64,9 +73,7 @@ func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() boo
 			}
 		}
 
-		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", ep.Port))
-		var dialer net.Dialer
-		conn, dialErr := dialer.DialContext(dialCtx, "tcp", addr)
+		conn, dialErr := hostproxy.DialPinned(dialCtx, target, "tcp", netip.AddrPortFrom(ip, ep.Port))
 		if dialErr == nil {
 			if authorized != nil && !authorized() {
 				_ = conn.Close()

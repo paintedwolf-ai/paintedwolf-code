@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/CriticalStopStage.tsx",
+  "kind": "module",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "The component owns one critical-stop interaction, including recovery selection and retry state. Operational storage failures reuse its retry action; the separate notice model owns reason-to-action policy. Retain the current UI and dependencies without introducing another state owner.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 479,
+  "boundaries": {
+    "lycaon-den/src/components/CriticalStopStage.test.tsx": "50cfdf02c31ad14f7a7915a2dc24e7cb961c7ec75f914063982c1d32c36df18c",
+    "lycaon-den/src/notices/critical-stop-model.test.ts": "69d6354e01cbb3cca30c7219083fb1a61653c29590bc11e7cca5b762c024676e"
+  }
+}

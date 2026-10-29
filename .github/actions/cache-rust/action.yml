@@ -1,0 +1,55 @@
+name: Cache desktop compiler build
+description: Restore prepared desktop dependencies and publish them within the cache budget
+inputs:
+  save:
+    description: Publish the prepared cache on main
+    default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the current toolchain and lockfile cache was restored
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        toolchain=system
+        if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
+        printf 'prefix=den-rust-v1-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
+    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git/db
+          lycaon-den/target
+          !lycaon-den/target/**/incremental
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+        restore-keys: ${{ steps.paths.outputs.prefix }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      id: budget
+      uses: ./.github/actions/cache-budget
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git/db
+          lycaon-den/target
+          !lycaon-den/target/**/incremental
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git/db
+          lycaon-den/target
+          !lycaon-den/target/**/incremental
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: ./.github/actions/cache-budget
+      with:
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+        record: ${{ steps.budget.outputs.record }}

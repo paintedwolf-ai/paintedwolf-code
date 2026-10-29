@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import verification_plan as planning
 
@@ -66,6 +67,30 @@ pathlib.Path(os.environ['FIXTURE_RESULT']).write_text(json.dumps({
         self.assertIn("--full", invocation["arguments"])
         self.assertIn("integration", invocation["arguments"])
         self.assertIn("fixture/scanners", invocation["arguments"])
+
+    def test_merge_phases_preserve_the_full_bundled_recipe(self):
+        from ci_policy import hosted_plan, merge_preflight
+        packages = ["example/test/contract/hosted", "example/internal/scan"]
+        full = planning.expand(["test:full"])[0]
+        with patch.object(merge_preflight.subprocess, "run") as listing:
+            listing.return_value.stdout = "\n".join(json.dumps({"ImportPath": name}) for name in packages)
+            phases = merge_preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"])
+        observed = []
+        for phase in phases:
+            stage = planning.expand([phase[1]], phase[3:])[0]
+            self.assertEqual({k: v for k, v in stage.items() if k != "packages"},
+                             {k: v for k, v in full.items() if k != "packages"})
+            result = self.invoke(planning.digest_command(stage, stage["packages"]))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            invocation = json.loads(self.result.read_text())
+            self.assertEqual(invocation["required"], "1")
+            self.assertIn("--full", invocation["arguments"])
+            self.assertIn("integration", invocation["arguments"])
+            self.assertIn("-ldflags=-X=github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=" + IDENTITY,
+                          invocation["goflags"])
+            observed.extend(stage["packages"])
+        self.assertEqual(sorted(observed), sorted(packages))
+        self.assertEqual(len(observed), len(set(observed)))
 
     def test_missing_engine_or_identity_fails_before_any_scanner_test_runs(self):
         stage = planning.expand(["test:full"])[0]

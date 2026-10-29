@@ -97,16 +97,14 @@ func openAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams 
 		if err := json.Unmarshal(respBody, &sess); err != nil {
 			t.Fatalf("decode preparing session: %v body=%s", err, respBody)
 		}
-		waitSessionPreparedOpenAPI(t, base, sess.ID, 10*time.Second)
+		waitSessionPreparedOpenAPI(t, base, sess.ID)
 	}
 	return decodeOpenAPI[T](t, http.MethodPost, pathTemplate, respBody)
 }
 
-func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string, timeout time.Duration) {
+func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status != wire.SessionStatusPreparing {
 			return
@@ -141,7 +139,7 @@ func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	t.Helper()
 	accepted := openAPIPostJSON[wire.PromptAcceptedResponse](t, base, "/v1/sessions/{id}/prompts",
 		map[string]string{"id": sessionID}, body, http.StatusAccepted)
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		params := map[string]string{"id": sessionID}
 		before := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
 		messages := listMessagesOpenAPI(t, base, params, http.StatusOK)
@@ -158,17 +156,15 @@ func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	})
 }
 
-func waitSessionIdleOpenAPI(t *testing.T, base, sessionID string, timeout time.Duration) wire.Session {
+func waitSessionIdleOpenAPI(t *testing.T, base, sessionID string) wire.Session {
 	t.Helper()
-	return waitPromptTurnOpenAPI(t, base, sessionID, len(listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)), time.Now(), timeout)
+	return waitPromptTurnOpenAPI(t, base, sessionID, len(listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)), time.Now())
 }
 
-func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, acceptedAt time.Time, timeout time.Duration) wire.Session {
+func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, acceptedAt time.Time) wire.Session {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
 	sawBusy := false
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status == wire.SessionStatusBusy {
@@ -190,13 +186,13 @@ func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, a
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s did not complete prompt turn within %s", sessionID, timeout)
+	t.Fatalf("session %s did not complete prompt turn", sessionID)
 	return wire.Session{}
 }
 
-func lastAssistantStreamURL(t *testing.T, base, sessionID string, timeout time.Duration) (messageID, streamURL string) {
+func lastAssistantStreamURL(t *testing.T, base, sessionID string) (messageID, streamURL string) {
 	t.Helper()
-	waitSessionIdleOpenAPI(t, base, sessionID, timeout)
+	waitSessionIdleOpenAPI(t, base, sessionID)
 	msgs := listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == wire.MessageRoleAssistant && strings.TrimSpace(msgs[i].ID) != "" {
