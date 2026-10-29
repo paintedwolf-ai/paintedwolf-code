@@ -32,7 +32,10 @@ func mutationProgramFixture(t *testing.T) *programtest.Fixture {
 			Extract: &native.ExtractArchiveTool{Boundary: boundary},
 		})
 		testutil.FailErr(t, "mutation operations", err)
-		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, _ *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+			program := *mutations
+			program.Revisions.Memory, program.Admission = memory, admission
+			mutations := &program
 			natives := map[string]command.NativeOperation{}
 			for _, name := range []string{"touch", "mv"} {
 				tool, _ := mutations.Operation(name)
