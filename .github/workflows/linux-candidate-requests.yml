@@ -6,9 +6,7 @@ on:
     - cron: '17 9 * * 1'
 
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    # Only a head that can land builds candidates: a pull request into another
-    # branch would hold the shared maintenance executor for an hour per push.
+    types: [opened, ready_for_review, enqueued]
     branches: [main]
     paths:
       - '.github/workflows/linux-candidates.yml'
@@ -17,13 +15,29 @@ on:
       - '.github/actions/setup-*/**'
       - 'packaging/**'
       - 'scripts/*linux*'
+      - 'scripts/linux_release/**'
+      - 'scripts/release_distribution_contract/**'
       - 'scripts/*engine*'
       - 'scripts/*bundle*'
       - 'scripts/release-stage-platform-artifacts.sh'
+      - 'scripts/release-metadata.py'
+      - 'scripts/release_semver.py'
+      - 'scripts/update_keys.py'
+      - 'scripts/sha256.sh'
+      - 'scripts/*opengrep*'
+      - 'VERSION'
+      - 'RELEASE_BUILD'
+      - 'Taskfile.yml'
+      - 'task'
+      - 'lycaon/go.mod'
+      - 'lycaon/go.sum'
+      - 'lycaon-den/package.json'
+      - 'lycaon-den/bun.lock'
       - 'lycaon-den/src-tauri/Cargo.*'
       - 'lycaon-den/src-tauri/tauri*.json'
       - 'rust-toolchain.toml'
       - '.bun-version'
+      - '.node-version'
 
 permissions:
   contents: read
@@ -33,8 +47,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  candidates:
+  request:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft || github.event.action == 'ready_for_review' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      build: ${{ steps.request.outputs.build }}
+      source: ${{ steps.request.outputs.source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/linux_release/candidates.py --request
+
+  candidates:
+    needs: [request]
+    if: needs.request.outputs.build == 'true'
     uses: ./.github/workflows/linux-candidates.yml
     with:
-      source_sha: ${{ github.sha }}
+      source_sha: ${{ needs.request.outputs.source }}

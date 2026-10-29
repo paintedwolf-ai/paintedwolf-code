@@ -2,12 +2,14 @@
 import io
 import json
 import subprocess
+from pathlib import Path
+import tempfile
 import unittest
 import zipfile
 from unittest.mock import patch
 
 from ci_policy import qualification_receipt as receipt
-from ci_policy import qualification_requests as requests
+from ci_policy import qualification_source as source
 
 SOURCE = "a" * 40
 CONTROLLER = "b" * 40
@@ -19,76 +21,85 @@ ENVIRONMENT = dict(GITHUB_REPOSITORY="owner/repo", GITHUB_EVENT_NAME="workflow_d
 
 def selection():
     return dict(version=1, repository="owner/repo", event="workflow_dispatch", source_sha=SOURCE,
-                source_tree=TREE, controller_sha=CONTROLLER, run_id=42, run_attempt=2,
-                admitted=True, reason="selected candidate")
+                source_tree=TREE, controller_sha=CONTROLLER, run_id=42, run_attempt=2)
 
 
-class QualificationRequestTests(unittest.TestCase):
+class QualificationSourceTests(unittest.TestCase):
     def choose(self, environment, ancestor=0, head=CONTROLLER):
-        with patch.object(requests, "commit", side_effect=lambda value: value), \
-                patch.object(requests, "api", return_value={"object": {"sha": CONTROLLER}}), \
-                patch.object(requests.subprocess, "check_output", side_effect=[head, TREE]), \
-                patch.object(requests.subprocess, "run") as command:
+        with patch.object(source, "commit", side_effect=lambda value: value), \
+                patch.object(source, "api", return_value={"object": {"sha": CONTROLLER}}), \
+                patch.object(source.subprocess, "check_output", side_effect=[head, TREE]), \
+                patch.object(source.subprocess, "run") as command:
             command.return_value.returncode = ancestor
-            result = requests.select(environment)
+            result = source.select(environment)
             command.assert_any_call(["git", "merge-base", "--is-ancestor", result["source_sha"], CONTROLLER],
-                                    cwd=requests.ROOT)
+                                    cwd=source.ROOT)
             return result
 
     def test_manual_request_keeps_the_selected_source_after_main_advances(self):
         result = self.choose(ENVIRONMENT)
         self.assertEqual(result, selection())
 
-    def test_background_skips_superseded_sources_and_preserves_current_main(self):
-        background = {**ENVIRONMENT, "GITHUB_EVENT_NAME": "push", "QUALIFICATION_SOURCE": "", "GITHUB_SHA": SOURCE}
-        result = self.choose(background)
-        self.assertFalse(result["admitted"])
-        self.assertEqual(result["reason"], "superseded main snapshot")
-        background["GITHUB_SHA"] = CONTROLLER
-        self.assertTrue(self.choose(background)["admitted"])
+    def test_default_source_and_commit_identity(self):
+        self.assertEqual(self.choose({**ENVIRONMENT, "QUALIFICATION_SOURCE": ""})["source_sha"], CONTROLLER)
+        with patch.object(source.subprocess, "check_output", return_value=SOURCE + "\n") as git:
+            self.assertEqual(source.commit(SOURCE), SOURCE)
+        git.assert_called_once_with(["git", "rev-parse", "--verify", SOURCE + "^{commit}"], cwd=source.ROOT, text=True)
+        with patch.object(source.subprocess, "run") as git:
+            source.require_compatible_tooling(SOURCE, SOURCE)
+        git.assert_not_called()
+
+    def test_source_command_emits_only_the_bound_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, summary = Path(directory) / "output", Path(directory) / "summary"
+            with patch.dict(source.os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(summary)), \
+                    patch.object(source, "select", return_value=selection()):
+                self.assertEqual(source.main(), 0)
+            rows = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            self.assertEqual(set(rows), {"source-sha", "record"})
+            self.assertEqual(json.loads(rows["record"]), selection())
+            self.assertEqual(rows["source-sha"], SOURCE)
+            self.assertIn(CONTROLLER, summary.read_text())
 
     def test_selection_rejects_foreign_controllers_and_sources_outside_main(self):
         for environment in ({**ENVIRONMENT, "GITHUB_REF": "refs/heads/feature"},
-                            {**ENVIRONMENT, "GITHUB_EVENT_NAME": "pull_request"}):
+                            {**ENVIRONMENT, "GITHUB_EVENT_NAME": "pull_request"},
+                            {**ENVIRONMENT, "GITHUB_EVENT_NAME": "push"}):
             with self.subTest(environment=environment), self.assertRaises(ValueError):
-                requests.select(environment)
+                source.select(environment)
         with self.assertRaisesRegex(ValueError, "ancestor"):
             self.choose(ENVIRONMENT, ancestor=1)
         with self.assertRaisesRegex(ValueError, "controller checkout"):
             self.choose(ENVIRONMENT, head=SOURCE)
         for value in ("main", SOURCE[:12], "-x", None):
-            with self.subTest(value=value), patch.object(requests.subprocess, "check_output") as git, \
+            with self.subTest(value=value), patch.object(source.subprocess, "check_output") as git, \
                     self.assertRaises(ValueError):
-                requests.commit(value)
+                source.commit(value)
             git.assert_not_called()
 
     def test_incompatible_tooling_refuses_before_candidate_execution(self):
         for code in (1, 128):
             result = subprocess.CompletedProcess([], code)
-            with self.subTest(code=code), patch.object(requests.subprocess, "run", return_value=result) as run:
+            with self.subTest(code=code), patch.object(source.subprocess, "run", return_value=result) as run:
                 with self.assertRaises((ValueError, subprocess.CalledProcessError)):
-                    requests.require_compatible_tooling(SOURCE, CONTROLLER)
+                    source.require_compatible_tooling(SOURCE, CONTROLLER)
                 self.assertEqual(run.call_args.args[0], ["git", "diff", "--quiet", SOURCE, CONTROLLER, "--",
                                                        ".github", "scripts", "task", "Taskfile.yml"])
-        with patch.object(requests.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
-            requests.require_compatible_tooling(SOURCE, CONTROLLER)
-        with patch.object(requests, "require_compatible_tooling", side_effect=ValueError("tooling differs")) as check:
+        with patch.object(source.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+            source.require_compatible_tooling(SOURCE, CONTROLLER)
+        with patch.object(source, "require_compatible_tooling", side_effect=ValueError("tooling differs")) as check:
             with self.assertRaisesRegex(ValueError, "tooling differs"):
                 self.choose(ENVIRONMENT)
             check.assert_called_once_with(SOURCE, CONTROLLER)
-        with patch.object(requests, "require_compatible_tooling") as check:
-            self.choose({**ENVIRONMENT, "GITHUB_EVENT_NAME": "push", "GITHUB_SHA": SOURCE})
-            check.assert_not_called()
 
 
 class QualificationReceiptTests(unittest.TestCase):
-    def test_only_a_complete_admitted_attempt_produces_a_receipt(self):
+    def test_only_a_complete_dispatch_attempt_produces_a_receipt(self):
         results = {name: {"result": "success"} for name in receipt.CHECKS}
         completed = receipt.complete(selection(), results, ENVIRONMENT)
         self.assertEqual(completed["source_sha"], SOURCE)
         self.assertEqual(completed["controller_sha"], CONTROLLER)
-        self.assertNotIn("reason", completed)
-        for changed in ({"admitted": False}, {"run_attempt": 3}, {"source_sha": "main"},
+        for changed in ({"event": "push"}, {"run_attempt": 3}, {"source_sha": "main"},
                         {"controller_sha": SOURCE}, {"repository": "foreign/repo"}, {"version": True}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 receipt.complete({**selection(), **changed}, results, ENVIRONMENT)

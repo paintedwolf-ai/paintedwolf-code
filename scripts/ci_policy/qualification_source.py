@@ -1,4 +1,4 @@
-"""Select immutable qualification sources within the shared executor queue."""
+"""Bind an immutable release candidate to its trusted dispatch controller."""
 import json
 import os
 from pathlib import Path
@@ -33,7 +33,7 @@ def require_compatible_tooling(source, controller):
 def select(environment):
     repository = environment["GITHUB_REPOSITORY"]
     event = environment["GITHUB_EVENT_NAME"]
-    if environment["GITHUB_REF"] != "refs/heads/main" or event not in {"push", "workflow_dispatch"}:
+    if environment["GITHUB_REF"] != "refs/heads/main" or event != "workflow_dispatch":
         raise ValueError("qualification requests must use the trusted main workflow")
     controller = commit(environment["GITHUB_WORKFLOW_SHA"])
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -46,29 +46,20 @@ def select(environment):
     if ancestor.returncode:
         raise ValueError("qualification source is not an ancestor of current main")
     run_id = int(environment["GITHUB_RUN_ID"])
-    reason = "selected candidate" if event == "workflow_dispatch" else "current main"
-    if event == "push" and source != tip:
-        reason = "superseded main snapshot"
-    admitted = event == "workflow_dispatch" or source == tip
-    if admitted:
-        require_compatible_tooling(source, controller)
+    require_compatible_tooling(source, controller)
     tree = subprocess.check_output(["git", "rev-parse", source + "^{tree}"], cwd=ROOT, text=True).strip()
     return {"version": 1, "repository": repository, "run_id": run_id,
             "run_attempt": int(environment["GITHUB_RUN_ATTEMPT"]), "event": event,
-            "source_sha": source, "source_tree": tree, "controller_sha": controller,
-            "admitted": admitted, "reason": reason}
+            "source_sha": source, "source_tree": tree, "controller_sha": controller}
 
 
 def main():
-    repository = os.environ["GITHUB_REPOSITORY"]
     record = select(os.environ)
     encoded = json.dumps(record, separators=(",", ":"))
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-        output.write(f"source-sha={record['source_sha']}\nrecord={encoded}\nadmitted={str(record['admitted']).lower()}\n")
+        output.write(f"source-sha={record['source_sha']}\nrecord={encoded}\n")
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-        summary.write("### Qualification request\n\n```json\n" + json.dumps(record, indent=2) + "\n```\n")
-    if not record["admitted"]:
-        api(f"repos/{repository}/actions/runs/{record['run_id']}/cancel", "POST")
+        summary.write("### Qualification source\n\n```json\n" + json.dumps(record, indent=2) + "\n```\n")
     return 0
 
 

@@ -1,4 +1,5 @@
 {
   "default": {"rss_mib": 3584},
+  "race_scale": 1.5,
   "packages": {}
 }
