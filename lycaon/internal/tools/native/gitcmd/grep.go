@@ -149,12 +149,14 @@ func (g *gitGrep) operands(dir string) ([]grepSource, []string, int, error) {
 		}
 	}
 	before, after := g.p.command.beforeDash, g.p.command.afterDash
-	if len(patterns) == 0 {
-		if len(before) == 0 {
-			writeLine(g.stderr, "fatal: no pattern given")
-			return nil, nil, 128, nil
-		}
+	switch {
+	case len(patterns) > 0:
+	case len(before) > 0:
 		patterns, before = []string{before[0]}, before[1:]
+	default:
+		// Without -e, the first word after -- is still the pattern; the
+		// operand rule guarantees one exists.
+		patterns, after = []string{after[0]}, after[1:]
 	}
 	var sources []grepSource
 	var paths []string
