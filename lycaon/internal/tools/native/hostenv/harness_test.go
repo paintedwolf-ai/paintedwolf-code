@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 // fixtureHost is the injected host-facts port; it is the owner's seam for
@@ -99,7 +100,7 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 	exec.SetResolvedPathSource(func() string { return bin })
 	t.Cleanup(func() { exec.SetResolvedPathSource(nil) })
 	clock := &fixtureClock{at: time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("fixture", 5*3600))}
-	owners, err := NewOwners(host, clock.now)
+	owners, err := NewOwners(host, clock.now, nativefixture.Boundary(t))
 	testutil.FailErr(t, "owners", err)
 	tc := tools.ToolContext{
 		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
