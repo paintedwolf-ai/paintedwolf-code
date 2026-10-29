@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { classifyDroppedItem, DROP_REJECT_MISSING, DROP_REJECT_UNIMPORTABLE_PATH, type DroppedItem } from "./file-drop.ts";
+import { classifyDroppedItem, DROP_REJECT_MISSING, type DroppedItem } from "./file-drop.ts";
 import { relativeUnderRoot } from "../../api/project-path.ts";
 
 const roots = [
@@ -40,6 +40,7 @@ describe("classifyDroppedItem", () => {
     expect(classifyDroppedItem(item, "proj-1", roots, "file", "linux")).toEqual(
       {
         kind: "path-file",
+        absolutePath: "/proj/src/main.go",
         projectId: "proj-1",
         rootId: "root-a",
         path: "src/main.go",
@@ -47,30 +48,22 @@ describe("classifyDroppedItem", () => {
     );
   });
 
-  it("in-root image → bytes-media", () => {
-    const item: DroppedItem = {
-      source: "path",
-      absolutePath: "/proj/assets/shot.png",
-    };
-    expect(classifyDroppedItem(item, "proj-1", roots, "file", "linux")).toEqual(
-      {
-        kind: "bytes-media",
-        absolutePath: "/proj/assets/shot.png",
-        rootId: "root-a",
-      },
-    );
-  });
-
-  it("in-root screen recording → bytes-media, so its frames reach the model", () => {
-    const item: DroppedItem = { source: "path", absolutePath: "/proj/recordings/bug.mov" };
-    expect(classifyDroppedItem(item, "proj-1", roots, "file", "linux")).toEqual({
-      kind: "bytes-media",
-      absolutePath: "/proj/recordings/bug.mov",
-      rootId: "root-a",
+  it("in-root image keeps a live path for host perception and editing", () => {
+    expect(classifyDroppedItem({ source: "path", absolutePath: "/proj/assets/shot.png" }, "proj-1", roots, "file", "linux")).toEqual({
+      kind: "path-file", projectId: "proj-1", rootId: "root-a", path: "assets/shot.png", absolutePath: "/proj/assets/shot.png",
     });
   });
 
-  it("out-of-root regular file → immutable external-file import", () => {
+  it("in-root screen recording → projected-file, so its frames reach the model", () => {
+    const item: DroppedItem = { source: "path", absolutePath: "/proj/recordings/bug.mov" };
+    expect(classifyDroppedItem(item, "proj-1", roots, "file", "linux")).toEqual({
+      kind: "projected-file",
+      absolutePath: "/proj/recordings/bug.mov",
+      rootId: "root-a", projectId: "proj-1", path: "recordings/bug.mov",
+    });
+  });
+
+  it("out-of-root regular file → external-file reference", () => {
     const item: DroppedItem = {
       source: "path",
       absolutePath: "/other/secret.png",
@@ -83,7 +76,7 @@ describe("classifyDroppedItem", () => {
     );
   });
 
-  it("out-of-root folder → reject", () => {
+  it("out-of-root folder → external-folder reference", () => {
     const item: DroppedItem = {
       source: "path",
       absolutePath: "/tmp/folder",
@@ -91,8 +84,8 @@ describe("classifyDroppedItem", () => {
     expect(
       classifyDroppedItem(item, "proj-1", roots, "folder", "linux"),
     ).toEqual({
-      kind: "reject",
-      reason: DROP_REJECT_UNIMPORTABLE_PATH,
+      kind: "external-folder",
+      absolutePath: "/tmp/folder",
     });
   });
 

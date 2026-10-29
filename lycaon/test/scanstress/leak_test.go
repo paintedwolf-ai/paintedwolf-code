@@ -95,7 +95,7 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 			if err == nil {
 				t.Errorf("iteration %d: canceled scan returned nil error", i)
 			}
-		case <-time.After(90 * time.Second):
+		case <-t.Context().Done():
 			obs.finish()
 			t.Fatalf("iteration %d: Run did not return after cancellation", i)
 		}

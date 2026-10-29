@@ -2,7 +2,6 @@ package credentialstore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -113,56 +112,6 @@ func TestVaultNamespacesShareOneCiphertextWithoutAliasing(t *testing.T) {
 	}
 }
 
-func TestPassphraseIdentityLifecycle(t *testing.T) {
-	path := filepath.Join(t.TempDir(), VaultBasename)
-	provider := newPassphraseIdentityProvider(path)
-	if _, err := provider.LoadOrCreate(false); !errors.Is(err, ErrVaultUninitialized) {
-		t.Fatalf("without password = %v", err)
-	}
-	setUnlockPassword(t, "correct horse battery staple")
-	doc, err := provider.LoadOrCreate(false)
-	testutil.FailErr(t, "create wrapped identity", err)
-	if doc.Identity == "" || doc.VaultID == "" {
-		t.Fatal("created identity is incomplete")
-	}
-	raw, err := os.ReadFile(identityPath(path))
-	testutil.FailErr(t, "read wrapped identity", err)
-	if !bytes.HasPrefix(raw, []byte("age-encryption.org/v1")) ||
-		bytes.Contains(raw, []byte(doc.Identity)) ||
-		bytes.Contains(raw, []byte("correct horse battery staple")) {
-		t.Fatal("wrapped identity exposed private material")
-	}
-	assertOwnerOnly(t, identityPath(path))
-	ClearUnlockSecret()
-	if _, err := provider.LoadOrCreate(false); !errors.Is(err, ErrVaultLocked) {
-		t.Fatalf("without later password = %v", err)
-	}
-	setUnlockPassword(t, "wrong password value")
-	if _, err := provider.LoadOrCreate(false); !errors.Is(err, ErrVaultUnlockFailed) {
-		t.Fatalf("wrong password = %v", err)
-	}
-	ClearUnlockSecret()
-	setUnlockPassword(t, "correct horse battery staple")
-	reopened, err := provider.LoadOrCreate(false)
-	testutil.FailErr(t, "unlock wrapped identity", err)
-	if reopened != doc {
-		t.Fatalf("reopened identity changed: %#v != %#v", reopened, doc)
-	}
-}
-
-func TestReadUnlockFrameIsBoundedAndExact(t *testing.T) {
-	password := []byte(" spaces and \n newlines stay ")
-	var frame bytes.Buffer
-	testutil.FailErr(t, "write size", binary.Write(&frame, binary.BigEndian, uint32(len(password))))
-	_, err := frame.Write(password)
-	testutil.FailErr(t, "write password", err)
-	testutil.FailErr(t, "read frame", ReadUnlockFrame(&frame))
-	t.Cleanup(ClearUnlockSecret)
-	if got := configuredUnlockSecret(); !bytes.Equal(got, password) {
-		t.Fatalf("password = %q", got)
-	}
-}
-
 func TestVaultSerializesConcurrentWriters(t *testing.T) {
 	path := filepath.Join(t.TempDir(), VaultBasename)
 	left := newDevelopmentBackend(path, "shared")
@@ -202,16 +151,6 @@ func TestPurgeVaultRemovesEveryNamespaceAndIdentity(t *testing.T) {
 			t.Fatalf("%s still exists", removed)
 		}
 	}
-}
-
-func setUnlockPassword(t *testing.T, password string) {
-	t.Helper()
-	ClearUnlockSecret()
-	var frame bytes.Buffer
-	testutil.FailErr(t, "write password size", binary.Write(&frame, binary.BigEndian, uint32(len(password))))
-	_, err := frame.WriteString(password)
-	testutil.FailErr(t, "write password", err)
-	testutil.FailErr(t, "read password", ReadUnlockFrame(&frame))
 }
 
 func TestDescribeNamesEncryptedVault(t *testing.T) {

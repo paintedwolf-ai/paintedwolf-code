@@ -10,10 +10,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestWriteRootsForProjectMatchesBuildSeatbeltProfile(t *testing.T) {
+func TestWriteRootsForBoundaryMatchesBuildSeatbeltProfile(t *testing.T) {
 	proj := t.TempDir()
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "/opt/customcache-1451")
-	roots := confine.WriteRootsForProject("", []string{proj})
+	roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
 	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	// Scoped to the write-allow block: a root that appears only in a deny block is not
@@ -26,8 +27,10 @@ func TestWriteRootsForProjectMatchesBuildSeatbeltProfile(t *testing.T) {
 }
 
 func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
 	proj := t.TempDir()
-	roots := confine.WriteRootsForProject("", []string{proj})
+	roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	tmpProbe := filepath.Join(os.TempDir(), "lycaon-1451-probe")
 	if !confine.PathWithinWriteRoots(tmpProbe, roots) {
 		t.Fatalf("os.TempDir child must be inside write roots: path=%q roots=%v", tmpProbe, roots)
@@ -42,9 +45,9 @@ func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
 	}
 }
 
-func TestFilesystemRootRemainsInBoundaryAndCoversOrdinaryFiles(t *testing.T) {
-	roots := confine.WriteRootsForBoundary("", []string{"/"}, nil, "")
-	if !confine.PathWithinWriteRoots("/etc/hosts", roots) {
-		t.Fatalf("filesystem root was lost: %v", roots)
+func TestFilesystemRootCannotBecomeWriteAuthority(t *testing.T) {
+	roots, err := confine.WriteRootsForBoundary("", []string{"/"}, nil, "")
+	if err == nil || roots != nil {
+		t.Fatalf("filesystem root admitted: roots=%v error=%v", roots, err)
 	}
 }

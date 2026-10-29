@@ -778,7 +778,7 @@ CREATE TABLE IF NOT EXISTS vault_unlocks (
     unlocked_at TEXT NOT NULL CHECK (unlocked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
     ended_at TEXT CHECK (ended_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
     end_reason TEXT CHECK (end_reason IN (
-        'idle', 'ceiling', 'screen_locked', 'sleep', 'app_quit', 'manual', 'renewed', 'restart'
+        'idle', 'ceiling', 'screen_locked', 'sleep', 'away', 'app_quit', 'manual', 'renewed', 'restart'
     )),
     CHECK ((ended_at IS NULL) = (end_reason IS NULL))
 ) STRICT;
@@ -1593,11 +1593,11 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     conflict_path TEXT NOT NULL DEFAULT '',
     conflict_expected_revision TEXT NOT NULL DEFAULT '',
     conflict_observed_revision TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    settled_at TEXT,
     -- A native name launched as its installed program: the command and the
     -- unsupported form, counted so native coverage gaps stay visible.
     native_gap_json TEXT NOT NULL DEFAULT '' CHECK (native_gap_json = '' OR json_valid(native_gap_json)),
-    started_at TEXT NOT NULL,
-    settled_at TEXT,
     CHECK (id != parent_execution_id),
     CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
     UNIQUE (program_id, id),
@@ -3664,6 +3664,15 @@ CREATE INDEX IF NOT EXISTS idx_source_snapshots_roots_key
 CREATE INDEX IF NOT EXISTS idx_source_snapshots_created
     ON source_snapshots(created_ts, id);
 
+-- One root's admitted files, independent of the root's location: the same
+-- tree under two roots, or in a single-root and a multi-root publication,
+-- is one manifest.
+CREATE TABLE IF NOT EXISTS source_manifests (
+    id TEXT PRIMARY KEY,
+    entry_count INTEGER NOT NULL CHECK (entry_count >= 0),
+    total_bytes INTEGER NOT NULL CHECK (total_bytes >= 0)
+) STRICT;
+
 -- Snapshot roots are part of a content-addressed identity: identical trees
 -- share one snapshot across time, so observation-time facts (like a git
 -- position) live on source_git_heads and checkpoints, never here.
@@ -3671,15 +3680,33 @@ CREATE TABLE IF NOT EXISTS source_snapshot_roots (
     snapshot_id TEXT NOT NULL REFERENCES source_snapshots(id) ON DELETE CASCADE,
     root_path TEXT NOT NULL,
     ordinal INTEGER NOT NULL,
+    manifest_id TEXT NOT NULL REFERENCES source_manifests(id),
     PRIMARY KEY (snapshot_id, root_path)
 ) STRICT, WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
+    ON source_snapshot_roots(manifest_id);
 
--- Stable hash buckets share unchanged manifest content.
+-- Content-defined runs of a manifest's entries in path order. Boundaries
+-- follow the paths themselves, so a change rewrites the runs around it
+-- rather than a share of the whole tree.
 CREATE TABLE IF NOT EXISTS source_manifest_chunks (
     id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
     entry_count INTEGER NOT NULL CHECK (entry_count > 0),
-    total_bytes INTEGER NOT NULL CHECK (total_bytes >= 0)
+    total_bytes INTEGER NOT NULL CHECK (total_bytes >= 0),
+    hashed_count INTEGER NOT NULL CHECK (hashed_count >= 0 AND hashed_count <= entry_count)
 ) STRICT;
+
+-- A manifest's chunks keyed by the first path each holds, so a path or a
+-- directory finds its chunks by range.
+CREATE TABLE IF NOT EXISTS source_manifest_layout (
+    manifest_id TEXT NOT NULL REFERENCES source_manifests(id) ON DELETE CASCADE,
+    first_path TEXT NOT NULL,
+    chunk_id TEXT NOT NULL REFERENCES source_manifest_chunks(id),
+    PRIMARY KEY (manifest_id, first_path)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_source_manifest_layout_chunk
+    ON source_manifest_layout(chunk_id);
 
 -- One admitted file as a generation identified it. identity says where the
 -- content id came from: 'index' is git's own blob id for a file clean against
@@ -3689,8 +3716,6 @@ CREATE TABLE IF NOT EXISTS source_manifest_chunks (
 -- object store, the retained revision store, or the file itself.
 CREATE TABLE IF NOT EXISTS source_manifest_entries (
     chunk_id TEXT NOT NULL REFERENCES source_manifest_chunks(id) ON DELETE CASCADE,
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    root_path TEXT NOT NULL,
     path TEXT NOT NULL,
     sha256 TEXT NOT NULL DEFAULT '',
     git_oid TEXT NOT NULL DEFAULT '',
@@ -3698,21 +3723,14 @@ CREATE TABLE IF NOT EXISTS source_manifest_entries (
     size INTEGER NOT NULL CHECK (size >= 0),
     mode INTEGER NOT NULL,
     modified_ns INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (chunk_id, ordinal),
-    UNIQUE (chunk_id, root_path, path)
+    PRIMARY KEY (chunk_id, path)
 ) STRICT, WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_path
-    ON source_manifest_entries(root_path, path);
-CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_hashed
-    ON source_manifest_entries(chunk_id, root_path, path) WHERE identity = 'hashed';
-
--- Entries a publication has admitted but not yet folded into chunks, so a
--- survey of any size holds no more in memory than one bucket.
+-- Entries a survey has admitted but not yet folded into chunks: the walk
+-- meets files in directory order, and the build reads them back in path
+-- order a page at a time.
 CREATE TABLE IF NOT EXISTS source_manifest_staging (
     build_id TEXT NOT NULL,
-    bucket INTEGER NOT NULL CHECK (bucket >= 0 AND bucket < 256),
-    root_path TEXT NOT NULL,
     path TEXT NOT NULL,
     sha256 TEXT NOT NULL DEFAULT '',
     git_oid TEXT NOT NULL DEFAULT '',
@@ -3720,10 +3738,8 @@ CREATE TABLE IF NOT EXISTS source_manifest_staging (
     size INTEGER NOT NULL CHECK (size >= 0),
     mode INTEGER NOT NULL,
     modified_ns INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (build_id, bucket, root_path, path)
+    PRIMARY KEY (build_id, path)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_source_manifest_staging_path
-    ON source_manifest_staging(build_id, root_path, path);
 
 CREATE TABLE IF NOT EXISTS worker_baselines (
     id TEXT PRIMARY KEY,
@@ -3796,17 +3812,6 @@ BEGIN
     WHERE EXISTS (SELECT 1 FROM source_blob_objects WHERE sha256 = OLD.content_sha256)
       AND NOT EXISTS (SELECT 1 FROM source_versions WHERE content_sha256 = OLD.content_sha256);
 END;
-
-CREATE TABLE IF NOT EXISTS source_snapshot_chunks (
-    snapshot_id TEXT NOT NULL REFERENCES source_snapshots(id) ON DELETE CASCADE,
-    bucket INTEGER NOT NULL CHECK (bucket >= 0 AND bucket < 256),
-    chunk_id TEXT NOT NULL REFERENCES source_manifest_chunks(id),
-    PRIMARY KEY (snapshot_id, bucket),
-    UNIQUE (snapshot_id, chunk_id)
-) STRICT, WITHOUT ROWID;
-
-CREATE INDEX IF NOT EXISTS idx_source_snapshot_chunks_chunk
-    ON source_snapshot_chunks(chunk_id);
 
 -- Scope boundaries record policy exclusions; budget and I/O boundaries record coverage gaps.
 CREATE TABLE IF NOT EXISTS source_snapshot_boundaries (
@@ -4322,7 +4327,7 @@ CREATE VIEW IF NOT EXISTS history_busy_projects AS
  UNION SELECT project_id FROM workflow_runs WHERE status IN ('running','paused','paused_on_child')
  UNION SELECT s.project_id FROM pending_checkpoint_scopes p JOIN sessions s ON s.id = p.session_id
  UNION SELECT s.project_id FROM rewind_operations r JOIN sessions s ON s.id = r.session_id WHERE r.status IN ('prepared','applying','files_applied','diverged');
-CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha ON source_manifest_entries(sha256);
+CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha ON source_manifest_entries(sha256) WHERE sha256 != '';
 
 CREATE TABLE IF NOT EXISTS history_pruned_bodies (
  class TEXT NOT NULL, owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
@@ -4338,9 +4343,8 @@ CREATE TRIGGER IF NOT EXISTS history_clock_code_scans_delete AFTER DELETE ON cod
 CREATE TRIGGER IF NOT EXISTS history_clock_checkpoints_insert AFTER INSERT ON checkpoints BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_checkpoints_update AFTER UPDATE ON checkpoints BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_checkpoints_delete AFTER DELETE ON checkpoints BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_entries_insert AFTER INSERT ON source_manifest_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_entries_update AFTER UPDATE ON source_manifest_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_entries_delete AFTER DELETE ON source_manifest_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_chunks_insert AFTER INSERT ON source_manifest_chunks BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_chunks_delete AFTER DELETE ON source_manifest_chunks BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_worker_baseline_objects_insert AFTER INSERT ON worker_baseline_objects BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_worker_baseline_objects_update AFTER UPDATE ON worker_baseline_objects BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_worker_baseline_objects_delete AFTER DELETE ON worker_baseline_objects BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -23,6 +24,9 @@ func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectp
 		return tools.EditorDocumentText{}, false, err
 	}
 	doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+	if errors.Is(err, projectsource.ErrSourceIsDirectory) {
+		return tools.EditorDocumentText{}, false, DirectoryReject(resolved.DisplayPath)
+	}
 	if err != nil {
 		return tools.EditorDocumentText{}, false, fmt.Errorf("read collaborative document: %w", err)
 	}
