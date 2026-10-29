@@ -222,6 +222,13 @@ func (d *ProgramDispatcher) pathOperation(spec toolcontract.CommandSpecification
 		}
 		review := bound.Review(spec.Name)
 		for _, path := range bound.Operands().Values() {
+			if spec.Name == "cd" && path == "-" {
+				previous, ok := frame.PreviousDirectory()
+				if !ok {
+					continue
+				}
+				path = previous
+			}
 			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: path})
 		}
 		return NativePrepared{Review: review, Tool: spec.Name, Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
