@@ -1542,7 +1542,7 @@
       "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
       "cleanup": "Remove active routine offer/redirect/tutorial only with implementing replacement PR; retain history decoding and named public retirement. No retirement activated by P01.",
       "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit host domain contract; also expose session-scoped ps and lsof -i :<port> inside command for session-owned background processes and loopback port probes",
+      "behavior_change_or_retention": "Keep explicit host domain contract, including listening_port/protocol holder filters; also expose ps and lsof -i :<port> inside command, where lsof lists session listeners with job identity and other holders of a named port after the same process inspection approval",
       "existing_semantic_difference": "Host-owned processes state and lifecycle; see current description",
       "implementing_issues": [
         "P21",
