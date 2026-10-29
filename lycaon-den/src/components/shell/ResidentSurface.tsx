@@ -6,7 +6,7 @@ import { ResidentPresenceProvider, useResidentPresence } from "../../ui/resident
 import { beginScrollMeasureQuiet } from "../../platform/scrolling/themed-scrollbars.ts";
 import { createPreparation, createPresentationWaiting, type Preparation } from "../../ui/presentation.ts";
 import { PresentationProvider, usePresentationParticipant } from "../../ui/presentation-context.tsx";
-import { releaseInaccessibleWebKitSelection } from "../../platform/desktop/webkit-atspi-selection.ts";
+import { createRetainedWebKitSelection } from "../../platform/desktop/webkit-atspi-selection.ts";
 import { noteFocusRegionReachability } from "../../shortcuts/focus-region.ts";
 
 type Props = {
@@ -42,9 +42,12 @@ export function ResidentSurface(props: Props) {
     return parent === "pending" || props.presence === "pending" ? "pending" : "active";
   });
   const [root, setRoot] = createSignal<HTMLDivElement | undefined>();
-  onCleanup(() => {
+  const selection = createMemo(() => {
     const el = root();
-    if (el) releaseInaccessibleWebKitSelection(el);
+    if (!el) return;
+    const lifecycle = createRetainedWebKitSelection(el);
+    onCleanup(lifecycle.dispose);
+    return lifecycle;
   });
   const preparation = createPreparation();
   const [publishedGeneration, setPublishedGeneration] = createSignal<number>();
@@ -95,8 +98,8 @@ export function ResidentSurface(props: Props) {
   const inaccessible = () => hidden() || retained();
   // Regions inside become focusable only once the surface is reachable.
   createEffect(on(inaccessible, (hidden) => {
-    const el = root();
-    if (hidden && el) releaseInaccessibleWebKitSelection(el);
+    if (hidden) selection()?.hide();
+    else selection()?.restore();
     queueMicrotask(noteFocusRegionReachability);
   }, { defer: true }));
 

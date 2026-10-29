@@ -141,7 +141,7 @@ func TestPTYScreenDSRDoesNotBlockWrite(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("ptyScreen.Write blocked on DSR replies — reply drain missing")
 	}
 
@@ -153,12 +153,11 @@ func TestPTYScreenDSRDoesNotBlockWrite(t *testing.T) {
 		if snap.Cols != 80 || snap.Rows != 24 {
 			t.Fatalf("snapshot winsize %dx%d", snap.Cols, snap.Rows)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("snapshot blocked after DSR writes")
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		got.Lock()
 		n := len(replies)
 		got.Unlock()

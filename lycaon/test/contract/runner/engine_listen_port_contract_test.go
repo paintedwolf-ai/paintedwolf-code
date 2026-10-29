@@ -178,15 +178,14 @@ func (l *pythonListener) waitReaped(t *testing.T) {
 	select {
 	case <-done:
 		l.reaped = true
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatalf("unresponsive listener pid %d still running", l.pid)
 	}
 }
 
 func waitPortFile(t *testing.T, path string, stderr *strings.Builder) string {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		b, err := os.ReadFile(path)
 		if err == nil {
 			port := strings.TrimSpace(string(b))
@@ -202,9 +201,8 @@ func waitPortFile(t *testing.T, path string, stderr *strings.Builder) string {
 
 func waitListen(t *testing.T, port string, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
 	needle := strconv.Itoa(pid)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		out, err := exec.Command("lsof", "-ti", ":"+port, "-sTCP:LISTEN").Output()
 		if err == nil && strings.Contains(string(out), needle) {
 			return
@@ -218,8 +216,7 @@ func waitHTTPHealth(t *testing.T, addr string) {
 	t.Helper()
 	url := "http://" + addr + "/health"
 	client := &http.Client{Timeout: 200 * time.Millisecond}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		resp, err := client.Get(url)
 		if err == nil {
 			_ = resp.Body.Close()

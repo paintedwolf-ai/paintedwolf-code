@@ -29,7 +29,12 @@ type releaseFixture struct {
 
 func newReleaseFixture(t *testing.T) releaseFixture {
 	t.Helper()
-	f := releaseFixture{buildFixture: newBuildFixture(t)}
+	return releaseFixtureFromBuild(t, newBuildFixture(t))
+}
+
+func releaseFixtureFromBuild(t *testing.T, build buildFixture) releaseFixture {
+	t.Helper()
+	f := releaseFixture{buildFixture: build}
 	entries, err := os.ReadDir(f.directory)
 	testutil.FailErr(t, "read release fixture", err)
 	var buffer bytes.Buffer

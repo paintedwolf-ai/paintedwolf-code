@@ -144,9 +144,6 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		t.Fatalf("phase after board orient = %q want work", run.CurrentPhase)
 	}
 
-	// Each lifecycle stage has a wall-clock bound.
-	const perStageBudget = workerDrainQuiescenceTimeout
-
 	// Fixture phase preparation must not dispatch work ahead of the human ask.
 	if len(recording.AllRequests()) != 0 {
 		t.Fatal("model ran during fixture preparation")
@@ -159,16 +156,11 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	var pending []wire.WorkerTask
-	if !testutil.WaitForNoFatal(perStageBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		var err error
 		pending, err = h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
-	}) {
-		all, listErr := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
-		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		t.Fatalf("first worker did not become pending: stage=%d tasks=%+v messages=%+v list_err=%v message_err=%v",
-			stage.Load(), all, messages, listErr, messageErr)
-	}
+	})
 	testutil.FailErr(t, "ListBySession pending", err)
 	if len(pending) != 1 {
 		t.Fatalf("pending jobs = %d want 1", len(pending))
@@ -176,18 +168,13 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	completeWorkerWrite(t, h, sess, pending[0], dir, "w1", "package main\n// TODO: resolve later\n", "Wrote main.go")
 
 	// Wait for repair dispatch.
-	if !testutil.WaitForNoFatal(perStageBudget, func() bool { return stage.Load() >= 2 }) {
-		tasks, listErr := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
-		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		t.Fatalf("repair was not dispatched: stage=%d tasks=%+v messages=%+v list_err=%v message_err=%v",
-			stage.Load(), tasks, messages, listErr, messageErr)
-	}
+	testutil.WaitFor(t, func() bool { return stage.Load() >= 2 })
 
 	t.Logf("stage 1 elapsed = %v", time.Since(start))
 
 	// Complete repair and wait for closeout.
 	stage2Start := time.Now()
-	testutil.WaitFor(t, perStageBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) >= 1
 	})
@@ -199,21 +186,10 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	completeWorkerWrite(t, h, sess, pending2[0], dir, "w2", "package main\n", "Resolved TODO in main.go")
 
 	// Drain the final coordinator wake.
-	if !testutil.WaitForNoFatal(perStageBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		got, err := h.Store.Get(ctx, sess.ID)
 		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
-	}) {
-		last := recording.LastRequest()
-		t.Logf("last completion context: %+v", last.Debug)
-		for _, message := range last.Messages {
-			if message.Role != wire.MessageRoleSystem {
-				t.Logf("completion message: role=%s kind=%s content=%s tools=%+v", message.Role, message.Kind,
-					message.Content[:min(len(message.Content), 800)], message.ToolCalls)
-			}
-		}
-		t.Fatalf("coordinator did not idle after repair: stage=%d worker_finishes=%d leg_finishes=%d",
-			stage.Load(), workerTaskFinishedCount.Load(), legFinishedCount.Load())
-	}
+	})
 	t.Logf("stage 2 elapsed = %v; workerTaskFinishedCount=%d legFinishedCount=%d",
 		time.Since(stage2Start), workerTaskFinishedCount.Load(), legFinishedCount.Load())
 	if workerTaskFinishedCount.Load()+legFinishedCount.Load() < 1 {

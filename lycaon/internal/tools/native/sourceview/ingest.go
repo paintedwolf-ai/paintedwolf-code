@@ -97,10 +97,7 @@ func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRo
 		return nil, err
 	}
 	if info.IsDir() {
-		return nil, &toolrejection.ToolReject{
-			Code: "READ_IS_DIRECTORY",
-			Data: map[string]any{"path": displayPath},
-		}
+		return nil, DirectoryReject(displayPath)
 	}
 	if compressed {
 		return readCompressedContentCapped(tool, access, f, displayPath, maxBytes)

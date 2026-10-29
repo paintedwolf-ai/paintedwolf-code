@@ -103,6 +103,9 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 			return fmt.Errorf("migration %s: %w", step.ID, err)
 		}
 	}
+	if err := checkIntegrity(ctx, tx); err != nil {
+		return err
+	}
 	if err := checkForeignKeys(ctx, tx); err != nil {
 		return err
 	}
@@ -150,6 +153,29 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 	defer func() { _ = rows.Close() }()
 	if rows.Next() {
 		return fmt.Errorf("upgraded store contains a foreign key violation")
+	}
+	return rows.Err()
+}
+
+// ErrIntegrity means SQLite found damaged data, rather than an interrupted check.
+var ErrIntegrity = errors.New("upgraded store failed integrity verification")
+
+// Check the final state while rollback is still possible. Obsolete tables do
+// not need an expensive index audit before the migration removes them.
+func checkIntegrity(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA integrity_check`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return err
+		}
+		if result != "ok" {
+			return fmt.Errorf("%w: %s", ErrIntegrity, result)
+		}
 	}
 	return rows.Err()
 }

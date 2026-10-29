@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Revision 6 is unreleased. Its source tables gain a link entry and state
+// Revision 8 is unreleased. Its source tables gain a link entry and state
 // while preserving every earlier row, index, trigger and foreign key.
 func migrateLinkKind(ctx context.Context, tx *sql.Tx) error {
 	triggers, err := suspendLinkTableTriggers(ctx, tx)

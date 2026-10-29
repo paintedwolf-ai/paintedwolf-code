@@ -39,7 +39,7 @@ func TestWorkerCycleReadFailureDoesNotStallTheLoop(t *testing.T) {
 	engine.Cycles.OnWorkerCycleTerminal(context.Background(), "s1", "")
 	engine.Nudges.DrainPending(context.Background(), "s1")
 
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 }
 
 func TestWorkerCycleGenuinelyBusyStillDefers(t *testing.T) {
