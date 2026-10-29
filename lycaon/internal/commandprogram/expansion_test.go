@@ -15,7 +15,7 @@ const secretToken = "{{paintedwolf-secret:0f8fad5b-d9cb-469f-a165-70867728950e}}
 
 func TestExpandFieldsQuotingSplittingAndParameters(t *testing.T) {
 	environment := []string{
-		"HOME=/home/u", "SPACED=/h o", "IFS=:", "EMPTY=", "LEAD= b", "PAD= a b ",
+		"HOME=/home/u", "SPACED=/h o", "EMPTY=", "LEAD= b", "PAD= a b ",
 		"MIXED=a  b\tc\nd", "COLON=a:b c", "UNICODE=héllo", "INJECT=; rm -rf / && echo $(touch x) `id` > out",
 		"SECRET=" + secretToken,
 	}
@@ -30,7 +30,7 @@ func TestExpandFieldsQuotingSplittingAndParameters(t *testing.T) {
 		{"double-quote escapes", `: "\$MIXED\"\\\n" '$MIXED\n'`, nil, []string{`$MIXED"\\n`, `$MIXED\n`}},
 		{"fixed whitespace splitting", `: $MIXED`, nil, []string{"a", "b", "c", "d"}},
 		{"quoted expansion is one field", `: "$MIXED"`, nil, []string{"a  b\tc\nd"}},
-		{"environment IFS is inert", `: $COLON`, nil, []string{"a:b", "c"}},
+		{"unset IFS uses default whitespace", `: $COLON`, nil, []string{"a:b", "c"}},
 		{"surrounding separators split", `: x$PAD`, nil, []string{"x", "a", "b"}},
 		{"leading separator after empty quotes", `: ""$LEAD`, nil, []string{"", "b"}},
 		{"empty unquoted vanishes", `: $EMPTY $UNSET`, nil, []string{}},

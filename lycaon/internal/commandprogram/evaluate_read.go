@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// readBuiltin reads one record from the frame's input stream, splits it by
-// fixed IFS whitespace (space, tab, newline) and assigns the target variables.
+// readBuiltin reads one record from the frame's input stream, splits it using
+// the reached command's IFS, and assigns the target variables.
 func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fields Fields) error {
 	spec, ok, err := ResolveCommand(fields)
 	if err != nil {
@@ -63,7 +64,11 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		if readErr != nil {
 			return ownerResult(readErr), readErr
 		}
-		values := splitReadFields(record, escaped, len(names), !hasTargets && raw)
+		ifs, set := f.Variable("IFS")
+		if !set {
+			ifs = defaultIFS
+		}
+		values := splitReadFields(record, escaped, len(names), !hasTargets && raw, ifs)
 		for i, name := range names {
 			if err := f.state.vars.Assign(ctx, name, values[i]); err != nil {
 				return ownerResult(err), f.expansionRefusal(s.SyntaxLocation, err)
@@ -133,42 +138,54 @@ func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocatio
 	}
 }
 
-func isIFSByte(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n'
+func isIFSByte(c byte, ifs string) bool {
+	return strings.IndexByte(ifs, c) >= 0
 }
 
-func splitReadFields(record []byte, escaped []bool, count int, preserveAll bool) []string {
+func splitReadFields(record []byte, escaped []bool, count int, preserveAll bool, ifs string) []string {
 	out := make([]string, count)
 	if count == 0 {
 		return out
 	}
-	if preserveAll {
+	if preserveAll || ifs == "" {
 		out[0] = string(record)
 		return out
 	}
 	i, end := 0, len(record)
-	for i < end && !escaped[i] && isIFSByte(record[i]) {
+	for i < end && !escaped[i] && isIFSByte(record[i], ifs) && isIFSWhitespace(record[i]) {
 		i++
 	}
-	for end > i && !escaped[end-1] && isIFSByte(record[end-1]) {
+	for end > i && !escaped[end-1] && isIFSByte(record[end-1], ifs) && isIFSWhitespace(record[end-1]) {
 		end--
 	}
 	for field := range count {
-		for i < end && !escaped[i] && isIFSByte(record[i]) {
-			i++
-		}
-		if i >= end {
-			break
-		}
 		if field == count-1 {
 			out[field] = string(record[i:end])
 			break
 		}
 		start := i
-		for i < end && (escaped[i] || !isIFSByte(record[i])) {
+		for i < end && (escaped[i] || !isIFSByte(record[i], ifs)) {
 			i++
 		}
 		out[field] = string(record[start:i])
+		if i >= end {
+			break
+		}
+		if isIFSWhitespace(record[i]) {
+			for i < end && !escaped[i] && isIFSByte(record[i], ifs) && isIFSWhitespace(record[i]) {
+				i++
+			}
+			if i < end && !escaped[i] && isIFSByte(record[i], ifs) && !isIFSWhitespace(record[i]) {
+				i++
+			}
+		} else {
+			i++
+		}
+		for i < end && !escaped[i] && isIFSByte(record[i], ifs) && isIFSWhitespace(record[i]) {
+			i++
+		}
 	}
 	return out
 }
+
+func isIFSWhitespace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' }

@@ -144,13 +144,13 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		var out strings.Builder
 		for _, job := range statuses {
 			if showCmd && job.CommandLine != "" {
-				fmt.Fprintf(&out, "[%d] %s running %s\n", jobs.Number(job.Handle), job.Handle, job.CommandLine)
+				fmt.Fprintf(&out, "[%d] %d running %s\n", jobs.Number(job.Handle), jobs.publicID(job.Handle), job.CommandLine)
 			} else {
-				fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
+				fmt.Fprintf(&out, "[%d] %d running\n", jobs.Number(job.Handle), jobs.publicID(job.Handle))
 			}
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return ownerFailure(err), err
+			return readFailure(err), err
 		}
 		return readResult(0), nil
 	})
@@ -209,6 +209,14 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 
 func readResult(status int) toolcontract.ProducerResult {
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
+}
+
+// readFailure is a read-only builtin whose output could not be written: it
+// changed nothing, so a reader that finished first settles it as a closed pipe.
+func readFailure(err error) toolcontract.ProducerResult {
+	result := ownerFailure(err)
+	result.EffectCertainty = toolcontract.NoEffect
+	return result
 }
 
 // argvRejection projects a binder refusal with its exact word span. A typed

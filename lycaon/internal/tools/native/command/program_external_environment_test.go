@@ -83,11 +83,12 @@ func TestProgramJobsStaySessionScopedWhilePsRunsForBothSessions(t *testing.T) {
 	_, err := s1.call(t, t.Context(), "external -- /bin/sleep 30 &")
 	testutil.FailErr(t, "launch session-1 background job", err)
 	handle := s1.jobHandle(t)
+	registryHandle := s1.registryHandle(t)
 	defer func() {
 		_, _ = s1.call(t, t.Context(), "kill -TERM "+handle)
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
-		_, _, _ = shared.Lifecycle.Wait(ctx, s1.Session, handle)
+		_, _, _ = shared.Lifecycle.Wait(ctx, s1.Session, registryHandle)
 	}()
 
 	psOut1, err := s1.call(t, t.Context(), "ps")

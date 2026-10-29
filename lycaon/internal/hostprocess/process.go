@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -34,8 +35,21 @@ type Process struct {
 	Instance   string `json:"instance"`
 	// Owned reports descent from a launch this session made. Only an owned
 	// process carries a reference, so only an owned process can be signaled.
-	Owned      bool   `json:"owned"`
-	StartOrder uint64 `json:"-"`
+	Owned      bool         `json:"owned"`
+	StartOrder uint64       `json:"-"`
+	Stats      ProcessStats `json:"-"`
+}
+
+// ProcessStats holds observed kernel counters for the read-only ps view.
+// Individual fields remain empty when that kernel observation was unavailable.
+type ProcessStats struct {
+	CPUTime       time.Duration
+	Started       time.Time
+	VirtualBytes  uint64
+	ResidentBytes uint64
+	TTY           string
+	State         string
+	Available     bool
 }
 
 // VisibleProcess is a read-only process observation for shell ps and pgrep.

@@ -16,7 +16,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval":
 		return true
 	}
 	return controlBuiltins[name]
