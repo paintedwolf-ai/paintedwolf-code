@@ -17,6 +17,8 @@ if $(echo cond); then echo then; else echo else; fi
 while $(echo loop); do break; done
 helper() { echo $(echo function); }
 { echo grouped; } && ( echo isolated ) | cat
+time echo $(echo timed) | cat
+echo {$(echo brace),plain}
 `
 	locations := commandsurface.ExecutionLocations(parseProgram(t, source).Statements)
 	texts := make([]string, 0, len(locations))
@@ -41,6 +43,8 @@ helper() { echo $(echo function); }
 		"$(echo loop)", "break;",
 		"$(echo function)", "echo function",
 		"echo grouped;", "echo isolated", "cat",
+		"echo $(echo timed)", "$(echo timed)", "echo timed",
+		"$(echo brace)", "echo brace",
 	} {
 		if !slices.Contains(texts, want) {
 			t.Fatalf("no location for %q in %q", want, texts)
