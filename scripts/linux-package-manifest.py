@@ -36,6 +36,8 @@ INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/opt/painted-wolf-code/bin/painted-wolf-code"
 HELPERS = tuple(PAYLOAD["helpers"])
 ENTRY_POINTS = tuple(PAYLOAD["entry_points"])
+BOOTSTRAP = PAYLOAD["setuid_bootstrap"]
+LAUNCH_CATALOG = "protected-launch.json"
 ARCHITECTURES = {"x86_64-unknown-linux-gnu": "x86_64", "aarch64-unknown-linux-gnu": "aarch64"}
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
@@ -73,6 +75,7 @@ def generate(args: argparse.Namespace) -> int:
         executables.append(entry(f"{INSTALL_ROOT}/bin/{helper}", tauri_dir / "binaries" / f"{helper}-{args.target}"))
     for name in ENTRY_POINTS:
         executables.append(entry(f"/usr/bin/{name}", root / "packaging" / "linux" / "bin" / name))
+    executables.append(entry(BOOTSTRAP["path"], tauri_dir / "binaries" / f"{BOOTSTRAP['name']}-{args.target}"))
     engine_root = tauri_dir / "engine-root"
     for dirpath, dirnames, filenames in os.walk(engine_root):
         dirnames.sort()
@@ -85,7 +88,8 @@ def generate(args: argparse.Namespace) -> int:
     sources = {"bin/painted-wolf-code": tauri_dir / "target" / args.target / "release" / PACKAGE_NAME,
                "engine-root": engine_root,
                "release-version": root / "VERSION",
-               "THIRD-PARTY-NOTICES.md": tauri_dir / "THIRD-PARTY-NOTICES.md"}
+               "THIRD-PARTY-NOTICES.md": tauri_dir / "THIRD-PARTY-NOTICES.md",
+               LAUNCH_CATALOG: root / "packaging" / "linux" / LAUNCH_CATALOG}
     sources.update({"bin/" + helper: tauri_dir / "binaries" / f"{helper}-{args.target}" for helper in HELPERS})
     manifest = {
         "format_version": FORMAT_VERSION,
@@ -125,7 +129,8 @@ def validate(manifest: dict) -> None:
         if not HEX_DIGEST.match(row["sha256"]) or not isinstance(row["size"], int) or row["size"] < 0:
             raise ValueError(f"manifest digest or size is malformed for {row['path']}")
         seen.add(row["path"])
-    for required in (SHELL_EXECUTABLE, *(f"{INSTALL_ROOT}/bin/{helper}" for helper in HELPERS), *(f"/usr/bin/{name}" for name in ENTRY_POINTS)):
+    for required in (SHELL_EXECUTABLE, *(f"{INSTALL_ROOT}/bin/{helper}" for helper in HELPERS), *(f"/usr/bin/{name}" for name in ENTRY_POINTS),
+                     BOOTSTRAP["path"]):
         if required not in seen:
             raise ValueError(f"manifest omits {required}")
     validate_payload(manifest["payload"], rows, manifest["install_root"])
@@ -151,7 +156,7 @@ def verify_tree(args: argparse.Namespace) -> int:
         if sha != row["sha256"] or size != row["size"]:
             raise ValueError(f"manifest digest mismatch for {row['path']}")
     # Every executable the package installs under its roots must be listed.
-    for base in (tree / INSTALL_ROOT.lstrip("/"), tree / "usr" / "bin"):
+    for base in (tree / INSTALL_ROOT.lstrip("/"), tree / "usr" / "bin", (tree / BOOTSTRAP["path"].lstrip("/")).parent):
         for dirpath, _, filenames in os.walk(base):
             for filename in filenames:
                 path = Path(dirpath) / filename
@@ -175,7 +180,7 @@ def seal_tree(args: argparse.Namespace) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate(manifest)
     rows = []
-    for base in (tree / INSTALL_ROOT.lstrip("/"), tree / "usr" / "bin"):
+    for base in (tree / INSTALL_ROOT.lstrip("/"), tree / "usr" / "bin", (tree / BOOTSTRAP["path"].lstrip("/")).parent):
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames.sort()
             for filename in sorted(filenames):

@@ -5,8 +5,9 @@ producer's `generate`, `seal-tree` and `verify-tree` operations over these bytes
 `test_manifest_producer_contract_execution.py` reconstructs both staged trees and
 compares every manifest byte through `./task test:runner`. Producer format,
 required-role, inventory or serialization changes require explicit regeneration.
-The 64-byte ELF fixtures carry only the native ELF identification fields the
-readers inspect; they are never executed.
+The protected launch catalog is also retained under `payload/` so native reader
+fixtures materialize the exact sealed bytes. The 64-byte ELF fixtures carry only
+the native ELF identification fields the readers inspect; they are never executed.
 
 Go `pkgmanifest`, the Tauri shell's `sidecar::manifest`, the desktop-settings
 observer and the Nix AppArmor generator consume the same architecture manifest.

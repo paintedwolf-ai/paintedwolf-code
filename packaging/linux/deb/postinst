@@ -1,5 +1,11 @@
 #!/bin/sh
 set -e
+# The protected launch's generation owner; the path is fixed, never configurable.
+PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations
+if [ "$1" = "configure" ]; then
+  # Select this payload for new launches; running launches keep their generation.
+  "$PW_GENERATIONS" install --family deb
+fi
 # Register the package-authored units and refresh desktop caches; nothing else.
 SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
