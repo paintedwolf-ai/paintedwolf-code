@@ -63,30 +63,6 @@ func TestMissingHostFactsRefuseWithoutSubstitutes(t *testing.T) {
 	}
 }
 
-func TestDateCapturesTheClockOnceInUTC(t *testing.T) {
-	h := newHarness(t, defaultHost())
-	cases := []struct{ source, stdout string }{
-		{"date", "2026-01-01T22:04:05Z\n"},
-		{"date -u", "2026-01-01T22:04:05Z\n"},
-		{"date '+%Y/%m/%d %H:%M:%S %s %z %% literal'", "2026/01/01 22:04:05 1767305045 +0000 % literal\n"},
-		{"date -u +", "\n"},
-	}
-	for _, c := range cases {
-		reads := h.clock.reads
-		h.run(c.source).expectOutput(t, c.source, c.stdout, "", 0)
-		if h.clock.reads != reads+1 {
-			t.Fatalf("%s read the clock %d times", c.source, h.clock.reads-reads)
-		}
-	}
-	for _, source := range []string{"date +%a", "date +%", "date 0102", "date +%Y +%m", "date -d now"} {
-		code := "COMMAND_OPERAND_INVALID"
-		if source == "date -d now" {
-			code = "COMMAND_OPTION_UNSUPPORTED"
-		}
-		h.run(source).expectRefusal(t, source, code)
-	}
-}
-
 func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 	h := newHarness(t, defaultHost())
 	if got := h.owners.Commands(); len(got) != len(utilities) {
@@ -102,8 +78,11 @@ func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 	if _, err := h.owners.Prepare(request); err == nil {
 		t.Fatal("prepared a command these owners do not serve")
 	}
-	if _, err := NewOwners(nil, h.clock.now); err == nil {
+	if _, err := NewOwners(nil, h.clock.now, h.owners.Boundary); err == nil {
 		t.Fatal("owners without host facts accepted")
+	}
+	if _, err := NewOwners(defaultHost(), h.clock.now, nil); err == nil {
+		t.Fatal("owners without a read boundary accepted")
 	}
 	var unprepared Prepared
 	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {

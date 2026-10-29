@@ -94,7 +94,7 @@ func isNullRedirectTarget(v string) bool {
 func (s *descriptorScope) needsAdmission() bool {
 	for _, plan := range s.plans {
 		switch plan.redirect.Operator {
-		case "<<", "<<-", ">&", "<&":
+		case "<<", "<<-", "<<<", ">&", "<&":
 			continue
 		default:
 			if plan.target.ProcessSubstitution() == nil && isNullRedirectTarget(plan.target.Value) {
@@ -203,7 +203,7 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 		plan := descriptorPlan{redirect: r}
 		switch r.Operator {
 		case ">&", "<&":
-		case "<<", "<<-":
+		case "<<", "<<-", "<<<":
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
 				plan.body, err = f.e.expander.ExpandDocument(ctx, scope, r)
@@ -276,7 +276,7 @@ func (s *descriptorScope) open(ctx context.Context) (Streams, error) {
 		g.io = descriptorFrame{streams: streams}
 		for _, plan := range s.plans {
 			r := plan.redirect
-			if r.Operator == "<<" || r.Operator == "<<-" {
+			if r.Operator == "<<" || r.Operator == "<<-" || r.Operator == "<<<" {
 				g.io.streams.SetReader(redirectDescriptor(r), io.NopCloser(strings.NewReader(plan.body)))
 				continue
 			}

@@ -1,9 +1,12 @@
 package mutation
 
 import (
+	"archive/tar"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -68,4 +71,46 @@ func modeString(kind byte, perm fs.FileMode, setuid, setgid, sticky bool) string
 	special(6, setgid, 's', 'S')
 	special(9, sticky, 't', 'T')
 	return string(b)
+}
+
+// tarLongListing is GNU tar's tv line. The owner/size column widens to the
+// longest seen so far, starting at 19, and the time is local.
+func tarLongListing(hdr *tar.Header, name string, width int) (string, int) {
+	kind := byte('-')
+	switch hdr.Typeflag {
+	case tar.TypeDir:
+		kind = 'd'
+	case tar.TypeSymlink:
+		kind = 'l'
+	case tar.TypeLink:
+		kind = 'h'
+	case tar.TypeChar:
+		kind = 'c'
+	case tar.TypeBlock:
+		kind = 'b'
+	case tar.TypeFifo:
+		kind = 'p'
+	}
+	mode := modeString(kind, os.FileMode(hdr.Mode)&os.ModePerm, hdr.Mode&0o4000 != 0, hdr.Mode&0o2000 != 0, hdr.Mode&0o1000 != 0)
+	user, group := hdr.Uname, hdr.Gname
+	if user == "" {
+		user = strconv.Itoa(hdr.Uid)
+	}
+	if group == "" {
+		group = strconv.Itoa(hdr.Gid)
+	}
+	size := strconv.FormatInt(hdr.Size, 10)
+	if kind == 'c' || kind == 'b' {
+		size = fmt.Sprintf("%d,%d", hdr.Devmajor, hdr.Devminor)
+	}
+	pad := len(user) + 1 + len(group) + 1 + len(size)
+	width = max(width, pad)
+	line := fmt.Sprintf("%s %s/%s %*s %s %s", mode, user, group, width-pad+len(size), size, hdr.ModTime.Local().Format("2006-01-02 15:04"), name)
+	switch kind {
+	case 'l':
+		line += " -> " + hdr.Linkname
+	case 'h':
+		line += " link to " + hdr.Linkname
+	}
+	return line, width
 }

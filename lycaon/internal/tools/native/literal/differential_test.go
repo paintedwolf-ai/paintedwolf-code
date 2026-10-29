@@ -19,6 +19,7 @@ var referenceFamily = map[string]string{
 	"wc": "GNU coreutils", "ls": "GNU coreutils", "stat": "GNU coreutils", "base64": "GNU coreutils",
 	"sha1sum": "GNU coreutils", "sha256sum": "GNU coreutils", "sha512sum": "GNU coreutils", "md5sum": "GNU coreutils",
 	"diff": "GNU diffutils", "xxd": "xxd", "hexdump": "hexdump",
+	"od": "GNU coreutils", "du": "GNU coreutils", "cmp": "GNU diffutils", "strings": "GNU Binutils",
 }
 
 // differentialCases are forms whose catalog contract is the reference's own
@@ -52,6 +53,13 @@ var differentialCases = []struct {
 	{argv: "hexdump -C input"}, {argv: "hexdump -C -n 4 -s 2 lines"}, {argv: "hexdump -C empty"}, {argv: "hexdump -C", stdin: strings.Repeat("a", 50)},
 	{argv: "sha256sum empty input"}, {argv: "sha1sum empty"}, {argv: "md5sum empty"}, {argv: "sha512sum empty"},
 	{argv: "base64 lines"}, {argv: "base64 -w 4 input"}, {argv: "base64 -w 0 input"}, {argv: "base64 empty"}, {argv: "base64 -d", stdin: "QU\nJD\n"},
+	{argv: "od lines"}, {argv: "od -A x -t x1 lines"}, {argv: "od -c ten"}, {argv: "od -t a lines"}, {argv: "od -t x2 input"}, {argv: "od -t d1 -t c input"},
+	{argv: "od -A n -t u1 -N 4 -j 2 lines"}, {argv: "od -t x4 -t o1 ten"}, {argv: "od -v -t x1 ten"}, {argv: "od empty"},
+	{argv: "cmp same-a same-b"}, {argv: "cmp old new"}, {argv: "cmp -b old new"}, {argv: "cmp -l old new"}, {argv: "cmp -lb bin-a bin-b"},
+	{argv: "cmp -s old new"}, {argv: "cmp input lines"}, {argv: "cmp -n 3 old new"}, {argv: "cmp -i 4 old new"}, {argv: "cmp empty input"},
+	{argv: "cmp noeol-a noeol-b"}, {argv: "cmp missing input", stderr: true},
+	{argv: "strings lines"}, {argv: "strings -n 2 lines"}, {argv: "strings -t x words"}, {argv: "strings -n 3 -t d utf8"}, {argv: "strings -e S utf8"},
+	{argv: "du -s tree-a"}, {argv: "du -cb input lines"}, {argv: "du -h ten"}, {argv: "du -d 0 dir"}, {argv: "du -b input"},
 }
 
 // referenceBinary finds a host utility of the selected compatibility target.

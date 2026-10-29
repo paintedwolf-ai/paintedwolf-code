@@ -198,17 +198,20 @@ func runLs(inv *invocation) error {
 }
 
 // children reads one directory's entries itself: no ignore rules or map.
-// An unreadable directory is reported and yields no entries; GNU treats an
-// unreadable command-line operand as serious (2) and a nested one as minor.
+// ls -R and du share it. An unreadable directory is reported and yields no
+// entries. ls treats an unreadable command-line operand as serious (2) and
+// a nested one as minor; du treats both as minor.
 func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
 	opened, err := dir.OpenDir()
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
-			_, _ = fmt.Fprintf(inv.stderr, "ls: cannot open directory '%s': %s\n", dir.Resolved.DisplayPath, reason)
-			status := 1
-			if operand {
+			verb, status := "open", 1
+			if inv.name() == "du" {
+				verb = "read"
+			} else if operand {
 				status = 2
 			}
+			_, _ = fmt.Fprintf(inv.stderr, "%s: cannot %s directory '%s': %s\n", inv.name(), verb, dir.Resolved.DisplayPath, reason)
 			inv.status = max(inv.status, status)
 			return nil, false, nil
 		}

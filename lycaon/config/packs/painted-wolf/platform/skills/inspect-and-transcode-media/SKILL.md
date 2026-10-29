@@ -11,7 +11,7 @@ Use this workflow to handle media files precisely instead of by incantation. On 
 
 ## Workflow
 
-1. Probe before touching — `ffprobe -print_format json -show_format -show_streams` tells you the container, codecs, duration, and resolution. Most "convert this" requests are answered wrongly without it.
+1. Probe before touching — `ffprobe -print_format json -show_format -show_streams` tells you the container, codecs, duration, and resolution. Most "convert this" requests are answered wrongly without it. When a file will not probe, read its leading bytes with `od -A x -t x1 -N 32 FILE` and its embedded tags with `strings -n 8 FILE`; magic numbers name the real container.
 2. Know that flag position is semantics — options before `-i` apply to the input. Input-side `-ss` seeks to a nearby seek point; while transcoding, default accurate-seek behavior decodes and discards the gap, but stream copy preserves it. Output-side `-ss` decodes and discards until the target timestamp. Choose based on accuracy, speed, and whether streams are copied; never reorder cosmetically.
 3. Prefer stream copy. Trims, remuxes, and container changes want `-c copy` — instant and lossless; a full re-encode is slow and degrades quality. Re-encode only when the codec or dimensions must actually change, and say which one the command does.
 4. Be explicit about outputs — always pass `-y` or `-n` so nothing blocks on an interactive prompt, write to a new path, and never overwrite the input file; a failed in-place conversion destroys the source.
