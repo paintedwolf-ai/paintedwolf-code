@@ -96,6 +96,7 @@ type ProgramPaths struct {
 	cwdInfo       os.FileInfo
 	argumentLimit int64
 	outputLimit   int64
+	rootParents   map[string]struct{}
 }
 
 // NewProgramPaths binds the invocation directory through current path authority.
@@ -105,7 +106,7 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}, rootParents: rootParentChains(actionRootPaths(tc))}
 	for _, command := range catalog.Commands {
 		p.specs[command.Name] = command
 	}
