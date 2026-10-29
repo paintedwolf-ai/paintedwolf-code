@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -22,7 +23,7 @@ func TestRegisteredProcessListReturnsStructuredInventory(t *testing.T) {
 	var verify *native.VerifyTool
 	var output *command.CommandOutputTool
 	var stop *command.CommandStopTool
-	if err := registerCommandTools(reg, nil, nil, &cmd, &verify, &output, &stop); err != nil {
+	if err := registerCommandTools(reg, nil, sandbox.NewBoundary(sandbox.Config{}, nil), &cmd, &verify, &output, &stop); err != nil {
 		testutil.FailErr(t, "register process and command tools", err)
 	}
 	reviewed := false
@@ -68,7 +69,7 @@ func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T)
 			var verify *native.VerifyTool
 			var output *command.CommandOutputTool
 			var stop *command.CommandStopTool
-			if err := registerCommandTools(reg, nil, nil, &cmd, &verify, &output, &stop); err == nil {
+			if err := registerCommandTools(reg, nil, sandbox.NewBoundary(sandbox.Config{}, nil), &cmd, &verify, &output, &stop); err == nil {
 				t.Fatal("undeclared command tool registered")
 			}
 			if len(reg.List()) != missing {
