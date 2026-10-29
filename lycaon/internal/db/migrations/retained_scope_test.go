@@ -97,3 +97,15 @@ func TestRetainedSelectionRejectsPhysicalCountOverflow(t *testing.T) {
 		t.Fatal("accepted overflowing physical selection")
 	}
 }
+
+func TestRetainedRouteAcceptsOnlyTheReviewedBoundedWriter(t *testing.T) {
+	plan := retainedStorageContractPlan()
+	plan.steps[0].Checksum = "046635199cf698cecc77b7f59fe03b92a9874b1b1789025472f44e0af6b8931e"
+	if !plan.reviewedRetainedRoute() {
+		t.Fatal("reviewed streaming writer lost resource proof")
+	}
+	plan.steps[0].Checksum = "unreviewed-writer"
+	if plan.reviewedRetainedRoute() {
+		t.Fatal("unreviewed writer inherited allocation proof")
+	}
+}
