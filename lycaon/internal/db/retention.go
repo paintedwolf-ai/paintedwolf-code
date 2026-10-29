@@ -75,6 +75,15 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 		return rep, err
 	}
 	defer release()
+	if store, ok := sqlDB.(*Store); ok {
+		pending, err := store.IntegrityAuditPending(ctx)
+		if err != nil {
+			return rep, err
+		}
+		if pending {
+			return pendingAuditResourceWork(ctx, sqlDB, cfg)
+		}
+	}
 	now := time.Now().UTC()
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
