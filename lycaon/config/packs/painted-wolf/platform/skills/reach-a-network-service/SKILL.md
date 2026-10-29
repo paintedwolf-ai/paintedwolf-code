@@ -12,6 +12,7 @@ Use this workflow when a command needs something off this machine. Egress is med
 | You need | Carried by | What you do |
 |----------|-----------|-------------|
 | **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | Native `curl` in `command` | Declare the URL, method, headers and body with curl flags. Use `-o` to save output. Loopback needs `capability_request.loopback_connect` on the command call. |
+| The same exchange as a `curl` line in a `command` program — internal CA, client certificate, upload, a local server under its production name | `curl` on the host's HTTP client | `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` to upload, `--resolve host:port:127.0.0.1` or `--connect-to` with `loopback_connect` for the local server, `-v` to see the exchange. Never `external -- curl` |
 | **Reading a web page or documentation** | `fetch_url` | Pass the URL. The default `mode=text` returns readable markdown and pages long documents with `offset` and `limit`; `curl` returns the response bytes |
 | HTTP(S) from a process that must speak it itself — a package manager, a build, a test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |
 | Any other TCP — Postgres, Redis, Kafka, raw TCP | Mediated SOCKS5 `CONNECT` (`ALL_PROXY`) | Pass `socks_proxy: true` on that `command` / `verify` / `terminal_open` |
@@ -62,7 +63,7 @@ Application errors are clues, not host decisions. Read `command_output`’s stru
 - **Do not partially strip proxy environment variables** to "fix" mediation. Clearing only some of `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and their lowercase forms) leaves the others and reproduces the same failure. Prefer `socks_proxy` for SOCKS clients, or disable env trust in the HTTP client when the process must ignore mediation.
 - **Do not retry the same call unchanged.** A boundary refusal is deterministic; the second attempt fails identically.
 - **Do not request direct IP for TCP that mediation already carries** (HTTP via default env, other TCP via `socks_proxy: true`).
-- **Use native `curl` for HTTP exchanges.** Readiness is `wait` with `http_ready` / `port_ready`, not a request loop.
+- **Use native `curl` for HTTP exchanges; never retry with `external -- curl` to evade a host refusal.** Readiness is `wait` with `http_ready` / `port_ready`, not a request loop.
 - **Do not request direct IP just to run a server.** `local_listen` covers the bind while egress stays mediated — a strictly smaller request than unobserved direct networking.
 - **Do not use direct IP for loopback.** `loopback_connect` leaves external egress unchanged.
 - **Do not describe a declared destination as restricting *where* you connected.** It bounds protocol and port. The host cannot restrict the peer and does not claim to.
