@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -61,7 +62,13 @@ func TestEverySessionGetsItsOwnScratchFolder(t *testing.T) {
 	if workerCtx.Host.SessionScratchDir != f.dir(f.worker.ID) {
 		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.Host.SessionScratchDir, f.dir(f.worker.ID))
 	}
-	for _, dir := range []string{rootCtx.Host.SessionScratchDir, workerCtx.Host.SessionScratchDir} {
+	for _, item := range []struct{ id, output string }{{f.root.ID, rootCtx.Host.SessionOutputDir}, {f.worker.ID, workerCtx.Host.SessionOutputDir}} {
+		want := enginepaths.SessionOutputUnder(filepath.Dir(filepath.Dir(f.dir(item.id))), item.id)
+		if item.output != want {
+			t.Fatalf("session output=%q want=%q", item.output, want)
+		}
+	}
+	for _, dir := range []string{rootCtx.Host.SessionScratchDir, workerCtx.Host.SessionScratchDir, rootCtx.Host.SessionOutputDir, workerCtx.Host.SessionOutputDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			t.Fatalf("scratch folder %q was not prepared: %v", dir, err)
 		}
@@ -73,8 +80,9 @@ func TestScratchUnavailableLeavesContextWithoutScratch(t *testing.T) {
 	scratchRoot := filepath.Dir(f.dir(f.root.ID))
 	testutil.FailErr(t, "plant link", os.Symlink(t.TempDir(), scratchRoot))
 
-	if dir := f.toolContext(t, f.root).Host.SessionScratchDir; dir != "" {
-		t.Fatalf("scratch prepared through a linked root: %q", dir)
+	host := f.toolContext(t, f.root).Host
+	if host.SessionScratchDir != "" || host.SessionOutputDir != "" {
+		t.Fatalf("capabilities prepared through a linked root: %+v", host)
 	}
 }
 

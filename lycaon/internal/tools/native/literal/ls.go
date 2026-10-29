@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -223,7 +224,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		}
 		*visited++
 		if maximum > 0 && *visited > maximum {
-			return nil, false, limitExceeded("traversal_visits", maximum, *visited)
+			return nil, false, tools.CommandLimitExceeded("traversal_visits", maximum, *visited)
 		}
 		child := dir
 		if name != "." {

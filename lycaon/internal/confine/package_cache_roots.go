@@ -46,6 +46,7 @@ func standardCacheDataRoots() []string {
 	}
 	if runtime.GOOS == "darwin" {
 		candidates = append(candidates, join(home, "Library/Caches"))
+		candidates = append(candidates, darwinUserRoots()...)
 	}
 	for _, rel := range packageCacheHomeRelRoots {
 		candidates = append(candidates, join(home, rel))

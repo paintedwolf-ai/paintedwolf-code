@@ -9,9 +9,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // SourceDirEntry is one resolved child of a browsed directory.
@@ -47,6 +49,10 @@ func resolveSourceBrowseRoot(p ProjectSource, rootID string) (sourceBrowseRoot, 
 	if rootPath == "" {
 		return sourceBrowseRoot{}, ErrSourceNoRoot
 	}
+	rootPath, err = filepath.Abs(rootPath)
+	if err != nil {
+		return sourceBrowseRoot{}, fmt.Errorf("resolve root path: %w", err)
+	}
 	info, err := os.Stat(rootPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -57,9 +63,9 @@ func resolveSourceBrowseRoot(p ProjectSource, rootID string) (sourceBrowseRoot, 
 	if !info.IsDir() {
 		return sourceBrowseRoot{}, ErrSourceNotFound
 	}
-	resolved, err := filepath.EvalSymlinks(rootPath)
-	if err != nil {
-		return sourceBrowseRoot{}, fmt.Errorf("resolve root: %w", err)
+	resolved := fspath.CanonicalPath(rootPath)
+	if resolved == "" {
+		return sourceBrowseRoot{}, fmt.Errorf("resolve root: path identity unavailable")
 	}
 	return sourceBrowseRoot{root: root, path: rootPath, resolved: resolved}, nil
 }
@@ -69,9 +75,15 @@ func browseProjectSourceAt(root sourceBrowseRoot, dir string) (SourceDirListing,
 	if err != nil {
 		return SourceDirListing{}, "", err
 	}
+	if settingsoverlay.IsRecoveryRelPath(relDir) {
+		return SourceDirListing{}, "", ErrSourceNotFound
+	}
 	dirAbs, resolved, err := resolveSourceDir(root.path, root.resolved, relDir)
 	if err != nil {
 		return SourceDirListing{}, "", err
+	}
+	if settingsoverlay.IsRecoveryOnlyDir(dirAbs) {
+		return SourceDirListing{}, "", ErrSourceNotFound
 	}
 	children, err := sandbox.SurveyReadDir(dirAbs, relDir, sandbox.HumanFilesSurveyOptions())
 	if err != nil {
@@ -156,9 +168,9 @@ func resolveSourceDir(rootPath, evalRoot, relDir string) (string, string, error)
 	if !info.IsDir() {
 		return "", "", ErrSourceNotFound
 	}
-	evalAbs, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return "", "", fmt.Errorf("resolve browse dir: %w", err)
+	evalAbs := fspath.CanonicalPath(abs)
+	if evalAbs == "" {
+		return "", "", fmt.Errorf("resolve browse dir: path identity unavailable")
 	}
 	if !withinRoot(evalRoot, evalAbs) {
 		return "", "", ErrSourcePathDenied

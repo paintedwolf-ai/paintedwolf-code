@@ -81,7 +81,7 @@ func TestReadSessionObserverSeesOpensBeforeContent(t *testing.T) {
 		seen = append(seen, r.DisplayPath)
 		return nil
 	})
-	file, err := reads.Open(resolved)
+	file, err := reads.Open(t.Context(), resolved)
 	testutil.FailErr(t, "observed open", err)
 	file.Close()
 	if !slices.Equal(seen, []string{"a.go"}) {
@@ -89,7 +89,7 @@ func TestReadSessionObserverSeesOpensBeforeContent(t *testing.T) {
 	}
 	refused := errors.New("refused")
 	reads.Observe(func(projectpaths.Resolved, *os.File) error { return refused })
-	if _, err := reads.Open(resolved); !errors.Is(err, refused) {
+	if _, err := reads.Open(t.Context(), resolved); !errors.Is(err, refused) {
 		t.Fatalf("refused open = %v", err)
 	}
 }

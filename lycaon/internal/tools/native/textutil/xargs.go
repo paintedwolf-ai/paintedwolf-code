@@ -7,45 +7,18 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
-// runXargs reads all of standard input, splits it into items and runs
-// COMMAND (default echo) in batches, in input order, as GNU xargs does. Each
-// batch is one child through the evaluator's nested-command port, with its
-// own execution identity, binding and receipt; no shell runs and no input
-// becomes program text. Empty input runs COMMAND once with no items unless
-// -r or -I. With -P, up to that many batches (at most concurrent_processes)
-// run at once and their output is delivered in input order.
+// runXargs reads literal items incrementally and dispatches bounded batches.
 func runXargs(inv *invocation) error {
 	x := xargsRun{inv: inv}
 	plan, err := x.plan()
 	if err != nil {
 		return err
 	}
-	input, err := inv.readAll(inv.streams.Input)
+	input, err := x.input(plan)
 	if err != nil {
 		return err
 	}
-	lines, err := x.lines(input, plan.replacing, plan.eof)
-	if err != nil {
-		return err
-	}
-	command := inv.operands()
-	if len(command) == 0 {
-		command = commandprogram.Fields{{Value: "echo", Span: inv.request.Invocation.Span}}
-	}
-	batches, err := plan.batches(inv, command, lines)
-	if err != nil {
-		return err
-	}
-	if len(batches) == 0 && !plan.replacing && !inv.flag("-r") {
-		batches = []commandprogram.Fields{command}
-	}
-	if len(batches) == 0 {
-		return nil
-	}
-	if inv.ports.Nested == nil {
-		return unsupported(inv, command[0], "a program runtime that dispatches xargs batches")
-	}
-	return x.execute(batches, plan.parallel)
+	return x.execute(input, plan)
 }
 
 // xargsRun is one xargs invocation's input splitting and batch planning.
@@ -146,77 +119,6 @@ func (x xargsRun) count(value commandprogram.Field) (int, error) {
 	return count, nil
 }
 
-// lines splits input into its logical lines of items. -0 and -d give exact
-// items, one per line; -I gives one item per nonempty line without leading
-// blanks; otherwise blanks separate items, quotes group, a backslash quotes
-// one byte, and a line ending in a blank continues on the next (GNU -L).
-func (x xargsRun) lines(input []byte, replacing bool, eof *string) ([][]string, error) {
-	if delimiter, exact, err := x.delimiter(); err != nil || exact {
-		return exactItems(input, delimiter), err
-	}
-	if replacing {
-		var out [][]string
-		for _, line := range strings.Split(string(input), "\n") {
-			if line = strings.TrimLeft(line, " \t"); line != "" {
-				out = append(out, []string{line})
-			}
-		}
-		return out, nil
-	}
-	var out [][]string
-	var line []string
-	var item strings.Builder
-	present, quote, blankEnd, stopped := false, byte(0), false, false
-	end := func() {
-		if present {
-			if eof != nil && item.String() == *eof {
-				stopped = true
-			} else {
-				line = append(line, item.String())
-			}
-			item.Reset()
-			present = false
-		}
-	}
-	for i := 0; i < len(input) && !stopped; i++ {
-		c := input[i]
-		switch {
-		case quote != 0 && c == quote:
-			quote = 0
-		case quote != 0:
-			if c == '\n' {
-				return nil, x.inv.usage(x.inv.commandWord(), "input with matched quotes on one line")
-			}
-			item.WriteByte(c)
-		case c == '\'' || c == '"':
-			quote, present, blankEnd = c, true, false
-		case c == '\\' && i+1 < len(input):
-			i++
-			item.WriteByte(input[i])
-			present, blankEnd = true, false
-		case c == '\n':
-			end()
-			if !blankEnd && len(line) > 0 {
-				out, line = append(out, line), nil
-			}
-		case c == ' ' || c == '\t':
-			end()
-			blankEnd = true
-		default:
-			item.WriteByte(c)
-			present, blankEnd = true, false
-		}
-	}
-	if quote != 0 && !stopped {
-		return nil, x.inv.usage(x.inv.commandWord(), "input with matched quotes")
-	}
-	end()
-	if len(line) > 0 {
-		out = append(out, line)
-	}
-	return out, nil
-}
-
 // delimiter is the exact item terminator of -0 or -d, which accepts one byte
 // or a C escape (\n, \t, \0, \\, \NNN octal, \xHH).
 func (x xargsRun) delimiter() (byte, bool, error) {
@@ -245,19 +147,4 @@ func (x xargsRun) delimiter() (byte, bool, error) {
 		}
 	}
 	return 0, false, x.inv.usage(value, "one delimiter byte or a C escape")
-}
-
-func exactItems(input []byte, delimiter byte) [][]string {
-	if len(input) == 0 {
-		return nil
-	}
-	items := strings.Split(string(input), string([]byte{delimiter}))
-	if items[len(items)-1] == "" {
-		items = items[:len(items)-1]
-	}
-	out := make([][]string, len(items))
-	for i, item := range items {
-		out[i] = []string{item}
-	}
-	return out
 }

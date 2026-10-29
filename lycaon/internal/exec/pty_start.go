@@ -32,7 +32,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		guard.release()
 		return nil, err
 	}
-	if err := confine.ValidateProcessInputs(cmd); err != nil {
+	if err := confine.ValidateProcessInputs(ctx, cmd); err != nil {
 		cleanup()
 		guard.release()
 		return nil, err
@@ -48,7 +48,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 	}
 	err = guard.onStarted(cmd)
 	if err == nil {
-		err = confine.ConfirmProcessLaunch(cmd)
+		err = confine.ConfirmProcessLaunch(ctx, cmd)
 	}
 	if err != nil {
 		_ = main.Close()

@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Rename files within write scope (never use command mv); a replaced destination can be undone. Replaces command: mv(1)."
+description: "Rename files within write scope; a replaced destination can be undone."
 schema:
   type: object
   properties:

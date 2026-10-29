@@ -80,7 +80,7 @@ func UserConfigDir() (string, error) {
 	return dir, nil
 }
 
-// Root resolves the configuration path without creating or changing it.
+// Root resolves the active configuration path without creating or changing it.
 func Root() (string, error) {
 	if dir := configDirOverrideForBuild(releaseBuild, performanceBuild, os.Getenv(EnvConfigDir)); dir != "" {
 		return dir, nil

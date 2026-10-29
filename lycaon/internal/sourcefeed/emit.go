@@ -23,24 +23,24 @@ const (
 
 // Change is one source mutation prepared for publication.
 type Change struct {
-	ProjectID     string
-	WorkspaceID   string
-	WorkspaceKind api.SourceWorkspaceKind
-	RootID        string
-	Path          string
-	FromPath      string
-	Op            api.SourceChangeOp
-	Origin        api.SourceChangeOrigin
-	IsDir         *bool
-	SessionID     string
-	JobID         string
-	Turn          int
-	ToolCallID    string
-	AfterSHA256   string
+	ProjectID     string                  `json:",omitempty"`
+	WorkspaceID   string                  `json:",omitempty"`
+	WorkspaceKind api.SourceWorkspaceKind `json:",omitempty"`
+	RootID        string                  `json:",omitempty"`
+	Path          string                  `json:",omitempty"`
+	FromPath      string                  `json:",omitempty"`
+	Op            api.SourceChangeOp      `json:",omitempty"`
+	Origin        api.SourceChangeOrigin  `json:",omitempty"`
+	IsDir         *bool                   `json:",omitempty"`
+	SessionID     string                  `json:",omitempty"`
+	JobID         string                  `json:",omitempty"`
+	Turn          int                     `json:",omitempty"`
+	ToolCallID    string                  `json:",omitempty"`
+	AfterSHA256   string                  `json:",omitempty"`
 	// AbsPath and FromAbsPath suppress watcher echoes.
-	AbsPath     string
-	FromAbsPath string
-	TS          time.Time
+	AbsPath     string    `json:",omitempty"`
+	FromAbsPath string    `json:",omitempty"`
+	TS          time.Time `json:",omitempty"`
 }
 
 // Sink delivers source events durably.

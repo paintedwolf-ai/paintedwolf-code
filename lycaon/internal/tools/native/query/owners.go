@@ -101,10 +101,9 @@ func (o *Owners) limit(id string) int64 {
 	return 0
 }
 
-// Program is one invocation's logical cwd and publication barrier.
+// Program is one invocation's logical cwd.
 type Program struct {
-	Paths   *projectpaths.ProgramPaths
-	Barrier *native.PublicationBarrier
+	Paths *projectpaths.ProgramPaths
 }
 
 // Prepared is one bound utility invocation. InvokeOwner matches
@@ -129,7 +128,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	}
 	command := request.Argv[0].Value
 	spec, ok := o.specs[command]
-	if !ok || program.Paths == nil || program.Barrier == nil {
+	if !ok || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a query command", command)
 	}
 	if request.OperationID != command {
@@ -159,6 +158,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("query invocation is not prepared")
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer func() {
+		for _, release := range inv.releases {
+			release()
+		}
+	}()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()

@@ -26,10 +26,11 @@ func ExternalConsumerClosure(stage ExecutorClosure, producerID, consumerID strin
 	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: stage.ExpectedConsumerClosure(), external: true}
 }
 
-// NativeConsumerClosure recognizes only the canonical close returned by this
-// exact byte endpoint. Other/joined utility errors cannot gain this exception.
+// NativeConsumerClosure requires the immediate host witness for this exact
+// byte endpoint. Wrappers, joins and diagnostic sentinels carry no authority.
 func NativeConsumerClosure(pipe *BytePipe, cause error, producerID, consumerID string) ConsumerClosure {
-	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: pipe != nil && cause == ErrConsumerClosed && pipe.Completion().Termination == StreamConsumerClosed}
+	witness, direct := cause.(consumerClosureWitness)
+	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: direct && pipe != nil && pipe.identity != nil && witness.consumerClosedEndpoint() == pipe.identity && pipe.Completion().Termination == StreamConsumerClosed}
 }
 
 // PipelineStageOutcome is original producer settlement plus input/pipe facts.
@@ -90,7 +91,13 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 	for i, stage := range stages {
 		result := stage.Result
 		closure := stage.Closure
-		expected := closure.recognized && closure.producer == stage.ExecutionID && i+1 < len(stages) && closure.consumer == stages[i+1].ExecutionID && closure.producer != "" && closure.consumer != ""
+		var consumer PipelineStageOutcome
+		following := stages[i:]
+		hasConsumer := len(following) > 1
+		if hasConsumer {
+			consumer = following[1]
+		}
+		expected := closure.recognized && closure.producer == stage.ExecutionID && hasConsumer && closure.consumer == consumer.ExecutionID && closure.producer != "" && closure.consumer != ""
 		// Authority, interruption and explicit owner stops are never pipe closure.
 		// A consumer must have an ordinary settled result. Its utility error and
 		// publication eligibility remain independent later factors; normalizing the
@@ -102,14 +109,14 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 			expected = false
 		}
 		if expected {
-			consumer := stages[i+1].Result
-			expected = result.StopCode == "" && (result.Terminal == toolcontract.ProducerFailed || result.Terminal == toolcontract.ProducerCompleted) && consumer.Validate() == nil && (consumer.Terminal == toolcontract.ProducerCompleted || consumer.Terminal == toolcontract.ProducerFailed) && consumer.StopCode == "" && stages[i+1].RequiredInputComplete
+			consumerResult := consumer.Result
+			expected = result.StopCode == "" && (result.Terminal == toolcontract.ProducerFailed || result.Terminal == toolcontract.ProducerCompleted) && consumerResult.Validate() == nil && (consumerResult.Terminal == toolcontract.ProducerCompleted || consumerResult.Terminal == toolcontract.ProducerFailed) && consumerResult.StopCode == "" && consumer.RequiredInputComplete
 		}
 		// Duplicate or missing dynamic IDs are invalid settlement, independently of
 		// coincident static nodes or equal ordinary statuses.
 		identityValid := stage.ExecutionID != ""
-		for j := 0; j < i; j++ {
-			if stages[j].ExecutionID == stage.ExecutionID {
+		for _, prior := range stages[:i] {
+			if prior.ExecutionID == stage.ExecutionID {
 				identityValid = false
 			}
 		}

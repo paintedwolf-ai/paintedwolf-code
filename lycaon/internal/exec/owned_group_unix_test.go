@@ -24,7 +24,7 @@ func TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess(t *test
 	cmd, cleanup, err := PrepareCommand(ctx, "/bin/sh", []string{"-c", script}, ExecOpts{Launch: HostLaunch("synthetic asynchronous group"), Dir: root})
 	testutil.FailErr(t, "prepare asynchronous group", err)
 	defer cleanup()
-	group, err := StartInOwnGroup(cmd)
+	group, err := StartInOwnGroup(t.Context(), cmd)
 	testutil.FailErr(t, "start owned tree", err)
 	defer func() { group.Stop(); _ = group.Wait() }()
 	child := waitForPIDFile(t, filepath.Join(root, "child.pid"))
@@ -65,7 +65,7 @@ func TestOwnedProcessGroupCancellationRetainsNativeSettlement(t *testing.T) {
 	cmd, cleanup, err := PrepareCommand(ctx, "/bin/sh", []string{"-c", "echo $$ > leader.pid; sleep 30"}, ExecOpts{Launch: HostLaunch("synthetic asynchronous cancellation"), Dir: root})
 	testutil.FailErr(t, "prepare owned cancellation", err)
 	defer cleanup()
-	group, err := StartInOwnGroup(cmd)
+	group, err := StartInOwnGroup(t.Context(), cmd)
 	testutil.FailErr(t, "start cancellation fixture", err)
 	defer func() { group.Stop(); _ = group.Wait() }()
 	leader := waitForPIDFile(t, filepath.Join(root, "leader.pid"))
@@ -90,10 +90,10 @@ func TestOwnedProcessGroupRefusesConsumedPreparedCommand(t *testing.T) {
 	cmd, cleanup, err := PrepareCommand(t.Context(), "/bin/echo", []string{"literal"}, ExecOpts{Launch: HostLaunch("synthetic consumed group")})
 	testutil.FailErr(t, "prepare once-only group", err)
 	defer cleanup()
-	group, err := StartInOwnGroup(cmd)
+	group, err := StartInOwnGroup(t.Context(), cmd)
 	testutil.FailErr(t, "start first native group", err)
 	testutil.FailErr(t, "settle first native group", group.Wait())
-	if second, err := StartInOwnGroup(cmd); err == nil || second != nil {
+	if second, err := StartInOwnGroup(t.Context(), cmd); err == nil || second != nil {
 		t.Fatal("consumed native command started twice")
 	}
 }
@@ -112,7 +112,7 @@ func TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration(t *testing.T) 
 	testutil.FailErr(t, "create actual native tree owner", err)
 	defer guard.release()
 	guard.configure(cmd)
-	testutil.FailErr(t, "validate captured inputs", confine.ValidateProcessInputs(cmd))
+	testutil.FailErr(t, "validate captured inputs", confine.ValidateProcessInputs(t.Context(), cmd))
 	testutil.FailErr(t, "start held native helper", cmd.Start())
 	settled := false
 	defer func() {
@@ -128,7 +128,7 @@ func TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration(t *testing.T) 
 	removed := make(chan struct{})
 	go func() { cleanup(); close(removed) }()
 	<-removed
-	if confine.ConfirmProcessLaunch(cmd) == nil {
+	if confine.ConfirmProcessLaunch(t.Context(), cmd) == nil {
 		t.Fatal("removed capture reported accepted handoff")
 	}
 	guard.kill(cmd)
