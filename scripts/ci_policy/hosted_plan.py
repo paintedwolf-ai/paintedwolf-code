@@ -24,6 +24,11 @@ CONTAINER_TARGET = "den:webkit:atspi"
 BROWSER_TARGET = "test:confine:linux"
 # Drives the native repository tools against committed distribution fixtures.
 REPOSITORY_TOOLS_TARGET = "test:runner"
+# The protected launch leg builds and runs a GTK desktop under a display.
+LAUNCH_PACKAGE = "./internal/launchguard"
+# Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
+# and reach the protected launch leg.
+LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "check:coverage"}
 
 
 def lanes():
@@ -133,10 +138,36 @@ def max_parallel(profile):
     return caps[profile]
 
 
+def runs_protected_launch(target):
+    """Whether a target's Go run reaches the protected launch leg: its catalog recipe selects
+    the launch package, or its script selects packages that include it."""
+    recipe = catalog()["go"].get(target)
+    if recipe is None:
+        return target in LAUNCH_SCRIPT_TARGETS
+    return any(selects_package(pattern, LAUNCH_PACKAGE) for pattern in recipe["packages"])
+
+
+def selects_package(pattern, package):
+    """Whether a Go package pattern names package, directly or through a `/...` tree."""
+    if pattern.endswith("/..."):
+        root = pattern[:-len("/...")]
+        return package == root or package.startswith(root + "/")
+    return pattern == package
+
+
 def analysis_set(targets):
     lint = bool(set(targets) & {"lint:fast", "lint:full"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
+
+
+def scripts_python_in_scope(scope):
+    """Whether changed-scripts coverage may run a Python suite: only when scripts Python changed under a bounded scope.
+
+    Without a scope the target resolves its own change base and may run every suite, so the plan provisions for all of them."""
+    if scope is None or scope["full"]:
+        return True
+    return any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
 
 
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
@@ -171,8 +202,9 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
-                           "linux_launch": bool({"test:full", "test:confine:linux", "coverage:changes"} & set(lane["targets"])),
-                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
+                           "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
+                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
+                           or "scripts:coverage:changes" in lane["targets"] and scripts_python_in_scope(scope),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
