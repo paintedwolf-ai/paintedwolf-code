@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -52,7 +51,7 @@ func TestWorkflowRecommendedApprovalRunsExternalCommand(t *testing.T) {
 	}()
 	kind := wire.CheckpointKindToolApproval
 	var checkpoint wire.CheckpointEvent
-	testutil.WaitFor(t, 30*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, err := f.h.Sessions.Checkpoints.ListPending(ctx, f.session, &kind)
 		if err == nil && len(pending) == 1 {
 			checkpoint = pending[0]
