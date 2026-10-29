@@ -193,13 +193,32 @@ func renderDependabot(p *policy, sections []section) []byte {
 	for _, e := range d.Extra {
 		writeDependabotEntry(&b, d, e, nil)
 	}
+	type groupedManifest struct {
+		entry dependabotEntry
+		rows  []row
+	}
+	var groups []groupedManifest
+	byKey := map[string]int{}
 	for _, s := range sections {
 		m := s.cfg.Manifest
 		if m == nil || m.DependabotGroup == "" {
 			continue
 		}
-		e := dependabotEntry{Ecosystem: m.Kind, Directories: []string{manifestDirectory(m.Path)}, Group: m.DependabotGroup}
-		writeDependabotEntry(&b, d, e, s.rows)
+		dir := manifestDirectory(m.Path)
+		key := m.Kind + "\x00" + m.DependabotGroup
+		if idx, ok := byKey[key]; ok {
+			groups[idx].entry.Directories = append(groups[idx].entry.Directories, dir)
+			groups[idx].rows = append(groups[idx].rows, s.rows...)
+			continue
+		}
+		byKey[key] = len(groups)
+		groups = append(groups, groupedManifest{
+			entry: dependabotEntry{Ecosystem: m.Kind, Directories: []string{dir}, Group: m.DependabotGroup},
+			rows:  append([]row(nil), s.rows...),
+		})
+	}
+	for _, g := range groups {
+		writeDependabotEntry(&b, d, g.entry, g.rows)
 	}
 	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
 }
@@ -214,11 +233,20 @@ func writeDependabotEntry(b *strings.Builder, d dependabotConfig, e dependabotEn
 		fmt.Fprintf(b, "    cooldown:\n      default-days: %d\n", d.CooldownDays)
 	}
 	if e.Group != "" {
-		fmt.Fprintf(b, "    groups:\n      %s:\n        applies-to: version-updates\n        patterns:\n          - \"*\"\n        update-types:\n          - minor\n          - patch\n", e.Group)
+		updateTypes := e.UpdateTypes
+		if len(updateTypes) == 0 {
+			updateTypes = []string{"minor", "patch"}
+		}
+		fmt.Fprintf(b, "    groups:\n      %s:\n        applies-to: version-updates\n        patterns:\n          - \"*\"\n        update-types:\n", e.Group)
+		for _, ut := range updateTypes {
+			fmt.Fprintf(b, "          - %s\n", ut)
+		}
 	}
-	ignored := make([]row, 0, len(rows))
+	var ignored []row
+	seen := map[string]bool{}
 	for _, r := range rows {
-		if r.Updates != "" && r.dependency != "" {
+		if r.Updates != "" && r.dependency != "" && !seen[r.dependency] {
+			seen[r.dependency] = true
 			ignored = append(ignored, r)
 		}
 	}

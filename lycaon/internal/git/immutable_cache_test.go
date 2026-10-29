@@ -50,8 +50,7 @@ func TestImmutableCacheCanceledWaiterDoesNotCancelSharedRead(t *testing.T) {
 
 func waitCacheWaiters(t *testing.T, cache *immutableCache[string], key string, want int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		cache.mu.Lock()
 		flight := cache.flights[key]
 		ready := flight != nil && flight.waiters == want
@@ -89,7 +88,7 @@ func TestImmutableCacheLastWaiterCancelsAndCannotPublish(t *testing.T) {
 	}
 	select {
 	case <-canceled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("last waiter left a read running")
 	}
 	value, disposition, err := cache.load(t.Context(), "key", func(context.Context) (string, int, error) { return "fresh", 5, nil })

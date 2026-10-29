@@ -337,9 +337,11 @@ func TestLoopbackAllHolderConvergenceAndIncompleteObservation(t *testing.T) {
 
 	t.Run("DefaultLoopbackProvenanceExactSessionListener", func(t *testing.T) {
 		t.Parallel()
+		nativeIdentity := "native-before"
 		fixture := &provenanceFixture{
-			now:      []socketListener{listenerAt(4242, "127.0.0.1:8123"), listenerAt(4243, "[::1]:8123")},
-			sessions: map[int]string{4242: "chat-1", 4243: "chat-1"},
+			now:            []socketListener{listenerAt(4242, "127.0.0.1:8123"), listenerAt(4243, "[::1]:8123")},
+			sessions:       map[int]string{4242: "chat-1", 4243: "chat-1"},
+			nativeObserver: func(context.Context, string, netip.AddrPort) (string, bool, error) { return nativeIdentity, true, nil },
 		}
 		prov := fixture.resolver(t.Context())
 		b := newPortBrokers(gate.PostureBalanced, prov)
@@ -355,6 +357,7 @@ func TestLoopbackAllHolderConvergenceAndIncompleteObservation(t *testing.T) {
 		// Close and rebind by another session process changes the resource ID, revoking prior dial observation.
 		fixture.now = []socketListener{listenerAt(4244, "127.0.0.1:8123")}
 		fixture.sessions[4244] = "chat-1"
+		nativeIdentity = "native-replacement"
 		afterID, ok := ObserveOwnedSessionListener(t.Context(), prov, "chat-1", v4)
 		if !ok || afterID == "" || afterID == beforeID {
 			t.Fatalf("rebind resource ID = %q (ok=%v), want distinct from %q", afterID, ok, beforeID)

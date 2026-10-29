@@ -9,8 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-// functionParametersRootForbiddenKeys are JSON Schema keywords the provider
-// rejects on the function-parameters object. Nested uses stay.
+// Function parameter roots exclude relational constraints.
 var functionParametersRootForbiddenKeys = []string{"oneOf", "anyOf", "allOf", "enum", "const", "not"}
 
 // FunctionParametersRootForbiddenKeys returns a copy of the root-keyword ban.
@@ -19,7 +18,7 @@ func FunctionParametersRootForbiddenKeys() []string {
 }
 
 // ValidateFunctionParametersRoot checks the function-parameters object after
-// TrimCoordinatorToolMeta.
+// ProjectProviderToolMeta.
 func ValidateFunctionParametersRoot(schema map[string]any) error {
 	if schema == nil {
 		return fmt.Errorf("function parameters schema is nil")

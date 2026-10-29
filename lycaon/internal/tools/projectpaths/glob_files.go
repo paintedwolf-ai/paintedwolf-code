@@ -8,12 +8,14 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // GlobFiles is pathname expansion's view of one invocation's logical paths.
 // Directories list through the held-root confined walk, and a candidate is a
 // match only when an ordinary read operand of it would be admitted. Symbolic
-// links are entries, never directories, so a walk never traverses one.
+// links are entries, never directories, so a walk never traverses one, except
+// along an attached root's own parent chain.
 type GlobFiles struct{ Paths *ProgramPaths }
 
 var _ commandsurface.GlobFiles = GlobFiles{}
@@ -48,6 +50,9 @@ func (g GlobFiles) ListDir(ctx context.Context, dir string, maximum int) ([]comm
 // is not observed: it continues the walk, and only an admitted directory
 // beneath it can list or match.
 func (g GlobFiles) Entry(ctx context.Context, path string) (commandsurface.GlobEntry, bool, error) {
+	if g.rootParent(path) {
+		return commandsurface.GlobEntry{Dir: true}, true, ctx.Err()
+	}
 	bound, err := g.Paths.Bind(ctx, globOperand(path), false)
 	if err != nil {
 		if refusal := globRefusal(err); refusal != nil {
@@ -69,6 +74,9 @@ func (g GlobFiles) Entry(ctx context.Context, path string) (commandsurface.GlobE
 // Admit applies the invocation's read authority, with its boundary, to the
 // candidate's coordinates beneath its admitted root.
 func (g GlobFiles) Admit(ctx context.Context, path string) (bool, error) {
+	if g.rootParent(path) {
+		return ctx.Err() == nil, ctx.Err()
+	}
 	bound, err := g.Paths.Bind(ctx, globOperand(path), false)
 	if err == nil && bound.Null {
 		return false, nil
@@ -80,6 +88,34 @@ func (g GlobFiles) Admit(ctx context.Context, path string) (bool, error) {
 		return false, globRefusal(err)
 	}
 	return true, nil
+}
+
+// rootParent reports a proper ancestor of an attached root, in either the
+// root's own spelling or its canonical one. A walk passes through it to reach
+// the root, even across a symbolic link such as a system temporary directory;
+// listing it still needs read authority.
+func (g GlobFiles) rootParent(path string) bool {
+	if !filepath.IsAbs(path) {
+		return false
+	}
+	_, ok := g.Paths.rootParents[filepath.Clean(filepath.FromSlash(path))]
+	return ok
+}
+
+// rootParentChains resolves each root's parent chain once per invocation.
+func rootParentChains(roots []string) map[string]struct{} {
+	parents := map[string]struct{}{}
+	for _, root := range roots {
+		for _, spelling := range []string{filepath.Clean(root), fspath.CanonicalPath(root)} {
+			if !filepath.IsAbs(spelling) {
+				continue
+			}
+			for child, dir := spelling, filepath.Dir(spelling); dir != child; child, dir = dir, filepath.Dir(dir) {
+				parents[dir] = struct{}{}
+			}
+		}
+	}
+	return parents
 }
 
 func globOperand(path string) string {
