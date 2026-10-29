@@ -100,6 +100,10 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 	if !strings.Contains(workflow.Jobs["fast"].If, "!github.event.pull_request.draft || github.event.action == 'ready_for_review'") {
 		t.Error("draft pull requests must wait unless the event marks them ready")
 	}
+	const draftGroup = "-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}"
+	if !strings.HasSuffix(workflow.Concurrency.Group, draftGroup) {
+		t.Error("draft events must use a separate concurrency group so they cannot cancel ready verification")
+	}
 	refused := false
 	for _, step := range workflow.Jobs["check"].Steps {
 		refused = refused || strings.HasPrefix(step.Run, ciGateStep) &&

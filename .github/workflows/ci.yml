@@ -23,7 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}
+  # A delayed draft synchronize event must not cancel a ready-for-review run.
+  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
