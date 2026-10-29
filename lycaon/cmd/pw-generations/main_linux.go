@@ -31,7 +31,7 @@ func main() {
 func run(args []string) error {
 	switch {
 	case len(args) == 3 && args[0] == "install" && args[1] == "--family" && (args[2] == "deb" || args[2] == "rpm" || args[2] == "pacman"):
-		if err := os.MkdirAll(filepath.Dir(launchguard.PolicyPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(launchguard.PolicyPath), 0o755); err != nil { // #nosec G301 -- root-owned public launch policy must be readable by unprivileged validators
 			return err
 		}
 		generation, err := packagegeneration.Install(args[2], writePolicy, selection)
