@@ -244,7 +244,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundHarvestCanary})),
 		textStep("Done."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithSecretMatcher(secretmatch.NewInertMatcher()), wiring.WithoutCoordinatorLoop())
 	rec := installRecordingProviderHTTP(t)
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
@@ -296,18 +296,26 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	rec := installRecordingProviderHTTP(t)
 	enableBraveSearchOnly(t, h.Server)
 
+	// No evidence is seeded: an inert pattern detector still screens harvested values.
 	dir := h.ProjectDir(t, "j6")
-	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j6_inert]] inert matcher")
-	select {
-	case err := <-done:
-		testutil.FailErr(t, "prompt", err)
-	case <-t.Context().Done():
-		t.Fatal("prompt timed out — unexpected approval ask?")
-	}
+	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done:
+			testutil.FailErr(t, "prompt", err)
+			return true
+		default:
+		}
+		pending, err := h.Sessions.Checkpoints.ListPending(t.Context(), sess.ID, nil)
+		testutil.FailErr(t, "ListPending during inert prompt", err)
+		if len(pending) != 0 {
+			t.Fatalf("inert matcher raised unexpected checkpoints: %+v", pending)
+		}
+		return false
+	})
 
 	pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sess.ID, nil)
 	testutil.FailErr(t, "ListPending", err)
