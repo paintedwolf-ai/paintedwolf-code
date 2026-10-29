@@ -96,7 +96,7 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 	if d.run.recorder == nil {
 		return nil
 	}
-	locations := programNodes(plan.Statements)
+	locations := commandsurface.ExecutionLocations(plan.Statements)
 	nodes := make([]toolcontract.ProgramNode, 0, len(locations))
 	for _, loc := range locations {
 		nodes = append(nodes, toolcontract.ProgramNode{ID: string(loc.ID), SourceUnitID: unitID, Span: loc.Span})
