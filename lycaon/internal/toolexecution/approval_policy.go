@@ -172,19 +172,13 @@ func nativePathTargetsFromArgs(args map[string]any) []hitl.NativePathTarget {
 		return nil
 	}
 	targets := []hitl.NativePathTarget{}
-	items, ok := raw.([]any)
-	if !ok {
-		return targets
-	}
-	for _, item := range items {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		path, _ := entry["path"].(string)
-		write, _ := entry["write"].(bool)
-		if path != "" {
-			targets = append(targets, hitl.NativePathTarget{Path: path, Write: write})
+	groups, _ := raw.(map[string]any)
+	for _, direction := range []string{"read", "write"} {
+		paths, _ := groups[direction].([]any)
+		for _, item := range paths {
+			if path, _ := item.(string); path != "" {
+				targets = append(targets, hitl.NativePathTarget{Path: path, Write: direction == "write"})
+			}
 		}
 	}
 	return targets
