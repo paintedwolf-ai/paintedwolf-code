@@ -276,7 +276,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return "", err
 	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	jobs.BeginProgram()
+	ctx, err = jobs.BeginProgram(ctx)
+	if err != nil {
+		return "", err
+	}
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
 	if listeners == nil {

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -28,6 +29,7 @@ type SessionJobs struct {
 	ToolCallID    string
 
 	mu      sync.Mutex
+	closed  atomic.Bool
 	results map[string]jobOutcome
 	signals map[string]int
 	// order lists handles in start order; %N names order[N-1].
@@ -35,6 +37,9 @@ type SessionJobs struct {
 	// programOrder tracks handles started by the active program.
 	programOrder []string
 }
+
+// sessionJobsKey binds admission to this exact retained session owner.
+type sessionJobsKey struct{}
 
 type jobOutcome struct {
 	result toolcontract.ProducerResult
@@ -49,9 +54,9 @@ type jobStatus struct {
 
 // BeginProgram prunes finished jobs from prior programs before a new program
 // runs so %1 names the first active or newly started job.
-func (j *SessionJobs) BeginProgram() {
+func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error) {
 	if j == nil || j.Registry == nil {
-		return
+		return ctx, nil
 	}
 	active := map[string]bool{}
 	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
@@ -59,6 +64,19 @@ func (j *SessionJobs) BeginProgram() {
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.closed.Load() {
+		return ctx, ErrProgramStopped
+	}
+	for handle := range j.results {
+		if !active[handle] {
+			delete(j.results, handle)
+		}
+	}
+	for handle := range j.signals {
+		if !active[handle] {
+			delete(j.signals, handle)
+		}
+	}
 	kept := j.order[:0]
 	for _, handle := range j.order {
 		if active[handle] {
@@ -67,12 +85,19 @@ func (j *SessionJobs) BeginProgram() {
 	}
 	j.order = kept
 	j.programOrder = nil
+	return context.WithValue(ctx, sessionJobsKey{}, j), nil
 }
 
 // start runs the job body detached from the launching statement's context.
 func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	if j == nil || j.Registry == nil || run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
+	}
+	// Serialize registration against closing this retained session owner.
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.closed.Load() {
+		return "", ErrProgramStopped
 	}
 	jobCtx, setStop, release, err := j.Supervisor.Hold(ctx)
 	if err != nil {
@@ -105,10 +130,8 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		return "", err
 	}
 	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
-	j.mu.Lock()
 	j.order = append(j.order, handle)
 	j.programOrder = append(j.programOrder, handle)
-	j.mu.Unlock()
 	close(ready)
 	return handle, nil
 }

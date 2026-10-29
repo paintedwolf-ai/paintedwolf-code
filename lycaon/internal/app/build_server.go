@@ -49,6 +49,9 @@ func (b *serveBuilder) wireRuntimeServices() error {
 		return err
 	}
 	b.execution.Host.Commands.SetBackgroundRegistry(b.interactions.Processes)
+	if err := b.sessions.Manager.Resources.RegisterDisposal("command-programs", 19, b.execution.Host.Commands.DisposeProgramSession); err != nil {
+		return err
+	}
 	b.sessions.Manager.SetBackgroundRegistry(b.interactions.Processes)
 	b.sessions.Manager.SetHeldCalls(b.interactions.Calls)
 	b.sessions.Manager.SetPageRegistry(b.interactions.Pages)

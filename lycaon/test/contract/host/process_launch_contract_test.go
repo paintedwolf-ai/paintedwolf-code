@@ -41,6 +41,7 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 		slashRel := filepath.ToSlash(rel)
 		aliases := importAliases(f)
 		prepared := preparedCommandNames(f, aliases)
+		emptyErrorReturns := emptyOptionsErrorReturns(f)
 		allowRaw := strings.HasPrefix(slashRel, "lycaon/internal/exec/") ||
 			strings.HasPrefix(slashRel, "lycaon/internal/confine/")
 		allowLowLevel := allowRaw || strings.HasPrefix(slashRel, "lycaon/internal/launchguard/")
@@ -60,7 +61,7 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 				if !allowLowLevel && isRawExecCmdLiteral(node.Type, aliases) {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "raw os/exec.Cmd literal"))
 				}
-				if isLaunchOptionsLiteral(node.Type, f.Name.Name, aliases) && !hasKey(node, "Launch") {
+				if isLaunchOptionsLiteral(node.Type, f.Name.Name, aliases) && !hasKey(node, "Launch") && !emptyErrorReturns[node] {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "process options omit Launch"))
 				}
 			}
@@ -253,5 +254,63 @@ func TestPreparedCommandScanRejectsNativeStartBypasses(t *testing.T) {
 	})
 	if count != 4 {
 		t.Fatalf("prepared process bypasses detected=%d, want four", count)
+	}
+}
+
+// A zero options result inside an explicit non-nil error branch is not a
+// launch request. Successful zero returns and populated values still need Launch.
+func emptyOptionsErrorReturns(file *ast.File) map[*ast.CompositeLit]bool {
+	out := map[*ast.CompositeLit]bool{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		branch, ok := node.(*ast.IfStmt)
+		if !ok {
+			return true
+		}
+		condition, ok := branch.Cond.(*ast.BinaryExpr)
+		if !ok || condition.Op != token.NEQ {
+			return true
+		}
+		left, leftOK := condition.X.(*ast.Ident)
+		right, rightOK := condition.Y.(*ast.Ident)
+		if !leftOK || !rightOK || left.Name != "err" || right.Name != "nil" {
+			return true
+		}
+		for _, statement := range branch.Body.List {
+			returned, ok := statement.(*ast.ReturnStmt)
+			if !ok || len(returned.Results) != 2 {
+				continue
+			}
+			literal, ok := returned.Results[0].(*ast.CompositeLit)
+			if !ok || len(literal.Elts) != 0 {
+				continue
+			}
+			err, ok := returned.Results[1].(*ast.Ident)
+			if ok && err.Name == "err" {
+				out[literal] = true
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func TestLaunchOptionsErrorReturnDoesNotExemptRequests(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "fixture.go", `package exec
+func invalid() (ExecOpts, error) { if err := validate(); err != nil { return ExecOpts{}, err }; return ExecOpts{Launch: launch}, nil }
+func success() (ExecOpts, error) { return ExecOpts{}, nil }
+func unattributed() (ExecOpts, error) { return ExecOpts{Dir: "."}, err }
+`, 0)
+	contractcheck.FailErr(t, "parse options error-return fixture", err)
+	exemptions := emptyOptionsErrorReturns(file)
+	var findings int
+	ast.Inspect(file, func(node ast.Node) bool {
+		literal, ok := node.(*ast.CompositeLit)
+		if ok && isLaunchOptionsLiteral(literal.Type, "exec", nil) && !hasKey(literal, "Launch") && !exemptions[literal] {
+			findings++
+		}
+		return true
+	})
+	if len(exemptions) != 1 || findings != 2 {
+		t.Fatalf("launch options exemptions=%d findings=%d; want one error result and two refused requests", len(exemptions), findings)
 	}
 }
