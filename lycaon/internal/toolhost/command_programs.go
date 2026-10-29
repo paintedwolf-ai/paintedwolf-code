@@ -68,7 +68,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
 		return nil, err
 	}
-	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, t.boundary)
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
 	if err != nil {
 		return nil, err
 	}

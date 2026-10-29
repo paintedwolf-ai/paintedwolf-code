@@ -103,6 +103,7 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+	nativeDefs    map[string]toolcontract.OperationDefinition
 	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.
@@ -234,19 +235,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	seen := map[string]bool{}
-	for _, operation := range owners.Natives {
-		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
-			if seen[tool] {
-				continue
-			}
-			seen[tool] = true
-			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, programOperationDefinition(definition.Operation))
-			}
-		}
+	active, nativeDefs, err := r.nativeSurfaceDefinitions(external, catalog, owners.Natives)
+	if err != nil {
+		return "", err
 	}
+	run.nativeDefs = nativeDefs
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
 	if err != nil {
 		return "", err
@@ -446,6 +439,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
 			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
 			enrichProgramReject(reject, refusal.Command, span)
@@ -678,6 +679,63 @@ func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, err
 		})
 	})
 	return r.external, r.externalErr
+}
+
+// nativeSurfaceDefinitions collects one operation definition per native tool,
+// attaching catalog commands (such as touch and mktemp) that share a tool's
+// owner without their own structured-tool disposition row.
+func (r *ProgramRuntime) nativeSurfaceDefinitions(external toolcontract.OperationDefinition, catalog toolcontract.LanguageCatalog, natives map[string]NativeOperation) ([]toolcontract.OperationDefinition, map[string]toolcontract.OperationDefinition, error) {
+	active := []toolcontract.OperationDefinition{external}
+	defs := map[string]toolcontract.OperationDefinition{}
+	addTool := func(tool string, attachCandidates bool) error {
+		if tool == "" || defs[tool].Digest() != "" {
+			return nil
+		}
+		reg, ok := r.Registry.Definition(tool)
+		if !ok {
+			return nil
+		}
+		def := programOperationDefinition(reg.Operation)
+		if attachCandidates {
+			facts := def.Facts()
+			have := map[string]bool{}
+			for _, declared := range facts.Commands {
+				have[declared.Name] = true
+			}
+			changed := false
+			for _, candidate := range catalog.Commands {
+				if natives[candidate.Name].Tool == tool && !have[candidate.Name] {
+					facts.Commands = append(facts.Commands, candidate)
+					have[candidate.Name] = true
+					changed = true
+				}
+			}
+			if changed {
+				var err error
+				if def, err = toolcontract.NewOperationDefinition(facts); err != nil {
+					return err
+				}
+			}
+		}
+		defs[tool] = def
+		active = append(active, def)
+		return nil
+	}
+	for _, spec := range catalog.Commands {
+		op, ok := natives[spec.Name]
+		if !ok {
+			continue
+		}
+		if err := addTool(op.Tool, true); err != nil {
+			return nil, nil, err
+		}
+		for _, tool := range op.Tools {
+			if err := addTool(tool, false); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return active, defs, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

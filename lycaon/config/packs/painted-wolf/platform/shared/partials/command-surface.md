@@ -1,12 +1,14 @@
-## command (profile `{{ tool_profile }}`) — argv host runner
+## command (profile `{{ tool_profile }}`) — programs
 
-Needs `command` or `pipeline` (not both); no argv replay. Runs as argv without a login shell — `&&`/`||`/`;` sequence commands, `pipeline` carries `|`, `>`/`>>`/`2>` redirect output; globs (`*`, `**`) expand; here-documents (`<<`) reject; `$()`/backticks reject. Pass multiline input with `stdin` or `stdin_from`, or create a file with `write`. Leading `NAME=value` assignments scope to their command; shared variables belong in `env`. `command` takes one command or a sequence; `pipeline` wires stdout into stdin (unquoted `|` in stage lines is rejected). Sequenced commands each run as their own process, gated on the previous exit; results carry per-stage `exit_code` or `skipped: true`. `&` detaches — use `background: true`. `cd`/`export` affect only their own process: pass `cwd`/`env`. Omitting both is not a retry.
+`command` runs one program the way a shell would: pipelines, `&&`/`||`/`;`, `if`/`for`/`while`/`case`, functions, variables, `$()`, globs, here-documents, `<`/`>`/`>>`/`2>` redirects and trailing `&` jobs. Catalog utilities run natively; other programs run confined, and `external -- NAME` selects an installed binary that shares a native name.
 
-Pass `cwd` as a repo-relative directory, `@scratch` for session scratch, or `@label/...`; empty = workspace root. On a write worker, workspace paths anchor to the private branch. `@scratch/<path>` works as an argument (quote it to pass it literally) and in stream redirects (`stdout_to`, `stderr_to`, `stdin_from`, `>`, `<`). Wrong or missing directory → fix `cwd` / paths (`CWD_*` / path-not-found), not a confinement denial.
+{% if workspace_roots %}Programs start in {{ project_dir }}. `pwd`, `$PWD` and `$OLDPWD` are absolute; `cd` moves between folders by absolute path or `@label`, and relative paths resolve from the current directory for every command, redirect and external program. Unquoted `@label/...` and `@scratch/...` expand to the absolute paths below; quote one to pass it literally. Neither form grants access.
+{% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
+{% endfor %}These folders are the project; search indexing, history and undo cover only them. {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}
+{% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch, also `$TMPDIR` and where `mktemp` creates. Literal `/tmp` is the system's own.
+{% endif %}
 
 Foreground waits ~30s, then returns a live handle if still running; yielding never terminates it. The host ledger preserves the job and emits its terminal envelope. First read: `command_output(handle="<handle>", cursor=0)`. Later reads must pass the exact returned `next_cursor`; never reuse a cursor. If no output is needed now, call `wait(until_complete=true, conditions=[{"kind":"process_done","handles":["<handle>"]}], reason="waiting for command completion")`. Intentional termination uses `command_stop(handle="<handle>")`. Exact live reruns are rejected; set `allow_concurrent:true` only for independent work. `timeout_ms` is the execution deadline. For a server/watch/tail, set `background:true`; stop it with **`command_stop`**, never `kill`/`pkill`/`lsof` via `command`.
-
-Omit `stdout_to`/`stderr_to` (or `>`/`2>`) to read output in tool result `tail`; redirects persist into write scope.
 
 If **`COMMAND_NOT_ARGV`** or **`COMMAND_ARGV_REQUIRED`**, read reject **Instead** — don't retry variants.
 

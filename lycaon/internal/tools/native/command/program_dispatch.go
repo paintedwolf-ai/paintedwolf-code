@@ -109,7 +109,7 @@ type evaluatedChild struct {
 }
 
 // pathCommands run on the frame's own directory state.
-var pathCommands = map[string]bool{"cd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
+var pathCommands = map[string]bool{"cd": true, "pwd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
 
 // Fork captures this frame's directory for an isolated frame.
 func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func(), error) {
@@ -338,11 +338,15 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if tool == "" {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	definition, ok := d.run.registry.Definition(tool)
-	if !ok || !definitionHasCommand(definition.Operation, spec.Name) {
+	operationDef, ok := d.run.nativeDefs[tool]
+	if !ok {
+		if definition, regOK := d.run.registry.Definition(tool); regOK {
+			operationDef, ok = programOperationDefinition(definition.Operation), true
+		}
+	}
+	if !ok || !definitionHasCommand(operationDef, spec.Name) {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	operationDef := programOperationDefinition(definition.Operation)
 	mode := prepared.Mode
 	if mode == "" {
 		mode = request.EffectMode
@@ -498,23 +502,23 @@ func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition to
 	return programChild{id: invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
 }
 
+// start commits the durable owner-start marker for a host-run child.
+func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
+	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
+	return marker.BeforeNativeOwner(ctx, child.bound, d.run.tc.Identity.ToolCallID, child.review)
+}
+
 type admissionMarker struct {
 	invocation.ProgramAdmissionRecorder
 	started bool
 }
 
-func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, toolCallID string, reviewed toolcontract.ReviewedOperationInputs) error {
-	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, toolCallID, reviewed); err != nil {
+func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelToolCallID string, inputs toolcontract.ReviewedOperationInputs) error {
+	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, modelToolCallID, inputs); err != nil {
 		return err
 	}
 	m.started = true
 	return nil
-}
-
-// start commits the durable owner-start marker for a host-run child.
-func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
-	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
-	return marker.BeforeNativeOwner(ctx, child.bound, d.run.tc.Identity.ToolCallID, child.review)
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {

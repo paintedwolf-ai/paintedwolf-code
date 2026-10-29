@@ -110,7 +110,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	child.producer = false
 	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
-		inputs, _ := g.redirections()
+		inputs, _ := frameRedirections(g)
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
 			return nil, true, g.redirectFailure(child, r.Operator, target, err)
@@ -119,7 +119,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		child.settle(ordinaryResult(0), nil)
 		return nil, false, nil
 	}
-	_, outputs := g.redirections()
+	_, outputs := frameRedirections(g)
 	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
 		return nil, true, g.redirectFailure(child, r.Operator, target, err)
@@ -327,9 +327,9 @@ func staticWord(w commandsurface.DeferredWord) string {
 	return b.String()
 }
 
-// redirections are the redirect owners for this frame: a directory frame that
-// binds its own targets supplies them, so cd moves redirect resolution too.
-func (g *frame) redirections() (InputRedirection, OutputPublication) {
+// frameRedirections are the redirect owners for this frame: a directory frame
+// that binds its own targets supplies them, so cd moves redirect resolution too.
+func frameRedirections(g *frame) (InputRedirection, OutputPublication) {
 	if frame, ok := g.state.dispatch.(FrameRedirections); ok {
 		if input, output := frame.Redirections(); input != nil && output != nil {
 			return input, output

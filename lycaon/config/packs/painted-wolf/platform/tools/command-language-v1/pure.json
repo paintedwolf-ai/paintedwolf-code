@@ -2727,9 +2727,30 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "pwd",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pwd",
+      "argv": "pwd [-L|-P]",
+      "forms": [
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pwd-option-L",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pwd-option-P",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pwd [-L|-P]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -2758,7 +2779,7 @@
       ],
       "example": {
         "program": "pwd",
-        "stdout": ".\n",
+        "stdout": "<authorized-native-root>\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
