@@ -139,7 +139,7 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 				}
 			}
 			if kind != "socket_permit" && kind != "direct_ip_permit" {
-				if err := retainedOnceBoundary(kind, delta); err != nil {
+				if err := retainedBoundary(kind, delta); err != nil {
 					return nil, err
 				}
 				if _, present := delta["execution_id"]; present {
@@ -152,7 +152,7 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 					return nil, fmt.Errorf("retained once authority identity is incomplete")
 				}
 			}
-			if err := retainedOnceBoundary(kind, delta); err != nil {
+			if err := retainedBoundary(kind, delta); err != nil {
 				return nil, err
 			}
 			if _, present := delta["execution_id"]; present {
@@ -224,7 +224,7 @@ func retainedIdentity(raw json.RawMessage) bool {
 // Freeze the changed boundary payloads at revision4's exact stored shapes.
 // This is format recognition only; existing capability owners still decide
 // whether a restored descriptor is complete, current and usable.
-func retainedOnceBoundary(kind string, delta map[string]json.RawMessage) error {
+func retainedBoundary(kind string, delta map[string]json.RawMessage) error {
 	decode := func(raw json.RawMessage, target any) error {
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
@@ -233,7 +233,7 @@ func retainedOnceBoundary(kind string, delta map[string]json.RawMessage) error {
 		}
 		return nil
 	}
-	if kind == "socket_permit" {
+	if kind == "socket_permit" || kind == "socket_chat" {
 		var sockets []struct {
 			ApprovedPath string `json:"approved_path"`
 			ResolvedPath string `json:"resolved_path"`
@@ -244,6 +244,9 @@ func retainedOnceBoundary(kind string, delta map[string]json.RawMessage) error {
 		if len(sockets) == 0 {
 			return fmt.Errorf("retained socket boundary is missing")
 		}
+		return nil
+	}
+	if kind != "direct_ip_permit" && kind != "direct_ip_chat" {
 		return nil
 	}
 	var lease struct {
