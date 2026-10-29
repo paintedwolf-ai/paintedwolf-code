@@ -14,22 +14,22 @@ func boundedRetainedRoute(plan migrations.Plan) bool {
 	return plan.BoundedRetainedStorage()
 }
 
-func executeRetainedRoute(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged bool) error {
+func executeRetainedRoute(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged, sharedOriginal bool) error {
 	if !boundedRetainedRoute(plan) {
 		return executeUpgrade(ctx, path, plan, progress, registry)
 	}
-	return executeRetainedUpgrade(ctx, path, plan, progress, registry, staged)
+	return executeRetainedUpgrade(ctx, path, plan, progress, registry, staged, sharedOriginal)
 }
 
 // Only the unpublished replacement disables its journal. Activation opens
 // the sealed, atomically published database with the ordinary WAL writer.
-func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged bool) (err error) {
+func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry, staged, sharedOriginal bool) (err error) {
 	writer, err := openRetainedUpgradeWriter(ctx, path)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, writer.Close()) }()
-	storage, err := InspectUpgradeStorage(ctx, writer, path, staged)
+	storage, err := InspectUpgradeStorage(ctx, writer, path, staged, sharedOriginal)
 	if err != nil {
 		return err
 	}

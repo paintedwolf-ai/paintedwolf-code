@@ -20,7 +20,22 @@ type rebuildObject struct {
 // must keep the source immutable until publication; the source is attached read-only.
 // The copy keeps the released shape so the registered migration remains the sole
 // schema transformer, but never visits chunks that transformation would discard.
-func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (err error) {
+func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (retainedCopyResult, error) {
+	if _, err := os.Lstat(destination); err == nil {
+		return retainedCopyResult{}, os.ErrExist
+	} else if !os.IsNotExist(err) {
+		return retainedCopyResult{}, err
+	}
+	if boundedRetainedRoute(plan) {
+		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan)
+		if used || err != nil {
+			return result, err
+		}
+	}
+	return retainedCopyResult{}, copyRetainedRows(ctx, source, destination, plan)
+}
+
+func copyRetainedRows(ctx context.Context, source, destination string, plan migrations.Plan) (err error) {
 	selection := plan.CopyPlan()
 	if selection == nil {
 		return fmt.Errorf("upgrade route does not define a retained copy")

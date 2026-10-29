@@ -71,16 +71,17 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Migrating)
 	}
-	if err := copyRetainedStore(ctx, path, replacement, plan); err != nil {
+	prepared, err := copyRetainedStore(ctx, path, replacement, plan)
+	if err != nil {
 		return err
 	}
 	// The compact released-shape copy is itself verified before it becomes
 	// recovery material. Capture retains every backed-up installation payload;
 	// only unreachable legacy chunks and abandoned staging have been omitted.
-	if err := captureRetainedRecovery(ctx, replacement, plan, hooks, staged); err != nil {
+	if err := captureRetainedRecovery(ctx, replacement, plan, hooks, staged, prepared); err != nil {
 		return err
 	}
-	if err := executeRetainedRoute(ctx, replacement, plan, hooks.Progress, registry, staged); err != nil {
+	if err := executeRetainedRoute(ctx, replacement, plan, hooks.Progress, registry, staged, prepared.sharedOriginal); err != nil {
 		return err
 	}
 	if err := sealRebuiltStore(ctx, replacement); err != nil {
@@ -100,7 +101,7 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	return nil
 }
 
-func captureRetainedRecovery(ctx context.Context, replacement string, plan migrations.Plan, hooks UpgradeHooks, staged bool) (err error) {
+func captureRetainedRecovery(ctx context.Context, replacement string, plan migrations.Plan, hooks UpgradeHooks, staged bool, prepared retainedCopyResult) (err error) {
 	reader, err := openReader(ctx, replacement)
 	if err != nil {
 		return err
@@ -109,7 +110,11 @@ func captureRetainedRecovery(ctx context.Context, replacement string, plan migra
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Validating)
 	}
-	if err := validateStoreIntegrity(ctx, reader); err != nil {
+	if prepared.validatedIdentity != "" {
+		if err := requireRebuildIdentity(replacement, prepared.validatedIdentity); err != nil {
+			return err
+		}
+	} else if err := validateUpgradeIntegrity(ctx, reader); err != nil {
 		return err
 	}
 	if staged {
@@ -118,7 +123,7 @@ func captureRetainedRecovery(ctx context.Context, replacement string, plan migra
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Snapshotting)
 	}
-	return hooks.Before(ctx, reader, plan)
+	return hooks.Before(ctx, UpgradeSource{DB: reader, SharedOriginal: prepared.sharedOriginal}, plan)
 }
 
 func sealRebuiltStore(ctx context.Context, path string) error {

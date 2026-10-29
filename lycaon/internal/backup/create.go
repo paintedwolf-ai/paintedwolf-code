@@ -26,6 +26,7 @@ import (
 
 // CreateOpts configures archive production.
 type CreateOpts struct {
+	SharedOriginal    bool
 	ConfigDir         string
 	SQLDB             db.DBTX
 	DBPath            string
