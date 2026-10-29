@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -42,6 +45,15 @@ func launchCoverageOverlay(t *testing.T, build, directory string) (string, strin
 	backing := filepath.Join(build, "guardian_exec_linux.go")
 	testutil.FailErr(t, "retain instrumented exec source", os.WriteFile(backing, []byte(instrumented), 0o600))
 	initializer := filepath.Join(build, "fixture_coverage_linux.go")
+	declarations, err := parser.ParseFile(token.NewFileSet(), initializer, launchCoverageSource, 0)
+	testutil.FailErr(t, "parse fixture coverage declarations", err)
+	ast.Inspect(declarations, func(node ast.Node) bool {
+		switch node.(type) {
+		case *ast.FuncDecl, *ast.FuncLit:
+			t.Fatal("virtual fixture coverage source must not declare covered functions")
+		}
+		return true
+	})
 	testutil.FailErr(t, "retain fixture coverage initializer", os.WriteFile(initializer, []byte(launchCoverageSource), 0o600))
 	replacements := map[string]string{
 		original: backing,
@@ -69,6 +81,9 @@ func launchCoverageOverlay(t *testing.T, build, directory string) (string, strin
 	t.Logf("fixture exec source original=%x instrumented=%x initializer=%x", sha256.Sum256(raw),
 		sha256.Sum256([]byte(instrumented)), sha256.Sum256([]byte(launchCoverageSource)))
 	t.Logf("fixture mount source original=%x instrumented=%x", sha256.Sum256(transferRaw), sha256.Sum256([]byte(transferSource)))
+	collectorSource, err := os.ReadFile(filepath.Join(working, "testdata", "fixturecoverage", "coverage_linux.go"))
+	testutil.FailErr(t, "read actual fixture coverage collector", err)
+	t.Logf("fixture collector source=%x", sha256.Sum256(collectorSource))
 	for _, command := range []string{"pw-launch", "pw-launch-entry"} {
 		source, err := os.ReadFile(filepath.Join(working, "..", "..", "cmd", command, "main_linux.go"))
 		testutil.FailErr(t, "read actual native role dispatcher", err)
@@ -81,58 +96,12 @@ func launchCoverageOverlay(t *testing.T, build, directory string) (string, strin
 const launchCoverageSource = `//go:build linux
 package launchguard
 
-import (
-    "encoding/hex"
-    "fmt"
-    "os"
-    "path/filepath"
-    "runtime/coverage"
-    "golang.org/x/sys/unix"
-)
+import "github.com/lycaon/lycaon/internal/launchguard/testdata/fixturecoverage"
 
 var fixtureCoverageDirectoryHex string
-var fixtureCoverageDirectory = initializeFixtureCoverage()
-
-// This dependency initializer precedes main's generated coverage initHook.
-// The runtime retains its directory before the real main init scrubs Env.
-func initializeFixtureCoverage() string {
-    raw, err := hex.DecodeString(fixtureCoverageDirectoryHex)
-    if err != nil || !filepath.IsAbs(string(raw)) {
-        panic("invalid embedded native fixture collector")
-    }
-    if err := os.Setenv("GOCOVERDIR", string(raw)); err != nil {
-        panic(err)
-    }
-    return string(raw)
-}
-
-func fixtureFlushCoverage() error {
-    if err := coverage.WriteMetaDir(fixtureCoverageDirectory); err != nil {
-        return fmt.Errorf("fixture stage metadata: %w", err)
-    }
-    if err := coverage.WriteCountersDir(fixtureCoverageDirectory); err != nil {
-        return fmt.Errorf("fixture stage counters: %w", err)
-    }
-    return nil
-}
-
-func fixtureExecWithCoverage(execute func(string, []string, []string) error, path string, args, environment []string) error {
-    if err := fixtureFlushCoverage(); err != nil {
-        return err
-    }
-    return execute(path, args, environment)
-}
-
-// These counters describe actual owner work before its typed progress message,
-// never final counters from workers the guardian later kills.
-func fixtureSendWithCoverage(send func(int, []byte, []byte, unix.Sockaddr, int) (int, error), socket int, packet, control []byte, address unix.Sockaddr, flags int, kind byte) (int, error) {
-    if kind == mountTransferReady || kind == mountTransferAck {
-        if err := fixtureFlushCoverage(); err != nil {
-            return 0, err
-        }
-    }
-    return send(socket, packet, control, address, flags)
-}
+var fixtureCoverageCollector = fixturecoverage.New(fixtureCoverageDirectoryHex, mountTransferReady, mountTransferAck)
+var fixtureExecWithCoverage = fixtureCoverageCollector.Exec
+var fixtureSendWithCoverage = fixtureCoverageCollector.Send
 `
 
 func prepareLaunchCoverage(directory, uidText, gidText string) error {
