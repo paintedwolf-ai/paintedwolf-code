@@ -17,7 +17,7 @@
   "encoding": {
     "program": "UTF-8; reject invalid UTF-8 and NUL before effects",
     "streams": "bytes; preserve NUL and CRLF",
-    "document": "Capture accepted Unicode text plus the source encoding, BOM-presence and newline policy; encode exactly in that representation, retaining BOM iff recorded. Refuse unrepresentable text. cat, head/tail byte modes, checksums and byte counts consume these exact bytes. Record representation and digest together, separately from disk; line transforms retain explicit source mappings.",
+    "document": "Read saved file bytes, recording their encoding, BOM and newline policy with the captured disk revision. Native byte modes and external processes use those saved bytes. Text transforms decode that captured representation and retain explicit source mappings. Unsaved drafts are separate from command inputs.",
     "ordering": "unsigned byte lexical order; no ambient locale"
   },
   "syntax": {
@@ -103,7 +103,7 @@
     "dispatch": "Native names bind first, including unsupported flags. Bare other programs dispatch confined. external -- explicitly selects installed binaries. No shell fallback.",
     "paths": "Relative cwd, @label, @scratch and native absolute operands preserve physical identity; native_path converts explicitly and grants no access. TMPDIR and mktemp use real session paths. Null redirects use typed device sinks.",
     "statuses": "Last executed ordinary status; pipelines use rightmost nonzero after expected early closure. Grep/diff comparison 1 remains complete. Host terminal reasons latch and prevent later admission.",
-    "publication": "Every producer must be typed eligible and complete; native grep/diff comparison 1 qualifies, unclassified external nonzero does not. Capture revisions before producer, stage bytes, review, validate and publish per target. Never pre-truncate or replay producer.",
+    "publication": "When current authority permits, publish this session\u2019s accepted agent-only drafts through separate admitted write operations before a reached owner opens its inputs. Read-only profiles read saved bytes without publication. Every redirected producer must be typed eligible and complete; native grep/diff comparison 1 qualifies, unclassified external nonzero does not. Capture destinations after preparation, stage bytes, review, validate and publish per target. Never pre-truncate or replay a producer.",
     "evidence": "Execution pins differ from conversational delivery. Only delivered exact mapped cat/head/tail/nl ranges qualify an edit base; unseen output and arbitrary transforms do not.",
     "jobs": "Session job handles, not global PIDs; capture cwd/environment, bounded lifetime/output, owned cancellation; no interpreter checkpoints.",
     "secrets": "References remain opaque except declared authorized sinks; inserted bytes never become grammar.",
@@ -992,8 +992,8 @@
     },
     {
       "id": "COMMAND_PUBLICATION_PENDING",
-      "location": "Dependent external launch after an accepted native write that is not saved.",
-      "help": "External processes read published disk; accepted edits stay recoverable and other drafts are never saved."
+      "location": "An accepted command write that cannot be saved.",
+      "help": "Accepted changes are kept unsaved with their saved-file revision. Later operations do not run; inspect the retained change before choosing the next action."
     }
   ],
   "source_locations": {
@@ -1020,10 +1020,11 @@
     "unsupported": "Reject COMMAND_OPTION_UNSUPPORTED with exact option source span and generated help; no external fallback.",
     "conflicts": "Reject COMMAND_OPERAND_INVALID for incompatible modes; never select a dialect from host OS."
   },
-  "schema_copy": "Run a short coherent program using familiar shell syntax; return to the model when the next action needs evidence interpretation. Version 1 supports quotes/escapes, pipes, ;, &&/||, grouping, variables with ${name:-word}/#/%/// operators, $(( )) integer arithmetic, sorted globs, $()/backticks, if/case/for/while, bounded functions, set -e/-u/-o pipefail, source PATH, here-documents and redirects. The host validates the complete submitted syntax unit before effects. Computed operations bind only when reached; source captures and validates its own unit. Untaken branches do not expand. No eval, reparsing, process substitution, traps, arrays, other shell options or persistent shell state.\nNative utilities include literal cat/head/tail/nl; find/grep/rg; ls/stat/wc/diff/file/xxd/hexdump; checksums/base64; sed/awk/printf/echo/seq/yes/sort/uniq/cut/tr/paste/join/comm/column/fold/tac/rev/xargs; jq/yq; cp/mv/rm/rmdir/mkdir/touch/mktemp/tee; tar/unzip/zip/gzip/gunzip/zcat; Git; curl; path, environment, identity, date and session process built-ins. Use generated help for supported option/operand forms. Both GNU and BSD sed -i forms, stat -c/-f and base64 -d/-D have fixed portable meanings. Unsupported native forms reject with focused help; they never fall through to an OS binary.\nOther installed programs such as python3, go, cargo, npm, node and ./task launch directly under confinement. Bare python resolves to python3 only when python is absent. external -- explicitly selects an installed binary with a native built-in name. Arguments remain literal data; native_path -- PATH explicitly converts a logical cross-root path without granting access. Native absolute paths retain OS identity. TMPDIR and mktemp use the same real session directory as child processes. Native null redirects are typed discard sinks.\nPipes carry complete bytes, independently of previews and receipts. Variables never become grammar. Unquoted expansion uses fixed whitespace splitting then sorted globbing; quoted expansion preserves argument boundaries. Unmatched globs stay literal. Substitution strips trailing LF and refuses NUL scalars; failed substitution prevents its containing dispatch. Native reads use accepted document snapshots in captured encoding; external processes use published disk.\nRedirects and in-place edits stage complete output, then review and compare captured destination revisions before publication. They never pre-truncate. Native grep no-match/diff differences keep status1 but can publish complete output. Failed/incomplete producers discard staging. Earlier committed effects remain after later failure; programs are not transactions. Permission refusal, conflict, cancellation and host budgets stop later admission even after exit0. Dependent processes wait for publication; unrelated human drafts remain unsaved.\nOptional progress_update uses the existing progress payload and settles separately before gated effects. Every effect retains its subsystem authority, source span, child identity, evidence and recovery. Internal execution reads are not conversational observation; only exact delivered mapped source windows establish an edit base. Retained surgical/orientation tools remain available through normal selection.\nTrailing & returns a bounded session job handle; $!, jobs, wait and kill refer to owned jobs, not arbitrary PIDs. Approval resumes exact held inputs once. Host loss interrupts; it does not replay the program, HTTP or completed effects. Partial/unknown outcomes require a specific safe next action. Whole-program resubmission is suggested only with proved zero program effects and is never automatic. Secret references stay opaque except at declared authorized sinks.",
+  "schema_copy": "Run a short coherent program using familiar shell syntax; return to the model when the next action needs evidence interpretation. Version 1 supports quotes/escapes, pipes, ;, &&/||, grouping, variables with ${name:-word}/#/%/// operators, $(( )) integer arithmetic, sorted globs, $()/backticks, if/case/for/while, bounded functions, set -e/-u/-o pipefail, source PATH, here-documents and redirects. The host validates the complete submitted syntax unit before effects. Computed operations bind only when reached; source captures and validates its own unit. Untaken branches do not expand. No eval, reparsing, process substitution, traps, arrays, other shell options or persistent shell state.\nNative utilities include literal cat/head/tail/nl; find/grep/rg; ls/stat/wc/diff/file/xxd/hexdump; checksums/base64; sed/awk/printf/echo/seq/yes/sort/uniq/cut/tr/paste/join/comm/column/fold/tac/rev/xargs; jq/yq; cp/mv/rm/rmdir/mkdir/touch/mktemp/tee; tar/unzip/zip/gzip/gunzip/zcat; Git; curl; path, environment, identity, date and session process built-ins. Use generated help for supported option/operand forms. Both GNU and BSD sed -i forms, stat -c/-f and base64 -d/-D have fixed portable meanings. Unsupported native forms reject with focused help; they never fall through to an OS binary.\nOther installed programs such as python3, go, cargo, npm, node and ./task launch directly under confinement. Bare python resolves to python3 only when python is absent. external -- explicitly selects an installed binary with a native built-in name. Arguments remain literal data; native_path -- PATH explicitly converts a logical cross-root path without granting access. Native absolute paths retain OS identity. TMPDIR and mktemp use the same real session directory as child processes. Native null redirects are typed discard sinks.\nPipes carry complete bytes, independently of previews and receipts. Variables never become grammar. Unquoted expansion uses fixed whitespace splitting then sorted globbing; quoted expansion preserves argument boundaries. Unmatched globs stay literal. Substitution strips trailing LF and refuses NUL scalars; failed substitution prevents its containing dispatch. Native reads and external processes use saved file bytes. Unsaved human or mixed drafts stay separate; affected reads include a short note.\nRedirects and in-place edits stage complete output, then review and compare captured destination revisions before publication. They never pre-truncate. Native grep no-match/diff differences keep status1 but can publish complete output. Failed/incomplete producers discard staging. Earlier committed effects remain after later failure; programs are not transactions. Permission refusal, conflict, cancellation and host budgets stop later admission even after exit0. When allowed, accepted agent-only edits publish through separate admitted writes before a reached owner opens inputs. Read-only profiles do not publish drafts.\nOptional progress_update uses the existing progress payload and settles separately before gated effects. Every effect retains its subsystem authority, source span, child identity, evidence and recovery. Internal execution reads are not conversational observation; only exact delivered mapped source windows establish an edit base. Retained surgical/orientation tools remain available through normal selection.\nTrailing & returns a bounded session job handle; $!, jobs, wait and kill refer to owned jobs, not arbitrary PIDs. Approval resumes exact held inputs once. Host loss interrupts; it does not replay the program, HTTP or completed effects. Partial/unknown outcomes require a specific safe next action. Whole-program resubmission is suggested only with proved zero program effects and is never automatic. Secret references stay opaque except at declared authorized sinks.",
   "sources": [
     "archive.json",
     "builtins.json",
+    "control.json",
     "dispositions.json",
     "git.json",
     "golden.json",
@@ -1048,6 +1049,7 @@
     "awk",
     "base64",
     "basename",
+    "break",
     "cat",
     "cd",
     "chmod",
@@ -1056,6 +1058,7 @@
     "column",
     "comm",
     "command",
+    "continue",
     "cp",
     "curl",
     "cut",
@@ -1065,6 +1068,7 @@
     "echo",
     "edit",
     "env",
+    "exit",
     "export",
     "external",
     "false",
@@ -1133,16 +1137,19 @@
     "printf",
     "ps",
     "pwd",
+    "read",
     "readlink",
     "realpath",
     "replace-lines",
     "repo-map",
+    "return",
     "rev",
     "rg",
     "rm",
     "rmdir",
     "sed",
     "seq",
+    "set",
     "sha1sum",
     "sha256sum",
     "sha512sum",

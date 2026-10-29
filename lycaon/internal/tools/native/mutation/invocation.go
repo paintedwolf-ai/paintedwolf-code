@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -22,7 +21,6 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	barrier *native.PublicationBarrier
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
@@ -35,7 +33,7 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stdout: streams.Output, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
@@ -95,6 +93,11 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 	if bound.Null {
 		return projectpaths.BoundPath{}, inv.usage(operand, "a filesystem path, not the null device")
 	}
+	if write {
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
+			return projectpaths.BoundPath{}, err
+		}
+	}
 	return bound, nil
 }
 
@@ -129,6 +132,10 @@ func ordinary(err error) (string, bool) {
 
 // settle turns the utility's ordinary status or stop into one producer result.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
+	}
 	certainty := toolcontract.NoEffect
 	if inv.effects > 0 {
 		certainty = toolcontract.EffectCompleted
@@ -182,7 +189,11 @@ func (inv *invocation) destinationEntry(dest string, source string, many bool) (
 	}
 	info, statErr := os.Stat(bound.Resolved.Abs)
 	if statErr == nil && info.IsDir() {
-		return filepath.Join(bound.Resolved.Abs, filepath.Base(source)), nil
+		target := filepath.Join(bound.Resolved.Abs, filepath.Base(source))
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target, true); err != nil {
+			return "", err
+		}
+		return target, nil
 	}
 	if many {
 		return "", inv.usage(dest, "an existing directory for several sources")

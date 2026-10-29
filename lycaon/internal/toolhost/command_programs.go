@@ -40,7 +40,7 @@ type programOwnerTools struct {
 }
 
 // compose builds the literal and mutation owners once and returns the
-// per-program factory: one publication barrier and redirect owner per program.
+// per-program factory: one redirect owner per program.
 func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
 	recorder := services.Recorder
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
@@ -77,24 +77,27 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		barrier := &native.PublicationBarrier{}
-		httpNative, err := t.httpOperation(services.HTTP, mutationOwners, barrier)
+		httpNative, err := t.httpOperation(services.HTTP, mutationOwners)
 		if err != nil {
 			return command.ProgramOwners{}, err
 		}
-		program := mutation.Program{Paths: paths, Barrier: barrier}
+		program := mutation.Program{Paths: paths}
 		owners := command.ProgramOwners{
-			Natives:     map[string]command.NativeOperation{},
-			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			Sources:     &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			AdmitLaunch: barrier.AdmitDependentLaunch,
+			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
+			Natives:         map[string]command.NativeOperation{},
+			Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
+				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit}
+			},
+			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
+			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
 				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
 				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
 					return nil, nil, err
 				}
-				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}
+				builtinTC := ports.ToolContext
+				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directAdmission(&builtinTC)}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub}
 				release := func() {}
 				if spills != nil {
 					text.Spills = spills
@@ -112,8 +115,8 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				}
 				return builtins, release, nil
 			},
-			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
+			Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: admit}
 				return publication, publication
 			},
 		}
@@ -140,7 +143,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		for _, name := range mutationOwners.Commands() {
 			tool, _ := mutationOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
@@ -150,7 +153,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		for _, name := range queryOwners.Commands() {
 			tool, _ := queryOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := queryOwners.Prepare(query.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := queryOwners.Prepare(query.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
@@ -203,4 +206,12 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}, nil
+}
+
+func directAdmission(tc *tools.ToolContext) tools.CommandOutputAdmission {
+	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+			return apply(ctx, *tc)
+		}, Abandon: func(context.Context, error) error { return nil }}, nil
+	}
 }

@@ -170,3 +170,22 @@ func containsPath(list []string, want string) bool {
 	}
 	return false
 }
+
+// A draft is editor state; an ordinary Linux launch retains its declared roots.
+func TestLinuxDraftFileKeepsOrdinaryWriteRoot(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "saved draft base", os.WriteFile(filepath.Join(root, "draft.txt"), []byte("one\ntwo\n"), 0600))
+	rules, err := filesystemRules(Confinement{Roots: []string{root}})
+	testutil.FailErr(t, "ordinary draft-path rules", err)
+	plan, err := compileFilesystemPlan(rules)
+	testutil.FailErr(t, "ordinary Linux launch plan", err)
+	found := false
+	for _, path := range plan.WriteRoots {
+		if path == root {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("project write root lost: %+v", plan)
+	}
+}

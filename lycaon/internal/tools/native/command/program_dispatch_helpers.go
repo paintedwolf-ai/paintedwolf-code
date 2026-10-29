@@ -130,10 +130,7 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 			return err
 		}
 		invoked = true
-	} else if isRedirectConstruct(command) {
-		if teeSpec, ok := d.run.commands["tee"]; ok && len(teeSpec.Effects) > 0 {
-			child.bound, _ = toolcontract.BindOperation(definition, invocation, teeSpec.Name, teeSpec.Effects[0].Mode, nil)
-		}
+
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -158,25 +155,11 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 	if !record.Executed || result.Validate() != nil {
 		result = toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}
 	}
-	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted && isRedirectConstruct(record.Command) {
-		if err := d.start(ctx, entry.child); err == nil {
-			entry.ownerInvoked = true
-		}
-	}
 	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted {
 		// Descendants own their effects; a structural node only aggregates them.
 		result.EffectCertainty = toolcontract.EffectUnknown
 	}
 	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
-}
-
-func isRedirectConstruct(command string) bool {
-	switch command {
-	case ">", ">>", "2>", "2>>", "&>", "&>>":
-		return true
-	default:
-		return strings.HasPrefix(command, "redirect ")
-	}
 }
 
 // structuralDefinition compiles one definition per evaluator construct.
@@ -192,12 +175,6 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
 	}
 	var commands []toolcontract.CommandSpecification
-	if isRedirectConstruct(construct) {
-		if teeSpec, ok := d.run.commands["tee"]; ok {
-			contract.Owner = teeSpec.Owner
-			commands = []toolcontract.CommandSpecification{teeSpec}
-		}
-	}
 	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
 		Identity: "program " + construct, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
 		Commands: commands, Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
@@ -220,7 +197,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 	if d.redirections == nil {
 		return nil, nil
 	}
-	return d.redirections(d.paths)
+	return d.redirections(d.paths.Fork(), d.beginOutput)
 }
 
 // NativeBindings reports whether a program binds a name to a native owner.
@@ -356,19 +333,6 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 	return ""
 }
 
-func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	facts := definition.Facts()
-	if facts.ProgressGate == toolcontract.ProgressNotRequired {
-		return definition
-	}
-	facts.ProgressGate = toolcontract.ProgressNotRequired
-	updated, err := toolcontract.NewOperationDefinition(facts)
-	if err != nil {
-		return definition
-	}
-	return updated
-}
-
 func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {
 	requiresBound := false
 	for _, effect := range spec.Effects {
@@ -377,10 +341,16 @@ func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecificatio
 			break
 		}
 	}
-	if !requiresBound {
+	var effects toolcontract.CommandEffects
+	if requiresBound {
+		effects = d.boundChildEffects(spec, request)
+	}
+	if request.StreamPreparation != nil {
+		effects |= request.StreamPreparation.RequiredEffects()
+	}
+	if effects == 0 {
 		return nil
 	}
-	effects := d.boundChildEffects(spec, request)
 	return &effects
 }
 

@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -108,6 +109,17 @@ func (d *childDispatch) record(request commandprogram.OperationRequest) {
 }
 
 func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	d.record(request)
 	if _, owned := d.h.owners.Operation(request.OperationID); owned {
 		return d.h.owners.Invoke(ctx, d.h.tc, mustPaths(d.h.t, d.h), d, request, streams)
@@ -115,7 +127,18 @@ func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.Opera
 	return d.echo(request, streams)
 }
 
-func (d *childDispatch) Launch(_ context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *childDispatch) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	d.record(request)
 	return d.echo(request, streams)
 }
@@ -272,4 +295,19 @@ func (r run) refused(t *testing.T, label, code string) {
 func symlink(t *testing.T, target, path string) {
 	t.Helper()
 	testutil.FailErr(t, "symlink "+path, os.Symlink(target, path))
+}
+
+func (d *childDispatch) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
+	return body(ctx, streams)
 }

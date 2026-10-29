@@ -168,7 +168,6 @@ func TestEvaluateRefusesExcludedConstructsBeforeAnyEffect(t *testing.T) {
 		{"output redirect without owner", "echo a; echo b > out", func(p *EvaluationPorts) { p.Publication = nil }},
 		{"background without supervision", "echo a; sleep 1 &", func(p *EvaluationPorts) { p.Supervision = nil }},
 		{"source without capture", "echo a; source -- ./s.sh", func(p *EvaluationPorts) { p.Sources = nil }},
-		{"reserved function name", "echo a; exit() { echo b; }", func(*EvaluationPorts) {}},
 		{"nested in substitution", "echo a; echo $(echo b > out)", func(p *EvaluationPorts) { p.Publication = nil }},
 		{"output on stdin descriptor", "echo a; echo b 0> out", func(*EvaluationPorts) {}},
 	}

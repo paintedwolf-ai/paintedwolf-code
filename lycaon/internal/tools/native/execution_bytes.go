@@ -25,16 +25,18 @@ type ExecutionBytes struct {
 	Revision toolcontract.ExecutionRevision
 }
 
-// CaptureBytes pins one literal byte input before the utility reads it. The
-// accepted document is encoded in its recorded representation; otherwise the
-// published file bytes are captured. Inputs above maxBytes refuse with
-// READ_FILE_TOO_LARGE before materialization; nothing is truncated.
+// CaptureBytes pins one literal byte input from published disk before the
+// utility reads it. Inputs above maxBytes refuse with READ_FILE_TOO_LARGE
+// before materialization; nothing is truncated.
 func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolContext, path string, maxBytes int64) (ExecutionBytes, error) {
 	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
 	if err != nil {
 		return ExecutionBytes{}, err
 	}
-	content, revision, err := captureBytes(ctx, tctx, resolved, maxBytes)
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
+		return ExecutionBytes{}, err
+	}
+	content, revision, err := captureBytes(resolved, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionBytes{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}
@@ -44,39 +46,25 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 	return ExecutionBytes{Path: resolved.DisplayPath, Bytes: content, Revision: revision}, nil
 }
 
-func captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, error) {
+func captureBytes(resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, error) {
 	root, rel := revisionLocation(resolved)
-	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
-	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
+	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
+	content, err := sourceview.ReadContentCapped("read", sourceview.AccessRead, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
+	if os.IsNotExist(err) {
+		return nil, revision, fs.ErrNotExist
+	}
 	if err != nil {
 		return nil, revision, err
 	}
-	var content []byte
-	if open {
-		if content, err = sourceview.DocumentBytes(doc, resolved, maxBytes); err != nil {
-			return nil, revision, err
-		}
-		revision.Mode, revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = toolcontract.AcceptedDocumentRevision, doc.ID, doc.Revision, doc.BaseSHA256
-		revision.ContentSHA256 = textfile.SHA256(content)
-	} else {
-		content, err = sourceview.ReadContentCapped("read", sourceview.AccessRead, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
-		if os.IsNotExist(err) {
-			return nil, revision, fs.ErrNotExist
-		}
-		if err != nil {
-			return nil, revision, err
-		}
-		revision.Mode = toolcontract.PublishedDiskRevision
-		revision.DiskSHA256 = textfile.SHA256(content)
-		revision.ContentSHA256 = revision.DiskSHA256
-	}
+	revision.DiskSHA256 = textfile.SHA256(content)
+	revision.ContentSHA256 = revision.DiskSHA256
 	revision.ContentBytes = int64(len(content))
 	return content, revision, revision.Validate()
 }
 
 // recaptureBytes reads a literal pin's current state for Verify.
-func recaptureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
-	_, revision, err := captureBytes(ctx, tctx, resolved, readcaps.MaxFileBytes)
+func recaptureBytes(_ context.Context, _ tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
+	_, revision, err := captureBytes(resolved, readcaps.MaxFileBytes)
 	return revision, err
 }
 

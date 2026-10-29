@@ -79,6 +79,7 @@ func (inv *invocation) readBound(operand string, maximum int64, limit string) ([
 	if int64(len(data)) > maximum {
 		return nil, nil, limitRefusal(limit, "bytes", maximum, int64(len(data)))
 	}
+
 	return data, info, nil
 }
 
@@ -96,7 +97,7 @@ func (inv *invocation) publishCreated(operand string, data []byte, noReplace boo
 		inv.fail(operand, "already exists")
 		return false, nil
 	}
-	if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {
+	if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 		return false, err
 	}
 	inv.effects++

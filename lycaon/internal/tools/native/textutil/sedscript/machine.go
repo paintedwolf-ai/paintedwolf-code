@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Record is one input record; Text is valid until the next call to Next.
@@ -14,6 +16,8 @@ type Record struct {
 	Text       []byte
 	Terminated bool
 	Source     string
+	Pin        *toolcontract.SourcePin
+	Offset     int64
 }
 
 // Input yields records and io.EOF at the end.
@@ -26,15 +30,16 @@ type Input interface {
 // file reads as nothing, as in GNU sed). SpaceLimit bounds pattern and hold
 // space; StepLimit bounds branches and D restarts between input reads.
 type Config struct {
-	Quiet      bool
-	Delimiter  byte
-	SpaceLimit int64
-	StepLimit  int64
-	Reserve    func(int64) error
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Writers    map[string]io.Writer
-	Files      map[string][]byte
+	Quiet        bool
+	Delimiter    byte
+	SpaceLimit   int64
+	StepLimit    int64
+	Reserve      func(int64) error
+	Stdout       io.Writer
+	WriteLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	Stderr       io.Writer
+	Writers      map[string]io.Writer
+	Files        map[string][]byte
 }
 
 // Machine is one sed run. Hold space, the last regex, R file positions and
@@ -62,6 +67,8 @@ type inputState struct {
 	aheadOK    bool
 	line       int
 	source     string
+	pin        *toolcontract.SourcePin
+	offset     int64
 	terminated bool
 	replaced   bool
 	steps      int64
@@ -76,8 +83,9 @@ type spaces struct {
 // output is one destination; pending records that the last record written
 // lacked its newline, which later output restores first.
 type output struct {
-	w       io.Writer
-	pending bool
+	w            io.Writer
+	writeLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	pending      bool
 }
 
 type appendItem struct {
@@ -104,7 +112,7 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 		config.Stderr = io.Discard
 	}
 	m := &Machine{ctx: ctx, program: program, config: config, outputs: map[string]*output{}, cursors: map[string]int{}}
-	m.outputs[Stdout] = &output{w: config.Stdout}
+	m.outputs[Stdout] = &output{w: config.Stdout, writeLiteral: config.WriteLiteral}
 	m.outputs[Stderr] = &output{w: config.Stderr}
 	for _, name := range program.writes {
 		w, ok := config.Writers[name]
@@ -149,7 +157,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 			return false, err
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {
+			if err := m.stream.out.emitRecord(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
 				return false, err
 			}
 		}
@@ -197,8 +205,10 @@ func (m *Machine) next(appending bool) (bool, error) {
 	record := m.stream.ahead
 	if appending {
 		m.space.pattern = append(append(m.space.pattern, m.config.Delimiter), record.Text...)
+		m.stream.pin = nil
 	} else {
 		m.space.pattern = append(m.space.pattern[:0], record.Text...)
+		m.stream.pin, m.stream.offset = record.Pin, record.Offset
 	}
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
@@ -239,6 +249,28 @@ func (s *spaces) account(limit int64, reserve func(int64) error) error {
 	}
 	s.reserved = total
 	return nil
+}
+
+// emitRecord writes one record to an output, recording a source mapping when
+// the record is unmodified and the output accepts literal mappings.
+func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, offset int64) error {
+	if o.writeLiteral == nil || pin == nil {
+		return o.emit(record, delimiter, terminated)
+	}
+	if o.pending {
+		if _, err := o.w.Write([]byte{'\n'}); err != nil {
+			return err
+		}
+		o.pending = false
+	}
+	if !terminated {
+		o.pending = true
+		return o.writeLiteral(pin, record, offset)
+	}
+	if err := o.writeLiteral(pin, record, offset); err != nil {
+		return err
+	}
+	return o.writeLiteral(pin, []byte{delimiter}, offset+int64(len(record)))
 }
 
 // emit writes one record to an output. A record that lacked its delimiter is

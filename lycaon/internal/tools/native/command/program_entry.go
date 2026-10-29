@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -83,6 +84,11 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
+	control         programControlDefinition
+	publicationOnce sync.Once
+	publicationErr  error
+	publishDocument func(context.Context, tools.ToolContext, *toolcontract.ProgramMemory, tools.EditorDocumentPublication) (tools.EditorDocumentApplied, error)
+
 	externalHidden bool
 	// retainOutput keeps one child stream in the program output store.
 	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
@@ -145,6 +151,7 @@ const programOutputBytes = 64 << 10
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
 func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
@@ -214,6 +221,14 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	releasePlan := release
 	release = func() { frame.Close(); releasePlan() }
+	documents, err := newProgramDocuments(ctx, tc, memory)
+	if err != nil {
+		return "", err
+	}
+	releaseDocuments := release
+	release = func() { documents.close(); releaseDocuments() }
+	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
+	ctx = tools.WithCommandReadObserver(ctx, documents.read)
 	// A validation run's source identity is captured before anything runs.
 	var verification func() commandSourceIdentity
 	if tc.Execution.VerificationCheck {
@@ -234,23 +249,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	seen := map[string]bool{}
-	for _, operation := range owners.Natives {
-		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
-			if seen[tool] {
-				continue
-			}
-			seen[tool] = true
-			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, programOperationDefinition(definition.Operation))
-			}
-		}
-	}
-	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
-	if err != nil {
-		return "", err
-	}
 	outputs, err := r.sessionOutputs(ctx, tc.Identity.SessionID)
 	if err != nil {
 		return "", err
@@ -270,11 +268,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 		return nil
 	}
-	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
+	run.frame, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, memory, tc, root, tc.Invocation.ID, source
+	run.publishDocument = owners.PublishDocument
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
-	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
-		return "", err
-	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
@@ -284,7 +280,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
 	builtins["sleep"] = sleepBuiltin()
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	var publication commandprogram.OutputPublication
+	if owners.Publication != nil {
+		publication = owners.Publication(dispatcher.beginOutput)
+	}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
 			if _, taken := builtins[name]; !taken {
@@ -293,7 +293,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	if owners.Builtins != nil {
-		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
+		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: publication, Admission: r.sessionResources(tc.Identity.SessionID)})
 		if err != nil {
 			return "", err
 		}
@@ -305,7 +305,57 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			}
 		}
 	}
-	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	run.control.available = map[string]bool{}
+	for name := range builtins {
+		run.control.available[name] = true
+	}
+	for name := range pathCommands {
+		run.control.available[name] = true
+	}
+	for name := range owners.Natives {
+		run.control.available[name] = true
+	}
+	active := []toolcontract.OperationDefinition{external}
+	if write, ok := r.Registry.Definition("write"); ok {
+		active = append(active, write.Operation)
+	}
+	seen := map[string]bool{"write": true, external.Facts().Identity: true}
+	for _, operation := range owners.Natives {
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, definition.Operation)
+			}
+		}
+	}
+	run.control.taken = seen
+	definitions, err := run.controlDefinitions()
+	if err != nil {
+		return "", err
+	}
+	hostCommands := make([]string, 0, len(definitions))
+	for name := range definitions {
+		hostCommands = append(hostCommands, name)
+	}
+	slices.Sort(hostCommands)
+	for _, name := range hostCommands {
+		active = append(active, definitions[name])
+	}
+	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
+	if err != nil {
+		return "", err
+	}
+
+	run.surface = surface
+	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
+		return "", err
+	}
+	stdout, stderr := &boundedBuffer{limit: programOutputBytes, memory: memory, mappingContext: ctx}, &boundedBuffer{limit: programOutputBytes, memory: memory, mappingContext: ctx}
+	releaseBuffers := release
+	release = func() { stdout.closeMappings(); stderr.closeMappings(); releaseBuffers() }
 	sources := owners.Sources
 	if sources == nil {
 		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
@@ -313,8 +363,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	ports := commandprogram.EvaluationPorts{
-		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: owners.Publication, Input: owners.Input, Sources: sources,
+		Invocation: root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
+		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: run.baseEnv,
@@ -351,6 +401,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", errors.Join(feedback, err)
 	}
+	stdout.delivered(ctx, tc, outcome.Stdout)
+	stderr.delivered(ctx, tc, outcome.Stderr)
+	outcome.Stderr = documents.appendNotes(outcome.Stderr)
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
 	}
@@ -552,10 +605,16 @@ func (r *programRun) setSourceText(unitID, text string) {
 // boundedBuffer keeps the first limit bytes and records truncation; the
 // producer is never blocked or failed by a full display buffer.
 type boundedBuffer struct {
-	mu        sync.Mutex
-	limit     int
-	data      []byte
-	truncated bool
+	memory          *toolcontract.ProgramMemory
+	mappingContext  context.Context
+	mappingReleases []func()
+	activeWriters   int
+	overlapping     bool
+	mappings        []toolcontract.StreamSourceMapping
+	mu              sync.Mutex
+	limit           int
+	data            []byte
+	truncated       bool
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
@@ -768,10 +827,18 @@ func (r *programRun) childOutputs(request commandprogram.OperationRequest, strea
 	}
 	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
 	teed := streams
-	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	var base int64
+	endpoint, rootOutput := streams.Output.(*boundedBuffer)
+	if rootOutput {
+		base = endpoint.beginWriter()
+	}
+	teed.Output = childOutputView{Writer: io.MultiWriter(nonNilWriter(streams.Output), stdout), target: streams.Output, base: base}
 	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
 	execution := request.Invocation.Identity.ExecutionID
 	return teed, func(ctx context.Context) {
+		if rootOutput {
+			defer endpoint.endWriter()
+		}
 		for _, stream := range []struct {
 			name   string
 			buffer *boundedBuffer

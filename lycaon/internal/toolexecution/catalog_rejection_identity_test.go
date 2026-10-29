@@ -178,6 +178,9 @@ func TestCatalogEveryIntrinsicRejectionResolvesBeforeFallback(t *testing.T) {
 		t.Run(rule.ID, func(t *testing.T) {
 			calls := append([]string(nil), rule.Selector["tool"]...)
 			if len(calls) == 0 {
+				calls = append(calls, rule.Selector["paintedwolf.operation"]...)
+			}
+			if len(calls) == 0 {
 				calls = []string{"read"}
 			}
 			for _, tool := range calls {

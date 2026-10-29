@@ -35,7 +35,8 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.streams = Streams{Input: NullInput(), Output: stdout, Error: f.streams.Error}
+	g.io.setInput(NullInput())
+	g.io.setOutput(stdout)
 	_, err = g.statements(ctx, part.Statements)
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
@@ -161,17 +162,21 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	job.parent, job.loops, job.returnable = run.inv, 0, false
 	statement := s
 	statement.Background = false
+	releaseDescriptors := job.io.retain()
 	handle, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, streams Streams) (toolcontract.ProducerResult, error) {
 		defer release()
-		job.streams = streams.withDefaults()
+		job.io.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
 		result := ordinaryResult(job.state.control.Status())
 		if stop, ok := job.state.latch.Stop(); ok {
 			result = stop.Result
 		}
+		eligible := err == nil && job.publish.eligible()
+		err = errors.Join(err, releaseDescriptors(jobCtx, eligible))
 		return result, err
 	})
 	if err != nil {
+		_ = releaseDescriptors(ctx, false)
 		release()
 		return f.settle(run, ownerResult(err), err)
 	}
