@@ -41,15 +41,17 @@ func (s *Service) PortHolders(ctx context.Context, session string, query lineage
 	for _, listener := range table {
 		socket := ListeningSocket{Protocol: listener.Protocol, Address: listener.Addr.Addr().Unmap(), Port: int(listener.Addr.Port()), UID: listener.UID}
 		known := false
-		for _, pid := range listener.PIDs {
+		for _, holder := range listener.Holders {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			process, err := inspect(pid)
-			if err != nil {
+			// A holder that exited or whose PID was reused since the socket
+			// observation is unknown, never the process now at that PID.
+			process, err := inspect(holder.PID)
+			if err != nil || process.StartOrder != uint64(holder.Started) {
 				continue
 			}
-			if _, process.Owned = owned[pid]; process.Owned {
+			if _, process.Owned = owned[holder.PID]; process.Owned {
 				if process.Reference, err = s.encode(session, process); err != nil {
 					return nil, err
 				}

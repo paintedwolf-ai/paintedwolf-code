@@ -2,6 +2,7 @@ package lineage
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -87,6 +89,25 @@ func procFixture(t *testing.T) string {
 	return root
 }
 
+// fixtureIncarnation is the identity a fixture process reports.
+func fixtureIncarnation(pid int) ProcessIdentity {
+	return ProcessIdentity{PID: pid, Started: int64(pid) * 10}
+}
+
+// fixtureFS reads a procfs fixture whose processes report fixed incarnations.
+func fixtureFS(root string) procFS {
+	return procFS{root: root, identity: func(pid int) (ProcessIdentity, bool) { return fixtureIncarnation(pid), true }}
+}
+
+// holders names fixture processes by their incarnation.
+func holders(pids ...int) []ProcessIdentity {
+	out := make([]ProcessIdentity, len(pids))
+	for i, pid := range pids {
+		out[i] = fixtureIncarnation(pid)
+	}
+	return out
+}
+
 func TestProcListenersJoinsTablesWithHolders(t *testing.T) {
 	root := procFixture(t)
 	ap := netip.MustParseAddrPort
@@ -96,20 +117,20 @@ func TestProcListenersJoinsTablesWithHolders(t *testing.T) {
 		want  []Listener
 	}{
 		{name: "tcp port", query: ListenerQuery{Protocols: []Protocol{ProtocolTCP}, Port: 5432},
-			want: []Listener{{Protocol: ProtocolTCP, Addr: ap("127.0.0.1:5432"), UID: 70, PIDs: []int{300}}}},
+			want: []Listener{{Protocol: ProtocolTCP, Addr: ap("127.0.0.1:5432"), UID: 70, Holders: holders(300)}}},
 		{name: "shared socket on both families", query: ListenerQuery{Port: 8080}, want: []Listener{
-			{Protocol: ProtocolTCP, Addr: ap("0.0.0.0:8080"), UID: 1000, PIDs: []int{400, 401}},
-			{Protocol: ProtocolTCP, Addr: ap("[::]:8080"), UID: 1000, PIDs: []int{400}},
+			{Protocol: ProtocolTCP, Addr: ap("0.0.0.0:8080"), UID: 1000, Holders: holders(400, 401)},
+			{Protocol: ProtocolTCP, Addr: ap("[::]:8080"), UID: 1000, Holders: holders(400)},
 		}},
 		{name: "unreadable holder keeps the port", query: ListenerQuery{Port: 9000},
 			want: []Listener{{Protocol: ProtocolTCP, Addr: ap("0.0.0.0:9000"), UID: 0}}},
 		{name: "unconnected udp", query: ListenerQuery{Protocols: []Protocol{ProtocolUDP}, Port: 5353},
-			want: []Listener{{Protocol: ProtocolUDP, Addr: ap("0.0.0.0:5353"), UID: 1000, PIDs: []int{500}}}},
+			want: []Listener{{Protocol: ProtocolUDP, Addr: ap("0.0.0.0:5353"), UID: 1000, Holders: holders(500)}}},
 		{name: "udp query skips tcp", query: ListenerQuery{Protocols: []Protocol{ProtocolUDP}, Port: 5432}},
 		{name: "connected sockets do not listen", query: ListenerQuery{Port: 41001}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := procFS{root: root}.listeners(tc.query)
+			got, err := fixtureFS(root).listeners(tc.query)
 			testutil.FailErr(t, "listeners", err)
 			if len(got) == 0 && len(tc.want) == 0 {
 				return
@@ -119,7 +140,7 @@ func TestProcListenersJoinsTablesWithHolders(t *testing.T) {
 			}
 		})
 	}
-	all, err := procFS{root: root}.listeners(ListenerQuery{})
+	all, err := fixtureFS(root).listeners(ListenerQuery{})
 	testutil.FailErr(t, "all listeners", err)
 	if len(all) != 5 {
 		t.Fatalf("every listener on both protocols = %+v", all)
@@ -130,28 +151,28 @@ func TestProcListenersWithoutIPv6TablesAndWithoutProc(t *testing.T) {
 	root := procFixture(t)
 	testutil.FailErr(t, "drop tcp6", os.Remove(filepath.Join(root, "net", "tcp6")))
 	testutil.FailErr(t, "drop udp6", os.Remove(filepath.Join(root, "net", "udp6")))
-	got, err := procFS{root: root}.listeners(ListenerQuery{Port: 8080})
+	got, err := fixtureFS(root).listeners(ListenerQuery{Port: 8080})
 	testutil.FailErr(t, "listeners without ipv6", err)
 	if len(got) != 1 || got[0].Addr != netip.MustParseAddrPort("0.0.0.0:8080") {
 		t.Fatalf("listeners without ipv6 = %+v", got)
 	}
-	if _, err := (procFS{root: filepath.Join(root, "missing")}).listeners(ListenerQuery{}); err == nil {
+	if _, err := fixtureFS(filepath.Join(root, "missing")).listeners(ListenerQuery{}); err == nil {
 		t.Fatal("a missing tcp table reported no listeners instead of failing")
 	}
 	testutil.FailErr(t, "drop udp", os.Remove(filepath.Join(root, "net", "udp")))
-	if _, err := (procFS{root: root}).listeners(ListenerQuery{Protocols: []Protocol{ProtocolUDP}}); err == nil {
+	if _, err := fixtureFS(root).listeners(ListenerQuery{Protocols: []Protocol{ProtocolUDP}}); err == nil {
 		t.Fatal("a missing udp table reported no listeners instead of failing")
 	}
 }
 
 func TestProcSocketHoldersFindsEveryHolder(t *testing.T) {
 	root := procFixture(t)
-	got, err := procFS{root: root}.socketHolders(map[uint64]bool{101: true, 102: true})
+	got, err := fixtureFS(root).socketHolders(map[uint64]bool{101: true, 102: true})
 	testutil.FailErr(t, "socket holders", err)
 	if want := map[uint64][]int{101: {301}, 102: {400, 401}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("socketHolders = %v, want %v", got, want)
 	}
-	if got, err := (procFS{root: root}).socketHolders(nil); err != nil || len(got) != 0 {
+	if got, err := fixtureFS(root).socketHolders(nil); err != nil || len(got) != 0 {
 		t.Fatalf("no wanted sockets = %v, %v", got, err)
 	}
 }
@@ -162,17 +183,60 @@ func TestResolveListenersSkipsUnreadableAndInvalidProcesses(t *testing.T) {
 		{Protocol: ProtocolUDP, Local: netip.MustParseAddrPort("[::]:5353"), UID: 0, Handle: 9},
 	}
 	handles := map[int][]uint64{10: {7, 7, 3}, 11: {7}, 12: nil}
-	got := resolveListeners(rows, []int{0, 10, 11, 12}, func(pid int) []uint64 {
+	got := resolveListeners(rows, []int{0, 10, 11, 12, 13}, func(pid int) ([]SocketObservation, error) {
 		if pid <= 0 {
 			t.Fatalf("walked invalid pid %d", pid)
 		}
-		return handles[pid]
+		if pid == 13 {
+			return nil, syscall.EPERM
+		}
+		var out []SocketObservation
+		for _, handle := range handles[pid] {
+			out = append(out, SocketObservation{Holder: fixtureIncarnation(pid), handle: handle})
+		}
+		return out, nil
 	})
 	want := []Listener{
-		{Protocol: ProtocolTCP, Addr: rows[0].Local, UID: 501, PIDs: []int{10, 11}},
+		{Protocol: ProtocolTCP, Addr: rows[0].Local, UID: 501, Holders: holders(10, 11)},
 		{Protocol: ProtocolUDP, Addr: rows[1].Local, UID: 0},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolveListeners = %+v, want %+v", got, want)
+	}
+}
+
+// The per-process observation the listener table uses is the one SocketsOf
+// returns: protocol, kernel resource, listening state and holder incarnation,
+// refusing a process whose incarnation changes during the walk.
+func TestProcSocketsOfObservesOneIncarnation(t *testing.T) {
+	root := procFixture(t)
+	table, err := fixtureFS(root).sockets([]Protocol{ProtocolTCP, ProtocolUDP})
+	testutil.FailErr(t, "tables", err)
+	got, err := fixtureFS(root).socketsOf(400, table)
+	testutil.FailErr(t, "sockets of 400", err)
+	want := []SocketObservation{
+		{Protocol: ProtocolTCP, Local: netip.MustParseAddrPort("0.0.0.0:8080"), Remote: netip.MustParseAddrPort("0.0.0.0:0"), ResourceID: "linux-tcp:102", Listening: true, Holder: fixtureIncarnation(400), handle: 102},
+		{Protocol: ProtocolTCP, Local: netip.MustParseAddrPort("[::]:8080"), Remote: netip.MustParseAddrPort("[::]:0"), ResourceID: "linux-tcp:104", Listening: true, Holder: fixtureIncarnation(400), handle: 104},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("socketsOf(400) = %+v, want %+v", got, want)
+	}
+	if got, err := fixtureFS(root).socketsOf(500, table); err != nil || len(got) != 1 || got[0].Protocol != ProtocolUDP || got[0].ResourceID != "linux-udp:105" {
+		t.Fatalf("socketsOf(500) = %+v, %v", got, err)
+	}
+	if _, err := fixtureFS(root).socketsOf(600, table); err == nil {
+		t.Fatal("an unreadable descriptor table read as holding nothing")
+	}
+	reads := 0
+	reused := procFS{root: root, identity: func(pid int) (ProcessIdentity, bool) {
+		reads++
+		return ProcessIdentity{PID: pid, Started: int64(reads)}, true
+	}}
+	if _, err := reused.socketsOf(400, table); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("a reused pid during the walk = %v, want ESRCH", err)
+	}
+	gone := procFS{root: root, identity: func(int) (ProcessIdentity, bool) { return ProcessIdentity{}, false }}
+	if _, err := gone.socketsOf(400, table); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("an exited process = %v, want ESRCH", err)
 	}
 }
