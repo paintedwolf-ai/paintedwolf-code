@@ -3,6 +3,7 @@ package mutation
 import (
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -112,10 +113,25 @@ type sourceEntry struct {
 	mode os.FileMode
 }
 
-// collect walks operands under base in sorted byte order. Directories are
-// descended only when recursive; links are refused, never followed.
-func (inv *invocation) collect(base string, operands []string, recursive bool, budget *archiveBudget) ([]sourceEntry, error) {
+// collectRule selects what an archive is created from.
+type collectRule struct {
+	// recursive descends into directories.
+	recursive bool
+	// exclude reports an entry left out by name; with prune, nothing beneath
+	// an excluded directory is visited either.
+	exclude func(name string) bool
+	prune   bool
+	// archive is the archive being written, which never contains itself.
+	archive string
+	// flatten stores files under their base names and leaves directories out.
+	flatten bool
+}
+
+// collect walks operands under base in sorted byte order. Links are refused,
+// never followed; an excluded link is left out before it is examined.
+func (inv *invocation) collect(base string, operands []string, rule collectRule, budget *archiveBudget) ([]sourceEntry, error) {
 	var out []sourceEntry
+	stored := map[string]string{}
 	var visit func(name string) error
 	visit = func(name string) error {
 		if err := inv.ctx.Err(); err != nil {
@@ -133,16 +149,25 @@ func (inv *invocation) collect(base string, operands []string, recursive bool, b
 		if err != nil {
 			return err
 		}
+		entryName := filepath.ToSlash(filepath.Clean(name))
+		if info.IsDir() {
+			entryName = strings.TrimSuffix(entryName, "/") + "/"
+		}
+		excluded := rule.exclude != nil && rule.exclude(entryName)
+		if (excluded && (rule.prune || !info.IsDir())) || bound.Resolved.Abs == rule.archive {
+			return nil
+		}
 		if err := budget.entry(); err != nil {
 			return err
 		}
-		entryName := filepath.ToSlash(filepath.Clean(name))
 		switch {
 		case info.Mode()&os.ModeSymlink != 0:
 			return inv.unsupportedForm(name, "regular files and directories; archive links are not created")
 		case info.IsDir():
-			out = append(out, sourceEntry{name: strings.TrimSuffix(entryName, "/") + "/", dir: true, mode: info.Mode().Perm()})
-			if !recursive {
+			if !excluded && !rule.flatten {
+				out = append(out, sourceEntry{name: entryName, dir: true, mode: info.Mode().Perm()})
+			}
+			if !rule.recursive {
 				return nil
 			}
 			children, err := os.ReadDir(bound.Resolved.Abs)
@@ -160,6 +185,14 @@ func (inv *invocation) collect(base string, operands []string, recursive bool, b
 				}
 			}
 			return nil
+		}
+		if rule.flatten {
+			flat := path.Base(entryName)
+			if first, taken := stored[flat]; taken {
+				return inv.usage(name, "distinct file names for -j; "+first+" is also stored as "+flat)
+			}
+			stored[flat] = entryName
+			entryName = flat
 		}
 		data, _, err := inv.readBound(operand, budget.maxBytes-budget.bytes, budget.limitBytes)
 		if err != nil {
