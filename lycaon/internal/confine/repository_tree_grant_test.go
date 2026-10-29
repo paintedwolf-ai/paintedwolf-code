@@ -61,11 +61,12 @@ func TestOutsideWriteRefusalNamesTheEnclosingWorkTree(t *testing.T) {
 	}
 }
 
-// A home repository offers its canonical repository root.
+// A home repository offers its canonical repository root when state lives outside it,
+// and falls back to the containing directory when home contains the state tree.
 func TestOutsideWriteGrantOffersHomeRepository(t *testing.T) {
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(fspath.CanonicalPath(t.TempDir()), "paintedwolf"))
 	mkdirFixture(t, filepath.Join(home, ".git"))
 	dir := filepath.Join(home, "scratch")
 	mkdirFixture(t, dir)
@@ -73,15 +74,19 @@ func TestOutsideWriteGrantOffersHomeRepository(t *testing.T) {
 	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != home {
 		t.Fatalf("grant = %s, want %s", got, home)
 	}
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != dir {
+		t.Fatalf("state ancestor home grant = %s, want containing dir %s", got, dir)
+	}
 }
 
-// A broad reviewed root such as ~/.config is grantable; the control plane and
-// credential stores beneath it stay refused by their floors.
+// A broad reviewed root such as ~/.config is grantable when state is outside it;
+// the control plane and credential stores stay refused by their floors.
 func TestBroadWriteGrantKeepsInnerFloors(t *testing.T) {
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	config := filepath.Join(home, ".config")
-	control := filepath.Join(config, "paintedwolf")
+	control := filepath.Join(fspath.CanonicalPath(t.TempDir()), "paintedwolf")
 	t.Setenv("LYCAON_CONFIG_DIR", control)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 	mkdirFixture(t, control)

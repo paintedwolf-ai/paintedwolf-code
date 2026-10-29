@@ -10,8 +10,7 @@ import (
 
 func waitForPending(t *testing.T, broker *Broker, want int) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		broker.mu.Lock()
 		got := len(broker.pending)
 		broker.mu.Unlock()

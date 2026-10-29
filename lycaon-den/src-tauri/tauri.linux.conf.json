@@ -30,8 +30,8 @@
     "publisher": "Painted Wolf release <release-bot@users.noreply.github.com>",
     "homepage": "https://paintedwolf.ai",
     "license": "Apache-2.0",
-    "shortDescription": "Agentic coding assistant with a local security engine",
-    "longDescription": "Painted Wolf Code is a desktop coding agent with a local host engine for sessions, tools, workflows, review, and confined execution. The engine, helpers, document core, browser, Git toolchain, decision engine, and resources install under /opt/painted-wolf-code; pw and pw-logs are the command-line entry points.",
+    "shortDescription": "Desktop coding assistant with a local security engine",
+    "longDescription": "Painted Wolf Code is a desktop coding agent with a local host engine for sessions, tools, workflows, review, and confined execution. The engine, helpers, document core, browser, Git tools, decision engine, and resources install under /opt/painted-wolf-code; pw and pw-logs are the command-line entry points.",
     "linux": {
       "deb": {
         "section": "devel",
