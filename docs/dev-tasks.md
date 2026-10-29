@@ -786,6 +786,12 @@ executing them. They use the same resources and pinned features as the complete
 test targets; a compile-only pass does not establish runtime verification.
 No other native selection flags are accepted.
 
+`./task test:runner -- -k terminal -k test_cancel_execution` selects unittest
+cases by their fully qualified test names. Repeated `-k <nonempty pattern>`
+selectors are ORed, using unittest's substring/glob matching. Other discovery,
+output, fail-fast, directory, or worker arguments are refused before admission.
+Without selectors the existing complete runner suite executes, including in CI.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target
@@ -818,7 +824,9 @@ forward are still parsed by their own scripts when the run starts.
 
 ### Health and queue advisories
 
-A live supervisor settles descendants after its own producer completes. It uses
+A live supervisor settles descendants after its normal producer wait completes,
+or after explicit subscriber withdrawal stops and reaps that producer. Reaping
+solely during exception cleanup does not establish this authority. It uses
 that operation's retained reservation, or the capture/final batch lease at those
 boundaries, and rechecks process birth and file identity before signalling a
 holder. Normal completion probes kernel custody before scanning holders. Queue

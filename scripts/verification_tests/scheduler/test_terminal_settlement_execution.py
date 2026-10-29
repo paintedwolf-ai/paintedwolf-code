@@ -1,6 +1,7 @@
 """Terminal producer ownership, distinct from custody after a supervisor crash."""
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import signal
@@ -14,7 +15,8 @@ from unittest.mock import patch
 import verification_custody as custody
 import verification_lifetime as lifetime
 from verification_health import owner_identity
-from verification_resources import entries as reservations
+from verification_resources import Reservation, entries as reservations
+from verification_execute import Executor
 
 SCRIPT = Path(__file__).resolve().parents[2] / "test-execution.py"
 spec = importlib.util.spec_from_file_location("terminal_execution", SCRIPT)
@@ -148,6 +150,57 @@ class TerminalProcessTests(TerminalFixture):
         self.assertFalse(thread.is_alive())
         self.assertEqual(result, [True], "an unverified cleanup later recovered into a pass")
         self.assertTrue(cap.entry["terminal_settlement"]["unverified"])
+
+    def test_exception_cleanup_cannot_manufacture_stage_terminal_authority(self):
+        batch = self.capability("lease")
+        directory = self.root / "batch"
+        directory.mkdir()
+        request = {"ticket": "request", "order": 1, "environment_identity": "fixture"}
+        plan = {"batch": {"ticket": batch.entry["ticket"], "workers": 1, "members": ["request"]},
+                "requests": [request]}
+        (directory / "plan.json").write_text(json.dumps(plan))
+        ready, stop = self.root / "stage-holder", self.root / "stage-stop"
+        self.addCleanup(stop.touch)
+        descendant = ("import os,time\nfrom pathlib import Path\n"
+                      f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
+                      "deadline=time.monotonic()+20\n"
+                      f"while not Path({str(stop)!r}).exists() and time.monotonic()<deadline: time.sleep(.01)\n")
+        producer = ("import os,subprocess,sys,time\n"
+                    "fds=tuple(int(os.environ[key]) for key in ('PW_TEST_EXECUTION_FD','PW_TEST_RESOURCE_FD'))\n"
+                    f"subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=fds,start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                    "while True: time.sleep(.01)\n")
+        with patch.dict(os.environ, PW_SOURCE_SNAPSHOT_COMMIT="c" * 40,
+                        PW_TEST_EXECUTION_FD=str(batch.file.fileno())):
+            executor = Executor(self.queue, directory)
+            calls = 0
+            def interrupted_interest(_consumers):
+                nonlocal calls
+                calls += 1
+                if calls <= 2:
+                    return True
+                for _ in range(1000):
+                    if ready.exists():
+                        raise OSError("owned subscriber inspection interrupted")
+                    threading.Event().wait(.01)
+                self.fail("actual stage producer never created its escaped holder")
+            spec = {"locks": ["fixture"], "workers": 1}
+            with Reservation(self.queue, execution.lock_file, batch.entry["ticket"], "fixture", spec, 1) as cap, \
+                    patch.object(executor, "interested", side_effect=interrupted_interest), \
+                    patch("verification_execute.TerminalSettlement", side_effect=AssertionError("false terminal authority")):
+                with self.assertRaisesRegex(OSError, "subscriber inspection interrupted"):
+                    executor.run_command([sys.executable, "-c", producer], directory / "stage.log", ["request"],
+                                         reservation=cap)
+                pid = int(ready.read_text())
+                info = cap.path.stat()
+                self.assertTrue(custody.holds(pid, cap.path, (info.st_dev, info.st_ino)))
+                with self.queue.locked():
+                    self.assertTrue(reservations(self.queue, execution.lock_file), "exception released admission")
+                stop.touch()
+                for _ in range(1000):
+                    if not custody.holds(pid, cap.path, (info.st_dev, info.st_ino)):
+                        break
+                    threading.Event().wait(.01)
+                self.assertFalse(custody.holds(pid, cap.path, (info.st_dev, info.st_ino)))
 
     def test_unlocked_probe_still_has_live_owner_admission_guard(self):
         cap = self.capability()

@@ -399,11 +399,15 @@ def capture_source(queue, directory, capability):
         with queue.locked():
             capability.entry.update(child_pid=child.pid, child_identity=identity(child.pid))
             write_lease(capability.file, capability.entry)
+        terminal = False
+        blocked = False
         try:
             code = wait_members(queue, capability.entry, child)
+            terminal = True
         finally:
             stop_child(child)
-            blocked = TerminalSettlement(queue, capability, child).finish()
+            if terminal:
+                blocked = TerminalSettlement(queue, capability, child).finish()
             restore_batch_descriptor(capability)
     return (2 if blocked else code), captured.read_text().strip()
 
@@ -430,6 +434,7 @@ def supervise(queue, directory, inherited_fd):
     child = None
     witness = Witness(directory)
     cleanup_blocked = False
+    code = 2
     try:
         with queue.locked():
             entry["pid"] = os.getpid()
@@ -483,7 +488,7 @@ def supervise(queue, directory, inherited_fd):
         with queue.locked():
             # Publish the live owner's verdict before empty-custody recovery can run.
             write_json(directory / "finished.json", {"finished_at": time.time(),
-                       "status": "unverified" if cleanup_blocked else "completed",
+                       "status": "unverified" if cleanup_blocked or code in {2, 130, 143} else "completed",
                        "exit_code": 2 if cleanup_blocked else code})
             capability.file.close()
             queue.entries()

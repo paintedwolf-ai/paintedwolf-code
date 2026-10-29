@@ -316,6 +316,7 @@ class Executor:
             error_output = files.enter_context(errors.open("wb")) if errors else subprocess.STDOUT
             child = None
             cleanup_blocked = False
+            terminal = False
             cancelled = False
             try:
                 with self.queue.locked():
@@ -335,10 +336,12 @@ class Executor:
                         break
                     time.sleep(0.1)
                 code = child.wait()
+                terminal = True
             finally:
                 if child is not None:
                     stop_child(child)
-                    cleanup_blocked = TerminalSettlement(self.queue, reservation, child).finish()
+                    if terminal:
+                        cleanup_blocked = TerminalSettlement(self.queue, reservation, child).finish()
                     with self.queue.locked():
                         self.operation_pid(log.stem, None)
             return -1 if cleanup_blocked else (130 if cancelled else code)

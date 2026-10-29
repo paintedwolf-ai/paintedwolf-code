@@ -149,6 +149,45 @@ class CaptureBoundaryTests(TerminalFixture):
 
 @unittest.skipIf(os.name == "nt", "requires inherited POSIX capability locks")
 class BatchTerminalIntegrationTests(support.BatchFixture):
+    def test_interrupted_capture_owner_preserves_escaped_holder_and_admission(self):
+        ready, stop = self.root / "capture-holder", self.root / "capture-stop"
+        self.addCleanup(stop.touch)
+        descendant = ("import os,time\nfrom pathlib import Path\n"
+                      f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
+                      "deadline=time.monotonic()+20\n"
+                      f"while not Path({str(stop)!r}).exists() and time.monotonic()<deadline: time.sleep(.01)\n")
+        producer = ("import os,subprocess,sys,time\nfrom pathlib import Path\n"
+                    "fd=int(os.environ['PW_TEST_EXECUTION_FD'])\n"
+                    f"subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=(fd,),start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                    "while True: time.sleep(.01)\n")
+        (self.scripts / "capture-producer.py").write_text(producer)
+        capture = self.scripts / "test-source-snapshot.sh"
+        original = capture.read_text()
+        marker = "  capture)\n    capture_commit"
+        self.assertEqual(original.count(marker), 1)
+        capture.write_text(original.replace(marker, "  capture)\n    python3 scripts/capture-producer.py"))
+        request = self.start("build")
+        self.queued(1)
+        self.queue.resume()
+        self.await_condition(ready.exists)
+        active = next(e for e in self.queue.status()["runs"] if e.get("kind") == "batch")
+        self.assertEqual(active["phase"], "capture")
+        os.kill(active["pid"], signal.SIGTERM)
+        self.collect(request, 2)
+        lease = self.queue.root / (active["ticket"] + ".lease")
+        info = lease.stat()
+        self.assertTrue(custody.holds(int(ready.read_text()), lease, (info.st_dev, info.st_ino)))
+        self.await_condition(lambda: any(e["ticket"] == active["ticket"]
+                             and e.get("health", {}).get("state") == "supervision_lost"
+                             for e in self.queue.status()["runs"]))
+        status = self.queue.status()
+        retained = next(e for e in status["runs"] if e["ticket"] == active["ticket"])
+        self.assertEqual(retained["health"]["state"], "supervision_lost")
+        self.assertEqual(status["capacity"]["reserved"], 1)
+        self.assertEqual(self.records(), [], "uncaptured source was executed")
+        stop.touch()
+        self.await_condition(lambda: not self.queue.status()["runs"])
+
     def test_settled_request_survives_later_executor_crash_with_orphan_custody(self):
         self.catalog["resources"].update({
             "build": {"locks": ["build"], "workers": 1},
