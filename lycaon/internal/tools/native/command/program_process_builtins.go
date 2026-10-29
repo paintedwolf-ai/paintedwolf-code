@@ -125,7 +125,7 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 		var out strings.Builder
 		writePsCustomFormat(&out, parsed, visible, statuses, ownedByPID, jobs)
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return ownerFailure(err), err
+			return readFailure(err), err
 		}
 		return readResult(0), nil
 	})
@@ -275,7 +275,7 @@ func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 			}
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return ownerFailure(err), err
+			return readFailure(err), err
 		}
 		return readResult(0), nil
 	})

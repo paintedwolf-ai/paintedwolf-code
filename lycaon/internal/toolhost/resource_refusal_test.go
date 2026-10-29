@@ -81,10 +81,9 @@ func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 		t.Fatalf("delivered refusal %+v", result)
 	}
 	t.Logf("Delivered resource refusal:\n%s", result.Refusal.Feedback)
-	// The typed refusal owns model feedback. No second diagnostic is emitted
-	// into the redirected/ordinary stream before the receipt is settled.
-	if result.Stdout != "" || result.Stderr != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
-		t.Fatalf("partial outcome %+v", result)
+	const stderr = "cut: request: This command reached its record_bytes limit (4194305 bytes; maximum 4194304) [COMMAND_LIMIT_EXCEEDED]\n"
+	if result.Stdout != "" || result.Stderr != stderr || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
+		t.Fatalf("partial outcome %+v, want stderr %q", result, stderr)
 	}
 	if kept, err := os.ReadFile(filepath.Join(env.Dir, "kept")); err != nil || string(kept) != "before" {
 		t.Fatalf("earlier effect %q %v", kept, err)
