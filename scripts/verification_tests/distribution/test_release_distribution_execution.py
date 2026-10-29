@@ -145,6 +145,85 @@ class HaltPlanTests(unittest.TestCase):
         self.plan = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.plan)
 
+    def test_selection_rejects_effect_options_before_reading_release_state(self):
+        import sys
+        common = ['halt', '--bad', '1.2.3', '--select-only']
+        for options in [[], ['--write-plan', 'selected.json'],
+                        ['--write-plan', 'selected.json', '--distribution-output', 'distribution.json',
+                         '--prepare-output', 'prepared'],
+                        ['--write-plan', 'selected.json', '--distribution-output', 'distribution.json',
+                         '--apply-prepared', 'prepared']]:
+            with self.subTest(options=options), patch.object(sys, 'argv', common + options), \
+                 patch.object(self.plan, 'load_registry') as read, \
+                 patch.object(self.plan, 'prepare') as prepare, patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'selection requires'):
+                    self.plan.main()
+                read.assert_not_called()
+                prepare.assert_not_called()
+                apply.assert_not_called()
+
+    def test_cli_validates_prepared_authority_before_apply_and_honors_dry_run(self):
+        import sys
+        import tempfile
+        from pathlib import Path
+        reviewed = {'source_generation': 1, 'feeds': [], 'distribution': halt_distribution('1.2.3', None)}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan, ledger = root / 'plan.json', root / 'ledger.json'
+            plan.write_text(json.dumps(reviewed))
+            retained = [{'version': '1.2.3', 'action': 'withdraw'}]
+            ledger.write_text(json.dumps(retained))
+            common = ['halt', '--plan', str(plan)]
+            modes = [(['--prepare-output', str(root / 'prepared'), '--ledger-plan', str(ledger), '--dry-run'],
+                      ['prepare', 'validate']),
+                     (['--apply-prepared', str(root / 'prepared')], ['validate', 'apply']),
+                     ([], ['prepare', 'validate', 'apply'])]
+            for options, expected in modes:
+                with self.subTest(options=options), patch.object(sys, 'argv', common + options), \
+                     patch.object(self.plan, 'read_storage', return_value=None), \
+                     patch.object(self.plan, 'prepare') as prepare, \
+                     patch.object(self.plan, 'validate_prepared') as validate, \
+                     patch.object(self.plan, 'apply') as apply:
+                    order, prepared = [], {'reviewed': 'prepared authority'}
+                    prepare.side_effect = lambda *args, **kwargs: order.append('prepare')
+                    validate.side_effect = lambda *args: order.append('validate') or prepared
+                    apply.side_effect = lambda *args: order.append('apply')
+                    self.plan.main()
+                    self.assertEqual(order, expected)
+                    self.assertEqual(validate.call_args.args[1], reviewed)
+                    if '--ledger-plan' in options:
+                        self.assertEqual(prepare.call_args.kwargs['ledger_rows'], retained)
+                    if 'apply' in expected:
+                        self.assertIs(apply.call_args.args[0], prepared)
+            with patch.object(sys, 'argv', common + ['--apply-prepared', str(root / 'prepared')]), \
+                 patch.object(self.plan, 'read_storage', return_value=None), \
+                 patch.object(self.plan, 'validate_prepared', side_effect=ValueError('stale authority')), \
+                 patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'stale authority'):
+                    self.plan.main()
+                apply.assert_not_called()
+            with patch.object(sys, 'argv', common + ['--prepare-output', 'a', '--apply-prepared', 'b']), \
+                 patch.object(self.plan, 'read_storage', return_value=None), \
+                 patch.object(self.plan, 'prepare') as prepare, patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'choose prepare-output or apply-prepared'):
+                    self.plan.main()
+                prepare.assert_not_called()
+                apply.assert_not_called()
+
+    def test_halt_selection_requires_typed_generation_and_channel_before_storage(self):
+        from update_keys import load_registry
+        registry = load_registry()
+        malformed = [{'source_generation': True, 'feeds': []},
+                     {'source_generation': 1, 'feeds': False}]
+        malformed += [{'source_generation': 1, 'feeds': [row]} for row in
+                      [None, {'generation': True, 'channel': 'stable'},
+                       {'generation': 0, 'channel': 'stable'}, {'generation': 1, 'channel': 'nightly'}]]
+        for plan in malformed:
+            with self.subTest(plan=plan), patch.object(self.plan, 'read_storage') as read:
+                with self.assertRaises(ValueError):
+                    self.plan.validate_selection(plan, registry)
+                read.assert_not_called()
+
     def test_withdrawal_attempts_other_feed_after_a_write_failure(self):
         import subprocess
         import sys
