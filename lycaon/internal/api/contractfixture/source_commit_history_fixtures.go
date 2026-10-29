@@ -83,6 +83,9 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	t.Helper()
 	ledger, ledgerDB, withLedger := TestSourceLedger(t)
 	srv := NewTestServer(t, WithTestGitManager, withLedger, WithPassiveSourceInventory, WithSessionStore(sessionstore.NewSQL(ledgerDB)))
+	// The test context bounds arrival anchoring: the contracts assert the
+	// joined page, not how fast a loaded runner spawns git.
+	srv.Sources.Review.ArrivalAnchorTimeBound = 0
 	repo, nested := NestedRootRepo(t) // init commit: nested/src/app.ts "committed\n"
 
 	p := CreateProjectForTest(t, srv, nested)
