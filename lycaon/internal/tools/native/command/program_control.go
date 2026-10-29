@@ -3,7 +3,6 @@ package command
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -101,7 +100,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		}
 		d.shared.mu.Unlock()
 	}
-	return result.Producer, errors.Join(runErr, d.settle(ctx, child, result.Producer, result.OwnerInvoked || marker.OwnerStartRecorded, result.HostStopCode))
+	return result.Producer, joinSettle(runErr, d.settle(ctx, child, result.Producer, result.OwnerInvoked || marker.OwnerStartRecorded, result.HostStopCode))
 }
 
 // runProducer opens the evaluator's descriptor scope only after reached-owner
