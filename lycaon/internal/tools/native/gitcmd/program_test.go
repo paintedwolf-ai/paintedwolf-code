@@ -242,6 +242,38 @@ func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {
 	gitRun("add", ".")
 	gitRun("commit", "-q", "-m", "seed commit")
 
+	f.bindMutationOwners(t)
+	source := "patch -p1 <<'EOF'\n--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\nEOF\ngit add input\n" +
+		"git apply --index <<'EOF'\ndiff --git a/input b/input\n--- a/input\n+++ b/input\n@@ -1,2 +1,3 @@\n ALPHA\n beta\n+gamma\nEOF\n" +
+		"git apply --stat <<'EOF'\n--- a/input\n+++ b/input\n@@ -1 +1 @@\n-ALPHA\n+alpha\nEOF"
+	out, err := f.call(t, t.Context(), source)
+	testutil.FailErr(t, "run patch program", err)
+	var outcome struct {
+		Stdout string `json:"stdout"`
+		State  string `json:"state"`
+	}
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
+	if outcome.Stdout != "patching file input\n input |    2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n" || outcome.State != "completed" {
+		t.Fatalf("program outcome %s", out)
+	}
+	data, err := os.ReadFile(filepath.Join(f.dir, "input"))
+	testutil.FailErr(t, "read input", err)
+	if string(data) != "ALPHA\nbeta\ngamma\n" {
+		t.Fatalf("input = %q", data)
+	}
+	staged, err := exec.Command(bin, "-C", f.dir, "show", ":input").Output()
+	testutil.FailErr(t, "read index", err)
+	if string(staged) != "ALPHA\nbeta\ngamma\n" {
+		t.Fatalf("index input = %q", staged)
+	}
+	if executions := f.executions(t); executions["patch"] != "completed;" || executions["git add"] != "completed;" || executions["git apply"] != "completed;completed;" {
+		t.Fatalf("child receipts %v", executions)
+	}
+}
+
+// bindMutationOwners serves git and patch from one program's mutation owners.
+func (f *programFixture) bindMutationOwners(t *testing.T) {
+	t.Helper()
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
 	testutil.FailErr(t, "compile profile effects", err)
 	allowed := map[string]bool{"read": true, "write": true, "delete": true, "chmod": true, "stat": true, "list_dir": true}
@@ -272,30 +304,53 @@ func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {
 			}},
 		}}, nil
 	}
-	source := "patch -p1 <<'EOF'\n--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\nEOF\ngit add input\n" +
-		"git apply --index <<'EOF'\ndiff --git a/input b/input\n--- a/input\n+++ b/input\n@@ -1,2 +1,3 @@\n ALPHA\n beta\n+gamma\nEOF\n" +
-		"git apply --stat <<'EOF'\n--- a/input\n+++ b/input\n@@ -1 +1 @@\n-ALPHA\n+alpha\nEOF"
-	out, err := f.call(t, t.Context(), source)
-	testutil.FailErr(t, "run patch program", err)
-	var outcome struct {
-		Stdout string `json:"stdout"`
-		State  string `json:"state"`
+}
+
+// TestGitGoldenProgramsRunThroughTheCommandEntry executes the catalog's Git
+// golden programs from their setup files and compares stdout and status.
+func TestGitGoldenProgramsRunThroughTheCommandEntry(t *testing.T) {
+	catalog, err := toolcontract.LanguageV1()
+	testutil.FailErr(t, "catalog", err)
+	var contract struct {
+		Golden []struct {
+			ID       string                                     `json:"id"`
+			Program  string                                     `json:"program"`
+			Setup    struct{ Files map[string]json.RawMessage } `json:"setup"`
+			Expected struct {
+				Stdout string `json:"stdout"`
+				Status int    `json:"status"`
+			} `json:"expected"`
+		} `json:"golden_programs"`
 	}
-	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
-	if outcome.Stdout != "patching file input\n input |    2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n" || outcome.State != "completed" {
-		t.Fatalf("program outcome %s", out)
+	testutil.FailErr(t, "golden", json.Unmarshal(catalog.Contracts["golden"], &contract))
+	ran := 0
+	for _, golden := range contract.Golden {
+		if !strings.HasPrefix(golden.ID, "git-") {
+			continue
+		}
+		ran++
+		t.Run(golden.ID, func(t *testing.T) {
+			f := newProgramFixture(t)
+			for name, raw := range golden.Setup.Files {
+				var content string
+				testutil.FailErr(t, "golden file "+name, json.Unmarshal(raw, &content))
+				testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(f.dir, name), []byte(content), 0o644))
+			}
+			f.bindMutationOwners(t)
+			out, err := f.call(t, t.Context(), golden.Program)
+			testutil.FailErr(t, "run golden program", err)
+			var outcome struct {
+				Stdout string `json:"stdout"`
+				State  string `json:"state"`
+				Status int    `json:"status"`
+			}
+			testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
+			if outcome.Stdout != golden.Expected.Stdout || outcome.Status != golden.Expected.Status || outcome.State != "completed" {
+				t.Fatalf("program outcome %s", out)
+			}
+		})
 	}
-	data, err := os.ReadFile(filepath.Join(f.dir, "input"))
-	testutil.FailErr(t, "read input", err)
-	if string(data) != "ALPHA\nbeta\ngamma\n" {
-		t.Fatalf("input = %q", data)
-	}
-	staged, err := exec.Command(bin, "-C", f.dir, "show", ":input").Output()
-	testutil.FailErr(t, "read index", err)
-	if string(staged) != "ALPHA\nbeta\ngamma\n" {
-		t.Fatalf("index input = %q", staged)
-	}
-	if executions := f.executions(t); executions["patch"] != "completed;" || executions["git add"] != "completed;" || executions["git apply"] != "completed;completed;" {
-		t.Fatalf("child receipts %v", executions)
+	if ran == 0 {
+		t.Fatal("no Git golden programs")
 	}
 }

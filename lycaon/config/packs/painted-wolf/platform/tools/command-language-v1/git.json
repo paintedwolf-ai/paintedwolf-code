@@ -3470,7 +3470,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3496,6 +3496,390 @@
         "git add-option-u-update",
         "git add-option-q-quiet",
         "git add-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git mv",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] mv [-f] [-k] [-n|--dry-run] [-v] [--] SOURCE ... DESTINATION",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git mv-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git mv-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-f",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-k",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git mv-option-v",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Paths are relative to the command directory. Use -- before path operands beginning with a dash. Pathspec magic and submodule operations are unsupported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary safety refusal",
+        "128": "repository or path failure",
+        "2": "usage or host refusal"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git mv -- ./input ./renamed",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Tracked removals and moves use the shared filesystem operations for review, source history and recovery, then the shared Git stage operation for the index. Dry runs have no effects. Index-only removal retains saved files. git rm removes the directories a removal leaves empty, keeping the repository root and the command directory; worktree removal of a tracked symbolic link is refused, and --cached untracks it. Force permits ordinary Git safety checks to be bypassed; it does not change host authority. A later index failure reports any filesystem effects already completed. Session staging includes affected paths and leaves unrelated staging intact.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/move.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/file_mutation_test.go"
+        ],
+        "extension": "Compose filesystem delete or move with the existing Git stage operation.",
+        "evidence_kind": "native contract fixtures and pinned reference observations"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-mv-operands-valid",
+        "git-mv-rejection",
+        "git mv-option-C-global",
+        "git mv-option-c-global",
+        "git mv-option-nopager-global",
+        "git mv-option-f",
+        "git mv-option-k",
+        "git mv-option-n",
+        "git mv-option-v"
+      ]
+    },
+    {
+      "name": "git rm",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] rm [-r] [--cached] [-f] [-n|--dry-run] [-q] [--ignore-unmatch] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git rm-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git rm-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-r",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-f",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-n",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-q",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--ignore-unmatch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rm-option-ignore-unmatch",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Paths are relative to the command directory. Use -- before path operands beginning with a dash. Pathspec magic and submodule operations are unsupported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary safety refusal",
+        "128": "repository or path failure",
+        "2": "usage or host refusal"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git rm -- ./input",
+        "stdout": "rm 'input'\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Tracked removals and moves use the shared filesystem operations for review, source history and recovery, then the shared Git stage operation for the index. Dry runs have no effects. Index-only removal retains saved files. git rm removes the directories a removal leaves empty, keeping the repository root and the command directory; worktree removal of a tracked symbolic link is refused, and --cached untracks it. Force permits ordinary Git safety checks to be bypassed; it does not change host authority. A later index failure reports any filesystem effects already completed. Session staging includes affected paths and leaves unrelated staging intact.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/remove.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/file_mutation_test.go"
+        ],
+        "extension": "Compose filesystem delete or move with the existing Git stage operation.",
+        "evidence_kind": "native contract fixtures and pinned reference observations"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-rm-operands-valid",
+        "git-rm-rejection",
+        "git rm-option-C-global",
+        "git rm-option-c-global",
+        "git rm-option-nopager-global",
+        "git rm-option-r",
+        "git rm-option-cached",
+        "git rm-option-f",
+        "git rm-option-n",
+        "git rm-option-q",
+        "git rm-option-ignore-unmatch"
       ]
     },
     {
@@ -3655,7 +4039,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3820,7 +4204,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -3981,7 +4365,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4144,7 +4528,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4372,7 +4756,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4548,7 +4932,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4730,7 +5114,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -4890,7 +5274,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5064,7 +5448,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5257,7 +5641,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5432,7 +5816,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5571,7 +5955,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5742,7 +6126,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -5908,7 +6292,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -6080,7 +6464,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -6242,7 +6626,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
@@ -6400,7 +6784,7 @@
           }
         }
       },
-      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add, git rm or git mv, including both sides of a rename and deletions staged while the file stays on disk, and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [

@@ -56,6 +56,18 @@ files, while `git apply` changes nothing unless every section applies.
 operation with `git add`'s session-staging rules, and `--3way` merges from the
 preimage blob with Git's merge-file, reporting conflicted paths and index stages.
 
+`git rm` and `git mv` compose recoverable filesystem deletion or movement with
+the same Git stage operation. `git rm --cached` changes only the index. Both
+commands support dry runs, preserve unrelated staging, and include affected
+paths in session staging. Ordinary Git safety checks precede removal; force
+does not change host authority. `git rm` removes the directories a removal
+leaves empty, each through the same recoverable delete, and keeps the
+repository root and the command directory. If index staging fails after a
+filesystem change, the result retains the completed effect and its source
+recovery. A following `git commit` builds its tree in a private index seeded
+from `HEAD`, so staged deletions, both sides of a rename and the selected
+paths are committed while unrelated staged work stays staged.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete

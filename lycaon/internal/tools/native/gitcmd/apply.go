@@ -65,7 +65,7 @@ type applyRun struct {
 // through the same pinned publication as patch; index changes are one
 // reviewed Git operation with git add's session-staging rules.
 func runApply(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
-	if p.patches == nil {
+	if p.filesystem == nil {
 		return settleMutationError(toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": p.command.spec.Name, "capability": "the program's staged publication owner"}), toolcontract.NoEffect)
 	}
 	run := &applyRun{ctx: ctx, p: p, tc: tc, stderr: stderr, cached: has(p.Argv, "--cached"), threeWay: has(p.Argv, "-3")}
@@ -163,7 +163,7 @@ func (r *applyRun) inputs(stdin io.Reader) ([]applyInput, error) {
 		if err != nil {
 			return nil, err
 		}
-		data, err := r.p.patches.CapturePatchInput(r.ctx, r.tc, execution, bound.Resolved.Abs)
+		data, err := r.p.filesystem.CapturePatchInput(r.ctx, r.tc, execution, bound.Resolved.Abs)
 		if err != nil {
 			return nil, err
 		}

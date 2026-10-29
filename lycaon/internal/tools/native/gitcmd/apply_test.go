@@ -49,7 +49,7 @@ func newApplyHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory limits", err)
 	owners.Revisions.Memory, err = toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "program memory", err)
-	h.patches = owners
+	h.filesystem = owners
 	return h
 }
 
@@ -196,7 +196,7 @@ func (h *harness) patch(stdin string, words ...string) run {
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	prepared, err := h.patches.Prepare(mutation.Program{Paths: h.paths}, commandprogram.OperationRequest{Invocation: inv, OperationID: "patch", Statement: statement, Argv: argv})
+	prepared, err := h.filesystem.Prepare(mutation.Program{Paths: h.paths}, commandprogram.OperationRequest{Invocation: inv, OperationID: "patch", Statement: statement, Argv: argv})
 	testutil.FailErr(h.t, "prepare patch", err)
 	var stdout, stderr bytes.Buffer
 	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
@@ -396,7 +396,7 @@ func TestApplyOptionsAndDiagnosticsFollowGit(t *testing.T) {
 			t.Fatalf("%v accepted", words)
 		}
 	}
-	h.patches = nil
+	h.filesystem = nil
 	if reject := toolrejection.AsToolReject(h.apply(sample).err); reject == nil || reject.Code != "COMMAND_PLATFORM_UNAVAILABLE" {
 		t.Fatal("git apply ran without the staged publication")
 	}

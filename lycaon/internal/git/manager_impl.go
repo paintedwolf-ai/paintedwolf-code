@@ -143,11 +143,14 @@ func (m *Manager) ChangedPaths(ctx context.Context, projectDir string) ([]string
 	seen := map[string]struct{}{}
 	var paths []string
 	for _, entry := range entries {
-		if _, ok := seen[entry.path]; ok {
-			continue
+		// A rename changes its source too; a copy leaves the source in place.
+		for _, path := range []string{entry.path, renameSource(entry)} {
+			if _, ok := seen[path]; ok || path == "" {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
 		}
-		seen[entry.path] = struct{}{}
-		paths = append(paths, entry.path)
 	}
 	return paths, nil
 }
@@ -651,6 +654,13 @@ func notifyRepoChange(ctx context.Context, projectDir string, kind repochange.Ki
 }
 
 // Untracked directories expand to files for staging and invalidation.
+func renameSource(entry porcelainEntry) string {
+	if entry.status[0] == 'R' || entry.status[1] == 'R' {
+		return entry.from
+	}
+	return ""
+}
+
 func readPorcelainStatus(ctx context.Context, dir string, branch bool) (string, []porcelainEntry, error) {
 	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all"}
 	if branch {

@@ -226,6 +226,9 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 }
 
 func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.Repo, scratch string) ([]string, error) {
+	if p.request.Kind == "stage" {
+		return nil, nil
+	}
 	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
 	if paths := p.addPaths(); len(paths) > 0 {
 		dirtyArgs = append(dirtyArgs, "--")
@@ -411,7 +414,7 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 		}
 	}
 	for path, expected := range p.nestedHeads {
-		actual, err := optionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
+		actual, err := ResolveOptionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
 		if err != nil || actual != expected {
 			return operationRefusal("repository_changed_during_review", path)
 		}

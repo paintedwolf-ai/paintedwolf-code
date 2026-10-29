@@ -1115,6 +1115,8 @@
     "git init",
     "git apply",
     "git add",
+    "git rm",
+    "git mv",
     "git blame",
     "git branch",
     "git checkout",

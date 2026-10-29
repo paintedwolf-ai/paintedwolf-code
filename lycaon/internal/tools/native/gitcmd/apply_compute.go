@@ -90,7 +90,7 @@ func (r *applyRun) bind(s *applySection) error {
 func (r *applyRun) capture(s *applySection) (string, error) {
 	file := s.file
 	if !r.cached {
-		target, err := r.p.patches.CapturePatchTarget(r.ctx, r.tc, r.p.execution, s.target.OldAbs, s.target.NewAbs)
+		target, err := r.p.filesystem.CapturePatchTarget(r.ctx, r.tc, r.p.execution, s.target.OldAbs, s.target.NewAbs)
 		if err != nil && !errors.Is(err, mutation.ErrPatchTargetMissing) {
 			return "", err
 		}
@@ -252,7 +252,7 @@ func (r *applyRun) merge(s *applySection) (bool, error) {
 func (r *applyRun) publish(sections []*applySection) error {
 	if !r.cached {
 		for _, s := range sections {
-			effect, err := r.p.patches.PublishPatchTarget(r.ctx, r.tc, s.target, s.change)
+			effect, err := r.p.filesystem.PublishPatchTarget(r.ctx, r.tc, s.target, s.change)
 			if effect.Wrote || effect.Removed {
 				r.effects++
 			}

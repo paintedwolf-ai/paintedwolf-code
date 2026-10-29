@@ -148,7 +148,7 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 			refs = append(refs, oid)
 		}
 	}
-	autoStash, err := optionalObject(ctx, dir, "MERGE_AUTOSTASH")
+	autoStash, err := ResolveOptionalObject(ctx, dir, "MERGE_AUTOSTASH")
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 			continue
 		}
 		refs = append(refs, stash, stash+"^2")
-		third, err := optionalObject(ctx, dir, stash+"^3")
+		third, err := ResolveOptionalObject(ctx, dir, stash+"^3")
 		if err != nil {
 			return err
 		}

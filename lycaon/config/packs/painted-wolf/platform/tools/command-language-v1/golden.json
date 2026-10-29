@@ -2072,6 +2072,62 @@
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "git-tracked-move-and-remove",
+      "program": "git init -q; git add -- input other; git commit -q -m base; git mv -- input renamed; git status --short; git commit -q -m rename; git rm -- other; git commit -q -m remove; git ls-files",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n",
+          "other": "gamma\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "R  input -> renamed\nrm 'other'\nrenamed\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "git-commit",
+            "paths": [
+              "input",
+              "other"
+            ]
+          },
+          {
+            "kind": "filesystem-move",
+            "from": "input",
+            "path": "renamed"
+          },
+          {
+            "kind": "git-commit",
+            "paths": [
+              "input",
+              "renamed"
+            ]
+          },
+          {
+            "kind": "filesystem-delete",
+            "path": "other"
+          },
+          {
+            "kind": "git-commit",
+            "paths": [
+              "other"
+            ]
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     }
   ]
 }
