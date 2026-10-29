@@ -26,7 +26,7 @@ func TestRetainedCopyPreservesReleasedRowsAndHistory(t *testing.T) {
 	copyDB, err := sql.Open("sqlite", destination)
 	testutil.FailErr(t, "open retained copy", err)
 	defer func() { _ = copyDB.Close() }()
-	testutil.FailErr(t, "validate retained store", validateStoreIntegrity(t.Context(), copyDB))
+	testutil.FailErr(t, "validate retained store", auditSnapshot(t.Context(), copyDB, nil))
 	_, err = copyDB.Exec(`ATTACH DATABASE ? AS original`, fileDSN(source, "mode=ro"))
 	testutil.FailErr(t, "attach reference", err)
 	objects, err := readRebuildObjects(t.Context(), copyDB)
@@ -106,7 +106,7 @@ func TestRetainedCopyDoesNotReadRetiredIndex(t *testing.T) {
 	testutil.FailErr(t, "close fixture bytes", file.Close())
 	reader, err = OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open damaged source", err)
-	if err := validateStoreIntegrity(t.Context(), reader); err == nil {
+	if err := auditSnapshot(t.Context(), reader, nil); err == nil {
 		t.Fatal("fixture did not damage the obsolete index")
 	}
 	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)

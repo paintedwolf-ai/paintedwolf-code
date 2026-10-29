@@ -32,7 +32,7 @@ func TestRetainedStrategiesPreserveTheSameLogicalStore(t *testing.T) {
 	whole := filepath.Join(t.TempDir(), "whole.db")
 	prepared, used, err := copyWholeRetainedStore(t.Context(), source, whole, plan, nil)
 	testutil.FailErr(t, "prepare whole-file strategy", err)
-	if !used || !prepared.wholeFile || prepared.validatedIdentity == "" {
+	if !used || !prepared.wholeFile || prepared.preparedIdentity == "" {
 		t.Fatal("complete source did not exercise the whole-file strategy")
 	}
 	rows := filepath.Join(t.TempDir(), "rows.db")
@@ -45,7 +45,7 @@ func TestRetainedStrategiesPreserveTheSameLogicalStore(t *testing.T) {
 		testutil.FailErr(t, "seal migrated strategy", sealRebuiltStore(t.Context(), image.path))
 		database, err := openReader(t.Context(), image.path)
 		testutil.FailErr(t, "open migrated strategy", err)
-		testutil.FailErr(t, "validate all strategy pages and foreign keys", validateUpgradeIntegrity(t.Context(), database))
+		testutil.FailErr(t, "validate all strategy pages and foreign keys", auditSnapshot(t.Context(), database, nil))
 		var got int64
 		err = database.QueryRowContext(t.Context(), "SELECT seq FROM sqlite_sequence WHERE name=?", sequenceTable).Scan(&got)
 		testutil.FailErr(t, "read retained sequence ceiling", err)

@@ -75,9 +75,9 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err != nil {
 		return err
 	}
-	// The compact released-shape copy is itself verified before it becomes
-	// recovery material. Capture retains every backed-up installation payload;
-	// only unreachable legacy chunks and abandoned staging have been omitted.
+	// Recovery capture verifies the sealed released-shape image and complete
+	// installation payload. Whole-file copies retain source bytes directly;
+	// reconstructed images receive structural validation before capture.
 	if err := captureRetainedRecovery(ctx, replacement, plan, hooks, staged, prepared); err != nil {
 		return err
 	}
@@ -110,11 +110,11 @@ func captureRetainedRecovery(ctx context.Context, replacement string, plan migra
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Validating)
 	}
-	if prepared.validatedIdentity != "" {
-		if err := requireRebuildIdentity(replacement, prepared.validatedIdentity); err != nil {
+	if prepared.preparedIdentity != "" {
+		if err := requireRebuildIdentity(replacement, prepared.preparedIdentity); err != nil {
 			return err
 		}
-	} else if err := validateUpgradeIntegrity(ctx, reader); err != nil {
+	} else if err := validateUpgradeStructure(ctx, reader); err != nil {
 		return err
 	}
 	if staged {

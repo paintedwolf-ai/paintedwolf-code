@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestUpgradeIntegrityRestoresOnlyItsHeldConnection(t *testing.T) {
+func TestUpgradeStructureRestoresOnlyItsHeldConnection(t *testing.T) {
 	for _, invalid := range []bool{false, true} {
 		name := "healthy"
 		if invalid {
@@ -39,7 +39,7 @@ func TestUpgradeIntegrityRestoresOnlyItsHeldConnection(t *testing.T) {
 				testutil.FailErr(t, "seed rejected foreign key", err)
 			}
 			testutil.FailErr(t, "release upgrade reader", work.Close())
-			err = validateUpgradeIntegrity(t.Context(), database)
+			err = validateUpgradeStructure(t.Context(), database)
 			if invalid {
 				var failure *StoreIncompatibleError
 				if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
@@ -57,13 +57,13 @@ func TestUpgradeIntegrityRestoresOnlyItsHeldConnection(t *testing.T) {
 	}
 }
 
-func TestUpgradeIntegrityPreservesConnectionCancellation(t *testing.T) {
+func TestUpgradeStructurePreservesConnectionCancellation(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
 	testutil.FailErr(t, "open canceled upgrade fixture", err)
 	defer func() { _ = database.Close() }()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := validateUpgradeIntegrity(ctx, database); !errors.Is(err, context.Canceled) {
+	if err := validateUpgradeStructure(ctx, database); !errors.Is(err, context.Canceled) {
 		t.Fatalf("upgrade reader cancellation=%v", err)
 	}
 }

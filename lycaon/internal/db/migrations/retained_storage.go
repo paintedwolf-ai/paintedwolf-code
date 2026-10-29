@@ -102,7 +102,7 @@ func retainedRouteSortBytes(trees map[string]retainedTree, pageBytes uint64) (ui
 	}
 	// UNIQUE(snapshot_id,chunk_id) is re-enforced before conversion: a root
 	// selects each physical manifest row at most once, independent of metadata.
-	for _, name := range []string{"source_manifest_entries", "source_snapshot_roots", "sqlite_schema"} {
+	for _, name := range []string{"source_manifest_entries", "source_snapshot_roots", "source_snapshot_chunks", "sqlite_schema"} {
 		tree := trees[name]
 		largest, err = storageSum(tree.record, tree.record, 80)
 		if err != nil {
@@ -117,6 +117,19 @@ func retainedRouteSortBytes(trees map[string]retainedTree, pageBytes uint64) (ui
 		}
 		budget = max(budget, bytes)
 	}
+	// Selection's EXCEPT tree inserts only the physical chunk IDs, then deletes
+	// references. Two maximum-size temp pages per key cover its B-tree nodes;
+	// twice the encoded payload covers overflow and in-flight splitting.
+	chunks := trees["source_manifest_chunks"]
+	selectionRecord, err := storageSum(chunks.record, 18, 65536)
+	if err != nil || chunks.cells > math.MaxUint64/2/selectionRecord {
+		return 0, fmt.Errorf("retained selection input overflows")
+	}
+	selection, err := storageSum(2*chunks.cells*selectionRecord, 65536, 64<<20)
+	if err != nil {
+		return 0, err
+	}
+	budget = max(budget, selection)
 	// The authority conversion pages at most32 checkpoint payloads by id. If
 	// SQLite chooses a bounded ORDER BY index, its ephemeral tree has at most33
 	// records including the in-flight key. Charge the maximum legal temporary

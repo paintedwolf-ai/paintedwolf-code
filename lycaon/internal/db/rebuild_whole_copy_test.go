@@ -42,8 +42,8 @@ func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
 	destination := filepath.Join(t.TempDir(), "replacement.db")
 	prepared, err := copyRetainedStore(t.Context(), source, destination, plan, nil)
 	testutil.FailErr(t, "prepare complete whole-file image", err)
-	if !prepared.wholeFile || prepared.validatedIdentity == "" {
-		t.Fatal("complete selection reconstructed rows or lost validation custody")
+	if !prepared.wholeFile || prepared.preparedIdentity == "" {
+		t.Fatal("complete selection reconstructed rows or lost prepared-image custody")
 	}
 	after, err := os.ReadFile(source)
 	testutil.FailErr(t, "read retained original", err)
@@ -66,18 +66,18 @@ func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
 		}
 		return nil
 	}}
-	testutil.FailErr(t, "capture validated same image", captureRetainedRecovery(t.Context(), destination, plan, hooks, false, prepared))
+	testutil.FailErr(t, "capture same prepared image", captureRetainedRecovery(t.Context(), destination, plan, hooks, false, prepared))
 	if !captured {
-		t.Fatal("validated image did not reach recovery")
+		t.Fatal("prepared image did not reach recovery")
 	}
-	// Validation custody applies to one file identity, not a reusable boolean.
+	// Preparation custody applies to one file identity, not a reusable boolean.
 	raw, err := os.ReadFile(destination)
 	testutil.FailErr(t, "read prepared image", err)
-	testutil.FailErr(t, "move validated image", os.Rename(destination, destination+".saved"))
+	testutil.FailErr(t, "move prepared image", os.Rename(destination, destination+".saved"))
 	testutil.FailErr(t, "replace with identical different inode", os.WriteFile(destination, raw, 0600))
 	captured = false
 	if err := captureRetainedRecovery(t.Context(), destination, plan, hooks, false, prepared); err == nil || captured {
-		t.Fatal("replacement reused another file's validation")
+		t.Fatal("replacement reused another file's preparation")
 	}
 }
 
@@ -92,7 +92,7 @@ func TestRetainedIncompleteSelectionKeepsRowReconstruction(t *testing.T) {
 	testutil.FailErr(t, "close incomplete source", reader.Close())
 	prepared, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan, nil)
 	testutil.FailErr(t, "retain selected rows", err)
-	if prepared.wholeFile || prepared.sharedOriginal || prepared.validatedIdentity != "" {
+	if prepared.wholeFile || prepared.sharedOriginal || prepared.preparedIdentity != "" {
 		t.Fatal("incomplete retention bypassed row reconstruction")
 	}
 }
@@ -114,7 +114,7 @@ func TestRetainedCompleteMalformedCountsStillRefuse(t *testing.T) {
 	}
 }
 
-func TestRetainedCompleteDamagedSecondaryIndexRebuilds(t *testing.T) {
+func TestRetainedCompleteCopyDefersObsoleteSecondaryIndexAudit(t *testing.T) {
 	source, _ := completeRetainedFixture(t)
 	reader, err := openReader(t.Context(), source)
 	testutil.FailErr(t, "open complete source", err)
@@ -136,14 +136,21 @@ func TestRetainedCompleteDamagedSecondaryIndexRebuilds(t *testing.T) {
 	testutil.FailErr(t, "close damaged source", reader.Close())
 	destination := filepath.Join(t.TempDir(), "replacement.db")
 	prepared, err := copyRetainedStore(t.Context(), source, destination, plan, nil)
-	testutil.FailErr(t, "rebuild damaged secondary index", err)
-	if prepared.wholeFile || prepared.sharedOriginal {
-		t.Fatal("damaged index retained whole-file validation")
+	testutil.FailErr(t, "preserve damaged source bytes for migration", err)
+	if !prepared.wholeFile || prepared.preparedIdentity == "" {
+		t.Fatal("complete source paid for an exhaustive pre-capture index audit")
 	}
 	reader, err = openReader(t.Context(), destination)
 	testutil.FailErr(t, "open rebuilt image", err)
 	defer reader.Close()
-	testutil.FailErr(t, "fully validate rebuilt image", validateUpgradeIntegrity(t.Context(), reader))
+	if err := auditSnapshot(t.Context(), reader, nil); err == nil {
+		t.Fatal("explicit exhaustive audit did not detect damaged secondary index")
+	}
+	pending, err := integrityAuditState(t.Context(), reader)
+	testutil.FailErr(t, "read pending audit obligation", err)
+	if pending != integrityAuditPendingValue {
+		t.Fatal("preparation lost deferred audit obligation")
+	}
 }
 
 func TestRetainedCompletenessPredicatesAreIndependent(t *testing.T) {

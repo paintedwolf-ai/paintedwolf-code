@@ -8,13 +8,13 @@ import (
 	"github.com/lycaon/lycaon/internal/db/migrations"
 )
 
-func validateUpgradeIntegrity(ctx context.Context, database *sql.DB) (err error) {
+func validateUpgradeStructure(ctx context.Context, database *sql.DB) (err error) {
 	connection, err := database.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, connection.Close()) }()
 	return migrations.WithIntegrityCache(ctx, connection, func() error {
-		return validateStoreIntegrity(ctx, connection)
+		return validateStoreStructure(ctx, connection)
 	})
 }
