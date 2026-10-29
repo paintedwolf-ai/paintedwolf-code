@@ -206,7 +206,7 @@ Two terminals from repo root — sidecar logs on stderr in terminal 1; the Tauri
 ./task den:dev            # terminal 2 — `bun run tauri dev` (requires sidecar health)
 ```
 
-`den:dev` stops this checkout's Vite on `:1420` before bind; a foreign listener is an error. `den:sidecar` binds `LYCAON_ADDR` (`127.0.0.1:8787` by default): a live engine answering `GET /health` is a refuse — run `./task den:sidecar:stop` only when you mean to replace it. An unresponsive engine listener is reclaimed; a foreign listener is an error.
+`den:dev` stops this checkout's Vite on `:1420` before bind; a foreign listener is an error. `den:sidecar:stop` selects engine processes only through the configured development store locks or `LYCAON_ADDR` listener; it does not select installed engines by executable name. `den:sidecar` binds `LYCAON_ADDR` (`127.0.0.1:8787` by default): a live engine answering `GET /health` is a refuse — run `./task den:sidecar:stop` only when you mean to replace it. An unresponsive engine listener is reclaimed; a foreign listener is an error.
 
 **Fresh pair** (`den:sidecar:*:fresh` then `den:dev`): every fresh task runs `den:sidecar:stop` first, because the engine takes its store instance lock at startup — too late to defend a store the wipe has already deleted. `db:wipe` (see the [task table](#targets-with-behavior-the-description-cannot-carry)) clears the store and every store-keyed host tree: project host data, drafts, source content/observations, checkpoints, worker branches/seeds, session worktrees, and the web index. The fresh-session step clears Den's store-keyed boot slices while preserving app preferences, including the completed-onboarding latch, and marks the launch so the desktop shell lands on home. **Quit any open Den window** before `den:dev` after a fresh sidecar run so the new process reads cleared disk state.
 
@@ -238,8 +238,8 @@ The token is minted at `${SCRATCH}/cfg/api.token`; health is served at
 you own it; inspect its parent, start time, and arguments if ownership is unclear.
 
 Do not use `den:sidecar:stop` to stop this scratch process. Its default address
-is still `127.0.0.1:8787` even when only the config directory is overridden, and
-its bundled-engine sweep is not scoped by that directory. Shared-engine stop
+is still `127.0.0.1:8787` even when only the config directory is overridden.
+Shared-engine stop
 operations require explicit user authorization. Never broadcast-kill an engine.
 
 ### Development UI diagnostics
