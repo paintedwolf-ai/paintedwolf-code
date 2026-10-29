@@ -67,7 +67,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
 | **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 16 |
-| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 63 |
+| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 67 |
 
 ---
 
@@ -118,6 +118,7 @@ Policy files retain every declared entry, package rating, rationale, and verific
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |
+| Reference userlands (`lycaon/test/referenceuserland`) | 4 | [Policy](../../dependencies/sections/reference-userlands.yaml) | Declared pin sources in policy |
 
 ## Operational runbooks
 
