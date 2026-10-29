@@ -129,7 +129,7 @@ func redirectDescriptor(r commandsurface.ProgramRedirect) int {
 		return r.Descriptor
 	}
 	switch r.Operator {
-	case "<", "<&", "<<", "<<-":
+	case "<", "<&", "<<", "<<-", "<<<":
 		return 0
 	default:
 		return 1
@@ -172,6 +172,8 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 				words(p.Words())
 			case commandsurface.ArithmeticPart:
 				words(p.Words())
+			case commandsurface.BracePart:
+				words(p.Alternatives)
 			}
 		}
 	}
