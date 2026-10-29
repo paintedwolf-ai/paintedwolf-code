@@ -166,7 +166,7 @@ class LinuxWithdrawalPlanTests(unittest.TestCase):
     def test_only_re_signed_copies_of_one_apt_generation_share_a_version(self):
         release = lambda value: [{"path": "dists/stable/" + name, "sha256": value * 64, "size": 1}
                                  for name in ("Release", "InRelease", "Release.gpg")]
-        original = self.earlier("deb", "stable", None)
+        original = receipt("2.0.1")
         original = {**original, "objects": original["objects"] + release("1")}
         resigned = {**original, "objects": original["objects"][:1] + release("2")}
         for value in (original, resigned):
