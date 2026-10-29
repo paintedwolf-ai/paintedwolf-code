@@ -32,6 +32,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/people/personactions"
+	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -83,6 +84,7 @@ type Server struct {
 	personActions  *personactions.Store
 	sessions       *session.Host
 	fileBriefings  *filebriefing.Service
+	repoProvider   repoinfo.Provider
 	events         events.ReplayHub
 	eventPublisher *events.Publisher
 	presence       *events.Presence

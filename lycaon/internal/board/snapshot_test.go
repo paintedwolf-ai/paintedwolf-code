@@ -34,6 +34,7 @@ func (progressiveRepoProvider) KnownEmpty(context.Context, string) (bool, error)
 func (progressiveRepoProvider) Warm(string)                                      {}
 func (progressiveRepoProvider) Changed(context.Context, string)                  {}
 func (progressiveRepoProvider) SetOnSettled(func(string))                        {}
+func (progressiveRepoProvider) Wait(context.Context) error                       { return nil }
 func (progressiveRepoProvider) Close() error                                     { return nil }
 
 func TestSnapshotBuilderWithholdsProgressiveRepoBrief(t *testing.T) {

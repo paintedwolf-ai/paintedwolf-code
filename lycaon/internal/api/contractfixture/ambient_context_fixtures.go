@@ -51,3 +51,4 @@ func (*WarmTrackingRepo) Close() error { return nil }
 func (*WarmTrackingRepo) KnownEmpty(context.Context, string) (bool, error) { return false, nil }
 func (*WarmTrackingRepo) Changed(context.Context, string)                  {}
 func (*WarmTrackingRepo) SetOnSettled(func(string))                        {}
+func (*WarmTrackingRepo) Wait(context.Context) error                       { return nil }

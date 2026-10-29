@@ -67,6 +67,8 @@ type Provider interface {
 	Changed(ctx context.Context, projectDir string)
 	// SetOnSettled notifies readers after each materialized measurement.
 	SetOnSettled(fn func(projectDir string))
+	// Wait joins analysis, refinement, and their settled callbacks.
+	Wait(ctx context.Context) error
 	// Close stops background analysis.
 	Close() error
 }
@@ -135,7 +137,7 @@ type fileProvider struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	idle   chan struct{}
 }
 
 func (p *fileProvider) Brief(ctx context.Context, projectDir string) (*Brief, error) {
@@ -259,15 +261,19 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 		p.mu.Unlock()
 		return
 	}
+	if len(p.warming) == 0 {
+		p.idle = make(chan struct{})
+	}
 	p.warming[projectDir] = struct{}{}
-	p.wg.Add(1)
 	p.mu.Unlock()
 
 	go func() {
-		defer p.wg.Done()
 		defer func() {
 			p.mu.Lock()
 			delete(p.warming, projectDir)
+			if len(p.warming) == 0 {
+				close(p.idle)
+			}
 			p.mu.Unlock()
 		}()
 		p.loadClassifications(projectDir)
@@ -455,7 +461,25 @@ func (p *fileProvider) KnownEmpty(ctx context.Context, projectDir string) (bool,
 	return files.Measured && files.Count == 0, nil
 }
 
-// Close cancels analysis and waits for workers.
+// Wait joins admitted analyses through their synchronous settled callbacks.
+// Each busy interval has its own channel, so future Warm calls remain usable.
+func (p *fileProvider) Wait(ctx context.Context) error {
+	for {
+		p.mu.RLock()
+		done, idle := p.idle, len(p.warming) == 0
+		p.mu.RUnlock()
+		if idle {
+			return nil
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// Close cancels analysis and waits for workers and their settled callbacks.
 func (p *fileProvider) Close() error {
 	p.mu.Lock()
 	if p.closed {
@@ -465,7 +489,7 @@ func (p *fileProvider) Close() error {
 	p.closed = true
 	p.mu.Unlock()
 	p.cancel()
-	p.wg.Wait()
+	_ = p.Wait(context.Background())
 	p.memo.forget()
 	return nil
 }
