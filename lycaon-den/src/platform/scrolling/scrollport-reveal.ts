@@ -14,6 +14,24 @@ export type ScrollportRevealOptions = {
   complete?: () => void;
 };
 
+type VerticalSpan = { top: number; bottom: number };
+
+/** The vertical offset change that places `span` within `viewport` at `block`. */
+export function scrollportRevealDelta(
+  viewport: VerticalSpan,
+  span: VerticalSpan,
+  block: ScrollLogicalPosition = "nearest",
+): number {
+  if (block === "center") {
+    return (span.top + span.bottom - viewport.top - viewport.bottom) / 2;
+  }
+  if (block === "end") return span.bottom - viewport.bottom;
+  if (block === "start") return span.top - viewport.top;
+  if (span.top < viewport.top) return span.top - viewport.top;
+  if (span.bottom > viewport.bottom) return span.bottom - viewport.bottom;
+  return 0;
+}
+
 /** Animation time advances only while prepared viewports can be painted. */
 export function animateScrollportReveal(options: {
   target: () => number;

@@ -35,8 +35,25 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 		return Manifest{}, usage, err
 	}
 	storePath := filepath.Join(destination, storeRelPath)
-	if err := db.CreateSnapshot(ctx, opts.SQLDB, storePath); err != nil {
-		return Manifest{}, usage, err
+	// The upgrade captures before any writer opens, so the store can be cloned.
+	cloned := false
+	var snapshotSHA string
+	if opts.DBPath != "" {
+		var err error
+		if cloned, err = db.CloneSnapshot(ctx, opts.SQLDB, opts.DBPath, storePath); err != nil {
+			return Manifest{}, usage, err
+		}
+	}
+	if !cloned {
+		var err error
+		if opts.DBPath != "" {
+			snapshotSHA, err = db.CopyQuiescentSnapshot(ctx, opts.SQLDB, opts.DBPath, storePath)
+		} else {
+			err = db.CreateSnapshot(ctx, opts.SQLDB, storePath)
+		}
+		if err != nil {
+			return Manifest{}, usage, err
+		}
 	}
 	source, err := db.OpenReadOnly(ctx, storePath)
 	if err != nil {
@@ -108,9 +125,21 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 				return Manifest{}, usage, err
 			}
 		}
-		sum, size, err := sourceDigest(ctx, archiveSource{path: dest, kind: fileKindRegular})
-		if err != nil {
-			return Manifest{}, usage, err
+		var sum string
+		var size int64
+		if rel == storeRelPath && snapshotSHA != "" {
+			// fseffect already verifies the published copy against its stream hash.
+			info, err := os.Stat(dest)
+			if err != nil {
+				return Manifest{}, usage, err
+			}
+			sum, size = snapshotSHA, info.Size()
+		} else {
+			var err error
+			sum, size, err = sourceDigest(ctx, archiveSource{path: dest, kind: fileKindRegular})
+			if err != nil {
+				return Manifest{}, usage, err
+			}
 		}
 		if rel == storeRelPath {
 			usage.DatabaseBytes = size

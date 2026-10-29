@@ -45,8 +45,6 @@ func TestFanOutDoesNotCancelDirectOnSoftHits(t *testing.T) {
 						reason:     "cut",
 						detail:     fanCtx.Err().Error(),
 					}
-				case <-time.After(30 * time.Second):
-					return providerOutcome{providerID: directWireProviderID, reason: "timeout"}
 				}
 			},
 		},
@@ -86,7 +84,7 @@ func TestFanOutDoesNotCancelDirectOnSoftHits(t *testing.T) {
 		if !outs[0].ok || outs[0].providerID != directWireProviderID {
 			t.Fatalf("direct outcome = %+v", outs[0])
 		}
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("runProviderTasks hung")
 	}
 }

@@ -68,7 +68,8 @@ static int pw_stopped_image(int pid, int fd, int *matched) {
  struct stat expected;
  if (fstat(fd, &expected)) return errno;
  struct proc_archinfo architecture;
- if (proc_pidinfo(pid, PROC_PIDARCHINFO, 0, &architecture, sizeof(architecture)) != sizeof(architecture)) return errno ? errno : EIO;
+ if (proc_pidinfo(pid, PROC_PIDARCHINFO, 0, &architecture, sizeof(architecture)) != sizeof(architecture))
+  return errno ? errno : EIO;
  uint64_t offsets[64]; int offset_count;
  int format_error = pw_exec_offsets(fd, architecture.p_cputype, offsets, &offset_count);
  if (format_error) return format_error;

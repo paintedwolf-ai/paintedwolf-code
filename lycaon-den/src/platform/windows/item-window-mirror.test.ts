@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { itemWindowViews, startItemWindowViewMirror, type ItemWindowView } from "./item-windows.ts";
+import {
+  abandonFileTabTransfer,
+  beginFileTabTransfer,
+  commitFileTabTransfer,
+  itemWindowViews,
+  listenFileTabTransfer,
+  readyFileTabTransfer,
+  returnFileTabTransfer,
+  startItemWindowViewMirror,
+  type FileTabTransferSettled,
+  type ItemWindowView,
+} from "./item-windows.ts";
 
 const host = vi.hoisted(() => ({
   invoke: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
@@ -57,5 +68,43 @@ describe("window registry mirror", () => {
     expect(host.listen).toHaveBeenCalledTimes(2);
     stop(); stop = undefined;
     expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("forwards native file tab transfer lifecycle commands and settlement events", async () => {
+    host.invoke.mockResolvedValueOnce("transfer-token");
+    await expect(
+      beginFileTabTransfer({ projectId: "p", rootId: "root", path: "a.ts", title: "a.ts" }),
+    ).resolves.toBe("transfer-token");
+    expect(host.invoke).toHaveBeenCalledWith("begin_native_file_tab_drag", {
+      projectId: "p",
+      rootId: "root",
+      path: "a.ts",
+      title: "a.ts",
+    });
+
+    await readyFileTabTransfer("transfer-token");
+    expect(host.invoke).toHaveBeenCalledWith("ready_file_tab_transfer", { token: "transfer-token" });
+
+    await abandonFileTabTransfer("transfer-token");
+    expect(host.invoke).toHaveBeenCalledWith("abandon_file_tab_transfer", { token: "transfer-token" });
+
+    await commitFileTabTransfer("transfer-token");
+    expect(host.invoke).toHaveBeenCalledWith("commit_file_tab_transfer", { token: "transfer-token" });
+
+    await returnFileTabTransfer("transfer-token");
+    expect(host.invoke).toHaveBeenCalledWith("return_file_tab_transfer", { token: "transfer-token" });
+
+    const settled: FileTabTransferSettled[] = [];
+    const unlisten = vi.fn();
+    host.listen.mockImplementationOnce(async (event, handler) => {
+      expect(event).toBe("file-tab-transfer");
+      (handler as unknown as (e: { payload: FileTabTransferSettled }) => void)({
+        payload: { token: "transfer-token", outcome: "committed" },
+      });
+      return unlisten;
+    });
+    const stopTransfer = await listenFileTabTransfer((event) => settled.push(event));
+    expect(settled).toEqual([{ token: "transfer-token", outcome: "committed" }]);
+    stopTransfer();
   });
 });
