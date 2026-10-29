@@ -12,6 +12,21 @@ import (
 	"github.com/lycaon/lycaon/test/referenceuserland"
 )
 
+// Difference identifies a failed observable comparison without parsing its diagnostic.
+type Difference struct {
+	Kind           string
+	Path           string
+	ExpectedStatus int
+	ActualStatus   int
+	Text           string
+}
+
+// Identity excludes values that a reduction is allowed to simplify.
+func (d Difference) Identity() Difference {
+	d.Text = ""
+	return d
+}
+
 // Observation is what a program left through the command entry.
 type Observation struct {
 	Status int
@@ -61,12 +76,12 @@ func reference(s Snapshot) Snapshot {
 
 // Match returns a userland whose result the observation equals, or, when there is
 // none, the difference from each.
-func Match(got Observation, refs map[referenceuserland.ID]Snapshot) (referenceuserland.ID, map[referenceuserland.ID]string) {
-	diffs := map[referenceuserland.ID]string{}
+func Match(got Observation, refs map[referenceuserland.ID]Snapshot) (referenceuserland.ID, map[referenceuserland.ID]Difference) {
+	diffs := map[referenceuserland.ID]Difference{}
 	for _, id := range slices.Sorted(maps.Keys(refs)) {
 		want := reference(refs[id])
 		diff := snapshotDiff(want, Snapshot{Input: want.Input, Status: got.Status, Stdout: got.Stdout, Stderr: got.Stderr, Files: got.Files})
-		if diff == "" {
+		if diff.Kind == "" {
 			return id, nil
 		}
 		diffs[id] = diff
@@ -75,36 +90,42 @@ func Match(got Observation, refs map[referenceuserland.ID]Snapshot) (referenceus
 }
 
 // FormatDiffs renders Match's differences, one userland per line.
-func FormatDiffs(diffs map[referenceuserland.ID]string) string {
+func FormatDiffs(diffs map[referenceuserland.ID]Difference) string {
 	var b strings.Builder
 	for _, id := range slices.Sorted(maps.Keys(diffs)) {
-		fmt.Fprintf(&b, "\n  %s: %s", id, diffs[id])
+		fmt.Fprintf(&b, "\n  %s: %s", id, diffs[id].Text)
 	}
 	return b.String()
 }
 
-func filesDiff(want, got map[string]*File) string {
+func filesDiff(want, got map[string]*File) Difference {
 	for _, name := range slices.Sorted(maps.Keys(want)) {
 		w, g := want[name], got[name]
 		_, observed := got[name]
 		switch {
 		case !observed:
-			return fmt.Sprintf("file %s was not observed", name)
+			return Difference{Kind: "file_unobserved", Path: name, Text: fmt.Sprintf("file %s was not observed", name)}
 		case w == nil && g == nil:
 		case w == nil:
-			return fmt.Sprintf("file %s should not exist, now %s %q", name, g.Mode, g.Data)
+			return Difference{Kind: "file_created", Path: name, Text: fmt.Sprintf("file %s should not exist, now %s %q", name, g.Mode, g.Data)}
 		case g == nil:
-			return fmt.Sprintf("file %s %s %q is missing", name, w.Mode, w.Data)
+			return Difference{Kind: "file_missing", Path: name, Text: fmt.Sprintf("file %s %s %q is missing", name, w.Mode, w.Data)}
 		case w.Mode != g.Mode || w.Link != g.Link || string(w.Data) != string(g.Data):
-			return fmt.Sprintf("file %s %s %q%s, now %s %q%s", name, w.Mode, w.Data, link(w.Link), g.Mode, g.Data, link(g.Link))
+			kind := "file_bytes"
+			if w.Mode != g.Mode {
+				kind = "file_mode"
+			} else if w.Link != g.Link {
+				kind = "file_link"
+			}
+			return Difference{Kind: kind, Path: name, Text: fmt.Sprintf("file %s %s %q%s, now %s %q%s", name, w.Mode, w.Data, link(w.Link), g.Mode, g.Data, link(g.Link))}
 		}
 	}
-	for name := range got {
+	for _, name := range slices.Sorted(maps.Keys(got)) {
 		if _, ok := want[name]; !ok {
-			return fmt.Sprintf("file %s is not tracked", name)
+			return Difference{Kind: "file_untracked", Path: name, Text: fmt.Sprintf("file %s is not tracked", name)}
 		}
 	}
-	return ""
+	return Difference{}
 }
 
 func link(target string) string {

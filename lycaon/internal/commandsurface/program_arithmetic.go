@@ -105,7 +105,7 @@ func (c *programCompiler) validateArithmeticExpr(expr syntax.ArithmExpr, allowMu
 	}
 	switch v := expr.(type) {
 	case *syntax.Word:
-		c.markArithmeticWord(v)
+		c.markBraces(false, v)
 		if allowMutation {
 			for _, node := range v.Parts {
 				part, ok := node.(*syntax.ParamExp)
@@ -199,20 +199,6 @@ func subscriptAllSymbol(expr syntax.ArithmExpr) string {
 		return ""
 	}
 	return lit.Value
-}
-
-// Case words and patterns never undergo brace expansion.
-func (c *programCompiler) markPatternWord(word *syntax.Word) { c.markArithmeticWord(word) }
-
-// Arithmetic operand words never undergo brace expansion.
-func (c *programCompiler) markArithmeticWord(word *syntax.Word) {
-	if !c.reserveHeap(256, word) {
-		return
-	}
-	if c.testWords == nil {
-		c.testWords = make(map[*syntax.Word]bool)
-	}
-	c.testWords[word] = true
 }
 
 func (c *programCompiler) arithmetic(expr syntax.ArithmExpr) ArithmeticNode {
