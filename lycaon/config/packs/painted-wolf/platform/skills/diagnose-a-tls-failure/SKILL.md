@@ -21,9 +21,17 @@ Use this workflow when a connection fails on certificate verification. Several d
 | **Valid but rejected as expired or not-yet-valid** | The dates look fine to you, the peer disagrees | **Check the clock.** A skewed system or container clock makes valid certificates look invalid. This is a clock problem, not a certificate problem. |
 | **Incomplete chain** | Works in a browser, fails from application or command-line HTTP clients; server sends the leaf only | Server-side: serve the intermediates. Browsers hide this by caching and fetching intermediates; other clients do not — which is exactly why "it works in my browser" is the signature. |
 | **Hostname mismatch** | Verification fails naming the host, not the date | The name must be in the **SAN**; a matching Common Name has not been sufficient for years. Use the right name or reissue with it. |
-| **Untrusted root** | Self-signed, or an internal CA | Trust it *for this client only*, scoped to the call — never machine-wide. |
-| **TLS-inspecting proxy** | Issuer is your employer or a security vendor rather than a public CA | The connection is intercepted and re-signed. Use the CA bundle the organisation provides, scoped — and report that interception is happening. |
+| **Untrusted root** | Self-signed, or an internal CA | Trust it *for this client only*, scoped to the call — never machine-wide. For `curl`, `--cacert internal-ca.pem` (or `--capath certs/`). |
+| **TLS-inspecting proxy** | Issuer is your employer or a security vendor rather than a public CA | The connection is intercepted and re-signed. Use the CA bundle the organisation provides, scoped with `--cacert` — and report that interception is happening. |
 | **Protocol or cipher mismatch** | The handshake fails before any certificate appears | An old client against a server that dropped TLS 1.0/1.1, or the reverse. Nothing here is a certificate problem. |
+
+## Scoped trust with `curl`
+
+`curl` in a program runs on the host's HTTP client, so scoped trust needs no `external --`:
+
+- `curl -v https://host/` shows the TLS summary and the server certificate's subject, issuer and expiry on stderr; exit 60 means the peer was not verified.
+- `curl --cacert internal-ca.pem https://host/` or `--capath certs/` adds that bundle for this one request. Verification stays on, and `-k` is still refused beside it.
+- A service that wants a client certificate takes `--cert client.pem --key client.key`; give an encrypted key's passphrase with `--pass` as a managed secret reference. Exit 56 with a TLS alert usually means the server refused the client certificate.
 
 ## Inside this sandbox
 

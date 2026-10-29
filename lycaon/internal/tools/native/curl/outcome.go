@@ -43,8 +43,9 @@ func TransportOutcome(err error) (int, toolcontract.ProducerResult) {
 }
 
 // classify maps the owner's exchange facts to curl's exit codes: 6 DNS,
-// 7 connect, 18 partial body, 28 timeout, 35 TLS, 47 redirects, 52 no reply,
-// 56 receive failure, 63 size ceiling.
+// 7 connect, 18 partial body, 28 timeout, 47 redirects, 52 no reply, 56
+// receive failure (including a peer's TLS alert, such as a refused client
+// certificate), 60 peer certificate verification, 63 size ceiling.
 func classify(err error) *curlFailure {
 	var failure *curlFailure
 	if errors.As(err, &failure) {
@@ -67,6 +68,8 @@ func classify(err error) *curlFailure {
 	var oversized *outboundhttp.BodyTooLargeError
 	var partial *outboundhttp.TransferError
 	dial := errors.As(cause, &op) && op.Op == "dial"
+	// crypto/tls reports a peer's alert as the "remote error" operation.
+	alert := op != nil && op.Op == "remote error"
 	timeout := errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, os.ErrDeadlineExceeded) || isTimeout(cause)
 	// After the first byte may have left, the outcome is unknown until a
 	// response arrives; the earlier stages sent nothing.
@@ -83,7 +86,7 @@ func classify(err error) *curlFailure {
 	case dial:
 		return &curlFailure{code: 7, message: "Failed to connect", certainty: unsent, cause: err}
 	case errors.As(cause, &tlsFault):
-		return &curlFailure{code: 35, message: "TLS connect error: " + tlsFault.Reason, certainty: unsent, cause: err}
+		return &curlFailure{code: 60, message: "SSL certificate problem: " + tlsFault.Reason, certainty: unsent, cause: err}
 	case errors.As(cause, &redirect) && strings.Contains(redirect.Reason, "too many redirects"):
 		return &curlFailure{code: 47, message: "Maximum redirects followed", certainty: afterSend, cause: err}
 	case errors.As(cause, &oversized):
@@ -92,6 +95,8 @@ func classify(err error) *curlFailure {
 		return &curlFailure{code: 18, message: "Transferred a partial file", certainty: toolcontract.EffectCompleted, cause: err}
 	case timeout:
 		return &curlFailure{code: 28, message: "Operation timed out", certainty: afterSend, cause: err}
+	case alert:
+		return &curlFailure{code: 56, message: "Failure when receiving data from the peer: " + op.Error(), certainty: afterSend, cause: err}
 	case started && !received:
 		return &curlFailure{code: 52, message: "Empty reply from server", certainty: toolcontract.EffectUnknown, cause: err}
 	case !started:
@@ -110,10 +115,19 @@ func isTimeout(err error) bool {
 // transport or --fail outcome is curl's ordinary exit status.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	if err == nil {
-		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted,
-			Evidence: inv.evidence()}, nil
+		if err = inv.writeOut(0); err == nil {
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted,
+				Evidence: inv.evidence()}, nil
+		}
+		return inv.failure(err)
 	}
-	_ = inv.writeOut(0, 0, inv.opts.url)
+	result, err := inv.failure(err)
+	_ = inv.writeOut(result.Status)
+	return result, err
+}
+
+// failure settles an unsuccessful run as a host refusal or curl's exit.
+func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 	if _, denied := egressgate.Denied(inv.ctx); denied || errors.Is(err, context.Canceled) && !inv.sent {
 		return inv.refused(err, 7)
 	}
@@ -166,11 +180,17 @@ func (inv *invocation) refused(err error, code int) (toolcontract.ProducerResult
 	return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerRefused, StopCode: stop, EffectCertainty: toolcontract.NoEffect}, err
 }
 
-// evidence names the owner and the received and emitted body identities.
+// evidence names the owner and the sent, received and emitted body
+// identities.
 func (inv *invocation) evidence() toolcontract.OperationEvidence {
 	evidence := toolcontract.OperationEvidence{Owner: "outbound_http", Kind: "http_exchange"}
-	if inv.transfer.ReceivedSHA256 != "" {
-		evidence.EvidenceRef = "received:sha256:" + inv.transfer.ReceivedSHA256 + " emitted:sha256:" + inv.transfer.EmittedSHA256
+	var refs []string
+	if inv.transfer.SentBytes > 0 {
+		refs = append(refs, "sent:sha256:"+inv.transfer.SentSHA256)
 	}
+	if inv.transfer.ReceivedSHA256 != "" {
+		refs = append(refs, "received:sha256:"+inv.transfer.ReceivedSHA256, "emitted:sha256:"+inv.transfer.EmittedSHA256)
+	}
+	evidence.EvidenceRef = strings.Join(refs, " ")
 	return evidence
 }

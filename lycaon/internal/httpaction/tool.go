@@ -5,6 +5,8 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -145,15 +147,23 @@ type ExchangeOptions struct {
 	ConnectTimeout time.Duration
 	// WireHeaders keeps complete headers and any observable cleartext block.
 	WireHeaders bool
+	// TLS adds request-scoped trust and a client certificate.
+	TLS *outboundhttp.ClientTLS
+	// Dial replaces the resolve argument: address and connect-to overrides
+	// pass the same loopback authority and destination policy as the URL.
+	Dial []outboundhttp.ResolveMapping
 }
 
 // Exchange is a command frontend's unmodified response. Presentation and
-// screening belong to the command's model-delivery boundary.
+// screening belong to the command's model-delivery boundary. SentBodyBytes
+// and SentBodySHA256 identify the request body as it went on the wire.
 type Exchange struct {
-	Response    outboundhttp.Response
-	FinalURL    string
-	Redirects   []outboundhttp.Hop
-	SentHeaders []outboundhttp.Header
+	Response       outboundhttp.Response
+	FinalURL       string
+	Redirects      []outboundhttp.Hop
+	SentHeaders    []outboundhttp.Header
+	SentBodyBytes  int64
+	SentBodySHA256 string
 }
 
 // Perform runs one request with the same screening, approval, secret,
@@ -169,11 +179,16 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 			return Exchange{}, invalid(fmt.Errorf("a frontend cookie jar replaces cookie_jar"))
 		}
 	}
+	if _, present := args["resolve"]; present && len(opts.Dial) > 0 {
+		return Exchange{}, invalid(fmt.Errorf("frontend dial overrides replace resolve"))
+	}
 	ex, err := exchange(ctx, deps, args, tctx, opts, commandResponse)
 	if err != nil {
 		return Exchange{}, err
 	}
-	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders}, nil
+	sum := sha256.Sum256(ex.outbound.body)
+	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders,
+		SentBodyBytes: int64(len(ex.outbound.body)), SentBodySHA256: hex.EncodeToString(sum[:])}, nil
 }
 
 // TransportFailure is a request the owner started that failed in transport.
@@ -214,6 +229,9 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
 	if err != nil {
 		return exchanged{}, invalid(err)
+	}
+	if len(opts.Dial) > 0 {
+		spec.resolve = opts.Dial
 	}
 	capability, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
@@ -418,7 +436,7 @@ func send(
 	if opts.RedirectLimit > 0 {
 		req.RedirectLimit = opts.RedirectLimit
 	}
-	req.ConnectTimeout, req.WireHeaders = opts.ConnectTimeout, opts.WireHeaders
+	req.ConnectTimeout, req.WireHeaders, req.TLS = opts.ConnectTimeout, opts.WireHeaders, opts.TLS
 	var landed *inboundwrite.Receipt
 	var bufferedResponsePathBytes []byte
 	if spec.disposition.path != "" {
@@ -550,11 +568,15 @@ func hopLoopbackTarget(target *url.URL, resolve []outboundhttp.ResolveMapping) (
 	if err != nil {
 		return netip.Addr{}, 0, false
 	}
-	if mapped, mappedPort, found := outboundhttp.MappedDial(resolve, target.Hostname(), port); found {
-		mapped = mapped.Unmap()
-		return mapped, mappedPort, mapped.IsLoopback()
+	host := target.Hostname()
+	if dial, found := outboundhttp.MappedDial(resolve, host, port); found {
+		if dial.Address.IsValid() {
+			mapped := dial.Address.Unmap()
+			return mapped, dial.Port, mapped.IsLoopback()
+		}
+		host, port = dial.Host, dial.Port
 	}
-	if !egress.SyntacticLoopback(target.Hostname()) {
+	if !egress.SyntacticLoopback(host) {
 		return netip.Addr{}, 0, false
 	}
 	return netip.MustParseAddr("127.0.0.1"), port, true

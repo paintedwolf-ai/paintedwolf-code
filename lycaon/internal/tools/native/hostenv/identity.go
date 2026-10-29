@@ -9,7 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/hostos"
 )
 
+// system reads the declared platform facts.
 func (inv *invocation) system() (hostos.System, error) {
+
 	facts, err := inv.owners.Host.System(inv.ctx)
 	if errors.Is(err, hostos.ErrUnsupported) {
 		return facts, inv.unavailable("system identity", err)
