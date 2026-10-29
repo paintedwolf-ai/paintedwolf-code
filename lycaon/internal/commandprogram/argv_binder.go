@@ -600,7 +600,8 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 
 // optional handles forms that never take a following nonempty word: an
 // attached value (--porcelain=v1), or, for optional-attached-or-empty, also
-// a following empty word (sed -i.bak in GNU spelling, -i '' in BSD spelling).
+// a following empty word (GNU sed -i.bak, or BSD sed -i followed by an empty
+// argument).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value Field, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
