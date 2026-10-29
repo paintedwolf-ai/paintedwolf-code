@@ -7,7 +7,7 @@ import { currentSplitFocusRegion } from "../../shell/workspace-layout.ts";
 import { resolvePeerOpenSubject, type PeerOpenSubject, peerWindowsForSubject } from "../../shortcuts/peer-view-subject.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
-import { beginFileItemWindowDrag, closeItemWindow, focusItemWindow, itemWindowViews, openItemWindow, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
+import { beginFileItemWindowDrag, beginFileTabTransfer, closeItemWindow, focusItemWindow, itemWindowViews, openItemWindow, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import { resolveSourceRequest } from "../../platform/navigation/open-source.ts";
@@ -349,6 +349,14 @@ export function createShellPeerWindows({ shell, appStore, projects, activeProjec
     });
   };
 
+  const transferFileTab = async (key: string): Promise<string> => {
+    const projectId = activeProjectId();
+    if (!projectId) throw new Error("No project is bound to the file tab.");
+    const buffer = projectFilesState(projectId).byKey[key];
+    if (!buffer) throw new Error("The file tab is no longer open.");
+    return await beginFileTabTransfer({ projectId, rootId: buffer.rootId, path: buffer.path, title: buffer.name });
+  };
+
   const closeStageWindows = (stageId: ContextNavItemId) => {
     const projectId = activeProjectId();
     for (const view of itemWindowViews()) {
@@ -364,7 +372,7 @@ export function createShellPeerWindows({ shell, appStore, projects, activeProjec
 
   return {
     focusedPeerSubject, detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,
-    openFileInNewWindow, beginFileWindowDrag, closeStageWindows,
+    openFileInNewWindow, beginFileWindowDrag, transferFileTab, closeStageWindows,
     sessionWindowIds, sessionWindowCounts, sessionWindowViewNumbers, contextWindowViewNumbers,
     detachedStageIds, stageInPeerWindow, projectPeerViews, focusedPeerViews,
     focusWindowByNumber, cycleNextPeerWindow, filePeer, sessionPeer, isThisSessionWindow,

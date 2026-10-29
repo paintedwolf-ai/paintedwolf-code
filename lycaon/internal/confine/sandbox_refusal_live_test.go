@@ -19,9 +19,10 @@ var startRefusalWatch sync.Once
 func requireRefusalWatch(t *testing.T) {
 	t.Helper()
 	startRefusalWatch.Do(func() { confine.StartRefusalWatch(t.Context(), "") })
-	deadline := time.Now().Add(15 * time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
 	for !confine.RefusalWatchLive() {
-		if time.Now().After(deadline) {
+		if ctx.Err() != nil {
 			t.Skip("kernel sandbox reports are not readable on this host")
 		}
 		time.Sleep(50 * time.Millisecond)

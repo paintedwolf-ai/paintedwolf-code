@@ -109,8 +109,7 @@ the introducing runtime integration.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
-frames. Brace classification and
-static quote removal share that allocation pool; admission never invokes general
+frames. Brace classification and static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
 allocation; temporary parser wrappers remain scratch. This clarifies the
@@ -119,13 +118,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `ParseAdmitted` with working and retained state
-admission. Parser scratch grows the program's working account in 64 KiB chunks
-up to the per-unit `evaluation_memory_bytes` ceiling and is released when
-lowering returns, so a `source` parse shares the account with background job
-streams rather than holding the whole ceiling. Retained source/plan storage is
-charged to `program_state_bytes` before host-plan insertion; releasing scratch
-does not release that state.
+materialization. Execution constructs `NewProgramParser` before capture and
+admits an initial working chunk; parser growth uses that same incremental
+account up to `evaluation_memory_bytes`. Capture and its byte-copy overlap
+reserve bounded `program_state_bytes` capacity before materialization. Successful
+lowering transfers the captured bytes into the retained plan/snapshot envelope;
+closing parser scratch does not release that state.
+
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
@@ -136,7 +135,6 @@ progress update to this unit without treating an inspection copy or a caller's
 boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
-
 
 ### Complete byte streams
 
@@ -183,6 +181,22 @@ Unseen retained bytes and printed source-like text establish no model read base.
 A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
+
+Program operations pin execution revisions instead of conversational read bases.
+`native.ExecutionRevisions` captures each native input from the accepted shared
+document when one exists, otherwise from published disk, and captures each
+destination's revision or absence before the transform is prepared. A
+`WriteExecutionPinned` write rechecks the destination exactly in the document
+owner (or the write door's base check), rechecks its sources after review, and
+refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
+rebases, retries or reruns. External processes read published disk: their
+inputs are declared at launch as disk identities, not as observed reads. A
+`PublicationBarrier` refuses a dependent launch with
+`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
+state stays held and no other draft is saved. Each operation pins its own
+inputs, so a later statement captures newer revisions and sees earlier
+published writes; there is no whole-program snapshot. Program receipts retain
+the pins per execution.
 
 ### Platform adapter evidence
 
@@ -266,49 +280,6 @@ helper and security prerequisites on the installed target. Cross-compilation,
 Unix fixtures and unsupported results do not qualify those capabilities. The
 same native macOS/Linux runtime and installed-platform qualification obligations
 remain; individual adapter tests do not qualify the complete command evaluator.
-
-Program operations pin execution revisions instead of conversational read bases.
-`native.ExecutionRevisions` captures each native input from the accepted shared
-document when one exists, otherwise from published disk, and captures each
-destination's revision or absence before the transform is prepared. A
-`WriteExecutionPinned` write rechecks the destination exactly in the document
-owner (or the write door's base check), rechecks its sources after review, and
-refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
-rebases, retries or reruns. External processes read published disk: their
-inputs are declared at launch as disk identities, not as observed reads. A
-`PublicationBarrier` refuses a dependent launch with
-`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
-state stays held and no other draft is saved. Each operation pins its own
-inputs, so a later statement captures newer revisions and sees earlier
-published writes; there is no whole-program snapshot. Program receipts retain
-the pins per execution.
-
-### Literal content and metadata commands
-
-`internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
-wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
-outline, summarize and repo-map built-ins. Argv binds through the catalog
-binder; each command runs under its catalog operation identity (`read`, `wc`,
-`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
-operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
-each file as exact stream bytes before any output: the accepted document encoded
-in its recorded encoding, BOM and newline policy, or the published file. The pin
-names that representation separately from disk. An input above the read budget,
-or output above the stream ceiling, refuses; nothing is truncated or summarized
-in its place.
-
-Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
-`base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
-representations itself: wc separates values with one space, `file` answers from
-the versioned signature corpus, and `ls -l` prints numeric owners and UTC
-long-ISO times without a block total. Ordinary operand failures (missing,
-directory, permission) go to stderr with the utility's status and later operands
-still run; authority, budget and platform refusals stop with their typed code.
-Only diff's complete status 1 is a publishable comparison. Literal windows and
-reversible numbering record exact source mappings when the output endpoint
-implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
-record none. The command never delivers a conversational read; only exact mapped
-output that the delivery owner later delivers can qualify an edit base.
 
 ## Altitude
 
@@ -600,7 +571,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned task-bound instance references. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 

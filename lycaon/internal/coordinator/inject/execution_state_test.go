@@ -27,8 +27,13 @@ func TestExecutionStateRetainsRejectedOperationAfterChecklist(t *testing.T) {
 		t.Fatalf("checklist erased rejected write: %#v", vars)
 	}
 	other := executionReceipt("write", "different", api.InvocationStatusCompleted, "")
+	other.ToolResult.ToolArgs = map[string]any{"path": "other.py"}
 	if got := executionStateVars(append(history, other), ""); len(got["operations"].([]map[string]any)) != 1 {
-		t.Fatalf("different content cleared rejected operation: %#v", got)
+		t.Fatalf("different path cleared rejected operation: %#v", got)
+	}
+	samePathOther := executionReceipt("edit", "different", api.InvocationStatusCompleted, "")
+	if got := executionStateVars(append(history, samePathOther), ""); got != nil {
+		t.Fatalf("successful change to same path retained rejected operation: %#v", got)
 	}
 	retry := executionReceipt("write", "first", api.InvocationStatusCompleted, "")
 	if got := executionStateVars(append(history, retry), ""); got != nil {
@@ -136,18 +141,55 @@ func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
 func TestExecutionStatePrerequisitesAreOrderedPerRejectedCall(t *testing.T) {
 	first := executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING")
 	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
-	second := executionReceipt("write", "second", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	second := executionReceipt("write", "second", api.InvocationStatusRejected, "TOOL_NOT_OFFERED")
 	loaded := executionReceipt("request_tools", "loaded", api.InvocationStatusCompleted, "")
 	history := []api.Message{first, progress, second, loaded}
 	before, _ := json.Marshal(history)
 	vars := executionStateVars(history, "")
 	rows := vars["operations"].([]map[string]any)
-	if rows[0]["checklist_after"] != true || rows[1]["checklist_after"] != nil || rows[0]["tool_request_after"] != true || rows[1]["tool_request_after"] != true {
+	if rows[0]["checklist_after"] != true || rows[1]["checklist_after"] != nil || rows[0]["tool_request_after"] != nil || rows[1]["tool_request_after"] != true {
 		t.Fatalf("prerequisites lost event ordering: %#v", rows)
 	}
 	after, _ := json.Marshal(history)
 	if string(before) != string(after) {
 		t.Fatal("projection changed canonical history")
+	}
+}
+
+func TestExecutionStatePrerequisiteScopingAndPathRetirement(t *testing.T) {
+	editReject := executionReceipt("edit", "edit-old", api.InvocationStatusRejected, "EDIT_OLD_STRING_NOT_FOUND")
+	editReject.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
+	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
+	taskReject := executionReceipt("task", "task-item", api.InvocationStatusRejected, "PROGRESS_ITEM_NOT_CLOSED")
+	taskReject.ToolResult.ToolArgs = nil
+	progress2 := executionReceipt("update_progress", "progress2", api.InvocationStatusCompleted, "")
+
+	history := []api.Message{editReject, progress, taskReject, progress2}
+	vars := executionStateVars(history, "")
+	rows := vars["operations"].([]map[string]any)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(rows))
+	}
+	if rows[0]["checklist_after"] != nil {
+		t.Fatalf("EDIT_OLD_STRING_NOT_FOUND received checklist_after: %#v", rows[0])
+	}
+	if rows[1]["checklist_after"] != true {
+		t.Fatalf("PROGRESS_ITEM_NOT_CLOSED did not receive checklist_after: %#v", rows[1])
+	}
+
+	editSuccess := executionReceipt("edit", "edit-new", api.InvocationStatusCompleted, "")
+	editSuccess.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
+	vars2 := executionStateVars(append(history, editSuccess), "")
+	rows2 := vars2["operations"].([]map[string]any)
+	if len(rows2) != 1 || rows2[0]["tool"] != "task" {
+		t.Fatalf("successful edit did not clear edit on same path: %#v", rows2)
+	}
+
+	pathlessReject := executionReceipt("write", "bad-args", api.InvocationStatusRejected, "TOOL_ARGS_INVALID")
+	pathlessReject.ToolResult.ToolArgs = nil
+	vars3 := executionStateVars([]api.Message{pathlessReject, editSuccess}, "")
+	if vars3 != nil && len(vars3["operations"].([]map[string]any)) != 0 {
+		t.Fatalf("completed change did not clear pathless change rejection: %#v", vars3)
 	}
 }
 
