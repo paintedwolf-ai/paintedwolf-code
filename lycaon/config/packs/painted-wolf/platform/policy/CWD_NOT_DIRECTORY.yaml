@@ -22,7 +22,7 @@ copy:
     when on a write leg).
   why: The process needs an existing working directory within its assigned roots.
   fix: For the current project folder, use `cwd:"."`, not its folder name. For a subdirectory, confirm it exists
-    with `list_dir` and use its path relative to the project folder. Use an attached @label only when that root is offered;
+    with a native directory listing in `command` and use its path relative to the project folder. Use an attached @label only when that root is offered;
     a worker’s branch remains its execution root. Do not create an unrelated directory to clear this refusal.
   instead: Branch on Code; fix args and retry once
 x-paintedwolf-category: recoverable

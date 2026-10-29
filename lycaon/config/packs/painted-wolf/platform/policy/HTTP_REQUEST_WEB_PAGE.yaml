@@ -15,14 +15,14 @@ requires:
 when: paintedwolf.http_request_web_page
 effect: warn
 copy:
-  what: 'http_request returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
-  cause: 'The response is {{ paintedwolf.content_type }}; http_request returns bodies verbatim, including scripts, styles, and navigation.'
+  what: 'curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
+  cause: 'The response is {{ paintedwolf.content_type }}; curl returns bodies verbatim, including scripts, styles, and navigation.'
   why: 'Raw markup spends context on page structure instead of the text you need.'
   fix: >-
     To read this page or other documentation, call fetch_url with the same URL{% if paintedwolf.fetch_url_deferred %}
     after loading it with request_tools{% endif %}. It extracts readable text as markdown and pages long documents
     with offset and limit.
-  instead: Keep http_request when you need the exact markup, headers, or status of this endpoint
+  instead: Keep native curl when you need the exact markup, headers, or status of this endpoint
 x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:http_request
 x-paintedwolf-message: http_request delivered a web page as raw HTML
