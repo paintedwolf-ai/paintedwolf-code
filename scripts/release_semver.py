@@ -83,3 +83,15 @@ def linux_package_version(version: Version) -> str:
     if version.prerelease is None:
         return version.core
     return f"{version.core}~{'.'.join(version.prerelease)}"
+
+
+def pacman_package_version(version: Version) -> str:
+    """Map supported product prereleases to the native libalpm ordering."""
+    if version.prerelease is None:
+        return version.core
+    parts = version.prerelease
+    if not re.fullmatch(r"(?:alpha|beta|rc|preview|dev)[0-9]*", parts[0]) or any(
+        not part.isdigit() for part in parts[1:]
+    ):
+        raise ValueError("pacman prereleases require alpha/beta/rc/preview/dev followed by numeric identifiers")
+    return version.core + "pre." + ".".join(parts)

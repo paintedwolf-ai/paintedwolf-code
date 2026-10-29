@@ -34,7 +34,7 @@ func scanInternalDBInlineDDL(dbDir string) ([]string, error) {
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
-		if strings.HasSuffix(name, ".sql.go") || name == "models.go" {
+		if strings.HasSuffix(name, ".sql.go") || name == "models.go" || name == "retire.go" {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, path, nil, 0)

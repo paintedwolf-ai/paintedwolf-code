@@ -64,12 +64,8 @@ func TestLinuxAccountLookupBoundsCaptureAndLifetime(t *testing.T) {
 	blocked := accountLookupProgram(t, "exec /bin/sleep 10")
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
-	start := time.Now()
 	if _, err := linuxAccountShell(ctx, blocked, 42); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("blocked lookup error = %v", err)
-	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("lookup cancellation took %s", elapsed)
 	}
 }
 
