@@ -33,7 +33,7 @@ func TestUnavailablePathAdapterPreservesTypedCause(t *testing.T) {
 func TestConfinementFailuresBecomeTypedEscapeRefusals(t *testing.T) {
 	scope := &sandbox.ScopeError{Path: "secret", Kind: sandbox.ScopeRead}
 	for _, source := range []error{scope, fmt.Errorf("walk: %w", fseffect.ErrSymlink), fmt.Errorf("resolve: %w", sandbox.ErrPathEscape)} {
-		got := PathOperationError("alias", source)
+		got := pathOperationError("alias", source)
 		reject := toolrejection.AsToolReject(got)
 		if reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || reject.Data["path"] != "alias" || !errors.Is(got, source) {
 			t.Fatalf("%v projected as %v", source, got)
