@@ -58,3 +58,22 @@ func TestPreparedAuthorUpdateRejectsWithoutWrites(t *testing.T) {
 		t.Fatal("refused update committed")
 	}
 }
+
+func TestPreparedAuthorUpdateUsesTheAppliedSessionHistory(t *testing.T) {
+	prepared, err := PrepareAuthorUpdate("## Progress\n- [x] Inspect source")
+	testutil.FailErr(t, "prepare completed checklist", err)
+	store := NewMemoryStore()
+	var rejected *AuthorUpdateRejection
+	if _, err := prepared.Apply(t.Context(), store, "session"); !errors.As(err, &rejected) || rejected.Code != "PROGRESS_NO_OPEN_STEP" {
+		t.Fatalf("initial completion rejection: %v", err)
+	}
+	if got := store.Get(t.Context(), "session"); got != "" {
+		t.Fatalf("refused initial completion wrote %q", got)
+	}
+	testutil.FailErr(t, "install existing open checklist", store.Set("session", "## Progress\n- [ ] Inspect source"))
+	result, err := prepared.Apply(t.Context(), store, "session")
+	testutil.FailErr(t, "complete the existing checklist", err)
+	if !result.Updated || store.Get(t.Context(), "session") != "## Progress\n- [x] Inspect source" {
+		t.Fatalf("completed checklist: %+v / %q", result, store.Get(t.Context(), "session"))
+	}
+}

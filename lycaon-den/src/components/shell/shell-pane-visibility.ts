@@ -1,4 +1,4 @@
-import { createEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { widenWindowBy, windowGeometryClaimPending } from "../../platform/windows/window-chrome.ts";
 import type { WindowSubject } from "../../platform/windows/window-subject.ts";
@@ -56,10 +56,10 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
   );
   const [navAutomaticallyCollapsed, setNavAutomaticallyCollapsed] =
     createSignal(false);
-  const windowNavUserCollapsed = () =>
+  const windowNavUserCollapsed = createMemo(() =>
     windowSubject?.kind === "file"
       ? fileWindowNavCollapsed()
-      : navCollapsedPref();
+      : navCollapsedPref());
   const windowNavCollapsed = () =>
     windowNavUserCollapsed() || navAutomaticallyCollapsed();
   const setWindowNavCollapsed = (collapsed: boolean) =>
@@ -78,12 +78,27 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
       stageId: presentedStageId(),
     });
 
-  // Width changes do not subscribe to the collapse preference.
+  // Preference object replacement is not a change to the pane's actual fit.
+  const fitNavWidthPx = createMemo(preferredNavWidthPx);
+  // Residency is initialized later in Shell; effects first read it after setup.
+  const [fitStageFloorPx, setFitStageFloorPx] = createSignal(0);
+  const [fitSplitColumns, setFitSplitColumns] = createSignal(false);
+  createEffect(() => setFitStageFloorPx(responsiveStageFloorPx()));
+  createEffect(() => setFitSplitColumns(presentedSplitLive() && hiddenSplitPanePref() === null));
+  const fitChatWidthPx = createMemo(requestedChatWidthPx);
   let navWasAutomaticallyCollapsed = false;
   createEffect(() => {
+    if (windowNavUserCollapsed()) {
+      navWasAutomaticallyCollapsed = false;
+      setNavAutomaticallyCollapsed(false);
+    }
+  });
+  createEffect(() => {
     const viewportWidthPx = layoutViewportWidthPx();
-    const navWidthPx = preferredNavWidthPx();
-    const live = presentedSplitLive();
+    const navWidthPx = fitNavWidthPx();
+    const stageMinWidthPx = fitStageFloorPx();
+    const splitColumns = fitSplitColumns();
+    const chatWidthPx = fitChatWidthPx();
     const claiming = windowGeometryClaimPending();
     if (untrack(windowNavUserCollapsed)) {
       navWasAutomaticallyCollapsed = false;
@@ -96,9 +111,9 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
       automaticCollapsed: navWasAutomaticallyCollapsed,
       viewportWidthPx,
       navWidthPx,
-      stageMinWidthPx: responsiveStageFloorPx(),
-      splitColumns: live && hiddenSplitPanePref() === null,
-      chatWidthPx: requestedChatWidthPx(),
+      stageMinWidthPx,
+      splitColumns,
+      chatWidthPx,
     });
     const automatic = windowSubject == null && shouldCollapse;
     navWasAutomaticallyCollapsed = automatic;

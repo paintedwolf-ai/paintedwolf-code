@@ -89,11 +89,10 @@ func (m *coalesceHITL) approve() { m.approved.Store(true) }
 func waitJoinedPatch(t *testing.T, ctx context.Context, mgr *coalesceHITL) {
 	t.Helper()
 	for mgr.joinedPatch.Load() == 0 {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			t.Fatal("timed out waiting for joined_count patch")
-		case <-time.After(time.Millisecond):
 		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
