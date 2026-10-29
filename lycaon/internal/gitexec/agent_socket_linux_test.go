@@ -26,7 +26,9 @@ func agentFixtureBus(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
 	for t.Context().Err() == nil {
-		if _, err := os.Stat(path); err == nil {
+		connection, err := linuxbus.Connect(t.Context(), path)
+		if err == nil {
+			_ = connection.Close()
 			return path
 		}
 		time.Sleep(time.Millisecond)
