@@ -4,6 +4,8 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestGitConfigScannerRequiresCompleteReadArgv(t *testing.T) {
@@ -34,9 +36,7 @@ func TestGitConfigScannerRequiresCompleteReadArgv(t *testing.T) {
 				name = "repoConfigAuditArgv"
 			}
 			file, err := parser.ParseFile(fset, "fixture.go", "package fixture; func "+name+"(key string, tail []string) ([]string, error) {"+tc.body+"}", 0)
-			if err != nil {
-				t.Fatal(err)
-			}
+			contractcheck.FailErr(t, "parse config argument fixture", err)
 			findings := scanGitOneDoor(fset, file, "fixture.go", false)
 			if (len(findings) != 0) != tc.refuse {
 				t.Fatalf("scanner findings %v; refuse=%v", findings, tc.refuse)

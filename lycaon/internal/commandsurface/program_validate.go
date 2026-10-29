@@ -1,10 +1,18 @@
 package commandsurface
 
 import (
+	"math"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"mvdan.cc/sh/v3/syntax"
+)
+
+// Test predicates admitted in version 1 programs, each operator padded with
+// spaces so a whole-token search matches.
+const (
+	unaryTestOperators  = " ! -n -z -e -f -d -L -r -w -x "
+	binaryTestOperators = " = == != -eq -ne -lt -le -gt -ge && || =~ "
 )
 
 // validate counts upstream syntax nodes, including words and redirects, and
@@ -133,13 +141,13 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		c.markTestWord(v.X)
 	case *syntax.UnaryTest:
 		c.markTestWord(v.X)
-		if !strings.Contains(" ! -n -z -e -f -d -L -r -w -x ", " "+v.Op.String()+" ") {
+		if !strings.Contains(unaryTestOperators, " "+v.Op.String()+" ") {
 			c.unsupported(n, "a version 1 unary test predicate")
 		}
 	case *syntax.BinaryTest:
 		c.markTestWord(v.X)
 		c.markTestWord(v.Y)
-		if !strings.Contains(" = == != -eq -ne -lt -le -gt -ge && || =~ ", " "+v.Op.String()+" ") {
+		if !strings.Contains(binaryTestOperators, " "+v.Op.String()+" ") {
 			c.unsupported(n, "a version 1 binary test predicate")
 		}
 	default:
@@ -363,7 +371,11 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 		c.literalContext[r.Word] = true
 		c.literalContext[r.Hdoc] = true
 		if r.Hdoc != nil && len(r.Hdoc.Parts) > 0 {
-			c.limit(r, "here_document_bytes", int64(r.Hdoc.End().Offset()-r.Hdoc.Pos().Offset()))
+			size := uint64(r.Hdoc.End().Offset() - r.Hdoc.Pos().Offset())
+			if size > math.MaxInt64 {
+				size = math.MaxInt64
+			}
+			c.limit(r, "here_document_bytes", int64(size))
 		}
 	case syntax.DplOut, syntax.DplIn:
 		target, ok := c.literal(r.Word)

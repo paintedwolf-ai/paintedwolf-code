@@ -281,6 +281,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	if err != nil {
 		return history, "", "", err
 	}
+	closeoutState.turnsRanThisRun++
 	if st != nil {
 		st.proseFinishDelivered = true
 	}
