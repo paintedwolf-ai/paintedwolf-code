@@ -46,9 +46,11 @@ type standardStreams struct {
 
 // handoverStandardStreams owns regular-file copies until the helper has reaped
 // its target and descendants. Pipes, terminals, sockets and character devices
-// keep their descriptors; unsupported descriptor kinds refuse.
+// keep their descriptors; unsupported descriptor kinds refuse. The helper's
+// standard descriptors are the target's streams, so they are taken by number.
 func handoverStandardStreams(cmd *exec.Cmd) (func() error, error) {
-	streams, err := newStandardStreams([3]*os.File{os.Stdin, os.Stdout, os.Stderr}, sameOpenFile)
+	standard := [3]*os.File{os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")}
+	streams, err := newStandardStreams(standard, sameOpenFile)
 	if err != nil {
 		return nil, err
 	}
