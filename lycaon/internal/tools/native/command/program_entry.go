@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -56,8 +55,8 @@ type ProgramRuntime struct {
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (ProgramOwners, error)
-	// Listeners observes session-owned listeners; nil uses process lineage.
-	Listeners SessionListeners
+	// Ports reads host listeners and their holders for lsof.
+	Ports PortInventory
 	// ExternalHidden refuses the explicit `external --` selector; native gap
 	// launches still run and are recorded.
 	ExternalHidden bool
@@ -394,11 +393,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
-	listeners := r.Listeners
-	if listeners == nil {
-		listeners = lineage.SessionListeners
-	}
-	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, jobs, r.Ports, tc.Execution.ProcessReview)
 	builtins["sleep"] = sleepBuiltin()
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
 	var publication commandprogram.OutputPublication

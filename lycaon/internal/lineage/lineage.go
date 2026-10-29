@@ -412,17 +412,6 @@ func OfPeer(local, remote netip.AddrPort) (*Lineage, bool) {
 	return Of(pid)
 }
 
-// Listener is one listening TCP socket and the processes holding it. A holder
-// the host cannot inspect is absent from PIDs.
-type Listener struct {
-	Addr netip.AddrPort
-	PIDs []int
-}
-
-// Listeners reads the host's listening TCP sockets from the kernel. Platforms
-// without a native socket table return ErrUnsupported.
-func Listeners() ([]Listener, error) { return listeners() }
-
 // Supported reports whether this platform can observe descendants. A platform
 // that cannot must not offer mediated egress, because it cannot attribute one.
 func Supported() bool { return supported }
