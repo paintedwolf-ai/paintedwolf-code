@@ -579,7 +579,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			}
 			enrichProgramReject(rejection, evaluationRefusal.Command, span)
 			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeLimitRefusal(commandprogram.Streams{Error: stderr}, "command", rejection)
+				writeLimitRefusal(stderr, "command", "", rejection)
 			}
 		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
 			enrichProgramReject(rejection, "", run.root.Span)
