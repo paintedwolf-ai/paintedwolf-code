@@ -33,8 +33,7 @@ func TestCheckpointAutoExpiresToDenied(t *testing.T) {
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		final, perr := mgr.PollCheckpoint(ctx, resp.CheckpointID)
 		testutil.FailErr(t, "PollCheckpoint", perr)
 		if final.Status == hitl.DecisionStatusPending {
@@ -86,8 +85,7 @@ func TestCheckpointExpiryNotifiesToolApprovalTerminal(t *testing.T) {
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		final, perr := mgr.PollCheckpoint(ctx, resp.CheckpointID)
 		testutil.FailErr(t, "PollCheckpoint", perr)
 		if final.Status == hitl.DecisionStatusPending {
@@ -182,7 +180,7 @@ func TestRestorePendingRebuildsCoalescingBeforeExpiry(t *testing.T) {
 		if got != "terminal" {
 			t.Fatalf("second hook = %q want terminal", got)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("restored checkpoint did not expire")
 	}
 }

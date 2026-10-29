@@ -58,7 +58,7 @@ time.sleep(60)
 	})
 	testutil.FailErr(t, "prepare owned engine loss command", err)
 	defer cleanup()
-	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(context.Background(), cmd))
 }
 
 func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
@@ -94,7 +94,7 @@ func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 			if !status.Signaled() || status.Signal() != syscall.SIGKILL {
 				t.Fatalf("engine exit status = %v, want SIGKILL", status)
 			}
-			testutil.FailErr(t, "engine-owned processes survived SIGKILL", waitForFixtureDescendantsGone(owned, 8*time.Second))
+			testutil.FailErr(t, "engine-owned processes survived SIGKILL", waitForFixtureDescendantsGone(t.Context(), owned))
 			if _, start, ok := procStat(otherPID); !ok || start != otherStart {
 				t.Fatal("engine loss affected an unrelated command")
 			}
@@ -102,9 +102,8 @@ func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 	}
 }
 
-func waitForFixtureDescendantsGone(owned []descendant, within time.Duration) error {
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
+func waitForFixtureDescendantsGone(ctx context.Context, owned []descendant) error {
+	for ctx.Err() == nil {
 		remaining := 0
 		for _, child := range owned {
 			if _, start, ok := procStat(child.pid); ok && start == child.start {
@@ -116,7 +115,7 @@ func waitForFixtureDescendantsGone(owned []descendant, within time.Duration) err
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return fmt.Errorf("engine-owned process identities remain after %v", within)
+	return fmt.Errorf("engine-owned process identities remain: %w", ctx.Err())
 }
 
 func killFixtureDescendants(owned []descendant) {

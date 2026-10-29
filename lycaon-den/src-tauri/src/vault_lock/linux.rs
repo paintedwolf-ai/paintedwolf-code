@@ -1,276 +1,345 @@
-//! Linux step-away signals. logind on the system bus announces the coming
-//! sleep and this session's lock; the session bus's screensaver interface
-//! is the fallback for desktops whose lock never reaches logind.
+//! Initial lock facts, native signals and bounded bus reconnection.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
-use gtk::glib::ToVariant;
 use gtk::{gio, glib};
 use tauri::AppHandle;
 
-use super::{lock_in_background, lock_reason_for_signal};
-use crate::linux_desktop::bus as linux_bus;
+use super::{lock_in_background, LockReason};
+use crate::linux_desktop::{bus, session};
 
-const LOGIND_NAME: &str = "org.freedesktop.login1";
-const LOGIND_PATH: &str = "/org/freedesktop/login1";
-const LOGIND_MANAGER: &str = "org.freedesktop.login1.Manager";
-const LOGIND_SESSION: &str = "org.freedesktop.login1.Session";
-const LOGIND_USER: &str = "org.freedesktop.login1.User";
-const SCREENSAVER: &str = "org.freedesktop.ScreenSaver";
-const CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-const BUS_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+mod idle;
+mod signals;
+mod state;
+use idle::{DisplayTargets, IdleFacts, IdleUnavailable, Observer};
+use signals::{
+    preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
+    watch_connection, watch_owner,
+};
+pub(crate) use state::LockSources;
+use state::StepAwayMode;
 
-thread_local! {
-    // Subscriptions live as long as their connections; the main thread owns both.
-    static CONNECTIONS: RefCell<Vec<gio::DBusConnection>> = const { RefCell::new(Vec::new()) };
+#[cfg(test)]
+mod tests;
+
+const CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
+const CALL_TIMEOUT: Duration = Duration::from_secs(2);
+const RECONNECT_INTERVAL: u32 = 5;
+
+const SCREENSAVERS: [(&str, &str); 2] = [
+    (
+        "org.freedesktop.ScreenSaver",
+        "/org/freedesktop/ScreenSaver",
+    ),
+    ("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver"),
+];
+
+/// The monitor that serves `vault_lock_status` and presence confirmation.
+static OBSERVED: OnceLock<Arc<Mutex<LockSources>>> = OnceLock::new();
+
+pub(crate) fn status() -> LockSources {
+    OBSERVED
+        .get()
+        .map(|sources| sources.lock().unwrap().clone())
+        .unwrap_or_default()
 }
 
-/// Which step-away sources this session can observe. A missing source is a
-/// capability fact: the idle period and the ceiling still end unlocks.
-#[derive(Debug, Default)]
-struct Observed {
-    sleep: bool,
-    session_lock: bool,
-    screensaver: bool,
+/// Where the monitor reaches its two buses. Production uses the fixed system
+/// socket, never `DBUS_SYSTEM_BUS_ADDRESS`, and the person's session bus.
+pub(super) struct BusAddresses {
+    pub system: String,
+    pub session: Result<String, String>,
+}
+
+impl BusAddresses {
+    fn native() -> Self {
+        Self {
+            system: bus::SYSTEM_BUS_ADDRESS.to_string(),
+            session: bus::session_address(),
+        }
+    }
 }
 
 pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
-    let context = glib::MainContext::default();
-    let mut observed = Observed::default();
-    match linux_bus::connect(&context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT) {
-        Ok(system) => {
-            observed.sleep = subscribe(
-                &system,
-                &app,
-                Some(LOGIND_NAME),
-                LOGIND_MANAGER,
-                "PrepareForSleep",
-                Some(LOGIND_PATH),
-            );
-            match own_session_path(&context, &system) {
-                Ok(path) => {
-                    observed.session_lock = subscribe(
-                        &system,
-                        &app,
-                        Some(LOGIND_NAME),
-                        LOGIND_SESSION,
-                        "Lock",
-                        Some(&path),
-                    ) && subscribe_locked_hint(&system, &app, &path);
-                }
-                Err(error) => {
-                    eprintln!("Stored values are not locked by this session's lock signal: {error}")
-                }
-            }
-            CONNECTIONS.with(|connections| connections.borrow_mut().push(system));
-        }
-        Err(error) => eprintln!("Stored values are not locked by sleep or session lock: {error}"),
+    thread_local! { static INSTALLED: RefCell<Option<Monitor>> = const { RefCell::new(None) }; }
+    if INSTALLED.with(|installed| installed.borrow().is_some()) {
+        return Ok(());
     }
-    match linux_bus::connect_session(&context, BUS_CONNECT_TIMEOUT) {
-        Ok(session) => {
-            observed.screensaver =
-                subscribe(&session, &app, None, SCREENSAVER, "ActiveChanged", None);
-            CONNECTIONS.with(|connections| connections.borrow_mut().push(session));
-        }
-        Err(error) => eprintln!("Stored values are not locked by the screensaver signal: {error}"),
-    }
-    eprintln!(
-        "Step-away lock sources: sleep={} session_lock={} screensaver={}",
-        observed.sleep, observed.session_lock, observed.screensaver
+    let monitor = Monitor::new(
+        BusAddresses::native(),
+        DisplayTargets::native(),
+        glib::MainContext::default(),
+        Box::new(move |reason| lock_in_background(&app, reason)),
     );
+    let _ = OBSERVED.set(monitor.sources());
+    monitor.refresh();
+    let ticking = monitor.clone();
+    glib::timeout_add_seconds_local(RECONNECT_INTERVAL, move || {
+        ticking.tick();
+        glib::ControlFlow::Continue
+    });
+    INSTALLED.with(|installed| *installed.borrow_mut() = Some(monitor));
     Ok(())
 }
 
-/// Subscribes to one signal and locks on it. The first argument, when the
-/// signal has one, says whether the state became active.
-fn subscribe(
-    connection: &gio::DBusConnection,
-    app: &AppHandle,
-    sender: Option<&str>,
-    interface: &str,
-    member: &str,
-    object_path: Option<&str>,
-) -> bool {
-    let app = app.clone();
-    connection.signal_subscribe(
-        sender,
-        Some(interface),
-        Some(member),
-        object_path,
-        None,
-        gio::DBusSignalFlags::NONE,
-        move |_, _, _, interface, member, parameters| {
-            let active = if parameters.n_children() > 0 {
-                parameters.child_value(0).get::<bool>().unwrap_or(false)
-            } else {
-                true
-            };
-            if let Some(reason) = lock_reason_for_signal(interface, member, active) {
-                lock_in_background(&app, reason);
-            }
-        },
-    );
-    true
+/// Observes logind, the desktop's screen saver and the display server's input
+/// idle on one glib context and asks its sink to lock when the person steps
+/// away. Main-context only.
+#[derive(Clone)]
+pub(super) struct Monitor {
+    inner: Rc<Inner>,
 }
 
-/// Locks when the session's `LockedHint` becomes true. Desktops that lock
-/// their own screen, such as GNOME Shell, report the lock this way rather
-/// than through logind's `Lock` signal, which only `LockSession` emits.
-fn subscribe_locked_hint(connection: &gio::DBusConnection, app: &AppHandle, path: &str) -> bool {
-    let app = app.clone();
-    connection.signal_subscribe(
-        Some(LOGIND_NAME),
-        Some("org.freedesktop.DBus.Properties"),
-        Some("PropertiesChanged"),
-        Some(path),
-        Some(LOGIND_SESSION),
-        gio::DBusSignalFlags::NONE,
-        move |_, _, _, _, _, parameters| {
-            if locked_hint_set(parameters) {
-                lock_in_background(&app, super::LockReason::ScreenLocked);
-            }
-        },
-    );
-    true
+struct Inner {
+    addresses: BusAddresses,
+    displays: DisplayTargets,
+    /// The running input-idle observer and the session type it serves.
+    observer: RefCell<Option<(String, Box<dyn Observer>)>>,
+    context: glib::MainContext,
+    sink: Box<dyn Fn(LockReason)>,
+    sources: Arc<Mutex<LockSources>>,
+    refresh_requested: Cell<bool>,
+    refreshing: Cell<bool>,
+    buses: RefCell<Buses>,
 }
 
-/// Whether a session `PropertiesChanged` signal, `(sa{sv}as)`, sets
-/// `LockedHint` to true.
-fn locked_hint_set(parameters: &glib::Variant) -> bool {
-    if !parameters.is_type(glib::VariantTy::new("(sa{sv}as)").expect("valid type")) {
-        return false;
-    }
-    if parameters.child_value(0).str() != Some(LOGIND_SESSION) {
-        return false;
-    }
-    glib::VariantDict::new(Some(&parameters.child_value(1)))
-        .lookup::<bool>("LockedHint")
-        .ok()
-        .flatten()
-        .unwrap_or(false)
+#[derive(Default)]
+struct Buses {
+    system: Option<gio::DBusConnection>,
+    desktop: Option<gio::DBusConnection>,
+    subscriptions: Vec<(gio::DBusConnection, gio::SignalSubscriptionId)>,
 }
 
-/// The logind session whose lock this shell honors: the session it runs
-/// in, or, when the desktop started it in the user's service manager and
-/// it belongs to no session, the user's display session.
-fn own_session_path(
-    context: &glib::MainContext,
-    system: &gio::DBusConnection,
-) -> Result<String, String> {
-    let by_pid = linux_bus::call(
-        context,
-        system,
-        Some(LOGIND_NAME),
-        LOGIND_PATH,
-        LOGIND_MANAGER,
-        "GetSessionByPID",
-        Some(&(std::process::id(),).to_variant()),
-        CALL_TIMEOUT,
-    );
-    if let Ok(reply) = by_pid {
-        return reply
-            .child_value(0)
-            .str()
-            .map(str::to_owned)
-            .ok_or_else(|| "logind named no session".to_string());
-    }
-    // SAFETY: getuid has no preconditions and cannot fail.
-    let uid = unsafe { libc::getuid() };
-    let user = linux_bus::call(
-        context,
-        system,
-        Some(LOGIND_NAME),
-        LOGIND_PATH,
-        LOGIND_MANAGER,
-        "GetUser",
-        Some(&(uid,).to_variant()),
-        CALL_TIMEOUT,
-    )
-    .map_err(|error| error.to_string())?;
-    let user_path = user
-        .child_value(0)
-        .str()
-        .map(str::to_owned)
-        .ok_or_else(|| "logind named no user".to_string())?;
-    let display = linux_bus::call(
-        context,
-        system,
-        Some(LOGIND_NAME),
-        &user_path,
-        "org.freedesktop.DBus.Properties",
-        "Get",
-        Some(&(LOGIND_USER, "Display").to_variant()),
-        CALL_TIMEOUT,
-    )
-    .map_err(|error| error.to_string())?;
-    display_session_path(&display).ok_or_else(|| "this user has no display session".to_string())
-}
-
-/// The session path in a `Properties.Get` reply for `User.Display`, whose
-/// value is `(so)`; logind names `/` when the user has no display session.
-fn display_session_path(reply: &glib::Variant) -> Option<String> {
-    let value = reply.child_value(0).as_variant()?;
-    if !value.is_type(glib::VariantTy::new("(so)").ok()?) {
-        return None;
-    }
-    let path = value.child_value(1).str()?.to_owned();
-    (path != "/").then_some(path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn display_reply(id: &str, path: &str) -> glib::Variant {
-        let value = glib::Variant::tuple_from_iter([
-            id.to_variant(),
-            glib::variant::ObjectPath::try_from(path)
-                .unwrap()
-                .to_variant(),
-        ]);
-        glib::Variant::tuple_from_iter([glib::Variant::from_variant(&value)])
-    }
-
-    fn properties_changed(interface: &str, hint: Option<bool>) -> glib::Variant {
-        let changed = glib::VariantDict::new(None);
-        if let Some(hint) = hint {
-            changed.insert("LockedHint", hint);
+impl Monitor {
+    pub(super) fn new(
+        addresses: BusAddresses,
+        displays: DisplayTargets,
+        context: glib::MainContext,
+        sink: Box<dyn Fn(LockReason)>,
+    ) -> Self {
+        Self {
+            inner: Rc::new(Inner {
+                addresses,
+                displays,
+                observer: RefCell::new(None),
+                context,
+                sink,
+                sources: Arc::new(Mutex::new(LockSources::default())),
+                refresh_requested: Cell::new(false),
+                refreshing: Cell::new(false),
+                buses: RefCell::new(Buses::default()),
+            }),
         }
-        changed.insert("IdleHint", true);
-        glib::Variant::tuple_from_iter([
-            interface.to_variant(),
-            changed.end(),
-            Vec::<String>::new().to_variant(),
-        ])
     }
 
-    #[test]
-    fn a_set_locked_hint_locks() {
-        assert!(locked_hint_set(&properties_changed(
-            LOGIND_SESSION,
-            Some(true)
-        )));
-        assert!(!locked_hint_set(&properties_changed(
-            LOGIND_SESSION,
-            Some(false)
-        )));
-        assert!(!locked_hint_set(&properties_changed(LOGIND_SESSION, None)));
-        assert!(!locked_hint_set(&properties_changed(
-            "org.example.Other",
-            Some(true)
-        )));
-        assert!(!locked_hint_set(&"LockedHint".to_variant()));
+    pub(super) fn sources(&self) -> Arc<Mutex<LockSources>> {
+        self.inner.sources.clone()
     }
 
-    #[test]
-    fn the_display_session_is_read_from_the_user_property() {
-        assert_eq!(
-            display_session_path(&display_reply("8", "/org/freedesktop/login1/session/_38")),
-            Some("/org/freedesktop/login1/session/_38".to_string())
+    #[cfg(test)]
+    pub(super) fn status(&self) -> LockSources {
+        self.inner.sources.lock().unwrap().clone()
+    }
+
+    /// Reconnects a closed bus, or rereads every source after an event that
+    /// left the observations stale.
+    pub(super) fn tick(&self) {
+        if self.inner.refreshing.get() {
+            return;
+        }
+        let reconnect = {
+            let buses = self.inner.buses.borrow();
+            buses.system.as_ref().is_none_or(|bus| bus.is_closed())
+                || buses.desktop.as_ref().is_none_or(|bus| bus.is_closed())
+        };
+        if reconnect || self.inner.refresh_requested.replace(false) {
+            self.refresh();
+        }
+        self.poll_idle();
+    }
+
+    /// Reads the idle observer; a lost one locks and is replaced on the next
+    /// tick.
+    fn poll_idle(&self) {
+        let inner = &self.inner;
+        let facts = {
+            let mut observer = inner.observer.borrow_mut();
+            let Some((_, running)) = observer.as_mut() else {
+                return;
+            };
+            let facts = running.facts(&inner.context);
+            if facts.error == Some(IdleUnavailable::Lost) {
+                *observer = None;
+            }
+            facts
+        };
+        let mut next = inner.current();
+        if next.idle == facts {
+            return;
+        }
+        let lost = facts.error == Some(IdleUnavailable::Lost);
+        let covering = next.step_away_mode() == StepAwayMode::IdleFallback;
+        next.idle = facts;
+        match (lost, covering) {
+            // The observer was the step-away signal: its loss locks.
+            (true, true) => inner.lose(next),
+            (true, false) => {
+                inner.apply(next, LockReason::ScreenLocked);
+                inner.refresh_requested.set(true);
+            }
+            (false, _) => inner.apply(next, LockReason::Away),
+        }
+    }
+
+    /// Keeps the observer that serves this session type, or starts the one
+    /// its display server offers.
+    fn observe_idle(
+        &self,
+        session_type: Option<&str>,
+        desktop: Option<&gio::DBusConnection>,
+    ) -> IdleFacts {
+        let inner = &self.inner;
+        let mut observer = inner.observer.borrow_mut();
+        let Some(kind) = session_type else {
+            // A session we could not read keeps the observer it had.
+            return match observer.as_mut() {
+                Some((_, running)) => running.facts(&inner.context),
+                None => IdleFacts::unavailable(IdleUnavailable::NoDisplaySession),
+            };
+        };
+        if observer.as_ref().is_none_or(|(served, _)| served != kind) {
+            *observer = None;
+            match idle::start(kind, &inner.displays, &inner.context, desktop) {
+                Ok(started) => *observer = Some((kind.to_owned(), started)),
+                Err(error) => return IdleFacts::unavailable(error),
+            }
+        }
+        let (_, running) = observer.as_mut().expect("observer started");
+        let facts = running.facts(&inner.context);
+        if facts.error == Some(IdleUnavailable::Lost) {
+            *observer = None;
+        }
+        facts
+    }
+
+    /// Rereads the initial facts and resubscribes.
+    pub(super) fn refresh(&self) {
+        if self.inner.refreshing.replace(true) {
+            self.inner.refresh_requested.set(true);
+            return;
+        }
+        let next = self.read_sources();
+        self.inner.refreshing.set(false);
+        self.inner.apply(next, LockReason::ScreenLocked);
+    }
+
+    fn read_sources(&self) -> LockSources {
+        let inner = &self.inner;
+        let weak = Rc::downgrade(inner);
+        let context = &inner.context;
+        let mut guard = inner.buses.borrow_mut();
+        let buses = &mut *guard;
+        for (connection, id) in buses.subscriptions.drain(..) {
+            connection.signal_unsubscribe(id);
+        }
+        if buses.system.as_ref().is_none_or(|bus| bus.is_closed()) {
+            buses.system = bus::connect(context, &inner.addresses.system, CONNECT_TIMEOUT).ok();
+            if let Some(system) = &buses.system {
+                watch_connection(system, &weak, true);
+            }
+        }
+        if buses.desktop.as_ref().is_none_or(|bus| bus.is_closed()) {
+            buses.desktop = inner
+                .addresses
+                .session
+                .as_ref()
+                .ok()
+                .and_then(|address| bus::connect(context, address, CONNECT_TIMEOUT).ok());
+            if let Some(desktop) = &buses.desktop {
+                watch_connection(desktop, &weak, false);
+            }
+        }
+        let mut current = LockSources {
+            system_connected: buses.system.is_some(),
+            session_bus_connected: buses.desktop.is_some(),
+            ..LockSources::default()
+        };
+        if let Some(system) = buses.system.clone() {
+            current.sleeping = preparing_for_sleep(context, &system).unwrap_or(false);
+            match session::discover(context, &system) {
+                Ok(session) => {
+                    // A hint seen true stays proof for the same session.
+                    let previous = inner.current();
+                    current.locked_hint_seen = session.locked
+                        || (previous.locked_hint_seen
+                            && previous
+                                .session
+                                .as_ref()
+                                .is_some_and(|known| known.id == session.id));
+                    current.session = Some(session);
+                }
+                Err(error) => current.session_error = Some(error),
+            }
+            let path = current.session.as_ref().map(|session| session.path.clone());
+            subscribe_system(buses, &system, &weak, path.as_deref());
+        } else {
+            // An unreachable system bus observes no session, sleep or lock.
+            current.session_error = Some(session::SessionUnavailable::Unreadable);
+        }
+        if let Some(desktop) = buses.desktop.clone() {
+            for (name, path) in SCREENSAVERS {
+                if let Some(active) = screensaver_active(context, &desktop, name, path) {
+                    current.screensaver_locked = Some(active);
+                    subscribe_screensaver(buses, &desktop, &weak, name, path);
+                    break;
+                }
+            }
+            for (name, _) in SCREENSAVERS {
+                watch_owner(buses, &desktop, name, &weak);
+            }
+        }
+        let session_type = current
+            .session
+            .as_ref()
+            .map(|session| session.session_type.clone());
+        current.idle = self.observe_idle(session_type.as_deref(), buses.desktop.as_ref());
+        current
+    }
+}
+
+impl Inner {
+    fn current(&self) -> LockSources {
+        self.sources.lock().unwrap().clone()
+    }
+
+    /// Publishes new observations and locks when confirmation stopped being
+    /// allowed or a lock was observed.
+    fn apply(&self, mut next: LockSources, reason: LockReason) {
+        next.mode = next.step_away_mode();
+        let mut sources = self.sources.lock().unwrap();
+        let was_allowed = sources.confirmation_allowed();
+        let now_allowed = next.confirmation_allowed();
+        // A source that keeps reporting the same away state asks once.
+        let locked = next.observed_away() && !sources.observed_away();
+        *sources = next;
+        eprintln!(
+            "Step-away capability facts: {}",
+            serde_json::to_string(&*sources).unwrap_or_default()
         );
-        assert_eq!(display_session_path(&display_reply("", "/")), None);
-        let wrong =
-            glib::Variant::tuple_from_iter([glib::Variant::from_variant(&"8".to_variant())]);
-        assert_eq!(display_session_path(&wrong), None);
+        drop(sources);
+        if !now_allowed && (was_allowed || locked) {
+            (self.sink)(reason);
+        }
+    }
+
+    /// A source went away: its observations are stale, so lock, and reread
+    /// everything on the next tick.
+    fn lose(&self, next: LockSources) {
+        self.apply(next, LockReason::ScreenLocked);
+        (self.sink)(LockReason::ScreenLocked);
+        self.refresh_requested.set(true);
     }
 }

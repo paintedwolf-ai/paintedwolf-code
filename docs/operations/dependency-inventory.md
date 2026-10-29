@@ -55,7 +55,7 @@ because the migration is hard.
   runtimes, as with Yrs in Go-hosted WASM paired with Yjs in Den. Platform signing,
   per-platform hashes, and size budgets also count here.
 * **Moderate:** API deprecations, regenerated output that needs review, or verification that no
-  automated gate fully covers, such as Seatbelt confinement or the Windows shell.
+  automated gate fully covers, such as Seatbelt or Linux confinement (`./task test:confine:linux`) or the Windows shell.
 * **Low:** A semver-compatible bump that `./task check-fast` or `./task check` fully verifies.
 
 ## Quadrants
@@ -67,7 +67,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
 | **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 16 |
-| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 62 |
+| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 63 |
 
 ---
 
@@ -77,9 +77,9 @@ Held packages, restricted update policies, and high-friction upgrades, even when
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| Chrome headless shell (Chrome for Testing) | `154.0.8037.92` | Stable `155.0.8059.39` | **Critical** | **High** | — | **Urgency:** Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.<br>**Friction:** Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol. Re-verify confinement with `./task test:seatbelt` and the CI `confinement` job. The macOS bundle Developer ID–signs the tree. |
+| Chrome headless shell (Chrome for Testing) | `154.0.8037.92` | Stable `155.0.8059.39` | **Critical** | **High** | — | **Urgency:** Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.<br>**Friction:** Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol. Re-verify confinement with `./task test:seatbelt`, `./task test:confine:linux`, and the CI `confinement` job. The macOS bundle Developer ID–signs the tree. |
 | Git and Git LFS (dugite-native, paintedwolf-git on Linux) | Git `2.53.0`<br>LFS `3.7.1`<br>dugite build `f49d009`<br>paintedwolf-git build `paintedwolf.1` | Git `2.56.0`<br>LFS `3.8.0`<br>dugite `2.53.0-4`<br>paintedwolf-git not refreshed | **Critical** | **High** | — | **Urgency:** Git runs against untrusted repositories and remotes on the workstation.<br>**Friction:** Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so a newer Git is usable only once a dugite release ships it; Linux needs a matching paintedwolf-git release. Follow the [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS bundle signs every Mach-O with Developer ID and hardened runtime. |
-| Opengrep | `1.30.0+paintedwolf.40` | Opengrep `1.30.1`<br>fork `1.30.0+paintedwolf.39` | **High** | **High** | — | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
+| Opengrep | `1.30.0+paintedwolf.40` | Opengrep `1.30.1`<br>fork `1.30.0+paintedwolf.39` | **High** | **High** | — | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which pins `darwin/arm64`, `linux/amd64`, and `linux/arm64` artifacts. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
 | Document core | yrs `0.27.4` | yrs `0.28.0` | **High** | **High** | — | **Urgency:** Divergence in CRDT state loses user edits.<br>**Friction:** Built by `scripts/build-document-core.sh` into the native `pw-document-core`, which the host runs confined beside itself and every release signs and probes. Den binds CodeMirror to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a 0.x minor bump as breaking. |
 | `third_party/gotreesitter` | `v0.52.0` | `v0.55.1` | **Moderate** | **High** | — | **Urgency:** Parses repository source into symbols and outlines.<br>**Friction:** `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
 | `third_party/goawk` | `v1.32.0` | not refreshed | **Moderate** | **High** | — | **Urgency:** Interprets model-authored `awk` programs inside `command`; execution, environment and file doors are disabled by the host.<br>**Friction:** `third_party/goawk.patch` adds program inspection for refused constructs and the work and allocation budget. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
@@ -110,11 +110,11 @@ Policy files retain every declared entry, package rating, rationale, and verific
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
 | Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
-| Development, build, and verification tools | 7 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
+| Development, build, and verification tools | 8 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 6 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
-| Backend Go modules (`lycaon`) | 75 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
-| Tauri shell crates (`lycaon-den/src-tauri`) | 39 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Backend Go modules (`lycaon`) | 77 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 47 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |
@@ -123,10 +123,11 @@ Policy files retain every declared entry, package rating, rationale, and verific
 
 ### Update automation
 
-`.github/dependabot.yml` is generated from the policy. Each manifest section becomes one weekly
-ecosystem block with the configured cooldown. Minor and patch version updates share a group;
-major updates remain individual PRs. Security updates remain independent of that group and
-the version-update cooldown. A 0.x minor update can still be breaking and needs review.
+`.github/dependabot.yml` is generated from the policy. Manifest sections sharing an ecosystem
+and group coalesce into one monthly ecosystem block with the configured cooldown. Minor and
+patch library updates share a group while major library updates remain individual PRs; GitHub
+Actions updates group all semver levels together. Security updates remain independent of that
+group and the version-update cooldown. A 0.x minor update can still be breaking and needs review.
 A package's `updates` value becomes an
 ignore rule: `hold` ignores every update, `no-major` ignores major releases, and `patch-only`
 ignores major and minor releases. Ignore rules also suppress Dependabot security updates for
@@ -162,10 +163,10 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
      `lycaon/govulncheck-allowlist.yaml`, following the existing `docker/docker` entries.
 3. **Respond to engine CVEs.**
    * **Git:** follow the [bump procedure](../dependencies.md#bump-procedure) with a fixed
-     dugite release.
+     dugite-native and `paintedwolf-git` release.
    * **Chrome:** update the version and hashes in
      `lycaon/internal/browserengine/chrome_pin.go`. Provision with `./task browser:ensure`, then
-     re-verify confinement with `./task test:seatbelt`.
+     re-verify confinement with `./task test:seatbelt` and `./task test:confine:linux`.
    * **Opengrep:** cut a fork release, authenticate it with `./task scan:opengrep:select`, then
      run `./task test:scanners`.
 
@@ -182,7 +183,7 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
   1. Read the upstream changelog to see whether it fixes natively what the local patch covers.
   2. Rebase the patch onto the candidate version and update the `patchedDependencies` key.
   3. Run `./task den:test`. Then run `./task den:stage-engine` followed by
-     `./task e2e:den:desktop` on macOS to catch scroll and layout regressions in WebKit.
+     `./task e2e:den:desktop` on macOS and `./task den:webkit:atspi` on Linux to catch scroll, layout, and accessibility regressions in WebKit.
 * **`yjs` and `yrs`:** held. Bump both in one change and test end to end against the WASM
   core.
 * **`gotreesitter`:** follow [`third_party/README.md`](../../third_party/README.md), and drop

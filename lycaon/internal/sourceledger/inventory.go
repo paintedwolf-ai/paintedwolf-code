@@ -331,11 +331,6 @@ func (s *Inventory) reconcileInventoryRequest(
 	if err != nil {
 		return outcome, snapshot.ID, req.requestedEpoch, err
 	}
-	// A pass repairs a little on completion; one deferred behind another
-	// capture is not this inventory's failure.
-	if err := s.retention.MaintainBlobs(ctx); err != nil && !errors.Is(err, ErrBlobMaintenanceDeferred) {
-		return outcome, snapshot.ID, req.requestedEpoch, err
-	}
 	return outcome, snapshot.ID, req.requestedEpoch, nil
 }
 
@@ -447,6 +442,5 @@ type inventoryGitPort interface {
 }
 
 type inventoryRetentionPort interface {
-	MaintainBlobs(ctx context.Context) error
 	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
 }

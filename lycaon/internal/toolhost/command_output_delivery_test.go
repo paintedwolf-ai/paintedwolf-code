@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func newOutputDeliveryFixture(t *testing.T) *programtest.Fixture {
@@ -196,7 +197,22 @@ func TestGoTest200kLinesSummarySurvives(t *testing.T) {
 	b.WriteString("PASS\nok  \tgithub.com/lycaon/lycaon/internal/foo\t1.234s\n")
 	testutil.FailErr(t, "write gotest.log", os.WriteFile(filepath.Join(f.Dir, "gotest.log"), []byte(b.String()), 0o644))
 
+	owners := f.Runtime.Owners
+	releaseCapturePressure := func() {}
+	t.Cleanup(func() { releaseCapturePressure() })
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		// Keep streaming and retention available while the optional whole-source
+		// capture competes with other admitted work in this program.
+		var err error
+		releaseCapturePressure, err = memory.Reserve(t.Context(), 24<<20)
+		if err != nil {
+			return command.ProgramOwners{}, err
+		}
+		return owners(tc, paths, memory, spill)
+	}
 	raw, err := f.Call(t, t.Context(), "cat gotest.log")
+	f.Runtime.Owners = owners
+	releaseCapturePressure()
 	testutil.FailErr(t, "call cat gotest.log", err)
 	out := decodeProgramOutcome(t, raw)
 

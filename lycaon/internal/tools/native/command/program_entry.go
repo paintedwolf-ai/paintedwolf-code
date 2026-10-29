@@ -121,6 +121,7 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+	nativeDefs    map[string]toolcontract.OperationDefinition
 	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.

@@ -1,12 +1,12 @@
 package native
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
+	"math"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -22,7 +22,7 @@ type appendLanding struct {
 // landPinnedAppend copies the held original followed by the suffix through
 // the existing stream door. Both the copied prefix and target must still name
 // the original captured bytes; no approval or source pin is refreshed.
-func landPinnedAppend(ctx context.Context, tc tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, suffix []byte, admitSources func() error) (landing appendLanding, finalErr error) {
+func landPinnedAppend(ctx context.Context, tc tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, suffix io.Reader, suffixBytes int64, admitSources func() error) (landing appendLanding, finalErr error) {
 	file, err := fseffect.OpenRead(resolved.EffectLocation())
 	if err != nil {
 		return appendLanding{}, err
@@ -42,9 +42,15 @@ func landPinnedAppend(ctx context.Context, tc tools.ToolContext, resolved projec
 	if err != nil {
 		return appendLanding{}, err
 	}
+	if suffixBytes < 0 || suffixBytes >= math.MaxInt64-info.Size() {
+		return appendLanding{}, errors.New("exact append stream length exceeds supported size")
+	}
 	prefixHash := sha256.New()
 	prefix := io.TeeReader(io.NewSectionReader(file, 0, info.Size()), prefixHash)
-	result, err := applyAgentStream(ctx, tc, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: io.MultiReader(prefix, bytes.NewReader(suffix)), BeforeCommit: func(current fseffect.Target, _ fseffect.Result) error {
+	result, err := applyAgentStream(ctx, tc, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: io.MultiReader(prefix, io.LimitReader(suffix, suffixBytes+1)), BeforeCommit: func(current fseffect.Target, staged fseffect.Result) error {
+		if staged.Bytes != info.Size()+suffixBytes {
+			return errors.New("exact append stream length changed")
+		}
 		if hex.EncodeToString(prefixHash.Sum(nil)) != pin.DiskSHA256 {
 			return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: pin}
 		}
@@ -65,5 +71,5 @@ func landPinnedAppend(ctx context.Context, tc tools.ToolContext, resolved projec
 	if err != nil {
 		return appendLanding{}, err
 	}
-	return appendLanding{bytes: int(info.Size()) + len(suffix), publishedSHA256: result.SHA256}, nil
+	return appendLanding{bytes: int(result.Bytes), publishedSHA256: result.SHA256}, nil
 }

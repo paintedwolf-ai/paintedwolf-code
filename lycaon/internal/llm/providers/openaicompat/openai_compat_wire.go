@@ -1,6 +1,7 @@
 package openaicompat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -514,4 +515,10 @@ func streamToolIndex(acc map[int]*providerwire.StreamTool, call toolCallWire) (i
 
 func (p *Provider) Prepare(req modelcall.CompletionRequest, stream bool) ([]byte, error) {
 	return encodeChatCompletionRequest(req, p, stream, controlOpts{})
+}
+
+// RenderRequest serializes req exactly as this adapter dispatches a stream,
+// without contacting the provider.
+func (p *Provider) RenderRequest(_ context.Context, req modelcall.CompletionRequest) ([]byte, error) {
+	return encodeChatCompletionRequest(req, p, true, controlOpts{})
 }
