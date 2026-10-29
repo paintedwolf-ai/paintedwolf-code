@@ -12,8 +12,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
-import verification_custody as custody
-import verification_lifetime as lifetime
+import verification_lifecycle.custody as custody
+import verification_lifecycle.terminal as lifetime
 from verification_health import owner_identity
 from verification_resources import Reservation, entries as reservations
 from verification_execute import Executor

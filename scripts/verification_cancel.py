@@ -9,7 +9,7 @@ import time
 
 from verification_batch import status_details
 from verification_health import ownership, process_snapshot
-import verification_custody as custody
+import verification_lifecycle.custody as custody
 from verification_state import read_state, write_json
 
 USAGE = 'usage: ./task test:cancel -- <ticket> --reason "<why>" [--force]'

@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 
 import verification_cancel as cancel
-import verification_custody as custody
+import verification_lifecycle.custody as custody
 from verification_state import read_state
 
 SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")

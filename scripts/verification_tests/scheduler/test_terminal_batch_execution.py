@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import verification_batch as batch
 import verification_cancel as cancel
-import verification_custody as custody
-from verification_completion import Publisher, Witness, recovered_outcome, sealed_receipt
+import verification_lifecycle.custody as custody
+from verification_lifecycle.completion import Publisher, Witness, recovered_outcome, sealed_receipt
 from verification_tests import support
 from verification_tests.scheduler.test_terminal_settlement_execution import TerminalFixture
 
@@ -273,7 +273,7 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
                 f" subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=fds,start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
                 f" while not pathlib.Path({str(ready)!r}).exists(): time.sleep(.01)\n")
         tool.write_text(original.replace(marker, fork + marker))
-        owner = self.scripts / "verification_custody.py"
+        owner = self.scripts / "verification_lifecycle/custody.py"
         owner.write_text(owner.read_text() + "\ndef lease_holders(path):\n    raise PermissionError('fixture inspection refusal')\n")
         observer = self.root / "recovery-observations"
         scheduler = self.scripts / "verification_batch.py"
@@ -286,7 +286,7 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
             "        if value is not None:\n"
             f"            with open({str(observer)!r}, 'a') as stream: stream.write(json.dumps(value) + '\\n')\n"))
         if crash_after_settle:
-            owner = self.scripts / "verification_lifetime.py"
+            owner = self.scripts / "verification_lifecycle/terminal.py"
             owner.write_text(owner.read_text() + (
                 "\n_original_finish = TerminalSettlement.finish\n"
                 "def finish(self, on_blocked=None):\n"

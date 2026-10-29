@@ -16,7 +16,7 @@ import time
 import uuid
 
 from verification_advisories import admission_notice
-from verification_lifetime import TerminalSettlement, retained
+from verification_lifecycle.terminal import TerminalSettlement, retained
 from verification_history import record_duration
 from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment,
                                     foreground_git_environment, order_of, worker_budget)

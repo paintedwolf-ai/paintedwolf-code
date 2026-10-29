@@ -12,7 +12,7 @@ CATALOG = Path(__file__).with_name("verification-plan.json")
 GO_MODULE = CATALOG.parent.parent / "lycaon"
 DEN = CATALOG.parent.parent / "lycaon-den"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
-SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD",
+SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD", "PW_TEST_COMPLETION_FD",
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
                  "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
                  "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
@@ -420,11 +420,13 @@ def request(arguments, environment):
 
 def compatibility(root, binary, environment):
     """`environment` is the declared execution environment, exactly what shared stages receive."""
-    files = [CATALOG, *Path(__file__).parent.glob("verification_*.py"),
-             Path(__file__).with_name("test-execution.py")]
+    directory = Path(__file__).parent
+    files = [CATALOG, *directory.glob("verification_*.py"),
+             *directory.joinpath("verification_lifecycle").glob("*.py"), directory / "test-execution.py"]
     return identity({"source": str(Path(root).resolve()), "binary": str(Path(binary).resolve()),
                      "python": [sys.executable, sys.version], "environment": environment,
-                     "planner": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+                     "planner": {p.relative_to(directory).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                                 for p in files}})
 
 
 def stage_key(stage):

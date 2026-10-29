@@ -17,8 +17,8 @@ from verification_resources import blocked_reason, foreground_git_environment, o
 from verification_health import annotate, identity, owner_identity, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
-from verification_lifetime import Capability, TerminalSettlement
-from verification_completion import Witness, recovered_outcome, sealed_receipt
+from verification_lifecycle.terminal import Capability, TerminalSettlement
+from verification_lifecycle.completion import Witness, recovered_outcome, sealed_receipt
 
 
 MAX_REQUESTS = 32

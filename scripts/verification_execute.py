@@ -18,8 +18,8 @@ from verification_plan import catalog, digest_command, expand, resolve_request, 
 from verification_resources import (Reservation, blocked_reason, bounded_environment, capacity, demand, entries,
                                     order_of, profile)
 from verification_health import identity
-from verification_lifetime import TerminalSettlement
-from verification_completion import Publisher
+from verification_lifecycle.terminal import TerminalSettlement
+from verification_lifecycle.completion import Publisher
 from verification_cache import Maintenance
 from verification_state import read_json, read_state, write_json
 

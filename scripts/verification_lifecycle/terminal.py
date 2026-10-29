@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-import verification_custody as custody
+import verification_lifecycle.custody as custody
 from verification_health import ownership, process_snapshot
 
 if os.name != "nt":

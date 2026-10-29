@@ -7,7 +7,7 @@ import time
 import uuid
 
 from verification_health import owner_identity
-from verification_lifetime import retained
+from verification_lifecycle.terminal import retained
 from verification_history import estimate, read_history
 
 if os.name != "nt":
