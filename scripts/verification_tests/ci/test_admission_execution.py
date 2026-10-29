@@ -34,6 +34,7 @@ class AdmissionTests(unittest.TestCase):
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
+                     'lycaon/test/fixtures/e2e/minimal-go-project/internal/app/app.go',
                      'lycaon-den/src/assets/icon.svg']:
             self.assertTrue(impact.broad_scope([path])[0], path)
         backend = dict(full=False, paths=['lycaon/internal/a/a.go'])

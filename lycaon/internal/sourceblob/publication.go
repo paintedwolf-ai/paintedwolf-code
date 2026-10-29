@@ -3,19 +3,13 @@ package sourceblob
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
-	"sync/atomic"
 
-	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
-
-var putTempSeq atomic.Uint64
 
 // Put stores a complete payload already held in memory.
 func (s *Store) Put(ctx context.Context, sha string, plain []byte) (rel string, stored int64, oids GitOIDs, err error) {
@@ -79,50 +73,21 @@ func (s *Store) commitBytes(ctx context.Context, rel string, compressed []byte) 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	dest := filepath.Join(s.root, rel)
-	dir := filepath.Dir(dest)
-	tempPath := filepath.Join(dir, ".put-"+strconv.FormatUint(putTempSeq.Add(1), 36))
-	openMode := os.FileMode(0o400)
-	if runtime.GOOS == "windows" {
-		openMode = 0o600
+	if err := os.MkdirAll(s.root, 0o700); err != nil {
+		return fmt.Errorf("create content object root: %w", err)
 	}
-	temp, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, openMode)
-	if os.IsNotExist(err) {
-		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
-			return fmt.Errorf("create content object directory: %w", mkErr)
-		}
-		temp, err = os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, openMode)
-	}
-	if err != nil {
-		return fmt.Errorf("create content object temp: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(tempPath)
-		}
-	}()
-	_, writeErr := temp.Write(compressed)
-	var chmodErr error
-	if runtime.GOOS == "windows" {
-		chmodErr = temp.Chmod(0o400)
-	}
-	syncErr := fssync.File(temp)
-	closeErr := temp.Close()
-	if err := errors.Join(writeErr, chmodErr, syncErr, closeErr); err != nil {
-		return fmt.Errorf("write content object: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	restoreMode, err := prepareObjectPublication(dest)
+	restoreMode, err := prepareObjectPublication(filepath.Join(s.root, rel))
 	if err != nil {
 		return err
 	}
 	defer restoreMode()
-	if err := os.Rename(tempPath, dest); err != nil {
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: s.root, Rel: rel},
+		Source:   bytes.NewReader(compressed), Mode: 0o400, DirMode: 0o700,
+		BeforeCommit: func(fseffect.Target, fseffect.Result) error { return ctx.Err() },
+	})
+	if err != nil {
 		return fmt.Errorf("commit content object: %w", err)
 	}
-	committed = true
-	return syncDir(dir)
+	return nil
 }

@@ -262,5 +262,9 @@ func (s *Service) Signal(ctx context.Context, session string, process Process, s
 	if err := s.owns(session, process.PID); err != nil {
 		return err
 	}
-	return signalInstance(process, signal)
+	kind, err := parseSignal(signal)
+	if err != nil {
+		return err
+	}
+	return signalInstance(process, kind)
 }

@@ -51,6 +51,9 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 	b.resources.Track("instance-lock", 140, func(context.Context) error { claim.Release(); return nil })
 
 	configDir := filepath.Dir(dbPath)
+	if err := db.ResumeStoreUpgrade(dbPath); err != nil {
+		return fmt.Errorf("resume store upgrade before restore: %w", err)
+	}
 	if err := backup.CleanupInterruptedTransfers(configDir); err != nil {
 		b.logger.WarnContext(ctx, "could not clean interrupted backup transfers", "error", err)
 	}

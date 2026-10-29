@@ -750,9 +750,9 @@ type InvocationProgramExecutions struct {
 	ConflictPath                    string         `json:"conflict_path"`
 	ConflictExpectedRevision        string         `json:"conflict_expected_revision"`
 	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
-	NativeGapJson                   string         `json:"native_gap_json"`
 	StartedAt                       string         `json:"started_at"`
 	SettledAt                       sql.NullString `json:"settled_at"`
+	NativeGapJson                   string         `json:"native_gap_json"`
 }
 
 type InvocationProgramNodes struct {
@@ -1828,15 +1828,15 @@ type SourceLineAttr struct {
 }
 
 type SourceManifestChunks struct {
-	ID         string `json:"id"`
-	EntryCount int64  `json:"entry_count"`
-	TotalBytes int64  `json:"total_bytes"`
+	ID          string `json:"id"`
+	ContentID   string `json:"content_id"`
+	EntryCount  int64  `json:"entry_count"`
+	TotalBytes  int64  `json:"total_bytes"`
+	HashedCount int64  `json:"hashed_count"`
 }
 
 type SourceManifestEntries struct {
 	ChunkID    string `json:"chunk_id"`
-	Ordinal    int64  `json:"ordinal"`
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -1846,10 +1846,14 @@ type SourceManifestEntries struct {
 	ModifiedNs int64  `json:"modified_ns"`
 }
 
+type SourceManifestLayout struct {
+	ManifestID string `json:"manifest_id"`
+	FirstPath  string `json:"first_path"`
+	ChunkID    string `json:"chunk_id"`
+}
+
 type SourceManifestStaging struct {
 	BuildID    string `json:"build_id"`
-	Bucket     int64  `json:"bucket"`
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -1857,6 +1861,12 @@ type SourceManifestStaging struct {
 	Size       int64  `json:"size"`
 	Mode       int64  `json:"mode"`
 	ModifiedNs int64  `json:"modified_ns"`
+}
+
+type SourceManifests struct {
+	ID         string `json:"id"`
+	EntryCount int64  `json:"entry_count"`
+	TotalBytes int64  `json:"total_bytes"`
 }
 
 type SourceMutations struct {
@@ -1933,12 +1943,6 @@ type SourceSnapshotBoundaries struct {
 	Entries    int64  `json:"entries"`
 }
 
-type SourceSnapshotChunks struct {
-	SnapshotID string `json:"snapshot_id"`
-	Bucket     int64  `json:"bucket"`
-	ChunkID    string `json:"chunk_id"`
-}
-
 type SourceSnapshotHeads struct {
 	RootsKey    string `json:"roots_key"`
 	SnapshotID  string `json:"snapshot_id"`
@@ -1949,6 +1953,7 @@ type SourceSnapshotRoots struct {
 	SnapshotID string `json:"snapshot_id"`
 	RootPath   string `json:"root_path"`
 	Ordinal    int64  `json:"ordinal"`
+	ManifestID string `json:"manifest_id"`
 }
 
 type SourceSnapshots struct {
