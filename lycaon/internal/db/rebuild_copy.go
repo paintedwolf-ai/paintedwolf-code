@@ -27,7 +27,7 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 		return retainedCopyResult{}, err
 	}
 	if boundedRetainedRoute(plan) {
-		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan, progress)
+		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan)
 		if used || err != nil {
 			return result, err
 		}
@@ -161,6 +161,9 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 	}
 	if actual != plan.Source {
 		return fmt.Errorf("retained copy changed the released schema")
+	}
+	if err := prepareAuditState(ctx, tx, true); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

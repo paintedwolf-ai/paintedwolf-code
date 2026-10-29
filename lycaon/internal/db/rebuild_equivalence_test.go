@@ -62,7 +62,7 @@ func TestSkippedReleasesUseRetainedRebuild(t *testing.T) {
 			reader, err := OpenReadOnly(t.Context(), path)
 			testutil.FailErr(t, "open migrated fixture", err)
 			defer reader.Close()
-			testutil.FailErr(t, "verify migrated fixture", validateStoreIntegrity(t.Context(), reader))
+			testutil.FailErr(t, "verify migrated fixture", auditSnapshot(t.Context(), reader, nil))
 		})
 	}
 }
