@@ -67,6 +67,8 @@ type harness struct {
 	program Program
 	service *projectsource.SourceMutationService
 	project *project.Project
+	// env is the program frame's exported environment.
+	env []string
 }
 
 // newHarness wires the shared owners to a real attached root, its source
@@ -164,7 +166,7 @@ func (h *harness) runAs(inv toolcontract.OperationInvocation, out io.Writer, std
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	request := commandprogram.OperationRequest{Invocation: inv, OperationID: words[0], Statement: statement, Argv: argv}
+	request := commandprogram.OperationRequest{Invocation: inv, OperationID: words[0], Statement: statement, Argv: argv, Environment: h.env}
 	prepared, err := h.owners.Prepare(h.program, request)
 	if err != nil {
 		return run{err: err, execution: inv.Identity.ExecutionID}

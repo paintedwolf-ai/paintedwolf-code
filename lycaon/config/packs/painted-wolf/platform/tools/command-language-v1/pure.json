@@ -3245,20 +3245,116 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "date [-u] [+FORMAT]",
+      "argv": "date [-u] [-d STRING|-r FILE|SECONDS|-j -f FORMAT STRING] [-v ADJUST ...] [-I[FMT]|-R|--rfc-3339=FMT|+FORMAT]",
       "forms": [
         {
           "spellings": [
-            "-u"
+            "-u",
+            "--utc",
+            "--universal"
           ],
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "date-option-u",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "date-option-d-date",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-26 +1 day"
+          ]
+        },
+        {
+          "spellings": [
+            "-r",
+            "--reference"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "date-option-r-reference",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-I",
+            "--iso-8601"
+          ],
+          "arity": -1,
+          "value_role": "timespec",
+          "fixture_id": "date-option-I-iso8601",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-R",
+            "--rfc-email"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "date-option-R-rfcemail",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--rfc-3339"
+          ],
+          "arity": 1,
+          "value_role": "timespec",
+          "fixture_id": "date-option-rfc3339",
+          "consumption": "fixed",
+          "sample_values": [
+            "seconds"
+          ]
+        },
+        {
+          "spellings": [
+            "-j"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "date-option-j",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "date-option-f",
+          "consumption": "fixed",
+          "sample_values": [
+            "%Y-%m-%d"
+          ]
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 1,
+          "value_role": "adjustment",
+          "fixture_id": "date-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "-1d"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [+FORMAT]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [-d STRING|-r FILE|SECONDS|-j -f FORMAT STRING] [-v ADJUST ...] [-I[FMT]|-R|--rfc-3339=FMT|+FORMAT]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -3306,7 +3402,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. date reads the clock once, in the program TZ (UTC when unset; -u forces UTC). -d takes the GNU date grammar (yesterday, 2 days ago, next monday, @SECONDS, ISO 8601); -r reads a file's modification time through read authority, or SECONDS when no such file exists; -j -f FORMAT STRING parses as strptime with unset fields from now; each -v adjusts a field ([+-]N y m w d H M S or a weekday or month name). +FORMAT takes every C-locale conversion with - _ 0 ^ # flags and widths; -I and --rfc-3339 take date, hours, minutes, seconds or ns. The clock is never set.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -3326,7 +3422,15 @@
       "fixture_ids": [
         "date-operands-valid",
         "date-rejection",
-        "date-option-u"
+        "date-option-u",
+        "date-option-d-date",
+        "date-option-r-reference",
+        "date-option-I-iso8601",
+        "date-option-R-rfcemail",
+        "date-option-rfc3339",
+        "date-option-j",
+        "date-option-f",
+        "date-option-v"
       ]
     },
     {

@@ -3,6 +3,7 @@ package mutation
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/datetext"
 )
 
 // each runs op for every operand, reporting ordinary failures and continuing;
@@ -256,9 +258,9 @@ func runTouch(inv *invocation) error {
 	if len(inv.operands()) == 0 {
 		return inv.usage(inv.name(), "at least one PATH")
 	}
-	now := time.Now()
-	accessAt, modifyAt, err := inv.touchTimes(now)
-	if err != nil {
+	now := time.Now().In(datetext.Zone(inv.request.Environment))
+	accessAt, modifyAt, ok, err := inv.touchTimes(now)
+	if err != nil || !ok {
 		return err
 	}
 	explicit := !accessAt.Equal(now) || !modifyAt.Equal(now)
@@ -299,42 +301,49 @@ func runTouch(inv *invocation) error {
 }
 
 // touchTimes resolves -t, -d or -r into the access and modification times;
-// without them both are the invocation's captured clock.
-func (inv *invocation) touchTimes(now time.Time) (time.Time, time.Time, error) {
+// without them both are the invocation's captured clock. -t and -d read in
+// the program's TZ. ok is false after a malformed time was reported on
+// stderr, as touch reports it.
+func (inv *invocation) touchTimes(now time.Time) (time.Time, time.Time, bool, error) {
 	stamp, hasStamp := inv.value("-t")
 	date, hasDate := inv.value("-d")
 	reference, hasReference := inv.value("-r")
+	invalid := func(value string) (time.Time, time.Time, bool, error) {
+		_, _ = fmt.Fprintf(inv.stderr, "touch: invalid date format '%s'\n", value)
+		inv.status = 1
+		return now, now, false, nil
+	}
 	switch {
 	case btoi(hasStamp)+btoi(hasDate)+btoi(hasReference) > 1:
-		return now, now, inv.usage(inv.name(), "at most one of -t, -d and -r")
+		return now, now, false, inv.usage(inv.name(), "at most one of -t, -d and -r")
 	case hasStamp:
 		t, ok := parseStamp(stamp, now)
 		if !ok {
-			return now, now, inv.usage(stamp, "a time as [[CC]YY]MMDDhhmm[.ss]")
+			return invalid(stamp)
 		}
-		return t, t, nil
+		return t, t, true, nil
 	case hasDate:
-		t, ok := parseDate(date, now)
-		if !ok {
-			return now, now, inv.usage(date, "a date such as 2026-10-20 12:00:00, 2026-10-20T12:00:00Z, @SECONDS, yesterday or 2 hours ago")
+		t, err := datetext.Parse(date, now, now.Location())
+		if err != nil {
+			return invalid(date)
 		}
-		return t, t, nil
+		return t, t, true, nil
 	case hasReference:
 		bound, err := inv.bind(reference, false)
 		if err != nil {
-			return now, now, err
+			return now, now, false, err
 		}
 		info, err := os.Stat(bound.Resolved.Abs)
 		if err != nil {
-			return now, now, inv.usage(reference, "an existing reference file")
+			return now, now, false, inv.usage(reference, "an existing reference file")
 		}
 		accessed, ok := fseffect.AccessTime(info)
 		if !ok {
 			accessed = info.ModTime()
 		}
-		return accessed, info.ModTime(), nil
+		return accessed, info.ModTime(), true, nil
 	}
-	return now, now, nil
+	return now, now, true, nil
 }
 
 func btoi(b bool) int {
