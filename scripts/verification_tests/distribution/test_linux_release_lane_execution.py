@@ -61,18 +61,23 @@ class LinuxReleaseSigningTests(unittest.TestCase):
             (self.directory / (path.name + ".sha256")).write_text(sha(path.read_bytes()) + "\n")
         (self.directory / "candidate-packages.json").write_text("{}\n")
 
-    def sign(self, payload=lambda path: ("painted-wolf-code 1.2.3-1 x86_64", "payload")):
-        def rpm(kind, subject, destination, catalog, private):
+    def sign(self, payload=lambda path: ("painted-wolf-code 1.2.3-1 x86_64", "payload"), rehearsal=False):
+        modes = []
+
+        def rpm(kind, subject, destination, catalog, private, mode):
+            modes.append(mode)
             destination.write_bytes(subject.read_bytes() + b" signed header")
             return {"kind": kind}
 
-        def detached(subject, destination, catalog, private, rehearsal):
-            self.assertFalse(rehearsal)
+        def detached(subject, destination, catalog, private, mode):
+            modes.append(mode)
             destination.write_bytes(b"signature of " + subject.read_bytes())
         with patch.object(release_signing, "sign", side_effect=rpm), \
                 patch.object(release_signing, "binary_signature", side_effect=detached):
-            return release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE,
-                                               private=self.directory / "key", payload=payload)
+            result = release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE,
+                                                 private=self.directory / "key", payload=payload, rehearsal=rehearsal)
+        self.assertEqual(modes, [rehearsal] * 3)
+        return result
 
     def test_final_signed_bytes_rebind_checksums_and_inventory(self):
         result = self.sign()
@@ -101,6 +106,13 @@ class LinuxReleaseSigningTests(unittest.TestCase):
         (self.directory / f"{self.stem}.pkg.tar.zst.sha256").unlink()
         with self.assertRaisesRegex(ValueError, "incomplete"):
             self.sign()
+
+    def test_explicit_rehearsal_signs_every_package_with_disposable_trust(self):
+        self.sign(rehearsal=True)
+        self.assertTrue((self.directory / f"{self.stem}.deb.sig").is_file())
+        for mode in (None, 1, "true"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "explicit trust mode"):
+                release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE, rehearsal=mode)
 
     def test_private_key_is_owner_only_and_consumed_once(self):
         with patch.dict(os.environ, {"LINUX_PACKAGE_SIGNING_KEY": "private material"}):
