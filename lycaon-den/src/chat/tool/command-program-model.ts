@@ -171,10 +171,13 @@ export function buildCommandProgramPresentation(
   }
 
   const remaining: ToolFact[] = [];
-  const notStarted = (page?.nodes ?? []).filter((node) => node.state === "not_started");
-  for (const node of notStarted) remaining.push({ label: "Not started", value: span(node) ?? node.id });
-  if (page?.nodes_omitted) remaining.push({ label: "Omitted statements", value: String(page.nodes_omitted) });
-  if (program.progress_state !== "unchanged") remaining.push({ label: "Progress", value: PROGRESS[program.progress_state] });
+  // Completion settles the program even when static nodes have no executions.
+  if (program.state !== "completed") {
+    const notStarted = (page?.nodes ?? []).filter((node) => node.state === "not_started");
+    for (const node of notStarted) remaining.push({ label: "Not started", value: span(node) ?? node.id });
+    if (page?.nodes_omitted) remaining.push({ label: "Omitted statements", value: String(page.nodes_omitted) });
+    if (program.progress_state !== "unchanged") remaining.push({ label: "Progress", value: PROGRESS[program.progress_state] });
+  }
 
   return {
     summary,
