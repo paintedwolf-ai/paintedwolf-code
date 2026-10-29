@@ -20,17 +20,20 @@ type rebuildObject struct {
 // must keep the source immutable until publication; the source is attached read-only.
 // The copy keeps the released shape so the registered migration remains the sole
 // schema transformer, but never visits chunks that transformation would discard.
-func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (retainedCopyResult, error) {
+func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan, progress func(migrations.Phase)) (retainedCopyResult, error) {
 	if _, err := os.Lstat(destination); err == nil {
 		return retainedCopyResult{}, os.ErrExist
 	} else if !os.IsNotExist(err) {
 		return retainedCopyResult{}, err
 	}
 	if boundedRetainedRoute(plan) {
-		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan)
+		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan, progress)
 		if used || err != nil {
 			return result, err
 		}
+	}
+	if progress != nil {
+		progress(migrations.Migrating)
 	}
 	return retainedCopyResult{}, copyRetainedRows(ctx, source, destination, plan)
 }
@@ -59,7 +62,15 @@ func copyRetainedRows(ctx context.Context, source, destination string, plan migr
 	defer func() { err = errors.Join(err, copyDB.Close()) }()
 	reserve := uint64(0)
 	if boundedRetainedRoute(plan) {
-		reserve = plan.ScratchBytes()
+		sourceReader, openErr := openReader(ctx, source)
+		if openErr != nil {
+			return openErr
+		}
+		reserve, err = plan.RetainedCopyScratch(ctx, sourceReader)
+		err = errors.Join(err, sourceReader.Close())
+		if err != nil {
+			return err
+		}
 		if err := checkUpgradeTempStorage(ctx, copyDB, reserve); err != nil {
 			return err
 		}

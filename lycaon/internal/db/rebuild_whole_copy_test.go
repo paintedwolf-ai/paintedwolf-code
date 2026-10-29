@@ -40,7 +40,7 @@ func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
 	before, err := os.ReadFile(source)
 	testutil.FailErr(t, "read complete original", err)
 	destination := filepath.Join(t.TempDir(), "replacement.db")
-	prepared, err := copyRetainedStore(t.Context(), source, destination, plan)
+	prepared, err := copyRetainedStore(t.Context(), source, destination, plan, nil)
 	testutil.FailErr(t, "prepare complete whole-file image", err)
 	if !prepared.wholeFile || prepared.validatedIdentity == "" {
 		t.Fatal("complete selection reconstructed rows or lost validation custody")
@@ -90,7 +90,7 @@ func TestRetainedIncompleteSelectionKeepsRowReconstruction(t *testing.T) {
 	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)
 	testutil.FailErr(t, "measure incomplete source", err)
 	testutil.FailErr(t, "close incomplete source", reader.Close())
-	prepared, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan)
+	prepared, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan, nil)
 	testutil.FailErr(t, "retain selected rows", err)
 	if prepared.wholeFile || prepared.sharedOriginal || prepared.validatedIdentity != "" {
 		t.Fatal("incomplete retention bypassed row reconstruction")
@@ -108,7 +108,7 @@ func TestRetainedCompleteMalformedCountsStillRefuse(t *testing.T) {
 	plan, err = plan.PrepareRetainedStorage(t.Context(), writer)
 	testutil.FailErr(t, "measure primary rows", err)
 	testutil.FailErr(t, "close malformed fixture", writer.Close())
-	_, err = copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan)
+	_, err = copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "replacement.db"), plan, nil)
 	if !errors.Is(err, migrations.ErrIntegrity) {
 		t.Fatalf("bad source counts were admitted: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestRetainedCompleteDamagedSecondaryIndexRebuilds(t *testing.T) {
 	testutil.FailErr(t, "measure damaged source", err)
 	testutil.FailErr(t, "close damaged source", reader.Close())
 	destination := filepath.Join(t.TempDir(), "replacement.db")
-	prepared, err := copyRetainedStore(t.Context(), source, destination, plan)
+	prepared, err := copyRetainedStore(t.Context(), source, destination, plan, nil)
 	testutil.FailErr(t, "rebuild damaged secondary index", err)
 	if prepared.wholeFile || prepared.sharedOriginal {
 		t.Fatal("damaged index retained whole-file validation")

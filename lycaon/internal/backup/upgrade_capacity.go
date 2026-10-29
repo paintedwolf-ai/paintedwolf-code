@@ -262,7 +262,11 @@ func preflightRetainedUpgrade(ctx context.Context, opts CreateOpts, plan migrati
 		if err != nil {
 			return err
 		}
-		if storage.CloneBytes != 0 {
+		snapshotClone, err := fileclone.SupportedFrom(opts.DBPath, opts.ConfigDir)
+		if err != nil {
+			return err
+		}
+		if snapshotClone {
 			payload -= storage.Pages * storage.PageBytes
 		}
 		needed, err = sumSpace(needed, payload)
