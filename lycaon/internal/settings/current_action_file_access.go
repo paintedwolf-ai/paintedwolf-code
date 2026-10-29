@@ -21,3 +21,15 @@ func (g *RuleApprovalGate) currentActionFileAccess(action hitl.ProposedAction) [
 	}
 	return access
 }
+
+// Current-action authority covers the same exact directional subject during
+// prepared effect review, without becoming a reusable grant or covering other gates.
+func currentActionCoversTarget(action hitl.ProposedAction, target *gate.FileTarget) bool {
+	path := grantedpath.Normalize(target.Path)
+	for _, access := range action.Invocation.ApprovedFileAccess {
+		if access.Path == path && (!access.Tree) && (target.Mode != gate.ModeWrite || access.Write) {
+			return true
+		}
+	}
+	return false
+}

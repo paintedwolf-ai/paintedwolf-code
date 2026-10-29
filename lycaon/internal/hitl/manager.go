@@ -56,7 +56,9 @@ type ActionInvocation struct {
 	// NativePathTargets are the bound command owner's file operands. A present
 	// empty slice means the native form has no file operand.
 	NativePathTargets []NativePathTarget
-	ActionID          string
+	// ApprovedFileAccess carries exact authority already approved for this invocation.
+	ApprovedFileAccess []GrantedPathDelta `json:"-"`
+	ActionID           string
 }
 
 type NativePathTarget struct {

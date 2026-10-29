@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -70,7 +71,7 @@ func assertStagedSedReviewedInputs(t *testing.T, s *commandProgramSession, scrip
 	testutil.FailErr(t, "locate fixture host storage", s.h.DB.QueryRowContext(t.Context(), `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&databasePath))
 	var blob blobstore.Blob
 	testutil.FailErr(t, "decode retained input blob", json.Unmarshal([]byte(blobJSON), &blob))
-	reader, err := (blobstore.Store{Root: filepath.Dir(databasePath)}).Open(blob)
+	reader, err := (blobstore.Store{Root: filepath.Dir(databasePath), Dir: tooloutput.ToolOutputSpillDir}).Open(blob)
 	testutil.FailErr(t, "open retained final inputs", err)
 	body, err := io.ReadAll(reader)
 	testutil.FailErr(t, "read retained final inputs", err)
