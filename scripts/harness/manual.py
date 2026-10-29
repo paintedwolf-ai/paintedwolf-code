@@ -11,14 +11,25 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import webbrowser
+
+
+def loopback_origin(url):
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1") or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+        raise ValueError("URL must be an HTTP loopback origin for an isolated harness")
+    return url.rstrip("/")
+
+
+def chat_url(origin, session):
+    query = urllib.parse.urlencode({"window_subject": "session", "project_id": session["project_id"],
+                                    "session_id": session["id"], "view_id": "manual-driver"})
+    return loopback_origin(origin) + "/?" + query
 
 
 class Client:
     def __init__(self, url, token):
-        parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1") or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
-            raise ValueError("URL must be an HTTP loopback origin for an isolated harness")
-        self.url = url.rstrip("/")
+        self.url = loopback_origin(url)
         self.token = token
 
     def request(self, path, payload=None):
@@ -112,7 +123,8 @@ class Driver:
 
 HELP = """Enter a command program to run it as the assistant's command tool call.
 :begin              multiline program; finish with :end (:cancel discards)
-:call NAME JSON     another offered tool, such as progress_update or request_tools
+:call NAME JSON     another offered tool, such as update_progress or request_tools
+:call update_progress {"content":"- [ ] Test command writes"}
 :prompt             full last model request, including prompts and schemas
 :tools              offered schemas from that request
 :help               this help
@@ -167,17 +179,29 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=os.environ.get("LYCAON_E2E_API_URL"), required=not os.environ.get("LYCAON_E2E_API_URL"))
     parser.add_argument("--token-file", type=Path, help="file containing the harness API token (otherwise LYCAON_E2E_TOKEN)")
+    parser.add_argument("--den-url", help="loopback Den origin for the exact approval/chat link")
+    parser.add_argument("--open", action="store_true", help="open that chat in the default browser (requires --den-url)")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--session", help="idle session UUID to reuse")
     selection.add_argument("--project", help="project UUID for a new build session")
     args = parser.parse_args(argv)
+    if args.open and not args.den_url:
+        parser.error("--open requires --den-url")
+    if args.den_url:
+        loopback_origin(args.den_url)
     token = args.token_file.read_text().strip() if args.token_file else os.environ.get("LYCAON_E2E_TOKEN", "e2e-playwright-token")
     client = Client(args.url, token)
     # Prove the manual-only endpoint exists before creating any project.
     client.pending(args.session or "manual-driver-preflight", wait=0)
     session = open_session(client, args.session, args.project)
     print("Project:", session["project_id"], "\nSession:", session["id"], "\nWorkspace:", session.get("workspace_path", "(see project roots in Den)"))
-    print("Open this project/chat in the harness Den window to answer approvals.")
+    if args.den_url:
+        link = chat_url(args.den_url, session)
+        print("Approvals and transcript:", link)
+        if args.open:
+            webbrowser.open(link, new=2)
+    else:
+        print("Open this project/chat in the harness Den window to answer approvals.")
     repl(Driver(client, session["id"]))
 
 
