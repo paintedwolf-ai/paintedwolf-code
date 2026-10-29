@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "tar (-x|-t|-c) [-v] [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
+      "argv": "tar (-x|-t|-c) [-v] [-z|-j|-J|--zstd|-a] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--exclude PATTERN ...] [-X FILE] [--exclude-vcs] [-T FILE] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -110,6 +110,86 @@
           "fixture_id": "tar-option-v-verbose",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-J",
+            "--xz"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-J-xz",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--zstd"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-zstd",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--auto-compress"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-a-autocompress",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "tar-option-exclude",
+          "consumption": "fixed",
+          "sample_values": [
+            "node_modules"
+          ]
+        },
+        {
+          "spellings": [
+            "-X",
+            "--exclude-from"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "tar-option-X-excludefrom",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude-vcs"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-excludevcs",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-T",
+            "--files-from"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "tar-option-T-filesfrom",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
@@ -170,7 +250,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. -v prints member names for -c and -x and a GNU long listing for -t; member operands select named entries and the entries beneath named directories.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. -v prints member names for -c and -x and a GNU long listing for -t; member operands select named entries and the entries beneath named directories. tar -J/--xz and --zstd read and write .tar.xz and .tar.zst (xz dictionaries above 64 MiB and zstd windows above 8 MiB refuse); extraction and listing sniff all four codecs. -a picks the codec from the archive suffix. --exclude PATTERN, -X FILE lines and --exclude-vcs are globs whose * matches /, tested against every run of whole name components; an excluded directory is not descended. -T FILE adds one name per line. Exclusion and name files are read through read authority; the archive never contains itself.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -198,7 +278,14 @@
         "tar-option-f-file",
         "tar-option-C-directory",
         "tar-option-stripcomponents",
-        "tar-option-v-verbose"
+        "tar-option-v-verbose",
+        "tar-option-J-xz",
+        "tar-option-zstd",
+        "tar-option-a-autocompress",
+        "tar-option-exclude",
+        "tar-option-X-excludefrom",
+        "tar-option-excludevcs",
+        "tar-option-T-filesfrom"
       ]
     },
     {
@@ -206,7 +293,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
+      "argv": "unzip [-l|-p] [-d DIR] [-o|-n] [-q] [-j] [--] ARCHIVE [MEMBER ...] [-x MEMBER ...]",
       "forms": [
         {
           "spellings": [
@@ -259,9 +346,41 @@
           "fixture_id": "unzip-option-q",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": -2,
+          "value_role": "glob",
+          "fixture_id": "unzip-option-x",
+          "consumption": "through-next-option",
+          "sample_values": [
+            "docs/*"
+          ]
+        },
+        {
+          "spellings": [
+            "-j"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-j",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o|-n] [-q] [-j] [--] ARCHIVE [MEMBER ...] [-x MEMBER ...]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -319,7 +438,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. unzip MEMBER operands and -x MEMBER ... are wildcards over the stored name (* matches /); -x leaves members out. -j extracts files under their base names. -n never replaces an existing file and reports nothing; without -o or -n a kept file is reported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -343,7 +462,10 @@
         "unzip-option-p",
         "unzip-option-d",
         "unzip-option-o",
-        "unzip-option-q"
+        "unzip-option-q",
+        "unzip-option-x",
+        "unzip-option-j",
+        "unzip-option-n"
       ]
     },
     {
@@ -351,7 +473,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "zip [-r] [-q] [--] ARCHIVE PATH ...",
+      "argv": "zip [-r] [-q] [-j] [--] ARCHIVE PATH ... [-x PATTERN ...]",
       "forms": [
         {
           "spellings": [
@@ -372,9 +494,33 @@
           "fixture_id": "zip-option-q",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--exclude"
+          ],
+          "arity": -2,
+          "value_role": "glob",
+          "fixture_id": "zip-option-x-exclude",
+          "consumption": "through-next-option",
+          "sample_values": [
+            "*.o"
+          ]
+        },
+        {
+          "spellings": [
+            "-j",
+            "--junk-paths"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "zip-option-j-junkpaths",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [--] ARCHIVE PATH ...",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [-j] [--] ARCHIVE PATH ... [-x PATTERN ...]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -432,7 +578,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. zip -x PATTERN ... takes words up to the next option and leaves out every entry whose stored name a pattern matches (* matches /). -j stores files under their base names without directory entries; two files with one base name refuse.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -453,7 +599,9 @@
         "zip-operands-valid",
         "zip-rejection",
         "zip-option-r",
-        "zip-option-q"
+        "zip-option-q",
+        "zip-option-x-exclude",
+        "zip-option-j-junkpaths"
       ]
     },
     {

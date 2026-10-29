@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -22,6 +23,12 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
+
+// fixtureVolume is the file system every harness path reports to df, so
+// statistics are fixed; the platform reader has its own test.
+func fixtureVolume(*os.File, string) (fseffect.Volume, error) {
+	return fseffect.Volume{Source: "/dev/fixture", Target: "/fixture", BlockSize: 4096, Blocks: 1000, Free: 400, Available: 300, Files: 5000, FreeFiles: 4000}, nil
+}
 
 // fixtureTime is the deterministic mtime every seeded entry carries.
 var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -117,6 +124,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, DomainOwners{})
 	testutil.FailErr(t, "build owners", err)
+	owners.volumes = fixtureVolume
 	return &harness{t: t, boundary: boundary, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, cwd: "."}
 }
 
