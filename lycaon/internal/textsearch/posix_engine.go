@@ -34,6 +34,15 @@ func NewPOSIXEngine() (POSIXEngine, error) {
 }
 
 func (e POSIXEngine) Compile(ctx context.Context, pattern string, extended bool) (PosixRegex, error) {
+	return e.compile(ctx, pattern, extended, false)
+}
+
+// CompileFolded compiles with Unicode simple case folding (sed's I flag).
+func (e POSIXEngine) CompileFolded(ctx context.Context, pattern string, extended bool) (PosixRegex, error) {
+	return e.compile(ctx, pattern, extended, true)
+}
+
+func (e POSIXEngine) compile(ctx context.Context, pattern string, extended, fold bool) (PosixRegex, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -45,6 +54,9 @@ func (e POSIXEngine) Compile(ctx context.Context, pattern string, extended bool)
 		return nil, err
 	}
 	flags := syntax.PerlX | syntax.OneLine | syntax.DotNL | syntax.ClassNL | regexp2.ScalarCollation
+	if fold {
+		flags |= syntax.FoldCase
+	}
 	tree, err := regexp2.ParseSyntaxBounded(ctx, t.text, flags, e.Limits.syntaxBudget())
 	if err != nil {
 		return nil, parseError(pattern, err)

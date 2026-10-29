@@ -17,6 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.6
 	github.com/aws/smithy-go v1.28.6
 	github.com/aymanbagabas/go-udiff v0.4.1
+	github.com/benhoyt/goawk v1.32.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -323,6 +324,9 @@ replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runt
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
 
 replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
+
+// Bounded awk execution; provenance and patch in third_party/README.md.
+replace github.com/benhoyt/goawk => ../third_party/goawk
 
 replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
