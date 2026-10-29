@@ -9,10 +9,11 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	_ "modernc.org/sqlite"
 )
 
-func TestEffectPermitMigrationRetainsActualValidatedApprovalPlan(t *testing.T) {
+func TestEffectPermitMigrationPreservesDeclaredAuthorityVocabulary(t *testing.T) {
 	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture"}}, Scope: hitl.ActionScope{SessionID: "fixture-session", ProjectID: "fixture-project", ProjectDir: "/fixture"}}
 	once := hitl.CurrentActionOption()
 	socket := once
@@ -42,25 +43,35 @@ func TestEffectPermitMigrationRetainsActualValidatedApprovalPlan(t *testing.T) {
 		}
 		return hitl.GrantOption(chat)
 	}
+	quietDecision := &gate.Decision{Primary: api.GateAuthorityMisuse, ReasonKey: "authority_misuse:fixture/command", Cited: []gate.Fact{{Gate: api.GateAuthorityMisuse, Key: "detection.rule", Value: "fixture", Source: "detection_pack"}}}
+	quietOptions := append([]hitl.ApprovalOption{once}, hitl.QuietOptions(action, quietDecision, nil, nil)...)
+	covered := map[hitl.AuthorityDeltaKind]bool{}
 	for _, fixture := range []struct {
-		name    string
-		subject hitl.ApprovalSubjectKind
-		options []hitl.ApprovalOption
+		name     string
+		subject  hitl.ApprovalSubjectKind
+		options  []hitl.ApprovalOption
+		decision *gate.Decision
 	}{
-		{"current action", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once}},
-		{"generic grant", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once, hitl.GrantOption(offer)}},
-		{"generic day grant", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once, hitl.GrantOption(hitl.DayRung(offer))}},
-		{"socket once", hitl.ApprovalSubjectSocketSet, []hitl.ApprovalOption{socket}},
-		{"socket chat", hitl.ApprovalSubjectSocketSet, []hitl.ApprovalOption{socket, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthoritySocketChat, ActionDigest: hitl.GrantKey(action), Sockets: sockets}, false)}},
-		{"direct IP chat", hitl.ApprovalSubjectDirectIP, []hitl.ApprovalOption{direct, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityDirectIPChat, DirectIPLease: &lease}, false)}},
-		{"direct IP day chat", hitl.ApprovalSubjectDirectIP, []hitl.ApprovalOption{direct, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityDirectIPChat, DirectIPLease: &lease}, true)}},
-		{"write root day chat", hitl.ApprovalSubjectWriteRootSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityWriteRootChat, WriteRoots: []string{"/fixture"}}, true)}},
-		{"read path chat", hitl.ApprovalSubjectReadPathSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityReadPathChat, ReadPaths: []string{"/fixture/data"}}, false)}},
-		{"granted path", hitl.ApprovalSubjectWriteRootSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityGrantedPath, GrantedPath: &hitl.GrantedPathDelta{Path: "/fixture/data", Write: true, Tree: true}}, false)}},
-		{"trust destination", hitl.ApprovalSubjectDestinationSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityTrustDestination, TrustDestination: &hitl.TrustDestinationDelta{ProviderID: "fixture-provider", DestinationID: "fixture-destination", Label: "Fixture"}}, false)}},
+		{"current action", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once}, nil},
+		{"generic grant", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once, hitl.GrantOption(offer)}, nil},
+		{"generic day grant", hitl.ApprovalSubjectAction, []hitl.ApprovalOption{once, hitl.GrantOption(hitl.DayRung(offer))}, nil},
+		{"socket once", hitl.ApprovalSubjectSocketSet, []hitl.ApprovalOption{socket}, nil},
+		{"socket chat", hitl.ApprovalSubjectSocketSet, []hitl.ApprovalOption{socket, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthoritySocketChat, ActionDigest: hitl.GrantKey(action), Sockets: sockets}, false)}, nil},
+		{"direct IP chat", hitl.ApprovalSubjectDirectIP, []hitl.ApprovalOption{direct, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityDirectIPChat, DirectIPLease: &lease}, false)}, nil},
+		{"direct IP day chat", hitl.ApprovalSubjectDirectIP, []hitl.ApprovalOption{direct, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityDirectIPChat, DirectIPLease: &lease}, true)}, nil},
+		{"write root day chat", hitl.ApprovalSubjectWriteRootSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityWriteRootChat, WriteRoots: []string{"/fixture"}}, true)}, nil},
+		{"read path chat", hitl.ApprovalSubjectReadPathSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityReadPathChat, ReadPaths: []string{"/fixture/data"}}, false)}, nil},
+		{"granted path", hitl.ApprovalSubjectWriteRootSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityGrantedPath, GrantedPath: &hitl.GrantedPathDelta{Path: "/fixture/data", Write: true, Tree: true}}, false)}, nil},
+		{"trust destination", hitl.ApprovalSubjectDestinationSet, []hitl.ApprovalOption{chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityTrustDestination, TrustDestination: &hitl.TrustDestinationDelta{ProviderID: "fixture-provider", DestinationID: "fixture-destination", Label: "Fixture"}}, false)}, nil},
+		{"local listener", hitl.ApprovalSubjectLocalListen, []hitl.ApprovalOption{once, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityLocalListenChat, ListenPorts: []uint16{8080}}, false)}, nil},
+		{"loopback connection", hitl.ApprovalSubjectLoopbackConnect, []hitl.ApprovalOption{once, chatOption(hitl.ApprovalAuthorityDelta{Kind: hitl.AuthorityLoopbackConnectChat, ConnectPorts: []uint16{8080}}, false)}, nil},
+		{"quiet", hitl.ApprovalSubjectAction, quietOptions, quietDecision},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+			decision := fixture.decision
+			if decision == nil {
+				_, decision = gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+			}
 			primary, cited, reasons := hitl.PresentDecision(decision)
 			stage := hitl.ApprovalStagePreSpawn
 			if fixture.subject == hitl.ApprovalSubjectDestinationSet {
@@ -69,9 +80,16 @@ func TestEffectPermitMigrationRetainsActualValidatedApprovalPlan(t *testing.T) {
 			plan, err := hitl.NewApprovalPlan(action, stage, hitl.ApprovalSubject{Kind: fixture.subject, Title: "Fixture action", Targets: []hitl.ApprovalTarget{{Kind: "fixture", Label: "fixture"}}}, hitl.ApprovalPresentation{Action: "Use fixture", Impact: "Use fixture authority", Gate: primary, Cited: cited}, reasons, fixture.options, hitl.FaceContext{})
 			testutil.FailErr(t, "prepare actual owner plan", err)
 			testutil.FailErr(t, "validate original owner plan", plan.Validate())
+			for _, option := range plan.Options {
+				for _, delta := range option.Authority {
+					covered[delta.Kind] = true
+				}
+			}
 			assertRetainedApprovalPlan(t, plan)
+			assertUnrecognizedAuthorityRefused(t, plan)
 		})
 	}
+	requireAuthorityVocabularyCoverage(t, covered)
 }
 
 func assertRetainedApprovalPlan(t *testing.T, plan *hitl.ApprovalPlan) {
