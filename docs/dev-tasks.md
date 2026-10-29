@@ -265,6 +265,8 @@ ends before the sidecar and Vite start; the interactive session holds no queue
 slot. A queue pause delays preparation but does not stop an already running
 session. Run the interactive target separately from other targets.
 `den:harness:test` and `den:harness:canary` retain queued execution throughout.
+After preparation, `HARNESS_KEEP_STATE=1 LYCAON_E2E_STATE_DIR=DIR ./task den:harness -- --reuse-built` restarts the prepared runtime without compiling. Keep that state directory after shutdown and prepare again when its source changes. A missing executable is refused before startup.
+
 Preparation writes into the harness's private runtime directory and uses
 exclusive admission for shared engine staging; it does not produce a test receipt.
 
@@ -325,6 +327,16 @@ LYCAON_LLM_MANUAL=1 ./task den:harness                       # play both sides â
 Real mode disables the mock. At startup the harness copies the development credential vault and identity, `providers.local.yaml`, and `model-policy.yaml` into its throwaway config; the sidecar resolves provider keys and the default model from those copies ([registry.go `resolveAPIKey`](../lycaon/internal/llm/registry.go)). Harness writes stay in that config. `LYCAON_HARNESS_PROVIDER` selects the provider for a model override; otherwise the copied global coordinator supplies it.
 
 The authenticated non-LLM `/harness/*` fixture controls are available in every harness mode. In **manual** mode the driver also gains working `__harness.llm` controls: `auto(text|false)`, `manual()`, `pending(waitMs?)`, `respond({text, toolCalls})`. Auto-reply is on by default so internal calls (workers, summarizers) don't block; call `__harness.llm.manual()` to intercept the next completion, read it with `pending`, and supply it with `respond`. Backed by `ManualProvider` ([manual_provider.go](../lycaon/internal/llm/manual_provider.go)); model discovery answers from the E2E model fixture, so manual mode needs no local model server. The pending queue is shared by every chat, so a spec reads it with `GET /harness/llm/pending?session_id=<id>` and never answers a request an earlier spec left waiting. Turning auto-reply back on answers every request still waiting with the auto text. The `/harness/llm/*` endpoints require `LYCAON_LLM_MANUAL=1`. All harness routes additionally require a development build, `LYCAON_DEV=1`, and `LYCAON_HARNESS=1` â€” they are never present in `den:dev` or production.
+
+For direct command testing without a model, start `LYCAON_LLM_MANUAL=1 ./task den:harness`, then run this in another terminal using the sidecar URL printed by the harness:
+
+```bash
+python3 scripts/harness/manual.py --url 'http://127.0.0.1:<sidecar-port>'
+```
+
+The terminal creates a disposable draft project and build session. Open that project and chat in the harness Den window to answer approvals and questions. Each entered program becomes an assistant `command` call through the ordinary model boundary, with the real offered tools, prompt, executor, progress gates, approvals and feedback. Nothing executes in the terminal's shell. The transcript remains available in Den. The driver restores auto-reply and waits for the turn to settle between inputs, so thinking time does not consume a pending completion's timeout.
+
+Use `:begin` and `:end` for multiline programs, `:call NAME JSON` for another offered tool (including `update_progress` and `request_tools`), `:prompt` for the full last model request, `:tools` for its schemas, and `:quit` to leave. For a checklist, use `:call update_progress {"content":"- [ ] Test command writes"}`. No progress, permission, or approval is seeded for you. `--project UUID` creates a session on an existing harness project; `--session UUID` reuses an idle session. To use a nondefault harness token, set `LYCAON_E2E_TOKEN` or pass `--token-file FILE`. The URL must name the isolated loopback harness, whose manual endpoints are absent from ordinary app engines.
 
 Scripts: `scripts/den-harness.sh`, `scripts/den-harness-test.sh`, `scripts/harness/supervise.py`, `scripts/harness/lib.sh` (reuses `e2e-sidecar-bg.sh`, `e2e-vite.sh`, `e2e-sidecar-stop.sh`, `scripts/e2e/env.sh`).
 
