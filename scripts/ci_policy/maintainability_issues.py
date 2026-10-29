@@ -17,8 +17,8 @@ from .budget_snapshot import SHA
 
 def eligible(run, repo):
     return (run.get('repository', {}).get('full_name') == repo
-            and run.get('path') == '.github/workflows/qualification.yml'
-            and run.get('event') == 'push' and run.get('head_branch') == 'main'
+            and run.get('path') == '.github/workflows/nightly.yml'
+            and run.get('event') in {'schedule', 'workflow_dispatch'} and run.get('head_branch') == 'main'
             and run.get('status') == 'completed' and isinstance(run.get('head_sha'), str)
             and run.get('conclusion') in {'success', 'failure'}
             and SHA.fullmatch(run['head_sha']) is not None)
@@ -31,7 +31,7 @@ def current_main(sha):
 def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     repo = os.environ['GITHUB_REPOSITORY']
     if not eligible(run, repo) or not current_main(run['head_sha']):
-        return {'skipped': 'not a current post-merge qualification push'}
+        return {'skipped': 'not a current nightly observation'}
     pulls = merged_pulls(run, repo)
     if not pulls:
         return {'skipped': 'no merged PR associated with this main commit'}

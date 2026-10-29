@@ -64,7 +64,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E after merge; releases require that exact commit's qualification. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly owns race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 ### Where credentials live in development
 
@@ -1712,8 +1712,8 @@ Select a release source explicitly when main is moving:
 gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
 ```
 
-The request remains queued until the shared executor can run it. Main pushes
-cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+Qualification runs only on dispatch. The request remains queued until the shared
+executor can run it. Its completed `qualification-source-<attempt>` artifact binds
 the selected source to the controller and workflow attempt; publication checks
 that evidence before accepting the source. A failed or canceled request supplies
 no qualification. Source selection does not publish or tag a release.
@@ -1723,11 +1723,10 @@ The selected source and controller must have identical `.github/`, `scripts/`,
 any candidate checks start. Select a newer main commit when those interfaces
 change; qualification never combines an old script API with a new workflow.
 
-Rollout requires a fresh qualified candidate after this policy lands. Existing
-successful runs without a source receipt do not qualify release sources. Finish
-any already selected release before adopting this gate, or select and qualify a
-main commit containing it before requesting a release. Receipts expire after
-90 days; requalify expired candidates within the tooling compatibility rule.
+Receipts expire after 90 days; requalify expired candidates within the tooling
+compatibility rule. The daily nightly covers main's complete verification signal;
+release admission requires the explicit exact-source Qualification receipt.
+
 Historical dispatch lookup searches that retention window and filters the source
 SHA in the run title before downloading and verifying the receipt.
 

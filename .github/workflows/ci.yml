@@ -2,8 +2,8 @@ name: CI
 
 # A ready pull request runs the fast tier, whose check lets auto-merge add it to
 # the merge queue; the queue runs the affected-scope integration gate on the
-# exact commit that lands. Exact-commit platform qualification follows main and
-# gates releases.
+# exact commit that lands. The nightly verifies main daily; manual exact-source
+# Qualification gates releases.
 on:
   pull_request:
     branches: [main]
@@ -29,6 +29,9 @@ concurrency:
 jobs:
   fast:
     if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
