@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "confinement-platform-root-ownership",
   "disposition": "retain",
-  "reason": "Retain the measured 63-file confinement module. Four native convention files replace shared OS branches: Linux owns its exact data stores, availability facts and first-use preparation; Darwin, Windows and other platforms own their preserved conventions and absence of preparation. The shared root calculation still composes one authority from native conventions, package-home stores, toolchain state and explicit grants. These are compile-selected policy owners beside their kernel adapters, not forwarders or a second permission resolver. Full root-set contracts pin each platform; focused Linux preparation and applied launcher contracts verify the moved owner. Keep this member set under the unchanged 75-file hard limit.",
+  "reason": "Retain the measured 63-file confinement module. Four native convention files replace shared OS branches: Linux owns its exact data stores, availability facts and first-use preparation; Darwin, Windows and other platforms own their preserved conventions and absence of preparation. The shared root calculation still composes one authority from native conventions, package-home stores, toolchain state and explicit grants. These are compile-selected policy owners beside their kernel adapters, not forwarders or a second permission resolver. Full root-set contracts pin each platform; focused Linux preparation and applied launcher contracts verify the moved owner. Keep this member set under the unchanged 75-file hard limit. The newly landed metadata and standard-stream suites extend the same confinement authority. Preserve the prior ceiling and shape while hosted verification measures this combined membership and exercises both native-root and kernel-boundary contracts; renewal remains open.",
   "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
   "ceiling": 63,
   "boundaries": {
@@ -19,7 +19,10 @@
     "lycaon/internal/confine/package_cache_roots_linux.go": "87b137cccfe27d7ad77427b0d02c6251613a31346bdea346d699c3b41dacd894",
     "lycaon/internal/confine/package_cache_roots_darwin.go": "2eb7a92362b9e29a423d39a0322983d32d19760036b3e0d7f85f0d5320954ea8",
     "lycaon/internal/confine/package_cache_roots_windows.go": "c1d5666c9f2d4ceea7108178781b95cb287ce4ce6502af41de307f2abab8fc78",
-    "lycaon/internal/confine/package_cache_roots_other.go": "d4b110496d6af4ac70480ab0c905dfad3c4c3814fec95a8b236524ab60647c68"
+    "lycaon/internal/confine/package_cache_roots_other.go": "d4b110496d6af4ac70480ab0c905dfad3c4c3814fec95a8b236524ab60647c68",
+    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
   },
   "reviewed_shape": "e0d5c96c6ea1f8ab9ded6ed9eebcd1da3de795c0b1069a1b0808bf279c2647a4"
 }

@@ -97,7 +97,7 @@ func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store
 		ModelFeed: modelFeed,
 		Tracker:   tracker,
 	}
-	resources.Track("pricing", 44, func(context.Context) error { host.Close(); return nil })
+	resources.Track("pricing", 44, host.Close)
 	if options.Pricer == nil {
 		if err := host.SyncFromStore(ctx); err != nil {
 			return fmt.Errorf("pricing sync: %w", err)
