@@ -1,6 +1,6 @@
 ---
 name: hunt-a-regression-with-bisect
-description: Find the commit that introduced a reproducible regression using git bisect.
+description: Find the commit that introduced a reproducible regression with a scripted git bisect between a known-good and a known-bad commit.
 ---
 
 # Hunt a regression with bisect
