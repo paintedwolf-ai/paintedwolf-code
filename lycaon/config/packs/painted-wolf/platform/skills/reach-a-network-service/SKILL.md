@@ -11,7 +11,7 @@ Egress is mediated, so the question is never "is the network up". It is: **which
 
 | You need | Carried by | What you do |
 |----------|-----------|-------------|
-| **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | `http_request`, or native `curl` inside a `command` program | Declare method, URL, headers, body (`body_json`/`body_form`), `auth`, `cookie_jar`, `response_path`, or `unix_socket`. Loopback needs `capability_request.loopback_connect` |
+| **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | `http_request`, or the native command form inside a `command` program | Declare method, URL, headers, body (`body_json`/`body_form`), `auth`, `cookie_jar`, `response_path`, or `unix_socket`. Loopback needs `capability_request.loopback_connect` |
 | **Reading a web page or documentation** | `fetch_url` | Pass the URL; `mode=text` returns readable markdown, paged with `offset` and `limit` |
 | HTTP(S) from a process that must speak it itself — a package manager, a build, a test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |
 | Any other TCP — Postgres, Redis, Kafka, raw TCP | Mediated SOCKS5 `CONNECT` (`ALL_PROXY`) | Pass `socks_proxy: true` on that `command` / `verify` / `terminal_open` |
