@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import change_report
 import coverage_changes
+from toolchain import python_tools
 import coverage_policy
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -147,7 +148,7 @@ class PythonChangedCoverageTests(unittest.TestCase):
         self.write_test("self.assertEqual(sample.added(2), 6)")
         empty = Path(self.temp.name) / "no-tools"
         empty.mkdir()
-        with patch.object(coverage_changes.python_coverage, "provision", return_value=empty):
+        with patch.object(python_tools, "provision", return_value=empty):
             findings, failed = self.run_gate()
         self.assertTrue(failed)
         self.assertEqual([f.text for f in findings],
@@ -174,17 +175,32 @@ class ProvisionTests(unittest.TestCase):
                 Path(command[command.index("--target") + 1]).mkdir()
 
             with patch.dict(os.environ, {"PW_BIN_DIR": str(Path(directory) / "bin")}), \
-                    patch.object(coverage_changes.python_coverage.subprocess, "run", side_effect=install):
-                first = coverage_changes.python_coverage.provision(requirements)
-                second = coverage_changes.python_coverage.provision(requirements)
+                    patch.object(python_tools.subprocess, "run", side_effect=install):
+                first = python_tools.provision(requirements)
+                second = python_tools.provision(requirements)
             self.assertEqual(first, second)
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][-2:], ["-r", str(requirements)])
             self.assertIn("--no-deps", calls[0])
             self.assertEqual((first / "ready").read_text(), "example==1.0\n")
 
+    def test_prepared_tools_require_a_completed_matching_pin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            requirements = Path(temporary) / "requirements.txt"
+            requirements.write_text("example==1.0\n")
+            with patch.dict(os.environ, {"PW_BIN_DIR": str(Path(temporary) / "bin")}):
+                with self.assertRaisesRegex(ValueError, "setup-dev preparation"):
+                    python_tools.prepared(requirements)
+                target = python_tools.directory(requirements)
+                target.mkdir(parents=True)
+                (target / "ready").write_text(requirements.read_text())
+                self.assertEqual(python_tools.prepared(requirements), target)
+                requirements.write_text("example==2.0\n")
+                with self.assertRaises(ValueError):
+                    python_tools.prepared(requirements)
+
     def test_provisioning_installs_the_pin_and_every_suite_requirement(self):
-        with patch.object(coverage_changes.python_coverage, "provision") as provision:
+        with patch.object(python_tools, "provision") as provision:
             self.assertEqual(coverage_changes.main(["python", "--provision"]), 0)
         installed = [call.args[0] for call in provision.call_args_list]
         self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import re
 
-from ci_policy.github import api, pages
+from ci_policy.github import pages
 
 
 def require_success(results, skipped=(), draft=False):
@@ -26,23 +26,16 @@ def qualified_run(repository, sha):
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("qualification requires a full source commit SHA")
     retained_since = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    query = urlencode({"head_sha": sha, "per_page": 100, "created": ">=" + retained_since})
-    direct = api(f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}")["workflow_runs"]
-    seen = set()
 
     def accepts(run):
-        if (run.get("id") in seen or run.get("head_branch") != "main" or run.get("conclusion") != "success"
-                or run.get("event") not in {"push", "workflow_dispatch"}):
+        if (run.get("head_branch") != "main" or run.get("conclusion") != "success"
+                or run.get("event") != "workflow_dispatch"):
             return False
-        seen.add(run.get("id"))
         if not qualification_receipt.aggregate_passed(repository, run):
             return False
         receipt = qualification_receipt.from_run(repository, run)
         return receipt is not None and qualification_receipt.matches(receipt, repository, sha, run)
 
-    for run in direct:
-        if accepts(run):
-            return run
     query = urlencode({"event": "workflow_dispatch", "branch": "main", "status": "success",
                        "created": ">=" + retained_since})
     path = f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}"

@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/protected_launch_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-module-view-fixtures",
+  "disposition": "retain",
+  "reason": "Retain the protected-launch scenario suite within 530 code-bearing lines. Its installed generation fixture supports the complete launch and broker journeys, and the module actor scenario covers real privileged stage and watcher dispatch, exclusive mount-notification consumption, and late-mount restrictions. Keep scenario outcomes here and reusable privileged construction in the existing fixture files so namespace, mount and capability contracts remain explicit.",
+  "reviewed_commit": "548fc04d1f00b83135c674c3ba1c8b35d0166945",
+  "ceiling": 530,
+  "boundaries": {
+    "lycaon/internal/launchguard/protected_launch_linux_test.go": "782916c07cbd1f3fb4009aa13fa6516c8da93686cd3d80dd59cbbed1e7ba2a01",
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f71a8795b7149ccab1030d557e307c9c365de61e7c68fb6322ec8352e4e3f99"
+  }
+}

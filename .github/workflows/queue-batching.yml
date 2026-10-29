@@ -15,7 +15,7 @@ permissions:
   checks: read
   statuses: read
 concurrency:
-  group: maintenance
+  group: queue-batching
   cancel-in-progress: false
 jobs:
   reconcile:
