@@ -549,16 +549,16 @@
       "summary": "The job reference names no job of this session."
     },
     "COMMAND_LIMIT_EXCEEDED": {
-      "branch_instruction": "Check the result before retrying commands that change files.",
+      "branch_instruction": "Check the recorded results before retrying the remaining work.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "command: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }})."
+      "summary": "This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }})."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
+      "branch_instruction": "Use a supported command form.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
-      "summary": "The requested native form was refused before its effect attempt."
+      "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}"
     },
     "COMMAND_NOT_ARGV": {
       "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
@@ -585,10 +585,10 @@
       "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
-      "branch_instruction": "Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.",
+      "branch_instruction": "Use {{ paintedwolf.expected_form }}.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details."
+      "summary": "{{ paintedwolf.command }} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}that option{% endif %}{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}."
     },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
@@ -648,7 +648,7 @@
       "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+      "summary": "This shell form is not supported at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
     "COMMAND_TLS_VERIFICATION_REQUIRED": {
       "branch_instruction": "Send the request without -k; do not retry through an external program.",
@@ -1132,6 +1132,7 @@
       "summary": "mode=raw refused Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }})."
     },
     "FILE_CHANGE_APPROVAL_UNAVAILABLE": {
+      "branch_instruction": "Do not retry the file change through another command while approval is unavailable.",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "This call cannot review the change to {{ paintedwolf.path }}."
@@ -1160,6 +1161,12 @@
       "category": "recoverable",
       "emit": "guard:find",
       "summary": "find walk root {{ paintedwolf.path }} does not exist."
+    },
+    "GIT_BISECT_DIRTY_TREE": {
+      "branch_instruction": "Leave the current changes in place; commit or stash them only if that is part of the task.",
+      "category": "recoverable",
+      "emit": "guard:git_bisect_dirty_tree",
+      "summary": "git bisect start needs a working tree without tracked changes."
     },
     "GIT_COMMIT_BULK_DENIED": {
       "branch_instruction": "Resolve staging scope and commit intent before retrying",
@@ -2212,10 +2219,10 @@
       "summary": "The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}."
     },
     "SANDBOX_CONTROL_PLANE_DENIED": {
-      "branch_instruction": "Continue without this path. Ask the person to export needed content or change the app settings.",
+      "branch_instruction": "Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution",
       "category": "control-plane",
       "emit": "guard:sandbox_control_plane",
-      "summary": "This operation would reach the app's own state through {{ paintedwolf.path }}."
+      "summary": "{{ paintedwolf.path }} is part of the agent host's control plane."
     },
     "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED": {
       "branch_instruction": "Branch on Code; re-request direct network access for this action",
@@ -2682,6 +2689,7 @@
       "summary": "{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing could not finish."
     },
     "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE": {
+      "branch_instruction": "Do not discard the source through another command without recovery approval.",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."

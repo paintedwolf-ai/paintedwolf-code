@@ -5590,6 +5590,1178 @@
       ]
     },
     {
+      "name": "git bisect start",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect start [--term-old=TERM --term-new=TERM] [BAD [GOOD ...]] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect start-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect start-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect start-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-old",
+            "--term-good"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git bisect start-option-term-old",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fast"
+          ]
+        },
+        {
+          "spellings": [
+            "--term-new",
+            "--term-bad"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git bisect start-option-term-new",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "slow"
+          ]
+        }
+      ],
+      "operands": "An optional bad revision, then good revisions, then paths after --.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect start",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Starting refuses a tree with tracked changes; run bisect in a separate worktree instead.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-start-operands-valid",
+        "git-bisect-start-rejection",
+        "git bisect start-option-C-global",
+        "git bisect start-option-c-global",
+        "git bisect start-option-nopager-global",
+        "git bisect start-option-term-old",
+        "git bisect start-option-term-new"
+      ]
+    },
+    {
+      "name": "git bisect",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect (good|bad|old|new|TERM) [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "A verdict term (good, bad, old, new or the session's own terms), then revisions; a new verdict takes at most one.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect good",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Replaying a log file is not supported; git bisect log is the session record.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-operands-valid",
+        "git-bisect-rejection",
+        "git bisect-option-C-global",
+        "git bisect-option-c-global",
+        "git bisect-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect skip",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect skip [REV ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect skip-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect skip-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect skip-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Revisions to skip; HEAD when none is given.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect skip",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. A skipped commit is passed over for the next best candidate.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-skip-operands-valid",
+        "git-bisect-skip-rejection",
+        "git bisect skip-option-C-global",
+        "git bisect skip-option-c-global",
+        "git bisect skip-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect run",
+      "operands_end_options": true,
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect run COMMAND [ARG ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect run-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect run-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect run-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "The check command and its arguments, run through normal dispatch with the program's capabilities.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect run true",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules. Status 0 marks the commit old, 125 skips it, 1 to 127 marks it new and any other status stops the run. An interruption leaves the session recorded at the commit under test and names the reset to run.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-run-operands-valid",
+        "git-bisect-run-rejection",
+        "git bisect run-option-C-global",
+        "git bisect run-option-c-global",
+        "git bisect run-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect reset",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect reset [COMMIT]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect reset-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect reset-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect reset-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "An optional commit to return to instead of the session's start.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect reset",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-reset-operands-valid",
+        "git-bisect-reset-rejection",
+        "git bisect reset-option-C-global",
+        "git bisect reset-option-c-global",
+        "git bisect reset-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect log",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect log",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect log-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect log-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect log-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect log",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-log-operands-valid",
+        "git-bisect-log-rejection",
+        "git bisect log-option-C-global",
+        "git bisect log-option-c-global",
+        "git bisect log-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git bisect terms",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect terms [--term-old|--term-new]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect terms-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect terms-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-old",
+            "--term-good"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-term-old",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--term-new",
+            "--term-bad"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect terms-option-term-new",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect terms",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-terms-operands-valid",
+        "git-bisect-terms-rejection",
+        "git bisect terms-option-C-global",
+        "git bisect terms-option-c-global",
+        "git bisect terms-option-nopager-global",
+        "git bisect terms-option-term-old",
+        "git bisect terms-option-term-new"
+      ]
+    },
+    {
+      "name": "git bisect visualize",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect visualize --oneline",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect visualize-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect visualize-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect visualize-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect visualize-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands; --oneline is required because graphical and paged views are not supported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect visualize --oneline",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-visualize-operands-valid",
+        "git-bisect-visualize-rejection",
+        "git bisect visualize-option-C-global",
+        "git bisect visualize-option-c-global",
+        "git bisect visualize-option-nopager-global",
+        "git bisect visualize-option-oneline"
+      ]
+    },
+    {
+      "name": "git bisect view",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] bisect view --oneline",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git bisect view-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git bisect view-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect view-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git bisect view-option-oneline",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "No operands; --oneline is required because graphical and paged views are not supported.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "only skipped commits remain, or a usage or host refusal",
+        "128": "repository or revision failure"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git bisect view --oneline",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bisect sessions live in the repository's BISECT_* files and refs/bisect refs exactly as Git keeps them, so a user's own git bisect and git status see the same session. Every checkout goes through the Git owner's checkout operation with its review and dirty-tree rules.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/bisect.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/bisect_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-bisect-view-operands-valid",
+        "git-bisect-view-rejection",
+        "git bisect view-option-C-global",
+        "git bisect view-option-c-global",
+        "git bisect view-option-nopager-global",
+        "git bisect view-option-oneline"
+      ]
+    },
+    {
       "name": "git commit",
       "aliases": [],
       "family": "git",

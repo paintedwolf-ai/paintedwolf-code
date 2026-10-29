@@ -148,6 +148,9 @@ type Prepared struct {
 	filesystem *mutation.Owners
 	// execution records the pinned file inputs.
 	execution string
+	// request and nested let git bisect run dispatch its check as a child.
+	request commandprogram.OperationRequest
+	nested  commandprogram.NestedCommand
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
@@ -186,6 +189,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.
 		paths:      paths,
 		filesystem: filesystem,
 		execution:  request.Invocation.Identity.ExecutionID,
+		request:    request,
 	}, nil
 }
 

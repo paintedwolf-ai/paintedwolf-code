@@ -77,6 +77,18 @@ owner's read door with their catalogued options; `git shortlog` without a
 revision summarizes `HEAD`. Batch object reads, reflog maintenance and
 signature format atoms are refused.
 
+`git bisect` runs natively on the Git owner. Sessions live in the repository's
+`BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
+own `git bisect` and `git status` see the same session, and every step checks
+out through the Git owner's checkout operation. `git bisect start` refuses a
+tree with tracked changes with `GIT_BISECT_DIRTY_TREE`; a separate worktree
+keeps that tree untouched. `git bisect run` dispatches its check as an ordinary
+child of the program: status 0 marks the commit old, 125 skips it, 1 to 127
+marks it new, and any other status stops the run. An interrupted run leaves
+the session recorded at the commit under test and names the `git bisect reset`
+to run. `git bisect visualize` and `view` are limited to `--oneline`, and
+`replay` is refused because `git bisect log` is the session record.
+
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
 Native grep no-match and diff differences have ordinary status 1 and complete
