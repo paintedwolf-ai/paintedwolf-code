@@ -40,7 +40,7 @@ func TestParseProcNetTCPReadsStateAndInode(t *testing.T) {
    0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 41234 1 0000000000000000 100 0 0 10 0
    1: 0100007F:C350 0100007F:1F90 01 00000000:00000000 00:00000000 00000000  1000        0 41299 1 0000000000000000 20 4 30 10 -1
 `)
-	rows := parseProcNetTCP(table)
+	rows := parseProcNet(table, ProtocolTCP)
 	if len(rows) != 2 {
 		t.Fatalf("rows = %d, want 2: %+v", len(rows), rows)
 	}

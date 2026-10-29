@@ -120,6 +120,8 @@ type ProgramServices struct {
 	Projector *captureprojection.Projector
 	Progress  toolexecution.ProgramProgressFacts
 	Sessions  command.SessionOwners
+	// SourceRuns records the run evidence of a program that ended parked.
+	SourceRuns command.SourceRunRecorder
 	// ExternalHidden withdraws the explicit external selector.
 	ExternalHidden bool
 }
@@ -140,7 +142,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 		return nil
 	}
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
-	programs.Progress, programs.Sessions = services.Progress, services.Sessions
+	programs.Progress, programs.Sessions, programs.SourceRuns = services.Progress, services.Sessions, services.SourceRuns
 	programs.Supervisor.Interrupter = services.Recorder
 	programs.ExternalHidden = services.ExternalHidden
 	if programs.Executor != nil {
@@ -152,6 +154,23 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	}
 	programs.Owners = owners
 	return nil
+}
+
+// SetProgramParking lets command calls whose program waits park their turn.
+func (r *CommandServices) SetProgramParking(parking tools.ProgramParking) {
+	if programs := r.programs(); programs != nil {
+		programs.Parking = parking
+	}
+}
+
+// ProgramReceiptResult reports a program the host no longer runs from its
+// durable receipts.
+func (r *CommandServices) ProgramReceiptResult(ctx context.Context, sessionID, programID string) (string, error) {
+	programs := r.programs()
+	if programs == nil {
+		return "", fmt.Errorf("command program runtime is not configured")
+	}
+	return programs.ReceiptResult(ctx, sessionID, programID)
 }
 
 // setProgramExecutor binds the executor that admits each native child.

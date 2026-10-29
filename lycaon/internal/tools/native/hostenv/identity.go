@@ -5,12 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostos"
 )
 
-// runPwd delegates to the path owner that also serves cd and native_path, in
-// a frame bound to the request's directory; it prints the logical cwd.
+// system reads the declared platform facts.
 func (inv *invocation) system() (hostos.System, error) {
 	facts, err := inv.owners.Host.System(inv.ctx)
 	if errors.Is(err, hostos.ErrUnsupported) {
@@ -121,74 +119,6 @@ func countFlags(inv *invocation, keys ...string) int {
 		}
 	}
 	return count
-}
-
-// runDate reads the clock once and prints UTC: YYYY-MM-DDTHH:MM:SSZ, or the
-// single +FORMAT operand with %Y %m %d %H %M %S %s %z %% and literal text.
-// -u is explicit UTC, which every form already is; there is no ambient locale.
-func runDate(inv *invocation) error {
-	operands := inv.operands()
-	if len(operands) > 1 {
-		return inv.usage(operands[1], "at most one +FORMAT operand")
-	}
-	format := "%Y-%m-%dT%H:%M:%SZ"
-	if len(operands) == 1 {
-		if !strings.HasPrefix(operands[0].Value, "+") {
-			return inv.usage(operands[0], "+FORMAT; setting the clock is not supported")
-		}
-		format = operands[0].Value[1:]
-	}
-	text, err := formatDate(inv, operands, format)
-	if err != nil {
-		return err
-	}
-	return inv.line(text)
-}
-
-func formatDate(inv *invocation, operands commandprogram.Fields, format string) (string, error) {
-	now := inv.owners.Clock().UTC()
-	var out strings.Builder
-	for i := 0; i < len(format); i++ {
-		if format[i] != '%' {
-			out.WriteByte(format[i])
-			continue
-		}
-		i++
-		if i == len(format) {
-			return "", inv.usage(operands[0], "a complete % directive")
-		}
-		switch format[i] {
-		case 'Y':
-			out.WriteString(pad(now.Year(), 4))
-		case 'm':
-			out.WriteString(pad(int(now.Month()), 2))
-		case 'd':
-			out.WriteString(pad(now.Day(), 2))
-		case 'H':
-			out.WriteString(pad(now.Hour(), 2))
-		case 'M':
-			out.WriteString(pad(now.Minute(), 2))
-		case 'S':
-			out.WriteString(pad(now.Second(), 2))
-		case 's':
-			out.WriteString(strconv.FormatInt(now.Unix(), 10))
-		case 'z':
-			out.WriteString("+0000")
-		case '%':
-			out.WriteByte('%')
-		default:
-			return "", inv.usage(operands[0], "%Y, %m, %d, %H, %M, %S, %s, %z or %%")
-		}
-	}
-	return out.String(), nil
-}
-
-func pad(value, width int) string {
-	text := strconv.Itoa(value)
-	for len(text) < width {
-		text = "0" + text
-	}
-	return text
 }
 
 // runNproc prints the available processing units (--all: installed) less

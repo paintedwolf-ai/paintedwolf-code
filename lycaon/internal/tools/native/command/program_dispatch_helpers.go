@@ -36,7 +36,7 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 	sort.Strings(entries)
 	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
 	child.Scope = parent.Invocation.Scope
-	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
+	request := commandprogram.OperationRequest{Wait: parent.Wait, Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries, Process: parent.Process}
 	if resolved, ok, err := commandprogram.ResolveCommand(argv); err == nil && ok && resolved.Name != "external" {
 		if bound, err := d.binder.Bind(resolved, argv); err == nil && bound.Help {
 			request.OperationID = resolved.Name

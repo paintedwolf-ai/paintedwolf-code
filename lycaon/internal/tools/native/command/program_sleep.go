@@ -2,8 +2,6 @@ package command
 
 import (
 	"context"
-	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,42 +23,21 @@ func sleepBuiltin() commandprogram.OperationDispatcher {
 		}
 		var total time.Duration
 		for _, operand := range operands {
-			duration, ok := sleepDuration(operand)
+			duration, ok := commandprogram.ParseDuration(operand)
 			if !ok {
 				return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "sleep", "operand": operand, "reason": "a duration such as 5, 0.5, 2m or 1h"})
 			}
+			if duration > time.Duration(1<<63-1)-total {
+				return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "sleep", "operand": operand})
+			}
 			total += duration
 		}
-		timer := time.NewTimer(total)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-			return readResult(0), nil
-		case <-ctx.Done():
-			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, ctx.Err()
+		if err := request.Wait.Until(ctx, request.Wait.Now().Add(total), strings.Join(request.Argv.Values(), " ")); err != nil {
+			if reject := toolrejection.AsToolReject(err); reject != nil {
+				return refusedResult(reject.Code), err
+			}
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 		}
+		return readResult(0), nil
 	})
-}
-
-func sleepDuration(operand string) (time.Duration, bool) {
-	unit := time.Second
-	switch {
-	case strings.HasSuffix(operand, "s"):
-		operand = strings.TrimSuffix(operand, "s")
-	case strings.HasSuffix(operand, "m"):
-		operand, unit = strings.TrimSuffix(operand, "m"), time.Minute
-	case strings.HasSuffix(operand, "h"):
-		operand, unit = strings.TrimSuffix(operand, "h"), time.Hour
-	case strings.HasSuffix(operand, "d"):
-		operand, unit = strings.TrimSuffix(operand, "d"), 24*time.Hour
-	}
-	value, err := strconv.ParseFloat(operand, 64)
-	if err != nil || value < 0 || math.IsInf(value, 0) || math.IsNaN(value) || strings.ContainsAny(operand, "eEnN+") {
-		return 0, false
-	}
-	scaled := value * float64(unit)
-	if scaled > float64(math.MaxInt64) {
-		return 0, false
-	}
-	return time.Duration(scaled), true
 }
