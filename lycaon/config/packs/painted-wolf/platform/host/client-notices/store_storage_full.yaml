@@ -1,0 +1,12 @@
+scope: app
+title: Not enough free space
+message: >-
+  Painted Wolf Code could not finish writing its data because storage is full.
+  Free up space on that disk, then try again.
+suggested_action: >-
+  There is still not enough free space. Free up more space, then try again.
+scenarios:
+  - id: default
+    expect_contains:
+      - storage is full
+      - try again

@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/sourcesnapshot/sourcesnapshot.Store",
+  "kind": "runtime_service",
+  "workstream": "source-maintenance",
+  "disposition": "retain",
+  "reason": "Retain publication and pinned reads under one store authority at 1,320 receiver lines, 56 methods, and 15 fields. The transient snapshotCollector owns maintenance cursors and transactions while sharing the store pin set. Writer admission precedes pin freezing, and foreground publication does not invoke collection.",
+  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
+  "ceiling": 1320,
+  "boundaries": {
+    "lycaon/internal/sourcesnapshot/gc_admission_test.go": "068e9d1cdf11a7d0ec6867702f9ab3628ce30a180f484c975b088ca1d2e92a5f",
+    "lycaon/internal/sourcesnapshot/gc_publication_test.go": "d64d79067883874fa94142ac18e7c1b2f8f2e1b8a45b9d2f72863d4fe90c254c"
+  },
+  "reviewed_shape": "5176d14782ccad968a56077deef905b6d2f91c01c03dd60cfcafd39ecfdcfd17"
+}

@@ -117,7 +117,7 @@ export function WorkspaceOverlays(props: Props) {
         initialMode={crossbarArgs()?.mode}
         initialCommandId={crossbarArgs()?.commandId}
         gotoTargets={crossbarGotoTargets()}
-        contributionCommands={crossbarActions()}
+        contributionActions={crossbarActions()}
         onNavigateTarget={navigateFromCrossbarGoto}
         onOpenFolderAsProject={(path) => void proposeFolderAsProject(path)}
         onClose={() => closeCrossbar()}

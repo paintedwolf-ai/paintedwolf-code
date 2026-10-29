@@ -42,8 +42,8 @@ func TestProgramBackgroundReadTransfersUndeliveredDraftNotice(t *testing.T) {
 			release := sync.OnceFunc(func() { close(gate) })
 			defer release()
 			original, calls := f.Runtime.Owners, 0
-			f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-				owners, err := original(tc, paths, memory, spill)
+			f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+				owners, err := original(tc, paths, memory, admission)
 				cat := owners.Natives["cat"]
 				prepare := cat.Prepare
 				cat.Prepare = func(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {

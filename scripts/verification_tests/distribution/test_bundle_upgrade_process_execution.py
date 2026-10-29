@@ -13,6 +13,7 @@ class ProcessTests(unittest.TestCase):
         installation.app = Path("/test/Product.app")
         installation.config = Path("/test/config")
         installation.executable = installation.app / "Contents/MacOS/Product"
+        installation.last_observation = {"state": "not_observed"}
         return installation
 
     def test_cleanup_orders_owned_processes_and_does_not_signal_a_reused_pid(self):
@@ -41,7 +42,9 @@ class ProcessTests(unittest.TestCase):
         installation = self.installation()
         with patch.object(process.subprocess, "run") as run:
             installation.launch()
-        self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(installation.app)])
+        self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
+            "--stdout", str(installation.config / "desktop-launch.log"),
+            "--stderr", str(installation.config / "desktop-launch.log"), str(installation.app)])
 
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
@@ -101,3 +104,50 @@ class ProcessTests(unittest.TestCase):
              patch.object(process.os, "kill", side_effect=kill):
             installation.stop(crash_app=True)
         self.assertEqual(signals, [(10, signal.SIGKILL), (11, signal.SIGTERM)])
+
+    def test_health_timeout_explains_the_last_structured_rejection(self):
+        installation = self.installation()
+        installation.last_observation = {"state": "engine_not_owned", "engine_pid": 10}
+        with patch.object(process, "wait_for", side_effect=TimeoutError("startup")):
+            with self.assertRaisesRegex(TimeoutError, "engine_not_owned"):
+                installation.healthy("1.1.0")
+
+    def test_missing_daemon_retains_process_evidence_without_accepting_health(self):
+        installation = self.installation()
+        installation.owned = {10: ("app", 1)}
+        with patch.object(installation, "capture_owned"), patch.object(process, "read_json", return_value=None):
+            self.assertIsNone(installation.observe("1.1.0"))
+        self.assertEqual(installation.last_observation["state"], "daemon_missing")
+        self.assertEqual(installation.last_observation["owned"][10], {"identity": "app", "kind": 1})
+
+    def test_startup_sampling_does_not_inspect_a_reused_pid_or_an_engine(self):
+        import tempfile
+        installation = self.installation()
+        installation.owned = {10: ("app", 1), 11: ("old app", 1), 12: ("engine", 2)}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(installation, "capture_owned"), \
+             patch.object(process, "process_identity", side_effect=lambda pid: {10: "app", 11: "foreign"}.get(pid)), \
+             patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(returncode=0)) as run:
+            installation.sample_startup(Path(directory))
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.args[0][:4], ["/usr/bin/sample", "10", "1", "1"])
+            self.assertTrue((Path(directory) / "startup-process-10-status.json").exists())
+
+
+    def test_native_crashes_require_this_installation_and_current_launch(self):
+        import tempfile
+        import json
+        installation = self.installation()
+        installation.launched_at = 0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "Library/Logs/DiagnosticReports"
+            reports.mkdir(parents=True)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            (reports / "owned.ips").write_text('{}\n' + json.dumps({"procPath": str(installation.executable), "pid": 10}))
+            (reports / "foreign.ips").write_text('{}\n' + json.dumps({"procPath": "/foreign/app", "pid": 11}))
+            with patch.object(Path, "home", return_value=root):
+                installation.retain_crashes(evidence)
+            self.assertEqual(len(list(evidence.glob("native-crash-*.ips"))), 1)
+            self.assertEqual(json.loads((evidence / "native-crash-0.ips").read_text().split("\n", 1)[1])["pid"], 10)

@@ -25,3 +25,19 @@ func TestCredentialProtectionProbeRefusesIsolatedProvider(t *testing.T) {
 		t.Fatal("an isolated test process qualified the release credential provider")
 	}
 }
+
+func TestKeychainLossIsAMissingKeyAndALockedKeychainIsUnavailable(t *testing.T) {
+	missing := &itemsIdentityProvider{account: "a", description: "macOS Keychain", items: &memoryItems{readErr: keychainNotFound}}
+	if _, err := missing.LoadOrCreate(true); !errors.Is(err, ErrIdentityMissing) || errors.Is(err, ErrCustodianUnavailable) {
+		t.Fatalf("lost Keychain item: %v, want a missing key", err)
+	}
+	for _, status := range []keychainStatus{-25308, keychainMissingEntitlement} {
+		locked := &itemsIdentityProvider{account: "a", description: "macOS Keychain", items: &memoryItems{readErr: status, removeErr: status}}
+		if _, err := locked.LoadOrCreate(true); !errors.Is(err, ErrCustodianUnavailable) || errors.Is(err, ErrIdentityMissing) {
+			t.Fatalf("Keychain status %d: %v, want custodian unavailable", status, err)
+		}
+		if err := locked.Purge(); !errors.Is(err, ErrCustodianUnavailable) {
+			t.Fatalf("Keychain status %d purge: %v, want a refusal", status, err)
+		}
+	}
+}
