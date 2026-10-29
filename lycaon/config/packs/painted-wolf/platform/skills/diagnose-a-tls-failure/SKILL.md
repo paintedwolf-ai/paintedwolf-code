@@ -25,9 +25,7 @@ Use this workflow when a connection fails on certificate verification. Several d
 | **TLS-inspecting proxy** | Issuer is your employer or a security vendor rather than a public CA | The connection is intercepted and re-signed. Use the CA bundle the organisation provides, scoped — and report that interception is happening. |
 | **Protocol or cipher mismatch** | The handshake fails before any certificate appears | An old client against a server that dropped TLS 1.0/1.1, or the reverse. Nothing here is a certificate problem. |
 
-## Inside this sandbox
-
-The in-app proxy tunnels TLS bytes without replacing the origin certificate. An independent corporate proxy may inspect TLS. Check the presented chain and structured network observations before assigning a cause; use `reach-a-network-service` for routing failures.
+Proxies, internal CAs, and per-client trust settings: [scoped trust](references/scoped-trust.md).
 
 ## Do not
 

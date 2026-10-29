@@ -1,6 +1,6 @@
 ---
 name: orchestrate-a-large-task
-description: Decompose and integrate broad work, staged research, independent fixes, configuration matrices, and alternatives.
+description: Split broad work across task workers and integrate it, for staged research, parallel fixes, configuration matrices, competing approaches, or repo-wide rule sweeps.
 optional_tools:
   - decline_worker_budget
   - extend_worker_budget
@@ -13,17 +13,34 @@ metadata:
 
 # Orchestrate a large task
 
-Check the offered tool surface before choosing a procedure. When `task` is available, follow the dispatch and integration steps below. Without `task`, apply the decomposition, dependency, and verification steps within your assigned scope; report any work needing another role to the parent coordinator. Do not issue dispatch calls, invent worker results, or widen your assignment. The parent owns dispatch and integration across workers.
+**Entry check:** the work has several useful worker outcomes, concurrent or dependent, or one bounded leg that benefits from isolation, a worker capability, or extra context. Keep trivial work inline.
 
-Use the request and observed project/environment to choose the matching procedure below. Read that procedure before acting; load only the variants needed for this task. Read the orchestration procedure before the first dispatch; it owns briefing, width, and integration mechanics. Resource paths are relative to this skill directory.
+Without `task` on your surface you are a worker: apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.
 
-- [Orchestrate a large task](references/orchestrate_a_large_task.md) — Prepare, decompose, dispatch, and integrate substantial work with task workers for broad features, multi-component changes, or fix sets needing parallel or staged delegation.; supporting [briefs-and-topologies.md](references/orchestrate_a_large_task-briefs-and-topologies.md).
-- [Research then implement](references/research_then_implement.md) — Turn external or repository research into decided constraints and staged worker briefs when versions, APIs, standards, or unfamiliar architecture could change a build.
-- [Compare implementation approaches](references/compare_implementation_approaches.md) — Produce and evaluate isolated implementation alternatives against a frozen rubric when architecture, library choice, algorithm, or migration shape remains uncertain.
-- [Parallelize a configuration matrix](references/parallelize_a_configuration_matrix.md) — Coordinate builds, tests, migrations, or validations across platforms, versions, providers, or feature flags when independent outcomes share one acceptance contract.
-- [Parallelize independent fixes](references/parallelize_independent_fixes.md) — Partition broad fix sets with separable failures, findings, migrations, or repetitive changes across task workers while controlling overlap.
-- [Sweep a policy class](references/sweep_a_policy_class.md) — Apply one rule everywhere it is in scope and leave a guard so it cannot return when a standard or convention must hold across a repository, including code you did not write.
+## The loop
 
-## Boundaries
+1. **Investigate until you can name** the deliverables, stable interfaces, constraints, likely paths, and open decisions.
+2. **Classify each open fact as blocking or supplemental.** Finish blocking research before dependent builders start.
+3. **Write the progress checklist before the first dispatch**, one row per deliverable. Rows track outcomes, not worker counts.
+4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** legs at once.
+5. **Pick `agent_type` from the spawn roster in your prompt**, matching the leg's effect (read, product edit, test edit, review, run). An id not on the roster is rejected.
+6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.
+7. **Keep dependent stages sequential.** `record_finding` shares short grounded findings; it is not a prerequisite channel.
+8. **Wait for every leg, inspect complete envelopes, integrate write overlays explicitly, and verify the combined result.**
 
-Follow project policy and the user’s requested scope. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.
+Stop when every checklist row is closed by an integrated overlay, an explicit rejection, or a named blocker. Repair a partial leg at most once; a second failure is a decomposition problem.
+
+## Procedures
+
+Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, budget requests, and the dispatch shape.
+
+- [Orchestrate a large task](references/orchestrate_a_large_task.md): briefing, width, budgets, and integration mechanics. Topology choices: [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md).
+- [Research then implement](references/research_then_implement.md): versions, APIs, standards, or unfamiliar architecture could change the build.
+- [Compare implementation approaches](references/compare_implementation_approaches.md): architecture, library, algorithm, or migration shape is undecided; judge isolated alternatives against a frozen rubric.
+- [Parallelize a configuration matrix](references/parallelize_a_configuration_matrix.md): one acceptance contract across platforms, versions, providers, or flags.
+- [Parallelize independent fixes](references/parallelize_independent_fixes.md): separable failures or findings partitioned by root cause without overlapping paths.
+- [Sweep a policy class](references/sweep_a_policy_class.md): one rule applied everywhere in scope, with a guard so it cannot return.
+
+## Report
+
+The topology and why; each leg's outcome (integrated, repaired, rejected, open); the combined verification evidence; and any deliverable no leg claimed.

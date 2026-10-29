@@ -10,7 +10,7 @@ Use this when the deliverable is a coherent surface, not a temporary patch. Matc
    - Internal / no sticky consumers → redesign in place: one naming, one registration path, tests and docs updated with the code.
    - Durable / published / user data → additive change or versioned migration per project rules; never wipe sticky state to “fix” shape.
 4. **Implement the end state in one arc.** Update callers, schemas, registrations, prompts, and tests together. Delete superseded symbols, feature flags that only exist to keep the old path, and compatibility forwarders unless the durable class requires them.
-5. **Prove the class, not the instance.** Add or extend an invariant, property, contract, or table-driven test that would fail for similar mistakes—not only the one example that prompted the work. Prefer `design-and-debug-tests`, `trace-a-system-invariant`, or `design-and-debug-tests` when the risk warrants it.
+5. **Prove the class, not the instance.** Add or extend an invariant, property, contract, or table-driven test that would fail for similar mistakes—not only the one example that prompted the work. Prefer `design-and-debug-tests` or `trace-a-system-invariant` when the risk warrants it.
 6. **Comment for the present.** Keep only short notes on non-obvious logic; remove historical or preachy comments with the old code.
 7. **Bring the docs with it.** Documentation that described the old shape is now wrong; `update-the-docs` covers audience and scope.
 8. **Handoff.** Report the surface boundary, evolution class, deleted dead paths, and verification evidence. State any durable constraint that forced an additive shape.
