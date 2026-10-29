@@ -126,7 +126,7 @@ func runMv(inv *invocation) error {
 		if len(result.Moved) > 0 {
 			inv.verbose("renamed %s -> %s", quote(operand), quote(inv.destinationDisplay(dest, to)))
 		}
-		return len(result.Moved), err
+		return len(result.Moved) + len(result.DestinationCopied), err
 	})
 }
 
@@ -509,6 +509,8 @@ func runMktemp(inv *invocation) error {
 		if target.pin.Mode != toolcontract.AbsentRevision {
 			return inv.usage(name, "an unused temporary name")
 		}
+		// A temporary file is private to its owner, as mktemp creates it.
+		target.mode = 0o600
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return err
 		}

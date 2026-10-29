@@ -592,7 +592,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		}
 		refusal = &ProgramRefusal{Code: delivery.Code, Details: delivery.Details, DeliveryFailure: delivery.Failure}
 		if delivery.Feedback != nil {
-			refusal.Feedback = ensureProgramRefusalText(delivery.Feedback, toolrejection.AsToolReject(delivery.Feedback)).Error()
+			refusal.Feedback = delivery.Feedback.Error()
 		}
 		return refusal, delivery.Close, nil
 	}
@@ -623,7 +623,10 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		prepared.Close()
 		return failedDelivery(rendered)
 	}
-	return &ProgramRefusal{Code: reject.Code, Feedback: ensureProgramRefusalText(rendered, prepared.Rejection).Error(), Details: prepared.Rejection.Data}, release, nil
+	if rendered == nil {
+		rendered = toolrejection.RenderReject(prepared.Rejection, nil)
+	}
+	return &ProgramRefusal{Code: reject.Code, Feedback: rendered.Error(), Details: prepared.Rejection.Data}, release, nil
 }
 
 func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (*invocation.ProgramOutputRetention, error) {

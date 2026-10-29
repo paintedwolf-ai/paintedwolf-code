@@ -158,11 +158,14 @@ func (d *ProgramDispatcher) claimStopLine() bool {
 }
 
 // writeStatementRefusal writes a refused statement's shell-voice line.
-func (d *ProgramDispatcher) writeStatementRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, reject *toolrejection.ToolReject) {
-	if programResourceRefusal(reject) && !d.claimStopLine() {
+func (d *ProgramDispatcher) writeStatementRefusal(streams commandprogram.Streams, command string, cause error) {
+	if reject := toolrejection.AsToolReject(cause); programResourceRefusal(reject) {
+		if streams.Error != nil && d.claimStopLine() {
+			writeLimitRefusal(streams.Error, command, "", reject)
+		}
 		return
 	}
-	writeRejectRefusal(streams, command, request, reject)
+	writeRejectRefusal(streams, command, cause)
 }
 
 var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
@@ -385,7 +388,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!native.OwnerInvoked || native.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			d.writeStatementRefusal(streams, spec.Name, request, reject)
+			d.writeStatementRefusal(streams, spec.Name, runErr)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -423,7 +426,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 	}
 	rejection := argvRejection(spec, cause)
 	reject := toolrejection.AsToolReject(rejection)
-	d.writeStatementRefusal(streams, spec.Name, request, reject)
+	d.writeStatementRefusal(streams, spec.Name, rejection)
 	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
@@ -471,7 +474,7 @@ func (d *ProgramDispatcher) prepareChildFailure(streams commandprogram.Streams, 
 		span := request.Invocation.Span
 		reject.Data["source_start_byte"], reject.Data["source_end_byte"] = span.StartByte, span.EndByte
 		reject.Data["source_line"], reject.Data["source_column"] = span.Line, span.Column
-		d.writeStatementRefusal(streams, command, request, reject)
+		d.writeStatementRefusal(streams, command, cause)
 		return refusedResult(reject.Code), cause
 	}
 	return refusedResult("COMMAND_OPERAND_INVALID"), cause

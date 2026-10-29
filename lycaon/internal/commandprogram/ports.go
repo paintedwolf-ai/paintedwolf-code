@@ -178,6 +178,7 @@ func (s Streams) hasWriter(fd int) bool {
 // Diagnostic text is never a permission or effect discriminator.
 type RefusalReport struct {
 	Operation, Operand, Code string
+	Expected                 string
 	Span                     toolcontract.SourceSpan
 	Cause                    error
 }
