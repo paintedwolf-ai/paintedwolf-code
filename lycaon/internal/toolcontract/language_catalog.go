@@ -80,8 +80,7 @@ type RejectionFixture struct {
 	Fallback bool     `json:"fallback"`
 }
 
-// OptionForm freezes spelling and consumption: -1 optional, -2 a value list
-// its consumption terminates.
+// OptionForm freezes spelling and consumption: -1 optional, -2 delimiter-terminated.
 // Shorthand admits -VALUE for this arity-1 form: "numeric" (decimal digits) or
 // "word" (any suffix whose first byte is not a declared short option).
 type OptionForm struct {

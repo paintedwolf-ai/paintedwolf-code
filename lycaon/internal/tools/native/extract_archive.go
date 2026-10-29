@@ -41,19 +41,16 @@ func (t *ExtractArchiveTool) Run(ctx context.Context, args map[string]any, tctx 
 	return string(raw), nil
 }
 
-// ExtractInput is one complete extraction. Format is "zip", "tar", "tar.gz",
-// "tar.bz2", "tar.xz" or "tar.zst"; empty selects it from the archive name.
-// Select, when set, admits entries by their confined name before
-// StripComponents drops leading components; Flatten writes files under
-// their base names and skips directories. Without Overwrite an existing
-// destination file is skipped and reported.
+// ExtractInput is one complete extraction. Format is "zip", "tar", "tar.gz"
+// or "tar.bz2"; empty selects it from the archive name. StripComponents drops
+// leading entry path components, Members limits extraction to named entries,
+// and without Overwrite an existing destination file is skipped and reported.
 type ExtractInput struct {
 	Archive         string
 	Dest            string
 	Format          string
 	StripComponents int
-	Select          func(name string) bool
-	Flatten         bool
+	Members         []string
 	Overwrite       bool
 }
 
@@ -81,11 +78,11 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 	if err != nil {
 		return ExtractResult{}, err
 	}
-	sink := extractSink{ctx: ctx, tctx: tctx, dest: resolvedMutationTarget(dest), strip: in.StripComponents, overwrite: in.Overwrite, selected: in.Select, flatten: in.Flatten}
+	sink := extractSink{ctx: ctx, tctx: tctx, dest: resolvedMutationTarget(dest), strip: in.StripComponents, overwrite: in.Overwrite, members: in.Members}
 	switch format {
 	case "zip":
 		err = extractZipFile(sink, archive.EffectLocation(), budget, protectedEntryGuard)
-	case "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst":
+	case "tar", "tar.gz", "tar.bz2":
 		err = extractTarFile(sink, archive.EffectLocation(), format, budget, protectedEntryGuard)
 	default:
 		err = &toolrejection.ToolReject{Code: "EXTRACT_FORMAT_UNSUPPORTED", Data: map[string]any{"path": relArchive}}

@@ -2,19 +2,16 @@ package literal
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"path"
 	"slices"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// diffDirectories compares two trees in unsigned byte name order, leaving out
-// names an exclusion matches. Without -r only the top level is compared and
-// common subdirectories are named. Under -N an entry on one side only is
-// compared with an empty file or directory on the other; an absent side
-// lists nothing.
-func (inv *invocation) diffDirectories(left, right diffSide, opts diffOptions) error {
+// diffDirectories compares two trees in unsigned byte name order. Without
+// -r only the top level is compared and common subdirectories are named.
+func (inv *invocation) diffDirectories(left, right string, opts diffOptions) error {
 	leftNames, ok, err := inv.directoryNames(left)
 	if err != nil || !ok {
 		return err
@@ -28,17 +25,19 @@ func (inv *invocation) diffDirectories(left, right diffSide, opts diffOptions) e
 	names = slices.Compact(names)
 	visits := inv.owners.limit("traversal_visits")
 	for _, name := range names {
-		if opts.excluded(name) {
-			continue
-		}
 		inv.diffVisits++
 		if visits > 0 && inv.diffVisits > visits {
 			return tools.CommandLimitExceeded("traversal_visits", visits, inv.diffVisits)
 		}
-		a, b := path.Join(left.label, name), path.Join(right.label, name)
+		a, b := path.Join(left, name), path.Join(right, name)
 		inLeft, inRight := slices.Contains(leftNames, name), slices.Contains(rightNames, name)
 		if !inLeft || !inRight {
-			if err := inv.diffOneSided(left.label, right.label, name, inLeft, opts); err != nil {
+			only := left
+			if inRight {
+				only = right
+			}
+			inv.status = max(inv.status, 1)
+			if err := inv.out.text(fmt.Sprintf("Only in %s: %s\n", only, name)); err != nil {
 				return err
 			}
 			continue
@@ -57,7 +56,7 @@ func (inv *invocation) diffDirectories(left, right diffSide, opts diffOptions) e
 		dirA, dirB := typeLetter(stA.Mode) == 'd', typeLetter(stB.Mode) == 'd'
 		switch {
 		case dirA && dirB && opts.recursive:
-			if err := inv.diffDirectories(diffSide{label: a, dir: true}, diffSide{label: b, dir: true}, opts); err != nil {
+			if err := inv.diffDirectories(a, b, opts); err != nil {
 				return err
 			}
 		case dirA && dirB:
@@ -78,51 +77,17 @@ func (inv *invocation) diffDirectories(left, right diffSide, opts diffOptions) e
 	return nil
 }
 
-// diffOneSided reports an entry present on one side only: "Only in" without
-// -N, otherwise a comparison with the empty counterpart.
-func (inv *invocation) diffOneSided(leftDir, rightDir, name string, inLeft bool, opts diffOptions) error {
-	a, b := path.Join(leftDir, name), path.Join(rightDir, name)
-	present, missing, holder := a, b, leftDir
-	if !inLeft {
-		present, missing, holder = b, a, rightDir
-	}
-	if !opts.newFile {
-		inv.status = max(inv.status, 1)
-		return inv.out.text(fmt.Sprintf("Only in %s: %s\n", holder, name))
-	}
-	st, ok, err := inv.entry(present, true)
-	if err != nil || !ok {
-		return err
-	}
-	side, absent := diffSide{label: present, modTime: st.ModTime, dir: typeLetter(st.Mode) == 'd'}, absentSide(missing)
-	left, right := side, absent
-	if !inLeft {
-		left, right = absent, side
-	}
-	switch {
-	case side.dir && opts.recursive:
-		return inv.diffDirectories(left, right, opts)
-	case side.dir:
-		return inv.out.text(fmt.Sprintf("Common subdirectories: %s and %s\n", a, b))
-	}
-	return inv.diffFiles(left, right, opts, true)
-}
-
-// directoryNames lists a directory's entries; an absent side has none.
-func (inv *invocation) directoryNames(side diffSide) ([]string, bool, error) {
-	if side.absent {
-		return nil, true, nil
-	}
-	bound, err := inv.paths.Bind(inv.ctx, side.label, false)
+func (inv *invocation) directoryNames(label string) ([]string, bool, error) {
+	bound, err := inv.paths.Bind(inv.ctx, label, false)
 	if err == nil {
 		var names []string
 		if names, err = bound.ReadDir(); err == nil {
 			return names, true, nil
 		}
 	}
-	err = projectpaths.PathOperationError(side.label, err)
+	err = projectpaths.PathOperationError(label, err)
 	if reason, ok := ordinary(err); ok {
-		inv.fail(2, side.label, reason)
+		inv.fail(2, label, reason)
 		return nil, false, nil
 	}
 	return nil, false, err

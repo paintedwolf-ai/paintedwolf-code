@@ -15,9 +15,8 @@ import (
 // It does not run a shell, call a JSON tool, or inherit authority from stdout.
 func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	err := request.Validate()
-	status := 0
 	if err == nil {
-		status, err = p.commandOutput(ctx, request.OperationID, request.Argv, streams)
+		err = p.commandOutput(ctx, request.OperationID, request.Argv, streams.Output)
 	}
 	var utility *UtilityError
 	if errors.As(err, &utility) {
@@ -42,39 +41,36 @@ func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.Operat
 		}
 		return result, err
 	}
-	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}, nil
+	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 }
 
-// commandOutput runs one path utility and returns its ordinary status;
-// per-operand failures are already on stderr.
-func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv commandprogram.Fields, streams commandprogram.Streams) (int, error) {
+func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv commandprogram.Fields, output io.Writer) error {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return err
 	}
 	for _, arg := range argv[1:] {
 		if int64(len(arg.Value)) > p.argumentLimit {
-			return 0, pathLimit("argument_bytes", "bytes", p.argumentLimit, int64(len(arg.Value)))
+			return pathLimit("argument_bytes", "bytes", p.argumentLimit, int64(len(arg.Value)))
 		}
 		if strings.IndexByte(arg.Value, 0) >= 0 {
-			return 0, invalidOperand(arg.Value, "NUL in scalar operand")
+			return invalidOperand(arg.Value, "NUL in scalar operand")
 		}
 	}
 	spec, ok := p.specs[name]
 	if !ok {
-		return 0, invalidOperand(name, "not a path operation")
+		return invalidOperand(name, "not a path operation")
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, argv)
 	var argvErr *commandprogram.ArgvError
 	if errors.As(err, &argvErr) {
-		return 0, &PathError{Code: argvErr.Code, Operand: argvErr.Word, Command: name, ExpectedForm: spec.Argv, Cause: errors.New(argvErr.Expected)}
+		return &PathError{Code: argvErr.Code, Operand: argvErr.Word, Command: name, ExpectedForm: spec.Argv, Cause: errors.New(argvErr.Expected)}
 	}
 	if err != nil {
-		return 0, err
+		return err
 	}
-	output := nonNilWriter(streams.Output)
 	if bound.Help {
 		_, err := commandprogram.WriteCatalogHelp(spec, output)
-		return 0, err
+		return err
 	}
 	args := bound.Operands().Values()
 	usage := func(reason string) error {
@@ -82,47 +78,57 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv comm
 	}
 	if name == "native_path" {
 		if !bound.EndOfOptions || len(args) == 0 || !operandsFollowEnd(argv) {
-			return 0, usage("expected [-0] -- PATH ...")
+			return usage("expected [-0] -- PATH ...")
 		}
 		_, nul := bound.Last("-0")
-		return 0, p.NativePaths(ctx, args, nul, output)
+		return p.NativePaths(ctx, args, nul, output)
 	}
 	output = newPathOutput(ctx, output, p.outputLimit)
 	switch name {
 	case "basename":
-		return 0, basenameOutput(bound, args, output, usage)
+		if len(args) < 1 || len(args) > 2 {
+			return usage("expected PATH and optional SUFFIX")
+		}
+		suffix := ""
+		if len(args) == 2 {
+			suffix = args[1]
+		}
+		_, err := io.WriteString(output, PathBase(args[0], suffix)+"\n")
+		return err
 	case "dirname":
 		if len(args) != 1 {
-			return 0, usage("expected one PATH")
+			return usage("expected one PATH")
 		}
 		_, err := io.WriteString(output, PathDir(args[0])+"\n")
-		return 0, err
+		return err
 	case "pwd":
 		if len(args) != 0 {
-			return 0, usage("pwd accepts no operands")
+			return usage("pwd accepts no operands")
 		}
-		return 0, p.printWorkingDirectory(ctx, physicalForm(bound), output)
+		return p.printWorkingDirectory(ctx, physicalForm(bound), output)
 	case "cd":
 		if len(args) > 1 {
-			return 0, usage("cd accepts at most one PATH")
+			return usage("cd accepts at most one PATH")
 		}
 		operand := ""
 		if len(args) == 1 {
 			operand = args[0]
 		}
-		return 0, p.changeDirectory(ctx, operand, physicalForm(bound), output)
+		return p.changeDirectory(ctx, operand, physicalForm(bound), output)
 	case "realpath":
 		if len(args) == 0 {
-			return 0, usage("expected at least one PATH")
+			return usage("expected at least one PATH")
 		}
-		return p.realpathOutput(ctx, bound, args, output, nonNilWriter(streams.Error))
+		return p.pathOutput(ctx, args, true, output)
 	case "readlink":
 		if len(args) == 0 {
-			return 0, usage("expected at least one PATH")
+			return usage("expected at least one PATH")
 		}
-		return p.readlinkOutput(ctx, bound, args, output)
+		_, canonical := bound.Last("-f")
+		return p.pathOutput(ctx, args, canonical, output)
+	default:
+		return invalidOperand(name, "not a path operation")
 	}
-	return 0, invalidOperand(name, "not a path operation")
 }
 
 // WithPathRejection joins a catalog path diagnostic with its public rejection,
@@ -149,6 +155,28 @@ func operandsFollowEnd(argv commandprogram.Fields) bool {
 		}
 	}
 	return false
+}
+
+func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical bool, output io.Writer) error {
+	for _, arg := range args {
+		var path string
+		var err error
+		if canonical {
+			path, err = p.Canonical(ctx, arg)
+		} else {
+			path, err = p.LinkTarget(ctx, arg)
+		}
+		if err != nil {
+			return err
+		}
+		if err := validateOutputPath(path, false); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(output, path+"\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var _ commandprogram.OperationDispatcher = (*ProgramPaths)(nil)
