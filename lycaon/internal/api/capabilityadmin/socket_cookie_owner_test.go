@@ -224,7 +224,7 @@ func assertCookieDecisionLedger(t *testing.T, ctx context.Context, store *authzc
 type cookieObservation struct{ path, cookie, csrf, body string }
 type cookieReplacementInvoke func(string, map[string]any, bool, bool) cookieObservation
 
-func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handle, review *socketOwnerReview, authority *settings.RuleApprovalGate, runtime *approvalstate.SocketCapabilityRuntime, service *secretcap.Service, matcher *secretmatch.Matcher) *toolexecution.Executor {
+func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handle, review *socketOwnerReview, authority hitl.ApprovalGate, runtime *approvalstate.SocketCapabilityRuntime, service *secretcap.Service, matcher *secretmatch.Matcher) *toolexecution.Executor {
 	t.Helper()
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
