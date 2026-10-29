@@ -55,6 +55,7 @@ runs:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
           ${{ steps.paths.outputs.bin }}/deadcode
+          ${{ steps.paths.outputs.bin }}/actionlint
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
         lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
     - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.lint.outputs.cache-hit != 'true' && (inputs.tools == 'lint' || inputs.tools == 'all')
