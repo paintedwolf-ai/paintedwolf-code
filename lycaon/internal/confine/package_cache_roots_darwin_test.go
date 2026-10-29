@@ -3,8 +3,12 @@
 package confine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStandardCacheDataRootsDarwin(t *testing.T) {
@@ -24,5 +28,8 @@ func TestStandardCacheDataRootsDarwin(t *testing.T) {
 			filepath.Join(home, "Library/Caches"),
 		})
 	})
-	assertNoCachePreparation(t)
+	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) error {
+		t.Error("platform cache preparation attempted a filesystem effect")
+		return nil
+	}))
 }

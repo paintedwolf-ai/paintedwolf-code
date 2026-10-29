@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStandardCacheDataRootsOther(t *testing.T) {
@@ -27,5 +30,8 @@ func TestStandardCacheDataRootsOther(t *testing.T) {
 			filepath.Join(home, ".cache"), filepath.Join(home, ".local/share"), filepath.Join(home, ".local/state"),
 		})
 	})
-	assertNoCachePreparation(t)
+	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) error {
+		t.Error("platform cache preparation attempted a filesystem effect")
+		return nil
+	}))
 }

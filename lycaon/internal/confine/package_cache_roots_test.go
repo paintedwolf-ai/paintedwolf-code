@@ -1,14 +1,11 @@
 package confine
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func cacheRootFixture(t *testing.T) string {
@@ -36,12 +33,4 @@ func assertCacheRootSet(t *testing.T, home, config string, conventions []string)
 	if !slices.Equal(got, want) {
 		t.Errorf("default root set:\n got %q\nwant %q", got, want)
 	}
-}
-
-func assertNoCachePreparation(t *testing.T) {
-	t.Helper()
-	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) error {
-		t.Error("platform cache preparation attempted a filesystem effect")
-		return nil
-	}))
 }
