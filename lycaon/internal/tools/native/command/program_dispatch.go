@@ -352,7 +352,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	var operationDef toolcontract.OperationDefinition
 	if definition, ok := d.run.registry.Definition(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
-		operationDef = programOperationDefinition(definition.Operation)
+		operationDef = offeredProgramDefinition(tool, definition.Operation)
 	} else if tool == spec.Name {
 		var err error
 		operationDef, err = d.catalogDefinition(spec)
