@@ -429,6 +429,7 @@ def run(queue, name, command, spec=EXCLUSIVE):
         process_options = {"pass_fds": (fd, reservation.file.fileno()), "start_new_session": True} if fd is not None else {}
         child = None
         cleanup_blocked = False
+        terminal = False
         try:
             print(f"test execution: {name} admitted (worker budget {workers})", file=sys.stderr, flush=True)
             started = time.time()
@@ -446,6 +447,7 @@ def run(queue, name, command, spec=EXCLUSIVE):
             while True:
                 try:
                     code = child.wait(timeout=SAMPLE_SECONDS)
+                    terminal = True
                 except subprocess.TimeoutExpired:
                     report(queue, lease.entry["ticket"])
                     continue
@@ -467,11 +469,12 @@ def run(queue, name, command, spec=EXCLUSIVE):
                     else:
                         os.killpg(child.pid, signal.SIGKILL)
                     child.wait()
-            if child is not None:
+            # An interrupted owner cannot turn its own cleanup kill into terminal authority.
+            if terminal:
                 cleanup_blocked = TerminalSettlement(queue, reservation, child).finish()
             if fd is not None:
                 os.close(fd)
-            if child is not None:
+            if terminal:
                 cleanup_blocked |= TerminalSettlement(queue, lease, child).finish()
             if progress is not None:
                 progress.unlink(missing_ok=True)
