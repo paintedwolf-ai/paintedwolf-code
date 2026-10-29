@@ -636,7 +636,7 @@
     },
     {
       "id": "excluded-trap",
-      "program": "printf x > ./never; trap x INT",
+      "program": "printf x > ./never; trap data EXIT",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -649,7 +649,7 @@
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
-          "end_byte": 30
+          "end_byte": 24
         },
         "semantic_effects": [],
         "receipts": {
@@ -2223,7 +2223,6 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-
       "id": "excluded-brace",
       "program": "printf x > ./never; echo {a,b}",
       "setup": {
