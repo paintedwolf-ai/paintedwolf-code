@@ -1,0 +1,17 @@
+{
+  "notes": "### Fixed\n\n- The credential vault opens on macOS. Release builds rejected the identity\n  they had just stored in the Keychain, so 1.0.0-rc.1 could not start.\n- Reads outside the attached folders ask at every approval posture.\n- A refused write outside the write roots offers the enclosing repository.\n- Untagged report fences in a closing answer are read as report fields.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQTE5cG9KY2JGS095YXE1TUdPR3hEVWF5dXVjQzZSczlvaEg0akRNa052K1BsTVU5VkxPTC9rVmFFVXZKOWI5a3JyWUtEN3ZiUkszL1FmQkluZkxIY1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwOTA2MzQ0CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4wCnlOaEthakViQWpVYmpSYjlqc0ltQTZMN1hLc2Z6bTRiaTFNUVdUZ0hqVHk3Q1ZOdHJBTmYyMnRYZjRJbE1uYmF0QnhGT1NzSUpVTmdLTEVBVitqdkRnPT0K",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.0-rc.2/painted-wolf-code_v1.0.0-rc.2_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-01T18:38:57-07:00",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.0-rc.2"
+}

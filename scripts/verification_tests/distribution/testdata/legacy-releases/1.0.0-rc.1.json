@@ -1,0 +1,17 @@
+{
+  "notes": "### Added\n\n- First public release candidate of **Painted Wolf Code**.\n- Sessions, tools, workflows, approvals, and mediated sandboxing managed by the\n  local host \u2014 Apache-2.0 application code; see [`LICENSE`](./LICENSE) and\n  [`docs/licensing.md`](docs/licensing.md).",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQXltUDFUWm1mZExsS1ZQalhKRlJubHZyUkwxN1VuNUxDMDRMOWkvdnJNN0Vjd3FOdi9TeHl4emFaTElQZm45VWc1dHVrZWVNdUNMM096NXFXTkRlc0FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwODk0NzI4CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4wCjJ5VG9seGd2M2RMcWhYdW10YXZiRVJZMmlvZjhxYTZyWnkwaWtKNHB1Ty9YQklYV0dlZC9HUTNPREdiazRVU1hJaEMvckN0UmQ0TzQ2Y2krTHlEOEJ3PT0K",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.0-rc.1/painted-wolf-code_v1.0.0-rc.1_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-01T15:22:18-07:00",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.0-rc.1"
+}

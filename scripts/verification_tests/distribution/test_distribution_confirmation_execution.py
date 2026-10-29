@@ -158,7 +158,7 @@ class ClosedPublicHistoryTests(unittest.TestCase):
         from scripts.release_distribution_contract import public_history
         from release_semver import compare, parse
         baseline = public_history.load()
-        self.assertEqual(set(baseline['releases']), {'1.0.0-rc.3', '1.0.0', '1.0.1', '1.0.2-rc1',
+        self.assertEqual(set(baseline['releases']), {'1.0.0-rc.1', '1.0.0-rc.2', '1.0.0-rc.3', '1.0.0', '1.0.1', '1.0.2-rc1',
             '1.0.2-rc3', '1.0.2-rc4', '1.0.2-rc5', '1.0.2-rc6', '1.0.2-rc7', '1.0.2-rc8', '1.0.2'})
         self.assertEqual(hashlib.sha256(LEGACY_PLATFORMS.read_bytes()).hexdigest(),
                          '789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3')
@@ -177,6 +177,13 @@ class ClosedPublicHistoryTests(unittest.TestCase):
             path.write_text(json.dumps(document))
             with self.assertRaisesRegex(ValueError, 'sealed baseline'):
                 public_history.load(path)
+
+    def test_sealed_enumeration_equals_the_website_migrated_legacy_history(self):
+        from scripts.release_distribution_contract import public_history
+        website = json.loads((Path(__file__).parent / 'testdata/website-legacy-history.json').read_text())
+        sealed = {version: {'manifest_sha256': row['updater_manifest_sha256'], 'sha256': row['dmg_sha256']}
+                  for version, row in public_history.load()['releases'].items()}
+        self.assertEqual(sealed, website['releases'])
 
     def test_unknown_missing_malformed_and_forged_legacy_never_classify(self):
         from scripts.verification_tests.distribution.repository_fixture_support import halt_distribution

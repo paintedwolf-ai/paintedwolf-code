@@ -8,7 +8,7 @@ from .document_schema import digest, exact, require
 
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY = ROOT / 'packaging/distribution-legacy-releases.json'
-LEGACY_SHA256 = '5f17294d797e15e99f205b63097eb30a64217e1d731d325d4e1a1df19290ef41'
+LEGACY_SHA256 = '7918c0293bf55d0a6af8c5649073098f634e190a1431cc594a8afa0e296d50f6'
 
 
 def load(path=LEGACY):

@@ -8,6 +8,16 @@
       "dmg_sha256": "e27d8e49c576ed11d4c3e8d2d5d2026dcdc6f2cfe3c8eee499d28941376492ba"
     },
     {
+      "version": "1.0.0-rc.1",
+      "updater_manifest_sha256": "f495a822dc24592790f784f28669fb7023e8ec32a047b151da1ce5f948e078ea",
+      "dmg_sha256": "1f8362f72460e23faa295607b2b6a015976eed6efe087f1b14aa8c7e56991ebc"
+    },
+    {
+      "version": "1.0.0-rc.2",
+      "updater_manifest_sha256": "832329e35ee0a082ce6e3c6489c94474b09d144cee395beee547275da938ac53",
+      "dmg_sha256": "4143cbd8c7b1fd87696b98e11b8aa73f593fc4ad86b7763727bf6fde369ae155"
+    },
+    {
       "version": "1.0.0-rc.3",
       "updater_manifest_sha256": "d476e9f4a0188ffb8dbf3e6ea48f062a91197215341d1d3504e7f8d444cbb8ef",
       "dmg_sha256": "584e24dc323557670cae759af1219c28c06a1b79dc5cfa7a1d72e3e7c5287f8f"
