@@ -84,7 +84,7 @@ func (f *parkFixture) park(t *testing.T, programID, result string) *parkedCall {
 		Effects:  tools.InvocationEffects{Out: call.out},
 	}
 	parked, err := ProgramParking{Subscriptions: f.loop.Subscriptions}.ParkProgram(t.Context(), tctx, tools.ProgramPark{
-		ProgramID: programID, Reason: "sleep 600", Deadline: time.Now().Add(time.Hour),
+		ProgramID: programID, Reason: "sleep 600", Deadline: time.Now().Add(time.Hour), Claim: func() bool { return true },
 		Interrupt: func(context.Context) string {
 			call.interrupted <- struct{}{}
 			return result
@@ -138,7 +138,7 @@ func TestProgramParkingArmsTheSessionLeaseAndEndsTheTurn(t *testing.T) {
 		t.Fatalf("awaiting_wake activity %+v", published)
 	}
 	if _, err := (ProgramParking{Subscriptions: f.loop.Subscriptions}).ParkProgram(t.Context(), tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parkSession}},
-		tools.ProgramPark{ProgramID: "program-2", Interrupt: func(context.Context) string { return "" }}); !errors.Is(err, tools.ErrParkUnavailable) {
+		tools.ProgramPark{ProgramID: "program-2", Claim: func() bool { return true }, Interrupt: func(context.Context) string { return "" }}); !errors.Is(err, tools.ErrParkUnavailable) {
 		t.Fatalf("second park in one session: %v", err)
 	}
 	if _, err := (ProgramParking{}).ParkProgram(t.Context(), tools.ToolContext{}, tools.ProgramPark{}); !errors.Is(err, tools.ErrParkUnavailable) {
@@ -293,4 +293,24 @@ func TestRestartResolvesAParkedProgramWhoseReceiptsAreUnreadable(t *testing.T) {
 		t.Fatalf("recovered lease %s winner %+v", status, winner)
 	}
 	<-after.resumed
+}
+
+// A wait that ended before the park claimed it arms nothing, and the session
+// can still park a later wait.
+func TestProgramParkingArmsNothingForAnEndedWait(t *testing.T) {
+	f := newParkFixture(t)
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parkSession, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-1"}}
+	_, err := ProgramParking{Subscriptions: f.loop.Subscriptions}.ParkProgram(t.Context(), tctx, tools.ProgramPark{
+		ProgramID: "program-1", Reason: "sleep 600", Claim: func() bool { return false },
+		Interrupt: func(context.Context) string { return "" },
+	})
+	if !errors.Is(err, tools.ErrWaitEnded) {
+		t.Fatalf("park of an ended wait: %v", err)
+	}
+	if _, armed, err := f.store.ForSession(t.Context(), parkSession); err != nil || armed || f.loop.Waits.IsSleeping(parkSession) {
+		t.Fatalf("an ended wait armed the session: armed=%v err=%v", armed, err)
+	}
+	if call := f.park(t, "program-2", ""); call.parked.LeaseID() == "" {
+		t.Fatal("a later wait could not park")
+	}
 }
