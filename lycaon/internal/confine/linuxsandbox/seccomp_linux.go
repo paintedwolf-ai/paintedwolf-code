@@ -62,6 +62,15 @@ var isolatedSocketFamilies = []uint32{unix.AF_INET, unix.AF_INET6, unix.AF_NETLI
 // own descriptor for the socket with its own copy of the address.
 var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN}
 
+// pathCreators create, link, or move a name; the supervisor decides each one
+// against the protected names and performs it inside the sandbox. openat2
+// carries its flags in memory, so every call goes; openat and open go only
+// when they would create.
+var pathCreators = []uint32{
+	unix.SYS_OPENAT2, unix.SYS_MKDIRAT, unix.SYS_MKNODAT, unix.SYS_SYMLINKAT,
+	unix.SYS_LINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
+}
+
 // fastOpenSends are the send calls that could start a connection through
 // TCP Fast Open, by syscall number and the argument holding their flags.
 var fastOpenSends = []struct{ nr, flagsArg uint32 }{
@@ -71,15 +80,9 @@ var fastOpenSends = []struct{ nr, flagsArg uint32 }{
 // seccompArgLow is the offset of the low half of syscall argument n.
 func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
 
-// seccompProgram builds the filter: kill on an escape syscall, a terminal
-// injection ioctl, or a clone that asks for a namespace; hand connect, bind,
-// and listen to the supervisor, since a network namespace does not isolate
-// path sockets and the filter cannot read an address; refuse creating a
-// Unix-domain datagram socket or pair, whose sends name a path the supervisor
-// never sees, or a socket of a family the namespaces do not isolate, and any
-// send that would open a connection by Fast Open; answer io_uring and clone3
-// with ENOSYS so libraries fall back to calls the filter can read; allow
-// everything else.
+// seccompProgram mediates socket addresses and name creation, which the filter
+// cannot inspect. It refuses namespace escapes, unmediated socket families and
+// Fast Open. io_uring and clone3 receive ENOSYS so libraries use mediated calls.
 func seccompProgram() ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{
@@ -154,6 +157,25 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 		)
 		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: uint8(len(block))})
 		insts = append(insts, block...)
+	}
+	notify := uint32(unix.SECCOMP_RET_USER_NOTIF)
+	for _, nr := range append(append([]uint32(nil), pathCreators...), legacyPathCreators...) {
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 1},
+			bpf.RetConstant{Val: notify},
+		)
+	}
+	for _, open := range []struct{ nr, flagsArg uint32 }{{unix.SYS_OPENAT, 2}, {legacyOpen, 1}} {
+		if open.nr == 0 {
+			continue
+		}
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: open.nr, SkipFalse: 4},
+			bpf.LoadAbsolute{Off: seccompArgLow(open.flagsArg), Size: 4},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: unix.O_CREAT, SkipFalse: 1},
+			bpf.RetConstant{Val: notify},
+			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+		)
 	}
 	m := len(notifiedSyscalls)
 	for i, nr := range notifiedSyscalls {

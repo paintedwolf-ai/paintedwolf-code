@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/launchverify"
-	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
@@ -20,15 +19,15 @@ type Peer struct {
 	PID int
 }
 
-const requestDeadline = 30 * time.Second
+const (
+	requestDeadline = 30 * time.Second
+	maxConnections  = 32
+)
 
 // Server answers identity requests for verified engines.
 type Server struct {
-	Store    *Store
-	Verifier launchverify.Verifier
-	// Manifest is loaded per connection, so a package upgrade applies to the
-	// next engine without restarting the service.
-	Manifest    string
+	Store       *Store
+	Verifier    launchverify.Verifier
 	TrustPolicy string
 	PeerOf      func(net.Conn) (Peer, error)
 	// IdleExit ends Serve after this long without a connection; the socket
@@ -55,19 +54,29 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		}
 		_ = listener.Close()
 	}()
+	slots := make(chan struct{}, maxConnections)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			stopped := ctx.Err() != nil || isIdleClosed(idle)
+			cancel()
 			s.wg.Wait()
-			if ctx.Err() != nil || isIdleClosed(idle) {
+			if stopped {
 				return nil
 			}
 			return err
+		}
+		select {
+		case slots <- struct{}{}:
+		default:
+			_ = conn.Close()
+			continue
 		}
 		s.active.Add(1)
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
+			defer func() { <-slots }()
 			defer s.active.Add(-1)
 			s.serveConn(ctx, conn)
 		}()
@@ -114,6 +123,7 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	stopClosing := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stopClosing()
+	_ = conn.SetDeadline(time.Now().Add(requestDeadline))
 	peer, err := s.PeerOf(conn)
 	if err != nil {
 		s.Log.WarnContext(ctx, "vault identity peer credentials unavailable", "error", err)
@@ -155,6 +165,11 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 		resp := s.handle(caller, req)
+		// Handling may wait on storage. Reverify before releasing its response.
+		if err := verifier.Recheck(chain); err != nil {
+			s.answer(conn, refusal(err))
+			return
+		}
 		// Accounts are configuration-root digests, never secrets.
 		s.Log.InfoContext(ctx, "vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
 		if !s.answer(conn, resp) {
@@ -174,17 +189,7 @@ func (s *Server) verifiersFor() ([]launchverify.Verifier, *vaultidentity.Respons
 		s.Log.Error("vault identity trust policy unreadable", "error", err)
 		return nil, &vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable), Message: "the administrator-selected custody policy is unavailable"}
 	}
-	manifest, err := pkgmanifest.Load(s.Manifest)
-	if err != nil {
-		s.Log.Error("vault identity manifest unreadable", "path", s.Manifest, "error", err)
-		return nil, &vaultidentity.Response{
-			Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable),
-			Message: "the installed executable manifest cannot be read",
-		}
-	}
-	verifier := s.Verifier
-	verifier.Manifest = manifest
-	return []launchverify.Verifier{verifier}, nil
+	return []launchverify.Verifier{s.Verifier}, nil
 }
 
 func refusal(err error) vaultidentity.Response {
@@ -229,6 +234,8 @@ func (s *Server) handle(caller connection, req vaultidentity.Request) vaultident
 		return vaultidentity.Response{Status: vaultidentity.StatusNotFound, LauncherPID: ok.LauncherPID}
 	case errors.Is(err, errExists):
 		return vaultidentity.Response{Status: vaultidentity.StatusExists, LauncherPID: ok.LauncherPID}
+	case errors.Is(err, errStoredIdentityCorrupt):
+		return vaultidentity.Response{Status: vaultidentity.StatusCorrupt, Message: "the stored identity is damaged"}
 	default:
 		s.Log.Error("vault identity store failed", "op", req.Op, "uid", caller.peer.UID, "error", err)
 		return vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store", Message: "the identity store failed"}

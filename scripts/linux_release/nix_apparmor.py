@@ -10,14 +10,9 @@ import argparse
 import hashlib
 from pathlib import Path
 
+from .apparmor_attachment import literal
+
 ROLES = {"engine": "paintedwolf-engine-", "scanner-builder": "paintedwolf-scanner-builder-"}
-
-
-def literal(value: str) -> str:
-    """An AppArmor attachment that matches exactly one path, with no globbing."""
-    if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise ValueError("AppArmor attachment contains a control character")
-    return '"' + "".join("\\" + char if char in '\\"*?[]{}^' else char for char in value) + '"'
 
 
 def profile(role: str, executable: Path) -> tuple[str, str]:

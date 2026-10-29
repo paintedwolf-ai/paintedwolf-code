@@ -31,8 +31,10 @@ type Location struct {
 
 // Result identifies the byte stream staged and committed by Replace.
 type Result struct {
-	Bytes  int64
-	SHA256 string
+	// Committed distinguishes publication from later durability failures.
+	Committed bool
+	Bytes     int64
+	SHA256    string
 }
 
 // Target exposes the destination through its held parent.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/egressgate"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/webindex"
 )
 
@@ -60,6 +61,12 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 	if err := validateProvider(explicit, opts.Registry); err != nil {
 		return WebSearchResult{OK: false, Query: q, Period: opts.Period.String(), Error: err.Error()}
 	}
+
+	screened, err := screenOutbound(ctx, secretmatch.SurfaceWebSearch, webSearchDestination(opts.Settings, opts.Registry), q)
+	if err != nil {
+		return WebSearchResult{OK: false, Period: opts.Period.String(), Error: err.Error()}
+	}
+	q = screened
 
 	start := time.Now()
 	if !opts.SkipResultCache {
@@ -166,6 +173,98 @@ func validateProvider(provider string, reg *Registry) error {
 }
 
 // fanTask is one parallel provider invocation in a web_search fan-out.
+func finalizeSearchResult(q string, maxResults int, outcomes []providerOutcome, soft map[string]struct{}) WebSearchResult {
+	skipped := make([]SkippedProvider, 0)
+	for _, o := range outcomes {
+		if o.ok && len(o.hits) == 0 {
+			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: "no_results"})
+		}
+		if !o.ok {
+			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: o.reason})
+		}
+	}
+	primary, softOutcomes := partitionSoftOutcomes(outcomes, soft)
+	merged := fuseHits(primary, maxResults)
+	// Soft (Direct-bundled results-only) hits fuse only when primary providers
+	// return nothing.
+	if len(merged) == 0 && len(softOutcomes) > 0 {
+		merged = fuseHits(softOutcomes, maxResults)
+	}
+	partial := false
+	for _, o := range outcomes {
+		if !o.ok {
+			partial = partial || len(merged) > 0
+		}
+	}
+	allSoftEmpty := len(outcomes) > 0
+	for _, o := range outcomes {
+		if o.ok || !isSoftSkipReason(o.reason) {
+			allSoftEmpty = false
+			break
+		}
+	}
+	if len(merged) == 0 && allSoftEmpty {
+		return WebSearchResult{OK: true, Query: q, ProvidersSkipped: skipped}
+	}
+	if len(merged) == 0 {
+		allFailed := true
+		for _, o := range outcomes {
+			if o.ok {
+				allFailed = false
+				break
+			}
+		}
+		if allFailed {
+			parts := make([]string, 0, len(outcomes))
+			for _, o := range outcomes {
+				detail := o.detail
+				if detail == "" {
+					detail = o.reason
+				}
+				parts = append(parts, fmt.Sprintf("%s: %s", o.providerID, detail))
+			}
+			return WebSearchResult{
+				OK:               false,
+				Query:            q,
+				ProvidersSkipped: skipped,
+				Error:            strings.Join(parts, "; "),
+			}
+		}
+	}
+	return WebSearchResult{
+		OK:               true,
+		Query:            q,
+		Results:          merged,
+		ProvidersSkipped: skipped,
+		Partial:          partial && len(merged) > 0,
+	}
+}
+
+func partitionSoftOutcomes(outcomes []providerOutcome, soft map[string]struct{}) (primary, softOnly []providerOutcome) {
+	if len(soft) == 0 {
+		return outcomes, nil
+	}
+	primary = make([]providerOutcome, 0, len(outcomes))
+	softOnly = make([]providerOutcome, 0)
+	for _, o := range outcomes {
+		if _, ok := soft[o.providerID]; ok {
+			softOnly = append(softOnly, o)
+			continue
+		}
+		primary = append(primary, o)
+	}
+	return primary, softOnly
+}
+
+func isSoftSkipReason(reason string) bool {
+	switch reason {
+	case "auth_missing", "not_configured", "discoverer_unavailable", "no_sources", "no_providers_enabled", "fetch_failed", "no_results", "paced", "down", "cut":
+		return true
+	default:
+		return false
+	}
+}
+
 type fanTask struct {
 	// direct marks the built-in Direct pipeline. Fan-out grace/budget/zero-hit
 	// cancel waits for Direct.
@@ -428,96 +527,4 @@ func fuseCompletedOutcomes(tasks []fanTask, outcomes []providerOutcome, done []b
 		completed = append(completed, o)
 	}
 	return fuseHits(completed, maxResults)
-}
-
-func finalizeSearchResult(q string, maxResults int, outcomes []providerOutcome, soft map[string]struct{}) WebSearchResult {
-	skipped := make([]SkippedProvider, 0)
-	for _, o := range outcomes {
-		if o.ok && len(o.hits) == 0 {
-			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: "no_results"})
-		}
-		if !o.ok {
-			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: o.reason})
-		}
-	}
-	primary, softOutcomes := partitionSoftOutcomes(outcomes, soft)
-	merged := fuseHits(primary, maxResults)
-	// Soft (Direct-bundled results-only) hits fuse only when primary providers
-	// return nothing.
-	if len(merged) == 0 && len(softOutcomes) > 0 {
-		merged = fuseHits(softOutcomes, maxResults)
-	}
-	partial := false
-	for _, o := range outcomes {
-		if !o.ok {
-			partial = partial || len(merged) > 0
-		}
-	}
-	allSoftEmpty := len(outcomes) > 0
-	for _, o := range outcomes {
-		if o.ok || !isSoftSkipReason(o.reason) {
-			allSoftEmpty = false
-			break
-		}
-	}
-	if len(merged) == 0 && allSoftEmpty {
-		return WebSearchResult{OK: true, Query: q, ProvidersSkipped: skipped}
-	}
-	if len(merged) == 0 {
-		allFailed := true
-		for _, o := range outcomes {
-			if o.ok {
-				allFailed = false
-				break
-			}
-		}
-		if allFailed {
-			parts := make([]string, 0, len(outcomes))
-			for _, o := range outcomes {
-				detail := o.detail
-				if detail == "" {
-					detail = o.reason
-				}
-				parts = append(parts, fmt.Sprintf("%s: %s", o.providerID, detail))
-			}
-			return WebSearchResult{
-				OK:               false,
-				Query:            q,
-				ProvidersSkipped: skipped,
-				Error:            strings.Join(parts, "; "),
-			}
-		}
-	}
-	return WebSearchResult{
-		OK:               true,
-		Query:            q,
-		Results:          merged,
-		ProvidersSkipped: skipped,
-		Partial:          partial && len(merged) > 0,
-	}
-}
-
-func partitionSoftOutcomes(outcomes []providerOutcome, soft map[string]struct{}) (primary, softOnly []providerOutcome) {
-	if len(soft) == 0 {
-		return outcomes, nil
-	}
-	primary = make([]providerOutcome, 0, len(outcomes))
-	softOnly = make([]providerOutcome, 0)
-	for _, o := range outcomes {
-		if _, ok := soft[o.providerID]; ok {
-			softOnly = append(softOnly, o)
-			continue
-		}
-		primary = append(primary, o)
-	}
-	return primary, softOnly
-}
-
-func isSoftSkipReason(reason string) bool {
-	switch reason {
-	case "auth_missing", "not_configured", "discoverer_unavailable", "no_sources", "no_providers_enabled", "fetch_failed", "no_results", "paced", "down", "cut":
-		return true
-	default:
-		return false
-	}
 }

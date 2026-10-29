@@ -127,6 +127,33 @@ class PublicPlatformTests(unittest.TestCase):
             path.unlink()
             path.write_bytes(content)
 
+    def test_assembler_names_each_refused_fragment(self):
+        fragments = self.work / "fragments"
+        fragments.mkdir()
+        notes, output = self.work / "notes", self.work / "manifest.json"
+        notes.write_text("A fixture release.")
+        binding = release_binding(load_registry(), VERSION)
+
+        def refusal(platform, cause, *, signed_version=VERSION, keys=binding):
+            artifact = f"painted-wolf-code_v{VERSION}_{platform}.app.tar.gz"
+            (fragments / "fragment.json").write_text(json.dumps({
+                "platform": platform, "signature": rehearsal_signature(signed_version, artifact),
+                "updater_artifact": artifact, "update_keys": keys}))
+            result = self.run_script("release-assemble-updater-manifest.py", "--catalog", self.catalog,
+                                     "--fragments", fragments, "--version", VERSION, "--notes", notes,
+                                     "--pub-date", "2026-10-18T00:00:00Z", "--base-url", "https://downloads.paintedwolf.dev",
+                                     "--output", output, success=False)
+            self.assertEqual(result.stderr, f"error: fragment.json {cause}\n")
+            self.assertFalse(output.exists())
+
+        refusal("darwin-aarch64", f"signature is signed for version 1.0.0-rc.2, not {VERSION}", signed_version="1.0.0-rc.2")
+        refusal("darwin-aarch64", "signing and embedded key generations disagree", keys={"signing_generation": 9})
+        refusal("linux-x86_64", "offers an updater artifact for package-managed platform linux-x86_64")
+        package_managed = copy.deepcopy(ROWS)
+        package_managed[0]["updater_extension"] = None
+        self.write_catalog(package_managed)
+        refusal("darwin-aarch64", "offers an updater artifact for package-managed platform darwin-aarch64")
+
     def test_assembler_and_validator_exclude_package_owned_updaters(self):
         fragments = self.work / "fragments"
         fragments.mkdir()

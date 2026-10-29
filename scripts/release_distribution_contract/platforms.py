@@ -48,6 +48,42 @@ def parse_platforms(raw: bytes) -> dict[str, dict]:
     return result
 
 
+def validate_release_catalog(raw: bytes) -> dict[str, dict]:
+    """Validate shipping inputs while keeping package publication separate from updates."""
+    platforms = parse_platforms(raw)
+    fields = {'artifact_arch', 'goarch', 'goos', 'package_extensions', 'publication',
+              'runner', 'updater_extension', 'updater_key'}
+    identities = {
+        'darwin-aarch64': ('darwin', 'arm64', 'aarch64'),
+        'linux-x86_64': ('linux', 'amd64', 'x86_64'),
+        'linux-aarch64': ('linux', 'arm64', 'aarch64'),
+        'windows-x86_64': ('windows', 'amd64', 'x86_64'),
+    }
+    if set(platforms) != set(identities):
+        raise ValueError('release platform set differs from the supported adapters')
+    linux = {'linux-aarch64', 'linux-x86_64'}
+    for key, row in platforms.items():
+        if (set(row) != fields or not isinstance(row['runner'], str) or not row['runner']
+                or (row['goos'], row['goarch'], row['artifact_arch']) != identities[key]):
+            raise ValueError('release platform execution fields are invalid')
+        if row['goos'] == 'linux':
+            if row['package_extensions'] != ['deb', 'rpm', 'pkg.tar.zst'] or row['updater_extension'] is not None:
+                raise ValueError('native Linux requires every package form and no automatic updater')
+        elif row['publication'] == 'public' and row['updater_extension'] is None:
+            raise ValueError('public non-Linux platform requires its automatic updater')
+    public = {key for key, row in platforms.items() if row['publication'] == 'public'}
+    if public not in ({'darwin-aarch64'}, {'darwin-aarch64', *linux}):
+        raise ValueError('release must retain macOS and publish both Linux architectures together')
+    return platforms
+
+
+def detached_signatures(row: dict) -> list[str]:
+    """Linux packages other than RPM carry a detached OpenPGP signature; RPM embeds its own."""
+    if row.get("goos") != "linux":
+        return []
+    return [extension for extension in row["package_extensions"] if extension != "rpm"]
+
+
 def public_updaters(platforms: dict[str, dict]) -> dict[str, dict]:
     return {key: row for key, row in platforms.items()
             if row["publication"] == "public" and row["updater_extension"] is not None}

@@ -12,6 +12,16 @@ import verification_execute as execution
 
 
 class HostedExecutionTests(unittest.TestCase):
+    def test_setup_timing_requires_an_observed_job_start(self):
+        for marker, basis in [('1', 'setup-and-execution'), ('', 'execution'), ('invalid', 'execution')]:
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.dict(ci.os.environ, {'PW_CI_JOB_STARTED_AT': marker}), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', return_value=0):
+                ci.run_lane('frontend')
+                timing = json.loads((Path(directory) / 'ci/timings.json').read_text())
+                self.assertEqual(timing['basis'], basis)
+
     def test_behavior_shards_preserve_the_full_recipe_and_memory_cap(self):
         lane = hosted_plan.lanes()["behavior"]
         for profile in ["check", "nightly", "release"]:
@@ -95,15 +105,29 @@ class HostedExecutionTests(unittest.TestCase):
             with self.subTest(code=preflight_code), tempfile.TemporaryDirectory() as directory, \
                     patch("ci_policy.impact.change", return_value=scope), \
                     patch.object(ci, "artifact_root", return_value=Path(directory)), \
-                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0]) as run:
+                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0, 0, 0]) as run:
                 self.assertEqual(ci.run_lane("ready"), preflight_code)
                 self.assertEqual(run.call_args_list[0].args[0],
                                  ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 2 if preflight_code == 0 else 1)
+                self.assertEqual(run.call_count, 4 if preflight_code == 0 else 1)
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["preflight"]["exit_code"], preflight_code)
                 self.assertIn("finished_at", record["preflight"])
                 self.assertEqual(record["scope"], scope)
+
+    def test_native_compile_failure_stops_admission_before_general_checks(self):
+        scope = dict(base='b' * 40, head='a' * 40, full=False,
+                     paths=['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', side_effect=[0, 1]) as run:
+            self.assertEqual(ci.run_lane('ready'), 1)
+            self.assertEqual(run.call_args_list[1].args[0], ['./task', 'den:test:rust', '--', '--compile-only'])
+            self.assertEqual(run.call_count, 2)
+            record = json.loads((Path(directory) / 'ci/run.json').read_text())
+            self.assertEqual(record['phases'][0]['exit_code'], 1)
+            self.assertEqual(record['scope']['head'], 'a' * 40)
 
     def test_interrupted_admission_keeps_an_unfinished_record(self):
         scope = dict(base="b" * 40, head="a" * 40, paths=[], full=False)
@@ -281,7 +305,7 @@ class HostedExecutionTests(unittest.TestCase):
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
 
-    def test_full_qualification_budgets_receive_push_change_base(self):
+    def test_full_limits_lane_receives_structured_change_base(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict('os.environ', PW_CI_AFFECTED='0'), \

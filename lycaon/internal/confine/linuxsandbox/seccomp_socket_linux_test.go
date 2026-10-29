@@ -16,10 +16,11 @@ import (
 func TestAppliedSocketCreationFloor(t *testing.T) {
 	if os.Getenv("PW_TEST_APPLIED_SOCKET_FILTER") != "1" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
 		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppliedSocketCreationFloor$")
 		cmd.Env = append(os.Environ(), "PW_TEST_APPLIED_SOCKET_FILTER=1")
-		if output, err := cmd.CombinedOutput(); err != nil {
+		output, err := cmd.CombinedOutput()
+		cancel()
+		if err != nil {
 			t.Fatalf("applied filter subprocess: %v\n%s", err, output)
 		}
 		return
@@ -32,7 +33,6 @@ func TestAppliedSocketCreationFloor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply production filter: %v", err)
 	}
-	defer func() { _ = unix.Close(listener) }()
 	for _, flags := range []int{0, unix.SOCK_CLOEXEC, unix.SOCK_NONBLOCK, unix.SOCK_CLOEXEC | unix.SOCK_NONBLOCK} {
 		for _, kind := range []int{unix.SOCK_DGRAM, unix.SOCK_RAW} {
 			fd, err := unix.Socket(unix.AF_UNIX, kind|flags, 0)
@@ -81,4 +81,6 @@ func TestAppliedSocketCreationFloor(t *testing.T) {
 		_ = unix.Close(pair[0])
 		_ = unix.Close(pair[1])
 	}
+	_ = unix.Close(listener)
+	os.Exit(0)
 }

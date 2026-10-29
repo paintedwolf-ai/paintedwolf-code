@@ -47,12 +47,31 @@ impl Reader for OsReader {
         { let _ = (program, args); Err(QueryReason::AdapterUnavailable) }
         #[cfg(target_os = "linux")]
         {
+            if crate::protected_launch::broker().is_some() {
+                let finished = crate::external_launch::External::new(program)
+                    .args(args)
+                    .clear_env()
+                    .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+                    .env("LC_ALL", "C")
+                    .output()
+                    .map_err(|_| QueryReason::QueryFailed)?;
+                if finished.stdout.len() > 64 * 1024 {
+                    return Err(QueryReason::OutputLimit);
+                }
+                return Ok(Output {
+                    code: finished.status.code().unwrap_or(-1),
+                    stdout: String::from_utf8(finished.stdout).map_err(|_| QueryReason::InvalidResponse)?,
+                });
+            }
             use std::os::{fd::AsRawFd, unix::process::CommandExt};
-            let child = Command::new(program).args(args).env_clear()
+            let mut command = Command::new(program);
+            command.args(args).env_clear()
                 .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin").env("LC_ALL", "C")
                 .current_dir("/")
                 .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())
-                .process_group(0).spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
+                .process_group(0);
+            crate::child_credentials::prepare(&mut command);
+            let child = command.spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
                     QueryReason::AdapterUnavailable
                 } else { QueryReason::QueryFailed })?;
             let mut child = OwnedChild(child, false);
@@ -104,8 +123,4 @@ pub(super) fn success(reader: &mut impl Reader, program: &str, args: &[&str]) ->
 
 pub(super) fn field(value: &str) -> bool {
     !value.is_empty() && value.len() <= 4096 && !value.chars().any(char::is_control)
-}
-
-pub(super) fn package_name(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 255 && value.bytes().all(|c| c.is_ascii_alphanumeric() || b"+._-".contains(&c)) && !value.starts_with('-')
 }

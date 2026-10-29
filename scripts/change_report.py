@@ -59,36 +59,49 @@ def resolve(root):
     return None
 
 
-def changed_paths(root, base):
-    diff = git(root, "diff", "--name-only", "--no-renames", "-z", base).stdout
-    untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout
-    return sorted({path for path in (diff + untracked).split("\0") if path})
+def untracked(root, head):
+    """Untracked work counts only when the change ends at the working tree."""
+    if head:
+        return ""
+    return git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout
 
 
-def added_and_removed(root, base):
+def changed_paths(root, base, head=None):
+    """Paths changed from base to head, or to the working tree when head is None."""
+    diff = git(root, "diff", "--name-only", "--no-renames", "-z", base, *filter(None, [head])).stdout
+    return sorted({path for path in (diff + untracked(root, head)).split("\0") if path})
+
+
+def added_and_removed(root, base, head=None):
     """Paths the change added (untracked files included) and paths it removed."""
     added, removed = set(), set()
-    fields = git(root, "diff", "--name-status", "--no-renames", "-z", base).stdout.split("\0")
+    fields = git(root, "diff", "--name-status", "--no-renames", "-z", base, *filter(None, [head])).stdout.split("\0")
     for status, path in zip(fields[0::2], fields[1::2]):
         if status == "A":
             added.add(path)
         elif status == "D":
             removed.add(path)
-    added |= {path for path in git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout.split("\0") if path}
+    added |= {path for path in untracked(root, head).split("\0") if path}
     return sorted(added), sorted(removed)
 
 
-def changed_lines(root, base, paths):
+def changed_lines(root, base, paths, head=None):
     """Line numbers each path adds or changes relative to base; new files count whole."""
     out = {}
     for path in paths:
         if git(root, "cat-file", "-e", f"{base}:{path}", check=False).returncode != 0:
-            file = Path(root) / path
-            if file.is_file():
-                out[path] = set(range(1, len(file.read_text(errors="replace").splitlines()) + 1))
+            if head:
+                shown = git(root, "show", f"{head}:{path}", check=False)
+                text = shown.stdout if shown.returncode == 0 else None
+            else:
+                file = Path(root) / path
+                text = file.read_text(errors="replace") if file.is_file() else None
+            if text is not None:
+                out[path] = set(range(1, len(text.splitlines()) + 1))
             continue
         lines = set()
-        diff = git(root, "diff", "--no-color", "--no-ext-diff", "--no-renames", "-U0", base, "--", path).stdout
+        diff = git(root, "diff", "--no-color", "--no-ext-diff", "--no-renames", "-U0", base,
+                   *filter(None, [head]), "--", path).stdout
         for line in diff.splitlines():
             match = HUNK.match(line)
             if match:
