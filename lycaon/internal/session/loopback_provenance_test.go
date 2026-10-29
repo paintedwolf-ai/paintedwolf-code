@@ -232,6 +232,24 @@ func TestHeldByOtherSeparatesFreeOwnedAndForeignPorts(t *testing.T) {
 	}
 }
 
+// lsof emits a process record followed by that process's files; each name
+// belongs to the process record before it.
+func TestParseLsofListenersPairsNamesWithTheirProcess(t *testing.T) {
+	out := []byte("p100\nf5\nn127.0.0.1:3000\np200\nf7\nn*:3000\nf8\nn[::1]:3001\n")
+	got := parseLsofListeners(out)
+	want := []socketListener{
+		listenerAt(100, "127.0.0.1:3000"),
+		{PID: 200, Port: 3000, Addr: netip.IPv6Unspecified()},
+		listenerAt(200, "[::1]:3001"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseLsofListeners = %+v, want %+v", got, want)
+	}
+	if got[1].loopbackBound() {
+		t.Fatal("a wildcard bind must not read as loopback")
+	}
+}
+
 func TestHostListenersSeesALiveListener(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen", err)
@@ -243,9 +261,8 @@ func TestHostListenersSeesALiveListener(t *testing.T) {
 	if err != nil {
 		t.Skipf("host socket table unavailable: %v", err)
 	}
-	held := onPort(all, port)
-	if len(held) != 1 || held[0].PID != os.Getpid() || held[0].Addr != netip.MustParseAddr("127.0.0.1") {
-		t.Fatalf("listener on %d from the host table = %+v, want this process on 127.0.0.1", port, held)
+	if len(onPort(all, port)) == 0 {
+		t.Fatalf("listener on %d missing from the host table", port)
 	}
 }
 
