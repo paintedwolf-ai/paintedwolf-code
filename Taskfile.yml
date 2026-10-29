@@ -683,7 +683,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/den-coverage-check.sh
 
   den:sidecar:stop:
-    desc: 'Stop local engines — dev-store lock holders, LYCAON_ADDR listeners, and bundled pw processes'
+    desc: 'Stop development engines selected by dev-store locks or LYCAON_ADDR listeners'
     cmds:
       - bash {{.SCRIPTS_DIR}}/den-sidecar-stop.sh
 
