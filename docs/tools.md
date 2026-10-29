@@ -913,14 +913,7 @@ Producer results separate ordinary status, typed terminal/host-stop facts, compl
 
 The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. `timeout` and `nohup` dispatch their command exactly as a reached command, with its own receipt and confinement. `timeout` expiry signals the external process through program supervision (KILL after `-k`) or interrupts a native operation, and returns 124; the call's `timeout_ms` stays the outer bound. `time` and `time -p` report on stderr with processor time from reaped external children; a report that counted native operations as zero sets `cpu_time_unmeasured` in the result. `ulimit` reports the limits external children receive and lowers a soft limit for later children of the same call only. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
 
-When every live evaluator activity is blocked, `sleep`, shell `wait`, `timeout` and
-`read -t` report their timer deadlines and exact job handles to the shared wait
-lease. Long waits park the command call, release its turn and resume with the
-complete program result. Short waits stay inline. Polling loops run each probe
-between their full sleep intervals; no readiness event wakes a sleep early.
-`timeout_ms` remains the outer bound, and a single wait beyond it refuses before
-parking. A timed read retains partial input and returns 142 on expiry. User input
-interrupts the foreground program and preserves supervised background jobs.
+When every live evaluator activity is blocked, `sleep`, shell `wait` (`wait`, `wait %N`, `wait PID`), `timeout` and `read -t` report their timer deadlines and exact job handles to the shared wait lease, so a long wait parks the call as described under wait leases. Polling loops run each probe between full sleep intervals; no readiness event wakes a sleep early. A timed read keeps its partial input and returns 142 on expiry, and `read -t 0` reports whether input is ready without consuming it.
 
 | Surface | Source |
 |---|---|
