@@ -123,6 +123,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		profile := tctx.ProfileID()
 		hostRunner := hostcmd.NewRunner()
 		launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, "terminal_open", confinement)
+		launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, egressLease, egress)
 		if tctx.Files.PackageExecution != nil {
 			launch = launch.WithReducedEnvironment()
 		}
