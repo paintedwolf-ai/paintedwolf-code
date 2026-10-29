@@ -1164,6 +1164,7 @@
     "mkdir",
     "mktemp",
     "mv",
+    "ln",
     "native_path",
     "nl",
     "nproc",

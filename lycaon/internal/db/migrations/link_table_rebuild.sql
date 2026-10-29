@@ -1,0 +1,4 @@
+CREATE TABLE %[1]s %[3]s;
+INSERT INTO %[1]s SELECT * FROM %[2]s;
+DROP TABLE %[2]s;
+ALTER TABLE %[1]s RENAME TO %[2]s;
