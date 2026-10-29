@@ -254,11 +254,11 @@ func hostListeners(context.Context) ([]socketListener, error) {
 	}
 	var out []socketListener
 	for _, l := range table {
-		if len(l.PIDs) == 0 {
+		if len(l.Holders) == 0 {
 			out = append(out, socketListener{Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
-		for _, pid := range l.PIDs {
-			out = append(out, socketListener{PID: pid, Port: l.Addr.Port(), Addr: l.Addr.Addr()})
+		for _, holder := range l.Holders {
+			out = append(out, socketListener{PID: holder.PID, Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
 	}
 	return out, nil

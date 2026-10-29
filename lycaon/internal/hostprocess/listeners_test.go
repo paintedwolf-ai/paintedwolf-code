@@ -79,6 +79,41 @@ func TestPortHoldersNamesRealHolders(t *testing.T) {
 	}
 }
 
+// The port lookup reports the holder the shared native socket observation
+// sees for the socket: same PID and the same process incarnation.
+func TestPortHoldersReportsTheObservedHolder(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	testutil.FailErr(t, "listen", err)
+	defer listener.Close()
+	endpoint := listener.Addr().(*net.TCPAddr).AddrPort()
+	sockets, err := lineage.SocketsOf(os.Getpid())
+	testutil.FailErr(t, "observe this process", err)
+	var observed lineage.ProcessIdentity
+	for _, socket := range sockets {
+		if socket.Listening && socket.Local == endpoint {
+			observed = socket.Holder
+		}
+	}
+	if observed.PID != os.Getpid() {
+		t.Fatalf("native observation of %s = %+v", endpoint, sockets)
+	}
+	service, err := New()
+	testutil.FailErr(t, "create service", err)
+	holders, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: endpoint.Port()})
+	testutil.FailErr(t, "port holders", err)
+	if len(holders) != 1 || holders[0].Process == nil || holders[0].Process.PID != observed.PID || holders[0].Process.StartOrder != uint64(observed.Started) {
+		t.Fatalf("port holders of %s = %+v, want the observed holder %+v", endpoint, holders, observed)
+	}
+}
+
+// incarnation reads the identity the shared socket observation reports for pid.
+func incarnation(t *testing.T, pid int) lineage.ProcessIdentity {
+	t.Helper()
+	process, err := inspect(pid)
+	testutil.FailErr(t, "inspect holder", err)
+	return lineage.ProcessIdentity{PID: pid, Started: int64(process.StartOrder)}
+}
+
 // fixtureService answers listener queries from a fixed table and session set.
 func fixtureService(t *testing.T, table []lineage.Listener, members map[int]struct{}) *Service {
 	t.Helper()
@@ -98,16 +133,21 @@ func fixtureService(t *testing.T, table []lineage.Listener, members map[int]stru
 }
 
 // A socket whose holder cannot be read keeps its port with the PID unknown,
-// and so does one whose holder exited between the table read and inspection.
+// and so does one whose holder exited, or whose PID now names another process
+// incarnation, between the socket observation and inspection.
 func TestPortHoldersKeepsUnreadableHoldersAsUnknown(t *testing.T) {
 	// No platform assigns a PID this large, so inspecting it always fails.
 	const gone = 1 << 30
 	self := os.Getpid()
+	current := incarnation(t, self)
+	reused := current
+	reused.Started++
 	service := fixtureService(t, []lineage.Listener{
-		{Protocol: lineage.ProtocolUDP, Addr: netip.MustParseAddrPort("[::]:5353"), UID: 0, PIDs: []int{self}},
+		{Protocol: lineage.ProtocolUDP, Addr: netip.MustParseAddrPort("[::]:5353"), UID: 0, Holders: []lineage.ProcessIdentity{current}},
 		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("[::ffff:127.0.0.1]:5432"), UID: 70},
-		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:5432"), UID: 70, PIDs: []int{gone}},
-		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:3000"), UID: 501, PIDs: []int{self}},
+		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:5432"), UID: 70, Holders: []lineage.ProcessIdentity{{PID: gone, Started: 1}}},
+		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:3000"), UID: 501, Holders: []lineage.ProcessIdentity{current}},
+		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("127.0.0.1:6000"), UID: 501, Holders: []lineage.ProcessIdentity{reused}},
 	}, map[int]struct{}{self: {}})
 	holders, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{})
 	testutil.FailErr(t, "port holders", err)
@@ -122,7 +162,7 @@ func TestPortHoldersKeepsUnreadableHoldersAsUnknown(t *testing.T) {
 		}
 		got = append(got, string(h.Socket.Protocol)+" "+netip.AddrPortFrom(h.Socket.Address, uint16(h.Socket.Port)).String()+" "+strconv.Itoa(pid))
 	}
-	want := []string{"tcp 0.0.0.0:3000 " + strconv.Itoa(self), "udp [::]:5353 " + strconv.Itoa(self), "tcp 0.0.0.0:5432 0", "tcp 127.0.0.1:5432 0"}
+	want := []string{"tcp 0.0.0.0:3000 " + strconv.Itoa(self), "udp [::]:5353 " + strconv.Itoa(self), "tcp 0.0.0.0:5432 0", "tcp 127.0.0.1:5432 0", "tcp 127.0.0.1:6000 0"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("holders = %q, want %q", got, want)
 	}
@@ -134,9 +174,10 @@ func TestListeningPagesHoldersWithTheirSockets(t *testing.T) {
 	testutil.FailErr(t, "start child", child.Start())
 	t.Cleanup(func() { _ = child.Process.Kill(); _ = child.Wait() })
 	first, second := min(self, child.Process.Pid), max(self, child.Process.Pid)
+	firstHolder, secondHolder := incarnation(t, first), incarnation(t, second)
 	service := fixtureService(t, []lineage.Listener{
-		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("127.0.0.1:8080"), UID: 501, PIDs: []int{second}},
-		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("[::1]:8080"), UID: 501, PIDs: []int{first, second}},
+		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("127.0.0.1:8080"), UID: 501, Holders: []lineage.ProcessIdentity{secondHolder}},
+		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("[::1]:8080"), UID: 501, Holders: []lineage.ProcessIdentity{firstHolder, secondHolder}},
 		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:8080"), UID: 0},
 	}, nil)
 	query := lineage.ListenerQuery{Port: 8080}

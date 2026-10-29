@@ -4,10 +4,8 @@ package lineage
 
 /*
 #include <errno.h>
-#include <libproc.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/proc_info.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/sysctl.h>
@@ -27,8 +25,9 @@ struct pw_listen_row {
 };
 
 // pw_listen_rows reads the host-wide PCB table, which needs no access to the
-// holding process. TCP rows listen in TCPS_LISTEN; UDP rows listen while bound
-// and unconnected. xso_so is the handle PROC_PIDFDSOCKETINFO reports as soi_so.
+// holding process, so a socket whose holder cannot be inspected still appears.
+// TCP rows listen in TCPS_LISTEN; UDP rows listen while bound and unconnected.
+// xso_so is the handle the shared descriptor walk reports as soi_so.
 static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
  const char *name = udp ? "net.inet.udp.pcblist64" : "net.inet.tcp.pcblist64";
  *rows = NULL;
@@ -87,32 +86,6 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
  return 0;
 }
 
-// pw_socket_handles lists the kernel handles of every socket pid holds. A
-// process this user may not inspect returns its error and no handles.
-static int pw_socket_handles(int pid, uint64_t **handles, int *count) {
- *handles = NULL;
- *count = 0;
- errno = 0;
- int size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
- if (size <= 0) return errno ? errno : ESRCH;
- size += 64 * (int)sizeof(struct proc_fdinfo);
- struct proc_fdinfo *fds = malloc((size_t)size);
- if (fds == NULL) return ENOMEM;
- int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fds, size);
- if (n <= 0) { int err = errno; free(fds); return err ? err : ESRCH; }
- int fdcount = n / (int)sizeof(struct proc_fdinfo);
- uint64_t *out = calloc((size_t)fdcount + 1, sizeof(uint64_t));
- if (out == NULL) { free(fds); return ENOMEM; }
- for (int i = 0; i < fdcount; i++) {
-  if (fds[i].proc_fdtype != PROX_FDTYPE_SOCKET) continue;
-  struct socket_fdinfo info;
-  if (proc_pidfdinfo(pid, fds[i].proc_fd, PROC_PIDFDSOCKETINFO, &info, sizeof(info)) != (int)sizeof(info)) continue;
-  out[(*count)++] = info.psi.soi_so;
- }
- free(fds);
- *handles = out;
- return 0;
-}
 */
 import "C"
 
@@ -142,7 +115,7 @@ func listeners(query ListenerQuery) ([]Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolveListeners(rows, pids, socketHandles), nil
+	return resolveListeners(rows, pids, observeSockets), nil
 }
 
 func pcbListeners(protocol Protocol) ([]kernelListener, error) {
@@ -168,18 +141,4 @@ func pcbListeners(protocol Protocol) ([]kernelListener, error) {
 		out = append(out, kernelListener{Protocol: protocol, Local: netip.AddrPortFrom(addr, uint16(row.port)), UID: uint32(row.uid), Handle: uint64(row.handle)})
 	}
 	return out, nil
-}
-
-func socketHandles(pid int) []uint64 {
-	var handles *C.uint64_t
-	var count C.int
-	if C.pw_socket_handles(C.int(pid), &handles, &count) != 0 {
-		return nil
-	}
-	defer C.free(unsafe.Pointer(handles))
-	out := make([]uint64, int(count))
-	for i, handle := range unsafe.Slice(handles, int(count)) {
-		out[i] = uint64(handle)
-	}
-	return out
 }

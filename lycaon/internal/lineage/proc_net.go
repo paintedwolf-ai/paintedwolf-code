@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // procTCPListen is the kernel's TCP_LISTEN state as /proc/net/tcp prints it.
@@ -30,8 +32,19 @@ type procSocket struct {
 }
 
 // procFS reads Linux kernel tables under one procfs mount. The host reads
-// /proc; tests read a fixture tree with the same layout.
-type procFS struct{ root string }
+// /proc; tests read a fixture tree with the same layout and supply identity.
+type procFS struct {
+	root string
+	// identity reads a process incarnation; nil reads the host kernel's.
+	identity func(pid int) (ProcessIdentity, bool)
+}
+
+func (p procFS) processIdentity(pid int) (ProcessIdentity, bool) {
+	if p.identity != nil {
+		return p.identity(pid)
+	}
+	return processIdentity(pid)
+}
 
 // procTables names each protocol's tables. A host without IPv6 has no *6 table.
 var procTables = map[Protocol][]string{ProtocolTCP: {"tcp", "tcp6"}, ProtocolUDP: {"udp", "udp6"}}
@@ -54,8 +67,33 @@ func (p procFS) sockets(protocols []Protocol) ([]procSocket, error) {
 	return out, nil
 }
 
+// socketsOf joins one current process incarnation's socket descriptors with
+// the kernel table rows. Inaccessible descriptor tables are failures, never
+// empty ownership evidence.
+func (p procFS) socketsOf(pid int, table []procSocket) ([]SocketObservation, error) {
+	holder, ok := p.processIdentity(pid)
+	if !ok {
+		return nil, syscall.ESRCH
+	}
+	inodes, err := p.socketInodes(pid)
+	if err != nil {
+		return nil, err
+	}
+	if current, ok := p.processIdentity(pid); !ok || current != holder {
+		return nil, syscall.ESRCH
+	}
+	var result []SocketObservation
+	for _, socket := range table {
+		if inodes[socket.Inode] {
+			result = append(result, SocketObservation{Protocol: socket.Protocol, Local: socket.Local, Remote: socket.Remote,
+				ResourceID: fmt.Sprintf("linux-%s:%d", socket.Protocol, socket.Inode), Listening: socket.Listening, Holder: holder, handle: socket.Inode})
+		}
+	}
+	return result, nil
+}
+
 // listeners joins the wanted listening sockets with the processes holding
-// them. A socket whose holders the host cannot read keeps an empty PID list.
+// them. A socket whose holders the host cannot read keeps no holders.
 func (p procFS) listeners(query ListenerQuery) ([]Listener, error) {
 	sockets, err := p.sockets(query.protocols())
 	if err != nil {
@@ -74,31 +112,56 @@ func (p procFS) listeners(query ListenerQuery) ([]Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolveListeners(rows, pids, p.socketInodes), nil
+	return resolveListeners(rows, pids, func(pid int) ([]SocketObservation, error) { return p.socketsOf(pid, sockets) }), nil
 }
 
-// socketHolders maps each wanted socket inode to the processes holding it.
+// socketHolders maps each wanted socket inode to the processes holding it. A
+// process whose descriptors cannot be read contributes nothing.
 func (p procFS) socketHolders(wanted map[uint64]bool) (map[uint64][]int, error) {
+	out := map[uint64][]int{}
 	if len(wanted) == 0 {
-		return map[uint64][]int{}, nil
+		return out, nil
 	}
 	pids, err := p.livePIDs()
 	if err != nil {
 		return nil, err
 	}
-	return socketHolders(wanted, pids, p.socketInodes), nil
+	for _, pid := range pids {
+		inodes, err := p.socketInodes(pid)
+		if err != nil {
+			continue
+		}
+		for inode := range inodes {
+			if wanted[inode] {
+				out[inode] = append(out[inode], pid)
+			}
+		}
+	}
+	return out, nil
 }
 
-// socketInodes lists the socket inodes a process holds; an unreadable
-// descriptor table yields none.
-func (p procFS) socketInodes(pid int) []uint64 {
-	var out []uint64
-	p.forEachFD(pid, func(_, target string) {
-		if inode, ok := linkInode(target, "socket:["); ok {
-			out = append(out, inode)
+// socketInodes reads the socket inodes a process holds. Descriptors closed
+// during the walk are skipped; any other read failure is returned.
+func (p procFS) socketInodes(pid int) (map[uint64]bool, error) {
+	dir := filepath.Join(p.root, strconv.Itoa(pid), "fd")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	inodes := map[uint64]bool{}
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join(dir, entry.Name()))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
-	})
-	return out
+		if err != nil {
+			return nil, err
+		}
+		if inode, ok := linkInode(target, "socket:["); ok {
+			inodes[inode] = true
+		}
+	}
+	return inodes, nil
 }
 
 func (p procFS) livePIDs() ([]int, error) {

@@ -32,14 +32,15 @@ func (q ListenerQuery) wants(protocol Protocol, local netip.AddrPort) bool {
 }
 
 // Listener is one listening TCP socket or bound, unconnected UDP socket, the
-// user the kernel records as its owner, and the processes holding it. A holder
-// the host cannot inspect is absent from PIDs, so an empty list means unknown,
-// never unheld.
+// user the kernel records as its owner, and the process incarnations holding
+// it. Holders come from the same native per-process observation SocketsOf
+// uses. A holder the host cannot inspect is absent, so an empty list means
+// unknown, never unheld.
 type Listener struct {
 	Protocol Protocol
 	Addr     netip.AddrPort
 	UID      uint32
-	PIDs     []int
+	Holders  []ProcessIdentity
 }
 
 // Listeners reads the host's listening sockets from the kernel. Platforms
@@ -47,7 +48,7 @@ type Listener struct {
 func Listeners(query ListenerQuery) ([]Listener, error) { return listeners(query) }
 
 // kernelListener is one listening socket from a host-wide kernel table, keyed
-// by the opaque handle the platform's per-process descriptor walk also reports.
+// by the handle the per-process observation reports for the same socket.
 type kernelListener struct {
 	Protocol Protocol
 	Local    netip.AddrPort
@@ -55,36 +56,35 @@ type kernelListener struct {
 	Handle   uint64
 }
 
-// resolveListeners attaches to each row every process whose descriptors hold
-// its handle. A process whose descriptors cannot be read contributes nothing,
-// so its sockets keep an empty holder list rather than disappearing.
-func resolveListeners(rows []kernelListener, pids []int, handlesOf func(pid int) []uint64) []Listener {
+// resolveListeners attaches to each row every process incarnation whose
+// observed sockets include its handle. A process the observation cannot read
+// contributes nothing, so its sockets keep an empty holder list rather than
+// disappearing.
+func resolveListeners(rows []kernelListener, pids []int, observe func(pid int) ([]SocketObservation, error)) []Listener {
 	wanted := make(map[uint64]bool, len(rows))
 	for _, row := range rows {
 		wanted[row.Handle] = true
 	}
-	holders := socketHolders(wanted, pids, handlesOf)
-	out := make([]Listener, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, Listener{Protocol: row.Protocol, Addr: row.Local, UID: row.UID, PIDs: holders[row.Handle]})
-	}
-	return out
-}
-
-// socketHolders maps each wanted handle to the processes holding it, once each.
-func socketHolders(wanted map[uint64]bool, pids []int, handlesOf func(pid int) []uint64) map[uint64][]int {
-	out := map[uint64][]int{}
+	holders := map[uint64][]ProcessIdentity{}
 	for _, pid := range pids {
 		if pid <= 0 {
 			continue
 		}
+		sockets, err := observe(pid)
+		if err != nil {
+			continue
+		}
 		held := map[uint64]bool{}
-		for _, handle := range handlesOf(pid) {
-			if wanted[handle] && !held[handle] {
-				held[handle] = true
-				out[handle] = append(out[handle], pid)
+		for _, socket := range sockets {
+			if wanted[socket.handle] && !held[socket.handle] {
+				held[socket.handle] = true
+				holders[socket.handle] = append(holders[socket.handle], socket.Holder)
 			}
 		}
+	}
+	out := make([]Listener, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Listener{Protocol: row.Protocol, Addr: row.Local, UID: row.UID, Holders: holders[row.Handle]})
 	}
 	return out
 }
