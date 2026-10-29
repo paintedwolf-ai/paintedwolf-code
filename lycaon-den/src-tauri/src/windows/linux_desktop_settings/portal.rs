@@ -82,6 +82,7 @@ pub(crate) fn setup(app: AppHandle) -> Result<(), String> {
             let failed = running.clone();
             process::watch(
                 &shell,
+                &super::launch::ShellLaunch,
                 requested,
                 move |frame| apply(&changed, frame),
                 move |status| source_status(&failed, status, false),

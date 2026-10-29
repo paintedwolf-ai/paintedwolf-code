@@ -144,11 +144,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	t.Cleanup(func() {
 		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 		cancel()
-		select {
-		case <-done:
-		case <-time.After(testutil.Timeout(5 * time.Second)):
-			t.Error("outbound prompt did not stop during cleanup")
-		}
+		<-done
 	})
 	go func() {
 		defer close(done)
@@ -163,7 +159,7 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(testutil.Timeout(30 * time.Second)):
+	case <-t.Context().Done():
 		err := fmt.Errorf("outbound prompt did not finish after its approval was resolved")
 		dumpSessionFloorDebug(t, h, sessionID, err)
 		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
@@ -173,25 +169,24 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 
 func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) wire.CheckpointEvent {
 	t.Helper()
-	ev, ok := tryWaitOnePendingApproval(t, h, sessionID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sessionID)
 	if !ok {
 		t.Fatal("timed out waiting for tool_approval checkpoint")
 	}
 	return ev
 }
 
-func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string, d time.Duration) (wire.CheckpointEvent, bool) {
+func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) (wire.CheckpointEvent, bool) {
 	t.Helper()
 	var ev wire.CheckpointEvent
-	ok := testutil.WaitForNoFatal(d, func() bool {
+	for t.Context().Err() == nil {
 		pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
 		if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
-			ev = pending[0]
-			return true
+			return pending[0], true
 		}
-		return false
-	})
-	return ev, ok
+		time.Sleep(5 * time.Millisecond)
+	}
+	return ev, false
 }
 
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {

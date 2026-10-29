@@ -119,13 +119,17 @@ class ReconciliationTests(unittest.TestCase):
     def test_only_completed_repository_qualification_pushes_are_eligible(self):
         mutations = [dict(event='pull_request'), dict(event='merge_group'), dict(event='workflow_dispatch'),
                      dict(head_branch='feature'), dict(repository={'full_name': 'foreign/repo'}),
-                     dict(path='.github/workflows/ci.yml'), dict(status='in_progress'), dict(head_sha='invalid')]
+                     dict(path='.github/workflows/ci.yml'), dict(status='in_progress'), dict(head_sha='invalid'),
+                     dict(conclusion='cancelled'), dict(conclusion='timed_out'), dict(conclusion='neutral'),
+                     dict(conclusion='skipped'), dict(conclusion='action_required')]
         for mutation in mutations:
             with self.subTest(mutation=mutation), patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(tracker, 'api') as api, patch.object(tracker, 'read_snapshot') as read:
                 self.assertIn('skipped', tracker.reconcile({**run(), **mutation}))
             api.assert_not_called()
             read.assert_not_called()
+        self.assertTrue(tracker.eligible({**run(), 'conclusion': 'success'}, 'owner/repo'))
+        self.assertTrue(tracker.eligible({**run(), 'conclusion': 'failure'}, 'owner/repo'))
 
     def test_stale_run_and_main_advance_abort_writes(self):
         for states in [[False], [True, False], [True, True, False]]:

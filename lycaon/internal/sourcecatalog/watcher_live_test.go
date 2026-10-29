@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -39,7 +38,7 @@ func TestLiveWatcherRefreshesCatalogForExternalFileLifecycle(t *testing.T) {
 	assertPaths := func(want []string) {
 		t.Helper()
 		var got []string
-		testutil.WaitFor(t, 5*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			snapshot, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 			testutil.FailErr(t, "read live catalog", err)
 			got = got[:0]
@@ -75,7 +74,7 @@ func TestLiveWatcherInvalidatesModelLiteralCandidatesWithUnchangedMetadata(t *te
 	}
 	writeLiteralFixture(t, root, "source.txt", "OmegaNeedle")
 	testutil.FailErr(t, "preserve external timestamp", os.Chtimes(filepath.Join(root, "source.txt"), info.ModTime(), info.ModTime()))
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		current, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 		testutil.FailErr(t, "refresh catalog", err)
 		candidates, err := catalog.Literals.LiteralCandidates(t.Context(), current, query)

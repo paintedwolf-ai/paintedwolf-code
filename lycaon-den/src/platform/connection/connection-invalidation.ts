@@ -119,6 +119,7 @@ export class ConnectionInvalidation {
     if (keys.includes("providers") || keys.includes("model_policy")) {
       appStore.actions.bumpModelPolicyRevision();
     }
+    if (keys.includes("cost")) this.scheduleCost(currentClient, scope, sessionId);
     if (scope.kind === "session" && scope.session_id !== sessionId) return;
     if (!projectDir) return;
     if (keys.includes("workers") && sessionId) {
@@ -152,32 +153,28 @@ export class ConnectionInvalidation {
         keys.includes("cost"),
       );
     }
-    const currentCosts = this.ports.costs();
-    const currentSettings = this.ports.settings();
-    if (
-      keys.includes("cost") &&
-      currentCosts &&
-      currentSettings &&
-      costTrackingEnabled(currentSettings)
-    ) {
-      const client = currentClient;
-      const costStore = currentCosts;
-      const costSessionId = sessionId;
-      this.sessionInvalidation?.scheduleCost(async () => {
-        if (costSessionId) {
-          await costStore.refreshSession(client, costSessionId).catch(
-            () => undefined,
-          );
-        }
-        // Self-fetching surfaces refetch here.
-        costStore.emitInvalidated();
-      });
-    }
     if (keys.includes("scan")) {
       void refreshCodeScanCache(appStore, currentClient).catch(
         () => undefined,
       );
     }
+  }
+  /** Refreshes the session the cost store presents, which can trail the foreground session during a switch. */
+  private scheduleCost(client: LycaonClient, scope: EventScope, foregroundId: string | undefined): void {
+    const costStore = this.ports.costs();
+    const settings = this.ports.settings();
+    if (!costStore || !settings || !costTrackingEnabled(settings)) return;
+    const shownId = costStore.state.sessionId ?? foregroundId;
+    if (scope.kind === "session" && scope.session_id !== shownId && scope.session_id !== foregroundId) return;
+    this.sessionInvalidation?.scheduleCost(async () => {
+      // The coalesced run refreshes whichever session is presented by then.
+      const target = costStore.state.sessionId ?? shownId;
+      if (target) {
+        await costStore.refreshSession(client, target).catch(() => undefined);
+      }
+      // Self-fetching surfaces refetch here.
+      costStore.emitInvalidated();
+    });
   }
   async hydrate(client: LycaonClient, shouldApply: () => boolean): Promise<void> {
     const settings = this.ports.settings();
