@@ -128,6 +128,9 @@ func ordinary(err error) (string, bool) {
 	if errors.Is(err, os.ErrNotExist) {
 		return "No such file or directory", true
 	}
+	if errors.Is(err, os.ErrExist) {
+		return "File exists", true
+	}
 	return "", false
 }
 

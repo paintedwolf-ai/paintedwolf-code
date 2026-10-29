@@ -53,7 +53,7 @@ func TestCommandSedPreparedAdmissionAndFileScriptPins(t *testing.T) {
 	memory := observedProgramMemory(t, env)
 	testutil.FailErr(t, "write input", os.WriteFile(filepath.Join(env.Dir, "in.txt"), []byte("alpha\nbeta\n"), 0o644))
 	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(env.Dir, "edit.sed"), []byte("s/alpha/omega/\n"), 0o644))
-	testutil.FailErr(t, "write forbidden w script", os.WriteFile(filepath.Join(env.Dir, "write.sed"), []byte("w out.txt\n"), 0o644))
+	testutil.FailErr(t, "write w script", os.WriteFile(filepath.Join(env.Dir, "write.sed"), []byte("w out.txt\n"), 0o644))
 
 	out, err := env.Call(t, t.Context(), `sed -f edit.sed in.txt && sed -i .bak 's/beta/delta/' in.txt`)
 	testutil.FailErr(t, "run sed -f and BSD -i", err)
@@ -80,7 +80,6 @@ func TestCommandSedPreparedAdmissionAndFileScriptPins(t *testing.T) {
 	}{
 		{`sed 'e date' in.txt`, "COMMAND_OPTION_UNSUPPORTED"},
 		{`sed 's/a/b/M' in.txt`, "COMMAND_OPTION_UNSUPPORTED"},
-		{`sed -f write.sed in.txt`, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
 	} {
 		out, err := env.Call(t, t.Context(), tc.program)
 		testutil.FailErr(t, tc.program, err)
@@ -88,5 +87,16 @@ func TestCommandSedPreparedAdmissionAndFileScriptPins(t *testing.T) {
 		if refused.Refusal == nil || refused.Refusal.Code != tc.wantCode || refused.NativeGaps != 0 || memory().InUse().Working != 0 {
 			t.Fatalf("%s: outcome=%+v refusal=%+v usage=%+v", tc.program, refused, refused.Refusal, memory().InUse())
 		}
+	}
+	out, err = env.Call(t, t.Context(), `sed -f write.sed in.txt`)
+	testutil.FailErr(t, "run sed -f with reviewed write", err)
+	written := decodePipeOutcome(t, out)
+	if written.Status != 0 || written.State != "completed" || written.Refusal != nil || written.CompletedEffects != 1 {
+		t.Fatalf("sed -f reviewed write outcome: %+v", written)
+	}
+	data, err := os.ReadFile(filepath.Join(env.Dir, "out.txt"))
+	testutil.FailErr(t, "read sed -f output", err)
+	if string(data) != "alpha\ndelta\n" {
+		t.Fatalf("sed -f output=%q", data)
 	}
 }

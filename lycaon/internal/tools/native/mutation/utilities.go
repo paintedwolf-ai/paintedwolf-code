@@ -509,6 +509,8 @@ func runMktemp(inv *invocation) error {
 		if target.pin.Mode != toolcontract.AbsentRevision {
 			return inv.usage(name, "an unused temporary name")
 		}
+		// A temporary file is private to its owner, as mktemp creates it.
+		target.mode = 0o600
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return err
 		}

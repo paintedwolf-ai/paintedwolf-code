@@ -296,11 +296,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:      memory,
-		Clock:       r.clock(),
-		Environment: run.baseEnv,
-		ScratchDir:  tc.Host.SessionScratchDir,
-		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:         memory,
+		Clock:          r.clock(),
+		ResourceLimits: confineLimits{},
+		Environment:    run.baseEnv,
+		ScratchDir:     tc.Host.SessionScratchDir,
+		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	// Evaluation writes the call's effects privately until its result belongs
 	// to the call; a parked program's later effects never reach the call.
@@ -496,7 +497,7 @@ func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, sourc
 func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, plan commandsurface.ProgramSnapshot, scope captureprojection.Scope, screening captureprojection.StreamOptions) error {
 	sourceRef := "output:program-source:" + run.root.Identity.ProgramID
 	var nodes []toolcontract.ProgramNode
-	for _, location := range programNodes(plan.Statements) {
+	for _, location := range commandsurface.ExecutionLocations(plan.Statements) {
 		nodes = append(nodes, toolcontract.ProgramNode{ID: string(location.ID), SourceUnitID: "submitted", Span: location.Span})
 	}
 	start := toolcontract.ProgramStart{
@@ -679,105 +680,6 @@ func (b *boundedBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]byte(nil), b.data...)
-}
-
-// programNodes lists every static location an execution can begin at:
-// statements (nested and inside substitutions), substitutions and redirections.
-func programNodes(statements []commandsurface.Statement) []commandsurface.SyntaxLocation {
-	var out []commandsurface.SyntaxLocation
-	var statement func(commandsurface.Statement)
-	var words func([]commandsurface.DeferredWord)
-	var parts func([]commandsurface.WordNode)
-	list := func(items []commandsurface.Statement) {
-		for _, item := range items {
-			statement(item)
-		}
-	}
-	parts = func(nodes []commandsurface.WordNode) {
-		for _, node := range nodes {
-			switch node := node.(type) {
-			case commandsurface.DoubleQuotedPart:
-				parts(node.Parts)
-			case commandsurface.SubstitutionPart:
-				out = append(out, node.SyntaxLocation)
-				list(node.Statements)
-			case commandsurface.ParameterPart:
-				words(node.Words())
-			case commandsurface.ArithmeticPart:
-				words(node.Words())
-			case commandsurface.BracePart:
-				words(node.Alternatives)
-			}
-		}
-	}
-	words = func(items []commandsurface.DeferredWord) {
-		for _, item := range items {
-			parts(item.Parts)
-		}
-	}
-	statement = func(s commandsurface.Statement) {
-		out = append(out, s.SyntaxLocation)
-		for _, redirect := range s.Redirects {
-			out = append(out, redirect.SyntaxLocation)
-			words([]commandsurface.DeferredWord{redirect.Target})
-		}
-		switch node := s.Command.(type) {
-		case commandsurface.SimpleCommand:
-			words(node.Words)
-			for _, assignment := range node.Assignments {
-				if assignment.Index != nil {
-					words(commandsurface.ArithmeticPart{Expression: assignment.Index}.Words())
-				}
-				words([]commandsurface.DeferredWord{assignment.Value})
-				words(assignment.Array)
-			}
-		case commandsurface.EnvironmentDeclaration:
-			words(node.Words)
-			for _, assignment := range node.Assignments {
-				words([]commandsurface.DeferredWord{assignment.Value})
-			}
-		case commandsurface.BinaryCommand:
-			statement(node.Left)
-			statement(node.Right)
-		case commandsurface.StatementGroup:
-			list(node.Statements)
-		case commandsurface.Conditional:
-			for branch := &node; branch != nil; branch = branch.Else {
-				list(branch.Condition)
-				list(branch.Then)
-			}
-		case commandsurface.WhileLoop:
-			list(node.Condition)
-			list(node.Body)
-		case commandsurface.ForLoop:
-			words(node.Items)
-			list(node.Body)
-		case commandsurface.CaseStatement:
-			words([]commandsurface.DeferredWord{node.Word})
-			for _, item := range node.Items {
-				words(item.Patterns)
-				list(item.Body)
-			}
-		case commandsurface.FunctionDeclaration:
-			statement(node.Body)
-		case commandsurface.ArithmeticCommand:
-			words(node.Words())
-		case commandsurface.TrapCommand:
-			list(node.Statements)
-		case commandsurface.TimedCommand:
-			list(node.Pipeline)
-		}
-	}
-	list(statements)
-	seen := map[commandsurface.NodeID]bool{}
-	unique := out[:0]
-	for _, location := range out {
-		if !seen[location.ID] {
-			seen[location.ID] = true
-			unique = append(unique, location)
-		}
-	}
-	return unique
 }
 
 var compiledCommandIndex = sync.OnceValues(func() (map[string]toolcontract.CommandSpecification, error) {

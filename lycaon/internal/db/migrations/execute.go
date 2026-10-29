@@ -57,7 +57,24 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 	if !planned.Required() {
 		return nil
 	}
-	tx, err := database.BeginTx(ctx, nil)
+	conn, err := database.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open schema upgrade connection: %w", err)
+	}
+	defer conn.Close()
+	for _, step := range planned.steps {
+		if step.RebuildTables {
+			if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+				return fmt.Errorf("prepare table rebuild: %w", err)
+			}
+			defer func() {
+				_, restoreErr := conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys=ON`)
+				err = errors.Join(err, restoreErr)
+			}()
+			break
+		}
+	}
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema upgrade: %w", err)
 	}

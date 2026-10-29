@@ -35,8 +35,11 @@ type SessionJobs struct {
 	waiters   map[string]map[*jobWaiter]bool
 	signals   map[string]int
 	processes map[string]jobProcess
-	// order lists handles in start order; %N names order[N-1].
-	order []string
+	// order is the job table in start order. A job takes one more than the
+	// highest number in the table and leaves it once waited, so numbers are
+	// reused as a shell reuses them.
+	order   []string
+	numbers map[string]int
 	// programOrder tracks handles started by the active program.
 	programOrder []string
 	publicIDs    map[string]int
@@ -115,6 +118,7 @@ func (j *SessionJobs) BeginProgram() {
 		if active[handle] {
 			kept = append(kept, handle)
 		} else {
+			delete(j.numbers, handle)
 			delete(j.processes, handle)
 			delete(j.results, handle)
 			delete(j.signals, handle)
@@ -170,6 +174,14 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	}
 	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
 	j.mu.Lock()
+	if j.numbers == nil {
+		j.numbers = map[string]int{}
+	}
+	number := 1
+	for _, current := range j.order {
+		number = max(number, j.numbers[current]+1)
+	}
+	j.numbers[handle] = number
 	j.order = append(j.order, handle)
 	j.programOrder = append(j.programOrder, handle)
 	j.mu.Unlock()
@@ -266,7 +278,7 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 		index = len(j.order) - 2
 	case strings.HasPrefix(reference, "%"):
 		if n, err := strconv.Atoi(reference[1:]); err == nil && n > 0 {
-			index = n - 1
+			index = slices.IndexFunc(j.order, func(handle string) bool { return j.numbers[handle] == n })
 		}
 	default:
 		if pid, err := strconv.Atoi(reference); err == nil && pid > 0 {
@@ -321,7 +333,16 @@ func (j *SessionJobs) Unwaited(ctx context.Context) ([]string, error) {
 func (j *SessionJobs) Number(handle string) int {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return slices.Index(j.order, handle) + 1
+	return j.numbers[handle]
+}
+
+// reap removes a waited job from the job table; its outcome stays for a
+// later wait on its PID or handle.
+func (j *SessionJobs) reap(handle string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.order = slices.DeleteFunc(j.order, func(current string) bool { return current == handle })
+	delete(j.numbers, handle)
 }
 
 // Wait returns the job's own settled outcome; waiting does not stop it.
@@ -370,6 +391,7 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
 	}
+	j.reap(handle)
 	if outcome.result.Terminal == toolcontract.ProducerInterrupted && errors.Is(outcome.err, context.Canceled) {
 		// A stopped job's own cancellation is its status, not the waiter's failure.
 		return outcome.result, nil

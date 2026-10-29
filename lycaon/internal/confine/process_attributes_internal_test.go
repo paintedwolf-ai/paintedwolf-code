@@ -1,6 +1,7 @@
 package confine
 
 import (
+	"errors"
 	"math"
 	"reflect"
 	"runtime"
@@ -36,5 +37,37 @@ func TestParseResourceLimitRefusesMalformedValues(t *testing.T) {
 		if limit, err := parseResourceLimit(value); err == nil {
 			t.Errorf("parseResourceLimit(%q) = %+v; want refused", value, limit)
 		}
+	}
+}
+
+// Each platform's declared resource-limit set is pinned here: Windows
+// declares none, and macOS, Linux and the other Unix platforms all three.
+func TestPlatformDeclaresItsResourceLimits(t *testing.T) {
+	resources := []string{"core", "fsize", "nofile", "stack", "cpu", "nproc", "as"}
+	want := LimitQuery | LimitSetSoft | LimitSetHard
+	if runtime.GOOS == "windows" {
+		want = LimitUnsupported
+	}
+	for _, resource := range resources {
+		capability := ResourceLimitCapability(resource)
+		if capability != want {
+			t.Errorf("%s %s = %b, want %b", runtime.GOOS, resource, capability, want)
+		}
+		limit, err := ReadResourceLimit(resource)
+		if capability&LimitQuery == 0 {
+			if !errors.Is(err, ErrLimitUnsupported) {
+				t.Errorf("unsupported %s read: %+v, %v", resource, limit, err)
+			}
+			continue
+		}
+		if err != nil || limit.Resource != resource || limit.Soft > limit.Hard {
+			t.Errorf("%s: %+v, %v", resource, limit, err)
+		}
+	}
+	if ResourceLimitCapability("rss") != LimitUnsupported {
+		t.Fatal("an undeclared resource has a capability")
+	}
+	if _, err := ReadResourceLimit("rss"); err == nil || errors.Is(err, ErrLimitUnsupported) {
+		t.Fatalf("unknown resource read: %v", err)
 	}
 }
