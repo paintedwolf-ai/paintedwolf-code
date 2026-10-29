@@ -118,7 +118,14 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 		var withoutRowID bool
 		testutil.FailErr(t, "read strategy table", tables.Scan(&name, &kind, &withoutRowID))
 		names = append(names, name)
-		rowIDs[name] = !withoutRowID
+		switch kind {
+		case "table", "shadow", "virtual":
+			rowIDs[name] = !withoutRowID
+		case "view":
+			rowIDs[name] = false
+		default:
+			t.Fatalf("unknown strategy object kind %q for %s", kind, name)
+		}
 		if kind == "shadow" {
 			shadows++
 		}
@@ -155,11 +162,12 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 
 func strategyQueryRows(t *testing.T, database *sql.DB, migrationTimes bool, query string, args ...any) strategyRows {
 	t.Helper()
+	identity := fmt.Sprintf("%s (args=%v)", query, args)
 	rows, err := database.QueryContext(t.Context(), query, args...)
-	testutil.FailErr(t, "read strategy state", err)
+	testutil.FailErr(t, "read strategy state: "+identity, err)
 	defer func() { _ = rows.Close() }()
 	columns, err := rows.Columns()
-	testutil.FailErr(t, "read strategy columns", err)
+	testutil.FailErr(t, "read strategy columns: "+identity, err)
 	out := strategyRows{columns: columns, rows: []string{}}
 	for rows.Next() {
 		values := make([]any, len(columns))
@@ -167,7 +175,7 @@ func strategyQueryRows(t *testing.T, database *sql.DB, migrationTimes bool, quer
 		for i := range destinations {
 			destinations[i] = &values[i]
 		}
-		testutil.FailErr(t, "read strategy values", rows.Scan(destinations...))
+		testutil.FailErr(t, "read strategy values: "+identity, rows.Scan(destinations...))
 		encoded := make([]struct {
 			Kind  string
 			Value any
@@ -182,7 +190,7 @@ func strategyQueryRows(t *testing.T, database *sql.DB, migrationTimes bool, quer
 		testutil.FailErr(t, "encode typed logical row", err)
 		out.rows = append(out.rows, string(raw))
 	}
-	testutil.FailErr(t, "finish logical strategy rows", rows.Err())
+	testutil.FailErr(t, "finish logical strategy rows: "+identity, rows.Err())
 	sort.Strings(out.rows)
 	return out
 }

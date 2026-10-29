@@ -27,12 +27,12 @@ func TestRetainedFastFailureAfterCapturePreservesCustodyAndRetry(t *testing.T) {
 			hooks := UpgradeHooks{
 				Before: func(ctx context.Context, reader UpgradeSource, _ migrations.Plan) error {
 					var path string
-					err := reader.QueryRowContext(ctx, "SELECT file FROM pragma_database_list WHERE name='main'").Scan(&path)
+					err := reader.DB.QueryRowContext(ctx, "SELECT file FROM pragma_database_list WHERE name='main'").Scan(&path)
 					testutil.FailErr(t, "locate private capture source", err)
-					cloned, err := CloneSnapshot(ctx, reader, path, recovery)
+					cloned, err := CloneSnapshot(ctx, reader.DB, path, recovery)
 					testutil.FailErr(t, "clone canonical recovery where supported", err)
 					if !cloned {
-						_, err = CopyQuiescentSnapshot(ctx, reader, path, recovery)
+						_, err = CopyQuiescentSnapshot(ctx, reader.DB, path, recovery)
 						testutil.FailErr(t, "copy canonical recovery otherwise", err)
 					}
 					captured = true

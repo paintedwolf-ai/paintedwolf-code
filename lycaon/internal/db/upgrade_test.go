@@ -138,7 +138,7 @@ func TestUpgradeSkippedReleasesPreservesHistoryAndSnapshot(t *testing.T) {
 			if got.Source != plan.Source || got.Target != plan.Target {
 				t.Fatal("capture received another route")
 			}
-			return CreateSnapshot(ctx, source, snapshot)
+			return CreateSnapshot(ctx, source.DB, snapshot)
 		},
 		After:    func(ctx context.Context, got migrations.Plan) error { committed = true; return nil },
 		Progress: func(phase migrations.Phase) { phases = append(phases, phase) },
