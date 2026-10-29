@@ -100,7 +100,8 @@ func runLinuxProbe(mode string) int {
 		}
 		return 4
 	case "unshare":
-		fmt.Println("unshare:", unix.Unshare(unix.CLONE_NEWNS))
+		flags, _ := strconv.Atoi(os.Getenv("PW_CONFINE_UNSHARE_FLAGS"))
+		fmt.Println("unshare:", unix.Unshare(flags))
 		return 4
 	case "tiocsti", "tioclinux":
 		// Take the inherited terminal as the controlling one, as a shell would,
@@ -398,12 +399,18 @@ func TestLinuxNetworkDenyLeavesOnlyLoopback(t *testing.T) {
 	}
 }
 
+// Every unshare kills the process except filesystem state alone, which
+// answers EPERM without running.
 func TestLinuxEscapeSyscallsKillTheProcess(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	for _, mode := range []string{"ptrace", "unshare"} {
-		status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv(mode), self, probeTestFlag)
-		if !status.Signaled() || status.Signal() != unix.SIGSYS {
-			t.Fatalf("%s: want death by SIGSYS, got %v: %s", mode, status, out)
+	for _, tc := range []struct {
+		mode  string
+		flags uint64
+	}{{"ptrace", 0}, {"unshare", unix.CLONE_NEWNS}, {"unshare", unix.CLONE_FS | unix.CLONE_NEWUSER}, {"unshare", unix.CLONE_FS | 1<<32}, {"unshare", unix.CLONE_FS}} {
+		status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), append(probeEnv(tc.mode), "PW_CONFINE_UNSHARE_FLAGS="+strconv.FormatUint(tc.flags, 10)), self, probeTestFlag)
+		refused, killed := tc.flags == unix.CLONE_FS, status.Signaled() && status.Signal() == unix.SIGSYS
+		if killed == refused || refused && !strings.Contains(out, "unshare: operation not permitted") {
+			t.Fatalf("%s %#x: killed by SIGSYS %v, want %v: %v: %s", tc.mode, tc.flags, killed, !refused, status, out)
 		}
 	}
 }
