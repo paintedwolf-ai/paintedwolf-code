@@ -3,38 +3,42 @@ package projectpaths
 import (
 	"errors"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // IsNullOperand identifies native device operands only. Substrings in external
 // code, URLs or arbitrary arguments are never passed through this classifier.
-func IsNullOperand(operand string) bool {
-	return operand == "/dev/null" || (runtime.GOOS == "windows" && strings.EqualFold(operand, "NUL"))
+func IsNullOperand(operand string) bool { return NullOperand(operand, fspath.HostOperandNames()) }
+
+// NullOperand reports whether operand names the null device under names.
+func NullOperand(operand string, names fspath.OperandNames) bool {
+	return operand == "/dev/null" || (names.NullDevice != "" && strings.EqualFold(operand, names.NullDevice))
 }
 
-// ValidateNativeOperand refuses values the current platform cannot represent.
-// On Unix non-Unicode names remain bytes; Windows validation is also exposed
-// independently for shared design fixtures, without claiming runtime parity.
+// ValidateNativeOperand refuses values the running platform cannot represent.
 func ValidateNativeOperand(operand string) error {
-	return ValidatePlatformOperand(operand, runtime.GOOS)
+	return ValidateOperand(operand, fspath.HostOperandNames())
 }
 
-// ValidatePlatformOperand checks representation without rewriting path bytes.
-func ValidatePlatformOperand(operand, platform string) error {
+// ValidateOperand checks representation under a platform's declared operand
+// facts without rewriting path bytes. POSIX names stay exact bytes.
+func ValidateOperand(operand string, names fspath.OperandNames) error {
 	if operand == "" || strings.IndexByte(operand, 0) >= 0 {
 		return invalidOperand(operand, "empty path or NUL in path")
 	}
-	if platform == "darwin" && !utf8.ValidString(operand) {
-		return invalidOperand(operand, "Darwin native path is not representable as UTF-8")
+	if names.UTF8 && !utf8.ValidString(operand) {
+		return invalidOperand(operand, "native path is not representable as UTF-8")
 	}
-	if platform != "windows" {
+	if names.Grammar != fspath.WindowsNames {
 		return nil
 	}
-	if !utf8.ValidString(operand) {
-		return invalidOperand(operand, "Windows path is not Unicode")
-	}
+	return validateWindowsOperand(operand, names)
+}
+
+func validateWindowsOperand(operand string, names fspath.OperandNames) error {
 	isSeparator := func(b byte) bool { return b == '/' || b == '\\' }
 	unc := len(operand) >= 2 && isSeparator(operand[0]) && isSeparator(operand[1])
 	if len(operand) >= 4 && unc && (operand[2] == '?' || operand[2] == '.') && isSeparator(operand[3]) {
@@ -69,7 +73,7 @@ func ValidatePlatformOperand(operand, platform string) error {
 		if len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9' {
 			reserved = true
 		}
-		if reserved && !strings.EqualFold(operand, "NUL") {
+		if reserved && !NullOperand(operand, names) {
 			return invalidOperand(operand, "reserved Windows device name")
 		}
 		if strings.ContainsAny(part, `<>"|?*`) || (strings.Contains(part, ":") && !(len(part) == 2 && part[1] == ':')) {
