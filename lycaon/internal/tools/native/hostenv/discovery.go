@@ -82,14 +82,14 @@ func (inv *invocation) names(visit func(discovery) error) error {
 	return nil
 }
 
-// runWhich prints NAME: native for a name dispatch binds natively, otherwise
-// the executable path a launch would select. Keywords and names without
-// either are status 1.
+// runWhich prints the name dispatch binds natively, as command -v does, so
+// "$(which NAME)" runs the same binding; otherwise the executable path a
+// launch would select. Keywords and names without either are status 1.
 func runWhich(inv *invocation) error {
 	return inv.names(func(d discovery) error {
 		switch {
 		case d.native:
-			return inv.line(d.name + ": native")
+			return inv.line(d.name)
 		case d.path != "":
 			return inv.line(d.path)
 		}
