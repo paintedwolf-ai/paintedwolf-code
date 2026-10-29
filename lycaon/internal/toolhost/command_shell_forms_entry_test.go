@@ -51,8 +51,8 @@ func TestCommandEntryBinarySearchContinuesWithoutMatchBudget(t *testing.T) {
 	}{
 		{"grep -rn TODO .", "binary.dat: binary file matches", 0},
 		{"rg -n TODO", "", 1},
-		{"rg -n TODO binary.dat", "Binary file binary.dat matches", 0},
-		{"rg -uuu -n TODO", "Binary file binary.dat matches", 0},
+		{"rg -n TODO binary.dat", "binary file matches (found \"\\0\" byte around offset 4)", 0},
+		{"rg -uuu -n TODO", "binary.dat: binary file matches (found \"\\0\" byte around offset 4)", 0},
 	} {
 		out, err := f.Call(t, t.Context(), tc.program)
 		testutil.FailErr(t, "run native binary search", err)

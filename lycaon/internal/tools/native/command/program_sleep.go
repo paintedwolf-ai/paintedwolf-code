@@ -2,9 +2,6 @@ package command
 
 import (
 	"context"
-	"math"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -25,7 +22,7 @@ func sleepBuiltin() commandprogram.OperationDispatcher {
 		}
 		var total time.Duration
 		for _, operand := range operands {
-			duration, ok := sleepDuration(operand)
+			duration, ok := commandprogram.ParseDuration(operand)
 			if !ok {
 				return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "sleep", "operand": operand, "reason": "a duration such as 5, 0.5, 2m or 1h"})
 			}
@@ -40,27 +37,4 @@ func sleepBuiltin() commandprogram.OperationDispatcher {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, ctx.Err()
 		}
 	})
-}
-
-func sleepDuration(operand string) (time.Duration, bool) {
-	unit := time.Second
-	switch {
-	case strings.HasSuffix(operand, "s"):
-		operand = strings.TrimSuffix(operand, "s")
-	case strings.HasSuffix(operand, "m"):
-		operand, unit = strings.TrimSuffix(operand, "m"), time.Minute
-	case strings.HasSuffix(operand, "h"):
-		operand, unit = strings.TrimSuffix(operand, "h"), time.Hour
-	case strings.HasSuffix(operand, "d"):
-		operand, unit = strings.TrimSuffix(operand, "d"), 24*time.Hour
-	}
-	value, err := strconv.ParseFloat(operand, 64)
-	if err != nil || value < 0 || math.IsInf(value, 0) || math.IsNaN(value) || strings.ContainsAny(operand, "eEnN+") {
-		return 0, false
-	}
-	scaled := value * float64(unit)
-	if scaled > float64(math.MaxInt64) {
-		return 0, false
-	}
-	return time.Duration(scaled), true
 }
