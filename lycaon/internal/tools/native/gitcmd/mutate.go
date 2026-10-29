@@ -46,7 +46,7 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	case "git apply":
 		return runApply(ctx, p, tc, streams, out, stderr)
 	}
-	write := spec.Name != "git ls-remote"
+	write := spec.Name != "git ls-remote" && !bisectReads[spec.Name]
 	dir, repo, status, err := resolveCommandRepo(ctx, p, stderr, write)
 	if err != nil || status != 0 {
 		return settle(status, err, spec.Name)
@@ -94,6 +94,9 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.NoEffect)
 	case "git pull":
 		return runPull(ctx, p, scopedTC, dir, repo, out, stderr)
+	case "git bisect", "git bisect start", "git bisect skip", "git bisect run", "git bisect reset",
+		"git bisect log", "git bisect terms", "git bisect visualize", "git bisect view":
+		return runBisect(ctx, p, scopedTC, repo, out, stderr)
 	default:
 		return settleMutationError(fmt.Errorf("unhandled git command %s", spec.Name), toolcontract.NoEffect)
 	}

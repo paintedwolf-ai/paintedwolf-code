@@ -16,6 +16,9 @@ var mutateForms = map[string]operandRule{
 	"git worktree": worktreeOperands, "git fetch": anyOperands, "git pull": pullOperands,
 	"git push": anyOperands, "git ls-remote": anyOperands, "git clone": cloneOperands,
 	"git apply": applyOperands, "git rm": removeOperands, "git mv": moveOperands,
+	"git bisect": bisectOperands, "git bisect start": bisectOperands, "git bisect skip": bisectOperands,
+	"git bisect run": bisectOperands, "git bisect reset": bisectOperands, "git bisect log": bisectOperands,
+	"git bisect terms": bisectOperands, "git bisect visualize": bisectOperands, "git bisect view": bisectOperands,
 }
 
 func applyOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
