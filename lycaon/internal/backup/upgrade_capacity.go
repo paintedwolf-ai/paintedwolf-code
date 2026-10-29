@@ -19,7 +19,11 @@ import (
 // needs the recovery point: a clone diverges only by what the upgrade writes
 // and the log it folds in, while a copy costs the whole store.
 func preflightUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan, capture bool) error {
-	if plan.CopyPlan() != nil {
+	plan, err := plan.PrepareRetainedStorage(ctx, opts.SQLDB)
+	if err != nil {
+		return err
+	}
+	if plan.BoundedRetainedStorage() {
 		return preflightRetainedUpgrade(ctx, opts, plan, capture)
 	}
 	available, known, err := availableUpgradeBytes(opts.ConfigDir)

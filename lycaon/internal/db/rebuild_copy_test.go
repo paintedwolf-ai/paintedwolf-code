@@ -108,6 +108,11 @@ func TestRetainedCopyDoesNotReadRetiredIndex(t *testing.T) {
 	if err := validateStoreIntegrity(t.Context(), reader); err == nil {
 		t.Fatal("fixture did not damage the obsolete index")
 	}
+	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)
+	testutil.FailErr(t, "measure primary records despite obsolete index damage", err)
+	if !plan.BoundedRetainedStorage() {
+		t.Fatal("damaged obsolete index lost reviewed resource proof")
+	}
 	testutil.FailErr(t, "close damaged source", reader.Close())
 	destination := filepath.Join(t.TempDir(), "rebuilt.db")
 	testutil.FailErr(t, "copy without obsolete index reads", copyRetainedStore(t.Context(), source, destination, plan))
