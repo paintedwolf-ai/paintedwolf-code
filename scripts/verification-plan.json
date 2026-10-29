@@ -198,7 +198,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$"
+      "exclude": "/test/security$|/internal/launchguard$"
     },
     "seatbelt:confine": {
       "options": [
@@ -410,6 +410,9 @@
     "nix:build": [
       "nix:build"
     ],
+    "test:linux:installed": [
+      "test:linux:installed"
+    ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ],
@@ -474,6 +477,7 @@
     "nix:build": "passthrough",
     "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
+    "test:linux:installed": "passthrough",
     "release:rehearse:native-repositories": "passthrough",
     "release:rehearse:native-repositories-r2": "passthrough",
     "release:rehearse:native-candidates": "passthrough",
@@ -821,6 +825,10 @@
       "locks": ["*"],
       "workers": 1,
       "progress": "log"
+    },
+    "test:linux:installed": {
+      "locks": [],
+      "workers": 1
     },
     "release:rehearse:linux-signing": {
       "locks": [
@@ -1306,6 +1314,8 @@
       "nightly.yml": 2,
       "release.yml": 2,
       "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
