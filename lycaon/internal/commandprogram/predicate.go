@@ -35,7 +35,7 @@ type PredicateRuntime struct {
 	Scope           ExpansionScope
 	Files           PredicateFiles
 	Patterns        PredicatePatterns
-	Memory          *toolcontract.ProgramMemory
+	Memory          PredicateMemory
 	LocalBoundsOnly bool
 	quota           *predicateQuota
 }

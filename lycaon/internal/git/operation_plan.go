@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -203,6 +204,9 @@ func (p *operationPlan) run(ctx context.Context, dir string) ([]byte, int, error
 		if err != nil || code != 0 {
 			return out, code, err
 		}
+	}
+	if p.request.Kind == "add" {
+		return gitexec.RunTo(ctx, dir, p.args, p.opts, io.Discard)
 	}
 	return gitexec.Run(ctx, dir, p.args, p.opts)
 }

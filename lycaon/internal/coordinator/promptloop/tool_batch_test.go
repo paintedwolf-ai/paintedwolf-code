@@ -99,7 +99,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 }
 
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
-	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "decision_adjudicate", "recon_reconcile"} {
+	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "orchestrate_plan", "implement_overlay_promote"} {
 		t.Run(surface, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
@@ -458,12 +458,12 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	}()
 	select {
 	case <-slowStarted:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("slow sibling never started")
 	}
 	select {
 	case <-fastAppended:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("fast sibling was not appended before the slow sibling finished")
 	}
 	close(releaseSlow)

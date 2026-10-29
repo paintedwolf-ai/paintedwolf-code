@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,7 +41,7 @@ func (b *feedTestBody) Close() error { b.closed = true; return nil }
 func feedTestNetwork(tr *feedTestTransport) feedNetwork {
 	return feedNetwork{
 		resolve:   egress.ResolvePublicIPs,
-		transport: func(string, []netip.Addr) feedTransport { return tr },
+		transport: func(*url.URL, []netip.Addr) feedTransport { return tr },
 	}
 }
 
@@ -80,7 +81,8 @@ func TestFeedRedirectsRevalidateAndCloseEveryHop(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: finalBody}, nil
 			}}
 			network := feedTestNetwork(tr)
-			network.transport = func(host string, ips []netip.Addr) feedTransport {
+			network.transport = func(target *url.URL, ips []netip.Addr) feedTransport {
+				host := target.Hostname()
 				hosts = append(hosts, host)
 				if len(ips) != 1 || ips[0].String() != host {
 					t.Fatalf("pin = %v for %s", ips, host)

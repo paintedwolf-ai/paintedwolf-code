@@ -36,31 +36,17 @@ var fixtureEnv = []string{
 }
 
 type harness struct {
-	t      *testing.T
-	root   string
-	bin    string
-	owners *Owners
-	paths  *projectpaths.ProgramPaths
-	tc     tools.ToolContext
+	t        *testing.T
+	root     string
+	bin      string
+	template string
+	owners   *Owners
+	paths    *projectpaths.ProgramPaths
+	tc       tools.ToolContext
 }
 
 func newHarness(t *testing.T) *harness {
-	t.Helper()
-	bin, err := gitengine.BinaryPath()
-	testutil.FailErr(t, "bundled git", err)
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "resolve root", err)
-	owners, err := NewOwners(git.NewManager())
-	testutil.FailErr(t, "owners", err)
-	boundary := nativefixture.Boundary(t)
-	owners.Boundary = boundary
-	tc := nativefixture.Context(root)
-	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
-	testutil.FailErr(t, "program paths", err)
-	h := &harness{t: t, root: root, bin: bin, owners: owners, paths: paths, tc: tc}
-	h.git("init", "-q", "-b", "main")
-	h.git("config", "user.name", "Ann Author")
-	h.git("config", "user.email", "ann@example.test")
+	h := newEmptyHarness(t)
 	h.write("a.txt", "one\ntwo\n")
 	h.write("sub/b.txt", "bee\n")
 	h.git("add", ".")
@@ -73,6 +59,31 @@ func newHarness(t *testing.T) *harness {
 	h.write("staged.txt", "s\n")
 	h.git("add", "staged.txt")
 	h.write("new.txt", "untracked\n")
+	return h
+}
+
+func newEmptyHarness(t *testing.T) *harness {
+	h := newUninitializedHarness(t)
+	h.git("init", "-q", "-b", "main")
+	h.git("config", "user.name", "Ann Author")
+	h.git("config", "user.email", "ann@example.test")
+	return h
+}
+
+func newUninitializedHarness(t *testing.T) *harness {
+	t.Helper()
+	bin, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "bundled git", err)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve root", err)
+	owners, err := NewOwners(git.NewManager())
+	testutil.FailErr(t, "owners", err)
+	boundary := nativefixture.Boundary(t)
+	owners.Boundary = boundary
+	tc := nativefixture.Context(root)
+	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
+	testutil.FailErr(t, "program paths", err)
+	h := &harness{t: t, root: root, bin: bin, template: t.TempDir(), owners: owners, paths: paths, tc: tc}
 	return h
 }
 
@@ -97,7 +108,7 @@ func (h *harness) git(args ...string) string {
 func (h *harness) direct(dir string, args ...string) (string, string, int) {
 	cmd := exec.Command(h.bin, append([]string{"-c", "color.ui=false"}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + h.root}, fixtureEnv...)
+	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + h.root, "GIT_TEMPLATE_DIR=" + h.template}, fixtureEnv...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -267,6 +278,12 @@ func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
 		{[]string{"git", "tag", "v2"}, "COMMAND_OPERAND_INVALID"},
 		{[]string{"git", "config", "user.name", "Mallory"}, "COMMAND_OPERAND_INVALID"},
 		{[]string{"git", "config", "--get", "user.name", "--list"}, "COMMAND_OPERAND_INVALID"},
+		{[]string{"git", "config", "--get", "user.name", "--get", "user.email"}, "COMMAND_OPERAND_INVALID"},
+		{[]string{"git", "config", "--unset", "user.name"}, "COMMAND_OPTION_UNSUPPORTED"},
+		{[]string{"git", "config", "--add", "user.name", "Changed"}, "COMMAND_OPTION_UNSUPPORTED"},
+		{[]string{"git", "config", "--global", "--list"}, "COMMAND_OPTION_UNSUPPORTED"},
+		{[]string{"git", "config", "--file", "other.config", "--list"}, "COMMAND_OPTION_UNSUPPORTED"},
+		{[]string{"git", "config", "--includes", "--list"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{[]string{"git", "remote", "add", "origin", "https://example.test/r.git"}, "COMMAND_OPERAND_INVALID"},
 		{[]string{"git", "remote", "show", "origin"}, "COMMAND_OPERAND_INVALID"},
 		{[]string{"git", "stash", "list", "extra"}, "COMMAND_OPERAND_INVALID"},

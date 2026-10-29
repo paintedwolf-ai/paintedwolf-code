@@ -43,14 +43,14 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	var delivered []string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			Policy:      registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}, {Name: "command", Deferred: true}}},
+			Policy:      registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "survey_repo", Deferred: true}}},
 			LoadedTools: func(string) map[string]bool { return active },
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
 			ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
 				delivered = slices.Clone(offered)
-				if slices.Contains(offered, "command") {
+				if slices.Contains(offered, "survey_repo") {
 					return "runner procedure", nil
 				}
 				return "", nil
@@ -62,7 +62,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	for _, activated := range []bool{false, true, false, true} {
 		active = map[string]bool{}
 		if activated {
-			active["command"] = true
+			active["survey_repo"] = true
 		}
 		turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "inspect", 0, 20, false, &promptLoopTurnState{})
 		testutil.FailErr(t, "build provider request", err)
@@ -98,13 +98,13 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	}
 }
 
-// A report-document repair asks only for the fence, so its turn forbids tool
-// use while keeping the definitions; a citation repair keeps the surface's tools.
-func TestReportDocumentRepairForbidsToolUse(t *testing.T) {
+// Closeout repairs keep the closed turn's tools callable, so the coordinator
+// can resume work; only the final prose turn forbids calls, keeping definitions.
+func TestCloseoutRepairToolUseFollowsTurnFinality(t *testing.T) {
 	retained := guidance.RetainedCloseout{}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "update_progress"}}},
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}}},
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
@@ -115,23 +115,33 @@ func TestReportDocumentRepairForbidsToolUse(t *testing.T) {
 	})
 	sess := &api.Session{ID: "repair", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	history := []api.Message{{Role: api.MessageRoleSystem, Content: "charter", ContextPinned: true}, {Role: api.MessageRoleUser, Content: "report"}}
+	document := guidance.RetainedCloseout{Active: true, DocumentAttempt: 1, ForcedBy: []string{guidance.ReportFenceUnreadableCode}}
 	for _, tc := range []struct {
+		name      string
 		retained  guidance.RetainedCloseout
+		final     bool
 		wantTools bool
 	}{
-		{guidance.RetainedCloseout{}, true},
-		{guidance.RetainedCloseout{Active: true, Attempt: 1, ForcedBy: []string{guidance.InvestHandleNotObservedCode}}, true},
-		{guidance.RetainedCloseout{Active: true, DocumentAttempt: 1, ForcedBy: []string{guidance.ReportClaimUnreportedCode}}, false},
+		{name: "no repair", wantTools: true},
+		{name: "citation repair", retained: guidance.RetainedCloseout{Active: true, Attempt: 1, ForcedBy: []string{guidance.InvestHandleNotObservedCode}}, wantTools: true},
+		{name: "document repair", retained: document, wantTools: true},
+		{name: "document repair on the final turn", retained: document, final: true},
 	} {
-		retained = tc.retained
-		turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "report", 0, 20, false, &promptLoopTurnState{})
-		testutil.FailErr(t, "build provider request", err)
-		if got := turn.Req.ToolsCallable(); got != tc.wantTools {
-			t.Fatalf("retained %+v callable = %v, want %v", tc.retained, got, tc.wantTools)
-		}
-		if len(turn.Req.Tools) == 0 {
-			t.Fatalf("retained %+v dropped the tool definitions", tc.retained)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			retained = tc.retained
+			st := &promptLoopTurnState{proseFinish: tc.final}
+			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "report", 0, 20, false, st)
+			testutil.FailErr(t, "build provider request", err)
+			if got := turn.Req.ToolsCallable(); got != tc.wantTools {
+				t.Fatalf("callable = %v, want %v", got, tc.wantTools)
+			}
+			if len(turn.Req.Tools) == 0 {
+				t.Fatal("dropped the tool definitions")
+			}
+			if got := slices.Contains(st.offeredToolNames, "request_tools"); got != tc.wantTools {
+				t.Fatalf("offered names = %v, want request_tools offered = %v", st.offeredToolNames, tc.wantTools)
+			}
+		})
 	}
 }
 
@@ -142,7 +152,7 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 	procedures := 0
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "submit_verdict"}}},
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "submit_verdict"}}},
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},

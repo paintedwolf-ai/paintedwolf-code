@@ -334,7 +334,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. curl [OPTIONS] URL",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete HTTP transfer (HTTP errors unless --fail)",
         "22": "--fail HTTP status>=400; incomplete/ineligible body publication",

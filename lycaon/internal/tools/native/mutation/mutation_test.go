@@ -69,9 +69,6 @@ func TestRedirectStagesThenPublishesExactBytes(t *testing.T) {
 			if len(pins) != 1 || pins[0].Role != toolcontract.DestinationRevision || pins[0].Mode != wantMode || pins[0].Path != "out.txt" {
 				t.Fatalf("destination pin %+v", pins)
 			}
-			if err := h.program.Barrier.AdmitDependentLaunch(t.Context(), h.tc); err != nil {
-				t.Fatalf("published disk write still blocks dependent launch: %v", err)
-			}
 		})
 	}
 }
@@ -118,7 +115,6 @@ func TestRedirectConflictsWhenDestinationChangesDuringReview(t *testing.T) {
 		reviews++
 		return os.WriteFile(h.path("out.txt"), []byte("human during review\n"), 0o644)
 	}
-	staged.(*fileStage).tools = h.tc
 	_, err := staged.Publish(t.Context())
 	if err == nil || reviews != 1 {
 		t.Fatalf("write landed over a change made during review (reviews=%d): %v", reviews, err)
@@ -135,7 +131,6 @@ func TestInterruptedPublicationLeavesNoPartialFile(t *testing.T) {
 			staged, _ := stage(t, h, ">", "out.txt", strings.Repeat("payload\n", 4096))
 			ctx, cancel := context.WithCancel(t.Context())
 			h.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { cancel(); return nil }
-			staged.(*fileStage).tools = h.tc
 			if _, err := staged.Publish(ctx); !errors.Is(err, context.Canceled) {
 				t.Fatalf("interrupted publication err=%v", err)
 			}
@@ -230,8 +225,8 @@ func TestRecursiveRemoveIsRecoverableAndRoundTrips(t *testing.T) {
 	if r.err != nil || r.result.Status != 0 || r.result.EffectCertainty != toolcontract.EffectCompleted || !h.absent("tree") {
 		t.Fatalf("rm -rf %+v %v %q", r.result, r.err, r.stderr)
 	}
-	// Three files and three directories, each its own recoverable removal.
-	h.undoAll(6)
+	// Whole-tree removal is one recoverable removal.
+	h.undoAll(1)
 	for name, content := range tree {
 		if h.read(name) != content {
 			t.Fatalf("%s did not round-trip", name)

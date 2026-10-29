@@ -1395,6 +1395,36 @@ type CommandProgramNode struct {
 	State        string `json:"state"`
 }
 
+// CommandProgramOutputLimit Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
+type CommandProgramOutputLimit struct {
+	Code     string `json:"code"`
+	LimitID  string `json:"limit_id"`
+	Maximum  int64  `json:"maximum"`
+	Observed int64  `json:"observed"`
+}
+
+// CommandProgramOutputWindow
+type CommandProgramOutputWindow struct {
+	Stream string `json:"stream"`
+	Ref    string `json:"ref"`
+	// Session output address of the retained stream copy.
+	OutputPath string `json:"output_path"`
+	// Bytes in the saved stream. For an incomplete stream the final total is unknown.
+	TotalBytes int64 `json:"total_bytes"`
+	// Lines in the saved stream. For an incomplete stream the final total is unknown.
+	TotalLines        int                        `json:"total_lines"`
+	Complete          bool                       `json:"complete"`
+	Truncated         bool                       `json:"truncated"`
+	HeadEndByte       int64                      `json:"head_end_byte"`
+	HeadEndLine       int                        `json:"head_end_line"`
+	TailStartByte     int64                      `json:"tail_start_byte"`
+	TailStartLine     int                        `json:"tail_start_line"`
+	OmittedBytes      int64                      `json:"omitted_bytes"`
+	OmittedLines      int                        `json:"omitted_lines"`
+	InlineBudgetBytes int                        `json:"inline_budget_bytes"`
+	Limit             *CommandProgramOutputLimit `json:"limit,omitempty"`
+}
+
 // CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
 type CommandProgramProgressReceipt struct {
 	ExecutionID             string `json:"execution_id"`
@@ -1424,6 +1454,8 @@ type CommandProgramReceipt struct {
 	ProgressRef     string     `json:"progress_ref,omitempty"`
 	StartedAt       time.Time  `json:"started_at"`
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
+	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
+	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
 }
 
 // CommandProgramReceiptPage
@@ -3545,12 +3577,16 @@ type HealthResponse struct {
 	PreviousAppVersion string `json:"previous_app_version,omitempty"`
 	// PRAGMA user_version read from the live store when status is recovery. Omitted on ordinary health.
 	StoreSchemaVersion int `json:"store_schema_version,omitempty"`
-	// Closed reason the store cannot be served. Present when status is recovery.
+	// Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
 	RecoveryReason string `json:"recovery_reason,omitempty"`
 	// Human-readable sentence matching the recovery reason. Present when status is recovery.
 	RecoveryDetail string `json:"recovery_detail,omitempty"`
 	// Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health.
 	RecoverySnapshotAvailable bool `json:"recovery_snapshot_available"`
+	// Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+	RecoverySpaceNeededBytes int64 `json:"recovery_space_needed_bytes,omitempty"`
+	// Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
+	RecoverySpaceAvailableBytes int64 `json:"recovery_space_available_bytes,omitempty"`
 	// RFC 3339 UTC creation time of the recovery snapshot when available. Omitted when recovery_snapshot_available is false.
 	RecoverySnapshotAt time.Time `json:"recovery_snapshot_at,omitempty"`
 }
@@ -4186,6 +4222,8 @@ type MessageContentPart struct {
 	Source string `json:"source,omitempty"`
 	// Optional MIME type for this text projection.
 	MediaType string `json:"media_type,omitempty"`
+	// Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
+	ArtifactID string `json:"artifact_id,omitempty"`
 	// Stable blob ID for a payload attachment, used to restage Edit/rewind.
 	BlobID string `json:"blob_id,omitempty"`
 	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).
@@ -4731,6 +4769,13 @@ type ProjectRemovalExtension struct {
 	Reasons     []ProjectRemovalReason `json:"reasons"`
 }
 
+// ProjectRemovalProgress Live host-owned progress; absent once the recorded operation settles.
+type ProjectRemovalProgress struct {
+	Phase     string `json:"phase"`
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
+}
+
 // ProjectRemovalReason
 type ProjectRemovalReason struct {
 	Code      string `json:"code"`
@@ -4747,6 +4792,7 @@ type ProjectRemovalRequest struct {
 
 // ProjectRemovalResult
 type ProjectRemovalResult struct {
+	Progress     *ProjectRemovalProgress   `json:"progress,omitempty"`
 	Assessment   *ProjectRemovalAssessment `json:"assessment,omitempty"`
 	OperationID  string                    `json:"operation_id"`
 	ProjectID    string                    `json:"project_id"`

@@ -12,7 +12,7 @@ Manifest touch paths are work-phase hints, not read limits.
 - **Hygiene:** flag temporary shims, dead compatibility aliases, preachy or historical comments, and one-off allow/deny lists where an invariant, property, contract, or table-driven guard would catch the class.
 - **Summary:** overall risk posture in ≤3 bullets.
 - **Unknowns:** files or context you could not review.
-- Host may reject `WORKER_EVIDENCE_HANDLE_UNKNOWN` when `findings[].path` was never observed in this leg — `read`/`grep` first, then re-emit typed JSON with `path`, `line`, and verbatim `excerpt`.
+- Host may reject `WORKER_EVIDENCE_HANDLE_UNKNOWN` when `findings[].path` was never observed in this leg — inspect the file first via `command`, then re-emit typed JSON with `path`, `line`, and verbatim `excerpt`.
 
 {% include "partials/code-finish-hygiene.md" %}
 

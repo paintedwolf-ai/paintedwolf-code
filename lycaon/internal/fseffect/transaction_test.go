@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -163,6 +162,22 @@ func TestUpdateModeAppliesThroughHeldParent(t *testing.T) {
 	testutil.FailErr(t, "stat target", err)
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("mode = %o, want 755", info.Mode().Perm())
+	}
+}
+
+func TestUpdateModeAppliesToDirectoryThroughHeldParent(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "copied")
+	testutil.FailErr(t, "seed directory", os.Mkdir(target, 0o755))
+	_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
+		Location: fseffect.Location{Root: root, Rel: "copied"},
+		Update:   func(os.FileMode) os.FileMode { return 0o700 },
+	})
+	testutil.FailErr(t, "update directory mode", err)
+	info, err := os.Stat(target)
+	testutil.FailErr(t, "stat directory", err)
+	if !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Fatalf("directory mode = %v, want 0700", info.Mode())
 	}
 }
 
@@ -356,12 +371,17 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 
 	<-entered // Writer A holds the target lock.
 
+	bStaged := make(chan struct{})
 	bDone := make(chan struct{})
 	go func() {
 		defer close(bDone)
 		_, err := fseffect.Replace(fseffect.ReplaceRequest{
 			Location: loc, Mode: 0o600,
 			Source: bytes.NewReader([]byte("from-B")),
+			ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+				close(bStaged)
+				return nil
+			},
 			BeforeCommit: func(fseffect.Target, fseffect.Result) error {
 				if !atomic.CompareAndSwapInt32(&active, 0, 1) {
 					t.Error("writer B entered its critical section while writer A still held the target")
@@ -373,10 +393,12 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 		testutil.FailErr(t, "writer B replace", err)
 	}()
 
+	<-bStaged
+	runtime.Gosched()
 	select {
 	case <-bDone:
 		t.Fatal("writer B completed its Replace before writer A released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 
 	close(release)
@@ -407,9 +429,11 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 	}()
 	<-replaceEntered
 
+	modeStarted := make(chan struct{})
 	modeEntered := make(chan struct{})
 	modeDone := make(chan error, 1)
 	go func() {
+		close(modeStarted)
 		_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
 			Location: loc,
 			Update:   func(mode os.FileMode) os.FileMode { return mode | 0o044 },
@@ -421,10 +445,12 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 		modeDone <- err
 	}()
 
+	<-modeStarted
+	runtime.Gosched()
 	select {
 	case <-modeEntered:
 		t.Fatal("UpdateMode entered before Replace released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(releaseReplace)
 	testutil.FailErr(t, "replace", <-replaceDone)
@@ -460,5 +486,20 @@ func TestOpenReadAcceptsCapabilityRoot(t *testing.T) {
 	testutil.FailErr(t, "stat capability root", err)
 	if !info.IsDir() {
 		t.Fatalf("capability root mode = %v", info.Mode())
+	}
+}
+
+func TestMkdirAllCountsOnlyObservedCreations(t *testing.T) {
+	root := t.TempDir()
+	loc := fseffect.Location{Root: root, Rel: "a/b"}
+	count, err := fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "create nested directories", err)
+	if count != 2 {
+		t.Fatalf("created=%d want=2", count)
+	}
+	count, err = fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "reuse directories", err)
+	if count != 0 {
+		t.Fatalf("existing directories counted as effects: %d", count)
 	}
 }

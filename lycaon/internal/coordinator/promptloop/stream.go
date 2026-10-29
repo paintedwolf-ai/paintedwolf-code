@@ -20,11 +20,13 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -51,6 +53,8 @@ func (l *modelTurn) runAssistantStreamTurn(
 		messageID = st.ensureCoordinatorDraftSlot()
 	}
 	outputID := uuid.NewString()
+	ctx, capture := trainingcapture.Begin(ctx, sessionID, messageID, outputID)
+	defer capture.Flush(ctx)
 	assistantMsg := newProvisionalAssistantMessage(api.Message{
 		ID:        messageID,
 		CreatedAt: time.Now().UTC(),
@@ -187,6 +191,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		}
 		st.output.id = committed.ID
 		canonicalOutputID = committed.ID
+		trainingcapture.Settled(ctx, committed.ID, wireAssistant)
 	}
 	if l.Deps.UpdateMessage != nil {
 		if err := l.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, wireAssistant); err != nil {
@@ -317,9 +322,11 @@ func (l *modelTurn) completeStream(
 	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
+	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
+	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
@@ -506,12 +513,13 @@ func (l *modelTurn) buildTurnRequest(
 	if st != nil && st.spendSoftStopGranted {
 		turnTools = filterSpendSoftStopToolMetas(turnTools)
 	}
-	// A prose-only turn keeps its tool definitions, which transports validate
-	// tool history against, and forbids calling them: a final turn with no
-	// completion tool, or a report-document repair that asks for one fence.
+	// A final turn with no completion tool keeps its tool definitions, which
+	// transports validate tool history against, and forbids calling them.
+	// Closeout repairs on earlier turns keep the surface callable: the repair
+	// kick offers resuming work, which retires the pinned report.
 	toolUse := modelcall.ToolUseAllowed
 	callable := turnTools
-	if l.Closeout.repairsReportDocument(ctx, sessionID) || (st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0) {
+	if st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0 {
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}
@@ -551,6 +559,7 @@ func (l *modelTurn) buildTurnRequest(
 			Iteration:        iterIndex + 1,
 			MaxIterations:    maxIter,
 			WorkflowRevision: frameValue.WorkflowRevision,
+			CommandGuidance:  l.buildCommandGuidanceDebug(ctx, sess, profileID, surfaceID, frameValue, turnTools),
 		},
 	}
 	if err := validateTurnToolFunctionRoots(turnTools); err != nil {
@@ -595,4 +604,56 @@ func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Sessio
 		return ""
 	}
 	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
+}
+
+func (l *modelTurn) buildCommandGuidanceDebug(
+	ctx context.Context,
+	sess *api.Session,
+	profileID, surfaceID string,
+	frame inject.CoordinatorTurnFrame,
+	turnTools []tools.ToolMeta,
+) *modelcall.CommandGuidanceDebug {
+	if sess == nil {
+		return nil
+	}
+	var offered, deferred []string
+	for _, meta := range turnTools {
+		name := strings.TrimSpace(meta.Name)
+		if name == "" {
+			continue
+		}
+		if meta.Deferred {
+			deferred = append(deferred, name)
+		} else {
+			offered = append(offered, name)
+		}
+	}
+	rootCount := 0
+	if l != nil && l.Context != nil && l.Context.Deps.ProjectRootCount != nil {
+		rootCount = l.Context.Deps.ProjectRootCount(ctx, sess)
+	}
+	projectDir := ""
+	if l != nil && l.Context != nil {
+		projectDir = l.Context.primaryProjectRoot(ctx, sess)
+	}
+	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
+		ProfileID:             profileID,
+		SurfaceID:             surfaceID,
+		AgentType:             sess.AgentType,
+		IsCoordinator:         profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
+		OfferedTools:          offered,
+		DeferredTools:         deferred,
+		RootCount:             rootCount,
+		ProjectDir:            projectDir,
+		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
+		Posture:               frame.Machine.Surface.Posture,
+		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
+	})
+	if len(templates) == 0 && len(facts) == 0 {
+		return nil
+	}
+	return &modelcall.CommandGuidanceDebug{
+		Templates: templates,
+		Facts:     facts,
+	}
 }

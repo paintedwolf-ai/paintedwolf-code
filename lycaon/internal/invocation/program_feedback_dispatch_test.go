@@ -208,7 +208,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
-		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, observer, effect, tc)
+		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
 		return res, invokeErr, executor, frame, tc, memory
 	}
 
@@ -248,7 +248,6 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		t.Fatalf("readonly refusal lost replayability: %s", proj1)
 	}
 
-	// 2. Scope denial (MOVE_PATH_DENIED), 3. Stale destination (TEXT_WRITE_CONFLICT), 4. Deferred domain tool (USE_WRITE_NATIVE with tool_loadable=true).
 	cases := []struct {
 		op, cmd, code string
 		offered       []string
@@ -256,7 +255,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	}{
 		{op: "move", cmd: "mv", code: "MOVE_PATH_DENIED", reject: &toolrejection.ToolReject{Code: "MOVE_PATH_DENIED", Data: map[string]any{"path": "../outside", "reason": "outside project root", "scope": "project root"}}},
 		{op: "write", cmd: "tee", code: "TEXT_WRITE_CONFLICT", reject: &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": "input", "text_base_changed": true}}},
-		{op: "write", cmd: "tee", code: "USE_WRITE_NATIVE", offered: []string{"command", "request_tools"}, reject: &toolrejection.ToolReject{Code: "USE_WRITE_NATIVE", Data: map[string]any{"tool": "command", "command": "tee input", "path": "input", "tool_loadable": true, "native_replacement_tools": []string{"write"}}}},
+		{op: "write", cmd: "tee", code: "TOOL_NOT_OFFERED", offered: []string{"command", "request_tools"}, reject: &toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", Data: map[string]any{"tool": "write", "tool_loadable": true}}},
 	}
 	for _, tcCase := range cases {
 		fc := newProgramReceiptFixture(t)
@@ -265,7 +264,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: tcCase.code, EffectCertainty: toolcontract.NoEffect}, tcCase.reject
 		})
 		refusal, proj := assertRenderedFeedback(t, fc, child, res, invokeErr, ex, fr, tc, mem, "rejected", tcCase.code)
-		if tcCase.code == "USE_WRITE_NATIVE" && (!strings.Contains(refusal.Body, "request_tools") || !strings.Contains(proj, `"tool_loadable":true`)) {
+		if tcCase.code == "TOOL_NOT_OFFERED" && (!strings.Contains(refusal.Body, "request_tools") || !strings.Contains(proj, `"tool_loadable":true`)) {
 			t.Fatalf("deferred domain tool lost request_tools recovery: body=%q proj=%s", refusal.Body, proj)
 		}
 	}

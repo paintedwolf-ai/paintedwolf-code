@@ -44,12 +44,12 @@ func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
 			if !reflect.DeepEqual(got, schema) {
 				t.Fatalf("LegTools %v != schema %v", got, schema)
 			}
-			for _, name := range got {
-				if name == "command" {
-					t.Fatalf("%s LegTools must not include command: %v", agentType, got)
+			for _, forbidden := range []string{"write", "replace_lines", "delete", "mkdir", "copy", "move"} {
+				if legToolsContains(got, forbidden) {
+					t.Fatalf("%s LegTools must not include mutation tool %q: %v", agentType, forbidden, got)
 				}
 			}
-			for _, want := range []string{"find", "grep", "read"} {
+			for _, want := range []string{"command", "find", "grep", "read"} {
 				if !legToolsContains(got, want) {
 					t.Fatalf("%s LegTools missing %q: %v", agentType, want, got)
 				}

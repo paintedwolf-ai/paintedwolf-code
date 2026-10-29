@@ -1,4 +1,4 @@
-description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Read a file and return its content or structure in JSON; unscoped large files return a structure digest. For literal content, set mode / offset / limit / ranges / symbol. Replaces command: cat / head / sed -n."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Read a file and return its content or structure in JSON; unscoped large files return a structure digest. For literal content, set mode / offset / limit / ranges / symbol."
 schema:
   type: object
   properties:
@@ -8,7 +8,7 @@ schema:
     mode:
       type: string
       enum: [content, outline]
-      description: content gives numbered lines; outline gives symbols[] and parses/errors[]. Unscoped files over 2000 lines return a digest; select offset/limit/ranges/symbol or mode content. Repeats may return the full file.
+      description: content gives exact source text under its line range (lines S–E; first text line is S); outline gives symbols[] and parses/errors[]. Unscoped files over 2000 lines return a digest; select offset/limit/ranges/symbol or mode content. Repeats may return the full file.
     ranges:
       type: array
       description: Up to 8 ranges, 4000 total lines; excludes offset/limit.
@@ -30,7 +30,7 @@ schema:
       description: Line limit (workers default 2000; coordinator max 2000)
     offset:
       type: integer
-      description: 1-based starting line for pagination
+      description: 1-based first line returned; reads a known line number exactly
     symbol:
       type: string
       description: Named definition (instead of offset/limit; writable statement span)

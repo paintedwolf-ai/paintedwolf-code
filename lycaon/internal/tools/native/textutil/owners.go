@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -63,7 +64,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	if pins == nil {
 		return nil, errors.New("text utilities require a revision pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -164,19 +165,35 @@ func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.Opera
 // Mode is the catalog effect mode the bound form selects, or empty when the
 // command has one mode.
 type Prepared struct {
-	Argv    commandprogram.BoundArgv
-	Review  commandprogram.ArgvReview
-	Mode    string
-	owners  *Owners
-	request commandprogram.OperationRequest
-	spec    toolcontract.CommandSpecification
-	run     utility
-	sed     *preparedSed
+	Argv           commandprogram.BoundArgv
+	Review         commandprogram.ArgvReview
+	Mode           string
+	DeferredSource bool
+	owners         *Owners
+	request        commandprogram.OperationRequest
+	spec           toolcontract.CommandSpecification
+	run            utility
+	sed            *preparedSed
 }
 
 // Close releases any admitted resources retained by the prepared invocation.
 func (p Prepared) Close() {
 	p.sed.close()
+}
+
+// RecordSourceRead records a source revision after its own path was admitted,
+// even if approval for the parsed script's effects is later declined.
+func (p Prepared) RecordSourceRead(ctx context.Context) error {
+	if p.sed == nil || p.sed.pinsRecorded {
+		return nil
+	}
+	for _, pin := range p.sed.pins {
+		if err := p.owners.Pins.AppendRevisionPin(ctx, p.request.Invocation.Identity.ExecutionID, pin); err != nil {
+			return err
+		}
+	}
+	p.sed.pinsRecorded = true
+	return nil
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
@@ -207,10 +224,51 @@ func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRe
 		}
 		prepared.sed = sedPlan
 		prepared.Mode = mode
+		prepared.Review.PathTargets = o.pathTargets(bound, sedPlan)
 		return prepared, nil
 	}
 	prepared.Mode = o.effectMode(bound)
+	if PathUtility(command) {
+		prepared.Review.PathTargets = o.pathTargets(bound, nil)
+	}
 	return prepared, nil
+}
+
+// PrepareNative projects script-file effects before the child approval while
+// preserving the streaming invocation's source capture and execution pin.
+func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramPaths, ports Ports, request commandprogram.OperationRequest) (Prepared, error) {
+	p, err := o.Prepare(ctx, request)
+	if err != nil || p.Argv.Command != "sed" || !argvFlag(p.Argv, "-f") {
+		return p, err
+	}
+	for _, item := range p.Argv.Items {
+		if item.Option == nil || item.Option.Key != "-f" {
+			continue
+		}
+		for _, value := range item.Option.Values {
+			if _, err := frame.Bind(ctx, value.Value, false); err != nil {
+				// The bound -f operand is already a typed read target. Defer
+				// loading until that target has passed child admission.
+				p.DeferredSource = true
+				return p, nil
+			}
+		}
+	}
+	ports.ToolContext = frame.ToolContext()
+	inv := newInvocation(ctx, p, ports, commandprogram.Streams{})
+	inv.preparing = true
+	source, program, err := loadSedFileScript(inv, p.sed.source)
+	inv.close()
+	if err != nil {
+		p.Close()
+		return Prepared{}, err
+	}
+	p.sed.source, p.sed.program = source, program
+	p.Review.PathTargets = o.pathTargets(p.Argv, p.sed)
+	if len(program.WriteFiles()) > 0 && p.Mode == "stream-script" {
+		p.Mode = "w-command"
+	}
+	return p, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
@@ -231,6 +289,11 @@ func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fie
 			bound.EndOfOptions = true
 			index++
 			break
+		}
+		if word.Value == "--help" {
+			bound.Help = true
+			bound.Items = append(bound.Items, commandprogram.BoundItem{Option: &commandprogram.BoundOption{Key: "--help", Spelling: "--help", ValueRole: "boolean", Span: word.Span}})
+			continue
 		}
 		keys, ok := shortCluster(word.Value, declared)
 		if !ok {
@@ -273,8 +336,17 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 		err := errors.New("text utilities require program memory admission")
 		return nativeutility.Settle(err, 0, false), err
 	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)
+	if err == nil {
+		err = inv.out.Flush()
+	}
 	if err == nil && inv.stoppedBatch == nil {
 		err = ctx.Err()
 	}
@@ -287,6 +359,10 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	}
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
+	}
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
 	}
 	err = tools.CommandResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)

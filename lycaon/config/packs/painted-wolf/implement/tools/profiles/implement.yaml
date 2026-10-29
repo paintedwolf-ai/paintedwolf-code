@@ -3,17 +3,17 @@ description: Implementer — product edits and command execution via command
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
-  read: sticky
+  read: true
   write: sticky
   edit: sticky
   replace_lines: sticky
   restore_version: sticky
   code_rewrite: sticky
-  grep: sticky
-  find: sticky
+  grep: true
+  find: true
   summarize: sticky
   survey_repo: sticky
-  list_dir: sticky
+  list_dir: true
   stat: sticky
   wc: sticky
   chmod: true
@@ -38,7 +38,7 @@ tools:
   handoff_release: true
   handoff_release_all: true
   diff: sticky
-  jq: sticky
+  jq: true
   jq_edit: true
   extract_archive: true
   source_history: true

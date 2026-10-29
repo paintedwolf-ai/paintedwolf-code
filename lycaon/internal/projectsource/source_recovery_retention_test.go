@@ -12,8 +12,8 @@ func TestSourcePreparationOwnsRecoveryUntilReceiptPublication(t *testing.T) {
 	service, p, _, _ := sourceMutationFixture(t)
 	ledger := service.settlement.recorder.(*sourceledger.Store)
 	interrupted := errors.New("injected preparation interruption")
-	_, err := service.execute(t.Context(), "operation", p.ID, "digest", func() (*sourceMutationPlan, error) {
-		if err := ledger.Retention.MaintainBlobs(t.Context()); !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
+	_, err := service.execute(t.Context(), "operation", p.ID, "digest", testSourceOperationMemory(t), func() (*sourceMutationPlan, error) {
+		if err := ledger.Retention.SweepBlobs(t.Context()); !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
 			t.Fatalf("collector entered uncommitted preparation: %v", err)
 		}
 		return nil, interrupted
@@ -21,5 +21,5 @@ func TestSourcePreparationOwnsRecoveryUntilReceiptPublication(t *testing.T) {
 	if !errors.Is(err, interrupted) {
 		t.Fatalf("preparation error=%v", err)
 	}
-	testutil.FailErr(t, "collect after preparation exits", ledger.Retention.MaintainBlobs(t.Context()))
+	testutil.FailErr(t, "collect after preparation exits", ledger.Retention.SweepBlobs(t.Context()))
 }

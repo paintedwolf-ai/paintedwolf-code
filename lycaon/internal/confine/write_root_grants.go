@@ -31,11 +31,10 @@ func grantedWriteRoots(projectID string) []string {
 
 // Write-root validation codes are shared by every entry point.
 const (
-	WriteRootCodeFilesystemRoot = "write_root_is_filesystem_root"
-	WriteRootCodeHome           = "write_root_is_home"
-	WriteRootCodeNotAbsolute    = "write_root_not_absolute"
-	WriteRootCodeSecretStore    = "write_root_under_secret_store"
-	WriteRootCodeControlPlane   = "write_root_under_control_plane"
+	WriteRootCodeNotAbsolute   = "write_root_not_absolute"
+	WriteRootCodeSecretStore   = "write_root_under_secret_store"
+	WriteRootCodeControlPlane  = "write_root_under_control_plane"
+	WriteRootCodeContainsState = "write_root_contains_control_plane"
 )
 
 // ControlPlaneTree reports whether path lies in the host's own state tree,
@@ -57,8 +56,11 @@ func ControlPlaneTree(path string) bool {
 // resolver share, so a denied path neither mints a card nor resolves through a grant.
 // sessionScratch is the invocation's own scratch root; like the confinement floor,
 // the verdict leaves it to the invocation and still denies every other session's.
-func ControlPlanePathDenied(path string, write bool, sessionScratch string) bool {
-	if WithinSessionScratch(path, sessionScratch) {
+func ControlPlanePathDenied(path string, write bool, sessionScratch, sessionOutput string) bool {
+	if write && writeRootContainsStateTree(fspath.CanonicalPath(path)) {
+		return true
+	}
+	if WithinSessionDirectory(path, sessionScratch) || (!write && WithinSessionDirectory(path, sessionOutput)) {
 		return false
 	}
 	if write {
@@ -67,14 +69,14 @@ func ControlPlanePathDenied(path string, write bool, sessionScratch string) bool
 	return ControlPlaneReadDenied(path)
 }
 
-// WithinSessionScratch reports whether path is sessionScratch or lies beneath it.
-func WithinSessionScratch(path, sessionScratch string) bool {
-	scratch := filepath.Clean(strings.TrimSpace(sessionScratch))
+// WithinSessionDirectory reports whether path lies in a session folder.
+func WithinSessionDirectory(path, directory string) bool {
+	root := filepath.Clean(strings.TrimSpace(directory))
 	p := filepath.Clean(strings.TrimSpace(path))
-	if scratch == "." || !filepath.IsAbs(scratch) || p == "." || !filepath.IsAbs(p) {
+	if root == "." || !filepath.IsAbs(root) || p == "." || !filepath.IsAbs(p) {
 		return false
 	}
-	return PathAtOrUnder(fspath.CanonicalPath(p), fspath.CanonicalPath(scratch))
+	return PathAtOrUnder(fspath.CanonicalPath(p), fspath.CanonicalPath(root))
 }
 
 // ControlPlaneReadDenied refuses active host reads outside managed workspaces.
@@ -116,6 +118,9 @@ func AttachedWriteRootRefused(root string) (refused bool, code string) {
 	if attachedWriteRootForbidden(resolved) {
 		return true, WriteRootCodeSecretStore
 	}
+	if writeRootContainsStateTree(resolved) {
+		return true, WriteRootCodeContainsState
+	}
 	return false, ""
 }
 
@@ -131,6 +136,9 @@ func GrantedWriteRootRefused(root string) (refused bool, code string) {
 	}
 	if ClassifyBlockedWrite(resolved).Kind != WriteSubjectOrdinary {
 		return true, WriteRootCodeSecretStore
+	}
+	if writeRootContainsStateTree(resolved) {
+		return true, WriteRootCodeContainsState
 	}
 	return false, ""
 }

@@ -1,7 +1,9 @@
 package commandprogram
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -121,8 +123,7 @@ func (f Fields) Values() []string {
 	return out
 }
 
-// ArgvBinder binds a complete argv to one catalog command's typed forms.
-// Utilities share it so option grammar comes only from the frozen catalog.
+// ArgvBinder binds argv to the selected command's catalog forms.
 type ArgvBinder interface {
 	Bind(toolcontract.CommandSpecification, Fields) (BoundArgv, error)
 }
@@ -152,6 +153,7 @@ type BoundArgv struct {
 	Command      string
 	Items        []BoundItem
 	EndOfOptions bool
+	Help         bool
 }
 
 func (b BoundArgv) Operands() Fields {
@@ -193,13 +195,19 @@ func (b BoundArgv) scoped(key string, global bool) []BoundOption {
 	return out
 }
 
-// ArgvReview is the approval projection: the shared operation identity plus
-// this form's bound options, rather than a legacy tool's JSON schema.
+// ArgvReview carries the selected form's options and operands for approval.
 type ArgvReview struct {
 	OperationID string           `json:"operation_id"`
 	Command     string           `json:"command"`
 	Options     []ReviewedOption `json:"options"`
 	Operands    []string         `json:"operands"`
+	PathTargets []PathTarget     `json:"path_targets,omitempty"`
+}
+
+// PathTarget is a bound native file operand and its exact access direction.
+type PathTarget struct {
+	Path  string `json:"path"`
+	Write bool   `json:"write"`
 }
 
 type ReviewedOption struct {
@@ -237,7 +245,15 @@ func (r ArgvReview) Arguments() map[string]any {
 	for i, operand := range r.Operands {
 		operands[i] = operand
 	}
-	return map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	if r.PathTargets != nil {
+		targets := make([]any, 0, len(r.PathTargets))
+		for _, target := range r.PathTargets {
+			targets = append(targets, map[string]any{"path": target.Path, "write": target.Write})
+		}
+		result["path_targets"] = targets
+	}
+	return result
 }
 
 // ArgvError carries an existing public rejection code and the exact word span.
@@ -429,7 +445,10 @@ func (b *argvBinding) psOptions() error {
 				ch := suffix[i]
 				flag := "-" + suffix[i:i+1]
 				switch ch {
-				case 'e', 'f', 'a', 'u', 'x', 'l':
+				case 'e', 'A', 'f', 'a', 'u', 'x', 'l':
+					if ch == 'A' {
+						flag = "-e"
+					}
 					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
 				case 'o', 'p':
 					rest := suffix[i+1:]
@@ -463,7 +482,15 @@ func optionWord(word string) bool { return len(word) > 1 && word[0] == '-' }
 func (b *argvBinding) option(word Field, scope string) error {
 	b.index++
 	if form, ok := b.exact(word.Value, scope); ok {
+		if word.Value == "--help" && b.spec.Name != "external" {
+			b.bound.Help = true
+		}
 		return b.consume(form, word.Value, word, Field{}, false)
+	}
+	if word.Value == "--help" && b.spec.Name != "external" {
+		b.bound.Help = true
+		b.record(toolcontract.OptionForm{Spellings: []string{"--help"}, Scope: scope, ValueRole: "boolean"}, "--help", word, nil, "")
+		return nil
 	}
 	if strings.HasPrefix(word.Value, "--") {
 		name, _, attached := strings.Cut(word.Value, "=")
@@ -588,7 +615,7 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 
 // optional handles forms that never take a following nonempty word: an
 // attached value (--porcelain=v1), or, for optional-attached-or-empty, also
-// a following empty word (sed -i.bak in GNU spelling, -i '' in BSD spelling).
+// a following empty word (sed -i.bak in GNU spelling, -i ” in BSD spelling).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value Field, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
@@ -651,4 +678,27 @@ func decimal(value string) bool {
 		}
 	}
 	return true
+}
+
+// WriteCatalogHelp writes a catalog command's help to out and returns a completed read-only result.
+func WriteCatalogHelp(spec toolcontract.CommandSpecification, out io.Writer) (toolcontract.ProducerResult, error) {
+	if out != nil {
+		if _, err := io.WriteString(out, spec.Help()+"\n"); err != nil {
+			return ownerResult(err), err
+		}
+	}
+	return ordinaryResult(0), nil
+}
+
+type helpDispatcher struct {
+	spec toolcontract.CommandSpecification
+}
+
+func (h helpDispatcher) Invoke(_ context.Context, _ OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	return WriteCatalogHelp(h.spec, streams.Output)
+}
+
+// HelpDispatcher returns an in-process dispatcher that writes spec's catalog help.
+func HelpDispatcher(spec toolcontract.CommandSpecification) OperationDispatcher {
+	return helpDispatcher{spec: spec}
 }

@@ -21,8 +21,14 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 	fset := token.NewFileSet()
 	var findings []string
 	err := filepath.WalkDir(internal, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
+		if walkErr != nil {
 			return walkErr
+		}
+		if d.IsDir() {
+			if d.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
@@ -32,17 +38,28 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 			return parseErr
 		}
 		rel, _ := filepath.Rel(root, path)
+		slashRel := filepath.ToSlash(rel)
 		aliases := importAliases(f)
 		prepared := preparedCommandNames(f, aliases)
-		allowRaw := strings.HasPrefix(filepath.ToSlash(rel), "lycaon/internal/exec/") ||
-			strings.HasPrefix(filepath.ToSlash(rel), "lycaon/internal/confine/")
+		allowRaw := strings.HasPrefix(slashRel, "lycaon/internal/exec/") ||
+			strings.HasPrefix(slashRel, "lycaon/internal/confine/")
+		allowLowLevel := allowRaw || strings.HasPrefix(slashRel, "lycaon/internal/launchguard/")
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.CallExpr:
 				if !allowRaw && (isRawProcessStart(node.Fun, aliases) || isRawPreparedStart(node.Fun, prepared)) {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "raw os/exec process start"))
 				}
+				if !allowLowLevel && isLowLevelProcessStart(node.Fun, aliases) {
+					findings = append(findings, positionFinding(fset, node.Pos(), rel, "direct low-level process launch"))
+				}
+				if isLauncherDirectStart(node.Fun, aliases) {
+					findings = append(findings, positionFinding(fset, node.Pos(), rel, "direct go-rod launcher process start or leakless helper"))
+				}
 			case *ast.CompositeLit:
+				if !allowLowLevel && isRawExecCmdLiteral(node.Type, aliases) {
+					findings = append(findings, positionFinding(fset, node.Pos(), rel, "raw os/exec.Cmd literal"))
+				}
 				if isLaunchOptionsLiteral(node.Type, f.Name.Name, aliases) && !hasKey(node, "Launch") {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "process options omit Launch"))
 				}
@@ -54,6 +71,22 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 	contractcheck.FailErr(t, "scan process launches", err)
 	if len(findings) != 0 {
 		t.Fatalf("process launch door drift:\n  %s", strings.Join(findings, "\n  "))
+	}
+}
+
+// Every engine launch entry point routes through the protected launch broker.
+func TestEngineLaunchDoorsRouteThroughTheBroker(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for file, want := range map[string]string{
+		"lycaon/internal/exec/pipeline.go":         "relayThroughBroker(cmd)",
+		"lycaon/internal/exec/supervisor_linux.go": "relayThroughBroker(cmd)",
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
+		contractcheck.FailErr(t, "read "+file, err)
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("%s does not route through %s", file, want)
+		}
 	}
 }
 
@@ -80,6 +113,49 @@ func isRawProcessStart(expr ast.Expr, aliases map[string]string) bool {
 	}
 	pkg, ok := sel.X.(*ast.Ident)
 	return ok && aliases[pkg.Name] == "os/exec"
+}
+
+func isLowLevelProcessStart(expr ast.Expr, aliases map[string]string) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	switch aliases[pkg.Name] {
+	case "os":
+		return sel.Sel.Name == "StartProcess"
+	case "syscall", "golang.org/x/sys/unix":
+		return sel.Sel.Name == "ForkExec" || sel.Sel.Name == "StartProcess" || sel.Sel.Name == "Exec"
+	default:
+		return false
+	}
+}
+
+func isRawExecCmdLiteral(expr ast.Expr, aliases map[string]string) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Cmd" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && aliases[pkg.Name] == "os/exec"
+}
+
+func isLauncherDirectStart(expr ast.Expr, aliases map[string]string) bool {
+	hasLauncher := false
+	for _, path := range aliases {
+		if path == "github.com/go-rod/rod/lib/launcher" {
+			hasLauncher = true
+			break
+		}
+	}
+	if !hasLauncher {
+		return false
+	}
+	sel, ok := expr.(*ast.SelectorExpr)
+	return ok && (sel.Sel.Name == "Launch" || sel.Sel.Name == "Leakless")
 }
 
 func isLaunchOptionsLiteral(expr ast.Expr, pkg string, aliases map[string]string) bool {
@@ -163,7 +239,7 @@ func TestPreparedCommandScanRejectsNativeStartBypasses(t *testing.T) {
  cmd,cleanup,err:=process.PrepareCommand(nil,"fixture",nil,process.ExecOpts{})
  _=cleanup;_=err
  cmd.Start();cmd.Run();cmd.Output();cmd.CombinedOutput();cmd.Wait()
- process.StartPrepared(cmd)
+ process.StartPrepared(nil, cmd)
  }`
 	f, err := parser.ParseFile(token.NewFileSet(), "fixture.go", source, 0)
 	contractcheck.FailErr(t, "parse launch scan fixture", err)

@@ -63,8 +63,8 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 		"SHELL": "/bin/sh", "PATH": "/usr/bin",
 	}, fakeShell{})
 	var runErr error
-	p.run = func(cmd *osexec.Cmd) error {
-		runErr = defaultRun(cmd)
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
+		runErr = defaultRun(ctx, cmd)
 		return runErr
 	}
 	snap := p.Resolve(context.Background())
@@ -88,9 +88,8 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse background pid %q: %v", raw, err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
 	for osprocess.Alive(background) {
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			_ = (&os.Process{Pid: background}).Kill()
 			t.Fatalf("profile helper %d outlived the probe that started it", background)
 		}

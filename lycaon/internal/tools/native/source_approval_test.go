@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestOmittedFileContentIsNotPresentedAsEmpty(t *testing.T) {
@@ -74,6 +76,40 @@ func TestPolicyWriteWithoutReviewCannotLand(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("unapproved policy exists: %v", err)
+	}
+}
+
+func TestReachedProgressAppliesOnlyToAttachedFileEdits(t *testing.T) {
+	project, scratch := t.TempDir(), t.TempDir()
+	tc := nativefixture.Context(project)
+	checks := 0
+	refused := errors.New("missing checklist")
+	tc.Effects.CheckMutationProgress = func(_ context.Context, rootID, path string) error {
+		checks++
+		if rootID != "r1" || path != filepath.Join(project, "created.txt") {
+			t.Fatalf("progress target = %s %s", rootID, path)
+		}
+		return refused
+	}
+	projectPath := filepath.Join(project, "created.txt")
+	if err := applyAgentFile(t.Context(), tc, testMutationTarget(projectPath), []byte("project"), nil, ""); !errors.Is(err, refused) {
+		t.Fatalf("project creation = %v, want progress refusal", err)
+	}
+	if checks != 1 {
+		t.Fatalf("progress checks = %d, want one before review", checks)
+	}
+	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
+		t.Fatalf("project file landed after refusal: %v", err)
+	}
+	scratchPath := filepath.Join(scratch, "temporary.txt")
+	testutil.FailErr(t, "scratch creation", applyAgentFile(t.Context(), tc, testMutationTarget(scratchPath), []byte("scratch"), nil, ""))
+	if checks != 1 {
+		t.Fatalf("scratch creation checked progress %d times", checks)
+	}
+	content, err := os.ReadFile(scratchPath)
+	testutil.FailErr(t, "scratch bytes", err)
+	if string(content) != "scratch" {
+		t.Fatalf("scratch content = %q", content)
 	}
 }
 
@@ -159,6 +195,54 @@ func TestCommandOutputReviewsActualBytesBeforeReplacingInstructions(t *testing.T
 			testutil.FailErr(t, "read declined output destination", err)
 			if string(current) != "before\n" {
 				t.Fatal("declined output changed instructions")
+			}
+		})
+	}
+}
+
+func TestFileReviewCancellationStopsTheFollowingSnapshot(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "AGENTS.md")
+	before := []byte("before")
+	testutil.FailErr(t, "seed reviewed file", os.WriteFile(path, before, 0o644))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	tc := nativefixture.Context(root)
+	reviewed := false
+	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { reviewed = true; cancel(); return nil }
+	mutation := agentMutation{Op: wire.SourceChangeOpWrite, AbsPath: path, Before: before, BeforeSHA256: textfile.SHA256(before), After: []byte("after")}
+	err := reviewAgentMutation(ctx, tc, mutation, testMutationTarget(path).Location, fseffect.Location{}, false)
+	if !reviewed || !errors.Is(err, context.Canceled) {
+		t.Fatalf("reviewed=%v outcome=%v", reviewed, err)
+	}
+	got, err := os.ReadFile(path)
+	testutil.FailErr(t, "read canceled review target", err)
+	if !bytes.Equal(got, before) {
+		t.Fatalf("canceled review changed bytes=%q", got)
+	}
+}
+
+func TestStagedStreamRechecksActualEntryBeforePublication(t *testing.T) {
+	for _, before := range []string{"", "before"} {
+		t.Run(map[bool]string{true: "missing", false: "existing"}[before == ""], func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "copy")
+			if before != "" {
+				testutil.FailErr(t, "seed original", os.WriteFile(path, []byte(before), 0o644))
+			}
+			tc := nativefixture.Context(dir)
+			stage, _, err := stageAgentStream(t.Context(), tc, agentStreamRequest{Target: testMutationTarget(path), Source: strings.NewReader("new bytes")})
+			testutil.FailErr(t, "stage reviewed stream", err)
+			defer stage.Close()
+			testutil.FailErr(t, "race destination after review", os.WriteFile(path, []byte("raced"), 0o644))
+			result, err := stage.Commit(t.Context(), tc)
+			if !errors.Is(err, errMutationSnapshotMoved) || result.Publication.Committed() {
+				t.Fatalf("changed entry published: result=%+v error=%v", result, err)
+			}
+			raw, err := os.ReadFile(path)
+			testutil.FailErr(t, "read preserved racing bytes", err)
+			if string(raw) != "raced" {
+				t.Fatalf("changed entry overwritten: %q", raw)
 			}
 		})
 	}

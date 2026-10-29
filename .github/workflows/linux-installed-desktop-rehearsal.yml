@@ -1,0 +1,174 @@
+name: Linux installed desktop rehearsal
+# A nonpublishing rehearsal of the installed lane on a GitHub-hosted Ubuntu
+# desktop. Native guest qualification runs locally through
+# ./task test:linux:installed; no self-hosted runner takes part.
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Native hosted CPU architecture
+        type: choice
+        options: [amd64, arm64]
+        required: true
+      candidate_run_id:
+        description: Run that produced the candidate packages
+        required: true
+      candidate_artifact_id:
+        description: Candidate artifact in that run
+        required: true
+      candidate_controller_commit:
+        description: Workflow commit of the candidate run
+        required: true
+      source_commit:
+        description: Application source commit the candidate was built from
+        required: true
+      source_tree:
+        description: Application source tree the candidate was built from
+        required: true
+      partial:
+        description: Partial diagnostic packages (first-launch diagnosis only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: github.repository == 'paintedwolf-ai/paintedwolf-code'
+    runs-on: ${{ inputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # Setup plus the per-case budgets enforced by the case runner.
+    timeout-minutes: 150
+    env:
+      APPLICATION_COMMIT: ${{ inputs.source_commit }}
+      APPLICATION_TREE: ${{ inputs.source_tree }}
+    steps:
+      # The runner context is unavailable to job-level env.
+      - name: Name the selection file in the runner temp directory
+        run: echo "SELECTION=$RUNNER_TEMP/installed-selection.json" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_commit }}
+          path: application-source
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: controller/lycaon/go.mod
+          cache: false
+      - name: Select the candidate against this controller checkout
+        working-directory: controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHITECTURE: ${{ inputs.architecture }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_CONTROLLER: ${{ inputs.candidate_controller_commit }}
+          PARTIAL: ${{ inputs.partial }}
+        run: |
+          arguments=()
+          if test "$PARTIAL" = true; then arguments+=(--partial); fi
+          ./task test:linux:installed -- --prepare-hosted-plan --checkout "$GITHUB_WORKSPACE/controller" \
+            --architecture "$ARCHITECTURE" --candidate-run-id "$CANDIDATE_RUN" --candidate-artifact-id "$CANDIDATE_ARTIFACT" \
+            --candidate-controller-commit "$CANDIDATE_CONTROLLER" --source-commit "$APPLICATION_COMMIT" \
+            --source-tree "$APPLICATION_TREE" --output "$SELECTION" "${arguments[@]}"
+          ./task test:linux:installed -- --prepare-candidate \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
+            --run-id "$CANDIDATE_RUN" --artifact-id "$CANDIDATE_ARTIFACT" --controller-commit "$CANDIDATE_CONTROLLER" \
+            --source-repository "$GITHUB_WORKSPACE/application-source" --source-commit "$APPLICATION_COMMIT" \
+            --source-tree "$APPLICATION_TREE" --architecture "$ARCHITECTURE" \
+            --output "$RUNNER_TEMP/installed-candidate" "${arguments[@]}"
+      - name: Prepare the measured graphical account
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime desktop \
+            --checkout "$GITHUB_WORKSPACE/controller" --controller-commit "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/installed-desktop/facts.json"
+      - id: prepare
+        if: ${{ !inputs.partial }}
+        name: Stage the selected package and bind the fresh execution
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare --selection "$SELECTION" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
+            --candidate "$RUNNER_TEMP/installed-candidate"
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime bootstrap --selection "$SELECTION" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime freeze --selection "$SELECTION" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
+      - id: diagnostic-prepare
+        if: ${{ inputs.partial }}
+        name: Stage partial bytes without pre-installing the application
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare-diagnostic --selection "$SELECTION" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
+            --candidate "$RUNNER_TEMP/installed-candidate"
+      - name: Execute the installed cases as the graphical user
+        if: ${{ !inputs.partial }}
+        run: |
+          contract=/var/lib/paintedwolf-installed-rehearsal/contract.json
+          go_bin="$(dirname "$(command -v go)")"
+          sudo -H -u paintedwolf-test /bin/bash -c 'cd /home/paintedwolf-test/controller && exec "$@"' -- \
+            env "PATH=$go_bin:/usr/bin:/bin" ./task test:linux:installed -- --run-cases \
+            --source-commit "$APPLICATION_COMMIT" --driver-tree "$(jq -r .controller_tree "$SELECTION")" \
+            --artifact-id "$(jq -r .artifact_id "$contract")" --environment-id "$(jq -r .environment_id "$contract")" \
+            --variant-id "$(jq -r .variant_id "$contract")" --snapshot "$(jq -c .snapshot "$contract")" \
+            --execution-nonce "$(jq -r .execution_nonce "$contract")" \
+            --final-artifacts /var/lib/paintedwolf-installed-rehearsal/final-artifacts.json \
+            --file-root /var/lib/paintedwolf-installed-rehearsal/packages --install-root /opt/painted-wolf-code \
+            --case-inputs /var/lib/paintedwolf-installed-rehearsal/case-inputs.json \
+            --output /home/paintedwolf-test/installed-observations
+      - name: Diagnose the first package launch on the native CPU
+        if: ${{ inputs.partial }}
+        run: |
+          contract=/var/lib/paintedwolf-installed-rehearsal/contract.json
+          go_bin="$(dirname "$(command -v go)")"
+          sudo -H -u paintedwolf-test /bin/bash -c 'cd /home/paintedwolf-test/controller && exec "$@"' -- \
+            env "PATH=$go_bin:/usr/bin:/bin" ./task test:linux:installed -- --diagnose-first-launch \
+            --candidate-inputs /var/lib/paintedwolf-installed-rehearsal \
+            --artifact-id "$(jq -r .artifact_id "$contract")" \
+            --candidate-run-id "$(jq -r .candidate_provenance.run_id "$contract")" \
+            --candidate-artifact-id "$(jq -r .candidate_provenance.artifact_id "$contract")" \
+            --candidate-controller-commit "$(jq -r .candidate_provenance.controller_commit "$contract")" \
+            --source-commit "$APPLICATION_COMMIT" --source-tree "$APPLICATION_TREE" \
+            --driver-tree "$(jq -r .controller_tree "$SELECTION")" \
+            --execution-nonce "$(jq -r .execution_nonce "$contract")" --output /home/paintedwolf-test/installed-observations
+      # Retention runs after failures too, and fails the job unless the
+      # complete campaign is accepted (or the partial diagnosis passed).
+      - name: Retain and admit the observations
+        if: always() && (steps.prepare.outcome == 'success' || steps.diagnostic-prepare.outcome == 'success')
+        working-directory: controller
+        env:
+          MODE: ${{ inputs.partial && 'retain-diagnostic' || 'retain' }}
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime "$MODE" --selection "$SELECTION" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
+            --output "$RUNNER_TEMP/installed-rehearsal"
+      - name: Retain graphical startup diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/installed-desktop"
+          sudo journalctl --boot --no-pager --output=json -u gdm3 -n 500 > "$RUNNER_TEMP/installed-desktop/gdm.jsonl"
+          sudo loginctl list-sessions --no-legend --no-pager > "$RUNNER_TEMP/installed-desktop/sessions.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: installed-desktop-rehearsal-${{ inputs.architecture }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/installed-rehearsal/
+            ${{ runner.temp }}/installed-desktop/
+            ${{ runner.temp }}/installed-selection.json
+          if-no-files-found: warn

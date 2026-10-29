@@ -109,6 +109,9 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		case occurrences > 1 && !replaceAll:
 			return "", editOldStringAmbiguous(path, occurrences)
 		}
+		if err := checkAndAdvanceReadSpans(&st, old, oldString, newString, replaceAll, path); err != nil {
+			return "", err
+		}
 		replaced := 1
 		newContent := strings.Replace(old, oldString, newString, 1)
 		// Multiple replacements have disjoint seams; zero selects the first diagnostic.

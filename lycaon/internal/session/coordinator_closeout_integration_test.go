@@ -53,7 +53,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	})
 	testutil.FailErr(t, "append leg summary", err)
 	simulateWorkerJobComplete(t, fix.mgr, queue, jobID)
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
 			return false

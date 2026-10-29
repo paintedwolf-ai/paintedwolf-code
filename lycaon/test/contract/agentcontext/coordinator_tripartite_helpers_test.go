@@ -77,11 +77,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(state.PendingOverlayIDs) > 0,
-			ProgressMissing:       state.ProgressMissing,
-			VerifyCommand:         state.VerifyCommand,
-		},
+		state.VerifyCommand,
 		vars,
 	)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)
@@ -173,7 +169,7 @@ func assertCoordinatorInvestigateBehavioral(t *testing.T, corpus string) {
 	norm := strings.ReplaceAll(corpus, "**", "")
 	for _, phrase := range []string{
 		"grep",
-		"list_dir",
+		"command",
 		"coordinator_product_write",
 		`task(`,
 		"project tree",
@@ -194,6 +190,10 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 	floor, _ := vars["surface_offered"].([]string)
 	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
 	contractcheck.FailErr(t, "surface loadable", err)
+	if rootCount, ok := vars["root_count"].(int); ok {
+		loadable, err = surface.FilterSurfaceToolsForRootCount(loadable, rootCount)
+		contractcheck.FailErr(t, "filter loadable for root count", err)
+	}
 	offered := append(append([]string(nil), floor...), loadable...)
 	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(surfaceID), floor, offered, nil)
 	blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)

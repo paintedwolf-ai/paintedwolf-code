@@ -102,7 +102,6 @@ var factDecls = []factDecl{
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_allowed_for_profile", oarcore.TypeBool, FactTierHost, ""},
-	{"habit_redirect_match", oarcore.TypeString, FactTierHost, ""},
 	{"write_roots", oarcore.TypeListString, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
 	{"arg_validation_errors", oarcore.TypeListString, FactTierStandard, ProfileTool},
@@ -427,13 +426,9 @@ var standardProfileFacts = map[string][]string{
 	},
 }
 
-// factTiers indexes every declared fact and function by tier, so the published
-// name and the portability verdict are both computable from one table.
-func factTiers() map[string]FactTier {
+func buildFactTiers() map[string]FactTier {
 	out := make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
-	eachDeclaredFact(func(d factDecl) {
-		out[d.name] = d.tier
-	})
+	eachDeclaredFact(func(d factDecl) { out[d.name] = d.tier })
 	for _, f := range observationFns {
 		out[f.name] = f.tier
 	}
@@ -442,7 +437,7 @@ func factTiers() map[string]FactTier {
 
 // PublishedFactName namespaces host facts and leaves standard names bare ([OAR-FACT-18]).
 func PublishedFactName(name string) string {
-	if published := publishedHostName(name, factTiers()[name]); published != "" {
+	if published := publishedHostName(name, bareFactTiers[name]); published != "" {
 		return published
 	}
 	return name

@@ -61,13 +61,13 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 	if proposed == "" {
 		return out, nil
 	}
-	// The invocation's own scratch is already inside its boundary.
-	if confine.WithinSessionScratch(proposed, in.SessionScratchRoot) {
-		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
-	}
 	// Control-plane writes are denied without prompting.
-	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot) {
+	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return out, nil
+	}
+	// The invocation's own scratch is already inside its boundary.
+	if confine.WithinSessionDirectory(proposed, in.SessionScratchRoot) {
+		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 	}
 	subject := confine.ClassifyBlockedWrite(proposed)
 	if subject.Kind == confine.WriteSubjectCredentialStore {
@@ -87,7 +87,10 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		roots = []string{projectDir}
 	}
 	// Effective roots include durable and chat-scoped grants.
-	writeRoots := confine.WriteRootsForBoundary(in.ProjectID, roots, nil, in.SessionScratchRoot)
+	writeRoots, err := confine.WriteRootsForBoundary(in.ProjectID, roots, nil, in.SessionScratchRoot)
+	if err != nil {
+		return out, err
+	}
 	writeRoots = append(writeRoots, b.Runtime.SessionWriteRoots(rootSessionID)...)
 	inRoots := confine.PathWithinWriteRoots(proposed, writeRoots)
 	if subject.Kind == confine.WriteSubjectOrdinary {

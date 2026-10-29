@@ -26,12 +26,13 @@ func (e *Approvals) awaitApproval(
 			AgentPolicy: policyWriteTargets(confReq, tc.ActiveRootPath()),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:  tc.Invocation.NativeInputs,
-			Tool:          tool,
-			Args:          args,
-			Files:         append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
-			ResolvedFiles: append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-			ActionID:      tc.EffectActionID(),
+			NativeInputs:      tc.Invocation.NativeInputs,
+			Tool:              tool,
+			Args:              args,
+			Files:             append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
+			ResolvedFiles:     append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
+			NativePathTargets: nativePathTargetsFromArgs(args),
+			ActionID:          tc.EffectActionID(),
 		},
 		Resources: hitl.ActionResources{
 			HostResources:        append([]string(nil), tc.Host.HostResources...),
@@ -43,6 +44,7 @@ func (e *Approvals) awaitApproval(
 			SessionID:          tc.Identity.SessionID,
 			RootSessionID:      tc.ChatSessionID(),
 			SessionScratchRoot: tc.Host.SessionScratchDir,
+			SessionOutputRoot:  tc.Host.SessionOutputDir,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),

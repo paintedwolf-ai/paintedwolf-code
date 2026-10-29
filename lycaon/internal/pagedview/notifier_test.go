@@ -19,7 +19,7 @@ func TestNotifierCoalescesProgressAndFlushesTerminalChange(t *testing.T) {
 	notifier.Notify(true)
 	select {
 	case <-delivered:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal change was held behind progress")
 	}
 	notifier.Close()
@@ -50,7 +50,7 @@ func TestNotifierCloseDrainsActivePublication(t *testing.T) {
 	close(finish)
 	select {
 	case <-closed:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("publication did not drain")
 	}
 }

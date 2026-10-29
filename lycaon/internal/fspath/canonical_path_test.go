@@ -7,7 +7,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -79,7 +78,7 @@ func TestCanonicalPathDoesNotBlockOnAFIFO(t *testing.T) {
 		if got == "" {
 			t.Fatalf("CanonicalPath(fifo) = empty")
 		}
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("CanonicalPath blocked on a FIFO — O_NONBLOCK is missing")
 	}
 }
@@ -111,12 +110,12 @@ func TestCanonicalPathLeavesRelativeNamesRelative(t *testing.T) {
 
 // TestCanonicalPathFollowsASymlinkToASocket covers an unopened socket leaf.
 func TestCanonicalPathFollowsASymlinkToASocket(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "pw-sock-")
+	testutil.FailErr(t, "create socket directory", err)
+	t.Cleanup(func() { testutil.FailErr(t, "remove socket directory", os.RemoveAll(dir)) })
 	sock := filepath.Join(dir, "a.sock")
 	l, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Skipf("cannot bind a unix socket here: %v", err)
-	}
+	testutil.FailErr(t, "bind unix socket", err)
 	defer func() { _ = l.Close() }()
 
 	link := filepath.Join(dir, "link.sock")

@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -163,15 +164,6 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	return out, nil
 }
 
-// MergeCoordinatorTurnSurfaceVars adds turn-scoped flags for conditional coordinator mode partials.
-func MergeCoordinatorTurnSurfaceVars(surfaceID string, pendingOverlayPromote bool, into map[string]any) {
-	if into == nil {
-		return
-	}
-	into["surface_id"] = strings.TrimSpace(surfaceID)
-	into["pending_overlay_promote"] = pendingOverlayPromote
-}
-
 // MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
 func MergeCoordinatorKickPolicyVars(into map[string]any) error {
 	if into == nil {
@@ -224,8 +216,15 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 	}
 	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
 	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
+		if isPreservedEnvironmentFact(k, into) {
+			continue
+		}
 		into[k] = v
 	}
+	into["is_coordinator"] = true
+	into["command_on_floor"] = slices.Contains(floor, "command")
+	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
+	syncCommandExternalFacts(into)
 	roster, err := RequestableTools(requestable, turn.Schemas)
 	if err != nil {
 		return err

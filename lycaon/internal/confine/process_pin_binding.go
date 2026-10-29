@@ -65,11 +65,33 @@ func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs
 		return nil, err
 	}
 	state := &processHandoff{ctx: ctx, inputs: inputs, readyRead: readyRead, readyWrite: readyWrite, releaseRead: releaseRead, releaseWrite: releaseWrite, check: check}
+	var hostProfileRead *os.File
 	closeState := func() {
+		if hostProfileRead != nil {
+			_ = hostProfileRead.Close()
+		}
 		_ = readyRead.Close()
 		_ = readyWrite.Close()
 		_ = releaseRead.Close()
 		_ = releaseWrite.Close()
+	}
+	if !IsHelperInvocation(cmd.Args) {
+		self, err := os.Executable()
+		if err != nil {
+			closeState()
+			return nil, err
+		}
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			closeState()
+			return nil, err
+		}
+		_ = pw.Close()
+		hostProfileRead = pr
+		cmd.Path = self
+		cmd.Err = nil
+		cmd.Args = append([]string{self, helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD), pinHostExecutionFlag, "--", name}, args...)
+		cmd.ExtraFiles = append([]*os.File{pr}, cmd.ExtraFiles...)
 	}
 	inputs.mu.Lock()
 	if inputs.closed || inputs.bound {
@@ -125,32 +147,40 @@ func cloneVector(vector []string) []string {
 // ValidateProcessInputs runs before starting a prepared command, including after
 // the existing Linux supervisor adds its own prefix. Caller I/O setup is allowed;
 // changing the captured executable vector/environment/cwd is not.
-func ValidateProcessInputs(cmd *exec.Cmd) error {
+func ValidateProcessInputs(ctx context.Context, cmd *exec.Cmd) error {
 	value, ok := processHandoffs.Load(cmd)
 	if !ok {
 		return fmt.Errorf("command lacks prepared launch inputs")
 	}
 	state := value.(*processHandoff)
+	if err := state.ctx.Err(); err != nil {
+		return err
+	}
 	count := len(state.helperArguments)
 	if cmd.Path != state.helperPath || len(cmd.ExtraFiles) < len(state.files) || !slices.Equal(cmd.ExtraFiles[:len(state.files)], state.files) || len(cmd.Args) < count || !slices.Equal(cmd.Args[len(cmd.Args)-count:], state.helperArguments) || !slices.Equal(cmd.Env, state.environment) || cmd.Dir != "" {
 		return ErrLaunchIdentityChanged
 	}
-	if err := state.check(state.ctx); err != nil {
+	if err := state.check(ctx); err != nil {
 		return err
 	}
-	return state.inputs.revalidate(state.ctx)
+	return state.inputs.revalidate(ctx)
 }
 
 // ConfirmProcessLaunch is called only after the existing owner registered the
 // actual process/tree. It releases immutable inputs once; failure stays with that
 // owner's native kill/reap and terminal settlement rather than replaying a launch.
-func ConfirmProcessLaunch(cmd *exec.Cmd) error {
+func ConfirmProcessLaunch(ctx context.Context, cmd *exec.Cmd) error {
 	value, ok := processHandoffs.Load(cmd)
 	if !ok {
 		return fmt.Errorf("prepared launch handoff is absent")
 	}
 	state := value.(*processHandoff)
-	ctx, cancel := context.WithTimeout(state.ctx, 10*time.Second)
+	if err := state.ctx.Err(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	stop := context.AfterFunc(state.ctx, cancel)
+	defer stop()
 	defer cancel()
 	_ = state.readyWrite.Close()
 	_ = state.releaseRead.Close()

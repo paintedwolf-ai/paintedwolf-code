@@ -49,6 +49,7 @@ func TestRecoveryClassifiesExecutedEffectsAcrossOperationKinds(t *testing.T) {
 						t.Fatal("fixture lacks future Undo reservation")
 					}
 				}
+				row.memory = testSourceOperationMemory(t)
 				if boundary != "prepared" {
 					testutil.FailErr(t, "execute filesystem effect without settlement", service.Effects.applyMutation(t.Context(), row))
 					if boundary == "file_applied" {

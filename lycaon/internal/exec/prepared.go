@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/installbinding"
 )
 
 type preparedLifecycle struct {
@@ -106,6 +107,9 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	if !filepath.IsAbs(metadataPath) {
 		metadataPath = cwd + string(filepath.Separator) + metadataPath
 	}
+	if err := installbinding.Verify(metadataPath); err != nil {
+		return nil, nil, err
+	}
 	inputs, err := confine.CaptureProcessInputs(ctx, metadataPath, paths, limits)
 	if err != nil {
 		return nil, nil, err
@@ -114,6 +118,11 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	ctx = ownedCtx
 	self, err := os.Executable()
 	if err != nil {
+		cancel()
+		_ = inputs.Close()
+		return nil, nil, err
+	}
+	if err := installbinding.Verify(self); err != nil {
 		cancel()
 		_ = inputs.Close()
 		return nil, nil, err
@@ -196,14 +205,14 @@ func resolveLaunchEntry(name, cwd string, environment []string) (string, error) 
 // StartPrepared starts the captured native invocation, registers its existing
 // per-process owner, and releases current-authorized inputs. Failure kills and
 // reaps this actual child; it never retries through another launch mechanism.
-func StartPrepared(cmd *exec.Cmd) error {
-	return StartPreparedWith(cmd, cmd.Start, TrackProcess)
+func StartPrepared(ctx context.Context, cmd *exec.Cmd) error {
+	return StartPreparedWith(ctx, cmd, cmd.Start, TrackProcess)
 }
 
 // StartPreparedWith lets a retained transport keep its maintained native start
 // algorithm while sharing the same admission, registration and settlement door.
 // Neither callback grants authority or selects a fallback execution mechanism.
-func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) func()) error {
+func StartPreparedWith(ctx context.Context, cmd *exec.Cmd, start func() error, register func(int) func()) error {
 	if start == nil || register == nil {
 		return fmt.Errorf("native start and owner are required")
 	}
@@ -211,7 +220,7 @@ func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) fun
 	if err != nil {
 		return err
 	}
-	if err := confine.ValidateProcessInputs(cmd); err != nil {
+	if err := confine.ValidateProcessInputs(ctx, cmd); err != nil {
 		return err
 	}
 	startErr := start()
@@ -250,7 +259,7 @@ func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) fun
 	if closed || untrack == nil {
 		return fail(fmt.Errorf("native process ownership unavailable or already released"))
 	}
-	if err := confine.ConfirmProcessLaunch(cmd); err != nil {
+	if err := confine.ConfirmProcessLaunch(ctx, cmd); err != nil {
 		return fail(fmt.Errorf("native launch handoff: %w", err))
 	}
 	return nil
@@ -258,8 +267,8 @@ func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) fun
 
 // RunPrepared settles the same per-process lifecycle; specialized group,
 // pipeline and PTY owners retain their existing tree guards instead.
-func RunPrepared(cmd *exec.Cmd) error {
-	if err := StartPrepared(cmd); err != nil {
+func RunPrepared(ctx context.Context, cmd *exec.Cmd) error {
+	if err := StartPrepared(ctx, cmd); err != nil {
 		return err
 	}
 	return cmd.Wait()

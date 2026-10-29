@@ -47,6 +47,10 @@ type NativeEffectStart interface {
 type PreparedNativeEffect struct {
 	Operation   toolcontract.BoundOperation
 	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	// DisclosedArgv is the one concrete source-disclosure transition. The
+	// source was admitted for reading; newly parsed path targets still require
+	// their own boundary before this owner can run.
+	DisclosedArgv *commandprogram.ArgvReview
 }
 
 // NativeEffect binds one reached operation to its immutable review projection.
@@ -74,7 +78,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	defer end()
 	bound := effect.Operation
 	definition, invocation := bound.Definition(), bound.Invocation()
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
@@ -95,12 +99,15 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), facts.Commands, effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
 	if err != nil {
 		return result, err
+	}
+	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
+		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
@@ -144,7 +151,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	defer releaseObservation()
-	if err := checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
+	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
@@ -189,6 +196,60 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
+	if disclosed := prepared.DisclosedArgv; disclosed != nil {
+		if prepared.InvokeOwner != nil || prepared.Operation.Definition().Digest() != definition.Digest() || prepared.Operation.Invocation() != invocation || prepared.Operation.Command() != bound.Command() {
+			return result, fmt.Errorf("native source disclosure changed operation attribution")
+		}
+		if err := surface.ValidateOperation(prepared.Operation); err != nil {
+			return result, err
+		}
+		bound = prepared.Operation
+		tc.Invocation.NativeOperation = &bound
+		expanded := make(map[string]any, len(effect.Arguments)+len(disclosed.Arguments()))
+		for key, value := range effect.Arguments {
+			expanded[key] = value
+		}
+		for key, value := range disclosed.Arguments() {
+			expanded[key] = value
+		}
+		nextArguments, prepErr := prepareNativeArguments(ctx, admission, expanded)
+		if prepErr != nil {
+			return result, prepErr
+		}
+		defer nextArguments.close()
+		if err := validateNativeArguments(facts, disclosed, nextArguments.values, tc); err != nil {
+			return result, err
+		}
+		canonical, tc, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
+		if err != nil {
+			return result, err
+		}
+		nextReviewedArguments, nextReviewed, reviewErr := admitReviewedOperationInputs(ctx, admission, canonical)
+		if reviewErr != nil {
+			return result, reviewErr
+		}
+		defer nextReviewedArguments.close()
+		prior, priorErr := tc.Invocation.NativeInputs.Reviewed()
+		if priorErr != nil {
+			return result, priorErr
+		}
+		if prior != nextReviewed {
+			return result, fmt.Errorf("disclosed native inputs changed after approval boundary")
+		}
+		canonical = nextReviewedArguments.values
+		tc.Invocation.ArgsDigest = nextReviewed.ArgumentsDigest()
+		ctx, resolved, err = e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
+		if err != nil {
+			return result, err
+		}
+		prepared, err = effect.PrepareReviewed(ctx, resolved, tc)
+		if err != nil {
+			return result, err
+		}
+		if prepared.DisclosedArgv != nil {
+			return result, fmt.Errorf("native source disclosure repeated after approval")
+		}
+	}
 	if prepared.InvokeOwner == nil || prepared.Operation.Definition().Digest() != definition.Digest() || prepared.Operation.Invocation() != invocation || prepared.Operation.Command() != bound.Command() {
 		return result, fmt.Errorf("reviewed native binding changed operation attribution")
 	}
@@ -223,10 +284,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	return result, err
 }
 
-func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
+func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
+	// Publication reaches the write door after its output is staged. Its
+	// destination, including scratch or output, decides the checklist gate.
+	if bound.Publication() != toolcontract.NoPublication {
+		return nil
+	}
 	if provider == nil {
 		return fmt.Errorf("native admission requires current progress facts")
 	}
+	definition, invocation := bound.Definition(), bound.Invocation()
 	state, err := provider.ProgramProgressState(ctx, invocation.SessionID)
 	if err != nil {
 		return err
@@ -246,6 +313,13 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 		result.Terminal = toolcontract.ProducerInterrupted
 	}
 	return result
+}
+
+func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) bool {
+	if bound.Publication() != toolcontract.NoPublication {
+		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
+	}
+	return stageMatchesCommand(bound.Command(), bound.Definition().ReadOnlyFacts().Commands, argv)
 }
 
 // stageMatchesCommand checks the stage against its catalog command. A confined
@@ -322,12 +396,12 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
-	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
+	return checkLiveProgramProgress(ctx, progressFacts, bound)
 }
 
-// validateNativeArguments checks a legacy structured value against its tool
-// schema. A catalog-bound form was already validated by the argv binder, so
-// its review record is not forced into that schema.
+// validateNativeArguments checks structured native tool values against their
+// schema. Catalog-bound argv is validated by its binder and carries a separate
+// review record.
 func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandprogram.ArgvReview, values map[string]any, tc tools.ToolContext) error {
 	if argv != nil {
 		if argv.OperationID != facts.Identity {
@@ -335,7 +409,7 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		}
 		return nil
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir); reject != nil {
 		return reject
 	}
 	var schema map[string]any

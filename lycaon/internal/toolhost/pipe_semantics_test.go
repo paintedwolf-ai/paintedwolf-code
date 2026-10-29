@@ -58,11 +58,11 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 		operations: ops,
 		git:        &git.Manager{},
 		registry:   f.Runtime.Registry,
-	}).compose(ProgramServices{Recorder: f.Recorder})
+	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	scratchDir := t.TempDir()
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir
 	}
 	return &pipeSemanticsEnv{Fixture: f, scratchDir: scratchDir}
@@ -73,6 +73,22 @@ func decodePipeOutcome(t *testing.T, out string) command.ProgramOutcome {
 	var outcome command.ProgramOutcome
 	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
 	return outcome
+}
+
+func TestProgramDiscoveryReportsWiredNativeUtilities(t *testing.T) {
+	env := newPipeSemanticsEnv(t)
+	for source, want := range map[string]string{
+		"which jq":      "jq: native\n",
+		"type jq":       "jq is a native built-in\n",
+		"command -v jq": "jq\n",
+	} {
+		out, err := env.Call(t, t.Context(), source)
+		testutil.FailErr(t, "run "+source, err)
+		result := decodePipeOutcome(t, out)
+		if result.Status != 0 || result.Refusal != nil || result.Stdout != want {
+			t.Fatalf("%s: %+v, want stdout %q", source, result, want)
+		}
+	}
 }
 
 // TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects

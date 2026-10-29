@@ -34,6 +34,7 @@ func TestCapturedSourceUnitUsesExactOwnerBytesAndPreservesIdentity(t *testing.T)
 	})
 	p, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "./script.pw", fixtureScratch(t))
 	testutil.FailErr(t, "capture and validate source", err)
+	defer p.Close()
 	raw[0] = 'x'
 	if string(p.Source()) != "printf '%s' \"$1\"\n" || captured.Pin.Revision != "revision-2" || p.Snapshot().SourceDigest != captured.Pin.SHA256 {
 		t.Fatalf("captured different source: %+v", captured.Pin)
@@ -94,7 +95,7 @@ func TestSourceCaptureRefusalAndSyntaxFailureNeverReturnPartialPlan(t *testing.T
 	}
 }
 
-func fixtureScratch(t *testing.T) *toolcontract.ProgramMemory {
+func fixtureScratch(t testing.TB) *toolcontract.ProgramMemory {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {
@@ -105,4 +106,104 @@ func fixtureScratch(t *testing.T) *toolcontract.ProgramMemory {
 		t.Fatal(err)
 	}
 	return memory
+}
+
+type missingCaptureLease struct{ *toolcontract.ProgramMemory }
+
+func (m missingCaptureLease) ReserveProgramState(context.Context, int64) (func(), error) {
+	return nil, nil
+}
+
+func TestSourceCaptureRequiresWorkingAndBufferAdmissionBeforeCapture(t *testing.T) {
+	for _, account := range []string{"working", "state", "missing state lease"} {
+		t.Run(account, func(t *testing.T) {
+			memory := fixtureScratch(t)
+			limits, err := toolcontract.CatalogProgramMemoryLimits()
+			testutil.FailErr(t, "load program bounds", err)
+			var release func()
+			var admission commandsurface.ProgramMemoryAdmission = memory
+			switch account {
+			case "working":
+				release, err = memory.Reserve(t.Context(), limits.Working-1024)
+			case "state":
+				release, err = memory.ReserveProgramState(t.Context(), limits.State-(1<<20))
+			default:
+				admission = missingCaptureLease{memory}
+			}
+			testutil.FailErr(t, "hold existing program memory", err)
+			if release != nil {
+				defer release()
+			}
+			before := memory.InUse()
+			calls := 0
+			capture := sourceCaptureFunc(func(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error) {
+				calls++
+				return capturedFixture([]byte(":")), nil
+			})
+			parsed, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "script.pw", admission)
+			if parsed != nil || len(captured.Bytes) != 0 || err == nil || calls != 0 {
+				t.Fatalf("capture ran without admission: calls=%d parsed=%v err=%v", calls, parsed, err)
+			}
+			if memory.InUse() != before {
+				t.Fatalf("failed pre-capture admission leaked memory: %+v before=%+v", memory.InUse(), before)
+			}
+		})
+	}
+}
+
+func TestSourceCaptureBuffersTransferToParsedAndSnapshotState(t *testing.T) {
+	memory := fixtureScratch(t)
+	held, err := memory.Reserve(t.Context(), 16<<20)
+	testutil.FailErr(t, "hold concurrent parser work", err)
+	defer held()
+	capture := sourceCaptureFunc(func(_ context.Context, _ toolcontract.OperationInvocation, request SourceCaptureRequest) (CapturedSource, error) {
+		usage := memory.InUse()
+		if usage.State != 2*request.MaximumBytes || usage.Working <= 16<<20 {
+			t.Fatalf("capture not bounded before materialization: %+v request=%+v", usage, request)
+		}
+		return capturedFixture([]byte("printf sourced")), nil
+	})
+	parsed, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "script.pw", memory)
+	testutil.FailErr(t, "capture source with bounded overlap", err)
+	defer parsed.Close()
+	if usage := memory.InUse(); usage.Working != 16<<20 || usage.State < int64(len(captured.Bytes)) || usage.State >= 2*commandsurface.SyntaxUnitByteLimit(true) {
+		t.Fatalf("temporary capacity did not transfer to retained envelope: %+v", usage)
+	}
+	snapshot, err := parsed.SnapshotWithMemory(t.Context(), memory)
+	testutil.FailErr(t, "retain source execution snapshot", err)
+	testutil.FailErr(t, "release parsed source", parsed.Close())
+	if string(captured.Bytes) != "printf sourced" || memory.InUse().State < int64(len(captured.Bytes)) {
+		t.Fatal("captured bytes lost their snapshot coverage")
+	}
+	captured = CapturedSource{}
+	testutil.FailErr(t, "release source execution snapshot", snapshot.Close())
+	if memory.InUse().State != 0 {
+		t.Fatalf("source execution retained state: %+v", memory.InUse())
+	}
+}
+
+func TestSourceCaptureErrorsReleaseCapacityWithoutReturningBytes(t *testing.T) {
+	refused := errors.New("capture refused")
+	for _, tc := range []struct {
+		name   string
+		source CapturedSource
+		err    error
+	}{
+		{"producer", CapturedSource{}, refused},
+		{"syntax", capturedFixture([]byte("if")), nil},
+		{"identity", CapturedSource{Bytes: []byte(":")}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			memory := fixtureScratch(t)
+			parsed, captured, err := LoadSourceUnit(t.Context(), sourceCaptureFunc(func(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error) {
+				return tc.source, tc.err
+			}), sourceInvocation(), "script.pw", memory)
+			if parsed != nil || err == nil || len(captured.Bytes) != 0 {
+				t.Fatalf("error returned live unleased source: %v %+v %v", parsed, captured, err)
+			}
+			if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+				t.Fatalf("capture error leaked capacity: %+v", memory.InUse())
+			}
+		})
+	}
 }

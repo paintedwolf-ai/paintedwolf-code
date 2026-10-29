@@ -7,6 +7,8 @@ vars:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py bin {{.ROOT_DIR}}
   BUILD_DIR:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py build {{.ROOT_DIR}}
+  COMPILER_CACHE_DIR:
+    sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py compiler-cache {{.ROOT_DIR}}
   ARTIFACT_DIR:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py artifacts {{.ROOT_DIR}}
 
@@ -129,6 +131,7 @@ tasks:
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
+      - scripts/toolchain/rust-path-remap.sh
     generates:
       - '{{.BUILD_DIR}}/bialy'
     preconditions:
@@ -272,6 +275,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
 
+  scripts:coverage:changes:
+    desc: Scripts Python statements the change adds or modifies must be tested, subprocesses included (floors and suites in scripts/coverage-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/coverage_changes.py python
+
   check:coverage:
     desc: Minimum statement coverage on internal/* (default 62%% floor)
     sources:
@@ -359,16 +367,15 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:contract -- {{.CLI_ARGS}}
 
-  # Confinement and gated integration tests use separate filters.
   test:seatbelt:
-    desc: 'Applied Seatbelt + Available()-gated confinement (--full, darwin)'
+    desc: 'Applied Seatbelt and confinement consumers (--full, darwin)'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
-      # The scope contract derives this applied-confinement inventory.
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce)$'
-      - |
-        bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
-          bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
+
+  test:linux:installed:
+    desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
+    cmds:
+      - python3 -m scripts.linux_release.installed_results {{.CLI_ARGS}}
 
   test:confine:linux:
     desc: 'Applied Linux confinement on this architecture: confine live suites, command supervisor, confined pinned browser (--full, linux; optional legs, e.g. -- browser)'
@@ -639,6 +646,7 @@ tasks:
     dir: lycaon-den/src-tauri
     sources:
       - 'src/**/*.rs'
+      - 'src/linux_install/source/**/*.py'
       - 'examples/**/*.rs'
       - 'crates/**/*.rs'
       - 'crates/**/Cargo.toml'
@@ -658,8 +666,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-      - cargo test --workspace --all-targets --quiet
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py den {{.CLI_ARGS}}
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
@@ -669,14 +676,13 @@ tasks:
       - Cargo.toml
       - Cargo.lock
     env:
-      CARGO_TARGET_DIR: '{{.BUILD_DIR}}/decide-target'
-      MLX_RS_METAL_PATH: '{{.BUILD_DIR}}/mlx-metal'
+      CARGO_TARGET_DIR: '{{.COMPILER_CACHE_DIR}}/decide'
+      MLX_RS_METAL_PATH: '{{.BIN_DIR}}/mlx-metal'
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      # Parity tests use the shipped binary's features.
-      - cargo test --all-targets --quiet --features "$(bash {{.SCRIPTS_DIR}}/decide-features.sh)"
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py decide {{.CLI_ARGS}}
 
   den:test:coverage:
     desc: Frontend Vitest with v8 coverage report
@@ -1042,7 +1048,17 @@ tasks:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
     cmds:
-      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
+
+  nix:check:
+    desc: Evaluate pinned Linux Nix package and development-shell contracts
+    cmds:
+      - python3 -m scripts.linux_release.nix check {{.CLI_ARGS}}
+
+  nix:build:
+    desc: Build the native Linux Nix closure from pinned inputs
+    cmds:
+      - python3 -m scripts.linux_release.nix build {{.CLI_ARGS}}
 
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
@@ -1054,7 +1070,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install Rust from https://rustup.rs
     cmds:
-      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh
+      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh {{.CLI_ARGS}}
 
   bundle:verify:
     desc: 'Audit a built .app/.dmg — arch slices, macOS floor, dylib paths, signing, hardened runtime, staple'
@@ -1102,10 +1118,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/bundle-openapi.sh check
 
   codegen:tool-command-equivalence:
-    desc: Generate exact command equivalence tables and sync tool-schema replaces suffixes
+    desc: Generate the frozen command language catalog
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
@@ -1113,25 +1128,20 @@ tasks:
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
   codegen:tool-command-equivalence:check:
-    desc: Fail if command equivalence codegen outputs are stale
+    desc: Fail if the generated command language catalog is stale
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
@@ -1768,14 +1778,27 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-boot.sh {{.CLI_ARGS}}
 
   upgrade:rehearse:
-    desc: 'Rehearse supported released-store upgrades, semantic history, and full backup restore (prior-release leg skips before v1)'
-    deps:
-      - build:lycaon-dev
+    desc: 'Rehearse released-store upgrades, or signed desktop activation with --bundle --fixtures DIR --evidence DIR'
     preconditions:
-      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
-        msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
+      - sh: |
+          {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+          command -v python3 && command -v bun && command -v minisign
+          {{else if hasPrefix "--bundle" .CLI_ARGS}}
+          command -v python3 && command -v openssl
+          {{else}}
+          command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node && command -v minisign
+          {{end}}
+        msg: Required upgrade rehearsal tools are unavailable
     cmds:
-      - bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+      - |
+        {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+        python3 {{.SCRIPTS_DIR}}/release_control.py bundle-prepare {{trimPrefix "--prepare-bundle" .CLI_ARGS}}
+        {{else if hasPrefix "--bundle" .CLI_ARGS}}
+        python3 {{.SCRIPTS_DIR}}/release_control.py bundle-rehearse {{trimPrefix "--bundle" .CLI_ARGS}}
+        {{else}}
+        ./task build:lycaon-dev
+        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+        {{end}}
 
   upgrade:corpus:prepare:
     desc: 'Prepare the versioned upgrade fixture for VERSION before tagging'
@@ -1808,13 +1831,80 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
-  release:live-test:
-    desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
-    preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+  release:candidate:select:
+    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    silent: true
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+      - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
+
+  release:candidate:diagnostics:
+    desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
+    cmds:
+      - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
+
+  release:live-test:
+    desc: 'Isolated release:live-test rehearsal; --local-nix-cache uses disposable local keys, default uses test R2 credentials'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
+
+  release:rehearse:linux-signing:
+    desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
+    cmds:
+      - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:native-repositories:
+    desc: 'Signed apt/dnf repository fixtures through isolated package-manager roots and a local TLS origin. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal fixtures {{.CLI_ARGS}}
+
+  release:rehearse:native-repositories-r2:
+    desc: 'The native repository fixtures also published under an isolated release-system-tests/ R2 prefix with test credentials. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal r2 {{.CLI_ARGS}}
+
+  release:rehearse:native-candidates:
+    desc: 'Retain actual DEB/RPM candidates as signed repositories under disposable test trust. Pass --candidate-dir, --retain-repositories, --source-commit, --version, --channel, --release-build, --architecture and --receipt after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal candidates {{.CLI_ARGS}}
+
+  release:rehearse:pacman-repositories:
+    desc: 'Signed pacman repository and AUR recipe fixtures through isolated pacman, makepkg and yay roots on an Arch-family host. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.pacman_rehearsal fixtures {{.CLI_ARGS}}
+
+  release:rehearse:pacman-repositories-r2:
+    desc: 'The pacman fixtures also published under an isolated release-system-tests/ R2 prefix with test credentials. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.pacman_rehearsal r2 {{.CLI_ARGS}}
+
+  release:rehearse:pacman-vm:
+    desc: 'The pacman fixtures inside one owned SSH VM. Pass --ssh-host, --ssh-port, --ssh-identity, --ssh-known-hosts and --receipt after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_remote {{.CLI_ARGS}}
+
+  release:publish:aur-recipe:
+    desc: 'Admit a release-aur-delivery request and prepare its separately bound AUR recipe. Pass request, provenance, collect or prepare and its options after --'
+    cmds:
+      - python3 -m scripts.linux_release.aur_delivery_workflow {{.CLI_ARGS}}
+
+  release:rehearse:package-probe:
+    desc: 'Run the extracted-package engine diagnostic under an owned transient AppArmor userns profile on a disposable native Linux host (-- --tree DIR [--lease PATH --output PATH --require-baseline-refusal])'
+    cmds:
+      - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
+
+  release:rehearse:rpm-metadata:
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:pacman-construction:
+    desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.arch_substrate_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
@@ -1884,7 +1974,7 @@ tasks:
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags integration --name test:scanners -- \
           ./internal/scan/... ./test/security/... \
-          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery)$'
+          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestInstalledScannerProductCases)$'
 
   check-fast:
     desc: Handoff gate on one stable source snapshot

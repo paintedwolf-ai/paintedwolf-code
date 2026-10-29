@@ -29,8 +29,8 @@ func RestoreNativeTrash(source string, destination Location, expected string) er
 	if identity != expected {
 		return ErrPostcondition
 	}
-	if err := renameNoReplace(unix.AT_FDCWD, source, int(parent.file.Fd()), parent.name); err != nil {
+	if err := renameNoReplace(unix.AT_FDCWD, source, parent.fd, parent.name); err != nil {
 		return err
 	}
-	return fsyncFD(int(parent.file.Fd()))
+	return fsyncFD(parent.fd)
 }

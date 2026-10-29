@@ -1,6 +1,149 @@
 {
   "commands": [
     {
+      "name": "git init",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] init [-q] [-b BRANCH] [--bare] [DIR]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git init-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git init-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git init-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git init-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b",
+            "--initial-branch"
+          ],
+          "arity": 1,
+          "value_role": "branch",
+          "fixture_id": "git init-option-b-initialbranch",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "main"
+          ]
+        },
+        {
+          "spellings": [
+            "--bare"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git init-option-bare",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared DIR operand accepts logical/native identity. git [-C DIR] [-c KEY=VALUE ...] init [-q] [-b BRANCH] [--bare] [DIR]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git init -q"
+      },
+      "notes": "Initializes a repository through the Git owner in an admitted directory; bundled Git supplies stdout, stderr and status. The directory remains within an attached writable root.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate_init.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/fresh_test.go"
+        ],
+        "extension": "Use the Git owner and bundled Git for initialization.",
+        "evidence_kind": "command-entry differential and first-commit workflow"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-init-operands-valid",
+        "git-init-rejection",
+        "git init-option-C-global",
+        "git init-option-c-global",
+        "git init-option-nopager-global",
+        "git init-option-q-quiet",
+        "git init-option-b-initialbranch",
+        "git init-option-bare"
+      ]
+    },
+    {
       "name": "git status",
       "aliases": [],
       "family": "git",
@@ -127,7 +270,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-s|--short] [--porcelain[=v1]] [--untracked-files=all|normal|no] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -401,7 +544,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--cached|--staged] [--stat] [-U N] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -759,7 +902,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-n N|-N] [--oneline] [REF_RANGE] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -977,7 +1120,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--stat] [REF[:PATH]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1149,7 +1292,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-L START,END] [REF] [--] PATH",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1366,7 +1509,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--list] [-a]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1504,7 +1647,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] --list [PATTERN]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1723,7 +1866,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--verify] REF",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1920,7 +2063,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--count] [-n N] REF_RANGE",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2055,7 +2198,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] REF REF",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2185,7 +2328,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-v|get-url NAME]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2352,7 +2495,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (--get KEY|--list)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2474,7 +2617,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] stash list",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2603,7 +2746,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] worktree list [--porcelain]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2804,7 +2947,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] ls-files [-c|--cached] [-m|--modified] [-o|--others] [-d|--deleted] [-s|--stage] [--exclude-standard] [-z] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2965,7 +3108,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3150,7 +3293,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-m MESSAGE] [--amend] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3315,7 +3458,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--staged] [--worktree] [--source REF] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3476,7 +3619,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-b BRANCH] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3639,7 +3782,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-c BRANCH] [REF]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3867,7 +4010,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only|--abort] [REF]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4559,7 +4702,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4752,7 +4895,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--soft|--mixed|--hard] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4927,7 +5070,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] -f [-d] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -5066,7 +5209,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (add PATH [REF]|remove PATH|prune)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -5236,7 +5379,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -5574,7 +5717,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only] [REMOTE [REFSPEC]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -5736,7 +5879,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -5898,7 +6041,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [PATTERN ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -6018,7 +6161,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] SUBCOMMAND ARGS ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

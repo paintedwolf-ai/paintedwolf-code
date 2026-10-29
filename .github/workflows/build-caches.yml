@@ -22,67 +22,20 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  # Compiles what a tag release compiles, with the same flags and no signing
-  # credentials, so tag runs restore warm Go and Tauri builds.
-  release:
-    needs: verification
-    runs-on: macos-15
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache: false
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-          no-cache: true
-
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
-
-      # The verification job below builds and saves it on every run.
-      - name: Restore the decision engine build
-        uses: ./.github/actions/cache-decide
-
-      - name: Download or restore qualified maintained engine
-        uses: ./.github/actions/setup-opengrep
-        with:
-          save: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Download pinned Bialy heads
-        uses: ./.github/actions/setup-bialy
-
-      - name: Cache the release build
-        id: build
-        uses: ./.github/actions/cache-release-build
-        with:
-          save: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Warm release compiler caches
-        if: steps.build.outputs.cache-hit != 'true'
-        run: ./task setup-dev -- --release-cache
-
-  # Seeds the caches setup-verification restores in the merge queue, pull
-  # requests, and nightly runs, by compiling the dependencies their lanes build.
   verification:
     strategy:
       fail-fast: false
-      # With the release job after it, warming holds one runner at a time.
+      # Each platform prepares and publishes its compiler inputs on one runner.
       max-parallel: 1
       matrix:
         runner: [ubuntu-latest, macos-15]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 180
     # Publishing lint diagnostics deletes the entries they replace.
     permissions:
       contents: read
@@ -106,6 +59,11 @@ jobs:
 
       - uses: ./.github/actions/setup-bialy
 
+      - name: Restore release compiler inputs
+        if: runner.os == 'macOS'
+        id: release
+        uses: ./.github/actions/cache-release-build
+
       - name: Compile the Go module
         if: steps.setup.outputs.go-cache-hit != 'true'
         run: ./task build
@@ -120,17 +78,37 @@ jobs:
         if: runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task build:decide
 
+      - name: Warm document compiler inputs
+        if: steps.setup.outputs.document-cache-hit != 'true'
+        run: ./task build:document-core
+
       - name: Warm desktop workspace builds
-        if: steps.setup.outputs.rust-cache-hit != 'true'
+        if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
-      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
-      - name: Record lint diagnostics
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: ./task lint:full
+      - name: Warm release compiler inputs
+        if: runner.os == 'macOS' && (steps.release.outputs.cache-hit != 'true' || steps.setup.outputs.go-cache-hit != 'true')
+        run: ./task setup-dev -- --release-cache
 
-      # Resolve paths at publication time instead of relying on nested post-job contexts.
+      - name: Publish prepared release compiler cache
+        if: github.ref == 'refs/heads/main' && runner.os == 'macOS' && steps.release.outputs.cache-hit != 'true'
+        uses: ./.github/actions/cache-release-build
+        with:
+          save: 'true'
+
+      - name: Publish prepared desktop compiler cache
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.rust-cache-hit != 'true'
+        uses: ./.github/actions/cache-rust
+        with:
+          save: 'true'
+
+      - name: Publish prepared document compiler cache
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.document-cache-hit != 'true'
+        uses: ./.github/actions/cache-document-core
+        with:
+          save: 'true'
+
+      # Publish completed compiler caches before diagnostic work.
       - name: Publish prepared Go caches
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
         uses: ./.github/actions/cache-go
@@ -156,12 +134,6 @@ jobs:
           tools: all
           save: 'true'
 
-      - name: Publish lint diagnostics
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
-        uses: ./.github/actions/cache-lint-diagnostics
-        with:
-          save: 'true'
-
       # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
       - name: Publish WebKitGTK accessibility images
         if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
@@ -176,9 +148,21 @@ jobs:
         with:
           save: 'true'
 
+      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      - name: Record lint diagnostics
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: ./task lint:full
+
+      - name: Publish lint diagnostics
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/cache-lint-diagnostics
+        with:
+          save: 'true'
+
   usage:
     if: always()
-    needs: [release, verification]
+    needs: verification
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -193,7 +177,7 @@ jobs:
           {
             echo '### Repository caches'
             gh api "repos/${REPO}/actions/cache/usage" \
-              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB of the 10 GiB limit"'
+              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB stored"'
             echo
             echo '| Ref | MiB | Key |'
             echo '|---|---|---|'

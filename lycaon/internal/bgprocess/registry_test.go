@@ -114,10 +114,9 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 	}, runner)
 	testutil.FailErr(t, "start background", err)
 
-	deadline := time.Now().Add(3 * time.Second)
 	var first bgprocess.OutputSnapshot
 	var firstFound, secondFound bool
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, 0)
 		testutil.FailErr(t, "command_output cursor 0", err)
 		if len(snapshot.Output.Chunks) > 0 {
@@ -131,7 +130,7 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 		t.Fatal("expected incremental output")
 	}
 	cursor := first.Output.Next
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, cursor)
 		testutil.FailErr(t, "command_output follow-up", err)
 		if len(snapshot.Output.Chunks) > 0 {
@@ -171,9 +170,24 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 	}
 
 	var live string
-	deadline := time.After(500 * time.Millisecond)
-	drain := true
-	for drain {
+	sawExit := false
+	for {
+		if sawExit {
+			select {
+			case event := <-events:
+				if strings.Contains(event.Text, backgroundCaptureSecret) {
+					t.Fatalf("live event exposed secret: %+v", event)
+				}
+				if event.Reset {
+					live = event.Text
+				} else {
+					live += event.Text
+				}
+			default:
+				goto drainedLiveEvents
+			}
+			continue
+		}
 		select {
 		case event := <-events:
 			if strings.Contains(event.Text, backgroundCaptureSecret) {
@@ -184,10 +198,14 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 			} else {
 				live += event.Text
 			}
-		case <-deadline:
-			drain = false
+			if event.Stream == "exit" {
+				sawExit = true
+			}
+		case <-t.Context().Done():
+			t.Fatal("timed out waiting for exit event")
 		}
 	}
+drainedLiveEvents:
 	if strings.Contains(live, backgroundCaptureSecret) || !strings.Contains(live, "[REDACTED]") {
 		t.Fatalf("live projection = %q", live)
 	}
@@ -236,8 +254,7 @@ func TestBackgroundStopKillsProcess(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 	_, err = reg.Lifecycle.Stop("sess-1", handle)
 	testutil.FailErr(t, "stop background", err)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
 		testutil.FailErr(t, "output after stop", err)
 		if !out.Running {
@@ -481,16 +498,18 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
 	})
 	runner := hostcmd.NewRunner()
+	// The execution deadline includes supervised process startup.
+	executionTimeout := testutil.Timeout(time.Second)
 	handle, err := reg.StartPipeline(context.Background(), bgprocess.PipelineSpec{
 		SessionID: "sess-1", Runner: runner, Mode: bgprocess.JobModeBackground,
-		OriginTool: "verify", Timeout: 50 * time.Millisecond,
+		OriginTool: "verify", Timeout: executionTimeout,
 		Request: hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
 			ProjectDir: t.TempDir(),
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 		},
 	})
 	testutil.FailErr(t, "start deadline command", err)
-	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, executionTimeout+testutil.Timeout(5*time.Second))
 	testutil.FailErr(t, "await deadline command", err)
 	if !finished {
 		t.Fatal("deadline command did not finish")
@@ -500,13 +519,14 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		if completion.TerminationReason != bgprocess.TerminationTimedOut {
 			t.Fatalf("termination = %q want timed_out", completion.TerminationReason)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal completion was not published")
 	}
+	_ = reg.Output.Promote(t.Context(), "sess-1", handle)
 	select {
 	case completion := <-completed:
 		t.Fatalf("duplicate terminal completion: %#v", completion)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 }
 
@@ -540,13 +560,14 @@ func TestPromotePublishesTerminalCompletionAfterExit(t *testing.T) {
 	testutil.FailErr(t, "promote completed command", reg.Output.Promote(context.Background(), "sess-1", handle))
 	select {
 	case <-completed:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("promotion did not publish terminal completion")
 	}
+	_ = reg.Output.Promote(t.Context(), "sess-1", handle)
 	select {
 	case completion := <-completed:
 		t.Fatalf("duplicate promoted completion: %#v", completion)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 }
 
@@ -618,7 +639,7 @@ func TestBackgroundLaunchFailureIsOnTheJobResult(t *testing.T) {
 		if completion.Failure == nil || completion.Failure.Kind != hostcmd.ExecFailureStageLaunch {
 			t.Fatalf("completion failure = %+v, want the stage launch error", completion.Failure)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal completion was not published")
 	}
 }

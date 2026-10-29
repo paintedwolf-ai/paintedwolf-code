@@ -71,7 +71,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 			return err
 		}
 	}
-	stderr := &syncWriter{w: f.streams.Error}
+	stderr := &syncWriter{w: f.io.streams.Error}
 	frames := make([]*frame, len(stages))
 	releases := make([]func(), 0, len(stages))
 	defer func() {
@@ -86,14 +86,14 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 		releases = append(releases, release)
 		g.parent, g.loops, g.returnable = run.inv, 0, false
-		g.streams = f.streams
-		g.streams.SetWriter(2, stderr)
+		g.io.streams = f.io.streams
+		g.io.setWriter(2, stderr)
 		if i > 0 {
-			g.streams.SetReader(0, pipes[i-1].ConsumerEnd())
+			g.io.setReader(0, pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
 			g.producerPipe = pipes[i]
-			g.streams.SetWriter(1, pipes[i])
+			g.io.setWriter(1, pipes[i])
 		}
 		frames[i] = g
 	}
@@ -108,7 +108,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 				_ = pipes[i].CloseProducer(results[i].incomplete())
 			}
 			if i > 0 {
-				_ = frames[i].streams.Input.Close()
+				_ = frames[i].io.streams.Input.Close()
 			}
 		}(i)
 	}
@@ -139,12 +139,8 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []comm
 	}
 	out, settleErr := SettlePipeline(run.inv.Identity.ExecutionID, outcomes, f.state.latch)
 	f.publish.mark(out.PublicationEligible)
-	pipeStatuses := make([]int, len(outcomes))
-	for i, outcome := range outcomes {
-		pipeStatuses[i] = outcome.Result.Status
-	}
-	f.state.pipeStatus = pipeStatuses
-	f.state.vars.SetPipeStatus(pipeStatuses)
+	f.state.pipeStatus = out.PipeStatuses
+	f.state.vars.SetPipeStatus(out.PipeStatuses)
 	aggregate := toolcontract.ProducerResult{Status: out.Status, Terminal: toolcontract.ProducerCompleted, Complete: out.Complete, EffectCertainty: toolcontract.NoEffect}
 	if stop, ok := f.state.latch.Stop(); ok {
 		aggregate = stop.Result
