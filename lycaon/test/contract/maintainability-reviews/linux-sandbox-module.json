@@ -4,12 +4,14 @@
   "kind": "module",
   "workstream": "linux-confinement",
   "disposition": "retain",
-  "reason": "The 28 source files implement one Linux sandbox boundary. The control transport is a focused OS descriptor boundary beside namespace, seccomp, and network mediation; it does not introduce a second policy owner. Retain this package with the current member set and focused descriptor and socket-policy contracts.",
-  "reviewed_commit": "07355e29fbe8ad8af3f01c96ce46ed49a6259bbe",
-  "ceiling": 28,
-  "reviewed_shape": "b57e4213bfe260c82720d7db4cd81bb0295099512e710d7d4c89b188af9c066d",
+  "reason": "Retain the measured 38-file Linux enforcement module. Capability facts, namespace setup, mount rendering, Landlock, seccomp, descriptor transport, the confined performer and mediated network effects compose one helper boundary. The filesystem phase now owns ordered mount masks and cwd re-entry; the launch owns its standard-stream byte bridges and their joined retirement. These are real kernel resource lifetimes inside the same boundary, not additional permission owners. Moving the new phases into unrelated packages would expose plan internals and split pre-target authority from its attestation. The focused mount, descriptor, socket policy and byte-stream contracts support this bounded member set.",
+  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
+  "ceiling": 38,
+  "reviewed_shape": "cbd4401dedef664f145b55dbfe2248de873d857a9abf0b37a80ac59950f90c42",
   "boundaries": {
-    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "7f5441a76fd0614539a9ee94d826e74c039b6478965a054f0cbf8851b250941e",
-    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8"
+    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "60da39c003d211d5be4b674fa95dcc64fc96e19b65c5c64c791bbec5a2b437f9",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8",
+    "lycaon/internal/confine/linuxsandbox/filesystem_linux_test.go": "874bffc1a06789ffa96e0fb59effa0db9c45faef9128e141ae01abd30e9e4734",
+    "lycaon/internal/confine/linuxsandbox/stdio_linux_test.go": "ddb67b150ef43f534191aa65d359dc3ebc4d69c884ae2178aae3a18100e81c19"
   }
 }

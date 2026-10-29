@@ -307,13 +307,7 @@ func TestLinuxWritesStayInsideWriteRoots(t *testing.T) {
 	if status.ExitStatus() != 0 || !strings.Contains(out, "inside") {
 		t.Fatalf("write inside root: exit %d: %s", status.ExitStatus(), out)
 	}
-	status, out = linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "echo escape > "+outside+"/no")
-	if status.ExitStatus() == 0 {
-		t.Fatalf("write outside root succeeded: %s", out)
-	}
-	if !strings.Contains(out, "Permission denied") {
-		t.Fatalf("write outside root must be refused by the kernel, got: %s", out)
-	}
+	expectFloorTable(t, c, proj, []floorStep{{"create " + filepath.Join(outside, "no"), "EROFS"}})
 	if _, err := os.Stat(filepath.Join(outside, "no")); !os.IsNotExist(err) {
 		t.Fatalf("file outside root exists: %v", err)
 	}
