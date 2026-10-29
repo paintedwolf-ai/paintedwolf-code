@@ -27,7 +27,7 @@ func (p *ProgramPaths) inspectPath(ctx context.Context, operand string, canonica
 	if err != nil {
 		return "", pathOperationError(operand, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	if canonical {
 		actual, err := root.Canonical(bound.exactRelative)
 		if err != nil {
