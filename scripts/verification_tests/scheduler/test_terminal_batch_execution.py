@@ -219,7 +219,7 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
     def test_final_batch_settles_a_helper_that_retains_only_the_batch_lease(self):
         self.batch_escape_case(False)
 
-    def test_blocked_final_shared_only_holder_retains_custody_and_returns_unverified(self):
+    def blocked_shared_case(self, crash_after_settle):
         ready, stop = self.root / "shared-holder", self.root / "shared-stop"
         self.addCleanup(stop.touch)
         descendant = ("import os,time\nfrom pathlib import Path\n"
@@ -236,6 +236,26 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
         tool.write_text(original.replace(marker, fork + marker))
         owner = self.scripts / "verification_custody.py"
         owner.write_text(owner.read_text() + "\ndef lease_holders(path):\n    raise PermissionError('fixture inspection refusal')\n")
+        observer = self.root / "recovery-observations"
+        scheduler = self.scripts / "verification_batch.py"
+        scheduler.write_text(scheduler.read_text() + (
+            "\n_original_recover = recover_abandoned\n"
+            "def recover_abandoned(entry):\n"
+            "    _original_recover(entry)\n"
+            "    if entry.get('kind') == 'batch':\n"
+            "        value = read_optional(Path(entry['directory']) / 'finished.json')\n"
+            "        if value is not None:\n"
+            f"            with open({str(observer)!r}, 'a') as stream: stream.write(json.dumps(value) + '\\n')\n"))
+        if crash_after_settle:
+            owner = self.scripts / "verification_lifetime.py"
+            owner.write_text(owner.read_text() + (
+                "\n_original_finish = TerminalSettlement.finish\n"
+                "def finish(self, on_blocked=None):\n"
+                "    result = _original_finish(self, on_blocked)\n"
+                "    if result and self.capability.entry.get('kind') == 'batch':\n"
+                "        os.kill(os.getpid(), signal.SIGKILL)\n"
+                "    return result\n"
+                "TerminalSettlement.finish = finish\n"))
         self.queue.resume()
         request = self.start("build")
         self.await_condition(ready.exists)
@@ -260,6 +280,16 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
         self.assertEqual((final["status"], final["exit_code"]), ("unverified", 2))
         self.assertEqual(self.receipts()[0]["status"], "passed")
         self.assertEqual(self.queue.status()["runs"], [])
+        if not crash_after_settle:
+            self.assertTrue(observer.exists(), "empty-custody recovery was not observed")
+            self.assertTrue(all(json.loads(line)["status"] == "unverified"
+                                for line in observer.read_text().splitlines()), "recovery published a transient pass")
+
+    def test_blocked_final_shared_only_holder_retains_custody_and_returns_unverified(self):
+        self.blocked_shared_case(False)
+
+    def test_supervisor_crash_after_tainted_settlement_preserves_unverified_batch(self):
+        self.blocked_shared_case(True)
 
     def invocation_case(self, code):
         ready, parent_exit, stop = self.root / "invocation-holder", self.root / "invocation-exit", self.root / "invocation-stop"

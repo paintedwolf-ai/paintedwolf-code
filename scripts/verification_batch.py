@@ -61,8 +61,10 @@ def recover_abandoned(entry):
         receipt = directory / (request["ticket"] + ".json")
         if not receipt.exists():
             write_json(receipt, unfinished_receipt(directory, request, "All batch execution processes exited"))
-    write_json(directory / "finished.json", {"finished_at": time.time(),
-               **recovered_outcome(directory, plan["requests"])})
+    outcome = ({"status": "unverified", "exit_code": 2} if
+               entry.get("terminal_settlement", {}).get("unverified") is True else
+               recovered_outcome(directory, plan["requests"]))
+    write_json(directory / "finished.json", {"finished_at": time.time(), **outcome})
 
 
 def active_members(queue, members):
@@ -478,12 +480,13 @@ def supervise(queue, directory, inherited_fd):
                 write_json(receipt, unfinished_receipt(directory, member,
                                                        "Verification interrupted or source capture failed"))
         witness.close()
-        capability.file.close()
         with queue.locked():
+            # Publish the live owner's verdict before empty-custody recovery can run.
+            write_json(directory / "finished.json", {"finished_at": time.time(),
+                       "status": "unverified" if cleanup_blocked else "completed",
+                       "exit_code": 2 if cleanup_blocked else code})
+            capability.file.close()
             queue.entries()
-        write_json(directory / "finished.json", {"finished_at": time.time(),
-                   "status": "unverified" if cleanup_blocked else "completed",
-                   "exit_code": 2 if cleanup_blocked else code})
         prune(queue, Path(entry["source"]))
     return 2 if cleanup_blocked else code
 
