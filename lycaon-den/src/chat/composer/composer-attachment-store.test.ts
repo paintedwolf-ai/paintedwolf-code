@@ -486,7 +486,7 @@ describe("addSelectedTextToChat", () => {
 });
 
 describe("ingestDropClassification", () => {
-  it("external file becomes a snapshot-backed byte chip", async () => {
+  it("external file retains its original path without uploading a snapshot", async () => {
     importExternalAttachment.mockResolvedValue({
       blob_id: "b".repeat(64),
       filename: "outside.txt",
@@ -502,24 +502,22 @@ describe("ingestDropClassification", () => {
     );
 
     expect(result).toEqual({ ok: true });
-    expect(importExternalAttachment).toHaveBeenCalledWith("proj-1", "/outside/outside.txt");
+    expect(importExternalAttachment).not.toHaveBeenCalled();
     expect(pendingAttachmentsForSession("sess-external")).toMatchObject([
       {
-        kind: "text",
+        kind: "external-file", projectId: "proj-1", path: "/outside/outside.txt",
         name: "outside.txt",
-        blobId: "b".repeat(64),
-        importedCopy: true,
       },
     ]);
   });
 
-  it("preserves the structured reject from native import", async () => {
+  it("preserves video import failures as structured rejects", async () => {
     importExternalAttachment.mockRejectedValue({
       code: "attachment_too_large",
       message: "file exceeds upload bound",
     });
     const result = await ingestDropClassification(
-      { kind: "external-file", absolutePath: "/outside/huge.txt" },
+      { kind: "external-file", absolutePath: "/outside/huge.mov" },
       { projectId: "proj-1", sessionId: "sess-external" },
       [],
     );
@@ -527,6 +525,18 @@ describe("ingestDropClassification", () => {
     expect(pendingAttachmentsForSession("sess-external")).toMatchObject([
       { kind: "reject", rejectMessage: "Attachment is too large for one message" },
     ]);
+  });
+
+  it("keeps a recording frame sheet and its original external path", async () => {
+    importExternalAttachment.mockResolvedValue({ blob_id: "b".repeat(64), filename: "bug.mov", mime: "video/quicktime", kind: "video", bytes: 12 });
+    await ingestDropClassification({ kind: "external-file", absolutePath: "/outside/bug.mov" }, { projectId: "proj-1", sessionId: "sess-video" }, []);
+    expect(pendingAttachmentsForSession("sess-video")).toMatchObject([{ kind: "video", blobId: "b".repeat(64) }, { kind: "external-file", path: "/outside/bug.mov" }]);
+  });
+
+  it("preserves native document extraction alongside its original path", async () => {
+    importExternalAttachment.mockResolvedValue({ blob_id: "b".repeat(64), filename: "report.pdf", mime: "application/pdf", kind: "document", bytes: 12 });
+    await ingestDropClassification({ kind: "external-file", absolutePath: "/outside/report.pdf" }, { projectId: "proj-1", sessionId: "sess-pdf" }, []);
+    expect(pendingAttachmentsForSession("sess-pdf")).toMatchObject([{ kind: "document", blobId: "b".repeat(64) }, { kind: "external-file", path: "/outside/report.pdf" }]);
   });
 
   it("web File becomes a byte chip", async () => {

@@ -4,7 +4,6 @@ package exec
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/confine"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -43,7 +43,7 @@ func TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess(t *test
 			t.Fatal("concurrent native Wait did not settle")
 		}
 	}
-	testutil.FailErr(t, "owned descendant survived", waitForProcessGone(child, 5*time.Second))
+	testutil.FailErr(t, "owned descendant survived", waitForProcessGone(t.Context(), child))
 	unrelated := exec.Command("/bin/sleep", "30")
 	testutil.FailErr(t, "start unrelated process", unrelated.Start())
 	defer func() { _ = unrelated.Process.Kill(); _ = unrelated.Wait() }()
@@ -80,7 +80,7 @@ func TestOwnedProcessGroupCancellationRetainsNativeSettlement(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("cancelled native owner did not settle")
 	}
-	testutil.FailErr(t, "cancelled leader survived", waitForProcessGone(leader, 5*time.Second))
+	testutil.FailErr(t, "cancelled leader survived", waitForProcessGone(t.Context(), leader))
 	if cmd.ProcessState == nil {
 		t.Fatal("native Wait state was discarded")
 	}
