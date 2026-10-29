@@ -53,7 +53,7 @@ func TestPipelineKeepsEveryProducerOutcome(t *testing.T) {
 
 func TestPipelineExternalClosureIsNotNativeClosure(t *testing.T) {
 	f := newEvalFixture(t)
-	out, err := f.run(t, t.Context(), "external -- yes | head -n 1")
+	out, err := f.run(t, t.Context(), "yes | head -n 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,9 +153,9 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never":      "loop_iterations",
+		"while x=1; do x=2; done; echo never": "loop_iterations",
 		"f() { while x=1; do continue; done; }; f": "loop_iterations",
-		"while :; do :; done; echo never":          "child_executions",
+		"while :; do :; done; echo never": "child_executions",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)
@@ -279,13 +279,8 @@ func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
 
 func TestSourceUsageAndDepth(t *testing.T) {
 	f := newEvalFixture(t)
-	if _, err := f.run(t, t.Context(), "source -x; echo $?"); err != nil || f.stdout.String() != "2\n" {
-		t.Fatalf("an option operand was not usage: %v %q", err, f.stdout.String())
-	}
-	f = newEvalFixture(t)
-	f.sources.files["./lib.sh"] = "echo sourced\n"
-	if _, err := f.run(t, t.Context(), "source ./lib.sh; echo $?"); err != nil || !strings.HasSuffix(f.stdout.String(), "0\n") {
-		t.Fatalf("plain source path: %v %q", err, f.stdout.String())
+	if _, err := f.run(t, t.Context(), "source ./x; echo $?"); err != nil || f.stdout.String() != "2\n" {
+		t.Fatalf("missing -- was not usage: %v %q", err, f.stdout.String())
 	}
 	limits, _ := catalogEvaluationLimits()
 	f = newEvalFixture(t)

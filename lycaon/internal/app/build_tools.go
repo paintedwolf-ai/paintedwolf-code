@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -263,17 +262,10 @@ func (b *serveBuilder) wireMCP() error {
 			b.interactions.Processes.Output.SetCaptureProjector(captureProjector)
 		}
 		if recorder, ok := b.sessions.Invocations.(*invocation.SQLRecorder); ok && b.execution.Host != nil && b.execution.Host.Commands != nil {
-			programSettings, err := settings.LoadCommandProgramsSettings()
-			if err != nil {
-				return err
-			}
-			if err := b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
+			b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
 				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
 				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions,
-				ExternalHidden: programSettings.ExternalHidden(),
-			}); err != nil {
-				return err
-			}
+			})
 		}
 		if b.interactions.Preview != nil {
 			b.interactions.Preview.SetCaptureProjector(captureProjector)

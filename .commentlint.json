@@ -5,10 +5,10 @@
   "local_home_paths": true,
   "parse_timeout": "30s",
   "excludes": [
+    "third_party/goawk",
     "third_party/gotreesitter",
     "third_party/gitleaks",
     "third_party/mvdan-sh",
-    "third_party/goawk",
     ".paintedwolf/tool-output",
     ".paintedwolf-dev",
     "THIRD-PARTY-NOTICES.md",

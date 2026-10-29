@@ -2,10 +2,7 @@ package projectpaths
 
 import (
 	"context"
-	"errors"
 	"os"
-
-	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // directoryBinding freezes the logical coordinate of the actual held cwd,
@@ -58,19 +55,4 @@ func (p *ProgramPaths) OpenCwd(ctx context.Context) (*os.File, error) {
 		return nil, err
 	}
 	return file, nil
-}
-
-// callCwdReject reports the command call's cwd field refusal under its own
-// repair code, keeping the binding refusal's code; cancellation stays a
-// cancellation.
-func callCwdReject(ctx context.Context, code, cwd string, cause error) error {
-	if ctx.Err() != nil {
-		return cause
-	}
-	data := map[string]any{"cwd": cwd}
-	var binding *toolrejection.ToolReject
-	if errors.As(cause, &binding) {
-		data["binding_code"] = binding.Code
-	}
-	return &toolrejection.ToolReject{Code: code, Data: data}
 }

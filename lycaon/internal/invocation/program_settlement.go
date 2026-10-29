@@ -123,7 +123,7 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		return fmt.Errorf("started child requires explicit owner outcome or recovery reconciliation")
 	}
 	evidence := result.Evidence
-	var conflict toolcontract.RevisionConflict
+	var conflict RevisionConflict
 	if in.Conflict != nil {
 		conflict = *in.Conflict
 	}

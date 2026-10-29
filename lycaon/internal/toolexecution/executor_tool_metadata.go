@@ -87,9 +87,6 @@ func (e *Metadata) enrichToolMeta(meta tools.ToolMeta, filter platform.ToolFilte
 			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
 		}
 	case "command":
-		if !e.externalHidden {
-			meta.Description = strings.TrimSpace(meta.Description) + " " + toolcommand.ExternalSelectorLine
-		}
 		if inverse := toolcommand.CommandInverseSurveyLine(profileID); inverse != "" {
 			meta.Description = strings.TrimSpace(meta.Description) + " " + inverse
 		}
@@ -118,14 +115,6 @@ func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[strin
 	}
 	kind["enum"] = values
 	return cloned
-}
-
-// SetCommandExternalHidden withdraws the explicit external selector from the
-// command schema.
-func (e *Metadata) SetCommandExternalHidden(hidden bool) {
-	if e != nil {
-		e.externalHidden = hidden
-	}
 }
 
 func (e *Metadata) SetPolicy(policy platform.PolicyEngine) {

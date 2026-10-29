@@ -22,7 +22,7 @@ import (
 func TestCoordinatorGuardStructuredReject(t *testing.T) {
 	boundary := fixtureBoundary(t)
 	profilePolicy := toolprofiles.NewProfilePolicyEngine(boundary)
-	guard := profilePolicy
+	guard := toolprofiles.NewGuidanceRejectPolicy(profilePolicy)
 	reg := tools.NewDefaultRegistry()
 	_ = reg.Register("write", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)

@@ -120,7 +120,7 @@ func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 		t.Fatal("owners without host facts accepted")
 	}
 	var unprepared Prepared
-	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {
+	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {
 		t.Fatalf("unprepared invocation ran: %+v", result)
 	}
 }

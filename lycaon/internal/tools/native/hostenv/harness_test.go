@@ -142,7 +142,7 @@ func (h *harness) run(source string) run {
 		},
 		OperationID: argv[0].Value, Statement: statement, Argv: argv, Environment: environment,
 	}
-	builtins := h.owners.Builtins(h.tc, h.nested, catalogBindings{})
+	builtins := h.owners.Builtins(h.tc, h.nested)
 	var stdout, stderr bytes.Buffer
 	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Output: &stdout, Error: &stderr})
 	if validation := result.Validate(); validation != nil {
@@ -174,8 +174,3 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 	}
 	return reject
 }
-
-// catalogBindings binds every catalog native, as a fully wired program does.
-type catalogBindings struct{}
-
-func (catalogBindings) NativeBound(string) bool { return true }

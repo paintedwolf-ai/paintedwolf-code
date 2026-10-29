@@ -54,8 +54,6 @@ func (r *expansionRun) word(parts []commandsurface.WordNode) error {
 			err = r.double(part)
 		case commandsurface.ParameterPart:
 			err = r.parameter(part, r.document != nil)
-		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(part, r.document != nil)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(part, r.document != nil)
 		default:
@@ -89,11 +87,7 @@ func (r *expansionRun) literal(text string, context expand.QuoteContext) error {
 	var err error
 	expand.RemoveQuotes(text, context, func(piece string, escaped bool) {
 		if err == nil && piece != "" {
-			if !escaped && context == expand.UnquotedText && r.mode == modeFields && r.document == nil {
-				err = r.assembly.split(piece)
-			} else {
-				err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
-			}
+			err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
 		}
 	})
 	return err
@@ -133,8 +127,6 @@ func (r *expansionRun) double(part commandsurface.DoubleQuotedPart) error {
 			err = r.literal(inner.Value, expand.DoubleQuotedText)
 		case commandsurface.ParameterPart:
 			err = r.parameter(inner, true)
-		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(inner, true)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(inner, true)
 		default:
@@ -162,9 +154,6 @@ func (r *expansionRun) onlyEmptyPositional(parts []commandsurface.WordNode) bool
 }
 
 func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool) error {
-	if part.Operator != "" {
-		return r.operated(part, quoted)
-	}
 	if (part.Name == "@" || part.Name == "*") && !part.Length {
 		positional := r.scope.Positional()
 		if quoted && part.Name == "@" && r.mode == modeFields {
@@ -188,9 +177,6 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 			return err
 		}
 		return r.emit(strings.Join(positional, " "), quoted)
-	}
-	if err := r.unbound(part); err != nil {
-		return err
 	}
 	value, err := parameterValue(r.scope, part)
 	if err != nil {
@@ -282,24 +268,4 @@ func (r *expansionRun) join(pieces []expansionPiece, maximum int64, id string) (
 		value.WriteString(piece.text)
 	}
 	return value.String(), nil
-}
-
-// unbound refuses an unset variable or positional parameter under set -u.
-func (r *expansionRun) unbound(part commandsurface.ParameterPart) error {
-	scope, ok := r.scope.(interface{ Nounset() bool })
-	if !ok || !scope.Nounset() || part.Length {
-		return nil
-	}
-	set := true
-	switch {
-	case VariableName(part.Name):
-		_, set = r.scope.Variable(part.Name)
-	case positionalName(part.Name):
-		index, err := strconv.Atoi(part.Name)
-		set = err == nil && index <= len(r.scope.Positional())
-	}
-	if set {
-		return nil
-	}
-	return invalidValue(part.Span, part.Name+": unbound variable")
 }

@@ -47,15 +47,6 @@ func cloneCommand(cmd CommandNode) CommandNode {
 		v.Condition = cloneStatements(v.Condition)
 		v.Body = cloneStatements(v.Body)
 		return v
-	case CaseStatement:
-		v.Word = cloneWord(v.Word)
-		items := make([]CaseItem, len(v.Items))
-		for i, item := range v.Items {
-			item.Patterns, item.Body = cloneWords(item.Patterns), cloneStatements(item.Body)
-			items[i] = item
-		}
-		v.Items = items
-		return v
 	case ForLoop:
 		v.Items = cloneWords(v.Items)
 		v.Body = cloneStatements(v.Body)
@@ -94,13 +85,6 @@ func cloneWords(src []DeferredWord) []DeferredWord {
 	return out
 }
 func cloneWord(w DeferredWord) DeferredWord { w.Parts = cloneParts(w.Parts); return w }
-func cloneOptionalWord(w *DeferredWord) *DeferredWord {
-	if w == nil {
-		return nil
-	}
-	clone := cloneWord(*w)
-	return &clone
-}
 func cloneParts(src []WordNode) []WordNode {
 	out := make([]WordNode, len(src))
 	for i, part := range src {
@@ -110,12 +94,6 @@ func cloneParts(src []WordNode) []WordNode {
 			out[i] = p
 		case SubstitutionPart:
 			p.Statements = cloneStatements(p.Statements)
-			out[i] = p
-		case ArithmeticPart:
-			p.Expression = cloneArithmetic(p.Expression)
-			out[i] = p
-		case ParameterPart:
-			p.Argument, p.Replacement = cloneOptionalWord(p.Argument), cloneOptionalWord(p.Replacement)
 			out[i] = p
 		default:
 			out[i] = part

@@ -2,6 +2,7 @@ package jq
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/itchyny/gojq"
@@ -66,8 +67,12 @@ func streamShape(results []any) *shapeNode {
 func shapeOf(v any, depth int, path string) *shapeNode {
 	node := &shapeNode{Type: gojq.TypeOf(v), QueryPath: normalizePath(path)}
 	switch val := v.(type) {
-	case *gojq.OrderedObject:
-		keys := val.Keys()
+	case map[string]any:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
 		if depth >= shapeMaxDepth {
 			node.ZoomIn = true
 			node.MoreKeys = len(keys)
@@ -81,7 +86,7 @@ func shapeOf(v any, depth int, path string) *shapeNode {
 		for _, k := range shown {
 			node.Keys = append(node.Keys, shapeField{
 				Key:   k,
-				Shape: shapeOf(objectValue(val, k), depth+1, childPath(path, k)),
+				Shape: shapeOf(val[k], depth+1, childPath(path, k)),
 			})
 		}
 	case []any:
@@ -105,9 +110,4 @@ func shapeOf(v any, depth int, path string) *shapeNode {
 		node.Sample = runeclamp.Clamp(gojq.Preview(v), samplePreviewMax)
 	}
 	return node
-}
-
-func objectValue(o *gojq.OrderedObject, k string) any {
-	v, _ := o.Get(k)
-	return v
 }

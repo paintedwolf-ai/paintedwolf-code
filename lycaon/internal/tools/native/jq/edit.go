@@ -60,7 +60,7 @@ func (e *errEncode) Error() string { return e.detail }
 // Edit runs query over the document and re-encodes the results in the
 // source's format. It never writes; the caller lands the text.
 func Edit(ctx context.Context, req EditRequest) (EditResult, error) {
-	format, err := DetectFormat(req.Path, req.Format)
+	format, err := detectFormat(req.Path, req.Format)
 	if err != nil {
 		return EditResult{}, err
 	}
@@ -68,13 +68,13 @@ func Edit(ctx context.Context, req EditRequest) (EditResult, error) {
 	if err != nil {
 		return EditResult{}, editParseReject(req.Path, format, parsedAs, err)
 	}
-	program, err := CompileProgram(req.Query, ProgramOptions{Variables: sortedVariables(req.Vars)})
+	code, varValues, err := compileQueryWithVars(req.Query, req.Vars)
 	if err != nil {
 		return EditResult{}, safecmd.Reject("JQ_QUERY_INVALID", map[string]any{
 			"query": req.Query, "detail": err.Error(),
 		})
 	}
-	results, err := runEditQuery(ctx, program, doc.inputs(), req)
+	results, err := runEditQuery(ctx, code, doc.inputs(), req, varValues...)
 	if err != nil {
 		return EditResult{}, err
 	}
@@ -158,31 +158,39 @@ func lossyReject(path, format string, lossy *errLossy) error {
 
 // runEditQuery keeps every result; a stream past the scan cap is refused
 // rather than written short.
-func runEditQuery(ctx context.Context, program *Program, inputs []any, req EditRequest) ([]editValue, error) {
+func runEditQuery(ctx context.Context, code *gojq.Code, inputs []any, req EditRequest, varValues ...any) ([]editValue, error) {
 	caps := safecmd.JQCaps()
 	runCtx, cancel := caps.WithTimeout(ctx)
 	defer cancel()
+
 	var results []editValue
 	for i, input := range inputs {
-		halt, err := program.Run(runCtx, gojq.FromGo(input), func(v any) error {
-			if len(results) >= safecmd.JQScanCap {
-				return safecmd.Reject("JQ_EDIT_STREAM_CAP", map[string]any{"path": req.Path, "cap": safecmd.JQScanCap})
+		iter := code.RunWithContext(runCtx, input, varValues...)
+		for {
+			v, ok := iter.Next()
+			if !ok {
+				break
 			}
-			results = append(results, editValue{value: gojq.ToGo(v), input: i})
-			return nil
-		})
-		if runCtx.Err() != nil && ctx.Err() == nil {
-			return nil, safecmd.Reject("JQ_TIMEOUT", map[string]any{"query": req.Query, "timeout_ms": caps.Timeout.Milliseconds()})
-		}
-		var queryErr *QueryError
-		if errors.As(err, &queryErr) {
-			return nil, safecmd.Reject("JQ_QUERY_ERROR", map[string]any{"query": req.Query, "detail": queryErr.Error()})
-		}
-		if err != nil {
-			return nil, err
-		}
-		if halt != nil {
-			break
+			if verr, isErr := v.(error); isErr {
+				if runCtx.Err() != nil {
+					return nil, safecmd.Reject("JQ_TIMEOUT", map[string]any{
+						"query": req.Query, "timeout_ms": caps.Timeout.Milliseconds(),
+					})
+				}
+				var halt *gojq.HaltError
+				if errors.As(verr, &halt) {
+					break
+				}
+				return nil, safecmd.Reject("JQ_QUERY_ERROR", map[string]any{
+					"query": req.Query, "detail": verr.Error(),
+				})
+			}
+			if len(results) >= safecmd.JQScanCap {
+				return nil, safecmd.Reject("JQ_EDIT_STREAM_CAP", map[string]any{
+					"path": req.Path, "cap": safecmd.JQScanCap,
+				})
+			}
+			results = append(results, editValue{value: v, input: i})
 		}
 	}
 	return results, nil
