@@ -29,6 +29,9 @@ concurrency:
 jobs:
   fast:
     if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
