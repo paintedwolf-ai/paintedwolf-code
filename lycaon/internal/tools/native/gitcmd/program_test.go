@@ -65,8 +65,8 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
-	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		prepared, err := owners.PrepareGit(frame, nil, request)
+	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
@@ -115,8 +115,8 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
 	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-			prepared, err := owners.PrepareGit(frame, nil, request)
+		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
 			if err != nil {
 				return command.NativePrepared{}, err
 			}
@@ -256,8 +256,8 @@ func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {
 		program := *mutations
 		program.Revisions.Memory = memory
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
-			"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := owners.PrepareGit(frame, &program, request)
+			"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := owners.PrepareGit(frame, &program, nestedCommand(dispatch), request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
@@ -298,4 +298,9 @@ func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {
 	if executions := f.executions(t); executions["patch"] != "completed;" || executions["git add"] != "completed;" || executions["git apply"] != "completed;completed;" {
 		t.Fatalf("child receipts %v", executions)
 	}
+}
+
+func nestedCommand(dispatch commandprogram.Dispatch) commandprogram.NestedCommand {
+	nested, _ := dispatch.(commandprogram.NestedCommand)
+	return nested
 }
