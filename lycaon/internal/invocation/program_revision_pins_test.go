@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -48,7 +47,7 @@ func TestProgramReceiptsRecordExactRevisionPins(t *testing.T) {
 		t.Fatal("pins crossed session scope")
 	}
 	result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "result"}}
-	testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), execution, invocation.ChildSettlement{Result: result, DetailReference: "output:conflict"}))
+	testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), execution, toolcontract.ProgramChildSettlement{Result: result, DetailReference: "output:conflict"}))
 	if err := f.recorder.RecordRevisionPins(t.Context(), execution, 3, pins[:1]); err == nil {
 		t.Fatal("settled execution gained pins")
 	}
