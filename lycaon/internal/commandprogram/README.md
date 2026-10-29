@@ -42,7 +42,12 @@ unquoted field splitting and `read`; a command prefix applies only to that comma
 Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
 `$name`, `${name}`, `${#name}` (Unicode scalars), `$0`, `$1`..`${10}`, `$#`, `$?`,
 `$!`, `$@` and `$*`; unset values expand empty. Quoted `"$@"` keeps each operand
-and expands to no field for no operands, `"$*"` joins with single spaces. Only
+and expands to no field for no operands, `"$*"` joins with single spaces.
+`${name=word}` and `${name:=word}` assign the expanded word in the frame when the
+parameter is unset (or empty) and expand to the value. Brace expansion runs first
+on command words, `for` items and array elements: each alternative or sequence
+value becomes its own word, with adjacent literal text joined, and then expands
+as written. Only
 `~` and `~/` expand, from `HOME`; without it the tilde stays literal. Unquoted
 expansion output splits on space, tab and LF; quoted output and literal text
 never split. Values are data: metacharacters, substitution syntax and secret
@@ -71,16 +76,18 @@ Scalars are bounded by `variable_value_bytes`, here-documents by
 memory and `expansion_memory_bytes` and released when the word completes.
 Every refusal is an `ExpansionError` with the catalog code and the word or part
 span. Here-documents with a quoted delimiter are literal; `<<-` strips leading
-tabs from body lines, not from expanded values.
+tabs from body lines, not from expanded values. A here-string expands its word
+as one value without splitting or globbing and appends LF; those bytes count
+against `here_document_bytes`.
 
 ## Evaluator
 
 `Evaluate(ctx, plan, EvaluationPorts)` is the host statement scheduler over a
 frozen `commandsurface.ProgramSnapshot`. It walks `;`, `&&`, `||`, `!`,
 pipelines, braces and isolated `( )` frames, `if`/`elif`/`else`, `for`,
-`while`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
+`while`, `until`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
 `exit`/`return`/`break`/`continue`, assignments, `export`/`unset`,
-redirections, here-documents and statement-trailing `&`. Every simple command
+redirections, here-documents, here-strings, `time [-p]`, `ulimit` and statement-trailing `&`. Every simple command
 is expanded through `Expander` when reached and dispatched through `Dispatch`:
 catalog names bind first through `ArgvBinder` and `Invoke`; other programs and
 `external --` use `Launch`. Unsupported option spellings refuse with the
@@ -227,3 +234,21 @@ Typed completeness and eligibility remain separate from ordinary status and
 verification evidence: native comparison status 1 may publish, while unclassified
 external status 1 cannot. Destination review, revision checks, publication and
 recovery remain with their existing operation domains.
+
+## Supervision prefixes and child process attributes
+
+`timeout` and `nohup` are dispatch prefixes beside `env`: their owner runs
+the COMMAND operand through `NestedCommand`, so it binds and is admitted like
+a reached command. `OperationRequest.Process` (`ChildProcess`) carries what an
+external launch for that request starts with, and a prefix passes it to its
+inner command: resource limits, an ignored SIGHUP, the `SignalRelay` timeout
+signals through, and the `ProcessTimes` account of an enclosing `time`.
+`RunTimeout` is the expiry state machine over an injected `Clock`: the signal
+goes to the process the inner command attached to the relay, a native inner
+command is interrupted through its context, KILL follows after `-k`, and the
+caller's context always wins. `time` reads the clock around the pipeline and
+reports processor time that external children reported when reaped; native
+operations count zero and set `ProgramOutcome.CPUTimeUnmeasured`. `ulimit`
+keeps a frame's `childLimits`: the first use pins the reported or set limits,
+which every later external child of the frame receives, and a `( )` frame
+keeps its own copy.

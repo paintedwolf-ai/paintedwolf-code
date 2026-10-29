@@ -208,6 +208,8 @@ type OperationRequest struct {
 	// Gap is set when a native name's form has no native owner and the
 	// launch would run the installed program; dispatch decides whether it may.
 	Gap *toolcontract.NativeGap
+	// Process is what an external launch for this request starts with.
+	Process ChildProcess
 }
 
 // Validate binds the plan node to the child invocation it is dispatched as.
@@ -228,7 +230,8 @@ type OperationDispatcher interface {
 }
 
 // ExpansionScope is the evaluator-visible state expansion may read. The
-// evaluator owns and mutates it; expansion never assigns or records status.
+// evaluator owns and mutates it; expansion records no status and assigns only
+// through ${name=word}, ${name:=word} and (( )) arithmetic in the frame.
 // Variables is the invocation-local implementation.
 type ExpansionScope interface {
 	Variable(name string) (value string, set bool)
@@ -249,8 +252,9 @@ type Expander interface {
 	ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error)
 	// ExpandPattern keeps quoted fragments literal for glob and ERE matching.
 	ExpandPattern(context.Context, ExpansionScope, commandsurface.DeferredWord) (PredicateValue, error)
-	// ExpandDocument yields a here-document body: literal when its delimiter
-	// is quoted, otherwise parameters and substitutions without splitting.
+	// ExpandDocument yields a here-document body (literal when its delimiter
+	// is quoted, otherwise parameters and substitutions without splitting) or
+	// a here-string's expanded word with a trailing LF.
 	ExpandDocument(context.Context, ExpansionScope, commandsurface.ProgramRedirect) (string, error)
 }
 

@@ -39,14 +39,21 @@ func (c *programCompiler) validate(file *syntax.File) {
 
 func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
-	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.TimeClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+	case *syntax.WordIter:
+		c.markBraces(true, v.Items...)
 	case *syntax.ArrayElem:
 		if v.Index != nil {
 			c.unsupported(n, "unindexed array elements")
 		}
+		c.markBraces(true, v.Value)
 	case *syntax.Word:
 		c.validateTilde(v)
-		if !c.literalContext[v] && !c.testWords[v] && !c.staticProof[v] {
+		switch {
+		case c.braces.fields[v]:
+			c.splitBraces(v)
+		case c.literalContext[v] || c.braces.literal[v] || c.staticProof[v]:
+		default:
 			expanded, err := syntax.ClassifyBraces(v, c.pool)
 			if err != nil {
 				c.err = parserDiagnostic(err, len(c.source))
@@ -67,22 +74,18 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Op == syntax.Pipe {
 			c.limit(n, "pipeline_stages", int64(c.pipelineWidth(v)))
 		}
-	case *syntax.WhileClause:
-		if v.Until {
-			c.unsupported(n, "while")
-		}
 	case *syntax.ForClause:
 		if v.Select || v.Braces {
 			c.unsupported(n, "for NAME in WORDS; do ...; done")
 		}
 	case *syntax.CaseClause:
-		c.markPatternWord(v.Word)
+		c.markBraces(false, v.Word)
 		for _, item := range v.Items {
 			if item.Op != syntax.Break {
 				c.unsupported(item, "case items ending with ;;")
 			}
 			for _, pattern := range item.Patterns {
-				c.markPatternWord(pattern)
+				c.markBraces(false, pattern)
 			}
 		}
 	case *syntax.CaseItem:
@@ -182,6 +185,10 @@ func (c *programCompiler) pipelineWidth(n syntax.Node) int {
 	return width
 }
 func (c *programCompiler) validateCall(call *syntax.CallExpr) {
+	for _, a := range call.Assigns {
+		c.markBraces(false, a.Value)
+	}
+	c.markBraces(true, call.Args...)
 	if len(call.Args) == 0 {
 		return
 	}
@@ -325,6 +332,16 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 		c.unsupported(p, "case conversion without a pattern")
 		return
 	}
+	if p.Exp != nil {
+		c.markBraces(false, p.Exp.Word)
+		if op := p.Exp.Op.String(); (op == "=" || op == ":=") && !assignableParameter(p) {
+			c.unsupported(p, "${name:=word} or ${name=word} assigning a variable or array element")
+			return
+		}
+	}
+	if p.Repl != nil {
+		c.markBraces(false, p.Repl.Orig, p.Repl.With)
+	}
 	name := p.Param.Value
 	if name == "-" || name == "$" {
 		c.unsupported(p, "invocation variables and supported positional/status parameters")
@@ -335,11 +352,21 @@ func validIndexedVariable(name string) bool {
 	return name == "PIPESTATUS" || validWritableVariable(name)
 }
 
-const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name:offset:length}, ${name^^} or supported array/positional/status parameters"
+const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:=word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name:offset:length}, ${name^^} or supported array/positional/status parameters"
 
-// supportedParameterOperators have fixed semantics that never assign state.
+// assignableParameter reports ${name=word} and ${name:=word} targets: a
+// writable variable or one element of an indexed array, never a positional or
+// special parameter.
+func assignableParameter(p *syntax.ParamExp) bool {
+	if p.Index == nil {
+		return validWritableVariable(p.Param.Value) || p.Param.Value == "IFS"
+	}
+	return validWritableVariable(p.Param.Value) && subscriptAllSymbol(p.Index) == ""
+}
+
+// supportedParameterOperators select, assign, test or transform a parameter.
 var supportedParameterOperators = map[string]bool{
-	"-": true, ":-": true, "+": true, ":+": true, "?": true, ":?": true,
+	"-": true, ":-": true, "=": true, ":=": true, "+": true, ":+": true, "?": true, ":?": true,
 	"#": true, "##": true, "%": true, "%%": true, "^": true, "^^": true, ",": true, ",,": true,
 }
 
@@ -374,6 +401,8 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 			}
 			c.limit(r, "here_document_bytes", int64(size))
 		}
+	case syntax.WordHdoc:
+		c.markBraces(false, r.Word)
 	case syntax.DplOut, syntax.DplIn:
 		target, ok := c.literal(r.Word)
 		if !ok || !validRedirectDescriptor(target) {
@@ -406,12 +435,6 @@ func (c *programCompiler) validateTilde(w *syntax.Word) {
 // retain ordinary validation for their own command words.
 func (c *programCompiler) markTestWord(expr syntax.TestExpr) {
 	if word, ok := expr.(*syntax.Word); ok {
-		if !c.reserveHeap(256, word) {
-			return
-		}
-		if c.testWords == nil {
-			c.testWords = make(map[*syntax.Word]bool)
-		}
-		c.testWords[word] = true
+		c.markBraces(false, word)
 	}
 }
