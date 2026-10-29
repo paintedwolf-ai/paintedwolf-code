@@ -395,7 +395,7 @@ func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.T
 					Reason: fmt.Sprintf("blocked: %s:%d is not an allowed address", dial.Address, dial.Port),
 				}
 			}
-			return egress.PinnedTransport(target.Hostname(), []netip.Addr{dial.Address}, dial.Port), 0, nil
+			return egress.PinnedTransport(target, []netip.Addr{dial.Address}, dial.Port), 0, nil
 		}
 		dialHost, dialPort = dial.Host, dial.Port
 	}
@@ -405,7 +405,7 @@ func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.T
 	if err != nil {
 		return nil, dnsElapsed, err
 	}
-	return egress.PinnedTransport(target.Hostname(), ips, dialPort), dnsElapsed, nil
+	return egress.PinnedTransport(target, ips, dialPort), dnsElapsed, nil
 }
 
 // addressAllowed applies the destination policy to an address a hop dials:

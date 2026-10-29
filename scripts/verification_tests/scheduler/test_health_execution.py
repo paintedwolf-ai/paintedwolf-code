@@ -2,16 +2,24 @@
 
 import copy
 import contextlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
 
+SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")
+spec = importlib.util.spec_from_file_location("test_execution", SCRIPT)
+execution = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(execution)
+import verification_execute as execute
+import verification_plan as planning
 import verification_health as health
 
 
@@ -188,6 +196,167 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
         identity = health.identity(os.getpid())
         self.assertIsNotNone(identity)
         self.assertEqual(health.ownership(os.getpid(), identity, health.process_snapshot()), "present")
+
+    @unittest.skipIf(os.name == "nt", "POSIX process sampling")
+    def test_declared_progress_signal_keeps_zero_cpu_daemon_job_active_until_signal_stops(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            queue = execution.Queue(root / "queue")
+            ready = root / "ready"
+            done = root / "done"
+            script = (
+                "import os, pathlib, time\n"
+                f"pathlib.Path({str(ready)!r}).write_text(os.environ.get('PW_TEST_STAGE_PROGRESS', ''))\n"
+                f"while not pathlib.Path({str(done)!r}).exists():\n"
+                "    time.sleep(0.02)\n"
+            )
+            outcomes = []
+            with patch.dict(os.environ, {"PW_TEST_EXECUTION_TICKET": "", "PW_TEST_STAGE_PROGRESS": ""}):
+                worker = threading.Thread(
+                    target=lambda: outcomes.append(execution.run(
+                        queue, "daemon:build", [sys.executable, "-c", script],
+                        {"locks": ["harness"], "workers": 1, "progress": "log"})))
+                worker.start()
+                try:
+                    deadline = time.monotonic() + 5
+                    while not ready.exists() and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(ready.exists())
+                    progress = Path(ready.read_text())
+                    status = queue.status()
+                    run_entry = status["runs"][0]
+                    op_entry = status["operations"][0]
+                    self.assertEqual(run_entry["activity_paths"], [str(progress)])
+                    self.assertEqual(op_entry["activity_paths"], [str(progress)])
+                    snapshot = {
+                        run_entry["pid"]: process(run_entry["pid"], identity=run_entry["owner_identity"]),
+                        run_entry["child_pid"]: process(
+                            run_entry["child_pid"], run_entry["pid"], identity=run_entry["child_identity"]),
+                    }
+                    with patch.object(health, "process_snapshot", return_value=snapshot), \
+                            patch.object(health.time, "clock_gettime") as clock:
+                        for step, now in enumerate(range(0, health.QUIET_SECONDS * 2 + 1, health.SAMPLE_SECONDS)):
+                            progress.write_text(f"step-{step}\n")
+                            clock.return_value = now
+                            observed = health.annotate(queue, queue.status())["runs"][0]["health"]
+                            self.assertNotEqual(observed["state"], "suspected_stall")
+                        self.assertEqual(observed["state"], "active")
+                        stopped_at = health.QUIET_SECONDS * 2
+                        for now in range(stopped_at + health.SAMPLE_SECONDS,
+                                         stopped_at + health.QUIET_SECONDS + 1, health.SAMPLE_SECONDS):
+                            clock.return_value = now
+                            observed = health.annotate(queue, queue.status())["runs"][0]["health"]
+                        self.assertEqual(observed["state"], "suspected_stall")
+                finally:
+                    done.write_text("done")
+                    worker.join(timeout=5)
+            self.assertEqual(outcomes, [0])
+            self.assertFalse(progress.exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX process sampling")
+    def test_ordinary_target_ignores_undeclared_progress_and_stalls_on_schedule(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            queue = execution.Queue(root / "queue")
+            ready = root / "ready"
+            done = root / "done"
+            fake_progress = root / "undeclared.progress"
+            script = (
+                "import os, pathlib, time\n"
+                f"pathlib.Path({str(ready)!r}).write_text(os.environ.get('PW_TEST_STAGE_PROGRESS', ''))\n"
+                f"while not pathlib.Path({str(done)!r}).exists():\n"
+                "    time.sleep(0.02)\n"
+            )
+            outcomes = []
+            with patch.dict(os.environ, {"PW_TEST_EXECUTION_TICKET": "",
+                                         "PW_TEST_STAGE_PROGRESS": str(fake_progress)}):
+                worker = threading.Thread(
+                    target=lambda: outcomes.append(execution.run(
+                        queue, "lint:fast", [sys.executable, "-c", script],
+                        {"locks": ["lint"], "workers": 1})))
+                worker.start()
+                try:
+                    deadline = time.monotonic() + 5
+                    while not ready.exists() and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(ready.exists())
+                    self.assertEqual(ready.read_text(), "")
+                    status = queue.status()
+                    run_entry = status["runs"][0]
+                    self.assertNotIn("activity_paths", run_entry)
+                    snapshot = {
+                        run_entry["pid"]: process(run_entry["pid"], identity=run_entry["owner_identity"]),
+                        run_entry["child_pid"]: process(
+                            run_entry["child_pid"], run_entry["pid"], identity=run_entry["child_identity"]),
+                    }
+                    with patch.object(health, "process_snapshot", return_value=snapshot), \
+                            patch.object(health.time, "clock_gettime") as clock:
+                        for step, now in enumerate(range(0, health.QUIET_SECONDS + 1, health.SAMPLE_SECONDS)):
+                            fake_progress.write_text(f"ignored-{step}\n")
+                            clock.return_value = now
+                            observed = health.annotate(queue, queue.status())["runs"][0]["health"]
+                        self.assertEqual(observed["state"], "suspected_stall")
+                finally:
+                    done.write_text("done")
+                    worker.join(timeout=5)
+            self.assertEqual(outcomes, [0])
+
+    def test_catalog_and_stage_execution_propagate_declared_progress_recipes(self):
+        base = json.loads(planning.CATALOG.read_text())
+        for valid in ("log", "heartbeat"):
+            candidate = copy.deepcopy(base)
+            candidate["resources"]["den:webkit:atspi"]["progress"] = valid
+            with patch.object(planning.Path, "read_text", return_value=json.dumps(candidate)):
+                self.assertEqual(planning.catalog()["resources"]["den:webkit:atspi"]["progress"], valid)
+        for invalid in ("prose", "", None, True, 1):
+            candidate = copy.deepcopy(base)
+            candidate["resources"]["den:webkit:atspi"]["progress"] = invalid
+            with patch.object(planning.Path, "read_text", return_value=json.dumps(candidate)), \
+                    self.assertRaisesRegex(ValueError, "invalid resource recipe: den:webkit:atspi"):
+                planning.catalog()
+        self.assertEqual(planning.invocation_profile(["den:webkit:atspi"], ["--prepare"])["progress"], "log")
+        self.assertNotIn("progress", planning.invocation_profile(["test:digest"], ["./internal/api"]))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            queue = execution.Queue(root / "queue")
+            batch_dir = root / "batch"
+            batch_dir.mkdir()
+            plan = {"batch": {"ticket": "00000000000000000001-batch", "workers": 1, "source": str(root),
+                              "members": ["00000000000000000001"], "state": "running", "kind": "batch"},
+                    "requests": [{"ticket": "00000000000000000001", "order": 1, "environment_identity": "env"}]}
+            (batch_dir / "plan.json").write_text(json.dumps(plan))
+            lease_path = queue.root / "00000000000000000001-batch.lease"
+            lease_path.write_text(json.dumps(plan["batch"]))
+            captured = []
+            pool = Mock()
+
+            def run_inline(fn, *args, **kwargs):
+                captured.append((args, kwargs))
+                future = Mock()
+                future.result.return_value = fn(*args, **kwargs)
+                return future
+
+            pool.submit.side_effect = run_inline
+            stage = {"kind": "task", "name": "den:webkit:atspi", "arguments": ["den:webkit:atspi"]}
+            with lease_path.open("r+") as batch_lease, \
+                    patch.dict(os.environ, {"PW_TEST_STAGE_PROGRESS": "/tmp/stale",
+                                            "PW_SOURCE_SNAPSHOT_COMMIT": "0" * 40}), \
+                    patch.object(execute, "task_command", return_value=[sys.executable, "-c", "pass"]):
+                execution.lock_file(batch_lease)
+                executor = execute.Executor(queue, batch_dir)
+                executor.interested = lambda _: True
+                job = executor.start_stage([(plan["requests"][0], stage, [], 0)], "stage-001", pool)
+                progress_paths = list(job["reservation"].entry["activity_paths"])
+                job["reservation"].__exit__(None, None, None)
+                ordinary = {"kind": "task", "name": "lint:fast", "arguments": ["lint:fast"]}
+                job2 = executor.start_stage([(plan["requests"][0], ordinary, [], 0)], "stage-002", pool)
+                ordinary_paths = list(job2["reservation"].entry["activity_paths"])
+                job2["reservation"].__exit__(None, None, None)
+            expected_progress = str(batch_dir / "stage-001-progress.log")
+            self.assertEqual(captured[0][1]["env"]["PW_TEST_STAGE_PROGRESS"], expected_progress)
+            self.assertIn(expected_progress, progress_paths)
+            self.assertNotIn("PW_TEST_STAGE_PROGRESS", captured[1][1]["env"])
+            self.assertEqual(ordinary_paths, [str(batch_dir / "stage-002.log")])
 
 
 if __name__ == "__main__":

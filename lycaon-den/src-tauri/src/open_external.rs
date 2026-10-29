@@ -3,7 +3,9 @@
 
 use crate::files::reveal_in_file_manager::path_under_roots;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+
+#[cfg(target_os = "linux")]
+mod linux_editor;
 
 /// Open `abs_path` in an external editor at optional `line`.
 /// The root check catches caller mistakes; configured launch arguments provide authority.
@@ -129,9 +131,7 @@ fn replace_tokens(mut input: &str, pairs: &[(&str, &str)]) -> String {
 }
 
 fn spawn_argv(program: &str, args: &[&str]) -> Result<(), String> {
-    let status = Command::new(program)
-        .args(args)
-        .status()
+    let status = crate::external_launch::External::new(program).args(args).status()
         .map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
@@ -158,7 +158,9 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
         .iter()
         .find(|e| e.id == preset)
         .ok_or_else(|| format!("unknown editor preset: {preset}"))?;
+    #[cfg(not(target_os = "linux"))]
     let folder = Path::new(path).is_dir();
+    #[cfg(not(target_os = "linux"))]
     let cli_args = substitute_tokens(
         if folder { entry.folder_cli_args } else { entry.cli_args },
         path,
@@ -200,23 +202,7 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
     }
     #[cfg(target_os = "linux")]
     {
-        use crate::detect_editors::linux_desktop;
-        if !entry.linux_cli.is_empty() && which::which(entry.linux_cli).is_ok() {
-            return spawn_argv_owned(entry.linux_cli, &cli_args);
-        }
-        let desktop = linux_desktop::find_entry(
-            entry.linux_desktop_ids,
-            &linux_desktop::system_application_directories(),
-            &linux_desktop::program_runnable,
-        )
-        .ok_or_else(|| format!("{} is not installed", entry.display_name))?;
-        let (program, fixed) = desktop
-            .command
-            .split_first()
-            .ok_or_else(|| format!("{} has no launch command", entry.display_name))?;
-        let mut argv = fixed.to_vec();
-        argv.extend(cli_args);
-        spawn_argv_owned(program, &argv)
+        linux_editor::spawn(entry, path, line)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
@@ -256,8 +242,9 @@ fn spawn_system_browser(url: &str, window: &tauri::WebviewWindow) -> Result<(), 
     }
     #[cfg(target_os = "linux")]
     {
-        use crate::files::linux_desktop_open::{open_uri, ParentWindow};
-        open_uri(&ParentWindow::of(window), url).map(|_| ())
+        let _ = window;
+        use crate::files::linux_desktop_open::open_uri;
+        open_uri(url).map(|_| ())
     }
     #[cfg(target_os = "windows")]
     {

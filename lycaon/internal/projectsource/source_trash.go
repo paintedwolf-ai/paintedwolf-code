@@ -372,7 +372,15 @@ func (s *SourceEffects) restoreNativeTrash(ctx context.Context, row *sourceMutat
 			return errors.Join(ErrSourceMutationDiverged, err)
 		}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	identity, err := fspath.EntryIdentity(plan.AbsPath)
+	if err != nil {
+		return err
+	}
+	plan.DestinationIdentity = identity
+	return s.Journal.update(ctx, row)
 }
 
 // A completed native move needs its acknowledged location before recovery can promise Undo.

@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src-tauri/src/app_exit.rs",
+  "kind": "runtime_service",
+  "workstream": "workspace-activation-exit",
+  "disposition": "retain",
+  "reason": "Retain the cohesive 496-line shared exit transaction: request identity, confirmation, preservation acknowledgements, update preparation, commitment and rollback have one state lifetime. Parent selection, active-work observation and approval semantics remain in the common confirmation domain; platform adapters only create the native parented dialog. Native Rust workspace contracts passed, including ambiguous-parent refusal and GTK close/destruction mapping to cancellation. Actual installed modal-parent observation remains a qualification gap. Any change to these state contracts renews this decision.",
+  "reviewed_commit": "4ab0956bee97206f1aa71f6374f975470ec6d485",
+  "ceiling": 496,
+  "boundaries": {
+    "lycaon-den/src-tauri/src/app_exit.rs": "57d3395df8aa34971cf2949fff795cef0f99f53f084b0057fae3d9a9a1637a32",
+    "lycaon-den/src-tauri/src/app_exit/confirmation.rs": "0f3392ebeed86a9c45f457a07358ab5130a79398b592ebacad16da8bd8ba6e07",
+    "lycaon-den/src-tauri/src/app_exit/confirmation/linux.rs": "3c9c4b7f8aad9411f169ca21a4d5bfc9b9635a0942280f7bcc2e28efd5bb4e42",
+    "lycaon-den/src-tauri/src/app_exit/confirmation/native.rs": "2864d49dbeb0416295eac8ce34abda8e88fcee510c32e0e6895ac019006c83a7"
+  }
+}

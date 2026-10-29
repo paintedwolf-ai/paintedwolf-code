@@ -27,11 +27,11 @@ import { setShortcutPlatformForTests } from "../../shortcuts/platform.ts";
 
 describe("shortcut-prefs", () => {
   beforeEach(() => {
+    resetDispatcherForTests();
     // Expectations use macOS reservations whatever the test host is.
     setShortcutPlatformForTests("macos");
     localStorage.clear();
     setAppStateSnapshot({ ...EMPTY_APP_STATE_V1 });
-    resetDispatcherForTests();
     resetShortcutPrefsForTests();
     seedStockFrame();
   });
@@ -268,15 +268,17 @@ describe("shortcut-prefs", () => {
     });
   });
 
-  it("resetting the leader rehomes its child sequences to the default", async () => {
+  it.each(["macos", "windows", "linux"] as const)("resetting the %s leader rehomes its child sequences to the default", async (platform) => {
+    setShortcutPlatformForTests(platform);
+    const expected = platform === "linux" ? "Mod+Shift+; D" : "Mod+; D";
     await saveShortcutOverride("nav.leader", "Mod+'");
     await saveShortcutOverride(stockBindingId("go-chat"), "Mod+' D");
     await clearShortcutOverride("nav.leader");
 
     // Stored child sequences follow the active leader.
-    expect(shortcutOverrides()).toEqual({ [stockBindingId("go-chat")]: "Mod+; D" });
+    expect(shortcutOverrides()).toEqual({ [stockBindingId("go-chat")]: expected });
     expect(
-      resolveKeymap(shortcutOverrides(), liveKeymapSource("macos")).byCommand.get(stockId("go-chat")),
-    ).toEqual(["Mod+; D"]);
+      resolveKeymap(shortcutOverrides(), liveKeymapSource(platform)).byCommand.get(stockId("go-chat")),
+    ).toEqual([expected]);
   });
 });
