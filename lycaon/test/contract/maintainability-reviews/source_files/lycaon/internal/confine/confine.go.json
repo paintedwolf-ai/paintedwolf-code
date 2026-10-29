@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/confine/confine.go",
+  "kind": "module",
+  "workstream": "required-confinement-admission",
+  "disposition": "retain",
+  "reason": "Admission policy switches and required versus applied state now live in admission.go. The remaining shared boundary declarations, request construction, launch construction and profile rendering continue to compose the same confinement input; retain that bounded core while the focused request and admission contracts protect its authority. No Confinement fields or dependency authority changed.",
+  "reviewed_commit": "1cd785fe9899dfdee9a950ea7ab845027c627227",
+  "ceiling": 500,
+  "boundaries": {
+    "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
+    "lycaon/internal/confine/admission_linux_test.go": "b55f2b5f1756e1982590809c9774ef382300ecd5bd3ed55ee0204cd670f34a49",
+    "lycaon/internal/confine/request_test.go": "0755e0f537c5662ef0531eefc47054559528290a7f435e844b591821f52d857e"
+  }
+}

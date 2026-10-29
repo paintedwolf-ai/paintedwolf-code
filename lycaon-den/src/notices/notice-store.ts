@@ -222,3 +222,8 @@ function evictOldestBuckets(next: NoticeStoreState): NoticeStoreState {
   for (const key of drop) delete buckets[key];
   return { buckets, order: next.order.slice(drop.length) };
 }
+
+/** Withdraw a condition published outside a component. */
+export function withdrawNotice(code: string, scope: NoticeScope = APP_SCOPE): void {
+  publishStoreRef?.withdraw(code, scope);
+}

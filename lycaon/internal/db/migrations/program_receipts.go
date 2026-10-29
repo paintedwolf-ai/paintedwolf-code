@@ -9,22 +9,14 @@ import (
 //go:embed program_receipts.sql
 var programReceiptsSQL []byte
 
-//go:embed link_kind.go
-var linkKindImplementation []byte
-
 // ProgramReceipts adds host execution records without manufacturing model calls.
-// Revision5 is the known native-authority intermediate; recognizing it here
+// Revision7 is the known native-authority intermediate; recognizing it here
 // does not register a new shipped baseline.
 func ProgramReceipts(target Baseline) Step {
-
-	return Step{ID: "portable-program-receipts", Source: append(append([]byte{}, programReceiptsSQL...), linkKindImplementation...), RebuildTables: true,
-		Checksum: "c037167890499c3af3a1889a16351d81bd09effc71e7ad14b12b38ecfc34774c",
-
-		From: Baseline{Revision: 5, Shape: "9916a026f07a01278311170fe3c896b12cbbd7569d6f11345870764806f8167b"},
-		To:   target, Apply: func(ctx context.Context, tx *sql.Tx) error {
-			if err := migrateLinkKind(ctx, tx); err != nil {
-				return err
-			}
+	return Step{ID: "portable-program-receipts", Source: programReceiptsSQL,
+		Checksum: "bde8b3115696ead32e21b55f520fff50c94e04da79604a0a71a6e7889370ef40",
+		From:     Baseline{Revision: 7, Shape: "3f850531058aa188145c4ff350d0d68bfa8810d2d3986070b34cd7d549489956"},
+		To:       target, Apply: func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, string(programReceiptsSQL))
 			return err
 		}}
