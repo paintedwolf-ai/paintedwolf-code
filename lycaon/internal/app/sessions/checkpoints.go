@@ -91,8 +91,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	if err := wireGrantedAccess(r, deps); err != nil {
 		return err
 	}
-	if deps.Security.Harvest != nil {
-		r.Manager.ToolContext.SetCredentialFiles(newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions))
+	if err := r.wireCredentialFiles(ctx, deps); err != nil {
+		return err
 	}
 	wireCredentialObservations(r.Manager, deps.Security.Fingerprinter, deps.Security.Matcher, deps.Security.Harvest)
 	deps.Execution.Host.Executor.Secrets.SetSecretExposureSource(func(c context.Context, chatSessionID string) (bool, error) {

@@ -15,6 +15,8 @@ type authoredRecorder struct {
 	authored []tools.AuthoredCredentialValues
 }
 
+func (*authoredRecorder) EnsureProject(context.Context, string) error { return nil }
+
 func (r *authoredRecorder) Delivered(context.Context, tools.CredentialFileRead) error { return nil }
 
 func (r *authoredRecorder) Authored(_ context.Context, written tools.AuthoredCredentialValues) error {
@@ -22,8 +24,7 @@ func (r *authoredRecorder) Authored(_ context.Context, written tools.AuthoredCre
 	return nil
 }
 
-// A landed credential-file write records the values its own arguments carried,
-// so reading the file back does not ask about the model's own output.
+// Landed writes record only values carried by their arguments.
 func TestWriteRecordsModelAuthoredCredentialValues(t *testing.T) {
 	dir := t.TempDir()
 	recorder := &authoredRecorder{}
@@ -48,3 +49,5 @@ func TestWriteRecordsModelAuthoredCredentialValues(t *testing.T) {
 		t.Fatalf("authored = %+v, want the one harvestable argument value", got)
 	}
 }
+
+func (*authoredRecorder) ForgetProject(context.Context, string) error { return nil }

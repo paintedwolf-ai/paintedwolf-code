@@ -18,6 +18,8 @@ type deliveredRecorder struct {
 	err   error
 }
 
+func (*deliveredRecorder) EnsureProject(context.Context, string) error { return nil }
+
 func (r *deliveredRecorder) Delivered(_ context.Context, read tools.CredentialFileRead) error {
 	r.reads = append(r.reads, read)
 	return r.err
@@ -73,3 +75,5 @@ func TestReadWithholdsCredentialFileWhenExposureFails(t *testing.T) {
 		t.Fatalf("the unrecorded read returned its text: %q", out)
 	}
 }
+
+func (*deliveredRecorder) ForgetProject(context.Context, string) error { return nil }

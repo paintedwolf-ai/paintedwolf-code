@@ -58,9 +58,15 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 	m.SetHarvestSource(func(ctx context.Context) []secretmatch.HarvestedValue {
 		var values []secretharvest.Value
 		attribution := secretmatch.AskAttributionFrom(ctx)
+		harvest.BindSessionProject(attribution.RootSessionID, secretScreenProject(ctx))
 		switch {
 		case attribution.RootSessionID != "":
 			values = harvest.ValuesFor(attribution.RootSessionID)
+			if project := secretScreenProject(ctx); project != "" {
+				values = append(values, harvest.FileValues(project)...)
+			} else {
+				values = append(values, harvest.FileValuesForSession(attribution.RootSessionID)...)
+			}
 		case attribution.ProjectID != "":
 			values = harvest.ValuesForProject(attribution.ProjectID)
 		default:
@@ -152,4 +158,17 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 		redacted, spans := m.RedactLabeledSpansWhere(context.WithoutCancel(ctx), "", text, nil)
 		return secretmatch.ApplyPseudonyms(redacted, spans)
 	})
+}
+
+// ModelScreeningValues reconciles file evidence before a provider sees the request.
+func (b *Runtime) ModelScreeningValues(ctx context.Context, projectID, rootSessionID string) ([]secretmatch.Remembered, error) {
+	if b.CredentialFiles != nil {
+		if err := b.CredentialFiles.EnsureProject(ctx, projectID); err != nil {
+			return nil, err
+		}
+	}
+	if b.Capabilities == nil {
+		return nil, nil
+	}
+	return b.Capabilities.ScreeningValues(ctx, projectID, rootSessionID)
 }

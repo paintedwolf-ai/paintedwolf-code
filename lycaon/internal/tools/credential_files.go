@@ -9,11 +9,11 @@ import (
 	"github.com/lycaon/lycaon/internal/secretharvest"
 )
 
-// CredentialFiles receives credential-file text a read delivered and values a
-// write took from the model's own arguments.
+// CredentialFiles indexes credential bindings and records attributed delivery.
 type CredentialFiles interface {
-	// Delivered records the session's exposure and admits the read's bindings
-	// to the session tree's evidence.
+	EnsureProject(ctx context.Context, projectID string) error
+	ForgetProject(ctx context.Context, projectID string) error
+	// Delivered records the session's exposure to a credential file.
 	Delivered(ctx context.Context, read CredentialFileRead) error
 	// Authored records values the model already holds.
 	Authored(ctx context.Context, written AuthoredCredentialValues) error
@@ -36,10 +36,9 @@ type AuthoredCredentialValues struct {
 	Values                                          []string
 }
 
-// ObserveCredentialRead reports a credential-file read. displayPath names the
-// file as the read addressed it.
-func (tc ToolContext) ObserveCredentialRead(ctx context.Context, absPath, displayPath, content string) error {
-	if tc.Effects.CredentialFiles == nil {
+// ObserveCredentialDelivery records content delivered from a credential path.
+func (tc ToolContext) ObserveCredentialDelivery(ctx context.Context, absPath, displayPath, content string) error {
+	if tc.Effects.CredentialFiles == nil || content == "" {
 		return nil
 	}
 	read := CredentialFileRead{
