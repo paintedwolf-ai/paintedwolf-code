@@ -828,7 +828,8 @@ supervisor or executor does not declare surviving work terminal.
 
 Stage completion settles its own reservation before publishing passing results.
 The executor seals exact request receipts through a private completion channel
-that stage children do not inherit. A later executor crash preserves those
+that stage children do not inherit. Subscribers require its exact durable seal
+before returning a passing receipt. A later executor crash preserves those
 independently completed receipts; unsealed or changed passing files become
 unverified. Final batch settlement additionally requires the executor's actual
 completion fact, including a legitimate failing outcome, rather than the outer

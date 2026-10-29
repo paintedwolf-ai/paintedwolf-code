@@ -3,10 +3,19 @@
 import hashlib
 import json
 import os
+from pathlib import Path
+
+from verification_state import read_optional, write_json
 
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def sealed_receipt(directory, receipt):
+    seal = read_optional(Path(directory) / (receipt["request"] + ".seal")) or {}
+    return (seal.get("source_commit") == receipt.get("source_commit")
+            and seal.get("digest") == digest(receipt))
 
 
 class Publisher:
@@ -35,7 +44,8 @@ class Publisher:
 class Witness:
     """Only the supervisor reads this pipe; request files alone cannot establish completion."""
 
-    def __init__(self):
+    def __init__(self, directory=None):
+        self.directory = Path(directory) if directory is not None else None
         self.reader, self.writer = os.pipe()
         os.set_blocking(self.reader, False)
         self.pending = b""
@@ -64,6 +74,9 @@ class Witness:
                     raise ValueError("Executor completion source identity changed")
                 if value.get("kind") == "request_complete":
                     self.requests[value["request"]] = value["digest"]
+                    if self.directory is not None:
+                        write_json(self.directory / (value["request"] + ".seal"),
+                                   {"source_commit": self.source, "digest": value["digest"]})
                 elif value.get("kind") == "executor_complete":
                     self.final = value
             if len(self.pending) > 65536:

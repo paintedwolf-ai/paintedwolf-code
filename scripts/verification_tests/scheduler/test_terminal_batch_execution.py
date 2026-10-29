@@ -11,7 +11,7 @@ from unittest.mock import patch
 import verification_batch as batch
 import verification_cancel as cancel
 import verification_custody as custody
-from verification_completion import Publisher, Witness
+from verification_completion import Publisher, Witness, sealed_receipt
 from verification_tests import support
 from verification_tests.scheduler.test_terminal_settlement_execution import TerminalFixture
 
@@ -56,7 +56,7 @@ class CaptureBoundaryTests(TerminalFixture):
         directory = self.root / "receipts"
         directory.mkdir()
         requests = [{"ticket": name} for name in ["sealed", "forged", "modified", "failed", "cancelled"]]
-        witness = Witness()
+        witness = Witness(directory)
         self.addCleanup(witness.close)
         # The executor receives the write capability; result files do not possess it.
         descriptor = os.dup(witness.writer)
@@ -76,7 +76,11 @@ class CaptureBoundaryTests(TerminalFixture):
         publisher.file.close()  # Simulate executor death before its final completion fact.
         witness.drain()
         self.assertFalse(witness.completed(0), "wrapper success fabricated executor completion")
-        batch.unverify_cleanup(directory, requests, witness)
+        for request in requests:
+            receipt = json.loads((directory / (request["ticket"] + ".json")).read_text())
+            self.assertEqual(sealed_receipt(directory, receipt), request["ticket"] == "sealed")
+        # Crash recovery uses the supervisor's durable seals, not an in-memory executor.
+        batch.unverify_cleanup(directory, requests)
         for name in ["forged", "modified"]:
             changed = json.loads((directory / (name + ".json")).read_text())
             self.assertEqual((changed["status"], changed["exit_code"]), ("unverified", 2))

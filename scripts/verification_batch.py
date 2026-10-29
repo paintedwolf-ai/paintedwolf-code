@@ -18,7 +18,7 @@ from verification_health import annotate, identity, owner_identity, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
 from verification_lifetime import Capability, TerminalSettlement
-from verification_completion import Witness
+from verification_completion import Witness, sealed_receipt
 
 
 MAX_REQUESTS = 32
@@ -56,6 +56,7 @@ def recover_abandoned(entry):
     plan = read_optional(directory / "plan.json")
     if plan is None or (directory / "finished.json").exists():
         return
+    unverify_cleanup(directory, plan["requests"])
     for request in plan["requests"]:
         receipt = directory / (request["ticket"] + ".json")
         if not receipt.exists():
@@ -253,6 +254,14 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         sys.stdout.buffer.flush()
                     receipt = directory / (lease.entry["ticket"] + ".json")
                     if receipt.exists():
+                        value = read_json(receipt)
+                        if value["status"] == "passed" and not sealed_receipt(directory, value):
+                            if not (directory / "finished.json").exists() and any(
+                                    e["ticket"] == assignment["ticket"] for e in entries):
+                                time.sleep(0.05)
+                                continue
+                            value.update(status="unverified", exit_code=2, reason="Request ownership was not sealed")
+                            write_json(receipt, value)
                         batch_plan = read_optional(directory / "plan.json") or {}
                         members = batch_plan.get("batch", {}).get("members", [])
                         live = {e["ticket"] for e in entries}.intersection(members) - {lease.entry["ticket"]}
@@ -264,7 +273,7 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         if output:
                             sys.stdout.buffer.write(output)
                             sys.stdout.buffer.flush()
-                        result = read_json(receipt)
+                        result = value
                         print(f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})",
                               file=sys.stderr, flush=True)
                         # The receipt keeps the tool's own code; the caller gets
@@ -393,11 +402,12 @@ def capture_source(queue, directory, capability):
     return (2 if blocked else code), captured.read_text().strip()
 
 
-def unverify_cleanup(directory, requests, witness):
+def unverify_cleanup(directory, requests, witness=None):
     for request in requests:
         path = directory / (request["ticket"] + ".json")
         receipt = read_optional(path)
-        if receipt and receipt["status"] == "passed" and not witness.sealed(receipt):
+        sealed = receipt is not None and (witness.sealed(receipt) if witness else sealed_receipt(directory, receipt))
+        if receipt and receipt["status"] == "passed" and not sealed:
             receipt.update(status="unverified", exit_code=2, reason="Terminal producer cleanup was unverified")
             write_json(path, receipt)
 
@@ -412,7 +422,7 @@ def supervise(queue, directory, inherited_fd):
     capability = Capability(queue.root / (entry["ticket"] + ".lease"), os.fdopen(LEASE_FD, "r+"), entry)
     os.environ["PW_TEST_EXECUTION_FD"] = str(LEASE_FD)
     child = None
-    witness = Witness()
+    witness = Witness(directory)
     cleanup_blocked = False
     try:
         with queue.locked():
@@ -443,6 +453,8 @@ def supervise(queue, directory, inherited_fd):
             # The executor may have updated phase/operation facts during execution.
             capability.file.seek(0)
             capability.entry = json.load(capability.file)
+            witness.drain()
+            unverify_cleanup(directory, plan["requests"], witness)
             summary = read_optional(directory / "summary.json") or {}
             normal = (witness.completed(child.returncode) and type(summary.get("requests")) is int
                       and summary["requests"] == len(plan["requests"])
