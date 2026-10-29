@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -362,20 +363,62 @@ func TestDetectionHoldsConnectUnderObserve(t *testing.T) {
 	}
 }
 
-func TestForgetActionRetainsOrdinaryHostVerdict(t *testing.T) {
+// verdictKeyFixtures returns one verdict key of every shape egressVerdictKey
+// writes for the session and action, keyed by shape.
+func verdictKeyFixtures(t *testing.T, sessionID, actionID string) map[string]string {
+	t.Helper()
+	cmd := EgressCommand{SessionID: sessionID, ToolCallID: actionID}
+	ep := egressproxy.Endpoint{Transport: egressproxy.TransportHTTPConnect, Host: "api.example", Port: 443}
+	declared := cmd
+	declared.DeclaredHosts = NormalizeDeclaredHosts([]string{ep.Host})
+	keys := map[string]string{
+		"endpoint":  egressVerdictKey(cmd, actionID, ep, nil),
+		"declared":  egressVerdictKey(declared, actionID, ep, nil),
+		"detection": egressVerdictKey(cmd, actionID, ep, &EgressDetectionCitation{PackID: "p", RuleID: "r", Level: "high"}),
+	}
+	if len(keys) != len(verdictKeyKinds) {
+		t.Fatalf("fixtures cover %d shapes, the broker releases %d", len(keys), len(verdictKeyKinds))
+	}
+	for kind, key := range keys {
+		if !strings.HasPrefix(key, kind+"\x00"+sessionID+"\x00"+actionID+"\x00") {
+			t.Fatalf("%s key %q does not start with its shape, session and action", kind, key)
+		}
+	}
+	return keys
+}
+
+func TestForgetReleasesEveryVerdictShapeOfItsScopeOnly(t *testing.T) {
 	t.Parallel()
 	b := newTestBroker()
-	b.verdict.Store("host\x00s1\x00api.example", true)
-	b.verdict.Store("detection\x00s1\x00action-1\x00api.example\x00p\x00r\x00high", true)
-	b.verdict.Store("detection\x00s1\x00action-2\x00api.example\x00p\x00r\x00high", true)
-	b.forgetActionLocked("s1", "action-1")
-	if b.verdict.Len() != 2 {
-		t.Fatalf("verdicts=%v", b.verdict.Snapshot())
+	ended := verdictKeyFixtures(t, "s1", "action-1")
+	sibling := verdictKeyFixtures(t, "s1", "action-2")
+	other := verdictKeyFixtures(t, "s2", "action-1")
+	for _, keys := range []map[string]string{ended, sibling, other} {
+		for _, key := range keys {
+			b.verdict.Store(key, true)
+		}
 	}
-	host, hostOK := b.verdict.Load("host\x00s1\x00api.example")
-	detection, detectionOK := b.verdict.Load("detection\x00s1\x00action-2\x00api.example\x00p\x00r\x00high")
-	if !hostOK || !host || !detectionOK || !detection {
-		t.Fatalf("unrelated verdict was removed: %v", b.verdict.Snapshot())
+	b.forgetActionLocked("s1", "action-1")
+	for kind, key := range ended {
+		if _, ok := b.verdict.Load(key); ok {
+			t.Fatalf("%s verdict survived its action: %v", kind, b.verdict.Snapshot())
+		}
+	}
+	for kind, key := range sibling {
+		if _, ok := b.verdict.Load(key); !ok {
+			t.Fatalf("%s verdict of another action was removed", kind)
+		}
+	}
+	b.forgetSessionLocked("s1")
+	for kind, key := range sibling {
+		if _, ok := b.verdict.Load(key); ok {
+			t.Fatalf("%s verdict survived its session: %v", kind, b.verdict.Snapshot())
+		}
+	}
+	for kind, key := range other {
+		if _, ok := b.verdict.Load(key); !ok {
+			t.Fatalf("%s verdict of another session was removed", kind)
+		}
 	}
 }
 
