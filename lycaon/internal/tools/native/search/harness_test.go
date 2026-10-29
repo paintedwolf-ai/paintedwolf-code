@@ -169,6 +169,8 @@ type harness struct {
 	removals *removals
 	dispatch *childDispatch
 	cwd      string
+	// env is the program frame's exported environment beyond LANG=C.
+	env []string
 	runs     int
 }
 
@@ -249,7 +251,7 @@ func requestFor(h *harness, argv ...string) commandprogram.OperationRequest {
 	operation := spec.Name
 	inv := h.invocation()
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	return commandprogram.OperationRequest{Invocation: inv, OperationID: operation, Statement: statement, Argv: fields, Environment: []string{"LANG=C"}}
+	return commandprogram.OperationRequest{Invocation: inv, OperationID: operation, Statement: statement, Argv: fields, Environment: append([]string{"LANG=C"}, h.env...)}
 }
 
 func streamsFor() commandprogram.Streams {

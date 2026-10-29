@@ -14,7 +14,7 @@ So the first move is never to fix. It is to measure which resource is gone.
 
 ## Where each resource hides
 
-**Disk space.** `df -h` for space, and **`df -i` for inodes** — a filesystem can be completely out of inodes with space free, which produces "No space left on device" on a tiny write and is the most confusing member of this family. Millions of small files (caches, session files, node_modules) do this. Then `du -sh` down the tree to find the consumer.
+**Disk space.** `df -h` for space, and **`df -i` for inodes** — a filesystem can be completely out of inodes with space free, which produces "No space left on device" on a tiny write and is the most confusing member of this family. Millions of small files (caches, session files, node_modules) do this. Then `du -sh` down the tree to find the consumer; `du -d 1 -h DIR | sort -h` ranks one level at a time. Both run natively in `command` for attached folders, `@scratch` and other readable paths.
 
 Two disk traps worth knowing:
 

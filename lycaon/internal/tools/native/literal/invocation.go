@@ -22,15 +22,16 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	request    commandprogram.OperationRequest
-	spec       toolcontract.CommandSpecification
-	argv       commandprogram.BoundArgv
-	closers    []io.Closer
-	input      io.Reader
-	stderr     io.Writer
-	out        *output
-	status     int
-	// comparison marks diff's complete status-one result as publishable.
+	request commandprogram.OperationRequest
+	spec    toolcontract.CommandSpecification
+	argv    commandprogram.BoundArgv
+	closers []io.Closer
+	input   io.Reader
+	stderr  io.Writer
+	out     *output
+	status  int
+	// comparison marks diff's and cmp's complete status-one result as
+	// publishable.
 	comparison    bool
 	diffVisits    int64
 	releases      []func()
@@ -90,6 +91,8 @@ func (inv *invocation) fail(status int, operand, reason string) {
 	switch {
 	case operand == "":
 		_, _ = fmt.Fprintf(inv.stderr, "%s: %s\n", inv.name(), reason)
+	case inv.name() == "strings":
+		_, _ = fmt.Fprintf(inv.stderr, "strings: %s\n", stringsFailure(operand, reason))
 	case failureForms[inv.name()] != "":
 		_, _ = fmt.Fprintf(inv.stderr, "%s: "+failureForms[inv.name()]+"\n", inv.name(), operand, reason)
 	default:
@@ -104,6 +107,7 @@ var failureForms = map[string]string{
 	"tail": "cannot open '%s' for reading: %s",
 	"ls":   "cannot access '%s': %s",
 	"stat": "cannot stat '%s': %s",
+	"du":   "cannot access '%s': %s",
 }
 
 // usage refuses a form the catalog admits syntactically but whose value is invalid.
