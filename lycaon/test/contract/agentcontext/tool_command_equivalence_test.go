@@ -147,19 +147,23 @@ func TestHTTPRequestEquivalenceFeedbackIsFirstClass(t *testing.T) {
 	t.Fatal("missing http_request equivalence entry")
 }
 
-// A redirection has no native form, so the command keeps its own execution.
+// Inline redirects remain in the actual command program, not a legacy replacement.
 func TestExactReplacementLeavesRedirectedCommandsToCommand(t *testing.T) {
 	t.Parallel()
-	exec := securityNativeExecutor(t)
+	fixture := newSecurityProgramFixture(t)
+	contractcheck.FailErr(t, "write redirected command source", os.WriteFile(filepath.Join(fixture.seed.Dir, "source.txt"), []byte("exact copy\n"), 0o644))
 	for _, command := range []string{"cp source.txt destination.txt 2> copy.log", "ls > listing.txt"} {
-		_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
-			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-				ActiveRootID: "r1"},
-			Identity: tools.InvocationIdentity{Agent: "implement"},
-		})
-		if refusal, ok := guidance.RefusalFromError(err); ok && strings.HasPrefix(refusal.Code(), "USE_") {
-			t.Fatalf("command %q redirected to %s despite its redirection", command, refusal.Code())
-		}
+		fixture.run(t, "implement", command)
+	}
+	content, err := os.ReadFile(filepath.Join(fixture.seed.Dir, "destination.txt"))
+	contractcheck.FailErr(t, "read redirected native copy", err)
+	if string(content) != "exact copy\n" {
+		t.Fatalf("redirected copy bytes = %q", content)
+	}
+	listing, err := os.ReadFile(filepath.Join(fixture.seed.Dir, "listing.txt"))
+	contractcheck.FailErr(t, "read native listing destination", err)
+	if !strings.Contains(string(listing), "source.txt") {
+		t.Fatalf("redirected native listing = %q", listing)
 	}
 }
 
@@ -167,11 +171,12 @@ func assertExactCommandReplacement(t *testing.T, command, code, tool string) {
 	t.Helper()
 	exec := securityNativeExecutor(t)
 	root := t.TempDir()
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
+	// verify retains exact argv-to-native recovery; command runs the v1 owner.
+	_, err := exec.Invoke(context.Background(), "verify", map[string]any{"command": command}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", tool}},
+		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"verify", tool}},
 	})
 	refusal, ok := guidance.RefusalFromError(err)
 	if err == nil || !ok {
