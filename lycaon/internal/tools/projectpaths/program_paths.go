@@ -113,6 +113,7 @@ type ProgramPaths struct {
 	hasPrevious   bool
 	argumentLimit int64
 	outputLimit   int64
+	rootParents   map[string]struct{}
 }
 
 type catalogPathFacts struct {
@@ -151,7 +152,7 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(actionRootPaths(tc))}
 	if cwd == "" {
 		cwd = "."
 	}

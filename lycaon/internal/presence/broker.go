@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -32,9 +33,6 @@ const (
 	AuthenticatorMacOS   = "macos_user_presence"
 	AuthenticatorWindows = "windows_user_presence"
 	AuthenticatorLinux   = "linux_user_presence"
-	// AuthenticatorLinuxAppPassword: the shell's native dialog re-verified
-	// the app password because no polkit agent could confirm the person.
-	AuthenticatorLinuxAppPassword = "linux_app_password" // #nosec G101 -- an authenticator name, not a credential
 
 	protocol = "painted-wolf-presence-v1"
 
@@ -92,6 +90,7 @@ type Proof struct {
 
 // Verified is a consumed challenge whose signature the shell's key produced.
 type Verified struct {
+	revoked       *revocation
 	ChallengeID   string
 	Purpose       Purpose
 	PersonID      string
@@ -113,6 +112,7 @@ type payload struct {
 }
 
 type pending struct {
+	revoked  *revocation
 	payload  payload
 	encoded  string
 	key      string
@@ -122,6 +122,7 @@ type pending struct {
 
 // Broker issues and consumes presence challenges in memory.
 type Broker struct {
+	revoked    atomic.Pointer[revocation]
 	mu         sync.Mutex
 	now        func() time.Time
 	publicKey  ed25519.PublicKey
@@ -223,7 +224,7 @@ func (b *Broker) Begin(claim Claim) (Challenge, error) {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(raw)
 	b.challenges[doc.ChallengeID] = pending{
-		payload: doc, encoded: encoded, key: key, personID: personID, deadline: deadline,
+		payload: doc, encoded: encoded, key: key, personID: personID, deadline: deadline, revoked: b.revoked.Load(),
 	}
 	return Challenge{ID: doc.ChallengeID, ProofPayload: encoded, ExpiresAt: doc.ExpiresAt}, nil
 }
@@ -261,7 +262,11 @@ func (b *Broker) Complete(proof Proof, purpose Purpose, personID string) (Verifi
 		!ed25519.Verify(key, SigningMessage(issued.encoded, authenticator), signature) {
 		return Verified{}, ErrDenied
 	}
+	if issued.revoked != b.revoked.Load() {
+		return Verified{}, ErrChallengeNotFound
+	}
 	return Verified{
+		revoked:     issued.revoked,
 		ChallengeID: issued.payload.ChallengeID, Purpose: issued.payload.Purpose, PersonID: issued.personID,
 		WindowLabel: issued.payload.WindowLabel, Authenticator: authenticator,
 		Subject: issued.payload.Subject, VerifiedAt: now,
@@ -293,7 +298,7 @@ func randomNonce() (string, error) {
 // user-presence authenticator.
 func IsAuthenticator(value string) bool {
 	switch value {
-	case AuthenticatorMacOS, AuthenticatorWindows, AuthenticatorLinux, AuthenticatorLinuxAppPassword:
+	case AuthenticatorMacOS, AuthenticatorWindows, AuthenticatorLinux:
 		return true
 	}
 	return false

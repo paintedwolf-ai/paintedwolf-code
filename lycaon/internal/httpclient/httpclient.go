@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/egressclass"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 )
 
 const (
@@ -27,7 +28,7 @@ var DefaultResponseHeader = 60 * time.Second
 // baseTransport bounds connection setup and applies host proxy selection.
 func baseTransport() *http.Transport {
 	cloned := http.DefaultTransport.(*http.Transport).Clone()
-	cloned.Proxy = hostProxy()
+	cloned.Proxy = hostproxy.ForRequest
 	cloned.DialContext = (&net.Dialer{
 		Timeout:   DefaultDial,
 		KeepAlive: 30 * time.Second,
