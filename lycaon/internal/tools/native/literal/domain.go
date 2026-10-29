@@ -85,7 +85,9 @@ func runSummarize(inv *invocation) error {
 		return err
 	}
 	focus, _ := inv.value("--focus")
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, inv.tc)
+	diskCtx := inv.tc
+	diskCtx.Source.EditorDocuments = nil
+	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, diskCtx)
 	if err != nil {
 		return err
 	}
@@ -110,7 +112,9 @@ func runRepoMap(inv *invocation) error {
 	if err != nil || !ok {
 		return err
 	}
-	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: repoMapBundle, Path: abs, LayoutDepth: depth}, inv.tc)
+	diskCtx := inv.tc
+	diskCtx.Source.EditorDocuments = nil
+	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: repoMapBundle, Path: abs, LayoutDepth: depth}, diskCtx)
 	if err != nil {
 		return err
 	}

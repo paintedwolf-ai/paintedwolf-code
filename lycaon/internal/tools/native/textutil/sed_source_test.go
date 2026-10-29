@@ -3,6 +3,7 @@
 package textutil
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,6 +15,32 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
+
+type mappedSedOutput struct {
+	bytes.Buffer
+	mappings []toolcontract.StreamSourceMapping
+}
+
+func (o *mappedSedOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
+	o.mappings = append(o.mappings, mapping)
+	return nil
+}
+
+func TestSedSelectedRecordPublishesExactSourceMapping(t *testing.T) {
+	h := newHarness(t)
+	h.seed("records", "one\ntwo\nthree\n")
+	request, release := h.bind("sed -n '2p' records")
+	defer release()
+	var output mappedSedOutput
+	result, err := h.owners.Builtins(h.ports())["sed"].Invoke(t.Context(), request, commandprogram.Streams{Input: commandprogram.NullInput(), Output: &output, Error: io.Discard})
+	testutil.FailErr(t, "run selected record", err)
+	if result.Status != 0 || output.String() != "two\n" {
+		t.Fatalf("selected output: result=%+v bytes=%q", result, output.String())
+	}
+	if len(output.mappings) != 1 || output.mappings[0].SourceStartByte != 4 || output.mappings[0].SourceEndByte != 8 || output.mappings[0].OutputStartByte != 0 || output.mappings[0].OutputEndByte != 4 {
+		t.Fatalf("selected record lost exact source mapping: %+v", output.mappings)
+	}
+}
 
 func TestSedLazyInputRetainsCapturedPinAndConsumedOffsets(t *testing.T) {
 	h := newHarness(t)

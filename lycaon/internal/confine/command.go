@@ -18,6 +18,9 @@ func Command(
 	if IsHelperInvocation(os.Args) {
 		return nil, func() {}, ErrNestedHelper
 	}
+	if c.HostExecution && c.lineage == nil {
+		return exec.CommandContext(ctx, name, args...), func() {}, nil
+	}
 	var profile string
 	var err error
 	if !c.HostExecution {

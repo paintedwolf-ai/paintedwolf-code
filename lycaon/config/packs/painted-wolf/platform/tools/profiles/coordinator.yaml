@@ -3,16 +3,16 @@ description: Coordinator tool surface — orchestration without product repo wri
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
-  read: sticky
+  read: true
   write: sticky
   edit: sticky
   replace_lines: sticky
-  grep: sticky
-  find: sticky
+  grep: true
+  find: true
   summarize: sticky
   survey_repo: sticky
-  jq: sticky
-  list_dir: sticky
+  jq: true
+  list_dir: true
   pack_board: sticky
   delegate_dispatch: sticky
   update_progress: sticky

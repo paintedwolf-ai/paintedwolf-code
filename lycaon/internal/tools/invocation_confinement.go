@@ -42,6 +42,7 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		ProjectID:            tctx.Identity.ProjectID,
 		Roots:                ConfineRootsForAction(tctx),
 		SessionScratchRoot:   tctx.Host.SessionScratchDir,
+		SessionOutputRoot:    tctx.Host.SessionOutputDir,
 		OverlayWriteRoots:    overlayWriteRoots,
 		PolicyWriteGrants:    tctx.Files.PolicyWriteGrants,
 		OverlayReadPaths:     overlayReadPaths,

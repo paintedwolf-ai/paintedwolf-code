@@ -32,7 +32,7 @@ func landRewritePlans(ctx context.Context, tctx tools.ToolContext, plans []rewri
 		indices = append(indices, i)
 	}
 	if len(edits) > 0 {
-		documents, ok := sourceview.ProjectDocuments(tctx)
+		documents, ok := tools.ProjectDocuments(tctx)
 		if !ok {
 			return fmt.Errorf("collaborative documents unavailable for rewrite transaction")
 		}
@@ -67,7 +67,7 @@ func landRewritePlans(ctx context.Context, tctx tools.ToolContext, plans []rewri
 	accepted := make([]multiApplyFileOut, 0, len(plans))
 	for i, plan := range plans {
 		if plan.source.Editor == nil {
-			if _, err := landEditedText(ctx, tctx, "code_rewrite", plan.resolved, plan.source, plan.content); err != nil {
+			if _, err := landEditedText(ctx, tctx, "code_rewrite", plan.resolved, plan.source, editorTextProposal{Authored: plan.content, Reviewed: plan.content}); err != nil {
 				out.Failed = append(out.Failed, rewriteFailure{Path: plan.resolved.DisplayPath, Error: err.Error()})
 				continue
 			}

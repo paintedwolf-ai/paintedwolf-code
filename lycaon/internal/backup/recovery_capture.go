@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -95,6 +96,14 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 		if err := collectDurableDir(ctx, base, dir, files, branches, math.MaxInt); err != nil {
 			return Manifest{}, usage, err
 		}
+	}
+	captured, err := db.OpenReadOnly(ctx, storePath)
+	if err != nil {
+		return Manifest{}, usage, err
+	}
+	referenceErr := validateArchiveReferences(ctx, captured, files)
+	if err := errors.Join(referenceErr, captured.Close()); err != nil {
+		return Manifest{}, usage, err
 	}
 	manifest.RetainedBranchTrees = branches.names()
 	for _, root := range manifest.RetainedBranchTrees {

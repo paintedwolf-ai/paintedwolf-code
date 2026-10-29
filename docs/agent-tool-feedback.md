@@ -25,12 +25,8 @@ anchor evaluations still read their own current occurrence state.
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
-Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,
-including short log lines. The file-writing operation has the same recovery
-whether called directly or inside a shell wrapper. Ordinary stdout and arbitrary
-program output are unaffected. Exact replacement calls require representable
-paths and known output bytes; uncertain quoting, expansion, or output options
-retain recovery guidance without synthesized file content.
+Redirected output such as `printf ... > file` is an ordinary native write in
+the program; the host does not redirect it to a structured tool.
 
 ## Native command failure attribution
 

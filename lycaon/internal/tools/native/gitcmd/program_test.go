@@ -139,6 +139,46 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	}
 }
 
+// Global options before the subcommand, including identity and initial
+// branch overrides, run natively.
+func TestProgramEntryRunsGlobalConfigOverridesNatively(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "README.txt"), []byte("new\n"), 0o644))
+	testutil.FailErr(t, "fresh", os.Mkdir(filepath.Join(f.dir, "fresh"), 0o755))
+	owners, err := gitcmd.NewOwners(git.NewManager())
+	testutil.FailErr(t, "git owners", err)
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			prepared, err := owners.PrepareGit(frame, request)
+			if err != nil {
+				return command.NativePrepared{}, err
+			}
+			return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+		}}}}, nil
+	}
+	out, err := f.call(t, t.Context(), "git --no-pager -C fresh -c init.defaultBranch=other init -q -b trunk && git -c init.defaultBranch=other init -q && git add README.txt && "+
+		"git -c user.name=Test -c user.email=test@example.invalid commit -qm first && git log -1 --format='%an <%ae> %s'")
+	testutil.FailErr(t, "global options workflow", err)
+	var outcome struct {
+		Stdout string `json:"stdout"`
+		State  string `json:"state"`
+	}
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
+	if outcome.Stdout != "Test <test@example.invalid> first\n" || outcome.State != "completed" {
+		t.Fatalf("program outcome %s", out)
+	}
+	if executions := f.executions(t); executions["git init"] != "completed;completed;" || executions["git commit"] != "completed;" {
+		t.Fatalf("child receipts %v", executions)
+	}
+	for dir, want := range map[string]string{"fresh": "ref: refs/heads/trunk\n", ".": "ref: refs/heads/other\n"} {
+		head, err := os.ReadFile(filepath.Join(f.dir, dir, ".git", "HEAD"))
+		testutil.FailErr(t, "read HEAD", err)
+		if string(head) != want {
+			t.Fatalf("%s HEAD = %q, want %q", dir, head, want)
+		}
+	}
+}
+
 type fixtureSessions struct{}
 
 func (fixtureSessions) Get(_ context.Context, id string) (*api.Session, error) {
@@ -197,6 +237,7 @@ func (f *programFixture) call(t *testing.T, ctx context.Context, source string) 
 	parent, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
+	tc.Host.SessionOutputDir = t.TempDir()
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.session, callID
 	tc.Invocation.ID = parent.ID
 	return f.runtime.Run(ctx, args, tc)

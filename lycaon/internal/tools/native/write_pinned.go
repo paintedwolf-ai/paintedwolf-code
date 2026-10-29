@@ -39,7 +39,7 @@ func (t *WriteTool) applyPinned(ctx context.Context, input WriteInput, tctx tool
 		return WriteResult{}, err
 	}
 	defer releaseMetadata()
-	st, current, err := captureRevision(ctx, tctx, resolved, toolcontract.DestinationRevision)
+	st, current, err := captureDestinationRevision(ctx, tctx, resolved)
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -159,6 +159,24 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		return WriteResult{}, err
 	}
 	defer releaseMetadata()
+	if input.Source != nil {
+		if input.SourceBytes > readcaps.MaxMutationBytes {
+			return t.applyPinnedStream(ctx, input, tctx, resolved, revisions)
+		}
+		releaseBytes, err := revisions.reserveWorking(ctx, 2*input.SourceBytes)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		defer releaseBytes()
+		input.Bytes = make([]byte, int(input.SourceBytes))
+		if _, err := io.ReadFull(input.Source, input.Bytes); err != nil {
+			return WriteResult{}, err
+		}
+		var extra [1]byte
+		if n, err := io.ReadFull(input.Source, extra[:]); n != 0 || err != io.EOF {
+			return WriteResult{}, errors.New("exact write stream length changed")
+		}
+	}
 	st, current, raw, releaseRaw, err := revisions.captureDestinationBytes(ctx, tctx, resolved, input.Append)
 	defer releaseRaw()
 	if err != nil {
@@ -192,7 +210,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		})
 	}
 	if input.Append && exists && (st.Disk == nil || int64(len(st.Content))+int64(len(input.Bytes)) > readcaps.MaxMutationBytes) {
-		result, err := landPinnedAppend(ctx, tctx, resolved, input.Destination, input.Bytes, admitSources)
+		result, err := landPinnedAppend(ctx, tctx, resolved, input.Destination, bytes.NewReader(input.Bytes), int64(len(input.Bytes)), admitSources)
 		if err != nil {
 			return WriteResult{}, err
 		}
@@ -209,7 +227,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		proposed = append(append([]byte(nil), raw...), input.Bytes...)
 	}
 	land := func(final []byte) (landing, error) {
-		landed, err := landPinnedBytes(ctx, tctx, resolved, input.Destination, final, admitSources)
+		landed, err := landPinnedBytes(ctx, tctx, resolved, input.Destination, input.Mode, final, admitSources)
 		if conflictsWithPin(err) {
 			return landing{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: input.Destination, Cause: err}
 		}
@@ -239,8 +257,8 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 // journals and keeps any replaced file recoverable. Immediately before commit
 // the destination must still hold the captured bytes (or still be absent),
 // and admitSources rechecks the inputs the bytes came from.
-func landPinnedBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, final []byte, admitSources func() error) (landing, error) {
-	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: bytes.NewReader(final),
+func landPinnedBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, pin toolcontract.ExecutionRevision, mode os.FileMode, final []byte, admitSources func() error) (landing, error) {
+	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{Target: resolvedMutationTarget(resolved), Source: bytes.NewReader(final), Mode: newFileMode(mode),
 		BeforeCommit: func(current fseffect.Target, _ fseffect.Result) error {
 			if err := verifyRawBase(current, resolved.DisplayPath, pin.DiskSHA256); err != nil {
 				return err

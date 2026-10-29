@@ -25,7 +25,7 @@ func TestJqDecompressesBlobstoreManagedSpill(t *testing.T) {
 	body := `{"name":"lycaon","version":3}`
 
 	store := blobstore.Store{Root: host}
-	blob, err := store.PutAt(tooloutput.ToolOutputSpillDir+"/spill.json", strings.NewReader(body), bytebound.Materialization(1<<20))
+	blob, err := store.PutAt(t.Context(), tooloutput.ToolOutputSpillDir+"/spill.json", strings.NewReader(body), bytebound.Materialization(1<<20))
 	testutil.FailErr(t, "spill via blobstore", err)
 
 	raw, err := os.ReadFile(filepath.Join(host, filepath.FromSlash(blob.Rel)))
@@ -63,7 +63,7 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 	dir, host := t.TempDir(), t.TempDir()
 	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)) + `"}`
 	store := blobstore.Store{Root: host}
-	blob, err := store.PutAt(tooloutput.ToolOutputSpillDir+"/oversized.json", strings.NewReader(body), bytebound.Materialization(len(body)+1))
+	blob, err := store.PutAt(t.Context(), tooloutput.ToolOutputSpillDir+"/oversized.json", strings.NewReader(body), bytebound.Materialization(len(body)+1))
 	testutil.FailErr(t, "write compressed oversized input", err)
 	ctx := testCtx(dir)
 	ctx.Host.HostDataDir = host
@@ -79,7 +79,7 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 	dir, host := t.TempDir(), t.TempDir()
 	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)-(1<<20)) + `original tail"}`
-	spill := tooloutput.SpillWholeToolOutput(host, tooloutput.Screened(body), 0)
+	spill := tooloutput.SpillWholeToolOutput(t.Context(), host, tooloutput.Screened(body), 0)
 	if spill.SpillPath == "" {
 		t.Fatal("failed to retain large structured observation")
 	}

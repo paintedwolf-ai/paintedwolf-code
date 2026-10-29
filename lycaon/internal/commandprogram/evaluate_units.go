@@ -3,6 +3,7 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -35,10 +36,10 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.streams = f.streams
-	g.streams.SetReader(0, NullInput())
-	g.streams.SetWriter(1, stdout)
-	g.streams.SetWriter(2, f.streams.Error)
+	g.io.streams = f.io.streams
+	g.io.setReader(0, NullInput())
+	g.io.setWriter(1, stdout)
+	g.io.setWriter(2, f.io.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
 	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
 		err = trapErr
@@ -58,23 +59,16 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 // owner, then runs it in the current frame. A capture, encoding or syntax
 // refusal latches before any sourced statement; earlier parent effects stay.
 func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields Fields) (finalErr error) {
-	if len(fields) > 1 && fields[1].Value != "--" && strings.HasPrefix(fields[1].Value, "-") {
-		return f.builtinStatus(s.SyntaxLocation, "source", 2)
-	}
-	spec, _, err := ResolveCommand(fields)
-	if err != nil {
+	if _, _, err := ResolveCommand(fields); err != nil {
 		return err
 	}
-	bound, err := f.e.ports.Binder.Bind(spec, fields)
-	var argv *ArgvError
-	if errors.As(err, &argv) {
-		return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
+	operands := fields[1:]
+	endOfOptions := false
+	if len(operands) > 0 && operands[0].Value == "--" {
+		endOfOptions = true
+		operands = operands[1:]
 	}
-	if err != nil {
-		return err
-	}
-	operands := bound.Operands()
-	if len(operands) != 1 || (!bound.EndOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
+	if len(operands) != 1 || (!endOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
 		return f.builtinStatus(s.SyntaxLocation, "source", 2)
 	}
 	if int64(f.sources+1) > f.e.limits["source_depth"] {
@@ -96,7 +90,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		f.e.recordSource(run.inv.Identity.ExecutionID, captured.Pin)
 	}
 	if err != nil {
-		return f.sourceRefusal(ctx, run, s, err)
+		return f.sourceRefusal(ctx, run, s, "source", err)
 	}
 	lease, err := parsed.SnapshotWithMemory(ctx, f.e.ports.Memory)
 	_ = parsed.Close()
@@ -135,12 +129,13 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	return err
 }
 
-func (f *frame) sourceRefusal(ctx context.Context, run *childRun, s commandsurface.Statement, err error) error {
+func (f *frame) sourceRefusal(ctx context.Context, run *childRun, s commandsurface.Statement, command string, err error) error {
 	var diagnostic *commandsurface.SyntaxDiagnostic
 	var integrity *SourceIntegrityError
 	switch {
 	case errors.As(err, &diagnostic):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: diagnostic.Code, EffectCertainty: toolcontract.NoEffect}, err)
+		f.hostRefusal(command, fmt.Sprintf("line %d", diagnostic.Span.Line), diagnostic.Expected, diagnostic.Code)
 		return f.refuse(s.SyntaxLocation, diagnostic.Code, diagnostic.Expected, err)
 	case errors.As(err, &integrity):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_OPERAND_INVALID", EffectCertainty: toolcontract.NoEffect}, err)
@@ -173,9 +168,10 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	job.parent, job.loops, job.returnable = run.inv, 0, false
 	statement := s
 	statement.Background = false
+	releaseDescriptors := job.io.retain()
 	handle, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, streams Streams) (toolcontract.ProducerResult, error) {
 		defer release()
-		job.streams = streams.withDefaults()
+		job.io.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
 		if trapErr := runExitTrap(jobCtx, job, err); trapErr != nil && err == nil {
 			err = trapErr
@@ -184,9 +180,12 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		if stop, ok := job.state.latch.Stop(); ok {
 			result = stop.Result
 		}
+		eligible := err == nil && job.publish.eligible()
+		err = errors.Join(err, releaseDescriptors(jobCtx, eligible))
 		return result, err
 	})
 	if err != nil {
+		_ = releaseDescriptors(ctx, false)
 		release()
 		return f.settle(ctx, run, ownerResult(err), err)
 	}

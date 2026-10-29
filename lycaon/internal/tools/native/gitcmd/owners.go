@@ -64,7 +64,7 @@ func NewOwners(backend Backend) (*Owners, error) {
 	if backend == nil {
 		return nil, errors.New("git command owners require the Git backend")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -167,12 +167,15 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if reviewID == "" {
 		reviewID = spec.Name
 	}
+	mode := effectMode(spec, parsed, bound)
+	review := bound.Review(reviewID)
+	review.PathTargets = gitPathTargets(bound, parsed, mode)
 	return Prepared{
 		Command:   spec.Name,
 		Operation: o.ops[spec.Name],
-		Mode:      effectMode(spec, parsed, bound),
+		Mode:      mode,
 		Argv:      bound,
-		Review:    bound.Review(reviewID),
+		Review:    review,
 		command:   parsed,
 		owners:    o,
 		paths:     paths,
@@ -247,7 +250,7 @@ func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []st
 		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
 			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
 		}
-		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil, false); err != nil {
+		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil); err != nil {
 			return operandInvalid(spec, entry, "an environment without host-reserved variables")
 		}
 	}

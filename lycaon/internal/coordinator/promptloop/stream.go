@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tokenest"
@@ -558,6 +559,7 @@ func (l *modelTurn) buildTurnRequest(
 			Iteration:        iterIndex + 1,
 			MaxIterations:    maxIter,
 			WorkflowRevision: frameValue.WorkflowRevision,
+			CommandGuidance:  l.buildCommandGuidanceDebug(ctx, sess, profileID, surfaceID, frameValue, turnTools),
 		},
 	}
 	if err := validateTurnToolFunctionRoots(turnTools); err != nil {
@@ -602,4 +604,56 @@ func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Sessio
 		return ""
 	}
 	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
+}
+
+func (l *modelTurn) buildCommandGuidanceDebug(
+	ctx context.Context,
+	sess *api.Session,
+	profileID, surfaceID string,
+	frame inject.CoordinatorTurnFrame,
+	turnTools []tools.ToolMeta,
+) *modelcall.CommandGuidanceDebug {
+	if sess == nil {
+		return nil
+	}
+	var offered, deferred []string
+	for _, meta := range turnTools {
+		name := strings.TrimSpace(meta.Name)
+		if name == "" {
+			continue
+		}
+		if meta.Deferred {
+			deferred = append(deferred, name)
+		} else {
+			offered = append(offered, name)
+		}
+	}
+	rootCount := 0
+	if l != nil && l.Context != nil && l.Context.Deps.ProjectRootCount != nil {
+		rootCount = l.Context.Deps.ProjectRootCount(ctx, sess)
+	}
+	projectDir := ""
+	if l != nil && l.Context != nil {
+		projectDir = l.Context.primaryProjectRoot(ctx, sess)
+	}
+	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
+		ProfileID:             profileID,
+		SurfaceID:             surfaceID,
+		AgentType:             sess.AgentType,
+		IsCoordinator:         profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
+		OfferedTools:          offered,
+		DeferredTools:         deferred,
+		RootCount:             rootCount,
+		ProjectDir:            projectDir,
+		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
+		Posture:               frame.Machine.Surface.Posture,
+		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
+	})
+	if len(templates) == 0 && len(facts) == 0 {
+		return nil
+	}
+	return &modelcall.CommandGuidanceDebug{
+		Templates: templates,
+		Facts:     facts,
+	}
 }

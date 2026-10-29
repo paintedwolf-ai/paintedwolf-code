@@ -47,7 +47,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, write *nat
 	if pins == nil || write == nil {
 		return nil, errors.New("query owners require a pin recorder and the write door")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +101,9 @@ func (o *Owners) limit(id string) int64 {
 	return 0
 }
 
-// Program is one invocation's logical cwd and publication barrier.
+// Program is one invocation's logical cwd.
 type Program struct {
-	Paths   *projectpaths.ProgramPaths
-	Barrier *native.PublicationBarrier
+	Paths *projectpaths.ProgramPaths
 }
 
 // Prepared is one bound utility invocation. InvokeOwner matches
@@ -129,7 +128,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	}
 	command := request.Argv[0].Value
 	spec, ok := o.specs[command]
-	if !ok || program.Paths == nil || program.Barrier == nil {
+	if !ok || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a query command", command)
 	}
 	if request.OperationID != command {
@@ -150,7 +149,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 			mode = "query"
 		}
 	}
-	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = queryPathTargets(bound, program.Paths)
+	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

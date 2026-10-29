@@ -58,11 +58,11 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 		operations: ops,
 		git:        &git.Manager{},
 		registry:   f.Runtime.Registry,
-	}).compose(ProgramServices{Recorder: f.Recorder})
+	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	scratchDir := t.TempDir()
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir
 	}
 	return &pipeSemanticsEnv{Fixture: f, scratchDir: scratchDir}
@@ -73,6 +73,27 @@ func decodePipeOutcome(t *testing.T, out string) command.ProgramOutcome {
 	var outcome command.ProgramOutcome
 	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
 	return outcome
+}
+
+// A native name answers as native even with an installed program of the same
+// name on the launch PATH.
+func TestProgramDiscoveryReportsWiredNativeUtilities(t *testing.T) {
+	env := newPipeSemanticsEnv(t)
+	bin := t.TempDir()
+	testutil.FailErr(t, "install jq", os.WriteFile(filepath.Join(bin, "jq"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	env.Configure = func(tc *tools.ToolContext) { tc.Host.HostResourcePathExtra = []string{bin} }
+	for source, want := range map[string]string{
+		"which jq":      "jq\n",
+		"type jq":       "jq is a native built-in\n",
+		"command -v jq": "jq\n",
+	} {
+		out, err := env.Call(t, t.Context(), source)
+		testutil.FailErr(t, "run "+source, err)
+		result := decodePipeOutcome(t, out)
+		if result.Status != 0 || result.Refusal != nil || result.Stdout != want {
+			t.Fatalf("%s: %+v, want stdout %q", source, result, want)
+		}
+	}
 }
 
 // TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects

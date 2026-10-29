@@ -19,6 +19,7 @@ How Painted Wolf Code proves v1 behavior.
 | Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
 | Reference userlands | `lycaon/test/referenceuserland/` | Pinned GNU, BSD and busybox container images and the runner command conformance compares with ([Reference userlands](#reference-userlands)) |
+| Command conformance | `lycaon/test/commandconformance/`, `lycaon/test/wiring/conformance/` | Shell programs run through the `command` entry and compared with the reference userlands' results ([Command conformance](#command-conformance)) |
 | Verification runner | `scripts/verification_tests/` (`scheduler`, `ci`, `distribution`, `evidence`) | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
 | Coordinator benchmark | `scripts/coordinator-benchmark/` | Opt-in paid runs of candidate models through the real application, graded on environment outcomes — [Coordinator benchmark](coordinator-benchmark.md) |
 
@@ -163,6 +164,8 @@ is the reproduced one. After changing a pin, `./task userlands:record` rebuilds
 without any cache and records the new digest; record each architecture on a
 native host, because emulated builds are not dependable.
 
+The images are built from their pins and cached for CI; they are not distributed.
+
 **One fixed environment.** A batch of programs runs in one new container with
 no network. Before each program the driver resets the workspace, home and
 temporary directories, seeds the workspace with fixed times and owner, and runs
@@ -189,6 +192,54 @@ text and statuses are FreeBSD's. What it cannot carry over:
 all three: the fixed environment, the identity of each userland's tools, exact
 result bytes, isolation between programs, and repeatable results. The ordinary
 suites never need Docker; they compare with stored snapshots.
+
+### Command conformance
+
+The conformance corpus (`lycaon/test/commandconformance`) is a list of shell
+programs, each with the workspace it starts from, the paths whose final state
+counts, and the userlands it compares with. A case names only the userlands
+that implement every spelling it uses: `stat -c` compares with `gnu` and
+`busybox`, `stat -f` with `bsd`, and bash syntax or tools busybox lacks with
+`gnu` and `bsd`. A spelling no reference implements, such as macOS's
+`base64 -b`, is covered by its lane's golden tests instead, and the corpus
+names that test.
+
+The command entry passes a case when its status, both output streams and every
+tracked file (content and permissions) equal one of the case's userlands. Only
+these deliberate differences are normalized:
+
+- The command language always has `pipefail` and, in bash, `globstar`; each
+  reference program starts with a prelude that enables them.
+- The command entry runs in a real project directory, whose absolute path
+  stands for the reference workspace, `/workspace`.
+- The command entry writes a shell error as `bash: …`, without the line number
+  a shell running `-c` adds.
+
+One deliberate difference is checked exactly rather than normalized: under the
+language's pipefail, a producer ended by SIGPIPE because its reader finished
+does not fail the pipeline, so `seq 1 100000000 | head -3` exits 0 where bash
+exits 141, while `PIPESTATUS` still reports 141. The contract case
+`pipefail-reader-ends-producer` holds those expectations.
+
+Host decisions, approvals, labels and receipts are structured results outside
+the output streams. A differential case must finish with no refusal and no
+fallback to an installed program, so none of them is compared. Programs whose
+result the command language defines itself, such as native built-ins, `external`,
+`native_path` and redirects that publish over their own input, are contract
+cases in `lycaon/test/wiring/conformance` with their expected results.
+
+Snapshots record behaviour only, never a tool's `--help`, `--version`, `info`
+or manual output; the corpus refuses a program that asks for them.
+
+`./task conformance:capture` runs the corpus in the verified images and stores
+every result in `testdata/snapshots.json`, with the digest of each case's input
+and the images it came from (`-- <case>...` captures only those cases;
+`-git-seed` records the Git seed repository again in `gnu`). The suite refuses a
+snapshot whose case or images changed, so editing a case means capturing it.
+`test:wiring` compares the command entry with the stored snapshots and needs no
+Docker. `./task test:conformance:live` runs the corpus in the images again,
+fails when any stored snapshot does not reproduce byte for byte, and compares
+every program through the command entry with the live results.
 
 ## Size budgets and changed coverage
 
@@ -912,9 +963,12 @@ pinned browser under confinement) runs on both. Platform qualification's
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
 
-The `reference-userlands` lane runs `test:userlands` in the merge queue for
-broad changes, which include every change to the userland definitions and their
-runner, and nightly and in qualification. Setup restores the verified images
+The `reference-userlands` lane runs `test:userlands` and
+`test:conformance:live` in the merge queue for broad changes, which include
+every change to the userland definitions and their runner, and for changes to
+the command language: its catalog, parser and evaluator (`commandsurface`,
+`commandprogram`), native utilities (`tools/native`) and the conformance corpus.
+It also runs nightly and in qualification. Setup restores the verified images
 that main's build-caches run publishes, builds any that are missing, and
 verifies each by its recorded digest before the lane goes offline.
 

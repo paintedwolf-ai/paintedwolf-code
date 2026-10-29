@@ -8,13 +8,14 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 type programReceiptLimits struct {
-	events, bytes, arguments, nodes, children       int64
-	terminalEvents, terminalBytes                   int64
-	parentEvents, parentBytes, progressEvents       int64
-	progressBytes                                   int64
+	events, bytes, arguments, nodes, children int64
+	terminalEvents, terminalBytes             int64
+	parentEvents, parentBytes, progressEvents int64
+	progressBytes                             int64
 }
 
 type traceChargeMode int
@@ -69,13 +70,13 @@ func chargeProgramTrace(ctx context.Context, tx *sql.Tx, programID string, event
 		return err
 	}
 	var usedEvents, usedBytes, liveParent, liveProgress, liveChildren, totalChildren int64
-	if err := tx.QueryRowContext(ctx, `SELECT p.trace_events,p.trace_bytes,CASE WHEN p.state IN ('running','waiting') THEN 1 ELSE 0 END,(SELECT count(*) FROM invocation_program_progress WHERE program_id=p.id AND state='running'),(SELECT count(*) FROM invocation_program_executions WHERE program_id=p.id AND state IN ('prepared','waiting','running')),(SELECT count(*) FROM invocation_program_executions WHERE program_id=p.id) FROM invocation_programs p WHERE p.id=?`, programID).Scan(&usedEvents, &usedBytes, &liveParent, &liveProgress, &liveChildren, &totalChildren); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT p.trace_events,p.trace_bytes,CASE WHEN p.state IN ('running','waiting') THEN 1 ELSE 0 END,(SELECT count(*) FROM invocation_program_progress WHERE program_id=p.id AND state='running'),(SELECT count(*) FROM invocation_program_executions WHERE program_id=p.id AND state IN ('prepared','waiting','running')),(SELECT COALESCE(MAX(ordinal),0) FROM invocation_program_executions WHERE program_id=p.id) FROM invocation_programs p WHERE p.id=?`, programID).Scan(&usedEvents, &usedBytes, &liveParent, &liveProgress, &liveChildren, &totalChildren); err != nil {
 		return fmt.Errorf("read program trace budget: %w", err)
 	}
 	switch mode {
 	case traceChargeChildStart:
 		if totalChildren+1 > limits.children {
-			return errors.New("program child execution limit exceeded")
+			return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "child_executions", "resource_unit": "children", "maximum": limits.children, "observed": totalChildren + 1})
 		}
 		liveChildren++
 	case traceChargeProgressStart:
@@ -101,10 +102,10 @@ func chargeProgramTrace(ctx context.Context, tx *sql.Tx, programID string, event
 	reservedEvents := liveParent*limits.parentEvents + liveProgress*limits.progressEvents + liveChildren*limits.terminalEvents
 	reservedBytes := liveParent*limits.parentBytes + liveProgress*limits.progressBytes + liveChildren*limits.terminalBytes
 	if usedEvents+events+reservedEvents > limits.events {
-		return errors.New("program trace event limit exceeded")
+		return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "trace_events", "resource_unit": "events", "maximum": limits.events, "observed": usedEvents + events + reservedEvents})
 	}
 	if usedBytes+bytes+reservedBytes > limits.bytes {
-		return errors.New("program trace byte limit exceeded")
+		return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "trace_bytes", "resource_unit": "bytes", "maximum": limits.bytes, "observed": usedBytes + bytes + reservedBytes})
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE invocation_programs SET trace_events=trace_events+?,trace_bytes=trace_bytes+? WHERE id=?`, events, bytes, programID)
 	return err

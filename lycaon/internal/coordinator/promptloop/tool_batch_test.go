@@ -99,7 +99,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 }
 
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
-	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "decision_adjudicate", "recon_reconcile"} {
+	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "orchestrate_plan", "implement_overlay_promote"} {
 		t.Run(surface, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {

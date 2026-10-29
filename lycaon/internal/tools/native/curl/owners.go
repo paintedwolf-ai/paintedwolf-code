@@ -12,6 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
@@ -68,15 +72,16 @@ func (o *Owners) Operation() string { return o.operation }
 // Prepared is one bound curl invocation; InvokeOwner matches
 // toolexecution.PreparedNativeEffect, so streams arrive after admission.
 type Prepared struct {
-	Mode      string
-	Operation string
-	Argv      commandprogram.BoundArgv
-	Review    commandprogram.ArgvReview
-	owners    *Owners
-	program   mutation.Program
-	request   commandprogram.OperationRequest
-	options   options
-	transfer  *Transfer
+	Mode          string
+	Operation     string
+	Argv          commandprogram.BoundArgv
+	Review        commandprogram.ArgvReview
+	LoopbackPorts []uint16
+	owners        *Owners
+	program       mutation.Program
+	request       commandprogram.OperationRequest
+	options       options
+	transfer      *Transfer
 }
 
 // Transfer reports the completed exchange's received and emitted identities
@@ -94,7 +99,7 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
-	if request.Argv[0].Value != "curl" || program.Paths == nil || program.Barrier == nil {
+	if request.Argv[0].Value != "curl" || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a curl invocation", request.Argv[0].Value)
 	}
 	if request.OperationID != "curl" && request.OperationID != o.operation {
@@ -119,7 +124,66 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 			mode = "-o--D--c-to-file"
 		}
 	}
-	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: bound.Review(o.operation), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+	review := bound.Review(o.operation)
+	review.PathTargets = curlPathTargets(opts)
+	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+}
+
+func curlPathTargets(opts options) []commandprogram.PathTarget {
+	targets := []commandprogram.PathTarget{}
+	add := func(path string, write bool) {
+		if path != "" && path != "-" && path != "/dev/null" {
+			targets = append(targets, commandprogram.PathTarget{Path: path, Write: write})
+		}
+	}
+	for _, path := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
+		add(path, true)
+	}
+	for _, path := range opts.cookies {
+		if !strings.Contains(path, "=") {
+			add(path, false)
+		}
+	}
+	for _, part := range opts.data {
+		if part.kind != "raw" && strings.HasPrefix(part.value, "@") {
+			add(strings.TrimPrefix(part.value, "@"), false)
+		}
+	}
+	for _, form := range opts.forms {
+		_, value, ok := strings.Cut(form, "=")
+		if ok && strings.HasPrefix(value, "@") {
+			path, _, _ := strings.Cut(strings.TrimPrefix(value, "@"), ";")
+			add(path, false)
+		}
+	}
+	return targets
+}
+
+func loopbackPorts(raw string) []uint16 {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	addr, addrErr := netip.ParseAddr(host)
+	if host != "localhost" && (addrErr != nil || !addr.IsLoopback()) {
+		return nil
+	}
+	port := 0
+	if parsed.Port() != "" {
+		port, err = strconv.Atoi(parsed.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return nil
+		}
+	} else if parsed.Scheme == "https" {
+		port = 443
+	} else if parsed.Scheme == "http" {
+		port = 80
+	}
+	if port == 0 {
+		return nil
+	}
+	return []uint16{uint16(port)}
 }
 
 // InvokeOwner performs the request once and settles curl's exit status.

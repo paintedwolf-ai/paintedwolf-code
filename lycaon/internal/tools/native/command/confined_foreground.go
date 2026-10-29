@@ -47,7 +47,7 @@ func (c ConfinedForeground) Run(
 	}
 	res := CommandResultFromOutcome(outcome, tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
 
-	if err := rejectCommandNotFound(res, args); err != nil {
+	if err := rejectCommandNotFound(res, args); err != nil && !CaptureInvocation(args) {
 		outcome.IndexWatch.Release()
 		return nil, outcome, nameCatalogAlternates(err, tctx.Host.ExecutableAlternates)
 	}

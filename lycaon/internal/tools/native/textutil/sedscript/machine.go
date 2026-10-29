@@ -29,15 +29,16 @@ type Input interface {
 // or unreadable file). SpaceLimit bounds pattern and hold
 // space; StepLimit bounds branches and D restarts between input reads.
 type Config struct {
-	Quiet      bool
-	Delimiter  byte
-	SpaceLimit int64
-	StepLimit  int64
-	Reserve    func(int64) error
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Writers    map[string]io.Writer
-	OpenFile   func(string) (ReadFile, error)
+	Quiet        bool
+	Delimiter    byte
+	SpaceLimit   int64
+	StepLimit    int64
+	Reserve      func(int64) error
+	Stdout       io.Writer
+	WriteLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	Stderr       io.Writer
+	Writers      map[string]io.Writer
+	OpenFile     func(string) (ReadFile, error)
 }
 
 // Machine is one sed run. Hold space, the last regex and quit state persist
@@ -66,6 +67,8 @@ type inputState struct {
 	aheadOK    bool
 	line       int
 	source     string
+	pin        *toolcontract.SourcePin
+	offset     int64
 	terminated bool
 	replaced   bool
 	steps      int64
@@ -74,8 +77,9 @@ type inputState struct {
 // output is one destination; pending records that the last record written
 // lacked its newline, which later output restores first.
 type output struct {
-	w       io.Writer
-	pending bool
+	w            io.Writer
+	writeLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	pending      bool
 }
 
 type appendItem struct {
@@ -113,7 +117,7 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 		}
 	}
 	m := &Machine{ctx: ctx, program: program, config: config, space: spaces{limit: config.SpaceLimit, reserve: config.Reserve}, outputs: map[string]*output{}, files: readFiles{open: config.OpenFile, reserve: config.Reserve, cursors: map[string]ReadFile{}}}
-	m.outputs[Stdout] = &output{w: config.Stdout}
+	m.outputs[Stdout] = &output{w: config.Stdout, writeLiteral: config.WriteLiteral}
 	m.outputs[Stderr] = &output{w: config.Stderr}
 	for _, name := range program.writes {
 		w, ok := config.Writers[name]
@@ -169,7 +173,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (_ bool, finalErr error) {
 			return false, err
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {
+			if err := m.stream.out.emitRecord(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
 				return false, err
 			}
 		}
@@ -218,8 +222,10 @@ func (m *Machine) next(appending bool) (bool, error) {
 	var err error
 	if appending {
 		err = m.space.join(&m.space.pattern, m.config.Delimiter, record.Text)
+		m.stream.pin = nil
 	} else {
 		err = m.space.assign(&m.space.pattern, record.Text)
+		m.stream.pin, m.stream.offset = record.Pin, record.Offset
 	}
 	if err != nil {
 		return false, err
@@ -242,6 +248,28 @@ func (s *inputState) step(ctx context.Context, limit int64) error {
 		return &LimitError{Resource: "query_work_steps", Maximum: limit, Observed: s.steps}
 	}
 	return nil
+}
+
+// emitRecord writes one record to an output, recording a source mapping when
+// the record is unmodified and the output accepts literal mappings.
+func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, offset int64) error {
+	if o.writeLiteral == nil || pin == nil {
+		return o.emit(record, delimiter, terminated)
+	}
+	if o.pending {
+		if _, err := o.w.Write([]byte{'\n'}); err != nil {
+			return err
+		}
+		o.pending = false
+	}
+	if !terminated {
+		o.pending = true
+		return o.writeLiteral(pin, record, offset)
+	}
+	if err := o.writeLiteral(pin, record, offset); err != nil {
+		return err
+	}
+	return o.writeLiteral(pin, []byte{delimiter}, offset+int64(len(record)))
 }
 
 // emit writes one record to an output. A record that lacked its delimiter is

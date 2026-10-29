@@ -143,7 +143,11 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "mutation owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
-	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, Tools: tc}
+	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+			return apply(ctx, tc)
+		}, Abandon: func(context.Context, error) error { return nil }}, nil
+	}}
 	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: &Spills{}, quota: &spillQuota{maximum: 1 << 30}, publication: publication}
 }
 

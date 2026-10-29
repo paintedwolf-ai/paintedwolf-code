@@ -6,16 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -47,9 +47,7 @@ type yqRun struct {
 
 // runYq evaluates a yq expression with the yq v4 library. Errors print
 // "Error: ..." and exit 1, as yq does; -i publishes the first file's result
-// at its captured revisions. Like gojq, yqlib exposes no internal VM step
-// counter hook, so evaluation is bounded by query_cpu_ms on the output stream
-// while read/printed documents meter query_work_steps.
+// at its captured revisions.
 func runYq(inv *invocation) error {
 	if inv.pythonYq() {
 		return runPythonYq(inv)
@@ -64,10 +62,6 @@ func runYq(inv *invocation) error {
 	}
 	yqEvaluation.Lock()
 	defer yqEvaluation.Unlock()
-	budget := time.Duration(inv.owners.limit("query_elapsed_ms")) * time.Millisecond
-	ctx, cancel := context.WithTimeout(inv.ctx, budget)
-	defer cancel()
-	inv.out.ctx = ctx
 	if inv.flag("-i") {
 		return run.inPlace()
 	}
@@ -99,7 +93,7 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	if expression, ok := inv.value("--expression"); ok {
 		run.expression = expression
-	} else if len(operands) > 0 && operands[0].Value != "-" && !inv.regularFile(operands[0]) {
+	} else if len(operands) > 0 && operands[0].Value != "-" && operands[0].ProcessSubstitution() == nil && !yqImplicitFile(inv.ctx, inv.paths, inv.argv, operands[0].Value) {
 		run.expression, operands = operands[0].Value, operands[1:]
 	}
 	if inv.flag("-P") {
@@ -166,13 +160,23 @@ func yqOption(inv *invocation, key, fallback string) string {
 	return strings.TrimPrefix(value, "=")
 }
 
-// regularFile is yq's maybeFile: an operand naming an existing regular file
-// is a file, not the expression.
-func (inv *invocation) regularFile(operand commandprogram.Field) bool {
-	if operand.ProcessSubstitution() != nil {
+// yqImplicitFile decides whether the first positional operand is a file.
+// Explicit path syntax is a file identity before path authority is checked;
+// otherwise yq's existing regular-file rule distinguishes a bare filename
+// from an expression. Null input takes the first operand as an expression.
+func yqImplicitFile(ctx context.Context, paths *projectpaths.ProgramPaths, argv commandprogram.BoundArgv, operand string) bool {
+	if _, nullInput := argv.Last("-n"); nullInput {
+		return false
+	}
+	if filepath.IsAbs(operand) || strings.HasPrefix(operand, "./") || strings.HasPrefix(operand, "../") || operand == "@scratch" || strings.HasPrefix(operand, "@scratch/") {
 		return true
 	}
-	bound, err := inv.paths.Bind(inv.ctx, operand.Value, false)
+	return regularYqFile(ctx, paths, operand)
+}
+
+// regularYqFile is yq's maybeFile for an unmarked first operand.
+func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operand string) bool {
+	bound, err := paths.Bind(ctx, operand, false)
 	if err != nil || bound.Null {
 		return false
 	}
@@ -183,10 +187,6 @@ func (inv *invocation) regularFile(operand commandprogram.Field) bool {
 // fail reports an ordinary yq error; typed refusals and interruption stop
 // the run instead.
 func (r *yqRun) fail(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil {
-		maximum := r.inv.owners.limit("query_elapsed_ms")
-		return tools.CommandLimitExceeded("query_elapsed_ms", maximum, maximum+1)
-	}
 	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, commandprogram.ErrConsumerClosed) {
 		return err
 	}
@@ -273,9 +273,6 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 	documents := list.New()
 	var processed uint
 	for index, file := range r.files {
-		if err := r.inv.step(); err != nil {
-			return err
-		}
 		reader, label, err := r.reader(file)
 		if err != nil {
 			return err

@@ -451,6 +451,9 @@
     ],
     "test:userlands": [
       "test:userlands"
+    ],
+    "test:conformance:live": [
+      "test:conformance:live"
     ]
   },
   "private": [
@@ -928,6 +931,16 @@
       "shared_locks": [
         "go"
       ]
+    },
+    "test:conformance:live": {
+      "locks": [
+        "go",
+        "reference-userlands"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
     }
   },
   "environment": {
@@ -1199,9 +1212,10 @@
     },
     "reference-userlands": {
       "targets": [
-        "test:userlands"
+        "test:userlands",
+        "test:conformance:live"
       ],
-      "minutes": 45,
+      "minutes": 60,
       "profiles": [
         "integration",
         "nightly",

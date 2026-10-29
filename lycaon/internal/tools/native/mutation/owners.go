@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -46,6 +47,7 @@ type Owners struct {
 	Revisions  native.ExecutionRevisions
 	Pins       PinRecorder
 	Operations Operations
+	Admission  tooloutput.SpillAdmission
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -72,7 +74,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations
 		operations.Chmod == nil || operations.Chown == nil || operations.Times == nil || operations.Extract == nil || pins == nil {
 		return nil, errors.New("mutation owners require every shared operation and a pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -140,12 +142,9 @@ type Prepared struct {
 	run       utility
 }
 
-// Program is one invocation's logical cwd and publication barrier. Every
-// write the program's utilities and redirects accept is tracked on Barrier so
-// a dependent external launch waits for it.
+// Program is one invocation's logical cwd.
 type Program struct {
-	Paths   *projectpaths.ProgramPaths
-	Barrier *native.PublicationBarrier
+	Paths *projectpaths.ProgramPaths
 }
 
 // Prepare binds a reached command through the catalog option grammar. It
@@ -156,7 +155,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	}
 	command := request.Argv[0].Value
 	spec, ok := o.specs[command]
-	if !ok || program.Paths == nil || program.Barrier == nil {
+	if !ok || program.Paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a mutation command", command)
 	}
 	if request.OperationID != command {
@@ -166,7 +165,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = mutationPathTargets(bound)
+	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
@@ -211,6 +212,12 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("mutation invocation is not prepared")
+	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
 	err := p.run(inv)

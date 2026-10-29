@@ -89,7 +89,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	testutil.FailErr(t, "build owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths}}
 }
 
 type run struct {

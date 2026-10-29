@@ -1,6 +1,7 @@
 package confine
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -70,12 +71,42 @@ func AgentPolicyPath(path string, roots ...string) (protectedpath.AgentPolicyLoc
 // AgentPolicyClassifier resolves the roots once for classifying many paths.
 func AgentPolicyClassifier(roots ...string) func(path string) (protectedpath.AgentPolicyLocation, bool) {
 	resolved := agentPolicyRoots(roots)
+	var mu sync.Mutex
+	var lastDir, lastCanonicalDir string
 	return func(path string) (protectedpath.AgentPolicyLocation, bool) {
 		path = strings.TrimSpace(path)
 		if path == "" || !filepath.IsAbs(path) {
 			return protectedpath.AgentPolicyLocation{}, false
 		}
-		p := fspath.CanonicalPath(path)
+		var p string
+		cleaned := filepath.Clean(path)
+		dir, base := filepath.Dir(cleaned), filepath.Base(cleaned)
+		if base != "" && base != "." && base != string(filepath.Separator) {
+			if _, err := os.Lstat(cleaned); os.IsNotExist(err) {
+				mu.Lock()
+				cachedDir := ""
+				if dir == lastDir {
+					cachedDir = lastCanonicalDir
+				}
+				mu.Unlock()
+				if cachedDir == "" {
+					if info, dirErr := os.Lstat(dir); dirErr == nil && info.IsDir() {
+						cachedDir = fspath.CanonicalPath(dir)
+						if cachedDir != "" {
+							mu.Lock()
+							lastDir, lastCanonicalDir = dir, cachedDir
+							mu.Unlock()
+						}
+					}
+				}
+				if cachedDir != "" {
+					p = filepath.ToSlash(filepath.Join(cachedDir, base))
+				}
+			}
+		}
+		if p == "" {
+			p = fspath.CanonicalPath(cleaned)
+		}
 		for _, root := range resolved {
 			if !PathAtOrUnder(p, root) || len(p) <= len(root) {
 				continue

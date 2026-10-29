@@ -23,6 +23,21 @@ type nullTrackingReader struct {
 	firstNull *int
 }
 
+// binaryRecordReader treats NUL as a record boundary while selecting a binary
+// file. This bounds the regex input to actual binary records rather than the
+// entire LF-free file, without changing byte offsets or the binary notice.
+type binaryRecordReader struct{ r io.Reader }
+
+func (b binaryRecordReader) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	for i := range p[:n] {
+		if p[i] == 0 {
+			p[i] = '\n'
+		}
+	}
+	return n, err
+}
+
 func (n *nullTrackingReader) Read(p []byte) (int, error) {
 	read, err := n.r.Read(p)
 	if read > 0 && *n.firstNull < 0 {
@@ -39,36 +54,51 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	return r.searchStream(label, bytes.NewReader(content), 0, len(content), bytes.IndexByte(content, 0), pin, names)
 }
 
+// searchNoMatch emits the zero-match file outcome when the index prunes a file.
+func (r *grepRun) searchNoMatch(label string, names bool) error {
+	switch r.mode {
+	case modeCount:
+		if r.rg {
+			return nil
+		}
+		if names {
+			return r.inv.out.text(label, r.nameEnd(":"), "0\n")
+		}
+		return r.inv.out.text("0\n")
+	case modeFilesWithout:
+		return r.inv.out.text(label, r.nameEnd("\n"))
+	default:
+		return nil
+	}
+}
+
 // searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
-// output line becomes one "grep: PATH: binary file matches" notice on stderr
-// (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
+// output line becomes one binary-match notice on the utility's normal stream.
+// A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	inv := r.inv
 	if r.json != nil {
-		var data []byte
-		var err error
-		if maxBytes > 0 {
-			data, err = io.ReadAll(io.LimitReader(reader, maxBytes+1))
-			if err == nil && int64(len(data)) > maxBytes {
-				err = tools.CommandLimitExceeded("stream_throughput_bytes", maxBytes, int64(len(data)))
-			}
-		} else {
-			data, err = io.ReadAll(reader)
-		}
+		content, err := inv.readAll(reader)
 		if err != nil {
 			return err
 		}
-		return r.jsonContent(label, data)
+		return r.jsonContent(label, content)
 	}
-	inv := r.inv
+	if r.binaryMode == "without-match" && firstNull >= 0 {
+		reader = bytes.NewReader(nil)
+		firstNull = -1
+	}
 	r.numberWidth = len(strconv.Itoa(totalBytes))
 	if !r.scan.NullData && r.binaryMode != "text" {
 		if r.binaryMode == "without-match" && firstNull >= 0 {
 			reader, firstNull = bytes.NewReader(nil), -1
 		} else if firstNull < 0 {
 			reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+		} else {
+			reader = binaryRecordReader{r: reader}
 		}
 	}
 	listing := r.mode != modeLines
@@ -86,11 +116,6 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		return tools.CommandLimitExceeded("stream_throughput_bytes", maximum, observed)
 	}
 	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
-		record := line.Text
-		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
-		if r.binaryMode == "without-match" && (binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record))) {
-			return errBinaryStop
-		}
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
 			r.selected = true
@@ -101,11 +126,17 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		if listing {
 			return nil
 		}
+		record := line.Text
+		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
 		if binary || (r.binaryMode != "text" && line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}
-			if err := r.binaryNotice(label, names, line, firstNull); err != nil {
+			offset := firstNull
+			if offset < 0 {
+				offset = line.Start
+			}
+			if err := r.binaryNotice(label, names, offset); err != nil {
 				return err
 			}
 			return errBinaryStop
@@ -128,6 +159,10 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		err = nil
 	}
 	if err != nil {
+		var budget *textsearch.BudgetError
+		if errors.As(err, &budget) {
+			inv.warn(false, "%s: search limit %s exceeded (maximum %d, observed %d)", label, budget.Resource, budget.Maximum, budget.Observed)
+		}
 		return err
 	}
 	switch r.mode {
@@ -153,20 +188,19 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 	return nil
 }
 
-func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, firstNull int) error {
+// binaryNotice reports a matching binary file: grep on stderr; rg on stdout
+// with the offset of the byte that made the file binary, prefixed by the
+// file name when several files are searched.
+func (r *grepRun) binaryNotice(label string, names bool, offset int) error {
 	if !r.rg {
 		r.inv.warn(false, "%s: binary file matches", label)
 		return nil
 	}
-	offset := firstNull
-	if offset < 0 {
-		offset = line.Start
-	}
-	notice := fmt.Sprintf("binary file matches (found \"\\0\" byte around offset %d)\n", offset)
+	prefix := ""
 	if names {
-		return r.inv.out.text(label, ": ", notice)
+		prefix = label + ": "
 	}
-	return r.inv.out.text(notice)
+	return r.inv.out.text(fmt.Sprintf("%sbinary file matches (found \"\\0\" byte around offset %d)\n", prefix, offset))
 }
 
 // printLine writes one selected or context record; with -o it writes each
@@ -219,6 +253,17 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 // writeRecord prints one output record; text copied from a pinned capture
 // at offset is mapped back to it.
 func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
+	if r.inv.out.mappings == nil || pin == nil {
+		term := byte('\n')
+		if r.scan.NullData {
+			term = 0
+		}
+		r.inv.out.scratch = append(r.inv.out.scratch[:0], prefix...)
+		r.inv.out.scratch = append(r.inv.out.scratch, text...)
+		r.inv.out.scratch = append(r.inv.out.scratch, term)
+		_, err := r.inv.out.Write(r.inv.out.scratch)
+		return err
+	}
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}

@@ -29,8 +29,8 @@ func (d discovery) found() bool { return d.native || d.keyword || d.path != "" }
 
 // discover classifies one name. The external lookup is the launch's own
 // selection: the same final PATH, launch directory and not-found result. A
-// native name is looked up when an executable path is requested (which,
-// command -v, or type -a).
+// native name binds first, so its installed program is looked up only for
+// type -a, which lists every binding.
 func (inv *invocation) discover(name string, needPath bool) (discovery, error) {
 	d := discovery{name: name, native: inv.owners.natives[name] && inv.bound != nil && inv.bound.NativeBound(name), keyword: keywords[name]}
 	if d.keyword || (d.native && !needPath) {
@@ -41,7 +41,11 @@ func (inv *invocation) discover(name string, needPath bool) (discovery, error) {
 		return d, err
 	}
 	// These are the environment inputs of the confined external launch.
-	opts, err := lyexec.AgentLaunchOptions(lyexec.LaunchPlan{}, cwd, inv.request.Environment, inv.tc.Host.HostResourcePathExtra, inv.tc.Files.PackageExecution != nil)
+	launch := lyexec.LaunchPlan{}
+	if inv.bound != nil {
+		launch = launch.WithTrustedEnvironment(inv.bound.BaseEnvironment())
+	}
+	opts, err := lyexec.AgentLaunchOptions(launch, cwd, inv.request.Environment, inv.tc.Host.HostResourcePathExtra)
 	path := ""
 	if err == nil {
 		path, err = lyexec.LaunchLookup(name, opts)
@@ -62,7 +66,7 @@ func (inv *invocation) discover(name string, needPath bool) (discovery, error) {
 
 // names discovers each operand in order; a refused lookup stops the run.
 func (inv *invocation) names(visit func(discovery) error) error {
-	needPath := inv.spec.Name == "which" || (inv.spec.Name == "command" && inv.flag("-v")) || (inv.spec.Name == "type" && inv.flag("-a"))
+	needPath := inv.spec.Name == "type" && inv.flag("-a")
 	for _, operand := range inv.operands() {
 		d, err := inv.discover(operand.Value, needPath)
 		if err != nil {
@@ -78,11 +82,15 @@ func (inv *invocation) names(visit func(discovery) error) error {
 	return nil
 }
 
-// runWhich prints the resolved executable path a launch would select.
-// Keywords and names without an executable on PATH are status 1.
+// runWhich prints the name dispatch binds natively, as command -v does, so
+// "$(which NAME)" runs the same binding; otherwise the executable path a
+// launch would select. Keywords and names without either are status 1.
 func runWhich(inv *invocation) error {
 	return inv.names(func(d discovery) error {
-		if d.path != "" {
+		switch {
+		case d.native:
+			return inv.line(d.name)
+		case d.path != "":
 			return inv.line(d.path)
 		}
 		inv.status = 1
@@ -90,9 +98,9 @@ func runWhich(inv *invocation) error {
 	})
 }
 
-// runCommand implements command -v (the resolved executable path, or the
-// keyword/builtin name when no executable exists on PATH) and command -V (a
-// description). Running COMMAND itself is not a version 1 form.
+// runCommand implements command -v (the name of a keyword or native built-in,
+// otherwise the resolved executable path) and command -V (a description).
+// Running COMMAND itself is not a version 1 form.
 func runCommand(inv *invocation) error {
 	verbose := inv.flag("-V")
 	if !verbose && !inv.flag("-v") {
@@ -107,10 +115,10 @@ func runCommand(inv *invocation) error {
 			return nil
 		case verbose:
 			return inv.line(describe(d))
-		case d.path != "":
-			return inv.line(d.path)
+		case d.native || d.keyword:
+			return inv.line(d.name)
 		}
-		return inv.line(d.name)
+		return inv.line(d.path)
 	})
 }
 

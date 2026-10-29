@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
+	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -72,7 +73,21 @@ func MutationSizeReject(tool, path string, size int64) error {
 // projectpaths.Resolved.Compressed, a directory-scoped fact, never from
 // sniffing the file's bytes.
 func ReadContentCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
-	f, err := fseffect.OpenRead(loc)
+	return ReadContentCappedFromRoot(tool, access, nil, loc, displayPath, compressed, maxBytes)
+}
+
+// ReadContentCappedFromRoot loads one bounded regular file using an already
+// held ReadRoot when provided, or opening loc.Root when root is nil.
+func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRoot, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
+	var (
+		f   *os.File
+		err error
+	)
+	if root != nil {
+		f, err = root.Open(loc.Rel)
+	} else {
+		f, err = fseffect.OpenRead(loc)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +102,28 @@ func ReadContentCapped(tool string, access Access, loc fseffect.Location, displa
 	if compressed {
 		return readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
 	}
-	if info.Size() > maxBytes {
-		return nil, access.SizeReject(tool, displayPath, info.Size(), maxBytes)
+	size := info.Size()
+	if size > maxBytes {
+		return nil, access.SizeReject(tool, displayPath, size, maxBytes)
+	}
+	if size >= 0 && size <= 64<<10 {
+		buf := make([]byte, size+1)
+		n, readErr := io.ReadFull(f, buf)
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
+			return buf[:n], nil
+		}
+		if readErr != nil {
+			return nil, readErr
+		}
+		rest, rerr := io.ReadAll(io.LimitReader(f, maxBytes+1-int64(n)))
+		body := append(buf[:n], rest...)
+		if int64(len(body)) > maxBytes {
+			return nil, access.SizeReject(tool, displayPath, int64(len(body)), maxBytes)
+		}
+		if rerr != nil {
+			return nil, rerr
+		}
+		return body, nil
 	}
 	return readPlainContentCapped(tool, access, f, displayPath, maxBytes)
 }
