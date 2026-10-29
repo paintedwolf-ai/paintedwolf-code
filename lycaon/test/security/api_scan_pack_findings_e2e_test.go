@@ -88,7 +88,7 @@ func TestAPIScanPackMatchesPerCategoryAPIRuns(t *testing.T) {
 		{wire.ScanCategorySAST, "lycaon-sast"},
 	} {
 		created := enqueueCodeScan(t, h.Server, projectDir, []wire.ScanCategory{tc.category})
-		got := waitScanComplete(t, h.Server, created.ProjectID, created.ID, bundledScannerWaitBudget)
+		got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 		if got.Status != wire.CodeScanStatusComplete {
 			t.Fatalf("category %s status = %q error=%q", tc.category, got.Status, got.Error)
 		}

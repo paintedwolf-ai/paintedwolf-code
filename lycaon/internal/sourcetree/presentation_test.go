@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -14,7 +13,7 @@ func captureForTest(t *testing.T, v *View) *Presentation {
 	t.Helper()
 	var result *Presentation
 	var err error
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		result, err = v.Capture(t.Context())
 		return !errors.Is(err, pagedview.ErrPreparing) && !errors.Is(err, pagedview.ErrRevision)
 	})
