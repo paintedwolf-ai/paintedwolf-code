@@ -145,7 +145,7 @@ func TestPredicateRejectsMissingAdmissionLeases(t *testing.T) {
 	if _, err := (NativePredicatePatterns{Memory: memory}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: "a"}}); err == nil {
 		t.Fatal("pattern admitted missing lease")
 	}
-	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Second, Reserve: memory.Reserve}
+	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Reserve: memory.Reserve}
 	if _, err := regexp2.MatchPatternBounded(t.Context(), "a", "a", syntax.POSIX, nil, limits); err == nil {
 		t.Fatal("selected engine admitted missing lease")
 	}
