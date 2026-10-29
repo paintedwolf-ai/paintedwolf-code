@@ -143,21 +143,30 @@ func TestContainedTaskOverlayStaysOutOfRoots(t *testing.T) {
 		t.Skip("confinement unavailable on this platform")
 	}
 	if hitl.GrantKey(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Execution: hitl.ActionExecution{
-Contained: got,
-},
-}) !=
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: got,
+		},
+	}) !=
 		hitl.GrantKey(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Execution: hitl.ActionExecution{
-Contained: plain,
-},
-}) {
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Execution: hitl.ActionExecution{
+				Contained: plain,
+			},
+		}) {
 		t.Fatal("GrantKey moved after a write-root overlay")
+	}
+}
+
+func TestContainedProjectionRefusesInvalidStateAncestor(t *testing.T) {
+	ancestor := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
+	got := hitl.ContainedFromConfinement(&confine.Confinement{Roots: []string{ancestor}}, true)
+	if !reflect.DeepEqual(got, hitl.Contained{}) {
+		t.Fatalf("invalid roots claimed applied confinement: %+v", got)
 	}
 }

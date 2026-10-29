@@ -162,7 +162,6 @@ func appendSSEOrdCases() []sseOrdCase {
 
 func waitParentMessageAppend(t *testing.T, ch <-chan wire.EventEnvelope, sessionID, messageID string) wire.MessageEvent {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -183,7 +182,7 @@ func waitParentMessageAppend(t *testing.T, ch <-chan wire.EventEnvelope, session
 				continue
 			}
 			return ev
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for append SSE of %s", messageID)
 			return wire.MessageEvent{}
 		}

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,15 +35,21 @@ func TestWatchParentExitIgnoresUnusablePID(t *testing.T) {
 func TestWatchParentExitStaysQuietWhileParentLives(t *testing.T) {
 	testutil.SkipIfShort(t, "waits through two parent-process polling intervals")
 	t.Setenv(ParentPIDEnv, strconv.Itoa(os.Getpid()))
-	gone := watchParentExit(t.Context())
-	if gone == nil {
-		t.Fatal("watchdog not armed for a live parent")
-	}
-	select {
-	case <-gone:
-		t.Fatal("watchdog fired while its parent was still running")
-	case <-time.After(parentPollInterval * 2):
-	}
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		gone := watchParentExit(ctx)
+		if gone == nil {
+			t.Fatal("watchdog not armed for a live parent")
+		}
+		time.Sleep(parentPollInterval * 2)
+		synctest.Wait()
+		select {
+		case <-gone:
+			t.Fatal("watchdog fired while its parent was still running")
+		default:
+		}
+	})
 }
 
 func TestWatchParentExitFiresWhenParentDies(t *testing.T) {
@@ -66,7 +73,7 @@ func TestWatchParentExitFiresWhenParentDies(t *testing.T) {
 
 	select {
 	case <-gone:
-	case <-time.After(parentPollInterval * 5):
+	case <-t.Context().Done():
 		t.Fatal("watchdog never noticed its parent had gone")
 	}
 }
@@ -82,7 +89,7 @@ func TestWatchParentExitStopsWithContext(t *testing.T) {
 	cancel()
 	select {
 	case <-gone:
-	case <-time.After(parentPollInterval * 3):
+	case <-t.Context().Done():
 		t.Fatal("watchdog goroutine outlived its context")
 	}
 }

@@ -3,14 +3,19 @@
 package fseffect
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func renameNoReplace(from int, name string, to int, dest string) error {
 	return unix.RenameatxNp(from, name, to, dest, unix.RENAME_EXCL)
+}
+
+func renameExchange(from int, name string, to int, dest string) error {
+	return unix.RenameatxNp(from, name, to, dest, unix.RENAME_SWAP)
 }
 
 // utimeOmit leaves one timestamp unchanged in utimensat (sys/stat.h).

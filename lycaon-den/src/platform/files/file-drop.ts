@@ -1,7 +1,7 @@
 /** Adapts native paths and web file drops into chat attachments. */
 
 import { longestMatchingRoot, relativeUnderRoot, type ResolveProjectRoot } from "../../api/project-path.ts";
-import { mediaMimeFromPath } from "../../chat/composer/composer-attachments.ts";
+import { nativeProjectionMimeFromPath } from "../../chat/composer/composer-attachments.ts";
 import { createClaimable } from "../interaction/claimable.ts";
 import { hostSharesDevice } from "../connection/host-identity.ts";
 import {
@@ -21,16 +21,17 @@ export type DropEvent = {
 };
 
 export type DropClassification =
-  | { kind: "path-file"; projectId: string; rootId: string; path: string }
+  | { kind: "path-file"; projectId: string; rootId: string; path: string; absolutePath?: string }
   | { kind: "path-folder"; projectId: string; rootId: string; path: string }
-  /** An image or video under a root uploads its bytes, so the model sees its pixels. */
-  | { kind: "bytes-media"; absolutePath: string; rootId: string }
+  /** Documents and recordings retain their extracted projection and live path. */
+  | { kind: "projected-file"; absolutePath: string; rootId: string; projectId: string; path: string }
   | { kind: "external-file"; absolutePath: string }
+  | { kind: "external-folder"; absolutePath: string }
   | { kind: "web-file"; file: File }
   | { kind: "reject"; reason: string };
 
 export const DROP_REJECT_UNIMPORTABLE_PATH =
-  "Drop an individual file to attach it. Folders must be inside a project folder.";
+  "Drop a file or folder with an absolute path.";
 
 export const DROP_REJECT_MISSING = "That file no longer exists.";
 
@@ -188,6 +189,7 @@ export function classifyDroppedItem(
     if (pathKindResult === "file") {
       return { kind: "external-file", absolutePath: abs };
     }
+    if (pathKindResult === "folder") return { kind: "external-folder", absolutePath: abs };
     if (pathKindResult === "missing") {
       return { kind: "reject", reason: DROP_REJECT_MISSING };
     }
@@ -203,11 +205,11 @@ export function classifyDroppedItem(
   if (kind === "missing") {
     return { kind: "reject", reason: DROP_REJECT_MISSING };
   }
+  const rel = relativeUnderRoot(abs, containingRoot.path, platform);
+  if (rel == null) {
+    return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
+  }
   if (kind === "folder") {
-    const rel = relativeUnderRoot(abs, containingRoot.path, platform);
-    if (rel == null) {
-      return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
-    }
     return {
       kind: "path-folder",
       projectId,
@@ -216,20 +218,19 @@ export function classifyDroppedItem(
     };
   }
 
-  if (mediaMimeFromPath(abs)) {
+  if (nativeProjectionMimeFromPath(abs)) {
     return {
-      kind: "bytes-media",
+      kind: "projected-file",
       absolutePath: abs,
       rootId: containingRoot.id,
+      projectId,
+      path: rel,
     };
   }
 
-  const rel = relativeUnderRoot(abs, containingRoot.path, platform);
-  if (rel == null) {
-    return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
-  }
   return {
     kind: "path-file",
+    absolutePath: abs,
     projectId,
     rootId: containingRoot.id,
     path: rel,

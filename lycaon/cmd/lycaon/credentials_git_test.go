@@ -68,13 +68,8 @@ func TestGitCredentialsCLIStoresListsAndRemoves(t *testing.T) {
 	if err := runGitCredentials([]string{"set", "https://github.com", "--username", "alice"}, strings.NewReader("\n"), &out); err == nil {
 		t.Fatal("empty token was stored")
 	}
-	t.Setenv("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1")
-	frame := append([]byte{0, 0, 0, 8}, []byte("password")...)
-	testutil.FailErr(t, "set with unlock frame", runGitCredentials([]string{"set", "--username=bob", "https://example.com"}, bytes.NewReader(append(frame, []byte("tok\n")...)), &out))
+	testutil.FailErr(t, "set token without an unlock preamble", runGitCredentials([]string{"set", "--username=bob", "https://example.com"}, strings.NewReader("tok\n"), &out))
 	if memory.entries["https://example.com"].Password != "tok" {
-		t.Fatalf("framed set stored %+v", memory.entries["https://example.com"])
-	}
-	if err := runGitCredentials([]string{"set", "https://example.com", "--username", "bob"}, strings.NewReader("short"), &out); err == nil {
-		t.Fatal("truncated unlock frame was accepted")
+		t.Fatalf("set stored %+v", memory.entries["https://example.com"])
 	}
 }

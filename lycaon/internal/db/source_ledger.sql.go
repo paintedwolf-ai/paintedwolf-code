@@ -1913,7 +1913,7 @@ SELECT object.sha256, object.size, object.stored_size, object.storage_relpath,
            SELECT 1 FROM source_command_window_objects retained WHERE retained.sha256 = object.sha256
        ) OR EXISTS (SELECT 1 FROM checkpoint_object_refs checkpoint WHERE checkpoint.sha256 = object.sha256)
        OR EXISTS (SELECT 1 FROM source_recovery_objects recovery WHERE recovery.sha256 = object.sha256)
-       OR EXISTS (SELECT 1 FROM source_manifest_entries entry WHERE entry.sha256 = object.sha256) AS INTEGER) AS referenced
+       OR EXISTS (SELECT 1 FROM source_manifest_entries entry WHERE entry.sha256 = object.sha256 AND entry.sha256 != '') AS INTEGER) AS referenced
 FROM source_blob_reclaim_queue queue
 JOIN source_blob_objects object ON object.sha256 = queue.sha256
 ORDER BY queue.sha256
