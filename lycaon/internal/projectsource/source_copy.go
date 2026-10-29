@@ -196,6 +196,15 @@ func sourceHistoryEvidence(ctx context.Context, abs string) (sourceEvidence, err
 	if info.IsDir() {
 		return sourceEvidence{entryKind: SourceEntryFolder}, nil
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, readErr := os.Readlink(abs)
+		if readErr != nil {
+			return sourceEvidence{}, readErr
+		}
+		content := []byte(target)
+		digest := sha256.Sum256(content)
+		return sourceEvidence{entryKind: SourceEntryLink, content: content, sha256: hex.EncodeToString(digest[:]), size: int64(len(content))}, nil
+	}
 	if !info.Mode().IsRegular() {
 		return sourceEvidence{entryKind: SourceEntryFile, size: info.Size()}, nil
 	}

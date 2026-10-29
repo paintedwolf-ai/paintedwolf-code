@@ -32,7 +32,8 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	inlineInputs := migrations.ProgramInlineInputs(current)
+	linkKind := migrations.SourceLinkKind(current)
+	inlineInputs := migrations.ProgramInlineInputs(linkKind.From)
 	nativeGaps := migrations.ProgramNativeGap(inlineInputs.From)
 	programs := migrations.ProgramReceipts(nativeGaps.From)
 	effectPermits := migrations.EffectPermitIdentity(programs.From)
@@ -40,10 +41,10 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.SourceManifestLayout(away.From), away, effectPermits, programs, nativeGaps, inlineInputs,
+		migrations.SourceManifestLayout(away.From), away, effectPermits, programs, nativeGaps, inlineInputs, linkKind,
 	}
 	// Registered intermediate shapes are supported sources, not released baselines.
-	return migrations.New(current, append(released, effectPermits.From, programs.From, nativeGaps.From, inlineInputs.From), steps)
+	return migrations.New(current, append(released, effectPermits.From, programs.From, nativeGaps.From, inlineInputs.From, linkKind.From), steps)
 }
 
 // CurrentBaseline identifies the fresh-install schema.
