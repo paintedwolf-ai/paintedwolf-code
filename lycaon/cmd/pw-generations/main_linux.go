@@ -12,6 +12,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -29,34 +30,50 @@ func main() {
 }
 
 func run(args []string) error {
+	return runCommand(args, os.Stdout, launchguard.PolicyPath, packagegeneration.Install, packagegeneration.Remove)
+}
+
+// runCommand keeps CLI dispatch testable without changing the installed paths or
+// generation owners selected by run.
+func runCommand(args []string, output io.Writer, policyPath string,
+	install func(string, func(packagegeneration.Generation, packagegeneration.SystemAccess) error, func() (string, error)) (packagegeneration.Generation, error),
+	remove func(func() error, func() (string, error)) error,
+) error {
 	switch {
 	case len(args) == 3 && args[0] == "install" && args[1] == "--family" && (args[2] == "deb" || args[2] == "rpm" || args[2] == "pacman"):
-		if err := os.MkdirAll(filepath.Dir(launchguard.PolicyPath), 0o755); err != nil { // #nosec G301 -- root-owned public launch policy must be readable by unprivileged validators
+		if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil { // #nosec G301 -- root-owned public launch policy must be readable by unprivileged validators
 			return err
 		}
-		generation, err := packagegeneration.Install(args[2], writePolicy, selection)
+		generation, err := install(args[2], writePolicy, selection)
 		if err != nil {
 			return fmt.Errorf("could not install the protected launch generation: %w", err)
 		}
-		fmt.Printf("painted-wolf-code: selected generation %s\n", generation.ManifestSHA256)
+		fmt.Fprintf(output, "painted-wolf-code: selected generation %s\n", generation.ManifestSHA256)
 		return nil
 	case len(args) == 1 && args[0] == "remove":
-		return packagegeneration.Remove(removePolicy, selection)
+		return remove(removePolicy, selection)
 	}
 	return errors.New("usage: pw-generations install --family deb|rpm|pacman | remove")
 }
 
 func writePolicy(generation packagegeneration.Generation, access packagegeneration.SystemAccess) error {
-	return launchguard.WritePolicy(launchguard.GenerationPolicy{
+	return launchguard.WritePolicy(generationPolicy(generation, access))
+}
+
+func generationPolicy(generation packagegeneration.Generation, access packagegeneration.SystemAccess) launchguard.GenerationPolicy {
+	return launchguard.GenerationPolicy{
 		Version: 1, GenerationRoot: generation.Root, ManifestSHA256: generation.ManifestSHA256,
 		LogicalInstallRoot: generation.LogicalInstallRoot, SystemExecutables: access.Executables,
 		LibraryRoots: access.LibraryRoots,
-	})
+	}
 }
 
 // selection is the generation the current policy selects; none once removed.
 func selection() (string, error) {
-	policy, err := launchguard.ReadPolicy()
+	return selectedGeneration(launchguard.ReadPolicy())
+}
+
+func selectedGeneration(policy launchguard.GenerationPolicy, err error) (string, error) {
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil
 	}
@@ -69,16 +86,24 @@ func selection() (string, error) {
 // removePolicy withdraws the selection so no new launch starts; running
 // launches keep the generation they hold.
 func removePolicy() error {
-	info, err := os.Lstat(launchguard.PolicyPath)
+	return withdrawPolicy(launchguard.PolicyPath)
+}
+
+func withdrawPolicy(path string) error {
+	info, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	return removePolicyFile(path, info)
+}
+
+func removePolicyFile(path string, info os.FileInfo) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !info.Mode().IsRegular() || !ok || stat.Uid != 0 {
-		return fmt.Errorf("%s is not the package's launch policy", launchguard.PolicyPath)
+		return fmt.Errorf("%s is not the package's launch policy", path)
 	}
-	return os.Remove(launchguard.PolicyPath)
+	return os.Remove(path)
 }
