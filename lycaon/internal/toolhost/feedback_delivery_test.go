@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -93,8 +94,13 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 					t.Fatal(err)
 				}
 				result := decodePipeOutcome(t, raw)
-				if result.Refusal == nil || result.Refusal.Code != original.Code || result.Refusal.Feedback != "" || result.Refusal.Details != nil || result.Refusal.DeliveryFailure == nil || result.Refusal.DeliveryFailure.Kind != mode || result.CompletedEffects != 1 || result.UncertainEffects != 0 || result.Status == 0 || result.State == "completed" || result.Stdout != "" || result.Stderr != "" {
-					t.Fatalf("partial result changed: %+v", result)
+				statement, subject := "<", "input"
+				if native {
+					statement, subject = "cut", "request"
+				}
+				stderr := fmt.Sprintf("%s: %s: This command reached its %v limit (%v bytes; maximum %v) [COMMAND_LIMIT_EXCEEDED]\n", statement, subject, original.Data["limit_id"], original.Data["observed"], original.Data["maximum"])
+				if result.Refusal == nil || result.Refusal.Code != original.Code || result.Refusal.Feedback != "" || result.Refusal.Details != nil || result.Refusal.DeliveryFailure == nil || result.Refusal.DeliveryFailure.Kind != mode || result.CompletedEffects != 1 || result.UncertainEffects != 0 || result.Status == 0 || result.State == "completed" || result.Stdout != "" || result.Stderr != stderr {
+					t.Fatalf("partial result changed: %+v, want stderr %q", result, stderr)
 				}
 				failure := result.Refusal.DeliveryFailure
 				if mode == "capacity" {
