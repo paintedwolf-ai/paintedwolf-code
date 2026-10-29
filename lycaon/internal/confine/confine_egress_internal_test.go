@@ -24,6 +24,13 @@ func newTestBroker() *egressBrokerT {
 	}
 }
 
+// forgetEgressSessionOnCleanup releases the session's cached verdicts from the
+// package broker the way a session end does, so a repeated run asks again.
+func forgetEgressSessionOnCleanup(t *testing.T, sessionID string) {
+	t.Helper()
+	t.Cleanup(func() { ForgetEgressSession(sessionID) })
+}
+
 func decideHTTPConnect(b *egressBrokerT, ctx context.Context, token, host string) bool {
 	ep, err := egressproxy.ParseHTTPEndpoint(host, egressproxy.TransportHTTPConnect)
 	if err != nil {
@@ -236,6 +243,7 @@ func TestHTTPObservationsKeepMethodAndPathDistinct(t *testing.T) {
 func TestDecideAttributedHostAsksAndCaches(t *testing.T) {
 	SetEgressPosture(PostureAsk)
 	defer SetEgressPosture(PostureObserve)
+	forgetEgressSessionOnCleanup(t, "web-sess")
 	asks := 0
 	SetEgressResolver(func(_ context.Context, cmd EgressCommand, ep egressproxy.Endpoint, _ *EgressDetectionCitation) bool {
 		asks++
@@ -543,6 +551,7 @@ func TestDeclaredHostsDigestIsOrderAndCaseStable(t *testing.T) {
 func TestHTTPRequestVerdictIsScopedToThePort(t *testing.T) {
 	SetEgressPosture(PostureAsk)
 	defer SetEgressPosture(PostureObserve)
+	forgetEgressSessionOnCleanup(t, "redirect-sess")
 	var asked []uint16
 	SetEgressResolver(func(_ context.Context, _ EgressCommand, ep egressproxy.Endpoint, _ *EgressDetectionCitation) bool {
 		asked = append(asked, ep.Port)
