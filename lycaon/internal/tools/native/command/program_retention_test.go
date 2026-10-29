@@ -76,3 +76,51 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 		t.Fatalf("sibling admission was closed: %v", err)
 	}
 }
+
+func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	registry := bgprocess.NewRegistry(bgprocess.Config{MaxBackground: 1, MaxRecent: 1}, bgprocess.Hooks{})
+	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
+	supervisor := &ProgramSupervisor{Background: registry}
+	jobs := supervisor.Jobs("session", "project")
+	start := func(id string, status int) string {
+		t.Helper()
+		admitted, err := jobs.BeginProgram(ctx)
+		testutil.FailErr(t, "begin next program", err)
+		root := toolcontract.OperationInvocation{SessionID: "session", Identity: toolcontract.ExecutionIdentity{ProgramID: id, ExecutionID: id}}
+		var handle string
+		_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
+			var startErr error
+			handle, startErr = supervisor.StartJob(runCtx, root, func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted}, nil
+			})
+			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
+		})
+		testutil.FailErr(t, "start real completed job", err)
+		supervisor.AfterJobs(id, func(bool) {})
+		if _, _, err := registry.Lifecycle.Wait(ctx, "session", handle); err != nil {
+			t.Fatalf("await real job: %v", err)
+		}
+		return handle
+	}
+	first := start("first", 23)
+	_, err := jobs.BeginProgram(ctx)
+	testutil.FailErr(t, "begin foreground after job exit", err)
+	result, err := jobs.Wait(ctx, first)
+	testutil.FailErr(t, "wait completed raw handle across programs", err)
+	if result.Status != 23 || len(jobs.order) != 0 {
+		t.Fatalf("raw-handle result=%+v live order=%v", result, jobs.order)
+	}
+	second := start("second", 42)
+	_, err = jobs.BeginProgram(ctx)
+	testutil.FailErr(t, "prune actual evicted history", err)
+	if _, err := jobs.Resolve(first); err == nil {
+		t.Fatal("evicted registry handle retained outcome authority")
+	}
+	result, err = jobs.Wait(ctx, second)
+	testutil.FailErr(t, "wait newest retained raw handle", err)
+	if result.Status != 42 || len(jobs.results) != 1 {
+		t.Fatalf("bounded retained results=%v latest=%+v", jobs.results, result)
+	}
+}

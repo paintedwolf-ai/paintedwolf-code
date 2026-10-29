@@ -67,13 +67,15 @@ func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error)
 	if j.closed.Load() {
 		return ctx, ErrProgramStopped
 	}
+	// Completed raw handles remain waitable until the registry evicts them
+	// under its bounded MaxRecent history policy. Only %N order is live-only.
 	for handle := range j.results {
-		if !active[handle] {
+		if _, err := j.Registry.CommandLine(j.SessionID, handle); err != nil {
 			delete(j.results, handle)
 		}
 	}
 	for handle := range j.signals {
-		if !active[handle] {
+		if _, err := j.Registry.CommandLine(j.SessionID, handle); err != nil {
 			delete(j.signals, handle)
 		}
 	}
