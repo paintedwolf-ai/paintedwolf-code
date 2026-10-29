@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from pathlib import Path, PurePosixPath
+import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -14,8 +15,9 @@ import urllib.request
 from scripts.release_semver import parse
 
 from . import pacman_r2, repository_r2, pacman_validation, repository_validation
-from .r2_objects import current
-from .release_repositories import STORAGE_PREFIX, withdrawal_key, publication_configuration
+from . import native_repositories
+from .r2_objects import current, public_bytes, put
+from .release_repositories import STORAGE_PREFIX, withdrawal_key, publication_configuration, retain_generation
 from release_distribution_contract.platforms import ORIGIN
 from .repository_objects import encoded
 from .signing import CATALOG
@@ -113,9 +115,10 @@ def prepare(distribution: dict, *, read=current, enumerate_prefixes=None, rehear
                     raise ValueError(f"Linux {family} {channel} has no retained withdrawal generation for {bad}")
             validator = pacman_validation if family == "pacman" else repository_validation
             validator.validate_manifest(receipt, catalog, rehearsal)
+            # apt keeps an index cached from a later Release, so restoring an earlier apt offer needs a fresh one.
             rows.append({"action": "withdraw", "storage_prefix": storage_prefix, "rehearsal": rehearsal, "family": family, "channel": channel, "architecture": architecture, "bad": bad,
                          "active": active["generation"], "replacement": hashlib.sha256(encoded(receipt)).hexdigest(),
-                         "receipt": receipt})
+                         "receipt": receipt, "resign": family == "deb" and bool(receipt["packages"])})
     return rows + kept
 
 
@@ -143,8 +146,60 @@ def download(base_url: str, row: dict, directory: Path):
     (directory / "generation.json").write_bytes(encoded(row["receipt"]))
 
 
-def apply(rows: list[dict], base_url: str, *, fetch=download, publishers=None, rehearsal=False, catalog=None,
-          storage_prefix=STORAGE_PREFIX, transport=None) -> list[dict]:
+def public_object(base_url: str, row: dict, generation: str, path: str, limit=1 << 20) -> bytes:
+    url = f"{base_url}/{row.get('storage_prefix', STORAGE_PREFIX)}/generations/{generation}/{path}"
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "painted-wolf-release/1"}),
+                                timeout=120) as response:
+        raw = response.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("retained Linux generation object exceeds its bound")
+    return raw
+
+
+def resign(rows: list[dict], base_url: str, output: Path, private: Path, *, fetch=download, read=public_object,
+           rehearsal=False, catalog=None, storage_prefix=STORAGE_PREFIX) -> list[dict]:
+    """Sign a fresh Release, dated after the halted one, for every prepared apt restore."""
+    catalog = catalog or CATALOG
+    publication_configuration(catalog, storage_prefix, base_url, rehearsal)
+    result = []
+    for row in rows:
+        if not row.get("resign"):
+            result.append(row)
+            continue
+        if row["action"] != "withdraw" or row["family"] != "deb" or row.get("storage_prefix") != storage_prefix:
+            raise ValueError("only a prepared apt restore can be re-signed")
+        retained = row["receipt"]
+        if hashlib.sha256(encoded(retained)).hexdigest() != row["replacement"]:
+            raise ValueError("prepared apt restore differs from its retained generation")
+        halted = native_repositories.release_date(read(base_url, row, row["active"], f"dists/{row['channel']}/Release"))
+        directory = Path(tempfile.mkdtemp(prefix=".resign-", dir=output))
+        try:
+            fetch(base_url, row, directory)
+            receipt = native_repositories.resign(retained, directory, catalog, private, rehearsal, after=halted)
+            repository_validation.admit(receipt, directory, catalog, rehearsal)
+            identity = hashlib.sha256(encoded(receipt)).hexdigest()
+            (directory / "generation.json").write_bytes(encoded(receipt))
+            (output / "generations").mkdir(exist_ok=True)
+            directory.rename(output / "generations" / identity)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+        result.append({**row, "receipt": receipt, "replacement": identity, "restores": row["replacement"], "retained": retained})
+    return result
+
+
+def signed_copy(signed: Path):
+    def fetch(base_url, row, directory):
+        source = signed / "generations" / row["replacement"]
+        for item in row["receipt"]["objects"]:
+            target = retained_path(directory, item)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(retained_path(source, item), target)
+        (directory / "generation.json").write_bytes(encoded(row["receipt"]))
+    return fetch
+
+
+def apply(rows: list[dict], base_url: str, *, fetch=download, signed: Path | None = None, publishers=None, rehearsal=False,
+          catalog=None, storage_prefix=STORAGE_PREFIX, transport=None, read=current) -> list[dict]:
     catalog = catalog or CATALOG
     publication_configuration(catalog, storage_prefix, base_url, rehearsal)
     if rehearsal and transport is None:
@@ -152,6 +207,15 @@ def apply(rows: list[dict], base_url: str, *, fetch=download, publishers=None, r
     if any(row.get("storage_prefix") != storage_prefix or row.get("rehearsal") is not rehearsal
            or row.get("action") not in {"withdraw", "keep"} for row in rows):
         raise ValueError("withdrawal target differs from the prepared trust mode or namespace")
+    for row in rows:
+        if row.get("resign") and (signed is None or "restores" not in row
+                                  or hashlib.sha256(encoded(row["retained"])).hexdigest() != row["restores"]
+                                  or hashlib.sha256(encoded(row["receipt"])).hexdigest() != row["replacement"]):
+            raise ValueError("an apt restore requires its re-signed generation")
+        if row.get("resign"):
+            native_repositories.same_restore(row["retained"], row["receipt"])
+    upload, verify = (transport.put, transport.public_bytes) if transport is not None else (put, public_bytes)
+    read = transport.current if transport is not None else read
     publishers = publishers or {"deb": repository_r2.publish_r2, "rpm": repository_r2.publish_r2,
                                 "pacman": pacman_r2.publish_r2}
     results, errors = [], []
@@ -167,7 +231,16 @@ def apply(rows: list[dict], base_url: str, *, fetch=download, publishers=None, r
         try:
             with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-retained-") as temporary:
                 directory = Path(temporary)
-                fetch(base_url, row, directory)
+                if row.get("resign"):
+                    # The restore still names the exact generation the halt plan selected.
+                    with tempfile.TemporaryDirectory() as scratch:
+                        retained = read(f"{storage_prefix}/generations/{row['restores']}/generation.json", Path(scratch))
+                    if retained != row["retained"]:
+                        raise ValueError("re-signed apt restore lost its retained generation")
+                    signed_copy(signed)(base_url, row, directory)
+                    retain_generation(row["receipt"], directory, base_url, catalog, storage_prefix, rehearsal, upload, verify)
+                else:
+                    fetch(base_url, row, directory)
                 results.append(publishers[row["family"]](row["receipt"], directory, catalog, storage_prefix, base_url,
                                                          row["active"], rehearsal, "withdraw", "activate", authorize=authorize,
                                                          **({"transport": transport} if transport is not None else {})))
@@ -180,9 +253,10 @@ def apply(rows: list[dict], base_url: str, *, fetch=download, publishers=None, r
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["prepare", "apply"])
+    parser.add_argument("operation", choices=["prepare", "resign", "apply"])
     parser.add_argument("--file", type=Path, required=True)
     parser.add_argument("--distribution-plan", type=Path)
+    parser.add_argument("--signed", type=Path, help="re-signed apt restores: resign writes them, apply reads them")
     parser.add_argument("--base-url", required=True)
     args = parser.parse_args()
     try:
@@ -190,8 +264,16 @@ def main():
             if args.distribution_plan is None:
                 parser.error("prepare requires --distribution-plan")
             args.file.write_text(json.dumps(prepare(json.loads(args.distribution_plan.read_bytes()), base_url=args.base_url.rstrip("/")), indent=2) + "\n")
+        elif args.operation == "resign":
+            if args.signed is None:
+                parser.error("resign requires --signed")
+            from .release_signing import private_key
+            args.signed.mkdir(parents=True, exist_ok=False)
+            with private_key() as private:
+                rows = resign(json.loads(args.file.read_text()), args.base_url.rstrip("/"), args.signed, private)
+            (args.signed / "linux-withdrawal.json").write_text(json.dumps(rows, indent=2) + "\n")
         else:
-            print(json.dumps(apply(json.loads(args.file.read_text()), args.base_url.rstrip("/")), indent=2))
+            print(json.dumps(apply(json.loads(args.file.read_text()), args.base_url.rstrip("/"), signed=args.signed), indent=2))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"Linux repository withdrawal failed: {exc}\n")
 

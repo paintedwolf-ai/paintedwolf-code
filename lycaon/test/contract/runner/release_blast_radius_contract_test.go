@@ -264,7 +264,8 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 		"scripts/release_withdrawal.py prepare",
 		"scripts/release_withdrawal.py apply",
 		"steps.distribution_plan.outcome",
-		"steps.halt_barrier.outcome == 'success'",
+		"steps.halt_barrier.outcome",
+		"needs.halt.outputs.barrier == 'success'",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("release halt workflow missing %q", needle)

@@ -209,15 +209,21 @@ class LinuxWithdrawalTests(unittest.TestCase):
             calls.append((manifest["family"], expected, rehearsal, operation, phase))
             return {"generation": identity(manifest)}
         fetched = []
+        # An apt restore needs its re-signed generation; nothing applies without it.
+        self.assertEqual([row["family"] for row in rows if row.get("resign")], ["deb"])
+        with self.assertRaisesRegex(ValueError, "re-signed generation"):
+            apply(rows, "https://downloads.paintedwolf.dev", fetch=lambda base, row, directory: fetched.append(row),
+                  publishers={"deb": publisher, "rpm": publisher, "pacman": publisher})
+        self.assertEqual((calls, fetched), ([], []))
+        rows = [row for row in rows if not row.get("resign")]
         results = apply(rows, "https://downloads.paintedwolf.dev", fetch=lambda base, row, directory: fetched.append(row),
                         publishers={"deb": publisher, "rpm": publisher, "pacman": publisher})
-        self.assertEqual(len(results), 2)
-        self.assertEqual(calls, [("deb", "b" * 64, False, "withdraw", "activate"),
-                                 ("pacman", "c" * 64, False, "withdraw", "activate")])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(calls, [("pacman", "c" * 64, False, "withdraw", "activate")])
 
         def broken(*args, **kwargs):
             raise ValueError("activation interrupted")
-        with self.assertRaisesRegex(ValueError, "deb stable: activation interrupted; pacman stable"):
+        with self.assertRaisesRegex(ValueError, "pacman stable: activation interrupted"):
             apply(rows, "https://downloads.paintedwolf.dev", fetch=lambda *args: None,
                   publishers={"deb": broken, "pacman": broken})
 
@@ -236,6 +242,10 @@ class LinuxWithdrawalTests(unittest.TestCase):
                 download(base, row, work / "retained")
                 self.assertEqual((work / "retained/pool/a/package").read_bytes(), b"package")
                 self.assertEqual(json.loads((work / "retained/generation.json").read_text()), self.good)
+                # The halted generation's public Release dates an apt restore's fresh one.
+                self.assertEqual(repository_withdrawal.public_object(base, row, row["replacement"], "pool/a/package"), b"package")
+                with self.assertRaisesRegex(ValueError, "exceeds its bound"):
+                    repository_withdrawal.public_object(base, row, row["replacement"], "pool/a/package", limit=3)
                 (origin / "package").write_bytes(b"changed")
                 with self.assertRaisesRegex(ValueError, "differs from its inventory"):
                     download(base, row, work / "changed")
@@ -343,6 +353,15 @@ class LinuxReleaseCommandTests(unittest.TestCase):
             self.assertEqual(planned.call_args.kwargs, {"base_url": "https://downloads.example.invalid"})
             self.assertEqual(self.run_main(repository_withdrawal, ["apply", *base]), 0)
             self.assertEqual(applied.call_args.args, ([{"planned": True}], "https://downloads.example.invalid"))
+            signed = Path(temporary) / "signed"
+            with patch.object(repository_withdrawal, "resign", return_value=[{"signed": True}]) as resigned, \
+                    patch.dict(os.environ, {"LINUX_PACKAGE_SIGNING_KEY": "private material"}):
+                self.assertEqual(self.run_main(repository_withdrawal, ["resign", *base, "--signed", str(signed)]), 0)
+                self.assertEqual(self.run_main(repository_withdrawal, ["resign", *base]), 2)
+            self.assertEqual(resigned.call_args.args[:3], ([{"planned": True}], "https://downloads.example.invalid", signed))
+            self.assertEqual(json.loads((signed / "linux-withdrawal.json").read_text()), [{"signed": True}])
+            self.assertEqual(self.run_main(repository_withdrawal, ["apply", *base, "--signed", str(signed)]), 0)
+            self.assertEqual(applied.call_args.kwargs, {"signed": signed})
             self.assertEqual(self.run_main(repository_withdrawal, ["prepare", *base]), 2)
             applied.side_effect = ValueError("retry")
             self.assertEqual(self.run_main(repository_withdrawal, ["apply", *base]), 1)

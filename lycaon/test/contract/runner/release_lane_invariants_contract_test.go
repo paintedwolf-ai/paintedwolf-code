@@ -26,6 +26,7 @@ type laneJob struct {
 	RunsOn      yaml.Node         `yaml:"runs-on"`
 	Environment string            `yaml:"environment"`
 	Env         map[string]string `yaml:"env"`
+	Outputs     map[string]string `yaml:"outputs"`
 	Steps       []laneStep        `yaml:"steps"`
 }
 
@@ -174,9 +175,27 @@ func TestLinuxPackageKeyStaysInSigningCustody(t *testing.T) {
 	if !slices.Equal(holders, []string{"build-release", "linux-pacman-repositories", "linux-repositories"}) {
 		t.Fatalf("Linux package key holders = %v", holders)
 	}
-	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
-	if strings.Contains(halt, "LINUX_PACKAGE_SIGNING_KEY") {
-		t.Fatal("release halt must reuse retained signed generations, not the package key")
+	// A halt signs only fresh apt Release files over restored generations, in signing custody.
+	halt := parseLane(t, ".github/workflows/release-halt.yml")
+	holders = nil
+	for _, name := range sortedJobs(halt) {
+		if strings.Contains(halt.Jobs[name].text(), "LINUX_PACKAGE_SIGNING_KEY") {
+			holders = append(holders, name)
+		}
+	}
+	signer := halt.Jobs["sign-native-restore"]
+	if !slices.Equal(holders, []string{"sign-native-restore"}) || signer.Environment != "release-signing" {
+		t.Fatalf("release halt package key holders = %v", holders)
+	}
+	for _, credential := range append(storageCredentials, "secrets.HOMEBREW_TAP_TOKEN", "secrets.WWW_DISPATCH_TOKEN") {
+		if strings.Contains(signer.text(), credential) {
+			t.Errorf("the halt signer holds the Linux package key with publication credential %s", credential)
+		}
+	}
+	for _, step := range signer.Steps {
+		if step.Env["LINUX_PACKAGE_SIGNING_KEY"] != "" && !strings.Contains(step.Run, "scripts.linux_release.repository_withdrawal resign") {
+			t.Fatal("the halt signer may only re-sign prepared apt restores")
+		}
 	}
 }
 
@@ -288,15 +307,17 @@ func TestReleaseWorkflowsReadOnlyTheirOwnRunEvidence(t *testing.T) {
 // A halt withdraws Linux repository offers in the same protected run as the feeds.
 func TestReleaseHaltWithdrawsLinuxRepositories(t *testing.T) {
 	t.Parallel()
-	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
+	workflow := parseLane(t, ".github/workflows/release-halt.yml")
+	halt, apply := workflow.Jobs["halt"], workflow.Jobs["apply-halt"]
 	var prepared, applied bool
 	for _, step := range halt.Steps {
 		prepared = prepared || strings.Contains(step.Run, "scripts.linux_release.repository_withdrawal prepare")
-		if strings.Contains(step.Run, "scripts.linux_release.repository_withdrawal apply") {
-			applied = strings.Contains(step.If, "!inputs.dry_run")
-		}
 	}
-	if !prepared || !applied || halt.Environment != "release-publication" {
+	for _, step := range apply.Steps {
+		applied = applied || strings.Contains(step.Run, "scripts.linux_release.repository_withdrawal apply") && strings.Contains(step.Run, "--signed")
+	}
+	if !prepared || !applied || !strings.Contains(apply.If, "!inputs.dry_run") ||
+		halt.Environment != "release-publication" || apply.Environment != "release-publication" {
 		t.Fatal("release halt must prepare Linux withdrawal in dry runs and apply it only when publishing")
 	}
 }
@@ -359,10 +380,10 @@ func TestNixCacheCredentialReachesOnlyItsGatedPublisher(t *testing.T) {
 // A halt withdraws Nix cache availability in the same protected run as the repositories.
 func TestReleaseHaltWithdrawsNixCacheAvailability(t *testing.T) {
 	t.Parallel()
-	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
-	for _, step := range halt.Steps {
+	apply := parseLane(t, ".github/workflows/release-halt.yml").Jobs["apply-halt"]
+	for _, step := range apply.Steps {
 		if strings.Contains(step.Run, "scripts.nix_cache.release_lane withdraw") {
-			if !strings.Contains(step.If, "!inputs.dry_run") {
+			if !strings.Contains(apply.If, "!inputs.dry_run") {
 				t.Fatal("Nix cache withdrawal must apply only outside dry runs")
 			}
 			return
@@ -373,7 +394,8 @@ func TestReleaseHaltWithdrawsNixCacheAvailability(t *testing.T) {
 
 func TestReleaseHaltRequiresCompleteSymmetricPreparationBeforeEveryMutation(t *testing.T) {
 	t.Parallel()
-	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
+	workflow := parseLane(t, ".github/workflows/release-halt.yml")
+	halt := workflow.Jobs["halt"]
 	steps := map[string]laneStep{}
 	positions := map[string]int{}
 	for position, step := range halt.Steps {
@@ -397,16 +419,27 @@ func TestReleaseHaltRequiresCompleteSymmetricPreparationBeforeEveryMutation(t *t
 	if !strings.Contains(barrier.Run, "release_distribution_contract.halt_effects") {
 		t.Fatal("the barrier must retain every owner's actions and refusals")
 	}
-	mutations := 0
-	for position, step := range halt.Steps {
-		if !strings.Contains(step.Run, "--apply-prepared") && !strings.Contains(step.Run, "repository_withdrawal apply") &&
-			!strings.Contains(step.Run, "nix_cache.release_lane withdraw") && !strings.Contains(step.Run, "release_withdrawal.py apply") {
-			continue
+	mutation := func(step laneStep) bool {
+		return strings.Contains(step.Run, "--apply-prepared") || strings.Contains(step.Run, "repository_withdrawal apply") ||
+			strings.Contains(step.Run, "nix_cache.release_lane withdraw") || strings.Contains(step.Run, "release_withdrawal.py apply")
+	}
+	if slices.ContainsFunc(halt.Steps, mutation) || halt.Outputs["barrier"] != "${{ steps.halt_barrier.outcome }}" {
+		t.Fatal("the preparing job applies nothing and hands its barrier outcome to the later jobs")
+	}
+	// Re-signing apt restores is preparation: it follows the barrier and precedes every effect.
+	signer, apply := workflow.Jobs["sign-native-restore"], workflow.Jobs["apply-halt"]
+	for _, condition := range []string{"!cancelled()", "!inputs.dry_run", "needs.halt.outputs.barrier == 'success'"} {
+		if !strings.Contains(signer.If, condition) || !strings.Contains(apply.If, condition) {
+			t.Fatalf("any preparation refusal must block re-signing and every halt mutation (%s)", condition)
 		}
-		mutations++
-		if position <= positions["halt_barrier"] || !strings.Contains(step.If, "!inputs.dry_run") ||
-			!strings.Contains(step.If, "!cancelled()") || !strings.Contains(step.If, "steps.halt_barrier.outcome == 'success'") {
-			t.Fatal("any preparation refusal must block every halt mutation")
+	}
+	if !strings.Contains(apply.If, "needs.sign-native-restore.result == 'success'") || !workflow.ancestors("apply-halt")["sign-native-restore"] {
+		t.Fatal("halt effects apply only after apt restores are signed")
+	}
+	mutations := 0
+	for _, step := range apply.Steps {
+		if mutation(step) {
+			mutations++
 		}
 	}
 	if mutations != 4 {

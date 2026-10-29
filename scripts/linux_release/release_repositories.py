@@ -190,9 +190,21 @@ def retain_withdrawal(receipt: dict, offer: dict, directory: Path, base_url: str
                    ["family", "channel", "version", "source_commit", "architecture", "signing_generation", "key_fingerprint"])):
         raise ValueError("Linux withdrawal generation differs from the offer it withdraws")
     qualified(receipt["source_commit"])
+    retain_generation(receipt, directory, base_url, catalog, storage_prefix, rehearsal, upload, verify)
+    with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-withdrawal-") as temporary:
+        pointer = Path(temporary) / "withdrawal.json"
+        pointer.write_bytes(encoded(receipt))
+        upload(withdrawal_key(receipt, storage_prefix=storage_prefix), pointer)
+        verify(f"{base_url.rstrip('/')}/{withdrawal_key(receipt, storage_prefix=storage_prefix)}", pointer)
+    return identity(receipt)
+
+
+def retain_generation(receipt: dict, directory: Path, base_url: str, catalog: Path, storage_prefix: str, rehearsal: bool,
+                      upload, verify):
+    """Upload one admitted generation's immutable objects and manifest before anything references it."""
     origin = base_url.rstrip("/") + "/" + storage_prefix
     local = pacman_publication.publish if receipt["family"] == "pacman" else repository_transaction.publish
-    with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-withdrawal-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="paintedwolf-linux-retention-") as temporary:
         store = Path(temporary) / "origin"
         local(receipt, directory, store, origin, catalog, None, rehearsal)
         generation = store / "generations" / identity(receipt)
@@ -201,11 +213,6 @@ def retain_withdrawal(receipt: dict, offer: dict, directory: Path, base_url: str
                 key = f"{storage_prefix}/{source.relative_to(store).as_posix()}"
                 upload(key, source)
                 verify(f"{base_url.rstrip('/')}/{key}", source)
-        pointer = Path(temporary) / "withdrawal.json"
-        pointer.write_bytes(encoded(receipt))
-        upload(withdrawal_key(receipt, storage_prefix=storage_prefix), pointer)
-        verify(f"{base_url.rstrip('/')}/{withdrawal_key(receipt, storage_prefix=storage_prefix)}", pointer)
-    return identity(receipt)
 
 
 def publish(generations: list[Path], artifacts: Path, version: str, source_commit: str, channels: list[str], base_url: str,
