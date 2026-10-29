@@ -205,4 +205,3 @@ harness_up --interactive
             result = subprocess.run(["bash", str(source / "den-harness.sh"), *arguments], env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn(message, result.stderr)
-

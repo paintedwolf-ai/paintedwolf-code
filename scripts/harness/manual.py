@@ -13,16 +13,12 @@ import urllib.request
 import uuid
 
 
-def loopback_origin(url):
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1") or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
-        raise ValueError("URL must be an HTTP loopback origin for an isolated harness")
-    return url.rstrip("/")
-
-
 class Client:
     def __init__(self, url, token):
-        self.url = loopback_origin(url)
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1") or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+            raise ValueError("URL must be an HTTP loopback origin for an isolated harness")
+        self.url = url.rstrip("/")
         self.token = token
 
     def request(self, path, payload=None):
