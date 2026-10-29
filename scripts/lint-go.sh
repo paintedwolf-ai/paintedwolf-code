@@ -21,6 +21,7 @@ export GOLANGCI_LINT_CACHE="${CACHE_DIR}/golangci-cache-${GOLANGCI_VERSION#v}"
 export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
 mkdir -p "${BIN_DIR}" "${GOLANGCI_LINT_CACHE}" "${GOCACHE}"
 
+PYTHONPATH="${ROOT}/scripts${PYTHONPATH:+:${PYTHONPATH}}" python3 -m workflow_lint
 python3 "${ROOT}/scripts/analysis_tools.py" ensure golangci-lint
 
 cd "${GO_DIR}"

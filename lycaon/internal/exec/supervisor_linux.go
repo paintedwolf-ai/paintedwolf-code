@@ -86,6 +86,7 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 		cleanup()
 		return nil, nil, err
 	}
+	resolveRelayedProgram(cmd, protectedState())
 	count := len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, read, statusWrite)
 	supervisorStarts.Store(cmd, supervisorStart{read: statusRead, write: statusWrite, target: cmd.Path})
