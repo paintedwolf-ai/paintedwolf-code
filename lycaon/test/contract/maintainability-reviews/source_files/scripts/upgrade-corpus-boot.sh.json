@@ -5,10 +5,10 @@
   "workstream": "release-fixture-verification",
   "disposition": "retain",
   "reason": "The CLI selects retained releases, boots isolated installations, verifies their readers, and stops each child before retaining failure evidence. Its negative fixtures exercise these same boot and cleanup functions. Keep this lifecycle together within 350 code-bearing lines, with phase-specific evidence and release non-interference contracts.",
-  "reviewed_commit": "95c6ea5ace80c43683c7bd6edb925f78cf9ec865",
+  "reviewed_commit": "a77b283e25cd1b8fbf694bab6652ee25536fff71",
   "ceiling": 350,
   "boundaries": {
     "lycaon/test/contract/hosted/platform_evidence_contract_test.go": "3ed334f188ab13d912c0a8c6319f04d1f1cb9b0c28453e793d2630541dc510d0",
-    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "a85cb79f1ea4d75048703bd8bcf2d203bdb1e4a6e43dc25f33606fb77641441b"
+    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "7525dc67b675fabcc68b8ae68d1b2d5ed94e2114446306aa3807a7872beb9d0b"
   }
 }
