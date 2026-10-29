@@ -1,4 +1,6 @@
-package configlayout
+// Package nixgeneration reads the running Nix package generation's layout
+// facts from its receipt and final-content manifest.
+package nixgeneration
 
 import (
 	"bytes"
@@ -15,8 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
-// NixLayout describes resources from the running package, never custody trust.
-type NixLayout struct {
+// Layout describes resources from the running package, never custody trust.
+type Layout struct {
 	Output   string
 	Root     string
 	Version  string
@@ -29,7 +31,7 @@ type nixReceipt struct {
 	NixStore      string `json:"nix_store"`
 }
 
-var runningNix = sync.OnceValues(func() (*NixLayout, error) {
+var running = sync.OnceValues(func() (*Layout, error) {
 	if runtime.GOOS != "linux" {
 		return nil, nil
 	}
@@ -42,14 +44,14 @@ var runningNix = sync.OnceValues(func() (*NixLayout, error) {
 		return nil, err
 	}
 	defer func() { _ = image.Close() }()
-	return nixLayout(executable, image)
+	return readLayout(executable, image)
 })
 
-// RunningNix returns immutable layout facts tied to the running ELF descriptor.
+// Running returns immutable layout facts tied to the running ELF descriptor.
 // A malformed present receipt is an error, not a developer-layout fallback.
-func RunningNix() (*NixLayout, error) { return runningNix() }
+func Running() (*Layout, error) { return running() }
 
-func nixLayout(executable string, image io.Reader) (*NixLayout, error) {
+func readLayout(executable string, image io.Reader) (*Layout, error) {
 	root := filepath.Dir(filepath.Dir(executable))
 	file, err := os.Open(filepath.Join(root, "nix-layout.json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -98,5 +100,5 @@ func nixLayout(executable string, image io.Reader) (*NixLayout, error) {
 	if n != expected.Size || got != expected.SHA256 {
 		return nil, &pkgmanifest.MismatchError{Path: executable, Want: expected.SHA256, Got: got}
 	}
-	return &NixLayout{Output: receipt.Output, Root: root, Version: manifest.Version, NixStore: receipt.NixStore}, nil
+	return &Layout{Output: receipt.Output, Root: root, Version: manifest.Version, NixStore: receipt.NixStore}, nil
 }

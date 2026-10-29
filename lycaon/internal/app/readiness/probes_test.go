@@ -16,10 +16,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
@@ -143,16 +143,16 @@ func TestNixGenerationIsNotHeldToTheHostLibcFloor(t *testing.T) {
 	host := preflight.DefaultEnv("", nil, nil, nil, nil, nil).LibcVersion != nil
 	for _, tc := range []struct {
 		name    string
-		layout  *configlayout.NixLayout
+		layout  *nixgeneration.Layout
 		err     error
 		checked bool
 	}{
 		{"native package", nil, nil, host},
-		{"nix generation", &configlayout.NixLayout{Output: "/nix/store/" + strings.Repeat("0", 32) + "-painted-wolf-code"}, nil, false},
+		{"nix generation", &nixgeneration.Layout{Output: "/nix/store/" + strings.Repeat("0", 32) + "-painted-wolf-code"}, nil, false},
 		{"malformed nix receipt", nil, errors.New("malformed receipt"), host},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			runningNix = func() (*configlayout.NixLayout, error) { return tc.layout, tc.err }
+			runningNix = func() (*nixgeneration.Layout, error) { return tc.layout, tc.err }
 			if got := probes.Environment().LibcVersion != nil; got != tc.checked {
 				t.Fatalf("host libc checked = %v, want %v", got, tc.checked)
 			}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -16,7 +17,7 @@ func TestNixRetentionReleasesOwnRootAndReclaimsOnlyDeadRoots(t *testing.T) {
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
 	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\n[ -z \"${LYCAON_API_TOKEN+x}\" ] || exit 1\n[ \"$3\" = --add-root ] || exit 1\nln -s \"$7\" \"$4\"\n"), 0o700))
-	layout := &NixLayout{Output: filepath.Join(root, "output"), NixStore: tool}
+	layout := &nixgeneration.Layout{Output: filepath.Join(root, "output"), NixStore: tool}
 	directory := filepath.Join(root, "roots")
 	releaseFirst, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "retain first", err)
@@ -49,7 +50,7 @@ func TestNixRetentionRefusesUnavailableDaemonAndUnsafeDirectories(t *testing.T) 
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
 	testutil.FailErr(t, "write unavailable registrar", os.WriteFile(tool, []byte("#!/bin/sh\necho 'daemon unavailable' >&2\nexit 1\n"), 0o700))
-	layout := &NixLayout{Output: "/generation", NixStore: tool}
+	layout := &nixgeneration.Layout{Output: "/generation", NixStore: tool}
 	directory := filepath.Join(root, "roots")
 	if _, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"}); err == nil {
 		t.Fatal("unavailable registration silently accepted")
@@ -94,7 +95,7 @@ func testDesktopLockSurvivesHelperExit(t *testing.T, graceful bool) {
 	tool := filepath.Join(root, "nix-store")
 	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\nln -s \"$7\" \"$4\"\n"), 0o700))
 	directory := filepath.Join(root, "roots")
-	retention, err := retainNix(context.Background(), &NixLayout{Output: "/selected-generation", NixStore: tool}, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
+	retention, err := retainNix(context.Background(), &nixgeneration.Layout{Output: "/selected-generation", NixStore: tool}, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "retain generation", err)
 	defer retention.Close()
 	desktop, err := os.OpenFile(retention.LockPath, os.O_RDWR, 0)

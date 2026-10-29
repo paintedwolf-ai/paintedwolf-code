@@ -436,10 +436,14 @@ and native desktop and installed-artifact qualification in
 Nix installations resolve the running ELF through `/proc/self/exe`. The private
 `lib/painted-wolf-code/nix-layout.json` receipt names its immutable output and
 Nix executable; the final-content manifest binds the desktop and private helper
-images to that output. Native `linux_generation` and Go `configlayout` own these
-layout facts. Helpers and engine resources stay in the running generation after
-a profile switch; the profile entry point on PATH is used only to report CLI
-installation status. No application command repairs or writes Nix-owned files.
+images to that output. Native `linux_generation` and Go `nixgeneration` own these
+layout facts; `nixgeneration` is a leaf, so path resolution, readiness, and
+confinement read the same facts without importing one another. Confinement uses
+them to name the AppArmor profile a generation ships for its exact engine when a
+host restricts user namespaces. Helpers and engine resources stay in the running
+generation after a profile switch; the profile entry point on PATH is used only
+to report CLI installation status. No application command repairs or writes
+Nix-owned files.
 
 Go `configlayout` owns indirect-root registration under the private XDG cache,
 with one locked root per running CLI or shell. The shell retains a captured

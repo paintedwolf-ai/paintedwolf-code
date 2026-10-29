@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
@@ -29,7 +30,7 @@ type Probes struct {
 }
 
 // runningNix reports the running Nix package generation, if any.
-var runningNix = configlayout.RunningNix
+var runningNix = nixgeneration.Running
 
 func New(service *llm.Service, decider decide.Decider, path userpath.Snapshot) *Probes {
 	return &Probes{service: service, decider: decider, path: path}

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
+
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 )
 
 // Module markers identify a checkout.
@@ -25,7 +27,7 @@ const EnvEngineRoot = "LYCAON_ENGINE_ROOT"
 
 // EngineRoot returns the explicit payload root or the installed host's payloads.
 func EngineRoot() string {
-	if layout, err := RunningNix(); err != nil {
+	if layout, err := nixgeneration.Running(); err != nil {
 		return ""
 	} else if layout != nil {
 		return filepath.Join(layout.Root, LinuxEngineRootDirName)
