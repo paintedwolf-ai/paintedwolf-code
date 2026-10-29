@@ -77,7 +77,7 @@ func (inv *invocation) value(key string) (string, bool) {
 
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
@@ -175,7 +175,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return fmt.Errorf("query reads require a program execution and pin recorder")
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
 
 // settle projects the run onto the producer contract. A published edit is a

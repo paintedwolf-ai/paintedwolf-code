@@ -19,9 +19,9 @@ import (
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+// (invocation.SQLRecorder.AppendRevisionPin). Pins append in capture order.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
 
 // Owners holds the shared operations behind jq, yq and jq-edit.
@@ -111,6 +111,7 @@ type Program struct {
 // toolexecution.PreparedNativeEffect: streams reach it only after admission.
 type Prepared struct {
 	Operation string
+	Mode      string
 	Argv      commandprogram.BoundArgv
 	Review    commandprogram.ArgvReview
 	owners    *Owners
@@ -138,7 +139,18 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
+	mode := ""
+	if len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
+	}
+	if command == "yq" {
+		if _, ok := bound.Last("-i"); ok {
+			mode = "-i"
+		} else {
+			mode = "query"
+		}
+	}
+	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: bound.Review(o.ops[command]), owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.
