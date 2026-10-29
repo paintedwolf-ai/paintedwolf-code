@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -19,6 +18,9 @@ func TestProgramReceiptsUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	retained := seedNativeAuthorityMainData(t, source)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO source_files(id,project_id,entry_kind,created_ts) VALUES('fixture-file','fixture-project','file','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed retained source identity", err)
+	if _, err := source.ExecContext(t.Context(), `INSERT INTO source_files(id,project_id,entry_kind,created_ts) VALUES('early-link','fixture-project','link','2026-01-01T00:00:00Z')`); err == nil {
+		t.Fatal("revision 7 source accepted a link entry")
+	}
 	_, err = source.ExecContext(t.Context(), `INSERT INTO invocation_receipts(id,project_id,session_id,tool_call_id,tool_name,owner,lifecycle,reversibility,evidence_policy,recovery_policy,evidence_kind,contract_digest,args_digest,status,started_at) VALUES('fixture-parent','fixture-project','fixture-session','actual-model-call','command','processes','effect_attempt','irreversible','attempt','abandon','pending','contract','args','running','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed real parent receipt", err)
 	target, err := CurrentBaseline(t.Context())
@@ -54,6 +56,8 @@ func TestProgramReceiptsUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	if entryKind != "file" {
 		t.Fatalf("source entry kind = %q", entryKind)
 	}
+	_, err = upgraded.Exec(`INSERT INTO source_files(id,project_id,entry_kind,created_ts) VALUES('fixture-link','fixture-project','link','2026-01-01T00:00:00Z')`)
+	testutil.FailErr(t, "record link entry after upgrade", err)
 	var count int
 	testutil.FailErr(t, "inspect migration ledger", upgraded.QueryRow(`SELECT count(*) FROM schema_migrations WHERE id='portable-program-receipts'`).Scan(&count))
 	if count != 1 {
