@@ -144,11 +144,7 @@ var contractCases = []contractCase{
 }
 
 func TestCommandLanguageContracts(t *testing.T) {
-	cases := make([]commandconformance.Case, len(contractCases))
-	for i, c := range contractCases {
-		cases[i] = c.Case
-	}
-	runner := newConformanceRunner(t, cases, gate.PostureLight, true)
+	runner := newConformanceRunner(t, gate.PostureLight, true)
 	for _, c := range contractCases {
 		t.Run(c.ID, func(t *testing.T) {
 			verifyContract(t, c, runner.runCase(t, c.Case))
