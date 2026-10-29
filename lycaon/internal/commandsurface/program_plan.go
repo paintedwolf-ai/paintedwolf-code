@@ -96,11 +96,13 @@ type Conditional struct {
 
 func (Conditional) commandNode() {}
 
-// WhileLoop defers both its test and body until evaluation.
+// WhileLoop defers both its test and body until evaluation. Until runs the
+// body while the condition fails instead of while it succeeds.
 type WhileLoop struct {
 	SyntaxLocation
 	Condition []Statement
 	Body      []Statement
+	Until     bool
 }
 
 func (WhileLoop) commandNode() {}
@@ -232,6 +234,49 @@ type DoubleQuotedPart struct {
 }
 
 func (DoubleQuotedPart) wordNode() {}
+
+// BracePart is one brace expansion in a command word, for-loop item or array
+// element. Before any other expansion, the word becomes one word per
+// alternative, or per sequence value, in order; nested braces multiply.
+type BracePart struct {
+	SyntaxLocation
+	Alternatives []DeferredWord
+	Sequence     *BraceSequence
+}
+
+func (BracePart) wordNode() {}
+
+// BraceSequence is {start..end[..step]}: decimal integers zero-padded to Width,
+// or single-byte letters. Step is the absolute step; the direction runs from
+// Start toward End.
+type BraceSequence struct {
+	Start, End int64
+	Step       uint64
+	Width      int
+	Letters    bool
+}
+
+// Count is the number of values, at least one.
+func (s BraceSequence) Count() uint64 {
+	span := uint64(s.End) - uint64(s.Start)
+	if s.End < s.Start {
+		span = uint64(s.Start) - uint64(s.End)
+	}
+	steps := span / max(s.Step, 1)
+	if steps == ^uint64(0) {
+		return steps
+	}
+	return steps + 1
+}
+
+// Value is the i-th value, for i below Count.
+func (s BraceSequence) Value(i uint64) int64 {
+	offset := i * max(s.Step, 1)
+	if s.End < s.Start {
+		return int64(uint64(s.Start) - offset)
+	}
+	return int64(uint64(s.Start) + offset)
+}
 
 // ParameterSlice retains ${name:offset} and ${name:offset:length} bounds.
 type ParameterSlice struct {

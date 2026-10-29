@@ -10,7 +10,8 @@ import (
 	"mvdan.cc/sh/v3/expand"
 )
 
-// operated expands ${name OP word}. Operators read state only; none assigns.
+// operated expands ${name OP word}. Only = and := assign, in the frame the
+// word expands in.
 func (r *expansionRun) operated(ctx context.Context, part commandsurface.ParameterPart, quoted bool) error {
 	value, set, err := r.parameterState(part)
 	if err != nil {
@@ -22,6 +23,13 @@ func (r *expansionRun) operated(ctx context.Context, part commandsurface.Paramet
 	case "-":
 		if missing {
 			return r.operand(ctx, part.Argument, quoted)
+		}
+		return r.emit(ctx, value, quoted)
+	case "=":
+		if missing {
+			if value, err = r.assignDefault(ctx, part, quoted); err != nil {
+				return err
+			}
 		}
 		return r.emit(ctx, value, quoted)
 	case "+":
@@ -51,6 +59,33 @@ func (r *expansionRun) operated(ctx context.Context, part commandsurface.Paramet
 		return r.emit(ctx, convertCase(value, part.Operator), quoted)
 	}
 	return r.patternOperation(value, part, quoted)
+}
+
+// assignDefault expands ${name=word}'s word as one value, with the quoting of
+// its context and without splitting or pathname expansion, and assigns it.
+func (r *expansionRun) assignDefault(ctx context.Context, part commandsurface.ParameterPart, quoted bool) (string, error) {
+	var index *int64
+	if part.Index != nil {
+		value, err := r.arithmeticValue(ctx, part.Index)
+		if err != nil {
+			return "", err
+		}
+		index = &value
+	}
+	word := *part.Argument
+	run, err := r.expander.begin(ctx, r.scope, word, modeScalar)
+	if err != nil {
+		return "", err
+	}
+	defer run.close()
+	if err := run.operand(ctx, &word, quoted); err != nil {
+		return "", err
+	}
+	value, err := run.join(ctx, run.assembly.current, r.expander.limits.valueBytes, "variable_value_bytes")
+	if err != nil {
+		return "", err
+	}
+	return value, assignScopeValue(ctx, r.scope, part.Name, index, value, part.Span)
 }
 
 // parameterState reads a parameter's value and whether it is set.
