@@ -13,7 +13,7 @@ from verification_state import read_state, write_json
 SAMPLE_SECONDS = 30
 QUIET_SECONDS = 600
 MAX_SAMPLE_GAP = 90
-NOTICE_STATES = {"supervision_lost", "supervisor_stopped", "suspected_stall"}
+NOTICE_STATES = {"supervision_lost", "supervisor_stopped", "suspected_stall", "cleanup_blocked"}
 
 
 def process_snapshot(pid=None):
@@ -82,6 +82,9 @@ def assess(entry, processes, previous, now):
         return health, {}
     if processes[entry["pid"]]["state"].startswith("T"):
         health.update(state="supervisor_stopped", reason="The operating system reports the owner as stopped")
+        return health, {}
+    if entry.get("terminal_settlement", {}).get("state") == "blocked":
+        health.update(state="cleanup_blocked", reason="Terminal producer cleanup is unverified; admission remains held")
         return health, {}
     if entry.get("kind") == "batch" and entry.get("phase") == "execution":
         health.update(state="supervised", reason="Activity is assessed separately for each operation")

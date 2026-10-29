@@ -818,6 +818,30 @@ forward are still parsed by their own scripts when the run starts.
 
 ### Health and queue advisories
 
+A live supervisor settles descendants after its own producer completes. It uses
+that operation's retained reservation, or the capture/final batch lease at those
+boundaries, and rechecks process birth and file identity before signalling a
+holder. Normal completion probes kernel custody before scanning holders. Queue
+and live-owner admission guards cover descriptor retirement and reacquisition;
+source-slot descriptors remain held until their owners finish. A crashed
+supervisor or executor does not declare surviving work terminal.
+
+Stage completion settles its own reservation before publishing passing results.
+The executor seals exact request receipts through a private completion channel
+that stage children do not inherit. A later executor crash preserves those
+independently completed receipts; unsealed or changed passing files become
+unverified. Final batch settlement additionally requires the executor's actual
+completion fact, including a legitimate failing outcome, rather than the outer
+snapshot wrapper's exit or a summary file alone.
+
+If terminal cleanup cannot be verified, `cleanup_blocked` reports an unverified
+outcome while the original supervisor retains admission and source custody.
+A holder's own exit can let cleanup finish, but does not turn that unverified
+outcome into a pass. This diagnostic adds no cancellation permission: unshared
+work still requires one of the documented adverse health flags below, or an
+explicit `--force` for known unwanted work. No process basename grants an
+exception or identifies a safe cleanup target.
+
 Health observations appear in `test:status` and existing queue notices. On macOS
 and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
