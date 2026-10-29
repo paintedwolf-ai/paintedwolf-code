@@ -150,6 +150,10 @@ func (g *gitGrep) operands(dir string) ([]grepSource, []string, int, error) {
 	}
 	before, after := g.p.command.beforeDash, g.p.command.afterDash
 	if len(patterns) == 0 {
+		if len(before) == 0 {
+			writeLine(g.stderr, "fatal: no pattern given")
+			return nil, nil, 128, nil
+		}
 		patterns, before = []string{before[0]}, before[1:]
 	}
 	var sources []grepSource
