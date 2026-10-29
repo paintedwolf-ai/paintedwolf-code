@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "The Linux sandbox package owns one command boundary across namespace, seccomp, notification and descriptor mediation. Focused reference retirement and performed connects share the supervisor lifetime; no second policy owner or native relay subsystem is added. Freeze this reviewed shape at 37 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available.",
+  "reason": "The Linux sandbox package owns one command boundary across namespace, seccomp, notification and descriptor mediation. Focused reference retirement and performed connects share the supervisor lifetime; no second policy owner or native relay subsystem is added. Freeze this reviewed shape at 37 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available. Delegated-daemon refusal is split into a separate dependent PR so the retained-object prerequisite lands first.",
   "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
   "ceiling": 37,
   "boundaries": {

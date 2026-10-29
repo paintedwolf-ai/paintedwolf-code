@@ -121,9 +121,6 @@ const SocketReferenceFD = 7
 type SocketGrant struct {
 	Path string `json:"path"`
 	FD   int    `json:"fd"`
-	// Delegated is set when the retained object is a delegated service's
-	// endpoint socket, however the grant named it.
-	Delegated DelegatedService `json:"delegated,omitempty"`
 }
 
 // DirectIPPermit narrows direct IP by transport and port.
@@ -229,9 +226,6 @@ func (p Plan) Validate() error {
 	for _, grant := range n.SocketGrants {
 		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
-		}
-		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {
-			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "unknown delegated service " + string(grant.Delegated)}
 		}
 		seenSockets[grant.Path], seenFDs[grant.FD] = true, true
 	}

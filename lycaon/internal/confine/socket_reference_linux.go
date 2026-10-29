@@ -45,25 +45,3 @@ func appendSocketCommandFiles(extra []*os.File, files []*os.File) ([]*os.File, e
 	}
 	return append(extra, files...), nil
 }
-
-// delegatedEndpoints are the endpoints whose sockets the plan marks delegated.
-var delegatedEndpoints = linuxsandbox.KnownDelegatedEndpoints()
-
-// socketPlan names each retained destination's descriptor and marks one whose
-// object is a delegated service's endpoint socket. The comparison reads the
-// retained object and the fixed endpoint; the grant's own name is never
-// looked up again.
-func socketPlan(grants []SocketGrant) []linuxsandbox.SocketGrant {
-	planned := make([]linuxsandbox.SocketGrant, 0, len(grants))
-	for i, grant := range grants {
-		next := linuxsandbox.SocketGrant{Path: grant.ResolvedPath, FD: linuxsandbox.SocketReferenceFD + i}
-		for _, endpoint := range delegatedEndpoints {
-			if grant.ResolvedPath == endpoint.Path || grant.Binding.MatchesPath(endpoint.Path) {
-				next.Delegated = endpoint.Service
-				break
-			}
-		}
-		planned = append(planned, next)
-	}
-	return planned
-}

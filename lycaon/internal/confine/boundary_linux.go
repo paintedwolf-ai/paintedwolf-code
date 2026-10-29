@@ -186,7 +186,9 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	for _, p := range c.DirectIPPermits {
 		n.DirectIPPermits = append(n.DirectIPPermits, linuxsandbox.DirectIPPermit{Protocol: p.Protocol, Port: p.Port})
 	}
-	n.SocketGrants = socketPlan(c.SocketGrants)
+	for i, g := range c.SocketGrants {
+		n.SocketGrants = append(n.SocketGrants, linuxsandbox.SocketGrant{Path: g.ResolvedPath, FD: linuxsandbox.SocketReferenceFD + i})
+	}
 	if c.Network == NetworkDirectIP {
 		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
 			n.Resolvers = linuxsandbox.HostResolvers(string(conf))

@@ -114,21 +114,8 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 	case !r.Stream && !r.Seqpacket:
 		return refuse("network-outbound", r.Unix)
 	}
-	path := filepath.Clean(r.Unix)
-	// A delegated service acts with its own authority, so no socket grant can
-	// stand in for host execution, whatever name reached its retained object.
-	for _, endpoint := range KnownDelegatedEndpoints() {
-		if endpoint.Path == path {
-			return refuse(OperationHostServiceDelegation, path)
-		}
-	}
 	for _, grant := range n.SocketGrants {
-		if grant.Path == path && grant.Delegated != "" {
-			return refuse(OperationHostServiceDelegation, path)
-		}
-	}
-	for _, grant := range n.SocketGrants {
-		if grant.Path == path {
+		if grant.Path == filepath.Clean(r.Unix) {
 			return Decision{Action: Perform, SocketFD: grant.FD}
 		}
 	}
@@ -243,31 +230,6 @@ func (n Network) directAllowed(stream bool, port uint16) bool {
 		}
 	}
 	return false
-}
-
-// DelegatedService is a host service that performs work with its own authority
-// outside any confined client.
-type DelegatedService string
-
-// DelegatedNixDaemon is the Nix daemon: builds, substitutions and remote
-// builders it runs belong to the daemon, not to the client that asked.
-const DelegatedNixDaemon DelegatedService = "nix_daemon"
-
-// OperationHostServiceDelegation reports a connect refused because its
-// destination is a delegated service; only explicit host execution reaches it.
-const OperationHostServiceDelegation = "host-service-delegation"
-
-// DelegatedEndpoint is a delegated service's standard operating-system endpoint.
-type DelegatedEndpoint struct {
-	Service DelegatedService `json:"service"`
-	Path    string           `json:"path"`
-}
-
-// KnownDelegatedEndpoints lists the endpoints the boundary refuses by name.
-// A grant whose retained object is one of these sockets arrives marked
-// Delegated, whatever name it was approved under.
-func KnownDelegatedEndpoints() []DelegatedEndpoint {
-	return []DelegatedEndpoint{{Service: DelegatedNixDaemon, Path: "/nix/var/nix/daemon-socket/socket"}}
 }
 
 func refuse(operation, target string) Decision {

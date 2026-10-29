@@ -170,12 +170,3 @@ func containsPath(list []string, want string) bool {
 	}
 	return false
 }
-
-// UseDelegatedEndpointsForTest stands a fixture socket in for a delegated
-// service endpoint, which tests cannot create at its operating-system path.
-func UseDelegatedEndpointsForTest(t *testing.T, endpoints []linuxsandbox.DelegatedEndpoint) {
-	t.Helper()
-	previous := delegatedEndpoints
-	delegatedEndpoints = endpoints
-	t.Cleanup(func() { delegatedEndpoints = previous })
-}
