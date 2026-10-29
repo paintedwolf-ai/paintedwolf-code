@@ -7,6 +7,7 @@ import (
 
 // ModelThinking is the resolved thinking treatment for one (provider, model).
 type ModelThinking struct {
+	EffortOff    string
 	Style        modelinfo.ThinkStyle
 	AlwaysOn     bool
 	DefaultOn    bool
@@ -22,6 +23,7 @@ func ResolveModelThinking(profile providerprofile.Profile, entry modelinfo.Entry
 	rule, ruleOK := modelinfo.MatchThinkingRule(model)
 	out := ModelThinking{
 		Style:        profile.Thinking,
+		EffortOff:    profile.ReasoningEffortOff,
 		AlwaysOn:     entry.ThinkingAlwaysOn || (ruleOK && rule.AlwaysOn),
 		DefaultOn:    ruleOK && rule.DefaultOn,
 		EffortLevels: rule.EffortLevels,
@@ -41,10 +43,18 @@ func ResolveModelThinking(profile providerprofile.Profile, entry modelinfo.Entry
 	if entry.ReasoningEffortLevels != (modelinfo.ReasoningEffortLevels{}) {
 		out.EffortLevels = entry.ReasoningEffortLevels
 	}
+	if out.EffortLevels.Off != "" {
+		out.EffortOff = out.EffortLevels.Off
+	} else if out.EffortOff == "" && declared != nil && declared.CanDisable && out.Style == modelinfo.ThinkStyleEffortLevels && out.EffortLevels == (modelinfo.ReasoningEffortLevels{}) {
+		out.EffortOff = providerprofile.OpenAIReasoningEffortOff
+	}
 	return out
 }
 
 func (thinking ModelThinking) EffortString(level ThinkLevel) (string, bool) {
+	if level == ThinkOff && !thinking.AlwaysOn && thinking.EffortLevels.Off != "" {
+		return thinking.EffortLevels.Off, true
+	}
 	if thinking.EffortLevels == (modelinfo.ReasoningEffortLevels{}) {
 		return level.EffortString()
 	}
@@ -88,7 +98,7 @@ func ResolveThinkingCapabilities(profile providerprofile.Profile, entry modelinf
 		if mt.Style == modelinfo.ThinkStyleEffortLevels {
 			out.CanEnable = false
 		}
-		if mt.Style == modelinfo.ThinkStyleEffortLevels && profile.ReasoningEffortOff == "" && profile.Thinking != modelinfo.ThinkStyleBooleanThink {
+		if mt.Style == modelinfo.ThinkStyleEffortLevels && mt.EffortOff == "" && profile.Thinking != modelinfo.ThinkStyleBooleanThink {
 			out.CanDisable = false
 		}
 	case modelinfo.ThinkStyleBudgetTokens:

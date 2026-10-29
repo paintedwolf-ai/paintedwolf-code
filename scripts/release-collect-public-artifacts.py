@@ -10,6 +10,7 @@ import shutil
 import sys
 
 from release_semver import parse
+from release_distribution_contract.platforms import detached_signatures, load_platforms
 
 
 def main() -> int:
@@ -22,17 +23,7 @@ def main() -> int:
     try:
         version = args.version
         parse(version)
-        catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
-        rows = catalog["platforms"]
-        if not isinstance(rows, list) or any(
-            not isinstance(row, dict)
-            or row.get("publication") not in {"public", "candidate"}
-            for row in rows
-        ):
-            raise ValueError("release platform catalog has an invalid publication state")
-        public = [row for row in rows if row.get("publication") == "public"]
-        if catalog.get("schema_version") != 2 or not public:
-            raise ValueError("release platform catalog has no public platform")
+        public = [row for row in load_platforms(args.catalog).values() if row["publication"] == "public"]
         if args.output.exists() and any(args.output.iterdir()):
             raise ValueError("public release artifact output must be empty")
         args.output.mkdir(parents=True, exist_ok=True)
@@ -43,11 +34,10 @@ def main() -> int:
             if not isinstance(extensions, list) or not extensions:
                 raise ValueError(f"public release platform {row['updater_key']} lists no package")
             names = [f"{stem}.{extension}{suffix}" for extension in extensions for suffix in ("", ".sha256")]
+            names += [f"{stem}.{extension}.sig" for extension in detached_signatures(row)]
             updater = row.get("updater_extension")
-            # A public platform updates through the signed updater artifact.
-            if not isinstance(updater, str) or not updater:
-                raise ValueError(f"public release platform {row['updater_key']} has no updater artifact")
-            names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]
+            if updater is not None:
+                names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]
             for name in dict.fromkeys(names):
                 source = args.input / name
                 if not source.is_file() or source.is_symlink():

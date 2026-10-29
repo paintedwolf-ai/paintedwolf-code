@@ -16,30 +16,22 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
-const recoveryUsage = `usage: pw credentials {where|custody|purge|move-to-service|move-to-app-password|verify-protection|git ...} [--yes]
+const recoveryUsage = `usage: pw credentials {where|custody|purge|verify-protection|git ...} [--yes]
 
 Inspect and reset every private credential namespace:
   where   name the backend holding each credential set
   custody   print, as JSON, who holds the vault identity
   purge   remove every stored credential; requires --yes
-  move-to-service   move an app-password-wrapped identity into the vault
-                    identity service; requires --yes
-  move-to-app-password   wrap the identity with a new app password and remove
-                         it from the vault identity service; requires --yes
   verify-protection   verify the native identity custodian using disposable identities
   git     list, store or remove Git HTTPS credentials the host serves
-
-Moves read the app password framed on stdin and run only as a child of the
-installed desktop app, which the vault identity service verifies.
 
 Purging is refused while an engine is running, because a running engine holds
 the decrypted identity and credential values in memory until it exits.
 
 Release builds keep all credential values in one age-encrypted vault. macOS
 keeps only the vault identity in Keychain; packaged Linux installs keep it in
-the vault identity service. Without that service, Linux and Windows wrap the
-identity with the app password. Development builds use a private local
-identity file.`
+the vault identity service. Other release platforms require a native credential
+custodian. Development builds use a private local identity file.`
 
 func runCredentials(args []string) error {
 	if len(args) == 0 {
@@ -62,9 +54,7 @@ func runCredentials(args []string) error {
 	if err != nil {
 		return err
 	}
-	if move, ok := custodyMoves[args[0]]; ok {
-		return moveCustody(args[0], args[1:], os.Stdin, os.Stdout, slots[0].Path, move)
-	}
+
 	switch args[0] {
 	case "where":
 		return describeCredentials(slots)

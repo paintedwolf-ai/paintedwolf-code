@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -132,7 +131,7 @@ func TestRequestedFrameRefreshesAfterRepositoryChange(t *testing.T) {
 	testutil.FailErr(t, "create file after frame", os.WriteFile(filepath.Join(root.Path, "new.txt"), []byte("source"), 0600))
 	view.catalog.InvalidateRoot(root.Path, "new.txt")
 	view.repositoryChanged(t.Context(), repochange.Event{ProjectDir: root.Path, Kind: repochange.WorktreeChanged, Paths: []string{"new.txt"}})
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		location, _, err := locateForTest(t, view, t.Context(), Address{Root: root.ID, Path: "new.txt"})
 		return err == nil && location.Visible
 	})
@@ -279,11 +278,7 @@ func TestRecursiveDisclosureKeepsCollapsedTreesClosed(t *testing.T) {
 	// command. A timeout reports what the catalog itself answers.
 	awaitBoundaries := func(want []string) {
 		t.Helper()
-		if testutil.WaitForNoFatal(10*time.Second, func() bool { return slices.Equal(derived(), want) }) {
-			return
-		}
-		boundaries, ready, err := view.catalog.Directories.CollapseBoundaries(t.Context(), view.scope.Project, root, ".")
-		t.Fatalf("view boundaries = %v, want %v; catalog answers %v (ready %v, err %v)", derived(), want, boundaries, ready, err)
+		testutil.WaitFor(t, func() bool { return slices.Equal(derived(), want) })
 	}
 
 	expandAll(".")
@@ -318,7 +313,7 @@ func TestRecursiveDisclosureKeepsCollapsedTreesClosed(t *testing.T) {
 // Boundaries converge even when the catalog finishes publishing before the
 // recursive rule is installed. Each round starts cold to race the first pass.
 func TestRecursiveDisclosureConvergesWhateverTheCatalogTiming(t *testing.T) {
-	for round := range 8 {
+	for range 8 {
 		view, root := viewFixture(t)
 		for _, rel := range []string{"src/keep.txt", "build/out.txt"} {
 			testutil.FailErr(t, "create fixture directory", os.MkdirAll(filepath.Dir(filepath.Join(root.Path, rel)), 0700))
@@ -326,15 +321,13 @@ func TestRecursiveDisclosureConvergesWhateverTheCatalogTiming(t *testing.T) {
 		}
 		testutil.FailErr(t, "expand all", view.Disclose(t.Context(), nil,
 			IntentEntry{Address: Address{Root: root.ID, Path: "."}, Disclosure: Disclosure{Open: true, Recursive: true}}))
-		converged := testutil.WaitForNoFatal(10*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			view.mu.Lock()
 			defer view.mu.Unlock()
 			derived := view.rules.Derived()
 			return len(derived) == 1 && derived[0].Path == "build"
 		})
-		if !converged {
-			t.Fatalf("round %d: the view never derived its boundary", round)
-		}
+
 	}
 }
 
