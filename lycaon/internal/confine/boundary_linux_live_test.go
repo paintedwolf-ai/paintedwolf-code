@@ -579,8 +579,7 @@ func confinedDescendant(t *testing.T, parent int, argument string) int {
 		for len(queue) > 0 {
 			pid := queue[0]
 			queue = queue[1:]
-			raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/task/%d/children", pid, pid))
-			for _, child := range strings.Fields(string(raw)) {
+			for _, child := range threadChildren(pid) {
 				id, err := strconv.Atoi(child)
 				if err != nil {
 					continue
@@ -597,6 +596,19 @@ func confinedDescendant(t *testing.T, parent int, argument string) int {
 		return false
 	})
 	return found
+}
+
+// threadChildren lists the children of every thread of pid. A child belongs
+// to the thread that forked it, and the helper forks from whichever thread
+// its locked goroutine runs on, which is rarely the main thread.
+func threadChildren(pid int) []string {
+	tasks, _ := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	var children []string
+	for _, task := range tasks {
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/task/%s/children", pid, task.Name()))
+		children = append(children, strings.Fields(string(raw))...)
+	}
+	return children
 }
 
 // terminalWatch accumulates what a terminal's main side reads.
