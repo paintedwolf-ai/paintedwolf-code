@@ -104,6 +104,10 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 	if !strings.HasSuffix(workflow.Concurrency.Group, draftGroup) {
 		t.Error("draft events must use a separate concurrency group so they cannot cancel ready verification")
 	}
+	const checkName = "${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}"
+	if workflow.Jobs["check"].Name != checkName {
+		t.Error("a skipped draft aggregate must not satisfy the ready pull request's required check")
+	}
 	refused := false
 	for _, step := range workflow.Jobs["check"].Steps {
 		refused = refused || strings.HasPrefix(step.Run, ciGateStep) &&
