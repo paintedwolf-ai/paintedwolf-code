@@ -4,9 +4,9 @@
   "kind": "test_suite",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Freeze this reviewed shape at 65 files; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
-  "ceiling": 65,
+  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. Freeze this reviewed shape at 66 files; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 66,
   "boundaries": {
     "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
     "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
@@ -18,5 +18,5 @@
     "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
     "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b"
   },
-  "reviewed_shape": "af956f2849d3b57a4d5ab4ab3377d9c8d76170a9978e2ed6bbf7b7b30f83691a"
+  "reviewed_shape": "682094111a26142ccaf381380c16c245ded5a73819f123c218cb42816030281d"
 }
