@@ -5,5 +5,5 @@ var effectPermitIdentitySource = Baseline{Revision: 6, Shape: "2294cfc726b056f71
 
 func EffectPermitIdentity(target Baseline) Step {
 	return Step{ID: "native-child-once-authority", Source: effectPermitIdentitySourceBytes,
-		Checksum: "3c3862c529179e69f83a21dbd3b6d6bdf89017b92ee37bf90aa09fa39e6b6d58", From: effectPermitIdentitySource, To: target, Apply: migrateEffectPermitIdentity}
+		Checksum: "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5", From: effectPermitIdentitySource, To: target, Apply: migrateEffectPermitIdentity}
 }
