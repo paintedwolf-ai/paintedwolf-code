@@ -21,7 +21,7 @@ import {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
 function deferred<T>() {
-  let resolve: (value: T) => void = () => { throw new Error("deferred promise is not initialized"); };
+  let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
