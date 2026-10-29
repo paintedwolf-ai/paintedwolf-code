@@ -153,12 +153,10 @@ func (g *gitGrep) operands(dir string) ([]grepSource, []string, int, error) {
 	case len(patterns) > 0:
 	case len(before) > 0:
 		patterns, before = []string{before[0]}, before[1:]
-	case len(after) > 0:
-		// Without -e, the first word after -- is still the pattern.
-		patterns, after = []string{after[0]}, after[1:]
 	default:
-		writeLine(g.stderr, "fatal: no pattern given")
-		return nil, nil, 128, nil
+		// Without -e, the first word after -- is still the pattern; the
+		// operand rule guarantees one exists.
+		patterns, after = []string{after[0]}, after[1:]
 	}
 	var sources []grepSource
 	var paths []string
