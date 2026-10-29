@@ -1,5 +1,6 @@
 """Native apt/dnf assembly and candidate retention sign only selected package identities."""
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -156,6 +157,13 @@ class NativeRepositoryAssemblyTests(unittest.TestCase):
         self.assertEqual(again["receipt"]["version"], "1.2.2")
         self.assertIn(again["replacement"], {restore["replacement"], restore["restores"]})
         self.assertTrue(again["resign"])
+        # Any other retained generation naming 1.2.2 is a real ambiguity.
+        other = {**restore["retained"], "source_commit": "e" * 40}
+        origin.objects[f"{PREFIX}/generations/{hashlib.sha256(encoded(other)).hexdigest()}/generation.json"] = encoded(other)
+        with self.assertRaises(repository_withdrawal.MissingRetainedGeneration) as failure:
+            repository_withdrawal.prepare(halt_distribution("1.2.4", "1.2.2", channels=("preview",)),
+                                          base_url=ORIGIN, transport=origin, **options)
+        self.assertEqual(failure.exception.reason["code"], "NATIVE_REPLACEMENT_AMBIGUOUS")
 
     def test_signed_generations_admit_and_retain_post_signing_package_identity(self):
         for family in ["deb", "rpm"]:
