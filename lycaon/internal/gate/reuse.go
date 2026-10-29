@@ -109,6 +109,13 @@ func (d *Decision) OnlyDirectIPChannel() bool {
 // OffersQuiet reports whether a decision's reasons may be quieted. A change
 // to agent policy is covered only by a lease naming its subject.
 func (d *Decision) OffersQuiet() bool {
+	if d != nil {
+		for _, cited := range d.Cited {
+			if cited.Key == "secret.issuer_unverified" {
+				return false
+			}
+		}
+	}
 	return !slices.Contains(d.Gates(), api.GateAgentPolicyChange)
 }
 

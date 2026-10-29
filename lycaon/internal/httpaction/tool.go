@@ -3,6 +3,7 @@ package httpaction
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	"context"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -84,9 +86,10 @@ type requestSpec struct {
 	redirects     string
 	disposition   responseDisposition
 	contest       string
-	// unixSocket is the argument as stated; socket is the reviewed path dialed.
+	// unixSocket is the argument; socket labels the retained destination in receipts.
 	unixSocket    string
 	socket        string
+	socketBinding socketref.Binding
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
@@ -128,6 +131,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 				return "", reject
 			}
 			spec.socket = grant.ResolvedPath
+			spec.socketBinding = grant.Binding
 		}
 		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
@@ -137,7 +141,17 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		if err != nil {
 			return "", err
 		}
-		// Stored cookies are attached after screening and scoped to their origin.
+		cookieSpec := spec
+		cookieSpec.target, err = outboundhttp.NormalizeURL(screened.url)
+		if err != nil {
+			return "", invalid(err)
+		}
+		cookieSpec.hostHeader = screened.hostHeader
+		screened.beforeCookieHop, err = prepareCookieDelivery(ctx, deps, cookieSpec, jar)
+		if err != nil {
+			return "", err
+		}
+		// Stored cookies and references use the same reviewed delivery view.
 		outbound, reject := resolveCookieReferences(screened, jar, spec.target)
 		if reject != nil {
 			return "", reject
@@ -163,6 +177,9 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
+			if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
+				return "", capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
+			}
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
 		}
 		if bufferedBody != nil {
@@ -295,16 +312,23 @@ func send(
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket: spec.socket,
-		HostHeader: outbound.hostHeader,
-		Resolve:    spec.resolve,
+		UnixSocket:    spec.socket,
+		SocketBinding: spec.socketBinding,
+		HostHeader:    outbound.hostHeader,
+		Resolve:       spec.resolve,
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
-	if spec.socket == "" {
-		req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
-			return egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method)
+	req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
+		if spec.socket == "" {
+			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
+				return err
+			}
 		}
+		if outbound.beforeCookieHop != nil {
+			return outbound.beforeCookieHop(hopCtx, hopURL)
+		}
+		return nil
 	}
 	if jar != nil {
 		req.Jar = jar.Store

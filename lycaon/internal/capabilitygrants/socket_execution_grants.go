@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -61,7 +62,7 @@ func socketChatGrantAuthority(
 	for _, socket := range grants {
 		targets = append(targets, hitl.ApprovalSocketTarget{
 			ApprovedPath: socket.ApprovedPath,
-			ResolvedPath: socket.ResolvedPath,
+			ResolvedPath: socket.ResolvedPath, Binding: socket.Binding,
 		})
 	}
 	return []hitl.ApprovalAuthorityDelta{{
@@ -118,6 +119,7 @@ func socketProjectAuthorities(
 			hitl.ApprovalGrantCategorySocketPath,
 			socket.ApprovedPath,
 			socket.ResolvedPath,
+			socket.Binding.Key(),
 			action.Scope.ProjectID,
 			action.Scope.ProjectDir,
 		}, "\x00")))
@@ -136,8 +138,8 @@ func socketProjectAuthorities(
 			ReaskWhen:    offer.ReaskWhen,
 			Witness:      offer.Grant.Witness,
 			ApprovedPath: socket.ApprovedPath,
-			ResolvedPath: socket.ResolvedPath,
-			Source:       "checkpoint",
+			ResolvedPath: socket.ResolvedPath, Binding: socket.Binding,
+			Source: "checkpoint",
 		}
 		authority = append(authority, hitl.ApprovalAuthorityDelta{
 			Kind: hitl.AuthorityGenericGrant, Grant: &grant, TTLSeconds: offer.TTLSeconds,
@@ -148,6 +150,13 @@ func socketProjectAuthorities(
 
 func socketChatGrantOffer(action hitl.ProposedAction, grants []confine.SocketGrant) hitl.ApprovalGrantOffer {
 	now := time.Now().UTC()
+	reask := "the socket path or confinement changes"
+	for _, grant := range grants {
+		if grant.Binding.Mode() == socketref.RetainedObject {
+			reask = "the service restarts, the engine restarts, or the socket path or confinement changes"
+			break
+		}
+	}
 	domainGrant := hitl.ApprovalGrant{
 		Scope:         hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategorySocketCapability, Pattern: confine.SocketPathsDigest(grants)},
@@ -158,7 +167,7 @@ func socketChatGrantOffer(action hitl.ProposedAction, grants []confine.SocketGra
 		Coverage:      "connections to this exact local-service set",
 		GrantedAt:     now,
 		ExpiresWhen:   hitl.ExpiresWhenChatDeleted,
-		ReaskWhen:     "the socket path, symlink target, or confinement changes",
+		ReaskWhen:     reask,
 		Witness:       hitl.BoundaryWitness(action.Execution.Contained),
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
@@ -185,13 +194,13 @@ func SocketSetCoalesceKey(action hitl.ProposedAction, grants []confine.SocketGra
 
 func SocketGrantPairKey(g confine.SocketGrant) string {
 	g = NormalizeToolSocketGrant(g)
-	return g.ApprovedPath + "\x00" + g.ResolvedPath
+	return g.ApprovedPath + "\x00" + g.ResolvedPath + "\x00" + g.Binding.Key()
 }
 
 func NormalizeToolSocketGrant(g confine.SocketGrant) confine.SocketGrant {
 	return confine.SocketGrant{
 		ApprovedPath: strings.TrimSpace(g.ApprovedPath),
-		ResolvedPath: strings.TrimSpace(g.ResolvedPath),
+		ResolvedPath: strings.TrimSpace(g.ResolvedPath), Binding: g.Binding,
 	}
 }
 

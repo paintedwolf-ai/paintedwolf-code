@@ -2,6 +2,7 @@ package hitl
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"strings"
 	"time"
 
@@ -113,9 +114,11 @@ type ApprovalGrant struct {
 	// GrantedPath is the filesystem access carried by the lease.
 	GrantedPath *GrantedPathDelta `json:"granted_path,omitempty"`
 	// Socket fields retain the approved and resolved targets.
-	ApprovedPath string `json:"approved_path,omitempty"`
-	ResolvedPath string `json:"resolved_path,omitempty"`
-	Source       string `json:"source,omitempty"`
+	ApprovedPath string            `json:"approved_path,omitempty"`
+	ResolvedPath string            `json:"resolved_path,omitempty"`
+	Unavailable  bool              `json:"-"`
+	Binding      socketref.Binding `json:"socket_binding,omitempty,omitzero" yaml:"socket_binding,omitempty"`
+	Source       string            `json:"source,omitempty"`
 	// GrantedByPersonID and GrantedByPolicy name whoever approved the grant:
 	// exactly one is set once the grant is installed.
 	GrantedByPersonID string                      `json:"granted_by_person_id,omitempty"`
@@ -139,6 +142,11 @@ func (g ApprovalGrant) TimeBounded() bool {
 
 // ValidateDurableIdentity requires project_id on a project-scoped grant.
 func (g ApprovalGrant) ValidateDurableIdentity() error {
+	if g.Predicate.Category == ApprovalGrantCategorySocketPath {
+		if err := g.Binding.ValidateShape(); err != nil {
+			return err
+		}
+	}
 	if err := ValidateElevatedEffects(g.ElevatedEffects); err != nil {
 		return err
 	}

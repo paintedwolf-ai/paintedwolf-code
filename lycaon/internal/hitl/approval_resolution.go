@@ -21,6 +21,10 @@ type approvalAuthorityRecovery interface {
 	RollbackApprovalOption(ctx context.Context, checkpointID string, option ApprovalOption) error
 }
 
+type unavailableSocketIntentRestorer interface {
+	RestoreUnavailableSocketIntent(context.Context, ChatGrant) error
+}
+
 // SetApprovalAuthorityInstaller wires the one authority mutation boundary.
 func (m *ApprovalAuthority) SetApprovalAuthorityInstaller(installer ApprovalAuthorityInstaller) {
 	if m != nil {
@@ -144,6 +148,13 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if option.Disabled {
 		return nil, ErrApprovalOptionUnavailable
 	}
+	// Restored approval history cannot reconstruct a lost live capability.
+	owners, err := acquireApprovalSocketOwners(&ApprovalPlan{Options: []ApprovalOption{option}})
+	if err != nil {
+		return nil, err
+	}
+	defer closeApprovalSocketOwners(owners)
+
 	if m.authorityInstaller == nil {
 		return nil, fmt.Errorf("approval authority installer is not configured")
 	}

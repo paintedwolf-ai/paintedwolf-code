@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/socketref"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -76,6 +77,14 @@ func (s *Grants) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Reques
 		s.writeSocketResolveError(w, err)
 		return
 	}
+	ctx, references := socketref.WithScope(r.Context())
+	defer references.Close()
+	resolved, err = confine.CaptureSocketGrant(ctx, resolved)
+	if err != nil {
+		s.writeSocketResolveError(w, err)
+		return
+	}
+
 	projectID := strings.TrimSpace(req.ProjectID)
 	var projectDir string
 	if projectID != "" && s.Projects != nil {
@@ -109,7 +118,7 @@ func (s *Grants) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Reques
 	id := hitl.ApprovalGrantID(
 		hitl.ApprovalGrantScope(req.Scope),
 		string(settings.ApprovalCategorySocketPath),
-		resolved.ApprovedPath+"\x00"+resolved.ResolvedPath,
+		resolved.ApprovedPath+"\x00"+resolved.ResolvedPath+"\x00"+resolved.Binding.Key(),
 		"",
 		projectID,
 		witness,
@@ -120,21 +129,21 @@ func (s *Grants) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Reques
 		title = "Allow local service for this project"
 	}
 	persisted := settings.ApprovalGrant{
-		ID:                id,
-		Scope:             hitl.ApprovalGrantScope(req.Scope),
-		Category:          settings.ApprovalCategorySocketPath,
-		Pattern:           resolved.ApprovedPath,
-		ProjectID:         projectID,
-		ProjectDir:        projectDir,
-		Title:             title,
-		Coverage:          "connect to `" + resolved.ApprovedPath + "`",
-		GrantedAt:         now,
-		ExpiresAt:         expiresAt,
-		ExpiresWhen:       expiresWhen,
-		ReaskWhen:         "the socket target, project, or confinement changes",
-		Witness:           witness,
-		ApprovedPath:      resolved.ApprovedPath,
-		ResolvedPath:      resolved.ResolvedPath,
+		ID:           id,
+		Scope:        hitl.ApprovalGrantScope(req.Scope),
+		Category:     settings.ApprovalCategorySocketPath,
+		Pattern:      resolved.ApprovedPath,
+		ProjectID:    projectID,
+		ProjectDir:   projectDir,
+		Title:        title,
+		Coverage:     "connect to `" + resolved.ApprovedPath + "`",
+		GrantedAt:    now,
+		ExpiresAt:    expiresAt,
+		ExpiresWhen:  expiresWhen,
+		ReaskWhen:    "the socket target, project, or confinement changes",
+		Witness:      witness,
+		ApprovedPath: resolved.ApprovedPath,
+		ResolvedPath: resolved.ResolvedPath, Binding: resolved.Binding,
 		Source:            "settings",
 		GrantedByPersonID: requestscope.Caller(r).ID,
 	}

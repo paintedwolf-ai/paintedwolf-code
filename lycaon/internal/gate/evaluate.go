@@ -65,6 +65,9 @@ func (d *Decision) Reuse() Reuse {
 	}
 	out := Reuse{Shape: ReusePredicate, Scope: ScopeDevice, DayCarrier: ScopeDevice}
 	for _, cited := range d.Cited {
+		if cited.Key == "secret.issuer_unverified" {
+			return Reuse{}
+		}
 		if cited.Key == "boundary.execution" {
 			out = Reuse{Shape: ReusePredicate, Scope: ScopeChat, DayCarrier: ScopeChat}
 		}
@@ -476,7 +479,7 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	if f.Payload == nil {
 		return false, nil, ""
 	}
-	if !f.Payload.Held {
+	if !f.Payload.Held && !f.Payload.IssuerUnverified {
 		if f.Payload.Source == SecretSourcePublicInbound && f.Payload.Surface != "visual_perception" {
 			return false, nil, ""
 		}
@@ -488,6 +491,9 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 		fact("secret.rule", firstNonEmpty(f.Payload.RuleTitle, f.Payload.RuleID), "payload_lens"),
 		fact("secret.surface", f.Payload.Surface, "payload_lens"),
 		fact("secret.source", secretSourceValue(f.Payload.Source), "payload_provenance"),
+	}
+	if f.Payload.IssuerUnverified {
+		cited = append(cited, fact("secret.issuer_unverified", "true", "managed_response"))
 	}
 	if f.Payload.SourceKind != "" {
 		cited = append(cited, fact("secret.source_kind", f.Payload.SourceKind, "payload_provenance"))
@@ -551,17 +557,18 @@ func unobservedChannel(f Facts) (bool, []Fact, string) {
 			fact("boundary.visibility", "neither writes nor destinations are observed", "confine"),
 		}, "unconfined"
 	}
-	if f.Leased {
+	if f.Leased && f.Containment.SocketCount == 0 {
 		return false, nil, ""
 	}
 	switch {
-	case f.Containment.DirectIP:
+	case f.Containment.DirectIP && !f.Leased:
 		return true, []Fact{
 			fact("boundary.egress", EgressDirectIP, "confine"),
 			fact("boundary.visibility", "destinations are not observed", "confine"),
 		}, "direct_ip"
 	case f.Containment.SocketCount > 0:
-		// Quieting is scoped to the reviewed socket set.
+		// The producer subtracts bound socket authority. An action lease cannot
+		// authorize a newly captured local-service object.
 		return true, []Fact{
 			fact("boundary.sockets", strconv.Itoa(f.Containment.SocketCount), "confine"),
 			fact("boundary.visibility", "effects inside the service are not observed", "confine"),

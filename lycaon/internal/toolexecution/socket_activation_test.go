@@ -9,11 +9,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestSavedSocketAuthorityRequiresInvocationDeclaration(t *testing.T) {
+	ctx := socketInvocationContext(t)
 	dir := shortTempDir(t)
 	paths := []string{filepath.Join(dir, "one.sock"), filepath.Join(dir, "two.sock")}
 	for _, path := range paths {
@@ -22,6 +24,11 @@ func TestSavedSocketAuthorityRequiresInvocationDeclaration(t *testing.T) {
 	grants, reject := capabilityrequest.ResolveCapabilitySockets(&capabilityrequest.CapabilityRequest{SocketPaths: paths})
 	if reject != nil {
 		t.Fatalf("resolve fixture sockets: %v", reject)
+	}
+	if socketref.Platform().Command == socketref.RetainedObject {
+		for i := range grants {
+			grants[i] = retainedTestSocket(t, grants[i])
+		}
 	}
 	rt := &memorySocketRuntime{task: grants[:1]}
 	executor := func() *Executor {
@@ -38,14 +45,14 @@ func TestSavedSocketAuthorityRequiresInvocationDeclaration(t *testing.T) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
 			ActiveRootID: "root"},
 	}
-	result, err := executor.Capabilities.preflightSocketCapability(t.Context(), "command", map[string]any{"command": "pwd"}, tc)
+	result, err := executor.Capabilities.preflightSocketCapability(ctx, "command", map[string]any{"command": "pwd"}, tc)
 	testutil.FailErr(t, "preflight unrelated command", err)
 	if result != nil {
 		t.Fatalf("unrelated command inherited sockets: %+v", result)
 	}
 	for _, path := range paths {
 		args := map[string]any{"command": "client", "capability_request": map[string]any{"socket_paths": []any{path}}}
-		result, err = executor.Capabilities.preflightSocketCapability(t.Context(), "command", args, tc)
+		result, err = executor.Capabilities.preflightSocketCapability(ctx, "command", args, tc)
 		testutil.FailErr(t, "reuse declared socket", err)
 		if result == nil || len(result.SocketGrants) != 1 || result.SocketGrants[0].ApprovedPath != path {
 			t.Fatalf("declaring %s activated the wrong sockets: %+v", path, result)

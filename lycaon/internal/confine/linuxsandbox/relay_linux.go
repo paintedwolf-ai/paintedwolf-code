@@ -68,7 +68,15 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	if refusals != nil {
 		lines = refusals
 	}
-	sup := newSupervisor(control, network, lines)
+	sup, err := newSupervisor(control, network, lines)
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = reportWrite.Close()
+		_ = control.Close()
+		_ = controlChild.Close()
+		return 0, 0, err
+	}
 	defer sup.close()
 	// A nil marker leaves its descriptor closed in the child.
 	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}

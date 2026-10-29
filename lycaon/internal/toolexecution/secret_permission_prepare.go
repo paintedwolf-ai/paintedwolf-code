@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -49,6 +50,22 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 		local = argvSecretRecipientsLocal(ctx)
 	case declared == toolcontract.SecretSurfaceHTTPRequest:
 		included = func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) }
+		if raw, _ := args[tc.Invocation.Contract.SocketArg].(string); raw != "" && tc.Invocation.Contract.SocketArg != "" {
+			requested := tools.SocketArgPath(tc, raw)
+			for _, grant := range tc.Socket.SocketGrants {
+				if grant.ApprovedPath == requested && grant.Binding.Mode() == socketref.RetainedObject {
+					destination, label = secretmatch.UnixDestination(grant.ResolvedPath, grant.Binding.Key())
+					local = true
+					break
+				}
+			}
+			// Before socket preflight captures the recipient, defer to its composed
+			// card or the final request screen; the URL origin grants no socket release.
+			if destination == "" {
+				return nil, nil
+			}
+			break
+		}
 		address, _ := args["url"].(string)
 		target, err := outboundhttp.NormalizeURL(address)
 		if err != nil {

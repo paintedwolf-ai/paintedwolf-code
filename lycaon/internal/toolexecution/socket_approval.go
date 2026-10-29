@@ -45,9 +45,9 @@ func (e *Capabilities) awaitSocketCapabilities(
 	authorityTargets := make([]hitl.ApprovalSocketTarget, 0, len(grants))
 	for _, grant := range grants {
 		_, alreadyChat := chatByPair[capabilitygrants.SocketGrantPairKey(grant)]
-		targets = append(targets, hitl.SocketCapabilityTarget{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, AlreadyChatGranted: alreadyChat})
+		targets = append(targets, hitl.SocketCapabilityTarget{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding, AlreadyChatGranted: alreadyChat})
 		approvalTargets = append(approvalTargets, hitl.ApprovalTarget{Kind: "socket", Label: grant.ApprovedPath, Details: map[string]any{"approved_path": grant.ApprovedPath, "resolved_path": grant.ResolvedPath}})
-		authorityTargets = append(authorityTargets, hitl.ApprovalSocketTarget{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath})
+		authorityTargets = append(authorityTargets, hitl.ApprovalSocketTarget{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding})
 	}
 	socketPayload := &hitl.SocketCapability{
 		Targets:            targets,
@@ -97,7 +97,9 @@ func (e *Capabilities) awaitSocketCapabilities(
 	if err != nil {
 		return toolrejection.ApprovalPlanInvalid()
 	}
-	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Invocation.Tool, action.Invocation.Args, tc)
+	permissionContext := tc
+	permissionContext.Socket.SocketGrants = append([]confine.SocketGrant(nil), grants...)
+	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Invocation.Tool, action.Invocation.Args, permissionContext)
 	if err != nil {
 		return err
 	}
