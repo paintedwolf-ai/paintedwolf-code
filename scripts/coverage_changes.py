@@ -116,6 +116,19 @@ def go_test_importers(packages, targets, tiers):
             and (path in reached or info["test_imports"] & reached)}
 
 
+def go_linked(packages, tested):
+    """The packages the tested packages' test binaries link: themselves, their test imports and
+    every production import below those. go test warns about, and the digest refuses, a coverage
+    pattern no tested package depends on."""
+    reached, frontier = set(), set(tested)
+    for path in tested:
+        frontier |= packages.get(path, {}).get("test_imports", set())
+    while frontier:
+        reached |= frontier
+        frontier = {dep for path in frontier for dep in packages.get(path, {}).get("imports", set())} - reached
+    return reached
+
+
 def go_changed_files(scope):
     out = []
     for path in scope.paths:
@@ -243,14 +256,15 @@ def run_go(scope):
     # Packages are measured by their own tests first; one that falls short is
     # measured again with the short test binaries that transitively reach it.
     own = {package for package in touched if packages[package]["tested"]}
-    blocks = measure_go("changes-go", touched, own, module) if own else {}
+    blocks = measure_go("changes-go", set(touched) & go_linked(packages, own), own, module) if own else {}
     if blocks is None:
         return [Finding("error", "go", "tests failed, so changed coverage was not measured; fix the tests above")], True, measured
     units = go_units(touched, blocks, lines, module)
     short = {p for p, unit in units.items() if unit.uncovered > floor["grace"] and unit.percent() < floor["percent"]}
     short |= set(touched) - own
     if short and importers(short):
-        wider = measure_go("changes-go-importers", short, (own & short) | importers(short), module)
+        wider_tested = (own & short) | importers(short)
+        wider = measure_go("changes-go-importers", short & go_linked(packages, wider_tested), wider_tested, module)
         if wider is None:
             return [Finding("error", "go", "tests failed, so changed coverage was not measured; fix the tests above")], True, measured
         blocks = merge_go_blocks(blocks, wider)

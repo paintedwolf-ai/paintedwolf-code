@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -172,6 +173,38 @@ class ChangedCoverageTests(unittest.TestCase):
                                "example.com/m/internal/a/a.go:7.1,7.9 1 0\n")
             blocks = coverage_changes.read_go_profile(profile, "example.com/m")
         self.assertEqual(sorted(blocks["lycaon/internal/a/a.go"]), [("3.10", "5.2", 2, True), ("7.1", "7.9", 1, False)])
+
+    def test_go_measurements_name_only_packages_the_selected_tests_link(self):
+        packages = {
+            "m/a": {"dir": "lycaon/a", "imports": {"m/p"}, "test_imports": {"m/t"}, "tested": True},
+            "m/p": {"dir": "lycaon/p", "imports": set(), "test_imports": set(), "tested": False},
+            "m/t": {"dir": "lycaon/t", "imports": {"m/u"}, "test_imports": set(), "tested": False},
+            "m/u": {"dir": "lycaon/u", "imports": set(), "test_imports": set(), "tested": False},
+            "m/q": {"dir": "lycaon/q", "imports": set(), "test_imports": set(), "tested": False},
+            "m/b": {"dir": "lycaon/b", "imports": {"m/q"}, "test_imports": set(), "tested": True},
+        }
+        self.assertEqual(coverage_changes.go_linked(packages, {"m/a"}), {"m/a", "m/p", "m/t", "m/u"})
+        self.assertEqual(coverage_changes.go_linked(packages, set()), set())
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        for name in ("a", "p", "q"):
+            (root / "lycaon" / name).mkdir(parents=True)
+            (root / "lycaon" / name / f"{name}.go").write_text("package x\n\nfunc F() {}\n")
+        scope = change_report.Scope("main", "main", ["lycaon/a/a.go", "lycaon/p/p.go", "lycaon/q/q.go"])
+        with patch.object(coverage_changes, "ROOT", root), \
+                patch.object(coverage_changes, "go_packages", return_value=packages), \
+                patch.object(coverage_changes, "module_path", return_value="m"), \
+                patch.object(coverage_changes, "exempt_packages", return_value=[]), \
+                patch.object(coverage_changes.verification_plan, "catalog",
+                             return_value={"go": {"test:short": {"exclude": "^$"}}}), \
+                patch.object(coverage_changes.change_report, "changed_lines", return_value={}), \
+                patch.object(coverage_changes, "measure_go", return_value={}) as measure:
+            coverage_changes.run_go(scope)
+        runs = {call.args[0]: (set(call.args[1]), set(call.args[2])) for call in measure.call_args_list}
+        # The own pass links a's binary: a, its imports and its test imports, never the unreached q.
+        self.assertEqual(runs["changes-go"], ({"m/a", "m/p"}, {"m/a"}))
+        # The untested packages are measured again through the binaries that reach them.
+        self.assertEqual(runs["changes-go-importers"], ({"m/p", "m/q"}, {"m/a", "m/b"}))
 
     def test_go_run_collects_child_counters_and_runs_uncached(self):
         with tempfile.TemporaryDirectory() as directory:

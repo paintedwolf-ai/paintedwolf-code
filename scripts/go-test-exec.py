@@ -20,6 +20,7 @@ from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E4
 from ci_policy.quarantine import arguments as quarantine_arguments  # noqa: E402
 
 CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
+               "PW_TEST_RACE",
                "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT", "PW_TEST_STAGE_ID",
                "PW_TEST_BATCH_DIRECTORY")
 # A test that leaks a process holding its output open cannot delay the package's outcome for long.
@@ -134,7 +135,8 @@ def main():
     package = context.package(os.getcwd())
     arguments = quarantine_arguments(package, arguments, environment.get("PW_QUARANTINE_OBSERVE") == "1")
     store = Path(environment["PW_TEST_REUSE_STORE"]) if environment.get("PW_TEST_REUSE_STORE") else None
-    environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package))
+    race = environment.get("PW_TEST_RACE") == "1"
+    environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package, race))
     key = reuse.result_key(arguments, package, environment) if store and reuse.fork_observable() else None
     started = time.monotonic()
     if key:
@@ -150,7 +152,7 @@ def main():
         log = Path(environment["PW_TEST_SCRATCH_ROOT"]) / "test-logs" / f"{os.getpid()}.log"
         log.parent.mkdir(exist_ok=True)
         arguments = [f"-test.testlogfile={log}", *arguments]
-    limit = budget(package)
+    limit = budget(package, race)
     status, output, forked, resource_limit = execute(binary, arguments, runtime_environment(child_environment, limit),
                                                      reuse.fork_observable(), limit)
     elapsed = time.monotonic() - started

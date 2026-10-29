@@ -10,6 +10,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from ci_policy import resources
 import verification_reuse as reuse
 from verification_execute import StageEvents
 
@@ -216,11 +217,12 @@ printf '=== RUN   TestFixture\\n'
 if [ "$FIXTURE_MODE" = fork ]; then /usr/bin/true; fi
 if [ "$FIXTURE_MODE" = fail ]; then printf -- '--- FAIL: TestFixture (0.00s)\\nFAIL\\n'; exit 1; fi
 printf -- '--- PASS: TestFixture (0.00s)\\nPASS %s\\n' "$value"
+printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
 ''')
         self.binary.chmod(0o755)
 
-    def run_wrapper(self, mode="pass"):
-        env = {"PATH": os.environ["PATH"], "FIXTURE_MODE": mode, "PW_TEST_STAGE_EVENTS": str(self.events),
+    def run_wrapper(self, mode="pass", **extra):
+        env = {"PATH": os.environ["PATH"], "FIXTURE_MODE": mode, "PW_TEST_STAGE_EVENTS": str(self.events), **extra,
                "PW_TEST_REUSE_STORE": str(self.root / "store"), "PW_TEST_SCRATCH_ROOT": str(self.scratch),
                "PW_TEST_SOURCE_ROOT": str(self.root / "source"), "PW_TEST_MODULE_ROOT": str(self.module),
                "PW_TEST_BATCH_DIRECTORY": str(self.root / f"batch-{mode}"), "PW_TEST_STAGE_ID": "stage-001",
@@ -236,6 +238,14 @@ printf -- '--- PASS: TestFixture (0.00s)\\nPASS %s\\n' "$value"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(b"PASS one", result.stdout)
         self.assertFalse(self.events.exists())
+
+    def test_a_race_build_gets_a_scaled_memory_ceiling_the_binary_never_sees(self):
+        ceiling = resources.budget("fixture/pkg")
+        result, _ = self.run_wrapper()
+        self.assertIn(f"GOMEMLIMIT {ceiling * 80 // 100} RACE unset".encode(), result.stdout)
+        result, _ = self.run_wrapper(PW_TEST_RACE="1")
+        self.assertEqual(resources.budget("fixture/pkg", race=True), int(ceiling * 1.5))
+        self.assertIn(f"GOMEMLIMIT {int(ceiling * 1.5) * 80 // 100} RACE unset".encode(), result.stdout)
 
     def test_failures_are_reported_as_they_happen_with_their_output(self):
         result, event = self.run_wrapper("fail")

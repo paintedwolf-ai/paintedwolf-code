@@ -8,12 +8,17 @@ POLICY = Path(__file__).with_name('resources.json')
 SOFT_LIMIT_PERCENT = 80
 
 
-def budget(package):
+def budget(package, race=False):
+    """The package's ceiling in bytes; a race build gets the declared multiple of it, since the
+    detector's shadow memory and instrumented heap are overhead, not retained test state."""
     policy = json.loads(POLICY.read_text())
     value = policy['packages'].get(package, policy['default'])
     if type(value.get('rss_mib')) is not int or value['rss_mib'] < 64:
         raise ValueError('package RSS budget must be an integer of at least 64 MiB')
-    return value['rss_mib'] * 1024 * 1024
+    scale = policy['race_scale'] if race else 1
+    if type(scale) not in (int, float) or not 1 <= scale <= 4:
+        raise ValueError('race_scale must be a number between 1 and 4')
+    return int(value['rss_mib'] * 1024 * 1024 * scale)
 
 
 def runtime_environment(environment, limit):
