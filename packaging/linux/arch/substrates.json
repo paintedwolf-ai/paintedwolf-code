@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "x86_64": {
+    "distribution": "Arch Linux",
+    "platform": "linux/amd64",
+    "image": "archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1"
+  },
+  "aarch64": {
+    "distribution": "Arch Linux ARM",
+    "platform": "linux/arm64",
+    "rootfs_url": "http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz",
+    "rootfs_sha256": "42a4eeaa038994ffd31fa173256ef2f0ef511358eeb41b9ea1f8626391b9b319",
+    "signature_url": "http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz.sig",
+    "key_file": "archlinuxarm-build-key.asc",
+    "key_fingerprint": "68B3537F39A313B3E574D06777193F152BDBE6A6",
+    "rootfs_signed_date": "2026-08-05",
+    "producer": "https://archlinuxarm.org/about/downloads",
+    "signature_file": "archlinuxarm-rootfs-20260805.sig"
+  }
+}

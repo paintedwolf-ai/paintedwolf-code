@@ -99,6 +99,9 @@ func (t *CodeRewriteTool) runSingleApply(ctx context.Context, tctx tools.ToolCon
 			if os.IsNotExist(err) {
 				return "", sourceview.PathNotFound("code_rewrite", path, fullPath)
 			}
+			if toolrejection.AsToolReject(err) != nil {
+				return "", err
+			}
 			return "", fmt.Errorf("read failed: %w", err)
 		}
 		res, err := structrewrite.Run(ctx, structrewrite.Request{

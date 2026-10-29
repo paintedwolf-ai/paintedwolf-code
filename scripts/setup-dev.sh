@@ -5,7 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
 if [[ "${1:-}" == "--ci-inputs" ]]; then
-  exec bash "$ROOT/scripts/ci_policy/provision.sh"
+  shift
+  exec bash "$ROOT/scripts/ci_policy/provision.sh" "$@"
 fi
 
 if [[ "${1:-}" == "--frontend" ]]; then
@@ -144,7 +145,7 @@ echo "  • Plan handoff: ./task check-fast once; closeouts: ./task check once"
 echo "  • In this repo: ./task, or bare task when you already use direnv"
 echo "  • Credentials: development builds use an encrypted vault plus a private"
 echo "    development identity file. Release macOS builds keep that identity in"
-echo "    Keychain; Linux and Windows use the app password."
+echo "    Keychain; packaged Linux builds use the protected identity service."
 echo ""
 if command -v direnv >/dev/null 2>&1; then
 	direnv exec "${ROOT}" task --version

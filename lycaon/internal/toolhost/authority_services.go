@@ -191,7 +191,7 @@ func (r *AuthorityServices) ApplyGuidanceRejects(formatter *guidance.StaticRejec
 	}
 	r.rejectFmt = formatter
 	approvalPolicy := toolexecution.NewApprovalPolicyEngine(r.profilePolicy, r.approvalGate)
-	r.metadata.SetPolicy(approvalPolicy)
+	r.metadata.SetPolicy(toolprofiles.NewGuidanceRejectPolicy(approvalPolicy))
 	r.rejections.SetRejectFormatter(formatter)
 }
 

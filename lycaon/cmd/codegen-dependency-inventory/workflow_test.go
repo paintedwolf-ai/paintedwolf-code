@@ -14,9 +14,6 @@ import (
 
 const inventoryCheck = "codegen:dependency-inventory:check"
 
-// Feature changes never regenerate dependency evidence: a scheduled workflow
-// refreshes the inventory and proposes it as its own pull request, so no gate
-// requires the inventory to match upstream.
 func TestInventoryIsMaintainedOnSchedule(t *testing.T) {
 	t.Parallel()
 	repo := filepath.Join("..", "..", "..")

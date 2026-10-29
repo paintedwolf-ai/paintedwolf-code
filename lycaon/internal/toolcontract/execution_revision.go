@@ -10,23 +10,6 @@ import (
 // preparing its effect. It is execution evidence only: it never establishes a
 // conversational read base, and a changed revision conflicts instead of
 // refreshing, rebasing or rerunning the operation.
-// Identity is the revision's stable label for receipts: the accepted document
-// revision when one was captured, else the content digest; "absent" for a
-// path that did not exist.
-func (r ExecutionRevision) Identity() string {
-	switch {
-	case r.Mode == AbsentRevision:
-		return "absent"
-	case r.DocumentID != "":
-		return fmt.Sprintf("document:%s@%d", r.DocumentID, r.DocumentRevision)
-	case r.ContentSHA256 != "":
-		return "sha256:" + r.ContentSHA256
-	case r.DiskSHA256 != "":
-		return "disk:" + r.DiskSHA256
-	}
-	return ""
-}
-
 type ExecutionRevision struct {
 	Role  ExecutionRevisionRole
 	Mode  ExecutionRevisionMode
@@ -112,9 +95,8 @@ func (r ExecutionRevision) Validate() error {
 	default:
 		return fmt.Errorf("unknown execution revision mode %q", r.Mode)
 	}
-	// Literal byte utilities capture exact stream bytes: the published file, or
-	// the accepted document encoded in its recorded encoding and newlines. A
-	// destination with no text view is captured as its exact disk bytes.
+	// Byte captures record exact stream bytes: the published file, or the
+	// accepted document encoded in its recorded encoding and newlines.
 	representation := r.Representation == LogicalUTF8LF || r.Representation == UTF8SourceBytes ||
 		(r.Representation == OriginalEncodedBytes && (r.Mode == AcceptedDocumentRevision || r.ContentSHA256 == r.DiskSHA256))
 	if r.Basis == DeclaredAtLaunch {

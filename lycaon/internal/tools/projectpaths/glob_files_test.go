@@ -12,7 +12,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -58,6 +62,40 @@ func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 				t.Fatalf("%s matched %q, want %q", c.pattern, got, c.want)
 			}
 		})
+	}
+}
+
+func TestGlobFilesReachRootsThroughLinkedParents(t *testing.T) {
+	target := t.TempDir()
+	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(target, "ws", "pkg"), 0o755))
+	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(target, "ws", "a.go"), nil, 0o600))
+	linked := filepath.Join(t.TempDir(), "linked")
+	testutil.FailErr(t, "link parent", os.Symlink(target, linked))
+	testutil.FailErr(t, "link below root", os.Symlink("..", filepath.Join(target, "ws", "up")))
+	root := filepath.Join(linked, "ws")
+	tc := tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	}
+	paths, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "program paths", err)
+	files := projectpaths.GlobFiles{Paths: paths}
+	spelled := filepath.ToSlash(root)
+	canonical := filepath.ToSlash(fspath.CanonicalPath(root))
+	for pattern, want := range map[string][]string{
+		spelled + "/*.go":    {spelled + "/a.go"},
+		canonical + "/*.go":  {canonical + "/a.go"},
+		spelled + "/*/":      {spelled + "/pkg/"},
+		spelled + "/up/ws/*": nil,
+		spelled + "/up/*":    nil,
+		"@ws/up/ws/a.go*":    nil,
+	} {
+		budget := commandsurface.GlobBudget{Matches: 100, Visits: 100}
+		got, err := commandsurface.MatchGlob(t.Context(), files, pattern, &budget)
+		testutil.FailErr(t, "match "+pattern, err)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s matched %q, want %q", pattern, got, want)
+		}
 	}
 }
 
