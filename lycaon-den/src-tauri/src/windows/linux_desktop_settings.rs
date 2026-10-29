@@ -12,6 +12,7 @@ use super::system_appearance::{hex_color, SystemAppearancePayload};
 
 #[cfg(target_os = "linux")]
 mod launch;
+#[cfg(target_os = "linux")]
 pub(crate) mod portal;
 #[cfg(test)]
 mod tests;
