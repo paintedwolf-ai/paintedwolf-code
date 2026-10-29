@@ -58,6 +58,20 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
 }
 
+func TestLinuxConfineScopeCoversSharedProcessStatDecoder(t *testing.T) {
+	t.Parallel()
+	scopes := linuxConfineScopes(t, contractcheck.RepoRoot(t))
+	for _, name := range []string{"TestParseLinuxStatPreservesKernelFacts", "TestParseLinuxStatRejectsMalformedRecords", "TestParseLinuxStatBoundsTheEntireRecord"} {
+		covered := false
+		for _, scope := range scopes {
+			covered = covered || scope.covers("./internal/osprocess", name)
+		}
+		if !covered {
+			t.Errorf("applied Linux scope omits shared process-stat decoder test %s", name)
+		}
+	}
+}
+
 // Every command supervisor test runs on each architecture; a new one cannot fall outside the filter.
 func TestLinuxConfineScopeCoversEverySupervisorTest(t *testing.T) {
 	t.Parallel()
