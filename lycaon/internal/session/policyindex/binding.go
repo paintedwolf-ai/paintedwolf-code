@@ -3,13 +3,13 @@ package policyindex
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"

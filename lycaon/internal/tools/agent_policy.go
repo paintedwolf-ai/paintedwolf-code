@@ -39,20 +39,25 @@ func (tc ToolContext) CheckPolicyTargets(ctx context.Context, targets []agentpol
 		if !filepath.IsAbs(target.Path) {
 			return fmt.Errorf("policy admission requires a resolved absolute path")
 		}
-		var rootID, rootPath string
-		for _, root := range tc.Source.Roots {
-			rel, err := filepath.Rel(root.Path, target.Path)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				continue
+		if target.RootID != "" {
+			root, ok := projectroot.RootRefByID(tc.Source.Roots, target.RootID)
+			if !ok {
+				return fmt.Errorf("policy root %q: %w", target.RootID, projectroot.ErrUnknownRootLabel)
 			}
-			if len(root.Path) > len(rootPath) {
-				rootID, rootPath = root.ID, root.Path
+			if !policyPathWithinRoot(root.Path, target.Path) {
+				return fmt.Errorf("policy root %q: %w", target.RootID, projectroot.ErrPathEscape)
+			}
+		} else {
+			var rootPath string
+			for _, root := range tc.Source.Roots {
+				if policyPathWithinRoot(root.Path, target.Path) && len(root.Path) > len(rootPath) {
+					target.RootID, rootPath = root.ID, root.Path
+				}
 			}
 		}
-		if rootID == "" {
+		if target.RootID == "" {
 			continue
 		}
-		target.RootID = rootID
 		if !seen[target] {
 			seen[target] = true
 			bound = append(bound, target)
@@ -64,6 +69,11 @@ func (tc ToolContext) CheckPolicyTargets(ctx context.Context, targets []agentpol
 	return check(ctx, bound)
 }
 
+func policyPathWithinRoot(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // CheckScopePolicy resolves a reached operation's catalog scope before admission.
 func (tc ToolContext) CheckScopePolicy(ctx context.Context, rootID, path string, mutation bool) error {
 	if check, _ := ctx.Value(agentPolicyKey{}).(AgentPolicyCheck); check == nil {
@@ -72,9 +82,9 @@ func (tc ToolContext) CheckScopePolicy(ctx context.Context, rootID, path string,
 	if path == "" {
 		path = "."
 	}
-	abs, _, err := projectroot.ResolveAbs(tc.Source.Roots, rootID, path)
+	abs, root, err := projectroot.ResolveAbs(tc.Source.Roots, rootID, path)
 	if err != nil {
 		return err
 	}
-	return tc.CheckPathPolicy(ctx, abs, mutation)
+	return tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{RootID: root.ID, Path: abs, Mutation: mutation}})
 }
