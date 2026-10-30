@@ -20,7 +20,7 @@ func (e ExecutionRevisions) observeFile(resolved projectpaths.Resolved, info fs.
 	return e.Literals.BeginRead(resolved.Root.Path, entry, fspath.ObserveFile(info))
 }
 
-// scanFile learns during the required capture; replay still verifies every block.
+// scanFile learns during the required capture; replay verifies every block.
 func (e ExecutionRevisions) scanFile(ctx context.Context, resolved projectpaths.Resolved, file *os.File, info fs.FileInfo, proofs bool) (*verifiedSource, error) {
 	observation := e.observeFile(resolved, info)
 	defer observation.Close()
