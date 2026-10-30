@@ -1,12 +1,5 @@
-// Package modelstore owns the durable lifecycle of local model artifacts:
-// staging, verification, activation and repair.
-//
-// The lifecycle is absent → staging → verified → active. Only verified
-// artifacts activate; activation is an append-only journal entry so a crash
-// between file placement and activation is recoverable. Every successful
-// operation is durable before it returns: staging syncs the file and its
-// directory, activation syncs the journal. The journal is recovered under an
-// exclusive lock before any write.
+// Package modelstore manages staging, verification, activation, leasing,
+// and garbage collection of local model artifacts.
 package modelstore
 
 import (
@@ -19,71 +12,150 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
-// MaxArtifactBytes bounds a staged payload. The E4B release artifact is well
-// under this; a larger input is rejected before any copy.
+// MaxArtifactBytes bounds a staged payload.
 const MaxArtifactBytes = 64 << 30
 
-// MaxJournalBytes bounds recovery: a journal larger than this is corruption,
-// not history.
+// MaxJournalBytes bounds journal recovery size.
 const MaxJournalBytes = 16 << 20
 
-// digestShape matches a lowercase hex sha256.
 var digestShape = regexp.MustCompile(`^[0-9a-f]{64}$`)
-
-// modelShape bounds model and revision names to path-safe characters.
 var nameShape = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+
+// ReadinessState reports the lifecycle state of a model slot.
+type ReadinessState string
+
+const (
+	StateAbsent         ReadinessState = "absent"
+	StateStaging        ReadinessState = "staging"
+	StateVerified       ReadinessState = "verified"
+	StateReady          ReadinessState = "ready"
+	StateRepairRequired ReadinessState = "repair_required"
+)
+
+// RepairAction identifies the recovery action needed when a model is not ready.
+type RepairAction string
+
+const (
+	RepairNone            RepairAction = "none"
+	RepairImportSeed      RepairAction = "import_seed"
+	RepairRestageArtifact RepairAction = "restage_artifact"
+	RepairRecoverJournal  RepairAction = "recover_journal"
+)
+
+// Readiness summarizes the state and available repair action for a model slot.
+type Readiness struct {
+	State    ReadinessState `json:"state"`
+	Active   *Manifest      `json:"active,omitempty"`
+	Previous *Manifest      `json:"previous,omitempty"`
+	Repair   RepairAction   `json:"repair"`
+	Reason   string         `json:"reason,omitempty"`
+}
+
+// SpaceRequirement breaks down the disk bytes needed before mutating the store.
+type SpaceRequirement struct {
+	StagingBytes   int64 `json:"staging_bytes"`
+	UnpackingBytes int64 `json:" unpacking_bytes"`
+	SeedDuplicate  int64 `json:"seed_duplicate_bytes"`
+	RollbackBytes  int64 `json:"rollback_bytes"`
+}
+
+// RequiredBytes returns total bytes needed across staging, unpacking, seed duplication, and rollback retention.
+func (r SpaceRequirement) RequiredBytes() int64 {
+	return r.StagingBytes + r.UnpackingBytes + r.SeedDuplicate + r.RollbackBytes
+}
+
+// ErrInsufficientSpace indicates that available disk space cannot cover the required mutation budget.
+var ErrInsufficientSpace = errors.New("modelstore: insufficient disk space")
 
 // Artifact identifies one immutable model payload.
 type Artifact struct {
-	// Digest is the sha256 of the payload, hex-encoded.
 	Digest string `json:"digest"`
-	// Format names the layout (safetensors, gguf).
 	Format string `json:"format"`
-	// Bytes is the payload size.
-	Bytes int64 `json:"bytes"`
+	Bytes  int64  `json:"bytes"`
 }
 
-// Manifest describes one model revision: the payload and how to serve it.
+// Manifest describes one model revision and its backing payload.
 type Manifest struct {
-	// Model is the stable model identity.
-	Model string `json:"model"`
-	// Revision distinguishes builds of the same model.
-	Revision string `json:"revision"`
-	// Artifact is the generation payload.
-	Artifact Artifact `json:"artifact"`
-	// Device names the backend recipe (cpu, mlx, vulkan).
-	Device string `json:"device"`
+	Model    string     `json:"model"`
+	Revision string     `json:"revision"`
+	Artifact Artifact   `json:"artifact"`
+	Files    []Artifact `json:"files,omitempty"`
+	Device   string     `json:"device"`
 }
 
-// SignedManifest is the authority boundary: a manifest plus its detached
-// signature. Activation requires one; a bare manifest is never authority.
+// SignedManifest pairs a manifest with its detached authority signature.
 type SignedManifest struct {
 	Manifest  Manifest `json:"manifest"`
 	Signature string   `json:"signature"`
 }
 
-// Signer verifies manifest authority. The host injects its key trust; the
-// store never derives trust from file contents.
+// Signer verifies manifest signatures against host-trusted keys.
 type Signer interface {
 	Verify(SignedManifest) error
 }
 
-// Store roots the on-disk layout: artifacts by digest, journal, manifests.
-type Store struct {
-	root   string
-	signer Signer
+// Lease pins an artifact revision in use by a runtime process so collection cannot remove it.
+type Lease struct {
+	store      *Store
+	Manifest   Manifest
+	Owner      string
+	Generation uint64
+	once       sync.Once
 }
 
-func New(root string, signer Signer) *Store { return &Store{root: root, signer: signer} }
+// Release drops the lease on the pinned revision.
+func (l *Lease) Release() {
+	if l == nil || l.store == nil {
+		return
+	}
+	l.once.Do(func() {
+		l.store.releaseLease(l.Manifest.Artifact.Digest)
+	})
+}
 
-// validate rejects identities that could escape the store or panic later,
-// before any filesystem effect.
+// Store manages content-addressed artifacts, the activation journal, and active leases.
+type Store struct {
+	root      string
+	signer    Signer
+	freeBytes func(string) (int64, error)
+
+	mu     sync.Mutex
+	leases map[string]int
+}
+
+func New(root string, signer Signer) *Store {
+	return &Store{
+		root:      root,
+		signer:    signer,
+		freeBytes: defaultFreeBytes,
+		leases:    make(map[string]int),
+	}
+}
+
+// SetFreeBytesFunc overrides disk-space probing for deterministic testing.
+func (s *Store) SetFreeBytesFunc(fn func(string) (int64, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.freeBytes = fn
+}
+
+func defaultFreeBytes(path string) (int64, error) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, err
+	}
+	return int64(stat.Bavail) * int64(stat.Bsize), nil
+}
+
 func validate(m Manifest) error {
 	if !nameShape.MatchString(m.Model) {
 		return fmt.Errorf("modelstore: model name %q is not a safe identity", m.Model)
@@ -91,10 +163,25 @@ func validate(m Manifest) error {
 	if !nameShape.MatchString(m.Revision) {
 		return fmt.Errorf("modelstore: revision %q is not a safe identity", m.Revision)
 	}
-	return validateArtifact(m.Artifact)
+	if !nameShape.MatchString(m.Device) {
+		return fmt.Errorf("modelstore: device %q is not a safe identity", m.Device)
+	}
+	if err := validateArtifact(m.Artifact); err != nil {
+		return err
+	}
+	seen := map[string]bool{m.Artifact.Digest: true}
+	for _, f := range m.Files {
+		if err := validateArtifact(f); err != nil {
+			return err
+		}
+		if seen[f.Digest] {
+			return fmt.Errorf("modelstore: duplicate artifact entry %s", f.Digest)
+		}
+		seen[f.Digest] = true
+	}
+	return nil
 }
 
-// validateArtifact bounds a payload identity independent of any manifest.
 func validateArtifact(a Artifact) error {
 	if !digestShape.MatchString(a.Digest) {
 		return fmt.Errorf("modelstore: digest %q is not a hex sha256", a.Digest)
@@ -105,14 +192,11 @@ func validateArtifact(a Artifact) error {
 	return nil
 }
 
-// artifactRel is the confinement-scoped artifact path passed to os.Root.
-// Digests are hex-validated, so no component can traverse or contain a separator.
 func (s *Store) artifactRel(digest string) string {
 	return filepath.Join("artifacts", digest[:2], digest)
 }
 
-// openRoot opens the store confined: symlinked path components inside the
-// store cannot redirect opens outside it.
+// openRoot opens the store directory via os.Root so symlinked components inside the store cannot escape it.
 func (s *Store) openRoot() (*os.Root, error) {
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return nil, fmt.Errorf("modelstore: root: %w", err)
@@ -122,15 +206,13 @@ func (s *Store) openRoot() (*os.Root, error) {
 
 func (s *Store) journalPath() string { return filepath.Join(s.root, "journal.jsonl") }
 
-// journalLock holds an exclusive advisory lock on the journal's lock file.
-// The caller closes the returned file to release.
 type journalLock struct{ f *os.File }
 
 func (s *Store) lockJournal() (*journalLock, error) {
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return nil, fmt.Errorf("modelstore: root: %w", err)
 	}
-	f, err := os.OpenFile(filepath.Join(s.root, "journal.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := filelock.Open(filepath.Join(s.root, "journal.lock"))
 	if err != nil {
 		return nil, fmt.Errorf("modelstore: lock file: %w", err)
 	}
@@ -142,16 +224,41 @@ func (s *Store) lockJournal() (*journalLock, error) {
 }
 
 func (l *journalLock) Unlock() {
-	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
+	_ = filelock.Unlock(l.f)
 	_ = l.f.Close()
 }
 
-// Stage copies a payload into the store under its digest, if absent.
-// It enforces the declared size while copying and verifies the hash; a
-// mismatch leaves nothing behind. The file and its directory are synced
-// before the rename and the publish is synced before returning.
+// CheckSpace verifies that the store root has enough free bytes for req.
+func (s *Store) CheckSpace(req SpaceRequirement) error {
+	need := req.RequiredBytes()
+	if need <= 0 {
+		return nil
+	}
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return fmt.Errorf("modelstore: root: %w", err)
+	}
+	s.mu.Lock()
+	probe := s.freeBytes
+	s.mu.Unlock()
+	if probe == nil {
+		return nil
+	}
+	avail, err := probe(s.root)
+	if err != nil {
+		return fmt.Errorf("modelstore: statfs: %w", err)
+	}
+	if avail < need {
+		return fmt.Errorf("%w: need %d bytes, available %d bytes", ErrInsufficientSpace, need, avail)
+	}
+	return nil
+}
+
+// Stage copies a payload into the store under its digest after verifying size, hash, and disk space.
 func (s *Store) Stage(r io.Reader, want Artifact) error {
 	if err := validateArtifact(want); err != nil {
+		return err
+	}
+	if err := s.CheckSpace(SpaceRequirement{StagingBytes: want.Bytes}); err != nil {
 		return err
 	}
 	root, err := s.openRoot()
@@ -163,8 +270,6 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	if err := root.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("modelstore: mkdir: %w", err)
 	}
-	// Create the staging file through the confined root: a symlinked prefix
-	// directory cannot redirect creation outside the store.
 	tmpName := filepath.Join(dir, ".staging-"+fmt.Sprint(time.Now().UnixNano()))
 	tmp, err := root.Create(tmpName)
 	if err != nil {
@@ -187,7 +292,6 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 		tmp.Close()
 		return fmt.Errorf("modelstore: digest mismatch: got %s want %s", got, want.Digest)
 	}
-	// Durable publish: sync file, rename, sync directory.
 	if err := fssync.File(tmp); err != nil {
 		tmp.Close()
 		return fmt.Errorf("modelstore: sync: %w", err)
@@ -212,7 +316,7 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	return nil
 }
 
-// Verified reports whether an artifact is fully present with the right hash.
+// Verified reports whether an artifact is present on disk with the expected sha256 digest.
 func (s *Store) Verified(digest string) bool {
 	if !digestShape.MatchString(digest) {
 		return false
@@ -234,10 +338,7 @@ func (s *Store) Verified(digest string) bool {
 	return hex.EncodeToString(h.Sum(nil)) == digest
 }
 
-// Activate verifies manifest authority, then records the manifest in the
-// journal, making it the store's intent. The journal is recovered under an
-// exclusive lock first, so a torn tail never corrupts the append. The entry
-// is durable before Activate returns.
+// Activate verifies manifest authority and appends the manifest to the activation journal under lock.
 func (s *Store) Activate(signed SignedManifest) error {
 	if s.signer == nil {
 		return errors.New("modelstore: no manifest authority configured")
@@ -251,6 +352,11 @@ func (s *Store) Activate(signed SignedManifest) error {
 	}
 	if !s.Verified(m.Artifact.Digest) {
 		return fmt.Errorf("modelstore: artifact %s is not verified", m.Artifact.Digest)
+	}
+	for _, f := range m.Files {
+		if !s.Verified(f.Digest) {
+			return fmt.Errorf("modelstore: supplementary artifact %s is not verified", f.Digest)
+		}
 	}
 	lock, err := s.lockJournal()
 	if err != nil {
@@ -276,7 +382,6 @@ func (s *Store) Activate(signed SignedManifest) error {
 	if err := fssync.File(f); err != nil {
 		return fmt.Errorf("modelstore: journal sync: %w", err)
 	}
-	// The directory entry must be durable too, or a first activation can vanish.
 	if dfd, err := os.Open(s.root); err != nil {
 		return fmt.Errorf("modelstore: journal dir: %w", err)
 	} else if err := fssync.File(dfd); err != nil {
@@ -288,9 +393,7 @@ func (s *Store) Activate(signed SignedManifest) error {
 	return nil
 }
 
-// recoverJournal validates every complete record and truncates a torn trailing
-// record so later appends stay well-formed. Corruption in any complete record
-// is an error, not history. Caller holds the journal lock.
+// recoverJournal validates all complete records and truncates any torn trailing line under the journal lock.
 func (s *Store) recoverJournal() error {
 	raw, err := os.ReadFile(s.journalPath())
 	if os.IsNotExist(err) {
@@ -302,7 +405,6 @@ func (s *Store) recoverJournal() error {
 	if len(raw) > MaxJournalBytes {
 		return fmt.Errorf("modelstore: journal of %d bytes exceeds the recovery bound", len(raw))
 	}
-	// A torn final line is truncated; every complete line must parse.
 	torn := len(raw) > 0 && raw[len(raw)-1] != '\n'
 	lines := splitLines(raw)
 	if torn && len(lines) > 0 {
@@ -320,13 +422,18 @@ func (s *Store) recoverJournal() error {
 	if !torn {
 		return nil
 	}
-	tail := len(raw)
+	tail := 0
 	if idx := lastNewline(raw); idx >= 0 {
 		tail = idx + 1
-	} else {
-		tail = 0
 	}
-	return os.Truncate(s.journalPath(), int64(tail))
+	if err := os.Truncate(s.journalPath(), int64(tail)); err != nil {
+		return err
+	}
+	if f, err := os.Open(s.journalPath()); err == nil {
+		_ = fssync.File(f)
+		_ = f.Close()
+	}
+	return nil
 }
 
 func lastNewline(raw []byte) int {
@@ -338,23 +445,24 @@ func lastNewline(raw []byte) int {
 	return -1
 }
 
-// Active returns the newest journaled manifest per (model, device). Only an
-// unstaged torn final line is skipped; the next Activate repairs it under the
-// lock. A corrupt complete record is an error, never silently older state.
-func (s *Store) Active() (map[string]Manifest, error) {
+// readRecords parses all complete records from the journal, skipping an unstaged torn final line.
+func (s *Store) readRecords() ([]Manifest, error) {
 	raw, err := os.ReadFile(s.journalPath())
 	if os.IsNotExist(err) {
-		return map[string]Manifest{}, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("modelstore: read journal: %w", err)
+	}
+	if len(raw) > MaxJournalBytes {
+		return nil, fmt.Errorf("modelstore: journal of %d bytes exceeds the recovery bound", len(raw))
 	}
 	lines := splitLines(raw)
 	torn := len(raw) > 0 && raw[len(raw)-1] != '\n'
 	if torn && len(lines) > 0 {
 		lines = lines[:len(lines)-1]
 	}
-	out := map[string]Manifest{}
+	out := make([]Manifest, 0, len(lines))
 	for i, line := range lines {
 		var m Manifest
 		if err := json.Unmarshal(line, &m); err != nil {
@@ -363,9 +471,221 @@ func (s *Store) Active() (map[string]Manifest, error) {
 		if err := validate(m); err != nil {
 			return nil, fmt.Errorf("modelstore: journal record %d is invalid: %w", i, err)
 		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// Active returns the newest journaled manifest per (model, device).
+func (s *Store) Active() (map[string]Manifest, error) {
+	records, err := s.readRecords()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]Manifest{}
+	for _, m := range records {
 		out[m.Model+"/"+m.Device] = m
 	}
 	return out, nil
+}
+
+// AcquireLease pins the currently active manifest for (model, device) for a runtime process generation.
+func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*Lease, error) {
+	active, err := s.Active()
+	if err != nil {
+		return nil, err
+	}
+	m, ok := active[model+"/"+device]
+	if !ok {
+		return nil, fmt.Errorf("modelstore: no active manifest for %s/%s", model, device)
+	}
+	if !s.Verified(m.Artifact.Digest) {
+		return nil, fmt.Errorf("modelstore: active artifact %s is not verified", m.Artifact.Digest)
+	}
+	s.mu.Lock()
+	s.leases[m.Artifact.Digest]++
+	for _, f := range m.Files {
+		s.leases[f.Digest]++
+	}
+	s.mu.Unlock()
+	return &Lease{
+		store:      s,
+		Manifest:   m,
+		Owner:      owner,
+		Generation: generation,
+	}, nil
+}
+
+func (s *Store) releaseLease(digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.leases[digest] <= 1 {
+		delete(s.leases, digest)
+	} else {
+		s.leases[digest]--
+	}
+}
+
+// Status reports readiness and any required repair action for (model, device).
+func (s *Store) Status(model, device string) Readiness {
+	records, err := s.readRecords()
+	if err != nil {
+		return Readiness{
+			State:  StateRepairRequired,
+			Repair: RepairRecoverJournal,
+			Reason: err.Error(),
+		}
+	}
+	key := model + "/" + device
+	var current, prev *Manifest
+	for i := range records {
+		m := records[i]
+		if m.Model+"/"+m.Device != key {
+			continue
+		}
+		if current != nil && current.Revision != m.Revision {
+			cp := *current
+			prev = &cp
+		}
+		cp := m
+		current = &cp
+	}
+	if current == nil {
+		return Readiness{
+			State:  StateAbsent,
+			Repair: RepairImportSeed,
+			Reason: "model revision not activated",
+		}
+	}
+	if !s.Verified(current.Artifact.Digest) {
+		return Readiness{
+			State:    StateRepairRequired,
+			Active:   current,
+			Previous: prev,
+			Repair:   RepairRestageArtifact,
+			Reason:   fmt.Sprintf("active artifact %s failed verification", current.Artifact.Digest),
+		}
+	}
+	for _, f := range current.Files {
+		if !s.Verified(f.Digest) {
+			return Readiness{
+				State:    StateRepairRequired,
+				Active:   current,
+				Previous: prev,
+				Repair:   RepairRestageArtifact,
+				Reason:   fmt.Sprintf("supplementary artifact %s failed verification", f.Digest),
+			}
+		}
+	}
+	return Readiness{
+		State:    StateReady,
+		Active:   current,
+		Previous: prev,
+		Repair:   RepairNone,
+	}
+}
+
+// Collect recovers the journal and removes unreferenced artifacts, preserving active, previous compatible, and leased revisions.
+func (s *Store) Collect() ([]string, error) {
+	lock, err := s.lockJournal()
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Unlock()
+
+	if err := s.recoverJournal(); err != nil {
+		return nil, err
+	}
+	records, err := s.readRecords()
+	if err != nil {
+		return nil, err
+	}
+
+	type slotHistory struct {
+		active   *Manifest
+		previous *Manifest
+	}
+	slots := map[string]*slotHistory{}
+	for i := range records {
+		m := records[i]
+		key := m.Model + "/" + m.Device
+		sh := slots[key]
+		if sh == nil {
+			sh = &slotHistory{}
+			slots[key] = sh
+		}
+		if sh.active != nil && sh.active.Revision != m.Revision {
+			prev := *sh.active
+			sh.previous = &prev
+		}
+		curr := m
+		sh.active = &curr
+	}
+
+	keep := map[string]bool{}
+	keepManifest := func(m *Manifest) {
+		if m == nil {
+			return
+		}
+		keep[m.Artifact.Digest] = true
+		for _, f := range m.Files {
+			keep[f.Digest] = true
+		}
+	}
+	for _, sh := range slots {
+		keepManifest(sh.active)
+		keepManifest(sh.previous)
+	}
+
+	s.mu.Lock()
+	for digest, count := range s.leases {
+		if count > 0 {
+			keep[digest] = true
+		}
+	}
+	s.mu.Unlock()
+
+	root, err := s.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	artifactsDir := filepath.Join(s.root, "artifacts")
+	prefixEntries, err := os.ReadDir(artifactsDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("modelstore: readdir artifacts: %w", err)
+	}
+
+	var removed []string
+	for _, prefixEntry := range prefixEntries {
+		if !prefixEntry.IsDir() {
+			continue
+		}
+		prefix := prefixEntry.Name()
+		subEntries, err := os.ReadDir(filepath.Join(artifactsDir, prefix))
+		if err != nil {
+			return nil, fmt.Errorf("modelstore: readdir %s: %w", prefix, err)
+		}
+		for _, entry := range subEntries {
+			name := entry.Name()
+			if !digestShape.MatchString(name) {
+				continue
+			}
+			if keep[name] {
+				continue
+			}
+			if err := root.Remove(filepath.Join("artifacts", prefix, name)); err != nil {
+				return nil, fmt.Errorf("modelstore: remove %s: %w", name, err)
+			}
+			removed = append(removed, name)
+		}
+	}
+	sort.Strings(removed)
+	return removed, nil
 }
 
 func splitLines(raw []byte) [][]byte {

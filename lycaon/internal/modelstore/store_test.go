@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// acceptSigner stands in for the host's real manifest authority in tests.
 type acceptSigner struct{ fail bool }
 
 func (a acceptSigner) Verify(SignedManifest) error {
@@ -69,7 +68,7 @@ func TestDigestMismatchLeavesNothing(t *testing.T) {
 func TestOversizeInputRejected(t *testing.T) {
 	s := newStore(t)
 	a := testArtifact(t, []byte("real"))
-	a.Bytes = 1 // declared smaller than the source
+	a.Bytes = 1
 	if err := s.Stage(newReader([]byte("too long")), a); err == nil {
 		t.Fatal("expected size mismatch error")
 	}
@@ -77,7 +76,6 @@ func TestOversizeInputRejected(t *testing.T) {
 
 func TestBadIdentityRejected(t *testing.T) {
 	s := newStore(t)
-	// A digest shorter than two characters panicked before validation existed.
 	for _, digest := range []string{"", "x", "../escape", "a\nb"} {
 		a := Artifact{Digest: digest, Bytes: 4}
 		if err := s.Stage(newReader([]byte("data")), a); err == nil {
@@ -87,6 +85,25 @@ func TestBadIdentityRejected(t *testing.T) {
 	m := Manifest{Model: "../escape", Revision: "r", Device: "cpu", Artifact: Artifact{Digest: "missing", Bytes: 1}}
 	if err := s.Activate(SignedManifest{Manifest: m}); err == nil {
 		t.Fatal("expected traversal identity rejection")
+	}
+}
+
+func TestDuplicateArtifactEntryRejected(t *testing.T) {
+	s := newStore(t)
+	payload := []byte("weights")
+	a := testArtifact(t, payload)
+	if err := s.Stage(newReader(payload), a); err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	m := Manifest{
+		Model:    "m",
+		Revision: "r",
+		Device:   "cpu",
+		Artifact: a,
+		Files:    []Artifact{a},
+	}
+	if err := s.Activate(SignedManifest{Manifest: m}); err == nil {
+		t.Fatal("expected duplicate artifact entry rejection")
 	}
 }
 
@@ -148,15 +165,13 @@ func TestTornTailRecoversAndNextActivateSurvives(t *testing.T) {
 	if err := s.Activate(SignedManifest{Manifest: m}); err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	// Simulate a crash mid-append.
 	f, err := os.OpenFile(s.journalPath(), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	f.Write([]byte(`{"model":"m","revi`))
-	f.Close()
+	_, _ = f.Write([]byte(`{"model":"m","revi`))
+	_ = f.Close()
 
-	// The next activation repairs the tail and its own entry survives.
 	m2 := Manifest{Model: "m", Revision: "r2", Device: "cpu", Artifact: a}
 	if err := s.Activate(SignedManifest{Manifest: m2}); err != nil {
 		t.Fatalf("activate after tear: %v", err)
@@ -189,8 +204,8 @@ func newReader(b []byte) *os.File {
 	if err != nil {
 		panic(err)
 	}
-	f.Write(b)
-	f.Seek(0, 0)
+	_, _ = f.Write(b)
+	_, _ = f.Seek(0, 0)
 	return f
 }
 
@@ -200,7 +215,6 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 		t.Fatalf("root: %v", err)
 	}
 	outside := t.TempDir()
-	// A symlinked `artifacts` prefix must not redirect staging outside the store.
 	if err := os.Symlink(outside, filepath.Join(s.root, "artifacts")); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
@@ -231,8 +245,6 @@ func TestCorruptCompleteRecordFailsActive(t *testing.T) {
 	if err := s.Activate(SignedManifest{Manifest: m}); err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	// Corrupt a complete record: the trailing newline stays, so recovery and
-	// Active must both detect it rather than fall back to older state.
 	raw, err := os.ReadFile(s.journalPath())
 	if err != nil {
 		t.Fatalf("read journal: %v", err)
@@ -245,5 +257,128 @@ func TestCorruptCompleteRecordFailsActive(t *testing.T) {
 	}
 	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "m", Revision: "r2", Device: "cpu", Artifact: a}}); err == nil {
 		t.Fatal("expected Activate to reject a corrupt complete record")
+	}
+}
+
+func TestCollectRetainsActivePreviousAndLeasedRevisions(t *testing.T) {
+	s := newStore(t)
+	a1 := testArtifact(t, []byte("rev-1"))
+	a2 := testArtifact(t, []byte("rev-2"))
+	a3 := testArtifact(t, []byte("rev-3"))
+	unreferenced := testArtifact(t, []byte("unreferenced"))
+
+	for _, item := range []struct {
+		art  Artifact
+		data []byte
+	}{
+		{a1, []byte("rev-1")},
+		{a2, []byte("rev-2")},
+		{a3, []byte("rev-3")},
+		{unreferenced, []byte("unreferenced")},
+	} {
+		if err := s.Stage(newReader(item.data), item.art); err != nil {
+			t.Fatalf("stage %s: %v", item.art.Digest, err)
+		}
+	}
+
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "gemma4-e4b", Revision: "r1", Device: "mlx", Artifact: a1}}); err != nil {
+		t.Fatalf("activate r1: %v", err)
+	}
+	leaseR1, err := s.AcquireLease("gemma4-e4b", "mlx", "nativegen", 1)
+	if err != nil {
+		t.Fatalf("lease r1: %v", err)
+	}
+
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "gemma4-e4b", Revision: "r2", Device: "mlx", Artifact: a2}}); err != nil {
+		t.Fatalf("activate r2: %v", err)
+	}
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "gemma4-e4b", Revision: "r3", Device: "mlx", Artifact: a3}}); err != nil {
+		t.Fatalf("activate r3: %v", err)
+	}
+
+	// While r1 is leased, Collect removes only the unreferenced artifact; r3 (active), r2 (previous), and r1 (leased) stay.
+	removed, err := s.Collect()
+	if err != nil {
+		t.Fatalf("collect with lease: %v", err)
+	}
+	if len(removed) != 1 || removed[0] != unreferenced.Digest {
+		t.Fatalf("collect with lease removed %v, want [%s]", removed, unreferenced.Digest)
+	}
+	for _, kept := range []Artifact{a1, a2, a3} {
+		if !s.Verified(kept.Digest) {
+			t.Fatalf("expected %s to remain verified while leased/retained", kept.Digest)
+		}
+	}
+
+	// Once the r1 lease ends, Collect removes r1 while keeping r3 (active) and r2 (previous rollback revision).
+	leaseR1.Release()
+	removed, err = s.Collect()
+	if err != nil {
+		t.Fatalf("collect after release: %v", err)
+	}
+	if len(removed) != 1 || removed[0] != a1.Digest {
+		t.Fatalf("collect after release removed %v, want [%s]", removed, a1.Digest)
+	}
+	if s.Verified(a1.Digest) {
+		t.Fatal("expected r1 artifact to be collected after lease release")
+	}
+	if !s.Verified(a2.Digest) || !s.Verified(a3.Digest) {
+		t.Fatal("expected active (r3) and previous (r2) artifacts to remain verified")
+	}
+}
+
+func TestInsufficientDiskSpacePreservesWorkingModel(t *testing.T) {
+	s := newStore(t)
+	workingPayload := []byte("working-weights")
+	working := testArtifact(t, workingPayload)
+	if err := s.Stage(newReader(workingPayload), working); err != nil {
+		t.Fatalf("stage working: %v", err)
+	}
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "gemma4-e4b", Revision: "r1", Device: "mlx", Artifact: working}}); err != nil {
+		t.Fatalf("activate working: %v", err)
+	}
+
+	s.SetFreeBytesFunc(func(string) (int64, error) {
+		return 8, nil
+	})
+	nextPayload := []byte("new-weights-larger-than-free-bytes")
+	next := testArtifact(t, nextPayload)
+	if err := s.Stage(newReader(nextPayload), next); !errors.Is(err, ErrInsufficientSpace) {
+		t.Fatalf("expected ErrInsufficientSpace, got %v", err)
+	}
+	if s.Verified(next.Digest) {
+		t.Fatal("expected rejected staging to leave no verified artifact")
+	}
+	status := s.Status("gemma4-e4b", "mlx")
+	if status.State != StateReady || status.Active == nil || status.Active.Revision != "r1" {
+		t.Fatalf("working model altered after failed space admission: %+v", status)
+	}
+}
+
+func TestReadinessAndRepairStates(t *testing.T) {
+	s := newStore(t)
+	if st := s.Status("gemma4-e4b", "mlx"); st.State != StateAbsent || st.Repair != RepairImportSeed {
+		t.Fatalf("absent status: %+v", st)
+	}
+
+	payload := []byte("weights")
+	a := testArtifact(t, payload)
+	if err := s.Stage(newReader(payload), a); err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "gemma4-e4b", Revision: "r1", Device: "mlx", Artifact: a}}); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+	if st := s.Status("gemma4-e4b", "mlx"); st.State != StateReady || st.Repair != RepairNone {
+		t.Fatalf("ready status: %+v", st)
+	}
+
+	// Corrupt the backing artifact on disk to verify repair detection.
+	artPath := filepath.Join(s.root, s.artifactRel(a.Digest))
+	if err := os.WriteFile(artPath, []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("corrupt artifact: %v", err)
+	}
+	if st := s.Status("gemma4-e4b", "mlx"); st.State != StateRepairRequired || st.Repair != RepairRestageArtifact {
+		t.Fatalf("corrupt artifact status: %+v", st)
 	}
 }
