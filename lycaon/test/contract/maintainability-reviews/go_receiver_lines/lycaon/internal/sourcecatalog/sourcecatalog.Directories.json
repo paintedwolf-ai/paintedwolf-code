@@ -4,13 +4,14 @@
   "kind": "runtime_service",
   "workstream": "indexed-command-discovery",
   "disposition": "retain",
-  "reason": "Directories owns structural membership observations, their freshness, and generation retention. ReadDirectory projects those existing immutable pages with completeness and preparation bounds. Retain the shared owner below 500 receiver lines and 20 methods; a second discovery cache would duplicate invalidation and publication authority. Namespace, bounded preparation, and observation freshness contracts support this boundary.",
-  "reviewed_commit": "99aa3821b0d3343b5bb9684c0c6d2ec7a86e0956",
+  "reason": "Directories owns structural observations, freshness, and generation retention. DirectoryReader is one traversal-scoped batch over the same collector and publisher, flushed after 64 directories or 4096 entries; a single listing retains the consumer entry bound; it retains no second namespace cache. The facade now measures 375 receiver lines and 19 methods, within the retained ceilings of 500 lines and 20 methods. Namespace, publication-count, cancellation, retirement, rebase, and invalidation contracts support this boundary.",
+  "reviewed_commit": "4212b4d7201968f6ad8b41bdaf1ecd5884119c6b",
   "ceiling": 500,
   "boundaries": {
-    "lycaon/internal/sourcecatalog/directory_listing_test.go": "2298e36fb0f4ed24afdb467afba353aeff8fdb540ba4c4b7407c7c1bc45a156c",
+    "lycaon/internal/sourcecatalog/directory_listing_test.go": "d0dee42c214055c6a0ef9dc112335f3ec3b1c7863b17050f952ebf719241e394",
+    "lycaon/internal/sourcecatalog/directory_reader_test.go": "ecf3b123e836a521e030790227bbf549fe7e4c56a39669337bd3a58d10659eaa",
     "lycaon/internal/sourcecatalog/observations_test.go": "eb0db1fc497d9b803bc18dbbcccfdc2338ed9f8ccd9c9afd1525c05dd8baf76d",
     "lycaon/internal/sourcecatalog/observation_invalidation_test.go": "90502ae5ea700c553ebd9cd30f2ccee55ab5e508f130b423e55d68f09b9135b9"
   },
-  "reviewed_shape": "09b184269e517e4d1bb2bc90027b034160c8bfde1a19a6836403a1683e5ac2c0"
+  "reviewed_shape": "c60e44087fa34e6555baae3021b1030397ffa39e06c826e6e66cef9f0f93fd3a"
 }
