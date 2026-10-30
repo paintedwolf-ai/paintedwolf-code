@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/contract/runner/release_lane_invariants_contract_test.go",
+  "kind": "test_suite",
+  "workstream": "release-admission",
+  "disposition": "retain",
+  "reason": "The measured 415 code-bearing lines own the reusable workflow lane model and the shared storage, custody, artifact-provenance and complete halt-barrier graph contracts. The halt is now three jobs (prepare and admit, re-sign apt restores in signing custody, apply), so its barrier, package-key custody and mutation contracts read job dependencies and outputs from the same graph. The public-artifact suite consumes the same parser and ancestor/artifact model. Retain this complete graph owner at the measured ceiling rather than introducing a second resolver or dividing one graph authority.",
+  "reviewed_commit": "a77b283e25cd1b8fbf694bab6652ee25536fff71",
+  "ceiling": 415,
+  "boundaries": {
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "beeca6ee53a62894a8f756a3b9cf707e4db4dbec9a5eb380a5189a6aea421d96",
+    "lycaon/test/contract/runner/release_public_artifacts_contract_test.go": "495764c9c5399bb28d7c3f760344dab439af8ccacd47259e6972cf9d5a55ba83"
+  }
+}

@@ -59,12 +59,12 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		// native pacman package per architecture, and no Tauri updater artifact.
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
-			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
+			GOOS: "linux", GOARCH: "amd64", Publication: "public",
 			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
-			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
+			GOOS: "linux", GOARCH: "arm64", Publication: "public",
 			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
@@ -100,12 +100,8 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Release and independent candidate runs share one non-publishing build path.
-	call := extractYAMLJob(workflow, "linux-candidates")
-	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
-		if !strings.Contains(call, needle) {
-			t.Fatalf("release candidate caller is missing %q", needle)
-		}
+	if strings.Contains(workflow, "  linux-candidates:") {
+		t.Fatal("public Linux releases must not build a second candidate package set")
 	}
 	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
@@ -124,8 +120,6 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	// Candidate runs carry no branch-scoped triggers, use one source checkout,
-	// and prepare userns locally without a probe lease.
 	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
 		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
 		"--package-extensions deb,rpm", "PW_PACKAGE_PROBE_LEASE"} {
@@ -244,95 +238,6 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	run(false)
 }
 
-func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	dir := t.TempDir()
-	input := filepath.Join(dir, "input")
-	output := filepath.Join(dir, "output")
-	contractcheck.FailErr(t, "create artifact input", os.Mkdir(input, 0o755))
-	version := "1.0.0-rc.1"
-	publicStem := "painted-wolf-code_v" + version + "_darwin-aarch64"
-	contractcheck.FailErr(t, "create audit input", os.Mkdir(filepath.Join(input, "opengrep"), 0o755))
-	audit := filepath.Join(input, "opengrep", publicStem+".json")
-	contractcheck.FailErr(t, "write public engine audit", os.WriteFile(audit, []byte(`{"mode":"reviewed-pin-only"}`), 0o644))
-	contractcheck.FailErr(t, "write candidate engine audit", os.WriteFile(filepath.Join(input, "opengrep", "painted-wolf-code_v"+version+"_linux-aarch64.json"), []byte(`{"mode":"reviewed-pin-only"}`), 0o644))
-	for _, suffix := range []string{"dmg", "dmg.sha256", "app.tar.gz", "app.tar.gz.sig"} {
-		contractcheck.FailErr(t, "write public artifact", os.WriteFile(filepath.Join(input, publicStem+"."+suffix), []byte(suffix), 0o644))
-	}
-	candidate := "painted-wolf-code_v" + version + "_linux-aarch64.deb"
-	contractcheck.FailErr(t, "write candidate artifact", os.WriteFile(filepath.Join(input, candidate), []byte("candidate"), 0o644))
-	cmd := exec.Command(
-		"python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"),
-		"--catalog", filepath.Join(root, "packaging", "release-platforms.json"),
-		"--input", input, "--output", output, "--version", version,
-	)
-	combined, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("collect public artifacts: %v\n%s", err, combined)
-	}
-	entries, err := os.ReadDir(output)
-	contractcheck.FailErr(t, "read public artifact output", err)
-	if len(entries) != 5 {
-		t.Fatalf("public artifact count = %d, want 5", len(entries))
-	}
-	if _, err := os.Stat(filepath.Join(output, candidate)); !os.IsNotExist(err) {
-		t.Fatalf("candidate artifact crossed publication boundary: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "painted-wolf-code_v"+version+"_linux-aarch64.opengrep.json")); !os.IsNotExist(err) {
-		t.Fatal("candidate audit crossed publication boundary")
-	}
-	contractcheck.FailErr(t, "remove required engine audit", os.Remove(audit))
-	missingOutput := filepath.Join(dir, "missing-audit")
-	missing := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", filepath.Join(root, "packaging", "release-platforms.json"), "--input", input, "--output", missingOutput, "--version", version)
-	if combined, err := missing.CombinedOutput(); err == nil {
-		t.Fatalf("missing engine audit accepted: %s", combined)
-	}
-}
-
-func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	for _, extension := range []string{"exe"} {
-		t.Run(extension, func(t *testing.T) {
-			dir := t.TempDir()
-			input, output := filepath.Join(dir, "input"), filepath.Join(dir, "output")
-			contractcheck.FailErr(t, "create audit input", os.MkdirAll(filepath.Join(input, "opengrep"), 0o755))
-			stem := "painted-wolf-code_v1.0.0_linux-x86_64"
-			for _, suffix := range []string{extension, extension + ".sha256", extension + ".sig"} {
-				contractcheck.FailErr(t, "write artifact", os.WriteFile(filepath.Join(input, stem+"."+suffix), []byte(suffix), 0o644))
-			}
-			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem+".json"), []byte(`{}`), 0o644))
-			catalog := filepath.Join(dir, "catalog.json")
-			row := map[string]any{"updater_key": "linux-x86_64", "publication": "public", "package_extensions": []string{extension}, "updater_extension": extension}
-			writeCatalog := func(rows []map[string]any) {
-				t.Helper()
-				raw, err := json.Marshal(map[string]any{"schema_version": 2, "platforms": rows})
-				contractcheck.FailErr(t, "encode catalog", err)
-				contractcheck.FailErr(t, "write catalog", os.WriteFile(catalog, raw, 0o644))
-			}
-			writeCatalog([]map[string]any{row})
-			run := func(destination string, wantSuccess bool) {
-				t.Helper()
-				cmd := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", catalog, "--input", input, "--output", destination, "--version", "1.0.0")
-				combined, err := cmd.CombinedOutput()
-				if (err == nil) != wantSuccess {
-					t.Fatalf("collector success=%v want %v: %v\n%s", err == nil, wantSuccess, err, combined)
-				}
-			}
-			run(output, true)
-			entries, err := os.ReadDir(output)
-			contractcheck.FailErr(t, "read shared artifact set", err)
-			if len(entries) != 4 {
-				t.Fatalf("shared artifact count=%d, want 4", len(entries))
-			}
-			writeCatalog([]map[string]any{row, row})
-			run(filepath.Join(dir, "repeated"), false)
-			writeCatalog([]map[string]any{row})
-			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem+"."+extension+".sig")))
-			run(filepath.Join(dir, "unsigned"), false)
-		})
-	}
-}
-
 func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -342,7 +247,7 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
 	if !strings.Contains(workflow, "painted-wolf-code@preview") ||
-		!strings.Contains(workflow, "--channel preview") ||
+		!strings.Contains(workflow, "--channel \"${selected}\"") ||
 		!strings.Contains(workflow, "--advance-if-newer") ||
 		!strings.Contains(extractYAMLJob(workflow, "update-cask"), `scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"`) {
 		t.Fatal("stable publication must advance Preview without sharing its cask token")

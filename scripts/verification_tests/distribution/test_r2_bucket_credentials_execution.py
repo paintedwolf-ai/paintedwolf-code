@@ -1,6 +1,7 @@
 """Repository rehearsals use explicit bucket credentials without REST authority."""
 
 import os
+import tempfile
 from pathlib import Path
 import sys
 import types
@@ -65,3 +66,34 @@ class BucketScopedRepositoryTests(unittest.TestCase):
             module.read_bytes.side_effect = ValueError("authenticated read failed")
             with self.assertRaisesRegex(ValueError, "authenticated read failed"):
                 r2_objects.current("key", Path("unused"))
+
+    def test_present_nonobject_activation_refuses_native_halt_for_both_transports(self):
+        from scripts.linux_release import repository_withdrawal
+        from scripts.release_storage import s3
+        from scripts.verification_tests.distribution.repository_fixture_support import halt_distribution
+        plan = halt_distribution('1.2.3', None, channels=('stable',))
+        for transport in ('s3', 'cloudflare'):
+            for raw in (b'null', b'[]', b'42', b'"value"'):
+                with self.subTest(transport=transport, raw=raw), tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    def request(operation, *arguments):
+                        if operation == 'list-objects-v2':
+                            key = arguments[arguments.index('--prefix') + 1]
+                            return {'Contents': [{'Key': key, 'Size': len(raw), 'ETag': 'fixture'}]}
+                        self.assertEqual(operation, 'get-object')
+                        Path(arguments[-1]).write_bytes(raw)
+                        return {'ETag': 'fixture'}
+                    def cloudflare(arguments, **kwargs):
+                        Path(arguments[-1]).write_bytes(raw)
+                        return '200'
+                    with patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': transport}), \
+                         patch.object(s3, 'request', side_effect=request), \
+                         patch.object(r2_objects.subprocess, 'check_output', side_effect=cloudflare), \
+                         patch.object(r2_objects.subprocess, 'run') as effects:
+                        with self.assertRaisesRegex(ValueError, 'JSON object'):
+                            repository_withdrawal.prepare(plan)
+                        effects.assert_not_called()
+                    with patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': transport}), \
+                         patch.object(s3, 'request', return_value={'Contents': []}), \
+                         patch.object(r2_objects.subprocess, 'check_output', return_value='404'):
+                        self.assertIsNone(r2_objects.current('fixture/current.json', directory))

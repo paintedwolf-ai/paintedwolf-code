@@ -36,7 +36,7 @@ env:
 jobs:
   replay-bundle-upgrade:
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.rehearsal_run_id != '' }}
-    needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]
+    needs: [ship-gates, bundle-upgrade, publish-github-release]
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
@@ -186,8 +186,8 @@ jobs:
           echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
-    # Every Linux generation is assembled before any publication credential is materialized,
-    # so a failed assembly refuses the release here and the lane stays at two runners.
+    # Signing completes before feed credentials and any publication write.
+    # Earlier channel selection reads authenticated controls without signing material.
     needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
@@ -559,14 +559,6 @@ jobs:
           security delete-keychain "${RUNNER_TEMP}/app-signing.keychain-db" 2>/dev/null || true
           rm -f "${RUNNER_TEMP}/AuthKey.p8"
 
-  # Candidate builds share the independent, non-publishing workflow.
-  linux-candidates:
-    needs: [classify, ship-gates, aggregate-release]
-    if: ${{ !cancelled() && needs.classify.result == 'success' }}
-    uses: ./.github/workflows/linux-candidates.yml
-    with:
-      source_sha: ${{ needs.classify.outputs.source_sha }}
-
   aggregate-release:
     needs: [classify, build-release]
     runs-on: ubuntu-latest
@@ -643,9 +635,37 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  select-release-channels:
+    needs: [classify, ship-gates, aggregate-release]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Select the shared channel plan from read-only retained controls
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels select \
+            --file "${RUNNER_TEMP}/channel-plan.json" --source "${SOURCE_SHA}" --version "${VERSION}" \
+            --channel "${CHANNEL}" --generation "$(jq -r .signing_generation packaging/update-keys.json)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-channel-plan
+          path: ${{ runner.temp }}/channel-plan.json
+          if-no-files-found: error
+          retention-days: 90
+
   # Repository metadata is signed under the same custody as the packages.
   linux-repositories:
-    needs: [classify, aggregate-release]
+    needs: [classify, aggregate-release, select-release-channels]
     runs-on: ubuntu-latest
     environment: release-signing
     timeout-minutes: 30
@@ -654,6 +674,10 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
           persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
       - name: Install apt and dnf repository tools
         run: sudo apt-get update && sudo apt-get install -y gnupg rpm apt-utils createrepo-c
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -669,7 +693,25 @@ jobs:
         run: |
           PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories assemble --family native \
             --artifacts release-artifacts --version "${VERSION}" --source-commit "${SOURCE_SHA}" \
-            --channel "${CHANNEL}" --output "${RUNNER_TEMP}/linux-native"
+            --channel "${CHANNEL}" --plan release-plan/channel-plan.json --output "${RUNNER_TEMP}/linux-native"
+      - name: Build and admit repository setup packages
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.release_repository_setup \
+            --generations "${RUNNER_TEMP}/linux-native" --artifacts release-artifacts \
+            --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" --plan release-plan/channel-plan.json \
+            --base-url "${DOWNLOAD_BASE_URL}/linux" --output "${RUNNER_TEMP}/linux-setup"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-repository-setup
+          path: ${{ runner.temp }}/linux-setup/*
+          if-no-files-found: error
+          retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-repositories-native
@@ -695,6 +737,10 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: release-channel-plan
+          path: release-plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
           name: release-public-artifacts
           path: release-artifacts
       - name: Assemble signed pacman generations
@@ -706,7 +752,7 @@ jobs:
         run: |
           PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories assemble --family pacman \
             --artifacts release-artifacts --version "${VERSION}" --source-commit "${SOURCE_SHA}" \
-            --channel "${CHANNEL}" --output "${RUNNER_TEMP}/linux-pacman"
+            --channel "${CHANNEL}" --plan release-plan/channel-plan.json --output "${RUNNER_TEMP}/linux-pacman"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-repositories-pacman
@@ -833,7 +879,7 @@ jobs:
           name: release-bundle-upgrade-${{ matrix.case_id }}-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  publish-immutable:
+  publish-artifacts:
     needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
@@ -843,6 +889,10 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
@@ -851,6 +901,11 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-public-artifacts
+          path: release-artifacts
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repository-setup
           path: release-artifacts
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -868,6 +923,7 @@ jobs:
         run: |
           set -euo pipefail
           SIGNING_GENERATION="$(jq -r .signing_generation packaging/update-keys.json)"
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
           python3 scripts/release_distribution.py advance --file release-metadata/latest.json \
             --key "updates/${CHANNEL}/key-${SIGNING_GENERATION}/latest.json"
 
@@ -884,10 +940,11 @@ jobs:
             bash scripts/release-r2-immutable-put.sh --key "$1" --file "$2" \
               --content-type "${3:-application/octet-stream}"
           }
-          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+          for artifact in release-artifacts/*; do
             put "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
           done
           put "updates/releases/${VERSION}.json" release-metadata/latest.json application/json
+          put "release-metadata/${VERSION}/channel-plan.json" release-plan/channel-plan.json application/json
           for cask in release-metadata/*.rb; do
             put "release-metadata/${VERSION}/$(basename "${cask}")" "${cask}" text/plain
           done
@@ -907,23 +964,13 @@ jobs:
           set -euo pipefail
           : "${DOWNLOAD_BASE_URL:?missing DOWNLOAD_BASE_URL}"
           verify_public() {
-            local key="$1" file="$2" downloaded="${RUNNER_TEMP}/public-$(basename "$1")"
-            for attempt in $(seq 1 24); do
-              if curl --fail --silent --show-error --location --connect-timeout 10 --max-time 300 \
-                -H 'Cache-Control: no-cache' \
-                "${DOWNLOAD_BASE_URL}/${key}?release_verify=${GITHUB_RUN_ID}-${attempt}" \
-                --output "${downloaded}" && cmp -s "${file}" "${downloaded}"; then
-                return 0
-              fi
-              sleep 5
-            done
-            echo "error: public object did not converge: ${key}" >&2
-            return 1
+            PYTHONPATH=scripts python3 -c 'from pathlib import Path; import sys; from scripts.linux_release.r2_objects import public_bytes; public_bytes(sys.argv[1], Path(sys.argv[2]), attempts=24)' "${DOWNLOAD_BASE_URL}/$1" "$2"
           }
-          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+          for artifact in release-artifacts/*; do
             verify_public "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
           done
           verify_public "updates/releases/${VERSION}.json" release-metadata/latest.json
+          verify_public "release-metadata/${VERSION}/channel-plan.json" release-plan/channel-plan.json
           for cask in release-metadata/*.rb; do
             verify_public "release-metadata/${VERSION}/$(basename "${cask}")" "${cask}"
           done
@@ -933,7 +980,7 @@ jobs:
           done < <(find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f -print0)
 
   publish-linux-repositories:
-    needs: [classify, ship-gates, publish-immutable, linux-repositories, linux-pacman-repositories]
+    needs: [classify, ship-gates, publish-artifacts, linux-repositories, linux-pacman-repositories]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
@@ -947,6 +994,10 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
           persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
@@ -978,12 +1029,19 @@ jobs:
         run: |
           PYTHONPATH=scripts python3 -m scripts.linux_release.release_repositories publish \
             --generations linux-native --generations linux-pacman --artifacts release-artifacts \
-            --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" \
-            --base-url "${DOWNLOAD_BASE_URL}"
+            --version "${VERSION}" --source-commit "${SOURCE_SHA}" --channel "${CHANNEL}" --plan release-plan/channel-plan.json \
+            --base-url "${DOWNLOAD_BASE_URL}" --output "${RUNNER_TEMP}/linux-publication.json"
 
-  # Publish the Nix cache after the announced release.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-repository-publication
+          path: ${{ runner.temp }}/linux-publication.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # Observe cache publication before immutable discovery metadata is signed.
   linux-delivery:
-    needs: [classify, ship-gates, publish-immutable, publish-linux-repositories, publish-github-release]
+    needs: [classify, ship-gates, publish-artifacts, publish-linux-repositories]
     if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.publish-linux-repositories.result == 'success' }}
     uses: ./.github/workflows/release-linux-delivery.yml
     permissions:
@@ -996,7 +1054,87 @@ jobs:
       version: ${{ needs.classify.outputs.version }}
       channel: ${{ needs.classify.outputs.channel }}
 
-  # Follows the Linux activation so publication holds one runner beside the candidate build.
+  publish-immutable:
+    needs: [classify, ship-gates, publish-artifacts, publish-linux-repositories, linux-delivery]
+    if: ${{ needs.classify.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned signer
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+      - name: Install document and control-package verification tools
+        run: sudo apt-get update && sudo apt-get install -y minisign gnupg rpm
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repository-setup
+          path: release-artifacts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-metadata
+          path: release-metadata
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repository-publication
+          path: native-publication
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nix-cache-publication
+          path: cache-publication
+      - name: Sign and publish the completed distribution document
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          CONTROLLER_SHA: ${{ github.workflow_sha }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.release_lane \
+            --artifacts release-artifacts --updater release-metadata/latest.json \
+            --native native-publication/linux-publication.json --nix cache-publication/nix-publication.json \
+            --source "${SOURCE_SHA}" --controller "${CONTROLLER_SHA}" --plan release-plan/channel-plan.json --output "${RUNNER_TEMP}/signed-distribution"
+          for name in distribution.v1.json distribution.v1.json.sig; do
+            PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
+            file="${RUNNER_TEMP}/signed-distribution/${name}"
+            key="releases/v${VERSION}/${name}"
+            content_type=application/json
+            if [[ "${name}" == *.sig ]]; then content_type=text/plain; fi
+            bash scripts/release-r2-immutable-put.sh --key "${key}" --file "${file}" --content-type "${content_type}"
+            PYTHONPATH=scripts python3 -c 'from pathlib import Path; import sys; from scripts.linux_release.r2_objects import public_bytes; public_bytes(sys.argv[1], Path(sys.argv[2]), attempts=24)' "${DOWNLOAD_BASE_URL}/${key}" "${file}"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-distribution-document
+          path: ${{ runner.temp }}/signed-distribution/*
+          if-no-files-found: error
+          retention-days: 90
+
+  # Follows Linux repository activation before announcing the release.
   update-cask:
     needs: [classify, publish-immutable, publish-linux-repositories]
     runs-on: ubuntu-latest
@@ -1006,6 +1144,10 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.HOMEBREW_TAP_REPO }}
@@ -1027,7 +1169,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           set -euo pipefail
-          python3 scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"
+          python3 scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}" --plan release-plan/channel-plan.json
           cd tap
           git config user.name painted-wolf-release
           git config user.email release-bot@users.noreply.github.com
@@ -1048,8 +1190,18 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: release-channel-plan
+          path: release-plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
           name: release-metadata
           path: release-metadata
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-distribution-document
+          path: signed-distribution
+      - name: Install distribution signature verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
       - name: Dispatch channel release to paintedwolf-www
         env:
           GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
@@ -1061,14 +1213,25 @@ jobs:
         run: |
           set -euo pipefail
           digest="$(sha256sum release-metadata/latest.json | cut -d ' ' -f1)"
-          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches \
-            -f event_type=painted-wolf-release \
-            -F "client_payload[version]=${VERSION}" \
-            -F "client_payload[tag]=v${VERSION}" \
-            -F "client_payload[channel]=${CHANNEL}" \
-            -F "client_payload[manifest_sha256]=${digest}"
+          distribution_digest="$(sha256sum signed-distribution/distribution.v1.json | cut -d ' ' -f1)"
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
+          PYTHONPATH=scripts python3 - <<'PYNOTICE' > "${RUNNER_TEMP}/website-dispatch.json"
+          import hashlib, json, os
+          from pathlib import Path
+          from release_distribution_contract.channels import check
+          plan = json.loads(Path("release-plan/channel-plan.json").read_bytes())
+          check(plan)
+          if (plan["version"], plan["channel"]) != (os.environ["VERSION"], os.environ["CHANNEL"]):
+              raise ValueError("website notification differs from the selected release plan")
+          payload = {"version": plan["version"], "tag": "v" + plan["version"], "channel": plan["channel"],
+                     "manifest_sha256": hashlib.sha256(Path("release-metadata/latest.json").read_bytes()).hexdigest(),
+                     "distribution_sha256": hashlib.sha256(Path("signed-distribution/distribution.v1.json").read_bytes()).hexdigest(),
+                     "publication_channels": plan["channels"]}
+          print(json.dumps({"event_type": "painted-wolf-release", "client_payload": payload}))
+          PYNOTICE
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "${RUNNER_TEMP}/website-dispatch.json"
           python3 scripts/release_distribution.py website --channel "${CHANNEL}" \
-            --version "${VERSION}" --manifest-sha256 "${digest}" --verify-promotion \
+            --version "${VERSION}" --manifest-sha256 "${digest}" --distribution-sha256 "${distribution_digest}" --plan release-plan/channel-plan.json \
             --generation "$(jq -r .signing_generation packaging/update-keys.json)"
 
   activate-updater:
@@ -1080,6 +1243,10 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
@@ -1106,12 +1273,14 @@ jobs:
           DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
         run: |
           SIGNING_GENERATION="$(jq -r .signing_generation packaging/update-keys.json)"
-          bash scripts/release-r2-publish-pointer.sh \
-            --file release-metadata/latest.json --channel "${CHANNEL}" --generation "${SIGNING_GENERATION}"
-          if [[ "${CHANNEL}" == stable ]]; then
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
+          while IFS= read -r selected; do
+            PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
+            optional=()
+            if [[ "${CHANNEL}" == stable && "${selected}" == preview ]]; then optional=(--advance-if-newer); fi
             bash scripts/release-r2-publish-pointer.sh \
-              --file release-metadata/latest.json --channel preview --generation "${SIGNING_GENERATION}" --advance-if-newer
-          fi
+              --file release-metadata/latest.json --channel "${selected}" --generation "${SIGNING_GENERATION}" "${optional[@]}"
+          done < <(jq -r '.channels[]' release-plan/channel-plan.json)
 
   publish-github-release:
     needs: [classify, publish-immutable, activate-updater]
@@ -1130,13 +1299,34 @@ jobs:
           name: release-public-artifacts
           path: release-artifacts
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-repository-setup
+          path: release-artifacts
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-distribution-document
+          path: signed-distribution
+      - name: Collect the immutable discovery document for the mirror
+        run: cp signed-distribution/distribution.v1.json signed-distribution/distribution.v1.json.sig release-artifacts/
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-channel-plan
+          path: release-plan
+
       - name: Publish trailing GitHub mirror
         env:
           GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           VERSION: ${{ needs.classify.outputs.version }}
           PRERELEASE: ${{ needs.classify.outputs.prerelease }}
         run: |
           set -euo pipefail
+          PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
           NOTES="${RUNNER_TEMP}/release-notes.md"
           awk -v heading="## [${VERSION}]" \
             'index($0, heading) == 1 {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md > "${NOTES}"
@@ -1153,7 +1343,7 @@ jobs:
               diff -u "${RUNNER_TEMP}/expected-assets" "${RUNNER_TEMP}/actual-assets" >&2 || true
               exit 1
             }
-            for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+            for artifact in release-artifacts/*; do
               name="$(basename "${artifact}")"
               [[ -f "${existing}/${name}" ]] && cmp -s "${artifact}" "${existing}/${name}" || {
                 echo "error: existing GitHub mirror differs at ${name}" >&2
@@ -1172,6 +1362,7 @@ jobs:
             else
               flags+=(--latest)
             fi
-            gh release create "v${VERSION}" release-artifacts/painted-wolf-code_v${VERSION}_* \
+            PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.channels check --file release-plan/channel-plan.json
+            gh release create "v${VERSION}" release-artifacts/* \
               "${flags[@]}" --title "Painted Wolf Code v${VERSION}" --notes-file "${NOTES}"
           fi

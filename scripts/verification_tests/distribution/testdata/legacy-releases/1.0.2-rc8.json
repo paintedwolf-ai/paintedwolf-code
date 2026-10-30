@@ -1,0 +1,17 @@
+{
+  "notes": "Eighth release candidate for 1.0.2, published on the preview channel for\nin-app update testing from RC7 and incorporating Homebrew update notification,\nlocal model provider, and coordinator prompt fixes.\n\n### Changed\n\n- Homebrew installations present a notification-only update notice and settings\n  summary when a newer package is available.\n- Coordinator progress and tool-loading guidance describe operations and targets\n  without naming unoffered or deferred tools.\n\n### Fixed\n\n- Local OpenAI-compatible providers preserve reasoning content across multi-step\n  tool loops, omit tool definitions on non-callable turns, fold post-tool system\n  guidance into the trailing tool result, and recover XML `<function=...>` tool\n  calls and `<tool_call>` blocks after prose.\n- Internal step notes mark model working notes as data while keeping host\n  directives authoritative and stripping parroted markers from replies.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQXlZbDd6dTFJWDJvN2xYOGlJblRIcXJtS25JS1h3Ti9sTzVmUmhkbXRsTGVkSWpoTjF6S2M4amNnSGpBTXVHR0ZHOXE2WU8rdWJOUExUK1dkemVET1FRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDgwMzM0CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjOApNamxlbWllaHVpN2VyeEN2alRTc0FiSGRNR0wwQVVWQ1FPblpDcDh1SkhuRlA4STZEbmtCL2grMkZNM1pNWUFhRU1vVFZRbis1TUZkUUFkazE4MEJBdz09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc8/painted-wolf-code_v1.0.2-rc8_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-20T03:03:41Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc8"
+}

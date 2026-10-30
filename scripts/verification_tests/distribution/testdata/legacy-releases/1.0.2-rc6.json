@@ -1,0 +1,17 @@
+{
+  "notes": "Sixth release candidate for 1.0.2, published on the preview channel for\nin-app update testing from RC5.\n\n### Fixed\n\n- Restarting after an update starts a fresh application process, including\n  recovery when a launch encounters the previous version during replacement.\n- Update startup confirmation verifies the complete installed application and\n  its publisher signature before removing the previous application bundle.\n- Update failure recovery checks the complete candidate bundle when recording\n  whether activation succeeded.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQStOYWQ1TDdjaTd6S0MvZmxiWlA3MkFnMVdDaHhlR3R1WkVtNkxHaDFEV21xOVRQREwyMzl0NzJ0U1BJS1ZGWVExakhZTHE1b09ZbmRVQXVLR3MwckEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzcyMzc3CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjNgo1WFQrbm13Z0k0ZzNEQ2dEZXRBWkI0VURRN2RIdU1ja0pta0cySnR4SVoyYU9VRDdMMk1SZWxlbjgvMk40NUV0K1JHd1I0eWVzYmFNb0JJSzR0QjJEZz09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc6/painted-wolf-code_v1.0.2-rc6_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-18T19:19:17Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc6"
+}
