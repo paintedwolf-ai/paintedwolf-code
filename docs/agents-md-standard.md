@@ -61,8 +61,41 @@ Human AGENTS.md edits are not gated by the surface enable: the Files editor trea
 At session create, or when a project directory is set, the sidecar warms an `AGENTS.md` index via `governance.ListIndex` (`WarmAgentsMD`). Coordinator and worker turn assembly then prepend applicable guidance:
 
 1. **Session start** — `BuildIndexInject` names the discovered regular `AGENTS.md` files under the active workspace root without opening their bodies. The walk prunes engine/VCS dirs (`.git`, the project overlay), dot-prefixed directories, and index-only omits (`testdata`, `node_modules`; `ListIndexOmitDir`). Index omit is not the survey walk prune set: a file inside an omitted or hidden tree is still applied by chain resolution when work goes there.
-2. **Path-scoped turns** — `BuildChainInject` resolves the ancestor chain for the active relative path, root-first and nearest-last, with `<root>/.paintedwolf/AGENTS.md` appended last so the overlay wins. It re-reads and injects the bounded current body for every completion, so a human edit takes effect on the next turn. A worker with no narrower scope receives the root chain.
+2. **Working scopes** — resolved source observations and reached operations select their attached physical workspaces. `BuildScopedInject` supplies current policy bodies with explicit jurisdiction, ancestors first and the applicable root overlay last. Shared policy files appear once. Human edits take effect on the next completion; reached mutations also check freshness before their effect. A worker with no narrower scope receives its actual workspace root chain.
 3. **Transcript compaction** — AGENTS guidance is assembled outside persisted transcript history and rebuilt from source for every completion. Compaction never summarizes or selectively preserves repository policy.
+
+### Resolved command scopes
+
+Policy delivery uses attached root identity, the current physical workspace, and
+resolved operation or source-observation paths. Raw command text and historical
+`path` arguments do not select a command's policy. Each scoped block identifies
+its root and jurisdiction; shared ancestors appear once, with nested policies
+and the root overlay retaining their precedence. Write workers use their private
+branch roots through the same workspace registry as tool execution.
+
+When current guidance exceeds the receiving model's available context, request
+fitting defers whole authenticated policy chains and supplies an explicit notice.
+Freshly reached scopes take priority; ancestor and root-overlay precedence stays
+unchanged. Deferred guidance grants no mutation coverage. A narrower held
+operation promotes its chain on the next completion without a new human request.
+Other live control facts and the current human instruction remain protected.
+
+Candidate authentication and physical workspace bindings are frozen before request
+fitting. The exact final model messages determine the immutable policy manifest;
+omitted or modified blocks supply no mutation coverage.
+Reached native mutations check the current applicable revisions before review
+and publication. External launches check their resolved working directory;
+arbitrary external arguments do not establish complete file-level policy coverage.
+New or changed policy returns `POLICY_CONTEXT_CHANGED` before the affected effect.
+The next completion receives the reached scope, and the model chooses a fresh
+operation. Earlier completed effects are retained and must not be replayed.
+Held operations retain their proposing request's manifest.
+
+Unavailable policy is reported separately from disabled trust and absent policy.
+Read-only investigation remains available; affected mutations remain unexecuted
+until current guidance is available and delivered. Policy source errors are host
+data, not instructions. Cancellation retains its ordinary lifecycle meaning.
+
 
 ```mermaid
 flowchart TD
@@ -70,7 +103,7 @@ flowchart TD
     applies -->|"no"| skip["No inject"]
     applies -->|"yes"| warm["governance.ListIndex<br/>warm AGENTS.md index"]
     warm --> index["BuildIndexInject<br/>session start: discovered paths, no body reads"]
-    index --> chain["BuildChainInject<br/>path-scoped turn: ancestor chain root-first,<br/>.paintedwolf/AGENTS.md appended last"]
+    index --> chain["Resolved working scopes<br/>deduplicated ancestor policies root-first,<br/>root overlays appended last"]
     chain --> sanitize["Strip invisible formatting codepoints"]
     sanitize --> valve{"Over the 65536-byte<br/>safety valve?"}
     valve -->|"no"| inject["System-message inject<br/>(current body for every completion)"]

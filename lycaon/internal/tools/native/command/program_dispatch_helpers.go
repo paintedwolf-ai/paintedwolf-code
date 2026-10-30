@@ -266,7 +266,7 @@ func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationReques
 	if len(request.Argv) == 0 || request.Argv[0].Value == "external" {
 		return false
 	}
-	return (ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs, BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
+	return (ExternalStages{ToolContext: d.run.tc, Cwd: d.paths.Cwd(), BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
 }
 
 // unsupportedForm is the native gap a typed unsupported-form refusal names;

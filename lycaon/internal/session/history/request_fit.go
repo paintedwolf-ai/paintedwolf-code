@@ -16,7 +16,11 @@ type RequestBudgets interface {
 }
 
 // FitRequest reserves the live frame before allocating history and output.
-func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets) (modelcall.CompletionRequest, error) {
+func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets, policies RequestPolicies) (modelcall.CompletionRequest, error) {
+	var policyGroups [][]api.Message
+	if policies != nil {
+		policyGroups = policies.PolicyMessageGroups(req.Messages)
+	}
 	cfg := m.compactionConfig(ctx, sess)
 	provider, model := m.Model(ctx, sess)
 	if model != "" {
@@ -107,6 +111,11 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 			break
 		}
 		capacity = max(1, min(capacity-1, capacity*3/4))
+	}
+	if policies != nil {
+		if fitted, deferred, err := m.fitPolicyFrame(ctx, sess, req, projection.history, cfg, budgets, policies, policyGroups, measure, reserve); deferred || err != nil {
+			return fitted, err
+		}
 	}
 	return req, &failure.ProviderContextTooSmallError{ProviderID: provider, Model: model,
 		PromptTokens: budget.Input, CompletionReserve: reserve, MaxContext: budget.Window}

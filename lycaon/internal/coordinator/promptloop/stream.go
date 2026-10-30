@@ -567,11 +567,23 @@ func (l *modelTurn) buildTurnRequest(
 	}
 	req.Tools = turnTools
 	req.ToolUse = toolUse
+	var policyBinding tools.AgentPolicyBinding
+	if l.Context.Deps.PrepareAgentPolicy != nil {
+		var bindErr error
+		policyBinding, bindErr = l.Context.Deps.PrepareAgentPolicy(ctx, sess, req.Messages)
+		if bindErr != nil {
+			return coordinatorTurnRequest{}, bindErr
+		}
+	}
 	if l.Deps.FitRequest != nil {
 		req, err = l.Deps.FitRequest(ctx, sess, history, req)
 		if err != nil {
 			return coordinatorTurnRequest{}, err
 		}
+	}
+	st.output.policyCheck = nil
+	if policyBinding != nil {
+		st.output.policyCheck = policyBinding(req.Messages)
 	}
 	st.stampOfferedToolNames(callable)
 	return coordinatorTurnRequest{

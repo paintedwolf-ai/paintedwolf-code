@@ -221,7 +221,7 @@ func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) 
 	service := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 700)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
-	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets, nil)
 	testutil.FailErr(t, "fit multi-exchange active turn", err)
 	seen := map[string]api.Message{}
 	for _, row := range fitted.Messages {

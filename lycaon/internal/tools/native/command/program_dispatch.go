@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -13,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -136,6 +136,10 @@ func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.O
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
@@ -186,6 +190,10 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
@@ -211,8 +219,6 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		}
 		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 	case d.builtins[spec.Name] != nil:
-		// Host builtins read the frame's directory from the invocation scope.
-		request.Invocation.Scope.Directory = d.paths.Cwd().DisplayPath
 		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
 	return d.refuseUnimplemented(ctx, spec, request, streams)
@@ -279,7 +285,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
-	cwd, display := d.paths.Cwd().Abs, d.paths.Cwd().DisplayPath
+	cwd, display := d.paths.Cwd(), d.paths.Cwd().DisplayPath
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
@@ -314,7 +320,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Dir: cwd, BaseEnvironment: d.run.baseEnv}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv}.Launch(ctx, request, streams)
 				})
 			}}, nil
 		},
@@ -384,6 +390,15 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		spec = resolved
 	}
+	mode := prepared.Mode
+	if mode == "" {
+		mode = request.EffectMode
+	}
+	mode = selectEffectMode(spec, mode)
+	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
+	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, request, d.paths.Cwd(), prepared.Review); err != nil {
+		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
 	tool := prepared.Tool
 	if tool == "" {
 		tool = operation.Tool
@@ -403,11 +418,6 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	mode := prepared.Mode
-	if mode == "" {
-		mode = request.EffectMode
-	}
-	mode = selectEffectMode(spec, mode)
 	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
@@ -448,6 +458,16 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				}
 				actual.Review.OperationID = operationDef.Facts().Identity
 				actual.Review.PathTargets = absolutePathTargets(frame.Cwd().Abs, admitted.Host.SessionScratchDir, actual.Review.PathTargets)
+			}
+			actualMode := actual.Mode
+			if actualMode == "" {
+				actualMode = mode
+			}
+			if err := d.checkPreparedPolicy(ctx, admitted, spec, actualMode, request, frame.Cwd(), actual.Review); err != nil {
+				if disclosed == nil && actual.Release != nil {
+					actual.Release()
+				}
+				return toolexecution.PreparedNativeEffect{}, err
 			}
 			if prepared.DeferredSource && disclosed == nil && !reflect.DeepEqual(actual.Review.PathTargets, review.PathTargets) {
 				prior := actual.Review
@@ -499,6 +519,9 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				if disclosed == nil && actual.Release != nil {
 					defer actual.Release()
 				}
+				if err := d.checkPreparedPolicy(ctx, tc, spec, actualMode, request, frame.Cwd(), actual.Review); err != nil {
+					return ownerFailure(err), err
+				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					tracker.w = nonNilWriter(streams.Error)
 					streams.Error = tracker
@@ -533,10 +556,13 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 // builtin, on this frame.
 func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	request.OperationID = spec.Name
-	if prepared.Mode != "" && request.EffectMode == "" {
+	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
+			return ownerFailure(err), err
+		}
 		noteJobNative(ctx, request.Argv.Values())
 		return prepared.Invoke(ctx, tc, streams)
 	})

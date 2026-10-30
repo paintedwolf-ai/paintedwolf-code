@@ -188,6 +188,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext
+		ctx = tools.WithAgentPolicy(ctx, st.output.policyCheck)
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
 	var turnTools []string

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -26,6 +27,15 @@ type FileChangeReviewer func(context.Context, []FileChange) error
 // ReviewFileChanges authorizes prepared changes before they reach their destinations.
 func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChange) error {
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var targets []agentpolicy.Target
+	for _, change := range changes {
+		for _, path := range []string{change.Path, change.FromPath} {
+			targets = append(targets, agentpolicy.Target{Path: path, Mutation: true})
+		}
+	}
+	if err := tc.CheckPolicyTargets(ctx, targets); err != nil {
 		return err
 	}
 	if tc.Files.FileChangeReview != nil {

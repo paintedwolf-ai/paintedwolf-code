@@ -15,6 +15,7 @@ import (
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
+	"github.com/lycaon/lycaon/internal/session/policyindex"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
@@ -33,6 +34,7 @@ type ContextRepository interface {
 	Get(ctx context.Context, id string) (*api.Session, error)
 }
 type Context struct {
+	PolicyIndex *policyindex.Service
 	Frame       inject.CoordinatorTurnFrameSource
 	Guards      *turnguards.Service
 	Limits      *sessionlimits.Service
@@ -106,6 +108,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			return presence
 		},
 		BuildMessages:         m.Runtime.BuildCompletionMessages,
+		PrepareAgentPolicy:    m.PolicyIndex.PrepareBinding,
 		WebSearchEnabled:      m.WebSearchEnabled,
 		CoordinatorFrame:      m.Frame,
 		ImplementSessionState: m.WorkerState.ForSession,
