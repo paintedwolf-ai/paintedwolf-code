@@ -4,8 +4,8 @@
   "kind": "construction",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "The shared command boundary validates inputs, renders the platform profile and hands off owned descriptors with rollback cleanup. Socket duplication has a focused platform helper; keeping command construction here preserves a single launch and cleanup transaction. No additional permission resolver is introduced. Freeze this reviewed shape at 520 lines; further growth requires renewed architectural review. The main refresh composes native cache-root selection and descriptor-relative first-use preparation before profile rendering with retained socket duplication and rollback cleanup after rendering. These steps remain ordered in the existing command launch transaction; native cache adapters do not gain socket authority, and socket grants do not widen filesystem roots. Keep the prior ceiling, shape and existing fingerprints pending focused verification of this combined source; warning renewal remains visible.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "reason": "Retain the shared command construction owner under the existing 520-line ceiling. One launch transaction validates the boundary, prepares only authorized platform cache stores, renders the profile, acquires retained socket descriptors and wires rollback cleanup. Native cache owners remain compile-selected filesystem collaborators; socketref remains the retained-object lifetime owner. Neither gains a second authority resolver. Focused Linux contracts on the combined source verified pure rendering without materialization, exact root sets, protected floors, symlink replacement, socket identity replacement, retirement and descriptor reuse, and delegated-service refusal. Preserve other boundary fingerprints until their corresponding contracts are verified; renewed warning obligations remain visible rather than claiming unqualified native coverage.",
+  "reviewed_commit": "7f9e4806851b1b4aaa28d4664c30101edf6ccec8",
   "ceiling": 520,
   "boundaries": {
     "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
@@ -19,7 +19,7 @@
     "lycaon/internal/confine/package_cache_roots_darwin_test.go": "77b4ad37e41696374c98d3461e17e076e9052010b571be260e2fe349f06fc540",
     "lycaon/internal/confine/package_cache_roots_windows_test.go": "962938548bf9397cf370daf512ebca7b76d51110dfe5933fd59edd562e845829",
     "lycaon/internal/confine/package_cache_roots_other_test.go": "1b1ec65ce53b822c47ed2f8370a6d9b4f29985754fced7cd4518580baaade8cf",
-    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "f7e2307fcef9b04da7586ab1261a86bbb49c9650f23b6cadd695d9cf5d634595",
     "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef"
   }
 }
