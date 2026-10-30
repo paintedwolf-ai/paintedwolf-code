@@ -247,6 +247,8 @@ implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
 record none. The command never delivers a conversational read; only exact mapped
 output that the delivery owner later delivers can qualify an edit base.
 
+Name-only `ls` listings admit directory member names without fetching child metadata. Metadata is read only for selected formatting, sorting, classification or recursion. Hidden-name selection applies before the remaining `traversal_visits` bound, so an oversized listing refuses before allocating its full membership or inspecting its children. Completion logs report listing entries, directories and child metadata reads.
+
 ### Search commands
 
 `grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select

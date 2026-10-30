@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -22,7 +21,7 @@ type lsOptions struct {
 	slash, inode, blocks, deref, unsorted, changeTime, accessTime, groupDirs          bool
 	// numeric is -n: owner and group stay decimal instead of account names.
 	numeric bool
-	// noGroup is GNU -G: long listings omit the group column.
+	// noGroup omits the group column in long listings.
 	noGroup bool
 	// noOwner is -g; commas is -m; followArgs is -H (command-line links);
 	// physical is -P (never follow links, even command-line directory links).
@@ -40,7 +39,7 @@ func (o lsOptions) time(st fseffect.EntryStat) time.Time {
 	return st.ModTime
 }
 
-// sortsByTime is -t, or -c/-u without -l, as GNU ls defines them.
+// sortsByTime selects -t, or -c/-u without -l.
 func (o lsOptions) sortsByTime() bool {
 	return !o.unsorted && (o.byTime || (o.changeTime || o.accessTime) && !o.long)
 }
@@ -87,7 +86,7 @@ func runLs(inv *invocation) error {
 	}
 	opts.deref, opts.followArgs, opts.physical = lastLinkSelection(inv)
 	// -o and -g are long listings without the group or the owner; -f is
-	// -aU without long format, as GNU and BSD define them.
+	// -aU without long format.
 	opts.long = opts.long || inv.flag("-o") || inv.flag("-g")
 	if inv.flag("-f") {
 		opts.all, opts.unsorted, opts.long = true, true, false
@@ -150,6 +149,7 @@ func runLs(inv *invocation) error {
 	sortEntries(dirEntries, opts)
 	visits := inv.owners.limit("traversal_visits")
 	visited := int64(0)
+	defer inv.directoryWork.report(inv)
 	labelled := len(files) > 0 || len(dirEntries) > 1 || opts.recursive
 	first := len(files) == 0
 	var walk func(label string, entry lsEntry, operand bool) error
@@ -197,86 +197,19 @@ func runLs(inv *invocation) error {
 	return nil
 }
 
-// children reads one directory's entries itself: no ignore rules or map.
-// An unreadable directory is reported and yields no entries; GNU treats an
-// unreadable command-line operand as serious (2) and a nested one as minor.
-func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
-	opened, err := dir.OpenDir()
-	var names []string
-	if err == nil {
-		names, err = opened.Names(0)
-		if err != nil {
-			_ = opened.Close()
-		}
-	}
-	if err != nil {
-		if reason, ok := ordinary(err); ok {
-			_, _ = fmt.Fprintf(inv.stderr, "ls: cannot open directory '%s': %s\n", dir.Resolved.DisplayPath, reason)
-			status := 1
-			if operand {
-				status = 2
-			}
-			inv.status = max(inv.status, status)
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-	defer opened.Close()
-	if opts.all {
-		names = append([]string{"."}, names...)
-	}
-	var out []lsEntry
-	for _, name := range names {
-		if !opts.all && !opts.almost && strings.HasPrefix(name, ".") {
-			continue
-		}
-		*visited++
-		if maximum > 0 && *visited > maximum {
-			return nil, false, tools.CommandLimitExceeded("traversal_visits", maximum, *visited)
-		}
-		var (
-			child projectpaths.BoundPath
-			st    fseffect.EntryStat
-		)
-		if name == "." {
-			child = dir
-			st, err = opts.stat(child)
-		} else {
-			child, st, err = opened.StatChild(name)
-			if err == nil && opts.deref && typeLetter(st.Mode) == 'l' {
-				if target, targetErr := opened.StatChildFollowed(child); targetErr == nil {
-					st = target
-				}
-			}
-		}
-		if err != nil {
-			if reason, ok := ordinary(err); ok {
-				inv.fail(1, path.Join(dir.Resolved.DisplayPath, name), reason)
-				continue
-			}
-			return nil, false, err
-		}
-		entry := lsEntry{name: name, stat: st, bound: child}
-		out = append(out, entry)
-	}
-	if opts.all {
-		if parent, err := inv.parentEntry(dir); err == nil {
-			out = append(out, parent)
-		}
-	}
-	return out, true, nil
-}
-
 // parentEntry describes ".." through the parent's own binding when it is
 // inside the same admitted root; it is never followed outward.
-func (inv *invocation) parentEntry(dir projectpaths.BoundPath) (lsEntry, error) {
+func (inv *invocation) parentEntry(dir projectpaths.BoundPath, metadata bool) (lsEntry, error) {
 	parent, err := inv.paths.Bind(inv.ctx, path.Join(dir.Resolved.Abs, ".."), false)
 	if err != nil {
 		return lsEntry{}, err
 	}
-	st, err := parent.Stat(false)
-	if err != nil {
-		return lsEntry{}, err
+	var st fseffect.EntryStat
+	if metadata {
+		st, err = parent.Stat(false)
+		if err != nil {
+			return lsEntry{}, err
+		}
 	}
 	return lsEntry{name: "..", stat: st, bound: parent}, nil
 }
@@ -371,7 +304,7 @@ func (o lsOptions) allocated(st fseffect.EntryStat) string {
 }
 
 // prefixes are the -i and -s columns, right-aligned across one listing
-// except in comma-separated (-m) listings, where GNU prints no padding.
+// except in comma-separated (-m) listings, which have no padding.
 func (o lsOptions) prefixes(entries []lsEntry) []string {
 	if !o.inode && !o.blocks {
 		return make([]string, len(entries))
@@ -409,7 +342,7 @@ func (o lsOptions) total(entries []lsEntry) string {
 }
 
 // listEntries prints one listing; a directory's long listing starts with
-// GNU's total of allocated space (1 KiB units, or -h IEC size).
+// allocated space (1 KiB units, or -h IEC size).
 func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool) error {
 	if (opts.inode || opts.blocks) && slices.ContainsFunc(entries, func(e lsEntry) bool { return !e.stat.POSIX }) {
 		return platformUnavailable("ls", "POSIX inode and allocation metadata")
@@ -477,7 +410,7 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 	return nil
 }
 
-// humanSize is GNU ls -h: powers of 1024, one decimal below ten, rounded up.
+// humanSize uses powers of 1024, one decimal below ten, rounded up.
 func humanSize(size int64) string {
 	if size < 1024 {
 		return strconv.FormatInt(size, 10)
@@ -509,7 +442,7 @@ func humanSize(size int64) string {
 	return fmt.Sprintf("%d%c", whole, units[unit])
 }
 
-// accounts names owners and groups as GNU ls does, through the platform's
+// accounts resolves owner and group names through the platform's
 // account database, falling back to the decimal id when it has no name.
 // Lookups are cached for the life of the owners.
 type accounts struct {
@@ -560,7 +493,7 @@ func (a *accounts) name(cache *map[uint32]string, id uint32, numeric bool, looku
 }
 
 // commaList is -m: names separated by ", " and wrapped before column 80,
-// GNU's width when output is not a terminal.
+// the width used for non-terminal output.
 func (inv *invocation) commaList(entries []lsEntry, prefixes []string, opts lsOptions) error {
 	const width = 80
 	var b strings.Builder

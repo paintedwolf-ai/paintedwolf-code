@@ -22,17 +22,18 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	request    commandprogram.OperationRequest
-	spec       toolcontract.CommandSpecification
-	argv       commandprogram.BoundArgv
-	closers    []io.Closer
-	input      io.Reader
-	stderr     io.Writer
-	out        *output
-	status     int
+	request commandprogram.OperationRequest
+	spec    toolcontract.CommandSpecification
+	argv    commandprogram.BoundArgv
+	closers []io.Closer
+	input   io.Reader
+	stderr  io.Writer
+	out     *output
+	status  int
 	// comparison marks diff's complete status-one result as publishable.
 	comparison    bool
 	diffVisits    int64
+	directoryWork directoryListingWork
 	releases      []func()
 	currentStream io.Closer
 	pinMu         sync.Mutex
@@ -98,7 +99,7 @@ func (inv *invocation) fail(status int, operand, reason string) {
 	inv.status = max(inv.status, status)
 }
 
-// failureForms are the GNU diagnostics that do not use "NAME: OPERAND: REASON".
+// failureForms are diagnostics that do not use "NAME: OPERAND: REASON".
 var failureForms = map[string]string{
 	"head": "cannot open '%s' for reading: %s",
 	"tail": "cannot open '%s' for reading: %s",
