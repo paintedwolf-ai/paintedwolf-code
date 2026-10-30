@@ -130,6 +130,7 @@ Refusals, approvals, mutations and uncertain effects retain individual outcomes.
 Missing inputs or receipts use a neutral operation presentation.
 
 Den keeps the existing group, single-line activity and expanded-detail structure.
+Activity grouping does not add a disclosure level.
 Rows show the action, target and outcome. Expanded cards prioritize the outcome
 and bounded output, then the original submitted command with the activity's
 source spans highlighted. Long content remains available through the existing
