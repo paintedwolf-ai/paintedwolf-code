@@ -447,6 +447,15 @@ A stopped `command` result keeps `refusal.code`, rendered `refusal.feedback`, an
 
 Scope is rechecked where the effect occurs. A model-visible schema, prompt instruction, or earlier path classification never authorizes a later write.
 
+Each reached command retains its prepared inputs before approval. After admission,
+the invocation recorder commits the screened reviewed inputs and owner-start marker
+in one transaction before dispatch. Screening and blob staging happen outside the
+writer transaction; attachment, trace charges, and the start marker commit together
+for inline and blob inputs. Progress envelopes use the same boundary. A failed
+acknowledgement never permits dispatch, and retained bodies remain charged until a
+durable lookup reconciles their attachment. Recovery preserves unknown outcomes
+without replaying the program.
+
 ---
 
 ## Prompt tool policy

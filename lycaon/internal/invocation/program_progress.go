@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -9,15 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ReviewedProgressInputRetention captures the structured envelope owner's
-// reviewed input. Progress has no fabricated source node or command spelling.
-type ReviewedProgressInputRetention interface {
-	RetainReviewedProgressInputs(context.Context, toolcontract.ProgramProgressIdentity, toolcontract.ReviewedOperationInputs) (string, error)
-}
-
 func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, identity toolcontract.ProgramProgressIdentity, modelCallID string, inputs toolcontract.ReviewedOperationInputs) error {
-	retainer, ok := r.Inputs.(ReviewedProgressInputRetention)
-	if r.Recorder == nil || r.Recorder.database == nil || !ok || identity.ProgramID == "" || identity.ExecutionID == "" || identity.ActorID == "" || identity.SessionID == "" || identity.RootSessionID == "" || modelCallID == "" {
+	if r.Recorder == nil || r.Recorder.database == nil || r.Inputs.Outputs == nil || identity.ProgramID == "" || identity.ExecutionID == "" || identity.ActorID == "" || identity.SessionID == "" || identity.RootSessionID == "" || modelCallID == "" {
 		return fmt.Errorf("progress start requires actual envelope, owner scope and reviewed retention")
 	}
 	if err := identity.Scope.Validate(); err != nil {
@@ -26,28 +20,31 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if err := validateReviewedInputs(inputs); err != nil {
 		return err
 	}
-	reference, err := retainer.RetainReviewedProgressInputs(ctx, identity, inputs)
-	if err != nil {
-		return err
-	}
-	if reference == "" {
-		return fmt.Errorf("progress retention returned no reference")
+	if identity.ProgramID != r.Inputs.ProgramID || identity.SessionID != r.Inputs.Scope.SessionID || identity.RootSessionID != r.Inputs.Scope.RootSessionID || identity.Scope.ProjectID != r.Inputs.Scope.ProjectID {
+		return fmt.Errorf("reviewed input capture does not match actual progress scope")
 	}
 	scope, err := json.Marshal(identity.Scope)
 	if err != nil {
 		return err
 	}
-	tx, err := r.Recorder.database.BeginTx(ctx, nil)
-	if err != nil {
+	prepared := preparedProgressStart{identity: identity, modelCallID: modelCallID, inputs: inputs, scope: scope}
+	start := reviewedOwnerStart{programID: identity.ProgramID, executionID: identity.ExecutionID, progress: true, record: prepared.record}
+	return r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs)
+}
+
+type preparedProgressStart struct {
+	identity    toolcontract.ProgramProgressIdentity
+	inputs      toolcontract.ReviewedOperationInputs
+	modelCallID string
+	scope       []byte
+}
+
+func (s preparedProgressStart) record(ctx context.Context, tx *sql.Tx, reference string) error {
+	identity, inputs, scope := s.identity, s.inputs, s.scope
+	if err := chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
-	// Current root scope is read from P09's progress owner immediately before
-	// this marker. The model parent and addressed program must still be running.
-	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
-		return err
-	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_representation,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.Representation(), inputs.ArgumentsDigest(), reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, modelCallID)
+	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_representation,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.Representation(), inputs.ArgumentsDigest(), reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, s.modelCallID)
 	if err != nil {
 		return err
 	}
@@ -58,12 +55,10 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
-// ProgressSettlement is the actual AuthorUpdate owner's outcome. Updated content
-// is never proof of shell execution or task completion. An ambiguous owner error
-// is recorded unknown; this API provides no automatic progress replay.
+// ProgressSettlement records the owner outcome without automatic replay.
 type ProgressSettlement struct {
 	Identity        toolcontract.ProgramProgressIdentity
 	OwnerInvoked    bool
@@ -111,8 +106,7 @@ func (r *SQLRecorder) SettleProgramProgress(ctx context.Context, in ProgressSett
 	return tx.Commit()
 }
 
-// RecordProgressRefusal retains an existing owner's structural preflight refusal
-// without claiming invocation or overwriting an already accepted update.
+// RecordProgressRefusal preserves an accepted update and records no invocation.
 func (r *SQLRecorder) RecordProgressRefusal(ctx context.Context, programID, ownerReference string) error {
 	if r == nil || r.database == nil || ownerReference == "" {
 		return fmt.Errorf("progress refusal requires authoritative owner reference")
