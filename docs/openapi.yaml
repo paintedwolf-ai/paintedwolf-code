@@ -26409,6 +26409,9 @@ components:
           type: string
         subject:
           type: string
+        job_handle:
+          type: string
+          description: Registered session-owned background job started by this activity.
         directory:
           type: string
         outcome:

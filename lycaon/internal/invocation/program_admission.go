@@ -34,7 +34,7 @@ func (r *ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound 
 		return err
 	}
 	r.OwnerStartRecorded = true
-	notifyActivity(ctx, in.Identity.ProgramID)
+	notifyActivity(ctx, in.Identity.ProgramID, in.Identity.ExecutionID)
 	return nil
 }
 

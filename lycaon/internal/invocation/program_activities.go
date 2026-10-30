@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"slices"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -23,35 +22,18 @@ type activityInput struct {
 func composeActivities(inputs []activityInput, settled bool) []api.CommandActivity {
 	activities := make([]api.CommandActivity, 0, len(inputs))
 	owners := make(map[string][]int)
-	for i := range inputs {
-		if inputs[i].receipt.State == "prepared" && !inputs[i].receipt.OwnerStarted {
-			continue
-		}
-		rule := activityPresentation(inputs[i])
-		if rule.role == "primary" || activityNeedsAttention(inputs[i].receipt) {
-			owners[inputs[i].receipt.ParentExecutionID] = append(owners[inputs[i].receipt.ParentExecutionID], i)
-		}
-	}
 	indices := make(map[int]int)
 	for i := range inputs {
 		input := inputs[i]
-		if input.receipt.State == "prepared" && !input.receipt.OwnerStarted {
-			continue
-		}
 		rule := activityPresentation(input)
 		if rule.role == "container" || (rule.role == "context" && !activityNeedsAttention(input.receipt)) {
 			continue
 		}
 		owner := i
-		if rule.role != "primary" && !activityNeedsAttention(input.receipt) {
+		if rule.role == "support" {
 			candidates := owners[input.receipt.ParentExecutionID]
-			if rule.role == "context" && len(owners) > 0 {
-				continue
-			}
 			if len(candidates) > 0 {
 				owner = supportingActivityOwner(inputs, i, candidates)
-			} else if rule.role == "support" && input.pipeline {
-				continue
 			}
 		}
 		index, exists := indices[owner]
@@ -61,12 +43,15 @@ func composeActivities(inputs []activityInput, settled bool) []api.CommandActivi
 			state, outcome := activityOutcome(primary.receipt)
 			activities = append(activities, api.CommandActivity{
 				ID: primary.receipt.ID, Group: presentation.group, Label: presentation.label,
-				Subject: activitySubject(primary), Directory: stringArgument(primary.arguments, "cwd"),
+				Subject: activitySubject(primary), JobHandle: primary.receipt.JobHandle, Directory: stringArgument(primary.arguments, "cwd"),
 				State: state, Outcome: outcome, StatusCode: primary.receipt.StatusCode,
 				ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, MergeKey: primary.mergeKey,
 			})
 			index = len(activities) - 1
 			indices[owner] = index
+		}
+		if owner == i {
+			owners[input.receipt.ParentExecutionID] = append(owners[input.receipt.ParentExecutionID], i)
 		}
 		activity := &activities[index]
 		activity.ExecutionIDs = append(activity.ExecutionIDs, input.receipt.ID)
@@ -75,7 +60,9 @@ func composeActivities(inputs []activityInput, settled bool) []api.CommandActivi
 		}
 		if owner != i && activityNeedsAttention(input.receipt) {
 			activity.State, activity.Outcome = activityOutcome(input.receipt)
-			activity.MergeKey = ""
+			activity.StatusCode = input.receipt.StatusCode
+		} else if owner != i && (input.receipt.State == "running" || input.receipt.State == "prepared") && activity.State == "completed" {
+			activity.State, activity.Outcome = "running", "Processing output"
 		}
 	}
 	// A control-only program still has a visible result.
@@ -98,12 +85,14 @@ func supportingActivityOwner(inputs []activityInput, index int, candidates []int
 }
 
 func activityNeedsAttention(receipt api.CommandExecutionReceipt) bool {
-	return receipt.State == "refused" || receipt.State == "failed" || receipt.State == "interrupted" || receipt.State == "waiting" || receipt.ApprovalRef != "" || receipt.HostStopCode != "" || receipt.StopCode != ""
+	return (receipt.StatusCode != nil && *receipt.StatusCode != 0) || receipt.State == "refused" || receipt.State == "failed" || receipt.State == "interrupted" || receipt.State == "waiting" || receipt.ApprovalRef != "" || receipt.HostStopCode != "" || receipt.StopCode != ""
 }
 
 func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	switch receipt.State {
-	case "prepared", "running":
+	case "prepared":
+		return "running", "Preparing"
+	case "running":
 		return "running", "Running"
 	case "waiting":
 		return "waiting", "Waiting"
@@ -132,21 +121,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, executions []api.Com
 		}
 		inputs = append(inputs, input)
 	}
-	result := composeActivities(inputs, settled)
-	// First-touch order is independent of result arrival.
-	slices.SortStableFunc(result, func(a, b api.CommandActivity) int {
-		return activityInputOrder(inputs, a.ID) - activityInputOrder(inputs, b.ID)
-	})
-	return result, nil
-}
-
-func activityInputOrder(inputs []activityInput, id string) int {
-	for i := range inputs {
-		if inputs[i].receipt.ID == id {
-			return i
-		}
-	}
-	return len(inputs)
+	return composeActivities(inputs, settled), nil
 }
 
 // ActivitySummary publishes row identities with the result, before detail reads.
@@ -156,6 +131,14 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 		return api.CommandProgramReceipt{}, err
 	}
 	page.Program.Activities = page.Activities
+	if len(page.Program.Activities) == 0 && page.Program.State != "running" && page.Program.State != "waiting" {
+		state := page.Program.State
+		if state == "rejected" {
+			state = "refused"
+		}
+		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: page.Program.StatusCode})
+		page.Program.Activities = []api.CommandActivity{{ID: page.Program.ID + ":result", Group: "Running commands", Label: "Run command", Subject: page.Program.StopCode, State: normalized, Outcome: outcome, StatusCode: page.Program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}}}
+	}
 	for _, receipt := range page.Executions {
 		state, outcome := activityOutcome(receipt)
 		page.Program.ActivityExecutions = append(page.Program.ActivityExecutions, api.CommandActivityExecution{ID: receipt.ID, State: state, Outcome: outcome, StatusCode: receipt.StatusCode})
@@ -168,12 +151,12 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 type activityObserverKey struct{}
 
 // WithActivityObserver binds live presentation to this invocation's lifetime.
-func WithActivityObserver(ctx context.Context, observe func(context.Context, string)) context.Context {
+func WithActivityObserver(ctx context.Context, observe func(context.Context, string, string)) context.Context {
 	return context.WithValue(ctx, activityObserverKey{}, observe)
 }
 
-func notifyActivity(ctx context.Context, program string) {
-	if observe, ok := ctx.Value(activityObserverKey{}).(func(context.Context, string)); ok {
-		observe(ctx, program)
+func notifyActivity(ctx context.Context, program, execution string) {
+	if observe, ok := ctx.Value(activityObserverKey{}).(func(context.Context, string, string)); ok {
+		observe(ctx, program, execution)
 	}
 }

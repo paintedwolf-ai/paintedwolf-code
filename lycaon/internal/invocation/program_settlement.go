@@ -99,7 +99,7 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	notifyActivity(ctx, programID)
+	notifyActivity(ctx, programID, executionID)
 	return nil
 }
 
