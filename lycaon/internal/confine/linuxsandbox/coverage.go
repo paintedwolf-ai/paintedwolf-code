@@ -18,3 +18,14 @@ func FlushCoverage() {
 		_ = coverage.WriteCountersDir(dir)
 	}
 }
+
+// coverageEnvironment is the environment of a process this helper starts from
+// its own binary with no inherited variables: only the coverage directory, so
+// an instrumented build records there instead of warning on the shared stderr.
+func coverageEnvironment() []string {
+	dir := os.Getenv("GOCOVERDIR")
+	if dir == "" {
+		return []string{}
+	}
+	return []string{"GOCOVERDIR=" + dir}
+}
