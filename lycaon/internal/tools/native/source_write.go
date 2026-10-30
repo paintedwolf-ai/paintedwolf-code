@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,9 +15,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -107,7 +107,10 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 				return err
 			}
 			delivery, err = tctx.PrepareFileDelivery(ctx)
-			return err
+			if err != nil {
+				return err
+			}
+			return checkAgentMutationPolicies(ctx, tctx, mutation)
 		},
 	})
 	if result.Publication.Committed() {
@@ -250,7 +253,10 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 				}
 			}
 			stage.delivery, prepareErr = tctx.PrepareFileDelivery(ctx)
-			return prepareErr
+			if prepareErr != nil {
+				return prepareErr
+			}
+			return checkAgentMutationPolicies(ctx, tctx, *mutation)
 		},
 	})
 	if err != nil {
@@ -317,6 +323,9 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 // outside attached roots it removes the entry through the scoped effect door.
 func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mutation agentMutation) error {
 	if removal, ok := recoverableRemoval(tctx, mutation); ok {
+		if err := checkAgentMutationPolicies(ctx, tctx, mutation); err != nil {
+			return err
+		}
 		operationID, err := tctx.Source.SourceMutations.RemoveEntry(ctx, removal)
 		if tctx.Effects.Out != nil && operationID != "" {
 			tctx.Effects.Out.OwnerRef = operationID
@@ -327,6 +336,9 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 				return reviewErr
 			}
 			removal, _ = recoverableRemoval(tctx, mutation)
+			if err := checkAgentMutationPolicies(ctx, tctx, mutation); err != nil {
+				return err
+			}
 			operationID, err = tctx.Source.SourceMutations.RemoveEntry(ctx, removal)
 		}
 		if tctx.Effects.Out != nil && operationID != "" {
@@ -582,6 +594,7 @@ func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, targe
 // destination. Each held replacement still revalidates its own target at commit.
 func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *toolcontract.ProgramMemory, streams []*agentStreamStage) ([]sourceeffect.Completion, sourceeffect.PendingEffects, error) {
 	plans := make([]sourceeffect.Plan, 0, len(streams))
+	mutations := make([]agentMutation, 0, len(streams))
 	var workspaceID string
 	if tc.Identity.ProjectID != "" {
 		workspaceID = sourceworkspace.ID(tc.Identity.ProjectID, tc.Source.Roots)
@@ -593,8 +606,12 @@ func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *tool
 			return completions, nil, err
 		}
 		plans = append(plans, sourceeffect.Plan{Record: record, Change: change, Target: stream.request.Target.Location})
+		mutations = append(mutations, stream.mutation)
 	}
 	completions := make([]sourceeffect.Completion, len(streams))
+	if err := checkAgentMutationPolicies(ctx, tc, mutations...); err != nil {
+		return completions, nil, err
+	}
 	pending, err := tc.Source.SourceMutations.PrepareEffects(ctx, memory, plans)
 	if err != nil {
 		return completions, nil, err

@@ -6,6 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -17,15 +21,23 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"io"
-	"os"
 )
 
-func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, target, from fseffect.Location, metadata bool) (sourceeffect.Pending, error) {
-	for _, path := range []string{mutation.AbsPath, mutation.FromAbsPath} {
-		if err := tctx.CheckPathPolicy(ctx, path, true); err != nil {
-			return nil, err
+func checkAgentMutationPolicies(ctx context.Context, tc tools.ToolContext, mutations ...agentMutation) error {
+	targets := make([]agentpolicy.Target, 0, 2*len(mutations))
+	for _, mutation := range mutations {
+		for _, path := range []string{mutation.AbsPath, mutation.FromAbsPath} {
+			if path != "" {
+				targets = append(targets, agentpolicy.Target{Path: path, Mutation: true})
+			}
 		}
+	}
+	return tc.CheckPolicyTargets(ctx, targets)
+}
+
+func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, target, from fseffect.Location, metadata bool) (sourceeffect.Pending, error) {
+	if err := checkAgentMutationPolicies(ctx, tctx, mutation); err != nil {
+		return nil, err
 	}
 	if tctx.Source.SourceMutations == nil {
 		return nil, nil
