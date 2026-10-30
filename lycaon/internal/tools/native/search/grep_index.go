@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
-// grepContentIndex owns pruning and captured-byte observation for one search.
+// grepContentIndex owns pruning and capture telemetry for one search.
 type grepContentIndex struct {
 	literals *sourcecatalog.LiteralSearch
 	require  litprefilter.Requirement
@@ -50,26 +50,12 @@ func (index *grepContentIndex) canPrune(e entry) bool {
 	return pruned
 }
 
-func (index grepContentIndex) begin(e entry) *sourcecatalog.ContentRead {
-	if !index.eligible(e) {
-		return nil
-	}
-	return index.literals.BeginRead(e.bound.Resolved.Root.Path, contentEntry(e), contentVersion(e))
-}
-
 type contentSearchStats struct {
 	candidates int
 	eligible   int
 	captured   int
 	pruned     int
 	learned    int
-}
-
-func (index *grepContentIndex) captured(read *sourcecatalog.ContentRead) {
-	defer read.Close()
-	if read.Learned() {
-		index.stats.learned++
-	}
 }
 
 func (index *grepContentIndex) completed(inv *invocation) {

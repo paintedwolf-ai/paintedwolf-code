@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -28,6 +29,7 @@ import (
 // COMMAND_REVISION_CONFLICT.
 type ExecutionRevisions struct {
 	Boundary *sandbox.Boundary
+	Literals *sourcecatalog.LiteralSearch
 	// Memory belongs to the invoking program; non-program metadata checks hold no retained captures.
 	Memory *toolcontract.ProgramMemory
 }

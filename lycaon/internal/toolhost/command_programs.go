@@ -59,6 +59,9 @@ func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutpu
 // per-program factory: one redirect owner per program.
 func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
+	if t.catalog != nil {
+		revisions.Literals = t.catalog.Literals
+	}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
 		return nil, err

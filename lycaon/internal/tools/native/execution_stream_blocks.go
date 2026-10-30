@@ -40,6 +40,7 @@ type verifiedSource struct {
 	cached         int64
 	valid          int
 	closed         bool
+	learned        bool
 }
 
 func (e ExecutionRevisions) scanSource(ctx context.Context, resolved projectpaths.Resolved, input io.Reader, proofs bool) (_ *verifiedSource, err error) {
