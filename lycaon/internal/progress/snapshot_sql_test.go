@@ -21,7 +21,7 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	for _, text := range []string{"- [ ] Other scope", before.Content} {
 		update, prepareErr := progress.PrepareAuthorUpdate(text)
 		testutil.FailErr(t, "prepare checklist", prepareErr)
-		_, applyErr := update.Apply(t.Context(), store, "session")
+		_, applyErr := update.Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "replace checklist", applyErr)
 	}
 	reopened := progress.NewSQLStore(database)
@@ -32,7 +32,7 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	}
 	update, err := progress.PrepareAuthorUpdate("- [x] Deliver")
 	testutil.FailErr(t, "prepare stale checklist", err)
-	_, err = update.ExpectRevision(before.Revision).Apply(t.Context(), reopened, "session")
+	_, err = update.ExpectRevision(before.Revision).Apply(t.Context(), reopened, "session", nil)
 	var conflict *progress.AuthorUpdateRejection
 	if !errors.As(err, &conflict) || conflict.Code != "PROGRESS_REVISION_CHANGED" {
 		t.Fatalf("stale update result: %v", err)

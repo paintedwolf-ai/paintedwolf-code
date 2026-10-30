@@ -7,18 +7,15 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// committedEffect keeps a producer-stated no-op from clearing repetition history.
-func (run completedToolRun) committedEffect() bool {
+// advancesRepetitionContext distinguishes material progress from bookkeeping.
+func (run completedToolRun) advancesRepetitionContext() bool {
 	if !run.contract.MutatesWorld() {
 		return false
 	}
-	if run.call.Name != "update_progress" {
-		return true
+	if run.call.Name == "update_progress" {
+		return progressResultAdvanced(run.output)
 	}
-	var result struct {
-		Status string `json:"status"`
-	}
-	return json.Unmarshal([]byte(run.output), &result) == nil && result.Status == "updated"
+	return true
 }
 
 // Progress documents can change without advancing a deliverable.

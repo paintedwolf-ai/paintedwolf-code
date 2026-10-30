@@ -18,7 +18,7 @@ type ProgramProgressStart interface {
 // ApplyProgramProgress uses existing policy, screening and author-update owner.
 // The caller records its result even when a later program operation is denied.
 // An attempted update cannot be automatically replayed through this envelope.
-func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramEnvelope, store progress.Store, facts ProgramProgressFacts, observer ProgramProgressStart, tc tools.ToolContext) (result ProgramProgressResult, err error) {
+func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramEnvelope, store progress.Store, facts ProgramProgressFacts, reconciler progress.Reconciler, observer ProgramProgressStart, tc tools.ToolContext) (result ProgramProgressResult, err error) {
 	if e == nil {
 		return result, fmt.Errorf("executor required")
 	}
@@ -134,6 +134,8 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 		return result, fmt.Errorf("progress root changed before owner application")
 	}
 	result.OwnerInvoked = true
-	result.Outcome, err = author.Apply(ctx, store, current.RootSessionID)
+	expected, _ := resolved["expected_revision"].(string)
+	token, _ := resolved["reconciliation_token"].(string)
+	result.Outcome, err = author.ExpectRevision(expected).ExpectReconciliation(token).Apply(ctx, store, current.RootSessionID, reconciler)
 	return result, progressOwnerError(err)
 }

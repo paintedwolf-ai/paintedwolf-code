@@ -137,14 +137,15 @@ func TestCallerFaultClassification(t *testing.T) {
 	}
 }
 
-func TestCommittedEffectUsesProgressStatus(t *testing.T) {
+func TestRepetitionContextRequiresMaterialProgress(t *testing.T) {
 	for _, tc := range []struct {
 		name, tool, output string
 		want               bool
 	}{
-		{"updated", "update_progress", `{"status":"updated"}`, true},
+		{"document only", "update_progress", `{"status":"updated","state_changed":false}`, false},
 		{"unchanged", "update_progress", `{"status":"unchanged"}`, false},
-		{"unrelated text", "update_progress", `{"status":"updated","note":"unchanged"}`, true},
+		{"state changed", "update_progress", `{"status":"updated","state_changed":true}`, true},
+		{"acknowledged", "update_progress", `{"status":"unchanged","reconciliation_status":"acknowledged"}`, true},
 		{"unknown", "update_progress", `{"status":"unknown"}`, false},
 		{"missing", "update_progress", `{}`, false},
 		{"invalid", "update_progress", `updated`, false},
@@ -157,8 +158,8 @@ func TestCommittedEffectUsesProgressStatus(t *testing.T) {
 				t.Fatalf("missing contract for %s", tc.tool)
 			}
 			run := completedToolRun{call: api.ToolCall{Name: tc.tool}, contract: contract, output: tc.output}
-			if got := run.committedEffect(); got != tc.want {
-				t.Fatalf("committedEffect = %v, want %v", got, tc.want)
+			if got := run.advancesRepetitionContext(); got != tc.want {
+				t.Fatalf("repetition context advance = %v, want %v", got, tc.want)
 			}
 		})
 	}

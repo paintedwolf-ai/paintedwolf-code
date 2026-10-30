@@ -9,8 +9,9 @@ import (
 
 // AuthorUpdate validates a complete replacement before publication.
 type AuthorUpdate struct {
-	content          string
-	expectedRevision string
+	content             string
+	expectedRevision    string
+	reconciliationToken string
 }
 
 // AuthorUpdateRejection preserves the progress catalog's code and typed facts.
@@ -38,10 +39,11 @@ func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 
 // AuthorUpdateResult is a progress-owner outcome, independent of program success.
 type AuthorUpdateResult struct {
-	Updated           bool     `json:"document_changed"`
-	StateChanged      bool     `json:"state_changed"`
-	DeliverableClosed bool     `json:"deliverable_closed"`
-	Snapshot          Snapshot `json:"snapshot"`
+	ReconciliationStatus string   `json:"reconciliation_status"`
+	Updated              bool     `json:"document_changed"`
+	StateChanged         bool     `json:"state_changed"`
+	DeliverableClosed    bool     `json:"deliverable_closed"`
+	Snapshot             Snapshot `json:"snapshot"`
 }
 
 // ExpectRevision binds a prepared replacement to an observed document.
@@ -51,7 +53,7 @@ func (u AuthorUpdate) ExpectRevision(revision string) AuthorUpdate {
 }
 
 // Apply checks the observed revision and publishes one atomic replacement.
-func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (AuthorUpdateResult, error) {
+func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, reconciler Reconciler) (AuthorUpdateResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AuthorUpdateResult{}, err
 	}
@@ -61,7 +63,10 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 	if u.content == "" || store == nil {
 		return AuthorUpdateResult{}, fmt.Errorf("prepared progress and store required")
 	}
-	var result AuthorUpdateResult
+	result := AuthorUpdateResult{ReconciliationStatus: "not_requested"}
+	if err := u.validateReconciliation(ctx, store, root, reconciler); err != nil {
+		return result, err
+	}
 	var previous string
 	snapshot, err := store.Update(ctx, root, func(current Snapshot) (string, error) {
 		previous = current.Content
@@ -79,10 +84,25 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 	})
 	result.Snapshot = snapshot
 	if err != nil {
+		if reconciler != nil {
+			result.Snapshot.Reconciliation = reconciler.Reconciliation(root)
+		}
+		if rejection, ok := err.(*AuthorUpdateRejection); ok && rejection.Code == "PROGRESS_REVISION_CHANGED" {
+			rejection.Data["snapshot"] = result.Snapshot
+		}
 		return result, err
 	}
 	if result.Updated {
 		NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Prev: previous})
+	}
+	if u.reconciliationToken != "" {
+		result.ReconciliationStatus = "changed"
+		if reconciler.Acknowledge(root, u.reconciliationToken) || result.DeliverableClosed && reconciler.Reconciliation(root) == nil {
+			result.ReconciliationStatus = "acknowledged"
+		}
+	}
+	if reconciler != nil {
+		result.Snapshot.Reconciliation = reconciler.Reconciliation(root)
 	}
 	return result, nil
 }

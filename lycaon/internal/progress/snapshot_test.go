@@ -25,7 +25,7 @@ func TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement(t *testing.T) {
 				results <- prepareErr
 				return
 			}
-			_, applyErr := update.ExpectRevision(initial.Revision).Apply(t.Context(), store, "session")
+			_, applyErr := update.ExpectRevision(initial.Revision).Apply(t.Context(), store, "session", nil)
 			results <- applyErr
 		}()
 	}
@@ -54,7 +54,7 @@ func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
 		t.Helper()
 		update, err := PrepareAuthorUpdate(content)
 		testutil.FailErr(t, "prepare checklist", err)
-		result, err := update.Apply(t.Context(), store, "session")
+		result, err := update.Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "apply checklist", err)
 		return result
 	}

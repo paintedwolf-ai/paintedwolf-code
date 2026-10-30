@@ -82,7 +82,7 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 				if mode == "closed-plan" {
 					testutil.FailErr(t, "close plan before application", plan.Close())
 				}
-				result, applyErr := executor.ApplyProgramProgress(t.Context(), prepared, owner, progressFacts{owner}, observer, tc)
+				result, applyErr := executor.ApplyProgramProgress(t.Context(), prepared, owner, progressFacts{owner}, nil, observer, tc)
 				if mode == "closed-plan" {
 					if applyErr == nil || result.OwnerInvoked {
 						t.Fatal("closed plan reached progress owner")
