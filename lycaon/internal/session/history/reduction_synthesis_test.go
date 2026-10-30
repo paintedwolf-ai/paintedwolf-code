@@ -16,7 +16,7 @@ import (
 )
 
 func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
-	for _, changed := range []string{"none", "source", "projection", "model", "cancellation"} {
+	for _, changed := range []string{"none", "chunk_only", "source", "projection", "model", "cancellation"} {
 		t.Run(changed, func(t *testing.T) {
 			mem := store.NewMemory()
 			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -44,8 +44,11 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			testutil.FailErr(t, "change captured state", err)
 			report := compaction.CompactionReport{SessionCompacted: true, TokensBefore: 1000, TokensAfter: 20,
 				Continuation: &messageview.Continuation{Format: 1, ThroughOrd: source.Ord}}
+			if changed == "chunk_only" {
+				report.SessionCompacted, report.ChunksCompacted, report.Continuation = false, 1, nil
+			}
 			svc := &Service{store: mem}
-			err = svc.publishReductionSynthesis(ctx, compaction.SessionInfo{ID: sess.ID}, rows, snapshot,
+			_, err = svc.publishReductionSynthesis(ctx, compaction.SessionInfo{ID: sess.ID}, rows, snapshot,
 				[]compaction.ContextMessage{{ID: "summary", Role: "assistant", Content: "A concise observation."}}, report)
 			if changed == "cancellation" {
 				if err != context.Canceled {
@@ -57,7 +60,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			current, err := mem.Get(t.Context(), sess.ID)
 			testutil.FailErr(t, "read current generation", err)
 			want := 0
-			if changed == "none" || changed == "projection" {
+			if changed == "none" || changed == "projection" || changed == "chunk_only" {
 				want = 1
 			}
 			if current.CompactionGeneration != want {
