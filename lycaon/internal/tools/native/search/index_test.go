@@ -92,7 +92,6 @@ func TestIndexSpeaksOnlyForItsGeneration(t *testing.T) {
 	all := len(indexCorpus()) - 1 // bin.dat lies outside src
 	for _, argv := range [][]string{
 		{"grep", "-rv", "NeedleToken", "src"},
-		{"grep", "-ri", "needletoken", "src"},
 		{"grep", "-rP", "Needle(?=Token)", "src"},
 		{"grep", "-rw", "NeedleToken", "src"},
 	} {

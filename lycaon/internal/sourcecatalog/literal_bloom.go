@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
-	"github.com/lycaon/lycaon/internal/textfile"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 )
@@ -20,14 +19,22 @@ func buildLiteralBloom(
 	ctx context.Context,
 	entry Entry,
 	open func(Entry) (io.ReadCloser, error),
-) (literalBloom, bool, error) {
+) (literalFileBlooms, error) {
 	f, err := open(entry)
 	if err != nil {
-		return literalBloom{}, false, err
+		return literalFileBlooms{}, err
 	}
 	defer func() { _ = f.Close() }()
 	reader := bufio.NewReaderSize(f, 64*1024)
 	prefix, _ := reader.Peek(3)
+	hasBOM := len(prefix) >= 2 && (prefix[0] == 0xff && prefix[1] == 0xfe || prefix[0] == 0xfe && prefix[1] == 0xff) || len(prefix) >= 3 && prefix[0] == 0xef && prefix[1] == 0xbb && prefix[2] == 0xbf
+	if !hasBOM {
+		bloom, searchable, err := buildLiteralBloomReader(ctx, reader, entry.Size)
+		projection := literalProjection{bloom: bloom, searchable: searchable}
+		return literalFileBlooms{decoded: projection, raw: projection}, err
+	}
+	raw := newLiteralBloomStream(entry.Size)
+	reader = bufio.NewReaderSize(io.TeeReader(reader, raw), 64*1024)
 	var decoded io.Reader = reader
 	if len(prefix) >= 2 && prefix[0] == 0xff && prefix[1] == 0xfe {
 		decoded = transform.NewReader(reader, unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder())
@@ -36,54 +43,33 @@ func buildLiteralBloom(
 	} else if len(prefix) >= 3 && prefix[0] == 0xef && prefix[1] == 0xbb && prefix[2] == 0xbf {
 		_, _ = reader.Discard(3)
 	}
-	return buildLiteralBloomReader(ctx, decoded, entry.Size)
+	bloom, searchable, err := buildLiteralBloomReader(ctx, decoded, entry.Size)
+	if err != nil {
+		return literalFileBlooms{}, err
+	}
+	rawBloom, rawSearchable := raw.finish()
+	return literalFileBlooms{decoded: literalProjection{bloom: bloom, searchable: searchable}, raw: literalProjection{bloom: rawBloom, searchable: rawSearchable}}, nil
 }
 
 // buildLiteralBloomReader carries split UTF-8 runes across chunks before folding.
 func buildLiteralBloomReader(ctx context.Context, reader io.Reader, contentBytes int64) (literalBloom, bool, error) {
-	bloom := newLiteralBloom(contentBytes)
-	validator := textfile.UTF8Validator{}
-	window := [3]byte{}
-	filled := 0
+	stream := newLiteralBloomStream(contentBytes)
 	buf := make([]byte, 64*1024)
-	folded := make([]byte, 0, 64*1024+8)
-	var carry []byte
 	for {
 		if err := ctx.Err(); err != nil {
-			return literalBloom{}, false, err
+			return nil, false, err
 		}
-		n, readErr := reader.Read(buf)
-		atEOF := errors.Is(readErr, io.EOF)
-		if !validator.Add(buf[:n], atEOF) {
-			return literalBloom{}, false, nil
+		n, err := reader.Read(buf)
+		_, _ = stream.Write(buf[:n])
+		if stream.invalid {
+			return nil, false, nil
 		}
-		chunk := buf[:n]
-		if len(carry) > 0 {
-			chunk = append(carry, chunk...)
+		if errors.Is(err, io.EOF) {
+			bloom, searchable := stream.finish()
+			return bloom, searchable, nil
 		}
-		complete := chunk
-		if !atEOF {
-			complete = trimIncompleteUTF8Tail(chunk)
-		}
-		folded = litprefilter.AppendCanonicalFold(folded[:0], complete)
-		carry = append(carry[:0], chunk[len(complete):]...)
-		for _, b := range folded {
-			if filled < len(window) {
-				window[filled] = b
-				filled++
-				if filled < len(window) {
-					continue
-				}
-			} else {
-				window[0], window[1], window[2] = window[1], window[2], b
-			}
-			bloom.add(window)
-		}
-		if atEOF {
-			return bloom, true, nil
-		}
-		if readErr != nil {
-			return literalBloom{}, false, readErr
+		if err != nil {
+			return nil, false, err
 		}
 	}
 }
