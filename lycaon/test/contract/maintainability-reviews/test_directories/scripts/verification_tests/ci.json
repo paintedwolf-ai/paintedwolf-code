@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "scripts/verification_tests/ci",
+  "kind": "test_suite",
+  "workstream": "verification-tools",
+  "disposition": "retain",
+  "reason": "Retain the 35-file CI contract suite within 35 files. Hosted planning, admission, evidence, and workflow commands are tested against the same catalog and entry points. Workflow validation remains one cohesive fixture module; its contracts preserve analyzer diagnostics and offline tool preparation.",
+  "ceiling": 35,
+  "reviewed_shape": "64100557afc44ffd00ba59df1a83fd45863d71faa4a5ccd2b549f93dced71325",
+  "boundaries": {
+    "scripts/verification_tests/ci/test_workflow_lint_execution.py": "cb467087f1ac2b05e1ed0c138c7e37e91d6545ac47b9353630be95775db682c5",
+    "scripts/verification_tests/ci/test_analysis_setup_execution.py": "4701dfec3b82724efe35098d8dbfc67c2edc137dcafcd5327815832f0b2d91bf",
+    "scripts/verification_tests/ci/test_python_coverage_execution.py": "f8063af98dd0f5bc75b829f594f5c1ab20931f887e31e6d5aad2279227c806fb"
+  },
+  "reviewed_commit": "8fb92f31286891a180769e95d687a30c500c10be"
+}

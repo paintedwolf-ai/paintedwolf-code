@@ -1,6 +1,9 @@
 name: Cache Go builds
 description: Restore bounded compiler outputs that main warms for verification
 inputs:
+  lookup-only:
+    description: Check the exact native cache identity without restoring payloads
+    default: 'false'
   save:
     description: Publish prepared caches (main only); the default restores without saving
     default: 'false'
@@ -19,37 +22,30 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        PYTHONPATH=scripts python3 -m ci_policy.cache_paths
         {
-          printf 'gocache=%s\n' "$(go env GOCACHE)"
-          printf 'key_prefix=go-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(go env GOVERSION)"
+          printf 'key_prefix=go-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(PYTHONPATH=scripts python3 -c 'from analysis_tools import toolchain; print(toolchain())')"
         } >> "${GITHUB_OUTPUT}"
 
     # Main publishes one trimmed payload per module graph.
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      id: budget
-      uses: ./.github/actions/cache-budget
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum', 'scripts/ci_policy/cache_payload.py') }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}
+    - name: Trim the prepared Go payload
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        PYTHONPATH: scripts
+      run: python3 -m ci_policy.cache_payload go "${{ steps.paths.outputs.gocache }}"
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
       id: save
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
-      uses: ./.github/actions/cache-budget
-      with:
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-        record: ${{ steps.budget.outputs.record }}
-
-    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
-      id: restore
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ${{ steps.paths.outputs.gocache }}
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-        restore-keys: ${{ inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum', 'scripts/ci_policy/cache_payload.py') }}

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type pinPathFixture struct {
@@ -41,19 +43,19 @@ func TestLaunchInputsKeepSelectionCwdAndCurrentAuthorityDistinct(t *testing.T) {
 	root := t.TempDir()
 	entry := filepath.Join(root, "fixture-script")
 	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf synthetic\n"), 0100); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write selected executable fixture", err)
 	}
 	paths := &pinPathFixture{cwd: root, allowed: map[string]bool{entry: true}}
 	inputs, err := CaptureProcessInputs(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "capture admitted process inputs", err)
 	}
 	defer inputs.Close()
 	if inputs.entry.path != entry {
 		t.Fatal("selected entry changed")
 	}
 	if err := inputs.revalidate(t.Context()); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "revalidate unchanged process inputs", err)
 	}
 	paths.refused = true
 	if err := inputs.revalidate(t.Context()); !errors.Is(err, os.ErrPermission) {
@@ -61,10 +63,10 @@ func TestLaunchInputsKeepSelectionCwdAndCurrentAuthorityDistinct(t *testing.T) {
 	}
 	paths.refused = false
 	if err := os.Rename(entry, entry+".old"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "retain selected executable before replacement", err)
 	}
 	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf replacement\n"), 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write replacement executable", err)
 	}
 	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
 		t.Fatal("replaced selected entry accepted")
@@ -74,29 +76,29 @@ func TestLaunchInputsRejectReplacedCwdClosedInputsAndCancelledCapture(t *testing
 	root := t.TempDir()
 	cwd := filepath.Join(root, "cwd")
 	if err := os.Mkdir(cwd, 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create selected working directory", err)
 	}
 	entry := filepath.Join(root, "entry")
 	if err := os.WriteFile(entry, []byte("native fixture"), 0100); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write working-directory executable", err)
 	}
 	paths := &pinPathFixture{cwd: cwd, allowed: map[string]bool{entry: true}}
 	inputs, err := CaptureProcessInputs(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "capture working-directory inputs", err)
 	}
 	defer inputs.Close()
 	if err := os.Rename(cwd, cwd+".old"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "retain original working directory", err)
 	}
 	if err := os.Mkdir(cwd, 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create replacement working directory", err)
 	}
 	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
 		t.Fatal("replaced cwd accepted")
 	}
 	if err := inputs.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close captured process inputs", err)
 	}
 	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
 		t.Fatal("closed input reopened")
@@ -110,7 +112,7 @@ func TestLaunchInputsRejectReplacedCwdClosedInputsAndCancelledCapture(t *testing
 func TestLaunchVectorLimitsRefuseBeforeCopyAndPreserveLiteralData(t *testing.T) {
 	limits := LaunchVectorLimits{ArgumentBytes: 4, ArgvBytes: 6, EnvironmentBytes: 4, ExpandedFields: 2}
 	if err := limits.checkCommand("abcd", []string{"ef"}, []string{"K=xy"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate exact launch vector limits", err)
 	}
 	for _, c := range []struct {
 		args, env []string

@@ -24,7 +24,7 @@ func (p BoundPath) MutationTarget() (Resolved, error) {
 	if err != nil {
 		return Resolved{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	actual, err := root.Canonical(parent)
 	if err != nil {
 		return Resolved{}, PathOperationError(p.Resolved.DisplayPath, err)

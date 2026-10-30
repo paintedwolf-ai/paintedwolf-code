@@ -74,6 +74,8 @@ func chargeProgramTrace(ctx context.Context, tx *sql.Tx, programID string, event
 		return fmt.Errorf("read program trace budget: %w", err)
 	}
 	switch mode {
+	case traceChargeNonTerminal:
+		// Non-terminal writes keep every live owner's settlement reserve.
 	case traceChargeChildStart:
 		if totalChildren+1 > limits.children {
 			return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "child_executions", "resource_unit": "children", "maximum": limits.children, "observed": totalChildren + 1})

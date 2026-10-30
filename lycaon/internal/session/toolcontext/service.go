@@ -43,7 +43,7 @@ type Service struct {
 	observations    *sourceledger.Inventory
 	sourceMutations sourceeffect.Journal
 	editorDocuments tools.EditorDocuments
-	credentialFiles tools.CredentialFiles
+	CredentialFiles tools.CredentialFiles
 	repoProvider    repoinfo.Provider
 	dataDir         string
 }
@@ -73,5 +73,4 @@ func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.So
 }
 func (m *Service) SetSourceMutations(source sourceeffect.Journal)     { m.sourceMutations = source }
 func (m *Service) SetEditorDocuments(documents tools.EditorDocuments) { m.editorDocuments = documents }
-func (m *Service) SetCredentialFiles(files tools.CredentialFiles)     { m.credentialFiles = files }
 func (m *Service) SetRepoProvider(provider repoinfo.Provider)         { m.repoProvider = provider }

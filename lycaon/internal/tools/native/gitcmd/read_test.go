@@ -2,6 +2,7 @@ package gitcmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -121,7 +122,8 @@ func (h *harness) direct(dir string, args ...string) (string, string, int) {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	status := 0
-	if exit, ok := err.(*exec.ExitError); ok {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
 		status = exit.ExitCode()
 	} else if err != nil {
 		h.t.Fatal(err)

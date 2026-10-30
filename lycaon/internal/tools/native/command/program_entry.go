@@ -266,6 +266,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return "", err
 	}
 	outputs, scope, screening := run.capture.Outputs, run.capture.Scope, run.capture.Screening
+	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
+	ctx, err = jobs.BeginProgram(ctx)
+	if err != nil {
+		return "", err
+	}
 	dispatcher, publication, releaseSurface, err := r.bindProgramSurface(ctx, run, owners, paths)
 	if err != nil {
 		return "", err
@@ -392,7 +397,6 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		}
 	}()
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, jobs, r.Ports, tc.Execution.ProcessReview)
 	builtins["sleep"] = sleepBuiltin()
@@ -544,7 +548,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 // overrides it with the interruption RunProgram reported.
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
-	if stopped {
+	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
 		status := 130
 		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode
 	}

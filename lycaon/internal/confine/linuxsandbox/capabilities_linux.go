@@ -3,14 +3,18 @@
 package linuxsandbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
 
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"golang.org/x/sys/unix"
 )
 
@@ -160,10 +164,30 @@ func classifyPrivilegedStep(step string, err error, label string) *Unavailabilit
 }
 
 func appArmorDenied(detail string) *Unavailability {
+	if profile := nixEngineProfile(); profile != "" {
+		return &Unavailability{Code: UnavailableUserNamespacesAppArmor, Detail: detail,
+			Remedy: RemedyLoadEngineProfile, Profile: profile}
+	}
 	return &Unavailability{
 		Code:    UnavailableUserNamespacesAppArmor,
 		Detail:  detail,
 		Remedy:  RemedyInstallPackage,
 		Profile: AppArmorProfile,
 	}
+}
+
+// runningNix reports the running Nix package generation, if any.
+var runningNix = nixgeneration.Running
+
+// nixEngineProfile is the user-namespace grant a running Nix generation ships for
+// its exact engine executable, or "" outside a Nix generation.
+func nixEngineProfile() string {
+	layout, err := runningNix()
+	if err != nil || layout == nil {
+		return ""
+	}
+	engine := filepath.Join(layout.Root, "bin", "pw")
+	sum := sha256.Sum256([]byte(engine))
+	return filepath.Join(layout.Output, "share", "painted-wolf-code", "apparmor",
+		"paintedwolf-engine-"+hex.EncodeToString(sum[:]))
 }

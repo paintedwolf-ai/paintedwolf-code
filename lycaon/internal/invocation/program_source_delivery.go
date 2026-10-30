@@ -191,7 +191,7 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 		exact.SourceEndByte = fact.SourceEndByte
 		exact.OutputStartByte = start
 		exact.OutputEndByte = end
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return "", none, nil, err
 		}
 		accepted = true

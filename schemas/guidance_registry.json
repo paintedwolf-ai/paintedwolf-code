@@ -483,16 +483,16 @@
       "summary": "code_rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
     },
     "COMMAND_ARGV_CONFLICT": {
-      "branch_instruction": "Retry with `command` or `pipeline`, not both",
+      "branch_instruction": "Retry with one explicit command form, not both",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "`{{ tool }}()` received both `command` and `pipeline`."
+      "summary": "`{{ tool }}()` received conflicting explicit command forms."
     },
     "COMMAND_ARGV_REQUIRED": {
-      "branch_instruction": "Retry with the program text in `command`",
+      "branch_instruction": "Retry `command()` with explicit `command` text",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "`command` was called without program text."
+      "summary": "`command()` was called without explicit `command` text."
     },
     "COMMAND_CONCURRENCY_CAP_REACHED": {
       "branch_instruction": "Reduce the live awaited command set",
@@ -561,7 +561,7 @@
       "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}"
     },
     "COMMAND_NOT_ARGV": {
-      "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}Use literal argv here, documented `verify` arguments for verification, or `command` without capture for composed programs{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_surface",
       "summary": "{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}"
@@ -627,7 +627,7 @@
       "summary": "env.PWD ({{ paintedwolf.pwd }}) does not match the resolved working directory ({{ paintedwolf.cwd }}) for this {{ tool }} call."
     },
     "COMMAND_REDIRECTION_UNSUPPORTED": {
-      "branch_instruction": "Redirect stdin, stdout, and stderr with `\u003c`, `\u003e`, `\u003e\u003e`, `2\u003e`, `\u0026\u003e`, or `2\u003e\u00261` on the stage that owns the stream",
+      "branch_instruction": "{% if paintedwolf.redirection_terminal %}Omit file redirection on this terminal surface; use `command` without capture for a redirected program{% else %}Redirect stdin, stdout, and stderr with `\u003c`, `\u003e`, `\u003e\u003e`, `2\u003e`, `\u0026\u003e`, or `2\u003e\u00261` on the stage that owns the stream{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."

@@ -54,6 +54,30 @@ fn on_main_thread<T: Send + 'static>(
     receiver
 }
 
+impl NativeClipboard {
+    pub(super) fn write_secret_text(&mut self, main: &dyn MainThread, text: String) -> Reply<u64> {
+        on_main_thread(main, move |reply| {
+            if reply.is_closed() {
+                return;
+            }
+            let result = clipboard().and_then(|board| super::secret_linux::write(&board, text));
+            if let Err(Ok(copy)) = reply.send(result) {
+                if let Ok(board) = clipboard() {
+                    super::secret_linux::clear(&board, copy);
+                }
+            }
+        })
+    }
+
+    pub(super) fn clear_secret_text(&mut self, main: &dyn MainThread, copy: u64) -> Reply<()> {
+        on_main_thread(main, move |reply| {
+            let _ = reply.send(clipboard().map(|clipboard| {
+                super::secret_linux::clear(&clipboard, copy);
+            }));
+        })
+    }
+}
+
 impl ClipboardAdapter for NativeClipboard {
     fn write_text(&mut self, main: &dyn MainThread, text: String) -> Reply<()> {
         on_main_thread(main, move |reply| {
@@ -102,7 +126,10 @@ mod tests {
     #[test]
     fn toolkit_work_off_the_main_thread_reports_the_display_unavailable() {
         assert_eq!(display().unwrap_err(), ClipboardError::DisplayUnavailable);
-        assert_eq!(startup_facts().unwrap_err(), ClipboardError::DisplayUnavailable);
+        assert_eq!(
+            startup_facts().unwrap_err(),
+            ClipboardError::DisplayUnavailable
+        );
         let mut adapter = NativeClipboard;
         let reply = adapter.write_text(&Inline, "text".into());
         assert_eq!(
@@ -125,10 +152,7 @@ mod tests {
     struct Inline;
 
     impl MainThread for Inline {
-        fn dispatch(
-            &self,
-            task: Box<dyn FnOnce() + Send + 'static>,
-        ) -> Result<(), ClipboardError> {
+        fn dispatch(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), ClipboardError> {
             task();
             Ok(())
         }
@@ -158,8 +182,14 @@ pub(super) fn request_image(reply: oneshot::Sender<Result<Vec<u8>, ClipboardErro
             let _ = reply.send(Err(error));
         }
         Ok(clipboard) => clipboard.request_image(move |_, image| {
-            let png = image.and_then(|image| image.save_to_bufferv("png", &[]).ok()).unwrap_or_default();
-            let _ = reply.send(if png.len() > IMAGE_LIMIT { Err(ClipboardError::ImageTooLarge) } else { Ok(png) });
+            let png = image
+                .and_then(|image| image.save_to_bufferv("png", &[]).ok())
+                .unwrap_or_default();
+            let _ = reply.send(if png.len() > IMAGE_LIMIT {
+                Err(ClipboardError::ImageTooLarge)
+            } else {
+                Ok(png)
+            });
         }),
     }
 }

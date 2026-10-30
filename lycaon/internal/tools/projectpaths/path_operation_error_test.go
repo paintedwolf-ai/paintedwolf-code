@@ -20,10 +20,10 @@ func TestUnavailablePathAdapterPreservesTypedCause(t *testing.T) {
 		t.Fatalf("unavailable path error lost classification: %v", got)
 	}
 	denied := &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE"}
-	if PathOperationError("fixture", denied) != denied {
+	if !errors.Is(PathOperationError("fixture", denied), denied) {
 		t.Fatal("adapter mapping replaced an authority refusal")
 	}
-	if PathOperationError("fixture", context.Canceled) != context.Canceled {
+	if !errors.Is(PathOperationError("fixture", context.Canceled), context.Canceled) {
 		t.Fatal("adapter mapping replaced cancellation")
 	}
 }

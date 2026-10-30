@@ -100,7 +100,8 @@ func runLinuxProbe(mode string) int {
 		}
 		return 4
 	case "unshare":
-		fmt.Println("unshare:", unix.Unshare(unix.CLONE_NEWNS))
+		flags, _ := strconv.Atoi(os.Getenv("PW_CONFINE_UNSHARE_FLAGS"))
+		fmt.Println("unshare:", unix.Unshare(flags))
 		return 4
 	case "tiocsti", "tioclinux":
 		// Take the inherited terminal as the controlling one, as a shell would,
@@ -232,6 +233,7 @@ func helperBinary(t *testing.T, self string) string {
 		helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // Process-wide: every later test's helper shares the one build.
 		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
 		build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain",
+			"-ldflags=-X=main.coverageDirectoryHex="+fmt.Sprintf("%x", dir),
 			"-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path, "./testdata/helpermain")
 		if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
 			helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
@@ -307,13 +309,7 @@ func TestLinuxWritesStayInsideWriteRoots(t *testing.T) {
 	if status.ExitStatus() != 0 || !strings.Contains(out, "inside") {
 		t.Fatalf("write inside root: exit %d: %s", status.ExitStatus(), out)
 	}
-	status, out = linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "echo escape > "+outside+"/no")
-	if status.ExitStatus() == 0 {
-		t.Fatalf("write outside root succeeded: %s", out)
-	}
-	if !strings.Contains(out, "Permission denied") {
-		t.Fatalf("write outside root must be refused by the kernel, got: %s", out)
-	}
+	expectFloorTable(t, c, proj, []floorStep{{"create " + filepath.Join(outside, "no"), "EROFS"}})
 	if _, err := os.Stat(filepath.Join(outside, "no")); !os.IsNotExist(err) {
 		t.Fatalf("file outside root exists: %v", err)
 	}
@@ -337,12 +333,13 @@ func TestLinuxDeniedReadsAreHidden(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	proj := t.TempDir()
 	secret := filepath.Join(proj, "other-worker")
+	const secretContent = "PAINTED_WOLF_CONFINE_DENIED_READ_SECRET_CONTENT"
 	testutil.FailErr(t, "mkdir secret", os.Mkdir(secret, 0o755))
-	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte("s3"), 0o644))
+	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte(secretContent), 0o644))
 	c := denyConfinement(proj)
 	c.ReadDenyPaths = []string{secret}
 	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "ls "+secret+" && cat "+secret+"/token && echo LEAK")
-	if status.ExitStatus() == 0 || strings.Contains(out, "s3") || strings.Contains(out, "LEAK") {
+	if status.ExitStatus() == 0 || strings.Contains(out, secretContent) || strings.Contains(out, "LEAK") {
 		t.Fatalf("denied read exposed content: exit %d: %s", status.ExitStatus(), out)
 	}
 }
@@ -403,12 +400,18 @@ func TestLinuxNetworkDenyLeavesOnlyLoopback(t *testing.T) {
 	}
 }
 
+// Every unshare kills the process except filesystem state alone, which
+// answers EPERM without running.
 func TestLinuxEscapeSyscallsKillTheProcess(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	for _, mode := range []string{"ptrace", "unshare"} {
-		status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv(mode), self, probeTestFlag)
-		if !status.Signaled() || status.Signal() != unix.SIGSYS {
-			t.Fatalf("%s: want death by SIGSYS, got %v: %s", mode, status, out)
+	for _, tc := range []struct {
+		mode  string
+		flags uint64
+	}{{"ptrace", 0}, {"unshare", unix.CLONE_NEWNS}, {"unshare", unix.CLONE_FS | unix.CLONE_NEWUSER}, {"unshare", unix.CLONE_FS | 1<<32}, {"unshare", unix.CLONE_FS}} {
+		status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), append(probeEnv(tc.mode), "PW_CONFINE_UNSHARE_FLAGS="+strconv.FormatUint(tc.flags, 10)), self, probeTestFlag)
+		refused, killed := tc.flags == unix.CLONE_FS, status.Signaled() && status.Signal() == unix.SIGSYS
+		if killed == refused || refused && !strings.Contains(out, "unshare: operation not permitted") {
+			t.Fatalf("%s %#x: killed by SIGSYS %v, want %v: %v: %s", tc.mode, tc.flags, killed, !refused, status, out)
 		}
 	}
 }
@@ -454,7 +457,8 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	defer master.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(t.TempDir()))
+	root := t.TempDir()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(root))
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
@@ -474,8 +478,15 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	terminal.await(t, "ready-for-input")
 	send("\x03")
 	terminal.await(t, "KeyboardInterrupt")
-	send("print('interrupt' + '-survived')\n")
-	terminal.await(t, "interrupt-survived")
+	created := filepath.Join(root, "after-interrupt")
+	send(fmt.Sprintf("with open(%q, 'w') as output: output.write('created')\n\n", created))
+	send("print('write' + '-survived')\n")
+	terminal.await(t, "write-survived")
+	contents, err := os.ReadFile(created)
+	testutil.FailErr(t, "read file created after Ctrl-C", err)
+	if string(contents) != "created" {
+		t.Fatalf("file created after Ctrl-C = %q", contents)
+	}
 	send("raise SystemExit(7)\n")
 	_ = cmd.Wait()
 	if status, _ := cmd.ProcessState.Sys().(syscall.WaitStatus); status.Signaled() || status.ExitStatus() != 7 {
@@ -483,15 +494,136 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 	}
 }
 
+func TestLinuxPerformerLossAnswersExitTimeCreate(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interpreter", err)
+	root := t.TempDir()
+	script := fmt.Sprintf(`import atexit, errno, os, sys
+def exit_create():
+ print('exit-create-started', flush=True)
+ try:
+  fd = os.open(%q, os.O_WRONLY | os.O_CREAT, 0o600)
+ except OSError as err:
+  print('exit-create-answer:' + str(err.errno), flush=True)
+ else:
+  os.close(fd)
+atexit.register(exit_create)
+print('ready-for-exit', flush=True)
+sys.stdin.readline()
+raise SystemExit(7)
+`, filepath.Join(root, "exit-create"))
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	confine.StartRefusalWatch(t.Context(), "")
+	boundary := denyConfinement(root)
+	lease, err := confine.BindAction(&boundary, confine.EgressCommand{SessionID: "performer-loss", ToolName: "command", CommandLine: python})
+	testutil.FailErr(t, "bind performer-loss action", err)
+	defer lease.Close(t.Context())
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-c", script}, boundary)
+	testutil.FailErr(t, "confine interpreter", err)
+	defer cleanup()
+	input, err := cmd.StdinPipe()
+	testutil.FailErr(t, "interpreter input", err)
+	defer input.Close()
+	out := &terminalWatch{done: make(chan struct{})}
+	cmd.Stdout, cmd.Stderr = out, out
+	testutil.FailErr(t, "start interpreter", cmd.Start())
+	go func() { _ = cmd.Wait(); close(out.done) }()
+	defer func() { _ = cmd.Process.Kill(); <-out.done }()
+	out.await(t, "ready-for-exit")
+	performer := confinedDescendant(t, cmd.Process.Pid, linuxsandbox.PerformerFlag)
+	target := confinedDescendant(t, cmd.Process.Pid, python)
+	pidfd, err := unix.PidfdOpen(performer, 0)
+	testutil.FailErr(t, "hold performer identity", err)
+	defer unix.Close(pidfd)
+	defer func() { _ = unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0) }()
+	testutil.FailErr(t, "stop performer", unix.PidfdSendSignal(pidfd, unix.SIGSTOP, nil, 0))
+	testutil.WaitFor(t, func() bool {
+		if ctx.Err() != nil {
+			t.Fatalf("performer never stopped: %s", out.text())
+		}
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", performer))
+		for _, line := range strings.Split(string(raw), "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "State:" {
+				return fields[1] == "T"
+			}
+		}
+		return false
+	})
+	_, err = input.Write([]byte("exit\n"))
+	testutil.FailErr(t, "start interpreter exit", err)
+	out.await(t, "exit-create-started")
+	testutil.WaitFor(t, func() bool {
+		if ctx.Err() != nil {
+			t.Fatalf("interpreter never entered exit create: %s", out.text())
+		}
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/syscall", target))
+		fields := strings.Fields(string(raw))
+		return len(fields) > 0 && fields[0] == strconv.Itoa(unix.SYS_OPENAT)
+	})
+	testutil.FailErr(t, "end stopped performer", unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0))
+	out.await(t, "exit-create-answer:"+strconv.Itoa(int(unix.EACCES)))
+	<-out.done
+	if status := cmd.ProcessState.Sys().(syscall.WaitStatus); !status.Exited() || status.ExitStatus() != 7 {
+		t.Fatalf("interpreter exit after performer loss: %v\n%s", status, out.text())
+	}
+	if got := lease.SettledRefusals(t.Context()); got.Witness != confine.WitnessIncomplete {
+		t.Fatalf("performer loss witness = %s, want incomplete", got.Witness)
+	}
+}
+
+func confinedDescendant(t *testing.T, parent int, argument string) int {
+	t.Helper()
+	found := 0
+	testutil.WaitFor(t, func() bool {
+		queue := []int{parent}
+		for len(queue) > 0 {
+			pid := queue[0]
+			queue = queue[1:]
+			for _, child := range threadChildren(pid) {
+				id, err := strconv.Atoi(child)
+				if err != nil {
+					continue
+				}
+				queue = append(queue, id)
+				command, _ := os.ReadFile("/proc/" + child + "/cmdline")
+				args := strings.Split(string(command), "\x00")
+				if len(args) > 1 && (args[0] == argument || args[1] == argument) {
+					found = id
+					return true
+				}
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// threadChildren lists the children of every thread of pid. A child belongs
+// to the thread that forked it, and the helper forks from whichever thread
+// its locked goroutine runs on, which is rarely the main thread.
+func threadChildren(pid int) []string {
+	tasks, _ := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	var children []string
+	for _, task := range tasks {
+		raw, _ := os.ReadFile(fmt.Sprintf("/proc/%d/task/%s/children", pid, task.Name()))
+		children = append(children, strings.Fields(string(raw))...)
+	}
+	return children
+}
+
 // terminalWatch accumulates what a terminal's main side reads.
 type terminalWatch struct {
-	mu  sync.Mutex
-	buf strings.Builder
+	mu   sync.Mutex
+	buf  strings.Builder
+	done chan struct{}
 }
 
 func watchTerminal(master *os.File) *terminalWatch {
-	w := &terminalWatch{}
+	w := &terminalWatch{done: make(chan struct{})}
 	go func() {
+		defer close(w.done)
 		chunk := make([]byte, 4096)
 		for {
 			n, err := master.Read(chunk)
@@ -521,11 +653,31 @@ func (w *terminalWatch) text() string {
 func (w *terminalWatch) await(t *testing.T, marker string) {
 	t.Helper()
 	for !strings.Contains(w.text(), marker) {
+		select {
+		case <-w.done:
+			if !strings.Contains(w.text(), marker) {
+				t.Fatalf("terminal closed before %q:\n%q", marker, w.text())
+			}
+			return
+		default:
+		}
 		if t.Context().Err() != nil {
 			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func TestTerminalWatchKeepsFinalOutputAfterClosing(t *testing.T) {
+	read, write, err := os.Pipe()
+	testutil.FailErr(t, "terminal watch pipe", err)
+	defer read.Close()
+	terminal := watchTerminal(read)
+	_, err = write.WriteString("final-marker")
+	testutil.FailErr(t, "write final output", err)
+	testutil.FailErr(t, "close final output", write.Close())
+	<-terminal.done
+	terminal.await(t, "final-marker")
 }
 
 // openPty opens a pseudo-terminal pair that is no session's controlling terminal.

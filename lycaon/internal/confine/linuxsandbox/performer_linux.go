@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/signal"
 	"runtime"
 	"sync"
 	"syscall"
@@ -101,7 +102,8 @@ const (
 // pathResult is the performer's answer; an opened descriptor travels with it
 // unless the performer already answered the kernel.
 type pathResult struct {
-	Errno int `json:"errno,omitempty"`
+	Notification uint64 `json:"notification,omitempty"`
+	Errno        int    `json:"errno,omitempty"`
 	// Refusal is set when a floor refused the call.
 	Refusal *Refusal `json:"refusal,omitempty"`
 	// Caller echoes the call's caller.
@@ -130,7 +132,7 @@ func startPerformer(fs Filesystem) error {
 		return fmt.Errorf("performer stdio: %w", err)
 	}
 	_, err = syscall.ForkExec("/proc/self/exe", []string{"pw-confine-performer", PerformerFlag}, &syscall.ProcAttr{
-		Env:   []string{},
+		Env:   coverageEnvironment(),
 		Files: []uintptr{uintptr(devnull), uintptr(devnull), 2, uintptr(pair[1])},
 		Sys:   &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL},
 	})
@@ -153,6 +155,8 @@ func startPerformer(fs Filesystem) error {
 // steer it, and answers the supervisor until it closes the socket.
 func ServePerformer() error {
 	runtime.LockOSThread()
+	// The terminal signals the whole foreground group; only the target handles it.
+	signal.Ignore(syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU)
 	// The caller's umask applies to each call; this thread keeps its own.
 	if err := unix.Unshare(unix.CLONE_FS); err != nil {
 		return fmt.Errorf("performer umask: %w", err)
@@ -202,16 +206,12 @@ func servePathCalls(fd int) error {
 		for _, dir := range dirs {
 			_ = unix.Close(dir)
 		}
-		result.Caller = call.Caller
+		result.Caller, result.Notification = call.Caller, call.Notification
 		if call.Notification != 0 && listener >= 0 {
 			answerKernel(listener, call, result, opened)
 			if opened >= 0 {
 				_ = unix.Close(opened)
 				opened = -1
-			}
-			// The supervisor hears only what it reports: a refusal.
-			if result.Refusal == nil {
-				continue
 			}
 		}
 		reply, err := json.Marshal(result)
@@ -290,11 +290,14 @@ func receivedFDs(oob []byte) []int {
 // pathCallTimeout bounds one performed call; a slow filesystem can take long.
 const pathCallTimeout = 60 * time.Second
 
-// performerClient is the supervisor's side of the performer's socket. Calls
-// run one at a time, so each answer belongs to the request before it.
+// performerClient sends calls in order and tracks their kernel completion.
 type performerClient struct {
-	mu sync.Mutex
-	fd int
+	mu          sync.Mutex
+	sendMu      sync.Mutex
+	fd          int
+	listener    int
+	pending     map[uint64]struct{}
+	resultsDone chan struct{}
 	// broken is set once an answer went missing.
 	broken bool
 	// forwarding is set once the performer holds the listener.
@@ -314,28 +317,79 @@ func newPerformerClient(fd int) *performerClient {
 func (c *performerClient) lend(listener int, report func(pathResult)) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.sendLocked(pathCall{Op: callListener}, []int{listener}); err != nil {
+	if err := c.send(pathCall{Op: callListener}, []int{listener}); err != nil {
+		c.broken = true
 		return err
 	}
+	c.listener, c.pending = listener, make(map[uint64]struct{})
 	c.forwarding = true
-	go c.readResults(report)
+	c.resultsDone = make(chan struct{})
+	go func() { defer close(c.resultsDone); c.readResults(report) }()
 	return nil
+}
+
+// Close joins refusal reporting before the supervising helper exits.
+func (c *performerClient) Close() error {
+	_ = unix.Shutdown(c.fd, unix.SHUT_RDWR)
+	c.mu.Lock()
+	done := c.resultsDone
+	c.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return unix.Close(c.fd)
 }
 
 // forward hands the performer a pending call it answers itself.
 func (c *performerClient) forward(call pathCall, dirs []int) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if !c.forwarding || c.broken {
+		c.mu.Unlock()
 		return errors.New("the sandbox performer is not answering calls")
 	}
-	return c.sendLocked(call, dirs)
+	c.pending[call.Notification] = struct{}{}
+	c.mu.Unlock()
+	// Reading acknowledgments must continue while a send waits for socket space.
+	if err := c.send(call, dirs); err != nil {
+		c.mu.Lock()
+		c.failPendingLocked()
+		c.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+// failPendingLocked refuses calls the performer did not acknowledge. Calls it
+// already answered or whose caller was interrupted no longer have a valid ID.
+func (c *performerClient) failPendingLocked() bool {
+	c.broken = true
+	_ = unix.Shutdown(c.fd, unix.SHUT_RDWR)
+	unexamined := false
+	for id := range c.pending {
+		if ioctlPtr(c.listener, unix.SECCOMP_IOCTL_NOTIF_ID_VALID, unsafe.Pointer(&id)) == nil {
+			answerKernel(c.listener, pathCall{Notification: id}, pathResult{Errno: int(unix.EACCES)}, -1)
+			unexamined = true
+		}
+		delete(c.pending, id)
+	}
+	return unexamined
 }
 
 // readResults reports each refusal the performer returns for a forwarded
-// call until the performer stops. A performer that stops leaves its pending calls unanswered; the
-// sandbox cannot continue without it.
+// call until the performer stops, refusing every call still pending then.
 func (c *performerClient) readResults(report func(pathResult)) {
+	defer func() {
+		c.mu.Lock()
+		unexamined := c.failPendingLocked()
+		c.mu.Unlock()
+		if unexamined {
+			report(pathResult{Refusal: &Refusal{Unexamined: true}})
+		}
+	}()
 	buf := make([]byte, 4096)
 	oob := make([]byte, unix.CmsgSpace(4))
 	for {
@@ -344,22 +398,25 @@ func (c *performerClient) readResults(report func(pathResult)) {
 			continue
 		}
 		if err != nil || n == 0 {
-			c.mu.Lock()
-			c.broken = true
-			c.mu.Unlock()
 			return
 		}
 		for _, fd := range receivedFDs(oob[:oobn]) {
 			_ = unix.Close(fd)
 		}
 		var result pathResult
-		if json.Unmarshal(buf[:n], &result) == nil && result.Refusal != nil {
+		if json.Unmarshal(buf[:n], &result) != nil || result.Notification == 0 {
+			return
+		}
+		c.mu.Lock()
+		delete(c.pending, result.Notification)
+		c.mu.Unlock()
+		if result.Refusal != nil {
 			report(result)
 		}
 	}
 }
 
-func (c *performerClient) sendLocked(call pathCall, dirs []int) error {
+func (c *performerClient) send(call pathCall, dirs []int) error {
 	raw, err := encodePathCall(call)
 	if err != nil {
 		return err
@@ -372,9 +429,6 @@ func (c *performerClient) sendLocked(call pathCall, dirs []int) error {
 	for errors.Is(err, unix.EINTR) {
 		err = unix.Sendmsg(c.fd, raw, rights, nil, 0)
 	}
-	if err != nil {
-		c.broken = true
-	}
 	return err
 }
 
@@ -386,7 +440,8 @@ func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, erro
 	if c.broken || c.forwarding {
 		return pathResult{}, -1, errors.New("the sandbox performer stopped answering")
 	}
-	if err := c.sendLocked(call, dirs); err != nil {
+	if err := c.send(call, dirs); err != nil {
+		c.broken = true
 		return pathResult{}, -1, err
 	}
 	buf := make([]byte, 4096)

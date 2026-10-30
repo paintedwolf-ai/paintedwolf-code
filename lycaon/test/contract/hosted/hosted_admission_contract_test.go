@@ -100,6 +100,14 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 	if !strings.Contains(workflow.Jobs["fast"].If, "!github.event.pull_request.draft || github.event.action == 'ready_for_review'") {
 		t.Error("draft pull requests must wait unless the event marks them ready")
 	}
+	const draftGroup = "-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}"
+	if !strings.HasSuffix(workflow.Concurrency.Group, draftGroup) {
+		t.Error("draft events must use a separate concurrency group so they cannot cancel ready verification")
+	}
+	const checkName = "${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}"
+	if workflow.Jobs["check"].Name != checkName {
+		t.Error("a skipped draft aggregate must not satisfy the ready pull request's required check")
+	}
 	refused := false
 	for _, step := range workflow.Jobs["check"].Steps {
 		refused = refused || strings.HasPrefix(step.Run, ciGateStep) &&
@@ -115,8 +123,11 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	t.Parallel()
 	ci := hostedWorkflowFile(t, "ci")
-	if ci.Permissions["actions"] != "" || ci.Jobs["fast"].Permissions != nil {
+	if ci.Permissions["actions"] != "" {
 		t.Error("pull request CI runs unreviewed code and must not hold actions write")
+	}
+	if want := map[string]string{"contents": "read", "actions": "read"}; !maps.Equal(ci.Jobs["fast"].Permissions, want) {
+		t.Errorf("pull request CI reads its previous run's receipts and needs exactly %v, got %v", want, ci.Jobs["fast"].Permissions)
 	}
 	if want := map[string]string{"contents": "read", "actions": "write", "pull-requests": "read"}; !maps.Equal(ci.Jobs["integration"].Permissions, want) {
 		t.Errorf("merge-group CI needs exactly %v to cancel its own run, got %v", want, ci.Jobs["integration"].Permissions)

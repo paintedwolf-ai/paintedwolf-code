@@ -3,6 +3,8 @@ package textsearch
 import (
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func catalogLimits(t *testing.T) Limits {
@@ -165,9 +167,7 @@ func TestRE2AndFixedSemantics(t *testing.T) {
 
 func TestNoPatternsSelectNothing(t *testing.T) {
 	m, err := Compile(t.Context(), Spec{Dialect: Basic}, catalogLimits(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	if _, ok, err := m.Select(t.Context(), []byte("anything")); ok || err != nil {
 		t.Fatalf("empty pattern set selected: %v %v", ok, err)
 	}
@@ -187,12 +187,10 @@ func TestCaptureGroupsForReplacement(t *testing.T) {
 		{Extended, false, [][]int{{0, 3}}, 0},
 	} {
 		m, err := Compile(t.Context(), Spec{Patterns: []string{"(f)oo"}, Dialect: c.dialect, Word: c.word}, limits)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "compile text-search pattern", err)
 		var got [][]int
 		if err := m.Groups(t.Context(), []byte("foo"), func(g []int) error { got = append(got, slices.Clone(g)); return nil }); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "visit capture groups", err)
 		}
 		if !slices.EqualFunc(got, c.want, slices.Equal) || m.CaptureGroups() != c.groups {
 			t.Fatalf("%s word=%v groups %v (%d), want %v (%d)", c.dialect, c.word, got, m.CaptureGroups(), c.want, c.groups)

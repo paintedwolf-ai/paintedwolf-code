@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -14,6 +15,7 @@ type agentStreamStage struct {
 	mutation       agentMutation
 	captured       revisionCapture
 	journal        sourceeffect.Pending
+	delivery       *secretcap.PreparedDelivery
 	replacement    *fseffect.Replacement
 	copyBuffer     []byte
 	releaseWorking func()
@@ -87,4 +89,14 @@ func (c *revisionCapture) Close() {
 	if c.buffer != nil {
 		c.buffer.Close()
 	}
+}
+
+// publish commits credential delivery only after the filesystem effect committed,
+// including a committed effect whose later synchronization reports an error.
+func (s *agentStreamStage) publish(ctx context.Context) (fseffect.Result, error) {
+	result, err := s.replacement.Commit()
+	if result.Publication.Committed() {
+		s.delivery.Commit(ctx)
+	}
+	return result, err
 }

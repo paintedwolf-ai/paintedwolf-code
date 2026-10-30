@@ -1,9 +1,16 @@
 name: Set up WebKitGTK accessibility images
 description: Restore, or build on a miss, the container image of each WebKitGTK release that den:webkit:atspi checks, so an offline lane finds every image it runs
 inputs:
+  lookup-only:
+    description: Check the native image cache identity without loading or building images
+    default: 'false'
   save:
     description: Publish images built on a miss (main only); every other run restores without saving
     default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact image cache exists
+    value: ${{ steps.cache.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -23,11 +30,11 @@ runs:
       with:
         path: ${{ steps.identity.outputs.archive }}
         key: ${{ steps.identity.outputs.prefix }}${{ hashFiles('scripts/harness/webkit-atspi/*.Containerfile') }}
-        restore-keys: ${{ inputs.save != 'true' && steps.identity.outputs.prefix || '' }}
-        lookup-only: ${{ inputs.save == 'true' }}
+        restore-keys: ${{ inputs.lookup-only != 'true' && inputs.save != 'true' && steps.identity.outputs.prefix || '' }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
 
     - name: Load restored images
-      if: inputs.save != 'true' && steps.cache.outputs.cache-matched-key != ''
+      if: inputs.lookup-only != 'true' && inputs.save != 'true' && steps.cache.outputs.cache-matched-key != ''
       shell: bash
       env:
         ARCHIVE: ${{ steps.identity.outputs.archive }}
@@ -38,12 +45,12 @@ runs:
 
     # Builds only the releases whose images are missing, while the runner still has a network.
     - name: Build missing images
-      if: inputs.save != 'true' || steps.cache.outputs.cache-hit != 'true'
+      if: inputs.lookup-only != 'true' && (inputs.save != 'true' || steps.cache.outputs.cache-hit != 'true')
       shell: bash
       run: ./task den:webkit:atspi -- --prepare
 
     - name: Archive built images
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.lookup-only != 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         ARCHIVE: ${{ steps.identity.outputs.archive }}
@@ -53,7 +60,7 @@ runs:
         podman save --quiet --multi-image-archive --output "${ARCHIVE}" "${images[@]}"
 
     - name: Cache built images
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.lookup-only != 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.identity.outputs.archive }}

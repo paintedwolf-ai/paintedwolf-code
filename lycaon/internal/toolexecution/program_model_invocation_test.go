@@ -105,10 +105,10 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 	}
 	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
 	executor := NewExecutor(nil, nil, "fixture")
-	if got := executor.Rejections.rejectBeforeInvoke(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); toolrejection.AsToolReject(got) != cause {
+	if got := executor.Rejections.rejectBeforeInvoke(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); got != cause { //nolint:errorlint // Receipt settlement requires the exact original error object, without wrapping.
 		t.Fatal("native preinvoke rejection was rendered before receipt settlement")
 	}
-	if got := executor.Rejections.settleReject(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); toolrejection.AsToolReject(got) != cause {
+	if got := executor.Rejections.settleReject(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); got != cause { //nolint:errorlint // Receipt settlement requires the exact original error object, without wrapping.
 		t.Fatal("native owner rejection was rendered before receipt settlement")
 	}
 	release()

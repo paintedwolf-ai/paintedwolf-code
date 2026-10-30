@@ -33,6 +33,10 @@ const (
 
 // retentionAnswers records released and process-lifetime stores.
 var retentionAnswers = map[string]retentionAnswer{
+	// Session disposal closes admission, drains jobs and drops the index.
+	"lycaon/internal/tools/native/command/program_supervision.go#sessions": retentionReleased,
+	// Each held job releases once; idle programs leave the supervisor index.
+	"lycaon/internal/tools/native/command/program_supervision.go#jobs":         retentionReleased,
 	"lycaon/internal/session/loopback_provenance.go#sessionContainers":         retentionReleased,
 	"lycaon/internal/session/stream/hub.go#subs":                               retentionReleased,
 	"lycaon/internal/session/stream/hub.go#sessionMsg":                         retentionReleased,

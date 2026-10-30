@@ -18,6 +18,7 @@ import (
 )
 
 type credentialFiles struct {
+	index    *credentialIndex
 	harvest  *secretharvest.Runtime
 	fp       *secretmatch.Fingerprinter
 	queries  *db.Queries
@@ -26,7 +27,7 @@ type credentialFiles struct {
 }
 
 func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, sessions *store.SQL) *credentialFiles {
-	return &credentialFiles{
+	files := &credentialFiles{
 		harvest: harvest, fp: fp, queries: db.New(database),
 		managed: func(projectID string) []secretmatch.Remembered {
 			if capabilities == nil {
@@ -36,6 +37,8 @@ func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerpr
 		},
 		exposure: sessions.MarkSecretExposureOnRead,
 	}
+	files.index = newCredentialIndex(files)
+	return files
 }
 
 func (c *credentialFiles) Delivered(ctx context.Context, read tools.CredentialFileRead) error {
@@ -77,7 +80,7 @@ func (c *credentialFiles) Authored(ctx context.Context, written tools.AuthoredCr
 	now := db.FormatTime(time.Now())
 	for _, value := range written.Values {
 		fp := c.fp.Fingerprint(value)
-		if managed[fp] || c.harvest.Has(written.RootSessionID, fp) {
+		if managed[fp] || c.harvest.Has(written.RootSessionID, fp) || c.harvest.HasFileValue(written.ProjectID, fp) {
 			continue
 		}
 		if err := c.queries.InsertCredentialAuthoredValue(ctx, db.InsertCredentialAuthoredValueParams{

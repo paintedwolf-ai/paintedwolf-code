@@ -17,7 +17,7 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
-PLATFORMS = {"linux": {"ubuntu-latest", "ubuntu-24.04-arm"}}
+PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
 # Runs its probe in container images that an offline lane must find already provisioned.
 CONTAINER_TARGET = "den:webkit:atspi"
 # Runs the pinned browser, which an offline lane must find already provisioned.
@@ -26,6 +26,11 @@ BROWSER_TARGET = "test:confine:linux"
 REPOSITORY_TOOLS_TARGET = "test:runner"
 # Runs the reference userland images, which an offline lane must find already built and verified.
 USERLANDS_TARGET = "test:userlands"
+# The protected launch leg builds and runs a GTK desktop under a display.
+LAUNCH_PACKAGE = "./internal/launchguard"
+# Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
+# and reach the protected launch leg.
+LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "check:coverage"}
 
 
 def lanes():
@@ -76,14 +81,14 @@ def lanes():
                 "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
             raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
-        if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
+        if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-24.04"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
         if "workers" in lane and (type(lane["workers"]) is not int or not 1 <= lane["workers"] <= 8):
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
         if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
             raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
         if "platform" in lane and (lane["platform"] not in PLATFORMS
-                                   or lane.get("runner", "ubuntu-latest") not in PLATFORMS[lane["platform"]]
+                                   or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
     validate_sources(values)
@@ -119,6 +124,9 @@ def lanes():
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")
+    for name, lane in values.items():
+        if ("check" in lane["profiles"] or "release" in lane["profiles"] and "platform" in lane) and "nightly" not in lane["profiles"]:
+            raise ValueError(f"nightly must include qualification lane {name}")
     return values
 
 
@@ -132,10 +140,36 @@ def max_parallel(profile):
     return caps[profile]
 
 
+def runs_protected_launch(target):
+    """Whether a target's Go run reaches the protected launch leg: its catalog recipe selects
+    the launch package, or its script selects packages that include it."""
+    recipe = catalog()["go"].get(target)
+    if recipe is None:
+        return target in LAUNCH_SCRIPT_TARGETS
+    return any(selects_package(pattern, LAUNCH_PACKAGE) for pattern in recipe["packages"])
+
+
+def selects_package(pattern, package):
+    """Whether a Go package pattern names package, directly or through a `/...` tree."""
+    if pattern.endswith("/..."):
+        root = pattern[:-len("/...")]
+        return package == root or package.startswith(root + "/")
+    return pattern == package
+
+
 def analysis_set(targets):
     lint = bool(set(targets) & {"lint:fast", "lint:full"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
+
+
+def scripts_python_in_scope(scope):
+    """Whether changed-scripts coverage may run a Python suite: only when scripts Python changed under a bounded scope.
+
+    Without a scope the target resolves its own change base and may run every suite, so the plan provisions for all of them."""
+    if scope is None or scope["full"]:
+        return True
+    return any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
 
 
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
@@ -156,6 +190,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
         tier = GATE if broad and "platform" not in lane else profile
         if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
+        if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
+            continue
         count = lane.get("shards", 1)
         for index in range(1, count + 1):
             result.append({"lane": name,
@@ -169,12 +205,13 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
                            "userlands": USERLANDS_TARGET in lane["targets"],
-                           "linux_launch": bool({"test:full", "test:confine:linux", "coverage:changes"} & set(lane["targets"])),
-                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
+                           "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
+                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
+                           or "scripts:coverage:changes" in lane["targets"] and scripts_python_in_scope(scope),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
-                           "runner": lane.get("runner", "ubuntu-latest")})
+                           "runner": lane.get("runner", "ubuntu-24.04")})
     if not result:
         raise ValueError("CI selection contains no verification")
     return {"include": order(result, values, timings, max_parallel(profile))}

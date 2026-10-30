@@ -7,7 +7,7 @@ Source of truth for host rules: `docs/den.md` (visual evidence) and `docs/tools.
 | Binding | Use when | Do not |
 |---|---|---|
 | `project_dir` | Plain static HTML/CSS/JS or a built export on disk. The tree is served same-origin at `http://lycaon.capture/`, so site-absolute assets including JSON (`/config.json`) are fulfilled from disk | Point at `src/` or bare `.` for bundler-only trees; start a generic HTTP file server |
-| `url` | Project's own loopback server (dev/SSR/HMR/auth/API), started with `command`/`verify` `background: true` + `process_handle`. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
+| `url` | Project's own loopback server (dev/SSR/HMR/auth/API), started with `command(command="npm run dev", background=true)` with `capability_request.local_listen`. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
 
 Pick exactly one binding. Prefer `url` when the ask is how it looks **running**. Prefer `project_dir` for "do these built files render?" A click handler that `fetch`es a file from the same tree does not require a loopback server. `CAPTURE_URL_UNREACHABLE` after a successful request to that URL is a down server or a wrong port.
 
@@ -87,4 +87,4 @@ N action steps produce N+1 settled frames (navigate idle + after each action). D
 
 - Copy producer `artifact_id` values into `artifact_ids` — on `surface_note` to show one mid-run, or on the final report at close.
 - Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in synthesis.
-- Stop a `url` server with `command_stop` + `process_handle` when the turn is done. `project_dir` leaves nothing to stop.
+- Stop a `url` server with `command_stop(handle=…)` when the turn is done. `project_dir` leaves nothing to stop.

@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/modules_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-module-view-fixtures",
+  "disposition": "retain",
+  "reason": "Retain the module mount contracts within 550 code-bearing lines. The shared mount fixtures compare parent, stage and module views, while the instrumented actor scenario exercises real mount events and preserves executable baseline library mounts. Keep namespace construction and raw descriptor closure beside those assertions so the sole mount-notification consumer, thread and subreaper lifetimes remain explicit.",
+  "reviewed_commit": "548fc04d1f00b83135c674c3ba1c8b35d0166945",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/internal/launchguard/modules_linux_test.go": "b15dd62d0c95a770bbb386710bcc2d89283feb9c1dcf00e121aca0952502c4b2",
+    "lycaon/internal/launchguard/agent_linux_test.go": "13f93e3923da0f4bb827a5b4df9a00f7df0243afa37fcf8f1686ffe741761802"
+  }
+}

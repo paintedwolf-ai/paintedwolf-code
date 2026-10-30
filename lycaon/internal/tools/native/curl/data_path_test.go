@@ -3,10 +3,12 @@ package curl
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"io"
 	"net/http"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestCurlPreservesSecretShapedResponseBytes(t *testing.T) {
@@ -54,9 +56,7 @@ func TestCurlFilePublicationRequiresBothNetworkAndMutation(t *testing.T) {
 		if effect.Mode == r.mode {
 			var err error
 			required, err = effect.CommandEffects(nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "resolve command effect classes", err)
 		}
 	}
 	if required == 0 || mutationOnly.Allows(required) || networkOnly.Allows(required) || !both.Allows(required) {

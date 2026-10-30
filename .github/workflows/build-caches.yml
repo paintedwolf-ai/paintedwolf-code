@@ -12,6 +12,8 @@ on:
       - 'docs/**'
       - '**.md'
   workflow_dispatch:
+  schedule:
+    - cron: '13 4 * * *'
 
 permissions:
   contents: read
@@ -33,13 +35,11 @@ jobs:
       # Each platform prepares and publishes its compiler inputs on one runner.
       max-parallel: 1
       matrix:
-        runner: [ubuntu-latest, macos-15]
+        runner: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
-    # Publishing lint diagnostics deletes the entries they replace.
     permissions:
       contents: read
-      actions: write
     env:
       PW_TEST_HOST: dedicated
     defaults:
@@ -50,7 +50,50 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Probe reusable cache identities
+        id: probe
+        uses: ./.github/actions/setup-verification
+        with:
+          setup: shell
+          analysis: all
+          lookup-only: 'true'
+
+      - name: Probe release compiler inputs
+        if: runner.os == 'macOS'
+        id: probe-release
+        uses: ./.github/actions/cache-release-build
+        with:
+          lookup-only: 'true'
+
+      - name: Probe WebKitGTK image inputs
+        if: runner.os == 'Linux'
+        id: probe-images
+        uses: ./.github/actions/setup-webkit-atspi-images
+        with:
+          lookup-only: 'true'
+
+      - name: Select cache warming
+        id: state
+        env:
+          PYTHONPATH: scripts
+          CACHE_HITS: >-
+            {"Go":{"active":true,"hit":"${{ steps.probe.outputs.go-cache-hit }}"},
+             "Desktop Rust":{"active":true,"hit":"${{ steps.probe.outputs.rust-cache-hit }}"},
+             "Decision engine":{"active":true,"hit":"${{ steps.probe.outputs.decide-cache-hit }}"},
+             "Document core":{"active":true,"hit":"${{ steps.probe.outputs.document-cache-hit }}"},
+             "Base tools":{"active":true,"hit":"${{ steps.probe.outputs.analysis-base-cache-hit }}"},
+             "Lint tools":{"active":true,"hit":"${{ steps.probe.outputs.analysis-lint-cache-hit }}"},
+             "Vulnerability tools":{"active":true,"hit":"${{ steps.probe.outputs.analysis-vulnerabilities-cache-hit }}"},
+             "Notices tools":{"active":true,"hit":"${{ steps.probe.outputs.notices-cache-hit }}"},
+             "Bun packages":{"active":true,"hit":"${{ steps.probe.outputs.bun-cache-hit }}"},
+             "OpenGrep":{"active":true,"hit":"${{ steps.probe.outputs.opengrep-cache-hit }}"},
+             "Release Rust":{"active":${{ runner.os == 'macOS' }},"hit":"${{ steps.probe-release.outputs.cache-hit }}"},
+             "WebKitGTK images":{"active":${{ runner.os == 'Linux' }},"hit":"${{ steps.probe-images.outputs.cache-hit }}"},
+             "Native package archives":{"active":false,"deferred":${{ runner.os == 'Linux' }}}}
+        run: python3 -m ci_policy.cache_payload status
+
       - id: setup
+        if: steps.state.outputs.prepare == 'true'
         uses: ./.github/actions/setup-verification
         with:
           setup: shell
@@ -58,77 +101,78 @@ jobs:
           analysis: all
 
       - uses: ./.github/actions/setup-bialy
+        if: steps.state.outputs.prepare == 'true'
 
       - name: Restore release compiler inputs
-        if: runner.os == 'macOS'
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'macOS')
         id: release
         uses: ./.github/actions/cache-release-build
 
       - name: Compile the Go module
-        if: steps.setup.outputs.go-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.go-cache-hit != 'true')
         run: ./task build
 
       # The macOS platform jobs build the development sidecar, which also
       # builds the decision engine whenever its cache key changes.
       - name: Build the development sidecar
-        if: runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'))
         run: ./task build:lycaon-dev
 
       - name: Build the decision engine
-        if: runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task build:decide
 
       - name: Warm document compiler inputs
-        if: steps.setup.outputs.document-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.document-cache-hit != 'true')
         run: ./task build:document-core
 
       - name: Warm desktop workspace builds
-        if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task setup-dev -- --workspace-cache
 
       - name: Warm release compiler inputs
-        if: runner.os == 'macOS' && (steps.release.outputs.cache-hit != 'true' || steps.setup.outputs.go-cache-hit != 'true')
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'macOS' && (steps.release.outputs.cache-hit != 'true' || steps.setup.outputs.go-cache-hit != 'true'))
         run: ./task setup-dev -- --release-cache
 
       - name: Publish prepared release compiler cache
-        if: github.ref == 'refs/heads/main' && runner.os == 'macOS' && steps.release.outputs.cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && runner.os == 'macOS' && steps.release.outputs.cache-hit != 'true')
         uses: ./.github/actions/cache-release-build
         with:
           save: 'true'
 
       - name: Publish prepared desktop compiler cache
-        if: github.ref == 'refs/heads/main' && steps.setup.outputs.rust-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.rust-cache-hit != 'true')
         uses: ./.github/actions/cache-rust
         with:
           save: 'true'
 
       - name: Publish prepared document compiler cache
-        if: github.ref == 'refs/heads/main' && steps.setup.outputs.document-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.document-cache-hit != 'true')
         uses: ./.github/actions/cache-document-core
         with:
           save: 'true'
 
       # Publish completed compiler caches before diagnostic work.
       - name: Publish prepared Go caches
-        if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true')
         uses: ./.github/actions/cache-go
         with:
           save: 'true'
 
       - name: Publish prepared decision engine
-        if: github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true')
         uses: ./.github/actions/cache-decide
         with:
           save: 'true'
 
       - name: Publish prepared notices tools
-        if: github.ref == 'refs/heads/main'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main')
         uses: ./.github/actions/cache-notices-tools
         with:
           save: 'true'
 
       - name: Publish prepared analysis tools
-        if: github.ref == 'refs/heads/main'
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main')
         uses: ./.github/actions/cache-analysis-tools
         with:
           tools: all
@@ -136,7 +180,7 @@ jobs:
 
       # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
       - name: Publish WebKitGTK accessibility images
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'Linux' && github.ref == 'refs/heads/main')
         uses: ./.github/actions/setup-webkit-atspi-images
         with:
           save: 'true'
@@ -148,14 +192,14 @@ jobs:
         with:
           save: 'true'
 
-      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      # Lint lanes run on Linux. Findings on main do not stop warming; nightly reports them.
       - name: Record lint diagnostics
-        if: runner.os == 'Linux'
+        if: steps.state.outputs.prepare == 'true' && steps.state.outputs.maintenance == 'true' && (runner.os == 'Linux')
         continue-on-error: true
         run: ./task lint:full
 
       - name: Publish lint diagnostics
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        if: steps.state.outputs.prepare == 'true' && steps.state.outputs.maintenance == 'true' && (runner.os == 'Linux' && github.ref == 'refs/heads/main')
         uses: ./.github/actions/cache-lint-diagnostics
         with:
           save: 'true'

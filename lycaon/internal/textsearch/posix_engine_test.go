@@ -5,13 +5,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPOSIXEngineFindsPositionedLongestMatchesWithSubexpressions(t *testing.T) {
 	engine, err := NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create POSIX regex engine", err)
 	for _, c := range []struct {
 		name     string
 		pattern  string
@@ -53,20 +53,14 @@ func TestPOSIXEngineFindsPositionedLongestMatchesWithSubexpressions(t *testing.T
 
 func TestPOSIXEngineFoldsCaseOnRequest(t *testing.T) {
 	engine, err := NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create POSIX regex engine", err)
 	folded, err := engine.CompileFolded(t.Context(), `a[b-c]\(É\)`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile case-folded POSIX pattern", err)
 	if got, err := folded.Find(t.Context(), []byte("xACé"), 0); err != nil || !slices.Equal(got, []int{1, 5, 3, 5}) {
 		t.Fatalf("folded find = %v, %v", got, err)
 	}
 	exact, err := engine.Compile(t.Context(), `a[b-c]`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile POSIX pattern", err)
 	if got, err := exact.Find(t.Context(), []byte("AC"), 0); err != nil || got != nil {
 		t.Fatalf("exact find = %v, %v", got, err)
 	}
@@ -77,21 +71,15 @@ func TestPOSIXEngineFoldsCaseOnRequest(t *testing.T) {
 // advances one scalar.
 func TestPOSIXEngineSubstitutesGlobally(t *testing.T) {
 	engine, err := NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create POSIX regex engine", err)
 	re, err := engine.Compile(t.Context(), `x*`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile POSIX pattern", err)
 	subject := []byte("abxc")
 	var out strings.Builder
 	copied, previous := 0, -1
 	for from := 0; from <= len(subject); {
 		m, err := re.Find(t.Context(), subject, from)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "find next POSIX match", err)
 		if m == nil {
 			break
 		}
@@ -116,9 +104,7 @@ func TestPOSIXEngineSubstitutesGlobally(t *testing.T) {
 
 func TestPOSIXEngineRefusesAndMeters(t *testing.T) {
 	engine, err := NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create POSIX regex engine", err)
 	var pattern *PatternError
 	if _, err := engine.Compile(t.Context(), `\(`, false); !errors.As(err, &pattern) || pattern.Code != CodeRegexInvalid {
 		t.Fatalf("invalid: %v", err)
@@ -139,9 +125,7 @@ func TestPOSIXEngineRefusesAndMeters(t *testing.T) {
 	small := engine
 	small.Limits.InputBytes = 2
 	re, err = small.Compile(t.Context(), `a`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile input-bounded POSIX pattern", err)
 	if _, err := re.Find(t.Context(), []byte("aaa"), 0); budgetResource(t, err) != "regex_input_bytes" {
 		t.Fatalf("input bytes: %v", err)
 	}

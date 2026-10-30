@@ -198,7 +198,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$"
+      "exclude": "/test/security$|/internal/launchguard$"
     },
     "seatbelt:confine": {
       "options": [
@@ -219,16 +219,18 @@
         "./internal/exec",
         "./internal/hitl",
         "./internal/mcp",
+        "./internal/programtest",
         "./internal/scan/drivers/bundled",
         "./internal/scan/drivers/external",
         "./internal/scan/installed",
         "./internal/scan/integration",
         "./internal/toolexecution",
+        "./internal/tools/native/command",
         "./internal/webresearch",
         "./test/contract/security"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata)$"
       ],
       "bundled": true
     },
@@ -464,6 +466,7 @@
     "seatbelt:scanstress"
   ],
   "selection": {
+    "test:runner": "unittest",
     "test:digest": "go",
     "test:oar": "go",
     "test:short": "go",
@@ -886,12 +889,6 @@
       ],
       "workers": 1
     },
-    "release:publish:aur-recipe": {
-      "locks": [
-        "aur-delivery"
-      ],
-      "workers": 1
-    },
     "release:live-test": {
       "locks": [
         "*"
@@ -1040,7 +1037,8 @@
       "minutes": 45,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification",
@@ -1055,7 +1053,8 @@
       "minutes": 120,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -1071,7 +1070,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -1085,7 +1085,8 @@
       "minutes": 90,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "analysis",
@@ -1103,7 +1104,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "analysis"
@@ -1115,7 +1117,8 @@
       "minutes": 60,
       "profiles": [
         "check",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "verification"
@@ -1148,7 +1151,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "frontend"
@@ -1162,7 +1166,8 @@
       "profiles": [
         "check",
         "release",
-        "integration"
+        "integration",
+        "nightly"
       ],
       "suite": "all",
       "setup": "shell",
@@ -1375,11 +1380,9 @@
     "footprints": {
       "ci.yml": 1,
       "qualification.yml": 3,
-      "qualification-supersession.yml": 1,
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
-      "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
       "linux-desktop-environment-rehearsal.yml": 1,
       "linux-installed-desktop-rehearsal.yml": 1,

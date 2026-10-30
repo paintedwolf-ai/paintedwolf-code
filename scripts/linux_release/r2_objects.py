@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -66,7 +65,9 @@ def tamper_fixture_object(key: str, source: Path, destination: Path):
     put(key, destination, True)
 
 
-def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=None):
+def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=None, attempts=12):
+    if type(attempts) is not int or not 1 <= attempts <= 24:
+        raise ValueError("public verification requires a bounded retry count")
     local = hashlib.sha256()
     with source.open("rb") as stream:
         while chunk := stream.read(1 << 20):
@@ -83,7 +84,7 @@ def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=Non
         if local.hexdigest() != expected or source.stat().st_size != size:
             raise ValueError("local repository object differs from its independently admitted identity")
     last = None
-    for attempt in range(12):
+    for attempt in range(attempts):
         try:
             request = urllib.request.Request(url, headers={"Cache-Control": "no-cache, no-store",
                                                            "User-Agent": "painted-wolf-release/1"})
@@ -102,16 +103,17 @@ def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=Non
                 last = "public repository bytes differ from selected final bytes"
         except (OSError, ValueError, urllib.error.URLError) as exc:
             last = type(exc).__name__
-        if attempt < 11:
+        if attempt + 1 < attempts:
             time.sleep(5)
     raise ValueError("repository public object did not converge: " + str(last))
 
 
 def current(key: str, directory: Path) -> dict | None:
+    from release_distribution import decode_storage
     if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
         from scripts.release_storage.s3 import read_bytes
         raw = read_bytes(key)
-        return None if raw is None else json.loads(raw)
+        return decode_storage(raw)
     output = directory / "remote-current.json"
     status = subprocess.check_output(["python3", str(ROOT / "scripts/release_distribution.py"),
                                       "storage-read", "--key", key, "--output", str(output)], text=True).strip()
@@ -119,7 +121,7 @@ def current(key: str, directory: Path) -> dict | None:
         return None
     if status != "200":
         raise ValueError("cannot establish authenticated repository activation state")
-    return json.loads(output.read_text())
+    return decode_storage(output.read_bytes())
 
 
 def put(key: str, source: Path, mutable=False):

@@ -9,3 +9,7 @@ internal/search/ast\.go:.*: unreachable func: (AndExpr|OrExpr|NotExpr|FilterExpr
 
 # Sealed command plan node markers (called via the CommandNode, TestNode and WordNode interfaces).
 internal/commandsurface/program_plan\.go:.*: unreachable func: [A-Za-z]+\.(commandNode|testNode|wordNode)
+
+# Sealed arithmetic word and expression markers implement WordNode and ArithmeticNode.
+internal/commandsurface/program_arithmetic\.go:.*: unreachable func: ArithmeticPart\.wordNode
+internal/commandsurface/program_arithmetic\.go:.*: unreachable func: Arithmetic(Operand|Unary|Binary)\.arithmeticNode

@@ -27,7 +27,6 @@ pub enum ClipboardError {
     #[cfg(target_os = "linux")]
     ImageTooLarge,
     /// The platform reported a fault.
-    #[cfg(not(target_os = "linux"))]
     Backend(String),
 }
 
@@ -39,7 +38,6 @@ impl fmt::Display for ClipboardError {
             Self::Timeout => f.write_str("Clipboard did not respond in time"),
             #[cfg(target_os = "linux")]
             Self::ImageTooLarge => f.write_str("The clipboard image is too large to paste"),
-            #[cfg(not(target_os = "linux"))]
             Self::Backend(message) => f.write_str(message),
         }
     }
@@ -141,7 +139,7 @@ impl<A: ClipboardAdapter> ClipboardService<A> {
         self.run(main, |adapter, main| adapter.read_text(main)).await
     }
 
-    async fn run<T>(
+    pub(super) async fn run<T>(
         &self,
         main: &dyn MainThread,
         operation: impl FnOnce(&mut A, &dyn MainThread) -> Reply<T>,

@@ -5,8 +5,9 @@ from ci_policy import budget_snapshot as snapshot, budget_issues as issues
 
 
 def row(artifact='pkg/server.go', category='source_files', measured=350):
+    source = artifact.rpartition('/')[0] + '/server.go' if category.startswith('go_') else artifact
     return dict(category=category, id=artifact, measured=measured, warn=300, limit=900,
-                touched=True, spans=[], effective_cap=900, exception_reason='', sources=['pkg/server.go'])
+                touched=True, spans=[], effective_cap=900, exception_reason='', sources=[source])
 
 
 def report(rows=None):
@@ -159,7 +160,7 @@ class WorkstreamTests(unittest.TestCase):
         ops, _ = self.groups.plan([], self.artifacts(*entries), observation())
         self.assertEqual(len(ops), 1)
         self.assertLess(len(ops[0]['body']['body'].encode()), 60000)
-        self.assertIn('linked complete qualification report', ops[0]['body']['body'])
+        self.assertIn('linked complete nightly report', ops[0]['body']['body'])
         self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 500)
 
     def test_not_planned_dismissal_is_bounded_by_intake_and_facts(self):
@@ -198,7 +199,7 @@ class WorkstreamTests(unittest.TestCase):
         self.assertEqual(len(state['evidence_digest']), 64)
         self.assertTrue(all(set(r) == {'category', 'id'} for r in state['artifacts']))
         self.assertIn('module1999', body)
-        self.assertIn('additional modules are listed in the complete qualification report', body)
+        self.assertIn('additional modules are listed in the complete nightly report', body)
 
     def test_area_evidence_change_renews_the_shared_review(self):
         first, second = row('pkg/a.go'), row('pkg/b.go')
@@ -209,3 +210,38 @@ class WorkstreamTests(unittest.TestCase):
         ops, _ = self.groups.plan([closed], self.artifacts(first, changed), observation(), intake_keys=set())
         self.assertEqual(ops[0]['action'], 'reopen')
         self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 2)
+
+    def test_held_artifacts_keep_their_recorded_membership(self):
+        first, second = row('pkg/a.go'), row('pkg/b.go')
+        held = lambda entry: entry['id'] == 'pkg/b.go'
+        ops, _ = self.groups.plan([], self.artifacts(first, second), observation(), held=held)
+        self.assertEqual([o['action'] for o in ops], ['create', 'hold'])
+        self.assertEqual(ops[1]['artifacts'], [{'category': 'source_files', 'id': 'pkg/b.go'}])
+        listed = self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']
+        self.assertEqual([entry['id'] for entry in listed], ['pkg/a.go'])
+        self.assertEqual(ops[0]['artifacts'], [{'category': 'source_files', 'id': 'pkg/a.go'},
+                                               {'category': 'source_files', 'id': 'pkg/b.go'}])
+        current = issue(body=self.groups.plan([], self.artifacts(first, second), observation())[0][0]['body']['body'])
+        self.assertEqual(self.groups.plan([current], self.artifacts(first, second), observation(), held=held), ([], 0))
+        # A held member stays listed even when the report would retain it, and its area is
+        # not written when the report would drop it.
+        from verification_tests.ci.test_budget_review_execution import reviewed
+        retained = {**second, 'review': reviewed()['review']}
+        ops, _ = self.groups.plan([current], self.artifacts(first, retained), observation(), held=held)
+        self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 2)
+        ops, _ = self.groups.plan([current], self.artifacts(first, retained), observation())
+        self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 1)
+        self.assertEqual(self.groups.plan([current], self.artifacts(first), observation(), held=held), ([], 0))
+        self.assertEqual(self.groups.plan([current], self.artifacts(first), observation())[0][0]['action'], 'update')
+
+    def test_held_artifact_cannot_reopen_or_renew_a_closed_area(self):
+        entry = row()
+        ops, _ = self.groups.plan([], self.artifacts(entry), observation())
+        dismissed = issue(state='closed', state_reason='not_planned', body=ops[0]['body']['body'])
+        changed = {**entry, 'measured': 360}
+        self.assertEqual(self.groups.plan([dismissed], self.artifacts(changed), observation(), intake_keys=set())[0][0]['action'], 'reopen')
+        self.assertEqual(self.groups.plan([dismissed], self.artifacts(changed), observation(), intake_keys=set(),
+                                          held=lambda _: True), ([], 0))
+        # A touch the frozen area cannot record waits for a later report.
+        ops, _ = self.groups.plan([dismissed], self.artifacts(changed), observation(), held=lambda _: True)
+        self.assertEqual(ops, [{'action': 'hold', 'key': 'pkg', 'artifacts': [{'category': 'source_files', 'id': 'pkg/server.go'}]}])

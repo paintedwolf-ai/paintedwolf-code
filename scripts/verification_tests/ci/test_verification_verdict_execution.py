@@ -32,68 +32,52 @@ class VerificationVerdictTests(unittest.TestCase):
             with self.subTest(results=results), self.assertRaisesRegex(ValueError, "ready for review"):
                 ci.require_success(results, ["platform"], draft=True)
 
-    def test_release_commit_needs_exact_main_qualification(self):
-        from ci_policy import qualification_receipt
-        sha = "a" * 40
-        good = {"id": 42, "run_attempt": 1, "head_sha": sha, "head_branch": "main", "conclusion": "success", "event": "push"}
-        proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="push",
-                     source_sha=sha, source_tree="c" * 40, controller_sha=sha,
-                     checks={name: "success" for name in qualification_receipt.CHECKS})
-        with patch.object(ci, "api", return_value={"workflow_runs": [good]}), \
-                patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
-                patch.object(qualification_receipt, "from_run", return_value=proof):
-            self.assertEqual(ci.require_qualification("owner/repo", sha), good)
-        for changed in ({}, {"head_sha": "b" * 40}, {"head_branch": "feature"}, {"conclusion": "failure"},
-                        {"event": "merge_group"}, {"event": "pull_request"}):
-            with patch.object(ci, "api", return_value={"workflow_runs": [{**good, **changed}]}), \
-                    patch.object(ci, "pages", return_value=[]), \
-                    patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
-                    patch.object(qualification_receipt, "from_run", return_value=None), self.assertRaises(ValueError):
-                ci.require_qualification("owner/repo", sha)
-
-    def test_successful_run_with_skipped_aggregate_cannot_qualify_a_source(self):
-        from ci_policy import qualification_receipt
-        sha = "a" * 40
-        run = dict(id=42, run_attempt=1, head_sha=sha, head_branch="main", conclusion="success", event="push")
-        with patch.object(ci, "api", return_value={"workflow_runs": [run]}), patch.object(ci, "pages", return_value=[]), \
-                patch.object(qualification_receipt, "aggregate_passed", return_value=False), \
-                patch.object(qualification_receipt, "from_run") as read, self.assertRaises(ValueError):
-            ci.require_qualification("owner/repo", sha)
-        read.assert_not_called()
-
-    def test_historical_source_uses_a_receipt_bound_to_the_current_controller(self):
+    def test_release_requires_a_complete_exact_source_dispatch_receipt(self):
         from ci_policy import qualification_receipt
         sha, controller = "a" * 40, "b" * 40
-        run = dict(id=42, run_attempt=1, head_sha=controller, head_branch="main", conclusion="success", event="workflow_dispatch",
-                   display_title=f"Qualification {sha}")
+        run = dict(id=42, run_attempt=1, head_sha=controller, head_branch="main", conclusion="success",
+                   event="workflow_dispatch", display_title=f"Qualification {sha}")
         proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="workflow_dispatch",
                      source_sha=sha, source_tree="c" * 40, controller_sha=controller,
                      checks={name: "success" for name in qualification_receipt.CHECKS})
-        for receipt, accepted in [(proof, True), ({**proof, "run_attempt": 2}, False), (None, False)]:
-            with self.subTest(receipt=receipt), patch.object(ci, "api", return_value={"workflow_runs": []}), \
-                    patch.object(ci, "pages", return_value=[run]), \
+        for changed in ({}, {"run_attempt": 2}, {"source_sha": controller}, {"controller_sha": sha},
+                        {"repository": "foreign/repo"}, {"event": "push"}):
+            with self.subTest(changed=changed), patch.object(ci, "pages", return_value=[run]), \
                     patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
-                    patch.object(qualification_receipt, "from_run", return_value=receipt):
-                if accepted:
+                    patch.object(qualification_receipt, "from_run", return_value={**proof, **changed}):
+                if not changed:
                     self.assertEqual(ci.require_qualification("owner/repo", sha), run)
                 else:
                     with self.assertRaises(ValueError):
                         ci.require_qualification("owner/repo", sha)
+        for changed in ({"head_branch": "feature"}, {"conclusion": "failure"}, {"event": "push"},
+                        {"event": "merge_group"}, {"display_title": "Qualification " + controller}):
+            with self.subTest(changed=changed), patch.object(ci, "pages", return_value=[{**run, **changed}]), \
+                    patch.object(qualification_receipt, "from_run") as read, self.assertRaises(ValueError):
+                ci.require_qualification("owner/repo", sha)
+            read.assert_not_called()
+        for aggregate, receipt in [(False, proof), (True, None)]:
+            with self.subTest(aggregate=aggregate), patch.object(ci, "pages", return_value=[run]), \
+                    patch.object(qualification_receipt, "aggregate_passed", return_value=aggregate), \
+                    patch.object(qualification_receipt, "from_run", return_value=receipt), self.assertRaises(ValueError):
+                ci.require_qualification("owner/repo", sha)
 
-    def test_dispatch_lookup_skips_unrelated_candidates_without_downloading_receipts(self):
+    def test_dispatch_lookup_is_bounded_and_skips_unrelated_sources(self):
         from ci_policy import qualification_receipt
         from urllib.parse import parse_qs, urlparse
         sha = "a" * 40
         unrelated = dict(id=7, head_branch="main", conclusion="success", event="workflow_dispatch",
                          display_title="Qualification " + "b" * 40)
-        with patch.object(ci, "api", return_value={"workflow_runs": []}) as direct, \
-                patch.object(ci, "pages", return_value=[unrelated]) as pages, \
+        with patch.object(ci, "pages", return_value=[unrelated]) as pages, \
                 patch.object(qualification_receipt, "from_run") as read, \
                 patch.object(qualification_receipt, "aggregate_passed") as jobs:
             self.assertIsNone(ci.qualified_run("owner/repo", sha))
             read.assert_not_called()
             jobs.assert_not_called()
-            for request in (direct.call_args.args[0], pages.call_args.args[0]):
-                created = parse_qs(urlparse(request).query)["created"][0]
-                self.assertTrue(created.startswith(">="))
-                self.assertTrue(created.endswith("Z"))
+            query = parse_qs(urlparse(pages.call_args.args[0]).query)
+            self.assertEqual(query["event"], ["workflow_dispatch"])
+            self.assertTrue(query["created"][0].startswith(">="))
+            self.assertTrue(query["created"][0].endswith("Z"))
+        for value in ("main", sha[:12], None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ci.qualified_run("owner/repo", value)

@@ -28,6 +28,10 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 	}{{".zip", writeTestZip}, {".tar.gz", writeTestTarGz}} {
 		t.Run(tc.suffix, func(t *testing.T) {
 			t.Parallel()
+			maxEntries := int(archiveLimit("archive_extract_entries"))
+			if maxEntries < 1 {
+				t.Fatal("compiled archive entry ceiling is missing")
+			}
 			tmpDir := t.TempDir()
 			zipPath := filepath.Join(tmpDir, "many"+tc.suffix)
 			entries := make(map[string]string, entryLimit+1)

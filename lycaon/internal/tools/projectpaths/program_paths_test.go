@@ -87,7 +87,7 @@ func TestProgramPathBindingRefusesLinkSwapAtEffect(t *testing.T) {
 	testutil.FailErr(t, "replace old link", os.Remove(filepath.Join(root, "selected")))
 	testutil.FailErr(t, "swap escaping link", os.Symlink(outside, filepath.Join(root, "selected")))
 	if file, err := bound.Open(); err == nil {
-		file.Close()
+		_ = file.Close()
 		t.Fatal("escaped read admitted after link swap")
 	}
 }
@@ -107,7 +107,7 @@ func TestProgramPathBindingRefusesReplacedRoot(t *testing.T) {
 		t.Fatal("replacement root gained old binding")
 	}
 	if file, err := bound.Open(); err == nil {
-		file.Close()
+		_ = file.Close()
 		t.Fatal("replacement root read through old binding")
 	}
 }
@@ -142,7 +142,7 @@ func TestProgramNullOperandIsTypedAndEmpty(t *testing.T) {
 	}
 	reader, err := bound.OpenReader()
 	testutil.FailErr(t, "open null input", err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	bytes, err := io.ReadAll(reader)
 	testutil.FailErr(t, "read null input", err)
 	if len(bytes) != 0 {
@@ -201,7 +201,7 @@ func TestProgramPathsAuthorizeActualLinkIdentity(t *testing.T) {
 	bound, err := p.Bind(t.Context(), "alias", false)
 	testutil.FailErr(t, "bind coordinates without authority", err)
 	if file, err := bound.Open(); err == nil {
-		file.Close()
+		_ = file.Close()
 		t.Fatal("allowed spelling widened actual target read authority")
 	}
 	if _, err := p.Canonical(t.Context(), "alias"); err == nil {
@@ -271,11 +271,11 @@ func TestPhysicalRootAliasKeepsAttachedReadScope(t *testing.T) {
 	testutil.FailErr(t, "bind physical spelling of attached alias", err)
 	file, err := allowed.Open()
 	testutil.FailErr(t, "open actual admitted identity", err)
-	file.Close()
+	_ = file.Close()
 	denied, err := p.Bind(t.Context(), filepath.Join(root, "a.go"), false)
 	testutil.FailErr(t, "bind denied coordinates", err)
 	if file, err := denied.Open(); err == nil {
-		file.Close()
+		_ = file.Close()
 		t.Fatal("physical root spelling bypassed attached read profile")
 	}
 }
@@ -295,7 +295,7 @@ func TestNativeCaseSpellingRetainsFilesystemIdentity(t *testing.T) {
 		file, err := bound.Open()
 		testutil.FailErr(t, "open native case identity", err)
 		native, err := io.ReadAll(file)
-		file.Close()
+		_ = file.Close()
 		testutil.FailErr(t, "read native case identity", err)
 		actual, err := os.ReadFile(filepath.Join(root, name))
 		testutil.FailErr(t, "read OS case identity", err)
@@ -324,13 +324,13 @@ func TestOpenCwdRetainsCheckedDirectoryAcrossReplacement(t *testing.T) {
 	testutil.FailErr(t, "bind current directory", err)
 	held, err := p.OpenCwd(t.Context())
 	testutil.FailErr(t, "hold checked directory", err)
-	defer held.Close()
+	defer func() { _ = held.Close() }()
 	before, err := held.Stat()
 	testutil.FailErr(t, "capture held identity", err)
 	testutil.FailErr(t, "move cwd fixture", os.Rename(filepath.Join(root, "pkg"), filepath.Join(root, "moved")))
 	testutil.FailErr(t, "replace cwd spelling", os.Mkdir(filepath.Join(root, "pkg"), 0700))
 	if replacement, err := p.OpenCwd(t.Context()); err == nil {
-		replacement.Close()
+		_ = replacement.Close()
 		t.Fatal("cwd replacement inherited captured identity")
 	}
 	after, err := held.Stat()
@@ -370,7 +370,7 @@ func TestNativeUnicodeNormalizationSpellingRemainsExact(t *testing.T) {
 		file, err := bound.Open()
 		testutil.FailErr(t, "open actual Unicode entry", err)
 		native, err := io.ReadAll(file)
-		file.Close()
+		_ = file.Close()
 		testutil.FailErr(t, "read native Unicode entry", err)
 		actual, err := os.ReadFile(filepath.Join(root, name))
 		testutil.FailErr(t, "read physical Unicode entry", err)

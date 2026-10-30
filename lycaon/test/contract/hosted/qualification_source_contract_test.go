@@ -22,12 +22,13 @@ func TestQualificationPreservesRequestsWithinOneExecutor(t *testing.T) {
 	if workflow.Concurrency.Group != "qualification" || workflow.Concurrency.Queue != "max" || workflow.Concurrency.Cancel {
 		t.Fatal("qualification must preserve pending candidates in one non-canceling executor queue")
 	}
-	jobs := hostedJobs(t, "qualification")
-	if jobs["verification"].If != "needs.select.outputs.admitted == 'true'" {
-		t.Fatal("qualification must reject unadmitted requests before expensive verification")
+	trigger := hostedWorkflowFile(t, "qualification").On
+	if _, ok := trigger["workflow_dispatch"]; !ok || len(trigger) != 1 {
+		t.Fatal("release qualification requires an explicit manual source dispatch")
 	}
+	jobs := hostedJobs(t, "qualification")
 	for _, name := range []string{"verification", "platform", "platform-lanes", "e2e"} {
-		if jobs[name].With["source-sha"] != "${{ needs.select.outputs.source-sha }}" {
+		if jobs[name].With["source-sha"] != "${{ needs.source.outputs.source-sha }}" {
 			t.Errorf("%s does not receive the selected source identity", name)
 		}
 	}
@@ -44,7 +45,7 @@ func TestQualificationCheckoutsBindSourceAndControllerSeparately(t *testing.T) {
 			}
 		}
 	}
-	for _, job := range []string{"select", "qualification"} {
+	for _, job := range []string{"source", "qualification"} {
 		found := false
 		for _, step := range hostedJobs(t, "qualification")[job].Steps {
 			if strings.HasPrefix(step.Uses, "actions/checkout@") {
@@ -63,13 +64,13 @@ func TestQualificationCheckoutsBindSourceAndControllerSeparately(t *testing.T) {
 func TestQualificationPublishesOnlyTheCompletedAttemptReceipt(t *testing.T) {
 	t.Parallel()
 	job := hostedJobs(t, "qualification")["qualification"]
-	if job.If != "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}" {
-		t.Fatal("unadmitted requests must skip the aggregate before asynchronous cancellation completes")
+	if job.If != "${{ !cancelled() }}" {
+		t.Fatal("the aggregate must judge every stage unless qualification is cancelled")
 	}
 	verified, published := false, false
 	for _, step := range job.Steps {
 		if step.Run == "python3 -m ci_policy.qualification_receipt" {
-			verified = step.Env["QUALIFICATION_RECORD"] == "${{ needs.select.outputs.record }}" &&
+			verified = step.Env["QUALIFICATION_RECORD"] == "${{ needs.source.outputs.record }}" &&
 				step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}"
 		}
 		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") {

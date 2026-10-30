@@ -3,9 +3,14 @@
 package linuxsandbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/nixgeneration"
 
 	"golang.org/x/sys/unix"
 )
@@ -44,6 +49,31 @@ func TestClassifyLaunchSeparatesQuotaFromHostPolicy(t *testing.T) {
 				t.Fatal("launch refusal lost diagnostics")
 			}
 		})
+	}
+}
+
+func TestNixGenerationsNameTheirExactEngineGrant(t *testing.T) {
+	previous := runningNix
+	t.Cleanup(func() { runningNix = previous })
+	output := "/nix/store/" + strings.Repeat("0", 32) + "-painted-wolf-code-1.0.2"
+	root := output + "/lib/painted-wolf-code"
+	runningNix = func() (*nixgeneration.Layout, error) {
+		return &nixgeneration.Layout{Output: output, Root: root}, nil
+	}
+	sum := sha256.Sum256([]byte(root + "/bin/pw"))
+	want := Unavailability{Code: UnavailableUserNamespacesAppArmor, Detail: "restricted", Remedy: RemedyLoadEngineProfile,
+		Profile: output + "/share/painted-wolf-code/apparmor/paintedwolf-engine-" + hex.EncodeToString(sum[:])}
+	if got := appArmorDenied("restricted"); *got != want {
+		t.Fatalf("nix generation: %+v, want %+v", *got, want)
+	}
+	for name, layout := range map[string]func() (*nixgeneration.Layout, error){
+		"native package":    func() (*nixgeneration.Layout, error) { return nil, nil },
+		"malformed receipt": func() (*nixgeneration.Layout, error) { return nil, errors.New("malformed") },
+	} {
+		runningNix = layout
+		if got := appArmorDenied("restricted"); got.Remedy != RemedyInstallPackage || got.Profile != AppArmorProfile {
+			t.Fatalf("%s: %+v", name, *got)
+		}
 	}
 }
 

@@ -36,7 +36,7 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	if err != nil {
 		return nil, CapturedSource{}, err
 	}
-	defer parser.Close()
+	defer func() { _ = parser.Close() }()
 	maximum := commandsurface.SyntaxUnitByteLimit(true)
 	releaseCapture, err := memory.ReserveProgramState(ctx, 2*maximum)
 	if err != nil {

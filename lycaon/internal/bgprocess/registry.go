@@ -59,6 +59,7 @@ type Registry struct {
 type processTable struct {
 	mu            sync.Mutex
 	sessions      map[string]map[string]*Process
+	drains        map[string]*sessionDrain
 	closed        bool
 	maxBackground int
 	maxAwaited    int
@@ -160,8 +161,8 @@ func (r *processTable) remove(sessionID, handle string) {
 
 func (r *processTable) countRunningBackgroundLocked(sessionID string) int {
 	n := 0
-	for _, proc := range r.sessions[sessionID] {
-		if proc.mode == JobModeBackground && proc.running {
+	for _, proc := range r.ownedProcessesLocked(sessionID) {
+		if proc.mode == JobModeBackground && (proc.running || proc.pendingDrainLocked()) {
 			n++
 		}
 	}
@@ -169,7 +170,7 @@ func (r *processTable) countRunningBackgroundLocked(sessionID string) int {
 }
 
 func (r *processTable) runningConflictsLocked(sessionID, runKey string) (duplicates, awaited []string) {
-	for _, proc := range r.sessions[sessionID] {
+	for _, proc := range r.ownedProcessesLocked(sessionID) {
 		if !proc.running || proc.kind != processKindPipeline {
 			continue
 		}
@@ -213,8 +214,8 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 
 func (r *processTable) countRunningAwaitedLocked(sessionID string) int {
 	n := 0
-	for _, proc := range r.sessions[sessionID] {
-		if proc.mode == JobModeAwaited && proc.running {
+	for _, proc := range r.ownedProcessesLocked(sessionID) {
+		if proc.mode == JobModeAwaited && (proc.running || proc.pendingDrainLocked()) {
 			n++
 		}
 	}

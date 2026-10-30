@@ -186,7 +186,8 @@ func (d ProgramDiagnostic) Repair(req ProgramRepairRequest) (*ProgramRepair, err
 	}
 	program := make([]byte, 0, len(req.Source)-len(d.Word)+len(text))
 	program = append(append(append(program, req.Source[:d.Span.StartByte]...), text...), req.Source[d.Span.EndByte:]...)
-	if valid := req.Validate(program) == nil; !valid {
+	if req.Validate(program) != nil {
+		//nolint:nilerr // Failed candidate validation means no proven repair; retain the original diagnostic.
 		return nil, nil
 	}
 	return &ProgramRepair{SourceUnitID: d.SourceUnitID, Span: d.Span, Text: text, Program: program}, nil

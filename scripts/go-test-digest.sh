@@ -196,6 +196,8 @@ else
     TEST_TIMEOUT_SCALE=3
   fi
   export PW_TEST_TIMEOUT_SCALE="${TEST_TIMEOUT_SCALE}"
+  # The exec wrapper scales each package's memory ceiling for the detector's overhead.
+  if ((${#RACE_FLAG[@]})); then export PW_TEST_RACE=1; else unset PW_TEST_RACE; fi
   P_PKGS="${GO_TEST_P:?verification admission must set GO_TEST_P}"
   P_INTRA="${GO_TEST_PARALLEL:?verification admission must set GO_TEST_PARALLEL}"
   PACKAGE_TIMEOUT="$(test_scale_go_duration "${PACKAGE_TIMEOUT}" "${TEST_TIMEOUT_SCALE}")"

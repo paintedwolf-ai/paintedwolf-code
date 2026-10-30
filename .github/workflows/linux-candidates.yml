@@ -29,6 +29,13 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
           echo "version=$(python3 scripts/release-metadata.py | jq -er .product_version)" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(./task release:candidate:select)" >> "${GITHUB_OUTPUT}"
+          ./task release:candidate:select -- --source-record "$RUNNER_TEMP/candidate-source.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-candidate-source-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate-source.json
+          if-no-files-found: error
+          retention-days: 90
 
   candidates:
     needs: source

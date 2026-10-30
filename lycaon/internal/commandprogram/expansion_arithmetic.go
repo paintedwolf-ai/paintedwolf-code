@@ -126,9 +126,9 @@ func evalArithmeticBinaryOp(op string, left, right int64, span toolcontract.Sour
 		}
 		return result, nil
 	case "<<":
-		return left << (right & 63), nil
+		return left << (uint64(right & 63)), nil
 	case ">>":
-		return left >> (right & 63), nil
+		return left >> (uint64(right & 63)), nil
 	case "&":
 		return left & right, nil
 	case "|":
@@ -321,7 +321,8 @@ func parseArithmeticInteger(text string, span toolcontract.SourceSpan) (int64, e
 	if err != nil {
 		return 0, invalidValue(span, "an integer arithmetic operand")
 	}
-	// Preserve the low 64 bits without an out-of-range unsigned conversion.
+	// Reconstruct the signed bit pattern without narrowing an unsigned value
+	// outside int64's positive range; arithmetic remains modulo 2^64.
 	signed := int64(value & math.MaxInt64)
 	if value > math.MaxInt64 {
 		signed += math.MinInt64

@@ -248,6 +248,12 @@ func TestMultiRootInvariantI9_AnalyzeRootsParity(t *testing.T) {
 	ctx := context.Background()
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
+	// Brief is non-blocking: compare materialized counts, not the placeholder.
+	brief, err := repoinfo.AwaitBrief(ctx, provider, dir)
+	contractcheck.FailErr(t, "AwaitBrief", err)
+	if brief.FileCount != 1 {
+		t.Fatalf("materialized file count = %d want 1", brief.FileCount)
+	}
 	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{{Path: dir, IsPrimary: true}}, repoinfo.DefaultBriefBudget(), provider)
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
 	if len(mrb.Roots) != 1 || mrb.Roots[0].Brief == nil {
@@ -255,8 +261,8 @@ func TestMultiRootInvariantI9_AnalyzeRootsParity(t *testing.T) {
 	}
 	mrb2, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{{Path: dir, IsPrimary: true, Label: "x"}}, repoinfo.BriefBudget{TotalBytes: 4096, PrimaryShare: 0.6}, provider)
 	contractcheck.FailErr(t, "AnalyzeRoots labeled", err)
-	if mrb.PrimaryRepoBrief().FileCount != mrb2.PrimaryRepoBrief().FileCount {
-		t.Fatalf("file counts differ: %d vs %d", mrb.PrimaryRepoBrief().FileCount, mrb2.PrimaryRepoBrief().FileCount)
+	if got, labeled := mrb.PrimaryRepoBrief(), mrb2.PrimaryRepoBrief(); got.Refreshing || labeled.Refreshing || got.FileCount != brief.FileCount || labeled.FileCount != brief.FileCount {
+		t.Fatalf("file counts differ: %d vs %d (materialized %d)", got.FileCount, labeled.FileCount, brief.FileCount)
 	}
 }
 

@@ -40,26 +40,26 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Keep PRs separate; automatic queue batching is the exception.** Never
-  combine PRs: do not assemble omnibus PRs, merge a PR into any branch other
-  than `main`, or bring an open PR's commits into another PR's branch. Stacked
-  PRs, based on another PR's branch for review, are allowed; after the base PR
-  lands, retarget the dependent PR to `main` and rebase it onto the landed
-  commit before it enters the queue. The hosted queue coordinator may batch
-  already admitted waiting PRs in queue order, preserving active groups and explicit
-  campaign holds. Combined admission and merge-group checks remain required.
-  The `no-combine` label excludes a PR from batches while preserving its normal
-  tests and merge eligibility. Source head changes and draft decisions
-  invalidate a batch; failed batches fall back to individual checks. Keep the
-  originals open until the exact recorded heads land. A human draft decision
-  remains a handoff; never undo it automatically.
-- **Cancel superseded background Qualification when its source is obsolete.**
-  The hosted supersession controller may cancel queued or running background
-  main-push Qualification after validating source ancestry and rechecking run
-  identity. Preserve explicit candidate and release Qualification. Releases still
-  require passing Qualification on their exact source commit. This cancellation
-  policy needs no additional approval; local verification cancellation follows
-  the stuck-verification rules below.
+- **Use focused integration batches when they improve delivery.** An authorized
+  merge-queue coordinator may combine closely related PRs and their internal
+  dependencies into one reviewable integration PR. Dependencies within that
+  batch do not need separate landings on `main`. Keep one coherent concern per
+  batch; never use it as a catch-all for every open PR or unrelated work.
+  Record the purpose, main base, source PRs and exact head OIDs, plus conflict
+  resolutions and generated-source decisions. Include only complete source
+  work; honor `no-combine`, explicit human holds and active author drafts.
+  A human draft decision remains a handoff and must not be undone automatically.
+  Revalidate source heads and readiness before admission and settlement; changed
+  sources require an explicit supersession decision and must not be closed as
+  though their newer work landed.
+  Qualify the combined head with the normal fast checks and DCO, then land it
+  through the protected merge queue with checks on the exact landing source.
+  Individual source passes never replace combined qualification. Keep original
+  PRs open and preserve their branches until the recorded source work is
+  verified on `main`; record delivery through the batch and advance remaining
+  dependents from the actual landed source. Automatic queue batching still
+  preserves queue order, active groups and its campaign holds. Unrelated or
+  unfinished work stays outside the batch.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is
@@ -97,8 +97,9 @@ owner's engine you stop and why.
 **Use GitHub CI by default.** Push work in progress to its draft PR; drafts run
 no CI, and local tests are not a prerequisite. A ready PR runs the fast tier;
 once its `check` passes, auto-merge adds it to the merge queue, which runs the
-affected-scope integration gate on the exact landing commit. Main receives full
-qualification separately; releases require qualification on the exact commit.
+affected-scope integration gate on the exact landing commit. The nightly
+qualifies main daily; releases require manually dispatched qualification on the
+exact commit.
 Do not run these gates locally first or repeat checks CI passed for the same
 commit. Report the PR without waiting on or polling CI.
 

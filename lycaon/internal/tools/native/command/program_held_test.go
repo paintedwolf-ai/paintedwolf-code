@@ -48,7 +48,7 @@ func TestHeldEffectResumesExactlyOnceAfterFreshRecheck(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-1")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	if err := held.Park(effect); err == nil {
 		t.Fatal("same execution parked twice")
@@ -75,7 +75,7 @@ func TestHeldEffectStaleInputConflictsWithoutRecomputation(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-stale")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	result, err := held.Resume(t.Context(), effect.Identity)
 	if err == nil || result.Terminal != toolcontract.ProducerRefused || result.StopCode != "EDIT_TARGET_CHANGED_BY_OTHERS" || probe.invoked != 0 {
@@ -91,10 +91,10 @@ func TestHeldEffectDenialSettlesWithoutInvoking(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-denied")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	if err := held.Stop(t.Context(), effect.Identity); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stop held effect", err)
 	}
 	if _, err := held.Resume(t.Context(), effect.Identity); err == nil || probe.invoked != 0 || probe.rechecked != 0 {
 		t.Fatal("denied effect resumed")
@@ -256,5 +256,25 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" || binding.Invocation.SourceUnitID != "lib.sh" {
 			t.Fatalf("binding %s = %+v", exec.ID, binding)
 		}
+	}
+}
+
+func TestHeldEffectPreservesInvocationAndSettlementErrors(t *testing.T) {
+	invokeErr, settleErr := errors.New("owner failed"), errors.New("receipt failed")
+	probe := &heldProbe{}
+	effect := probe.effect("held-errors")
+	effect.Invoke = func(context.Context) (toolcontract.ProducerResult, error) {
+		probe.invoked++
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed}, invokeErr
+	}
+	effect.Settle = func(context.Context, toolcontract.ProducerResult, string) error { return settleErr }
+	held := &command.ProgramHeldEffects{}
+	testutil.FailErr(t, "park failed owner", held.Park(effect))
+	_, err := held.Resume(t.Context(), effect.Identity)
+	if !errors.Is(err, invokeErr) || !errors.Is(err, settleErr) {
+		t.Fatalf("lost error identity: %v", err)
+	}
+	if _, err := held.Resume(t.Context(), effect.Identity); toolrejection.AsToolReject(err) == nil || probe.invoked != 1 {
+		t.Fatalf("failed owner replayed: %v, calls=%d", err, probe.invoked)
 	}
 }

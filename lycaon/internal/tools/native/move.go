@@ -58,7 +58,7 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	result, err := t.Move(ctx, MoveInput{Pairs: pairs}, tctx)
 	resp := moveResponse{Moved: make([]moveResult, 0, len(result.Moved))}
 	for _, pair := range result.Moved {
-		resp.Moved = append(resp.Moved, moveResult{From: pair.From, To: pair.To})
+		resp.Moved = append(resp.Moved, moveResult(pair))
 	}
 	for _, pair := range result.DestinationCopied {
 		resp.DestinationCopied = append(resp.DestinationCopied, moveResult{From: pair.From, To: pair.To})

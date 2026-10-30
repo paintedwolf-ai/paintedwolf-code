@@ -136,7 +136,7 @@ func (r *fileRunReader) Next() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size > uint64(r.maximum) {
+	if r.maximum < 0 || size > uint64(r.maximum) || size > uint64(^uint(0)>>1) {
 		return nil, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(min(size, 1<<62)))
 	}
 	if uint64(cap(r.record)) < size {

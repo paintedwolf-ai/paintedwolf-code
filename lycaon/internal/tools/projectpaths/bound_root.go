@@ -36,8 +36,7 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	return root, nil
 }
 
-// PathOperationError joins a confinement failure with its public rejection;
-// ordinary filesystem errors pass through unchanged.
+// PathOperationError preserves typed causes while classifying adapter and confinement failures.
 func PathOperationError(operand string, err error) error {
 	var reject *toolrejection.ToolReject
 	var pathErr *PathError

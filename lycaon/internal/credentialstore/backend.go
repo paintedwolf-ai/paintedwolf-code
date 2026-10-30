@@ -21,10 +21,11 @@ import (
 const fileMode = 0o600
 
 const (
-	vaultFormat        = 1
-	identityFormat     = 1
-	maxVaultBytes      = 64 << 20
-	maxVaultCiphertext = maxVaultBytes + (1 << 20)
+	vaultFormat    = 1
+	identityFormat = 1
+	// MaxPlaintextBytes bounds both vault reads and committed plaintext.
+	MaxPlaintextBytes  = 64 << 20
+	maxVaultCiphertext = MaxPlaintextBytes + (1 << 20)
 )
 
 var ErrVaultCorrupt = errors.New("credential vault is damaged")
@@ -178,12 +179,12 @@ func (v *vaultFile) read() (vaultDocument, error) {
 	if err != nil {
 		return vaultDocument{}, fmt.Errorf("%w: decrypt: %w", ErrVaultCorrupt, err)
 	}
-	plaintext, err := io.ReadAll(io.LimitReader(reader, maxVaultBytes+1))
+	plaintext, err := io.ReadAll(io.LimitReader(reader, MaxPlaintextBytes+1))
 	if err != nil {
 		return vaultDocument{}, fmt.Errorf("%w: read plaintext: %w", ErrVaultCorrupt, err)
 	}
-	if len(plaintext) > maxVaultBytes {
-		return vaultDocument{}, fmt.Errorf("%w: plaintext exceeds %d bytes", ErrVaultCorrupt, maxVaultBytes)
+	if len(plaintext) > MaxPlaintextBytes {
+		return vaultDocument{}, fmt.Errorf("%w: plaintext exceeds %d bytes", ErrVaultCorrupt, MaxPlaintextBytes)
 	}
 	var doc vaultDocument
 	if err := json.Unmarshal(plaintext, &doc); err != nil {
@@ -218,6 +219,9 @@ func (v *vaultFile) commit(doc vaultDocument) error {
 	plaintext, err := json.Marshal(doc) // #nosec G117 -- age encrypts this payload before it is written.
 	if err != nil {
 		return fmt.Errorf("encode credential vault: %w", err)
+	}
+	if len(plaintext) > MaxPlaintextBytes {
+		return fmt.Errorf("credential vault exceeds %d-byte limit", MaxPlaintextBytes)
 	}
 	var ciphertext bytes.Buffer
 	writer, err := age.Encrypt(&ciphertext, v.identity.Recipient())

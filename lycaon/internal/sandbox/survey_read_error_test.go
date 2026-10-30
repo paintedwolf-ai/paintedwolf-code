@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSurveyTypedReadErrorContinuationAndStop(t *testing.T) {
@@ -16,10 +18,10 @@ func TestSurveyTypedReadErrorContinuationAndStop(t *testing.T) {
 			t.Run(fmt.Sprintf("%v/%s", stream, mode), func(t *testing.T) {
 				root := t.TempDir()
 				if err := os.Mkdir(filepath.Join(root, "gone"), 0700); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "create survey fixture directory", err)
 				}
 				if err := os.WriteFile(filepath.Join(root, "kept"), nil, 0600); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "write file", err)
 				}
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
@@ -43,7 +45,7 @@ func TestSurveyTypedReadErrorContinuationAndStop(t *testing.T) {
 				err := SurveyWalk(ctx, root, options, func(entry SurveyEntry) (SurveyAction, error) {
 					if entry.Rel == "gone" {
 						if err := os.Remove(entry.Abs); err != nil {
-							t.Fatal(err)
+							testutil.FailErr(t, "remove surveyed fixture entry", err)
 						}
 						if mode == "cancel" {
 							cancel()

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 
 from artifact_paths import bin_dir
+from ci_policy.go_retry import run_go
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = {
@@ -15,13 +16,14 @@ TOOLS = {
     "golangci-lint": ("scripts/lint-go.sh", "GOLANGCI_VERSION", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint", "github.com/golangci/golangci-lint/v2"),
     "deadcode": ("scripts/deadcode-check.sh", "DEADCODE_VERSION", "golang.org/x/tools/cmd/deadcode", "golang.org/x/tools"),
     "govulncheck": ("scripts/govulncheck-gate.py", "GOVULNCHECK_VERSION", "golang.org/x/vuln/cmd/govulncheck", "golang.org/x/vuln"),
+    "actionlint": ("scripts/workflow_lint/__init__.py", "ACTIONLINT_VERSION", "github.com/rhysd/actionlint/cmd/actionlint", "github.com/rhysd/actionlint"),
     "sqlc": ("scripts/sqlc-version.sh", "SQLC_VERSION", "github.com/sqlc-dev/sqlc/cmd/sqlc", "github.com/sqlc-dev/sqlc"),
 }
 SETS = {
     "base": ["task", "sqlc"],
-    "lint": ["golangci-lint", "deadcode"],
+    "lint": ["golangci-lint", "deadcode", "actionlint"],
     "vulnerabilities": ["govulncheck"],
-    "all": ["task", "sqlc", "golangci-lint", "deadcode", "govulncheck"],
+    "all": ["task", "sqlc", "golangci-lint", "deadcode", "actionlint", "govulncheck"],
 }
 
 
@@ -61,7 +63,7 @@ def ensure(name, root=ROOT, directory=None, compiler=None):
     print(f"Installing {name} {version} with {compiler}", flush=True)
     with tempfile.TemporaryDirectory(prefix=f".{name}-", dir=directory) as temporary:
         env = {**os.environ, "GOTOOLCHAIN": compiler, "GOBIN": temporary}
-        subprocess.run(["go", "install", f"{package}@{version}"], cwd=root / "lycaon", env=env, check=True)
+        run_go(["go", "install", f"{package}@{version}"], cwd=root / "lycaon", env=env)
         built = Path(temporary) / name
         if not matches(built, module, version, compiler):
             raise ValueError(f"{name} did not produce the declared module version and toolchain")

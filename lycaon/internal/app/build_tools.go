@@ -302,7 +302,7 @@ func (b *serveBuilder) wireMCP() error {
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
 			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 			if b.security.Capabilities != nil {
-				screen.SetManagedSecretEvidence(b.security.Capabilities.ScreeningValues)
+				screen.SetManagedSecretEvidence(b.security.ModelScreeningValues)
 				screen.SetManagedSecretAdopter(func(ctx context.Context, req llm.ManagedSecretAdoptRequest) (string, error) {
 					put, putErr := b.security.Capabilities.Put(ctx, secretcap.PutRequest{
 						ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from release_storage import rehearsal, s3
+from release_storage import rehearsal, s3, listing
 
 
 class RehearsalCredentialsTests(unittest.TestCase):
@@ -181,3 +181,44 @@ class BucketTransportTests(unittest.TestCase):
             run.return_value = subprocess.CompletedProcess([], 1, b'', b'private-value')
             with self.assertRaisesRegex(ValueError, "^S3 delete-object failed; check bucket credentials, endpoint and object permissions$"):
                 s3.request("delete-object", "--key", "key")
+
+
+class RetainedPrefixListingTests(unittest.TestCase):
+    def test_s3_and_cloudflare_pagination_cover_the_same_immediate_prefixes(self):
+        parent = 'linux/generations/'
+        children = [parent + name * 64 + '/' for name in ('a', 'b')]
+        with patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': 's3'}), patch.object(s3, 'request', side_effect=[
+            {'CommonPrefixes': [{'Prefix': children[0]}], 'IsTruncated': True, 'NextContinuationToken': 'next'},
+            {'CommonPrefixes': [{'Prefix': children[1]}], 'IsTruncated': False}]) as request:
+            self.assertEqual(list(listing.prefixes(parent)), children)
+        self.assertIn('--delimiter', request.call_args.args)
+        self.assertEqual(request.call_args.args[-2:], ('--continuation-token', 'next'))
+        import release_distribution
+        environment = {'CLOUDFLARE_ACCOUNT_ID': 'account', 'R2_BUCKET': 'bucket', 'CLOUDFLARE_API_TOKEN': 'fixture'}
+        with patch.dict(os.environ, environment, clear=True), patch.object(release_distribution, 'storage_json', side_effect=[
+            (b'', {'success': True, 'result_info': {'delimited': [children[0]], 'is_truncated': True, 'cursor': 'next'}}),
+            (b'', {'success': True, 'result_info': {'delimited': [children[1]], 'is_truncated': False}})]) as request:
+            self.assertEqual(list(listing.prefixes(parent)), children)
+        self.assertIn('cursor=next', request.call_args.args[0])
+        self.assertIn('delimiter=%2F', request.call_args.args[0])
+
+    def test_malformed_repeated_or_unbounded_listing_refuses(self):
+        parent = 'linux/generations/'
+        bad = [{'CommonPrefixes': [{'Prefix': '../outside/'}]}, {'CommonPrefixes': None}, {'IsTruncated': 1},
+               {'IsTruncated': True}, []]
+        for response in bad:
+            with self.subTest(response=response), patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': 's3'}), \
+                 patch.object(s3, 'request', return_value=response), self.assertRaises(ValueError):
+                list(listing.prefixes(parent))
+        with patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': 's3'}), patch.object(s3, 'request', return_value={
+            'IsTruncated': True, 'NextContinuationToken': 'repeat'}) as request, self.assertRaisesRegex(ValueError, 'continuation'):
+            list(listing.prefixes(parent))
+        self.assertEqual(request.call_count, 2)
+        calls = []
+        def page(*args):
+            calls.append(args)
+            return {'IsTruncated': True, 'NextContinuationToken': str(len(calls))}
+        with patch.dict(os.environ, {'RELEASE_R2_TRANSPORT': 's3'}), patch.object(s3, 'request', side_effect=page), \
+             self.assertRaisesRegex(ValueError, 'page bound'):
+            list(listing.prefixes(parent))
+        self.assertEqual(len(calls), 64)

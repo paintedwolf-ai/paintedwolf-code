@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -56,9 +57,7 @@ func TestPipelineKeepsEveryProducerOutcome(t *testing.T) {
 func TestPipelineExternalClosureIsNotNativeClosure(t *testing.T) {
 	f := newEvalFixture(t)
 	out, err := f.run(t, t.Context(), "external -- yes | head -n 1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "run evaluated command program", err)
 	// Only the executor's own SIGPIPE classification may normalize an external
 	// producer; the native byte-endpoint exception does not apply to it.
 	if out.Status != 141 || f.stdout.String() != "y\n" {
@@ -137,9 +136,7 @@ func loopProgram(n int64) string {
 
 func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 	limits, err := catalogEvaluationLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load evaluation limits", err)
 	maximum := limits["loop_iterations"]
 	f := newEvalFixture(t)
 	if _, err := f.run(t, t.Context(), loopProgram(maximum)); err != nil || !slices.Equal(f.log.argv(), []string{"echo finished"}) {
@@ -174,11 +171,11 @@ func TestChildExecutionCounterChargeAtBoundaryAndOnePast(t *testing.T) {
 
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never":       "loop_iterations",
-		"f() { while x=1; do continue; done; }; f":  "loop_iterations",
-		"while :; do :; done; echo never":           "loop_iterations",
-		"while echo a; do echo b; done; echo never": "loop_iterations",
-		"until false; do :; done; echo never":       "loop_iterations",
+		"while x=1; do x=2; done; echo never":        "loop_iterations",
+		"f() { while x=1; do continue; done; }; f":   "loop_iterations",
+		"while :; do :; done; echo never":            "loop_iterations",
+		"while echo a; do echo b; done; echo never":  "loop_iterations",
+		"until false; do :; done; echo never":        "loop_iterations",
 		"until [ -f ready ]; do :; done; echo never": "loop_iterations",
 	} {
 		f := newEvalFixture(t)
@@ -195,9 +192,7 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 
 func TestFunctionRecursionCeilingAtBoundaryAndOnePast(t *testing.T) {
 	limits, err := catalogEvaluationLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load evaluation limits", err)
 	maximum := limits["function_depth"]
 	// Depth d runs with d-1 arguments; recursion stops once depth reaches n.
 	program := func(n int64) string {
@@ -221,9 +216,7 @@ func TestFunctionRecursionCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestStatementVisitCeiling(t *testing.T) {
 	limits, err := catalogEvaluationLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load evaluation limits", err)
 	// Each inner iteration visits 50 statements and stays well inside the
 	// iteration ceiling, so visits are the binding counter.
 	body := strings.Repeat("x=1; ", 50)
@@ -260,9 +253,7 @@ func TestSourceRunsCapturedUnitInCurrentFrame(t *testing.T) {
 	f.sources.files["./lib.sh"] = "greet() { echo hello $1; }\nshared=from-source\nreturn 0\necho unreachable\n"
 	f.sources.changes["./lib.sh"] = "echo changed after capture\n"
 	out, err := f.run(t, t.Context(), "echo before; source -- ./lib.sh; greet $shared; source -- ./lib.sh; echo $?")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "run evaluated command program", err)
 	if got := f.log.argv(); !slices.Equal(got, []string{"echo before", "echo hello from-source", "echo changed after capture", "echo 0"}) {
 		t.Fatalf("dispatched %q", got)
 	}

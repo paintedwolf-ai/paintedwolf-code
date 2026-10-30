@@ -44,6 +44,11 @@ type GenerationPolicy struct {
 	// generation the protected namespace may execute, such as WebKit's
 	// helper programs; nothing else outside the generation can execute there.
 	SystemExecutables []string `json:"system_executables,omitempty"`
+	// LibraryRoots are the root-controlled directories outside the generation
+	// whose native code the protected namespace may map executable: the
+	// system's library directories, or a Nix generation's closure. Every other
+	// mount is noexec there.
+	LibraryRoots []string `json:"library_roots"`
 }
 
 // Generation retains the directory and executable identities selected once at
@@ -159,7 +164,8 @@ func samePolicy(a, b GenerationPolicy) bool {
 		a.GenerationRoot == b.GenerationRoot &&
 		a.ManifestSHA256 == b.ManifestSHA256 &&
 		a.LogicalInstallRoot == b.LogicalInstallRoot &&
-		slices.Equal(a.SystemExecutables, b.SystemExecutables)
+		slices.Equal(a.SystemExecutables, b.SystemExecutables) &&
+		slices.Equal(a.LibraryRoots, b.LibraryRoots)
 }
 
 func decodePolicy(raw []byte) (GenerationPolicy, error) {
@@ -179,6 +185,14 @@ func decodePolicy(raw []byte) (GenerationPolicy, error) {
 	for _, path := range policy.SystemExecutables {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 			return policy, errors.New("invalid launch policy system executable")
+		}
+	}
+	if len(policy.LibraryRoots) == 0 {
+		return policy, errors.New("launch policy names no library roots")
+	}
+	for _, path := range policy.LibraryRoots {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+			return policy, errors.New("invalid launch policy library root")
 		}
 	}
 	for _, path := range []string{policy.GenerationRoot, policy.LogicalInstallRoot} {

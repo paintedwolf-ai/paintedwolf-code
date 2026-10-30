@@ -92,7 +92,11 @@ func (b *authorityBinding) value(v reflect.Value) (any, error) {
 	if !authorityKnownType(v.Type()) {
 		return nil, fmt.Errorf("native authority host type is not declared")
 	}
-	if err := b.reserve(int64(v.Type().Size())); err != nil {
+	size, err := authorityStorageBytes(v.Type().Size())
+	if err != nil {
+		return nil, err
+	}
+	if err := b.reserve(size); err != nil {
 		return nil, err
 	}
 	if v.Type() == authorityTimeType {
@@ -160,7 +164,11 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 	if !authorityKnownType(dst.Type()) {
 		return fmt.Errorf("native authority target type is not declared")
 	}
-	if err := b.reserve(int64(dst.Type().Size())); err != nil {
+	size, err := authorityStorageBytes(dst.Type().Size())
+	if err != nil {
+		return err
+	}
+	if err := b.reserve(size); err != nil {
 		return err
 	}
 	if dst.Type() == authorityTimeType {
@@ -187,7 +195,11 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 	}
 	switch dst.Kind() {
 	case reflect.Pointer:
-		if err := b.reserve(int64(dst.Type().Elem().Size())); err != nil {
+		elementBytes, err := authorityStorageBytes(dst.Type().Elem().Size())
+		if err != nil {
+			return err
+		}
+		if err := b.reserve(elementBytes); err != nil {
 			return err
 		}
 		value := reflect.New(dst.Type().Elem())
@@ -237,7 +249,10 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 		if !ok {
 			return fmt.Errorf("native authority list shape invalid")
 		}
-		size := int64(dst.Type().Elem().Size())
+		size, err := authorityStorageBytes(dst.Type().Elem().Size())
+		if err != nil {
+			return err
+		}
 		if size > 0 && int64(len(items)) > math.MaxInt64/size {
 			return fmt.Errorf("native authority list overflow")
 		}
@@ -282,4 +297,13 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 	default:
 		return fmt.Errorf("native authority binding target unsupported: %s", dst.Type())
 	}
+}
+
+// authorityStorageBytes refuses an unrepresentable reflected allocation size
+// before it can enter the signed retained-state admission account.
+func authorityStorageBytes(size uintptr) (int64, error) {
+	if size > math.MaxInt64 {
+		return 0, fmt.Errorf("native authority storage size overflow")
+	}
+	return int64(size), nil
 }

@@ -83,14 +83,14 @@ func (p BoundPath) Open() (*os.File, error) {
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
-			file.Close()
+			_ = file.Close()
 			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
@@ -313,7 +313,7 @@ func directoryInfo(path BoundPath) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err

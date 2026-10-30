@@ -98,13 +98,9 @@ func TestSourceCaptureRefusalAndSyntaxFailureNeverReturnPartialPlan(t *testing.T
 func fixtureScratch(t testing.TB) *toolcontract.ProgramMemory {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load catalog program memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create program memory", err)
 	return memory
 }
 
@@ -175,7 +171,6 @@ func TestSourceCaptureBuffersTransferToParsedAndSnapshotState(t *testing.T) {
 	if string(captured.Bytes) != "printf sourced" || memory.InUse().State < int64(len(captured.Bytes)) {
 		t.Fatal("captured bytes lost their snapshot coverage")
 	}
-	captured = CapturedSource{}
 	testutil.FailErr(t, "release source execution snapshot", snapshot.Close())
 	if memory.InUse().State != 0 {
 		t.Fatalf("source execution retained state: %+v", memory.InUse())

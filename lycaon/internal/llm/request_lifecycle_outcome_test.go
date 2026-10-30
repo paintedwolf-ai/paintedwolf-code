@@ -82,7 +82,7 @@ func TestRequestLifecycleReportsStreamOutcome(t *testing.T) {
 
 			scripted := &outcomeScriptedProvider{chunks: tc.chunks}
 			snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{Providers: map[string]modelcall.Provider{"p": scripted}})
-			provider := (&Registry{}).decorateProvider(snapshot, scripted)
+			provider := (&Registry{outboundSecretScreen: NewModelSecretScreen(nil, nil)}).decorateProvider(snapshot, scripted)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			stream, err := provider.Stream(ctx, modelcall.CompletionRequest{Model: "m"})

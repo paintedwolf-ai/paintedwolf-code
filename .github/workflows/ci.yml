@@ -2,8 +2,8 @@ name: CI
 
 # A ready pull request runs the fast tier, whose check lets auto-merge add it to
 # the merge queue; the queue runs the affected-scope integration gate on the
-# exact commit that lands. Exact-commit platform qualification follows main and
-# gates releases.
+# exact commit that lands. The nightly verifies main daily; manual exact-source
+# Qualification gates releases.
 on:
   pull_request:
     branches: [main]
@@ -23,12 +23,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}
+  # A delayed draft synchronize event must not cancel a ready-for-review run.
+  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fast:
     if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
@@ -52,6 +56,7 @@ jobs:
     uses: ./.github/workflows/platform-verification.yml
 
   check:
+    name: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
     needs: [fast, integration, platform]

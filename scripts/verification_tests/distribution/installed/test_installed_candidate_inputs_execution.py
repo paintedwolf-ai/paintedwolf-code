@@ -16,8 +16,8 @@ class CandidateInstalledInputsTests(unittest.TestCase):
         payload.mkdir()
         source={'source_commit':'a'*40,'source_tree':'b'*40,'version':'1.2.3','release_build':14,'channel':'stable'}
         run={'id':11,'head_sha':'c'*40,'repository':{'id':7,'full_name':'owner/repo'},'head_repository':{'id':7},
-             'path':'.github/workflows/linux-candidates.yml','head_branch':'linux/candidate-ci-isolation',
-             'event':'push','status':'completed','conclusion':'failure' if partial else 'success','run_attempt':1}
+             'path':'.github/workflows/linux-candidate-requests.yml','head_branch':'main',
+             'event':'workflow_dispatch','status':'completed','conclusion':'failure' if partial else 'success','run_attempt':1}
         selection={'artifact_id':12,'artifact_bytes':100,'artifact_sha256':'d'*64}
         rows=[]
         for family,extension in owner.EXTENSIONS.items():
@@ -132,3 +132,52 @@ class CandidateInstalledInputsTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         owner.select(lambda _:{**run,key:value},'owner/repo',7,11,12,'c'*40,'arm64',False)
                     artifact.assert_not_called()
+
+    def test_requests_accept_main_dispatch_schedule_and_landable_pull_requests(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            _,_,base,_=self.fixture(Path(temporary))
+            reference={'path':'owner/repo/.github/workflows/linux-candidates.yml@refs/pull/7/merge','sha':'c'*40}
+            pull={**base,'event':'pull_request','head_branch':'feature','head_sha':'e'*40,
+                  'pull_requests':[{'number':7,'base':{'ref':'main'}}],'referenced_workflows':[reference]}
+            for run in (base,{**base,'event':'schedule'},pull):
+                with self.subTest(run=run),patch.object(owner,'artifact_for_run',return_value={'artifact_id':12}) as artifact:
+                    result=owner.select(lambda _:run,'owner/repo',7,11,12,'c'*40,'arm64',False)
+                    self.assertEqual(result['controller_commit'],'c'*40)
+                    self.assertEqual(artifact.call_args.args[4],run['head_sha'])
+            mutations=[{'pull_requests':[]},{'pull_requests':[{'base':{'ref':'feature'}}]},
+                       {'referenced_workflows':[]},{'referenced_workflows':[reference,reference]},
+                       {'referenced_workflows':[{**reference,'sha':'f'*40}]},
+                       {'referenced_workflows':[{**reference,'path':'foreign/repo/.github/workflows/linux-candidates.yml@main'}]},
+                       {'referenced_workflows':[{**reference,'path':'owner/repo/.github/workflows/other.yml@main'}]},
+                       {'head_sha':'short'}]
+            for changed in mutations:
+                with self.subTest(changed=changed),patch.object(owner,'artifact_for_run') as artifact:
+                    with self.assertRaises(ValueError):
+                        owner.select(lambda _:{**pull,**changed},'owner/repo',7,11,12,'c'*40,'arm64',False)
+                    artifact.assert_not_called()
+            for changed in ({'event':'push'},{'event':'schedule','head_branch':'feature'},
+                            {'path':'.github/workflows/linux-candidates.yml'}):
+                with self.subTest(changed=changed),patch.object(owner,'artifact_for_run') as artifact:
+                    with self.assertRaises(ValueError):
+                        owner.select(lambda _:{**base,**changed},'owner/repo',7,11,12,'c'*40,'arm64',False)
+                    artifact.assert_not_called()
+
+    def test_pr_artifact_server_head_and_built_controller_are_independently_bound(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            _,_,run,_=self.fixture(Path(temporary))
+            run.update(event='pull_request',head_sha='e'*40,pull_requests=[{'base':{'ref':'main'}}],
+                       referenced_workflows=[{'path':'owner/repo/.github/workflows/linux-candidates.yml@merge','sha':'c'*40}])
+            producer=dict(id=11,head_sha='e'*40,repository_id=7,head_repository_id=7)
+            artifact=dict(id=12,name='linux-candidate-linux-aarch64',expired=False,size_in_bytes=100,
+                          digest='sha256:'+'d'*64,workflow_run=producer)
+            for changes in ({},{'head_sha':'c'*40},{'repository_id':8},{'head_repository_id':8},{'id':12}):
+                selected={**artifact,'workflow_run':{**producer,**changes}}
+                api=lambda path: run if path.endswith('/runs/11') else {'artifacts':[selected]}
+                with self.subTest(changes=changes):
+                    if changes:
+                        with self.assertRaises(ValueError):
+                            owner.select(api,'owner/repo',7,11,12,'c'*40,'arm64',False)
+                    else:
+                        result=owner.select(api,'owner/repo',7,11,12,'c'*40,'arm64',False)
+                        self.assertEqual(result['controller_commit'],'c'*40)
+                        self.assertEqual(result['artifact_sha256'],'d'*64)

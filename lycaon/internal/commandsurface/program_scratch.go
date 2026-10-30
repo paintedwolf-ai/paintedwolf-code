@@ -82,7 +82,7 @@ func ParseAdmitted(ctx context.Context, memory *toolcontract.ProgramMemory, sour
 	if err != nil {
 		return nil, err
 	}
-	defer parser.Close()
+	defer func() { _ = parser.Close() }()
 	return parser.Parse(source, options)
 }
 

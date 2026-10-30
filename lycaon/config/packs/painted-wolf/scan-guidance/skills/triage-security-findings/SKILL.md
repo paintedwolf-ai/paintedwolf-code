@@ -4,6 +4,7 @@ description: Use stored scanner evidence to assess findings, credibility, and ch
 # Triage reads stored scans; running one is the coordinator's action.
 optional_tools:
   - scan_pack
+  - command
 ---
 
 # Triage security findings

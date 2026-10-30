@@ -32,10 +32,10 @@ type sequenceRun struct {
 
 	waitErrs []error
 	// cpu is each waited stage's user and system processor time.
-	cpu      [][2]time.Duration
-	skipped  []bool
-	started  time.Time
-	timeout  *TimeoutError
+	cpu     [][2]time.Duration
+	skipped []bool
+	started time.Time
+	timeout *TimeoutError
 
 	// lastExit is the exit code of the most recently executed group.
 	lastExit int

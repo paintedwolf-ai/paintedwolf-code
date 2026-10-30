@@ -21,7 +21,9 @@ func TestAttributedEgressCurrentActionDoesNotCoverSiblingChild(t *testing.T) {
 	defer SetEgressResolver(nil)
 	cmd := EgressCommand{SessionID: "child-session", ToolCallID: "actual-model-call", ActionID: "first-child"}
 	defer ForgetEgressAction(cmd.SessionID, cmd.ActionID)
-	if !DecideAttributedHost(t.Context(), cmd, "fixture.invalid") || !DecideAttributedHost(t.Context(), cmd, "fixture.invalid") || asks != 1 {
+	first := DecideAttributedHost(t.Context(), cmd, "fixture.invalid")
+	second := DecideAttributedHost(t.Context(), cmd, "fixture.invalid")
+	if !first || !second || asks != 1 {
 		t.Fatalf("first child current-action verdict was not retained: asks%d", asks)
 	}
 	cmd.ActionID = "second-child"

@@ -140,8 +140,9 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		if err != nil {
 			return err
 		}
-		for i, pin := range pins[:overlap] {
-			if pin != existing[i] {
+		// The reader requires exactly overlap pins; bound both slices explicitly.
+		for i := 0; i < len(existing) && i < len(pins); i++ {
+			if existing[i] != pins[i] {
 				return fmt.Errorf("revision pin %d conflicts with the recorded capture", first+i)
 			}
 		}

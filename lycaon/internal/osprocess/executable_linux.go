@@ -36,7 +36,7 @@ func requireStopped(root string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, err)
 	}
-	defer status.Close()
+	defer func() { _ = status.Close() }()
 	scanner := bufio.NewScanner(io.LimitReader(status, 64<<10))
 	stopped := false
 	for scanner.Scan() {

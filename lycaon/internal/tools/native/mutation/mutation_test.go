@@ -152,7 +152,7 @@ func TestNullDeviceIsAVirtualSink(t *testing.T) {
 	h := newHarness(t, nil)
 	staged, destination := stage(t, h, ">", "/dev/null", "discarded\n")
 	if _, err := staged.Publish(t.Context()); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "publish staged null-device output", err)
 	}
 	entries, _ := os.ReadDir(h.root)
 	if len(entries) != 0 || len(h.pins.pins[destination.Invocation.Identity.ExecutionID]) != 0 {

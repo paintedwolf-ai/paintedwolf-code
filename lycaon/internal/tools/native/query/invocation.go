@@ -171,9 +171,6 @@ func (inv *invocation) captureSource(operand commandprogram.Field) (*source, err
 	if maximum := safecmd.JQCaps().InputBytes; int64(len(captured.Content)) > maximum {
 		return nil, safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": captured.Path, "max_bytes": maximum})
 	}
-	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
-		return nil, fmt.Errorf("record credential file read: %w", err)
-	}
 	if err := inv.recordPin(captured.Revision); err != nil {
 		return nil, err
 	}

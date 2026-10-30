@@ -27,6 +27,30 @@ rows:
       Pinned in `scripts/lint-go.sh` and configured in `lycaon/.golangci.yml`. New linters and
       checks usually need code fixes.
 
+  - id: actionlint
+    name: actionlint
+    pins:
+      - shell scripts/workflow_lint/__init__.py ACTIONLINT_VERSION
+    upstream:
+      - go-module github.com/rhysd/actionlint
+    urgency: moderate
+    friction: low
+    notes: |
+      Validates every GitHub Actions workflow through the Go lint targets.
+      Runner fixtures cover workflow expression contexts and concurrency queue grammar.
+
+  - id: workflow-yaml
+    name: PyYAML
+    pins:
+      - file scripts/workflow_lint/requirements.txt
+    upstream:
+      - github-release yaml/pyyaml
+    urgency: low
+    friction: low
+    notes: |
+      Reads workflow concurrency declarations for the queue grammar check.
+      Analysis and verification setup prepare the exact package before offline checks.
+
   - id: deadcode
     name: deadcode
     pins:

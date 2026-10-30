@@ -104,10 +104,13 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 	}
 	skeleton := out.String()
 	captures, err := predicateRepeatCaptures(ctx, skeleton, tags)
-	return skeleton, captures, err
+	if err != nil {
+		return "", nil, err
+	}
+	return skeleton, captures, nil
 }
 
-// predicateRepeatCaptures indexes admitted repeat tags in the parser skeleton.
+// predicateRepeatCaptures maps normalized repeat tags to actual capture IDs.
 func predicateRepeatCaptures(ctx context.Context, skeleton string, tags []repeatTag) (map[int]repeatTag, error) {
 	byOffset := map[int]repeatTag{}
 	for _, tag := range tags {

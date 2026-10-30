@@ -323,7 +323,16 @@ func TestSurveyArcRepoToolSelectedZeroConstant(t *testing.T) {
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	contractcheck.FailErr(t, "parse repo_tool.go", err)
 	var sawSelectedZero bool
-	ast.Inspect(f, func(n ast.Node) bool {
+	var owner *ast.FuncDecl
+	for _, declaration := range f.Decls {
+		if function, ok := declaration.(*ast.FuncDecl); ok && function.Name.Name == "buildRepoResponse" {
+			owner = function
+		}
+	}
+	if owner == nil {
+		t.Fatal("survey response construction owner is missing")
+	}
+	ast.Inspect(owner.Body, func(n ast.Node) bool {
 		cl, ok := n.(*ast.CompositeLit)
 		if !ok {
 			return true

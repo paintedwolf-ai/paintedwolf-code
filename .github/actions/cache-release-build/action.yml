@@ -1,6 +1,9 @@
 name: Cache release build
 description: Reuse shared Go builds and release-mode Tauri builds warmed on main
 inputs:
+  lookup-only:
+    description: Check the exact native cache identity without restoring payloads
+    default: 'false'
   save:
     description: Publish prepared caches on main; other calls restore without saving
     default: 'false'
@@ -21,34 +24,20 @@ runs:
         } >> "${GITHUB_OUTPUT}"
 
     # Cargo validates compiler inputs restored from an earlier lockfile generation.
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      id: budget
-      uses: ./.github/actions/cache-budget
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-release-build.sh') }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && steps.paths.outputs.build_key || '' }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
       id: save
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
-    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
-      uses: ./.github/actions/cache-budget
-      with:
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
-        record: ${{ steps.budget.outputs.record }}
-
-    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
-      id: restore
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          lycaon-den/src-tauri/target
-          !lycaon-den/src-tauri/target/*/release/bundle
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
-        restore-keys: ${{ steps.paths.outputs.build_key }}
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-release-build.sh') }}

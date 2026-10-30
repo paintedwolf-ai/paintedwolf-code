@@ -133,7 +133,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
 	baseline := memory.Reservations()
-	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.Reservations() != baseline {
+	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.Reservations() != baseline { //nolint:errorlint // Repeated delivery must return the exact cached error object.
 		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
 	}
 	prepared.Close()
@@ -184,7 +184,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	testutil.FailErr(t, "readonly command effects", err)
 	plane := stockFeedbackBlockPlane(t)
 
-	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, error, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *toolcontract.ProgramMemory) {
+	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *toolcontract.ProgramMemory, error) {
 		t.Helper()
 		executor := toolexecution.NewExecutor(&dispatchPolicy{effects: effects}, tools.NewDefaultRegistry(), profile)
 		executor.Rejections.SetBlockPlane(plane)
@@ -236,7 +236,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	// 1. Read-only denial through real InvokeNative entry.
 	f1 := newProgramReceiptFixture(t)
 	w1 := f1.childFor(t, "write")
-	res1, err1, ex1, fr1, tc1, mem1 := runNative(t, f1, "worker_readonly", readOnlyEffects, w1, []string{"tee", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	res1, ex1, fr1, tc1, mem1, err1 := runNative(t, f1, "worker_readonly", readOnlyEffects, w1, []string{"tee", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		t.Fatal("owner invoked on readonly surface")
 		return toolcontract.ProducerResult{}, nil
 	})
@@ -260,7 +260,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	for _, tcCase := range cases {
 		fc := newProgramReceiptFixture(t)
 		child := fc.childFor(t, tcCase.op)
-		res, invokeErr, ex, fr, tc, mem := runNative(t, fc, "fixture", child.Effects(), child, []string{tcCase.cmd, "input"}, tcCase.offered, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+		res, ex, fr, tc, mem, invokeErr := runNative(t, fc, "fixture", child.Effects(), child, []string{tcCase.cmd, "input"}, tcCase.offered, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: tcCase.code, EffectCertainty: toolcontract.NoEffect}, tcCase.reject
 		})
 		refusal, proj := assertRenderedFeedback(t, fc, child, res, invokeErr, ex, fr, tc, mem, "rejected", tcCase.code)
@@ -272,13 +272,13 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	// 5. Partial write + unknown HTTP through real InvokeNative entry, and 6. Misleading external stderr.
 	f5 := newProgramReceiptFixture(t)
 	w5 := f5.childFor(t, "write")
-	resW, errW, _, _, _, _ := runNative(t, f5, "fixture", w5.Effects(), w5, []string{"tee", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	resW, _, _, _, _, errW := runNative(t, f5, "fixture", w5.Effects(), w5, []string{"tee", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: "journal:w5", RecoveryRef: "journal:w5"}}, nil
 	})
 	testutil.FailErr(t, "completed write", errW)
 	testutil.FailErr(t, "settle completed write", f5.recorder.SettleChild(t.Context(), w5.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: resW.Producer, OwnerInvoked: resW.OwnerInvoked, DetailReference: "output:w5", AcceptedRevision: "rev2", PublishedRevision: "rev2"}))
 	h5 := f5.childFor(t, "http_request")
-	resH, errH, exH, frH, tcH, memH := runNative(t, f5, "fixture", h5.Effects(), h5, []string{"curl", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	resH, exH, frH, tcH, memH, errH := runNative(t, f5, "fixture", h5.Effects(), h5, []string{"curl", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, Data: map[string]any{"reason": "transport dropped"}}
 	})
 	_, proj5 := assertRenderedFeedback(t, f5, h5, resH, errH, exH, frH, tcH, memH, "failed", toolrejection.ToolOwnerFailedCode)

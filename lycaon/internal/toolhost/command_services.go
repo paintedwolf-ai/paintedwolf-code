@@ -180,3 +180,12 @@ func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 		executor.SetProgramEntry("command", command.CaptureInvocation)
 	}
 }
+
+// DisposeProgramSession releases the session's program job owner after closing
+// admission and draining its registered jobs.
+func (r *CommandServices) DisposeProgramSession(ctx context.Context, sessionID string) error {
+	if programs := r.programs(); programs != nil {
+		return programs.Supervisor.DisposeSession(ctx, sessionID)
+	}
+	return nil
+}

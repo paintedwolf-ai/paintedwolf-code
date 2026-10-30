@@ -49,7 +49,7 @@
     },
     {
       "id": "pacman",
-      "package_owner": "pacman, including packages built through AUR/yay",
+      "package_owner": "pacman",
       "vault_mode": "new or reopened app sessions require a system service; stored credentials preserved",
       "issues": [
         940,
@@ -378,7 +378,8 @@
         927,
         928,
         940,
-        941
+        941,
+        1145
       ],
       "cases": [
         "clean-install-and-launch",
@@ -386,7 +387,14 @@
         "elf-abi-and-runtime-modules",
         "launcher-arguments",
         "package-ownership-and-removal"
-      ]
+      ],
+      "platform_difference": {
+        "code_authority": "Immutable application generation and administrator-installed module roots; macOS uses Apple signatures and library validation.",
+        "residuals": [
+          "User configuration may select an unneeded root-installed library; macOS similarly admits unneeded Apple-signed libraries.",
+          "Code already running in a protected process can load code from memory; preserve process and sandbox authority separation."
+        ]
+      }
     },
     {
       "id": "updates",

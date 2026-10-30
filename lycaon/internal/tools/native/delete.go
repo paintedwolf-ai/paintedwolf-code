@@ -57,7 +57,7 @@ func (t *DeleteTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 	}
 	filesOnly, _ := args["files_only"].(bool)
 	result, err := t.Delete(ctx, DeleteInput{Paths: paths, FilesOnly: filesOnly}, tctx)
-	resp := deleteResponse{Deleted: result.Deleted}
+	resp := deleteResponse(result)
 	if resp.Deleted == nil {
 		resp.Deleted = []string{}
 	}

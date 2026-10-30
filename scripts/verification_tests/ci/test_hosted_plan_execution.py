@@ -1,4 +1,6 @@
 import copy
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -110,18 +112,43 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux", "test:userlands",
-                                   "test:conformance:live", "nix:check"})
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
+                                   "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                   "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
+                                   "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
+                                   "comments:check", "lint:vuln", "test:runner", "den:typecheck", "den:lint",
+                                   "den:test", "den:test:rust", "decide:test"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
                 expected = {name for name, lane in lanes.items() if "nightly" in lane["profiles"]
-                            and lane["suite"] in {"all", suite}}
+                            and (lane["suite"] == suite or lane["suite"] == "all" and "check" not in lane["profiles"])}
                 self.assertEqual(names, expected)
                 self.assertIn("vulnerability-freshness", names)
         for profile, suite in [("unknown", "all"), ("release", "race"), ("nightly", "typo")]:
             with self.assertRaises(ValueError):
                 ci.matrix(profile, suite)
+
+    def test_full_nightly_covers_checks_without_widening_partial_suites(self):
+        common_checks = {"limits", "build", "contracts", "lint", "vulnerabilities", "runner", "frontend", "native"}
+        full = {row["lane"] for row in ci.matrix("nightly", "all")["include"]}
+        self.assertLessEqual(common_checks | {"behavior"}, full)
+        for suite in ("performance", "e2e"):
+            with self.subTest(suite=suite):
+                partial = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
+                self.assertFalse(common_checks & partial)
+                self.assertIn("vulnerability-freshness", partial)
+        behavior = {row["lane"] for row in ci.matrix("nightly", "behavior")["include"]}
+        self.assertIn("behavior", behavior)
+
+    def test_daily_plan_rejects_missing_qualification_coverage(self):
+        for name, lane in ci.lanes().items():
+            if "check" not in lane["profiles"] and not ("release" in lane["profiles"] and "platform" in lane):
+                continue
+            data = copy.deepcopy(planning.catalog())
+            data["ci"][name]["profiles"].remove("nightly")
+            with self.subTest(lane=name), patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                ci.lanes()
 
     def test_host_platform_and_time_budgets_are_explicit(self):
         for profile in ci.PROFILES:
@@ -131,8 +158,21 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
                     # architecture-specific confinement.
-                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-latest")
+                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-24.04")
                     self.assertEqual(row["runner"], runner)
+
+    def test_linux_verification_uses_the_declared_release_build_baseline(self):
+        root = Path(__file__).resolve().parents[3]
+        platforms = json.loads((root / "packaging/release-platforms.json").read_text())["platforms"]
+        linux_runners = {platform["runner"] for platform in platforms if platform["goos"] == "linux"}
+        for profile in ci.PROFILES:
+            for platform in (False, True):
+                if platform and not any(profile in lane["profiles"] and "platform" in lane for lane in ci.lanes().values()):
+                    continue
+                for row in ci.matrix(profile, platform=platform)["include"]:
+                    if row["runner"].startswith("ubuntu"):
+                        with self.subTest(profile=profile, platform=platform, lane=row["lane"]):
+                            self.assertIn(row["runner"], linux_runners)
 
     def test_each_lane_installs_only_its_declared_setup(self):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
@@ -207,8 +247,7 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
                     targets = ci.lanes()[row["lane"]]["targets"]
-                    expected_launch = bool({"test:full", "test:confine:linux", "coverage:changes"} & set(targets))
-                    self.assertEqual(row["linux_launch"], expected_launch)
+                    self.assertEqual(row["linux_launch"], any(ci.runs_protected_launch(target) for target in targets))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
     def test_lanes_learn_whether_they_need_the_reference_userlands(self):
@@ -221,12 +260,47 @@ class HostedPlanTests(unittest.TestCase):
                 self.assertEqual([row["lane"] for row in ci.matrix(profile)["include"] if row["userlands"]],
                                  ["reference-userlands"])
 
+    def test_lanes_that_reach_the_protected_launch_leg_provision_its_display(self):
+        # Catalog recipes over the whole tree reach internal/launchguard; scripted runs declare it.
+        for target in ("test:full", "test:race", "check:coverage", "coverage:changes", "test:confine:linux"):
+            with self.subTest(target=target):
+                self.assertTrue(ci.runs_protected_launch(target))
+        for target in ("test:stress", "test:fuzz", "perf:bench", "build", "lint:full"):
+            with self.subTest(target=target):
+                self.assertFalse(ci.runs_protected_launch(target))
+        nightly = {row["lane"] for row in ci.matrix("nightly")["include"] if row["linux_launch"]}
+        self.assertTrue({"go-coverage", "race"} <= nightly, nightly)
+        data = copy.deepcopy(planning.catalog())
+        data["go"]["test:race"]["packages"] = ["./internal/db/...", "./test/wiring"]
+        with patch.object(ci, "catalog", return_value=data):
+            self.assertFalse(ci.runs_protected_launch("test:race"))
+            data["go"]["test:race"]["packages"].append("./internal/launchguard")
+            self.assertTrue(ci.runs_protected_launch("test:race"))
+
     def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
+        # Without a scope (a dispatched run) the coverage target resolves its own change base and may run every
+        # scripts suite, so every lane carrying it provisions the tools alongside the runner suite.
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
-                    self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
-        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
+                    self.assertEqual(row["repository_tools"],
+                                     bool({"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
+        self.assertTrue(any(row["lane"] == "ready" and row["repository_tools"] for row in ci.matrix("fast")["include"]))
+        self.assertIn("runner", [row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]])
+
+        scope = {"base": "base", "head": "head", "paths": ["scripts/ci_policy/hosted_plan.py"], "full": False}
+        self.assertEqual([row["lane"] for row in ci.matrix("fast", scope=scope)["include"]
+                          if row["repository_tools"]], ["ready"])
+        scope["paths"] = ["lycaon/internal/settings/settings.go"]
+        self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast", scope=scope)["include"]))
+        # A broad scope runs every scripts suite, and may carry no paths at all.
+        for broad in ({"full": True}, {"base": "", "head": "head", "paths": [], "full": True}):
+            for profile in ("fast", "integration"):
+                with self.subTest(profile=profile, scope=broad):
+                    self.assertEqual(
+                        sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"] if row["repository_tools"]),
+                        sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"]
+                               if {"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
 
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.

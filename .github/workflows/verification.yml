@@ -45,6 +45,7 @@ jobs:
       max-parallel: ${{ steps.plan.outputs.max-parallel }}
       package-timings: ${{ steps.plan.outputs.package-timings }}
       change-base: ${{ steps.plan.outputs.change-base }}
+      early-target: ${{ steps.plan.outputs.early-target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,7 +60,7 @@ jobs:
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
-          # Reads main's qualification receipts; without actions read access the plan uses lane budgets.
+          # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
@@ -75,6 +76,10 @@ jobs:
             python3 scripts/ci_verification.py timings > "$RUNNER_TEMP/timings.json"
             args+=(--timings "$RUNNER_TEMP/timings.json")
             echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$PROFILE" == fast && "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            early="$(PYTHONPATH=scripts python3 -m ci_policy.merge_preflight)"
+            echo "early-target=$early" >> "$GITHUB_OUTPUT"
           fi
           matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
           if [[ "$REUSE" == true ]]; then
@@ -113,6 +118,7 @@ jobs:
       SOAK: 10m
       PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
       PW_CHANGE_BASE: ${{ needs.plan.outputs.change-base }}
+      PW_CI_EARLY_TARGET: ${{ needs.plan.outputs.early-target }}
     steps:
       - name: Record job start
         run: python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'
@@ -148,15 +154,6 @@ jobs:
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
         if: ${{ matrix.setup == 'shell' }}
-
-      # Python repository fixtures run in the limits lane before the offline gate.
-      - name: Install repository metadata tool
-        if: ${{ runner.os == 'Linux' && matrix.lane == 'limits' }}
-        run: |
-          if ! command -v createrepo_c >/dev/null || ! command -v bsdtar >/dev/null || ! command -v makepkg >/dev/null || ! command -v pacman >/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends createrepo-c libarchive-tools makepkg pacman-package-manager
-          fi
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}

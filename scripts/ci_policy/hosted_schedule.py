@@ -14,12 +14,11 @@ def validate_sources(lanes):
             continue
         key = lane["timing_source"]
         source = lanes.get(key) if isinstance(key, str) else None
-        qualified = source and ("check" in source["profiles"]
-                                or "release" in source["profiles"] and "platform" in source)
-        if not qualified or key == name or "timing_source" in source:
-            raise ValueError(f"CI lane {name} needs a directly qualified timing source")
+        measured = source and "nightly" in source["profiles"]
+        if not measured or key == name or "timing_source" in source:
+            raise ValueError(f"CI lane {name} needs a direct nightly timing source")
         if any(lane.get(field, default) != source.get(field, default)
-               for field, default in [("runner", "ubuntu-latest"), ("setup", None), ("workers", None), ("shards", 1)]):
+               for field, default in [("runner", "ubuntu-24.04"), ("setup", None), ("workers", None), ("shards", 1)]):
             raise ValueError(f"CI lane {name} timing source must use the same execution configuration")
         stages = lambda value: Counter(stage["name"] for stage in expand(value["targets"]))
         if stages(lane) - stages(source):
@@ -75,7 +74,7 @@ def summarize(matrix, timings=None):
         lines += ["Missing measurements: " + ", ".join(f"`{key}`" for key in missing) + ".", ""]
     runs = (timings or {}).get("runs", [])
     if runs:
-        lines += ["Qualification timing sources: " + ", ".join(str(run) for run in runs) + ".", ""]
+        lines += ["Nightly timing sources: " + ", ".join(str(run) for run in runs) + ".", ""]
     lines += ["| Order | Lane | Shard | Priority | Execution estimate (seconds) | Timing row | Measurement run |",
               "|---|---|---|---|---|---|---|"]
     for index, row in enumerate(rows, 1):

@@ -35,7 +35,7 @@ func TestNativeAuthorityProjectionPreservesExactRawPaths(t *testing.T) {
 		original := []hitl.ApprovalOption{once}
 		projection, release, err := hitl.NewNativeAuthorityProjection(t.Context(), memory, original)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "project exact approval authority", err)
 		}
 		if !projection.Valid() || projection.Representation() != "native_approval_authority_v1" || !strings.Contains(projection.Canonical(), "native_approval_authority") {
 			t.Fatal("authority lost its explicit domain")
@@ -45,11 +45,11 @@ func TestNativeAuthorityProjectionPreservesExactRawPaths(t *testing.T) {
 		}
 		restored, releaseRestored, err := hitl.RestoreNativeAuthorityProjection(t.Context(), memory, projection.Representation(), projection.Digest(), projection.Canonical())
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "restore canonical approval authority", err)
 		}
 		options, releaseOptions, err := restored.Options(t.Context(), memory)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "recover original approval options", err)
 		}
 		if !reflect.DeepEqual(options, original) || options[0].Authority[0].Sockets[0].ApprovedPath != path {
 			t.Fatal("native authority path bytes/whitespace or typed metadata changed")
@@ -67,17 +67,17 @@ func TestNativeAuthorityProjectionRejectsUnknownFieldsEnumsAndUnadmittedWork(t *
 	memory := &nativeReviewMemory{}
 	projection, release, err := hitl.NewNativeAuthorityProjection(t.Context(), memory, []hitl.ApprovalOption{hitl.CurrentActionOption()})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "project current-action authority", err)
 	}
 	defer release()
 	for _, change := range []string{"unknown field", "missing field", "unknown enum"} {
 		value, releaseValue, err := toolcontract.RestoreNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, projection.Representation(), projection.Digest(), projection.Canonical())
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "restore authority for tamper fixture", err)
 		}
 		tree, releaseTree, err := value.Value(t.Context(), memory)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "decode projected authority tree", err)
 		}
 		option := tree.([]any)[0].(map[string]any)
 		switch change {
@@ -90,7 +90,7 @@ func TestNativeAuthorityProjectionRejectsUnknownFieldsEnumsAndUnadmittedWork(t *
 		}
 		tampered, releaseTampered, err := toolcontract.NewNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, tree)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "encode deliberately malformed authority", err)
 		}
 		if _, retained, err := hitl.RestoreNativeAuthorityProjection(t.Context(), memory, tampered.Representation(), tampered.Digest(), tampered.Canonical()); err == nil || retained != nil {
 			t.Fatal("unknown native authority shape acquired meaning", change)
@@ -122,7 +122,9 @@ func startNativeAuthorityHost(t *testing.T, path string) nativeAuthorityHost {
 	t.Helper()
 	database := testdbfixture.OpenPath(t, path)
 	manager := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
-	t.Cleanup(func() { testutil.FailErr(t, "stop checkpoint expiries", manager.StopExpiryTimers(context.Background())) })
+	t.Cleanup(func() {
+		testutil.FailErr(t, "stop checkpoint expiries", manager.StopExpiryTimers(context.Background()))
+	})
 	memory := &nativeReviewMemory{}
 	manager.Authority.SetNativeAuthorityAdmission(memory)
 	return nativeAuthorityHost{database: database, manager: manager, memory: memory}

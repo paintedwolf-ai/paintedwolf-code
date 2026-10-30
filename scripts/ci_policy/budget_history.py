@@ -1,5 +1,6 @@
-"""Durable reconciliation checkpoints and cumulative source-based warning intake."""
-from pathlib import Path
+"""Durable reconciliation checkpoints, cumulative source-based warning intake, and
+the measured content that ties a report's artifacts to current main."""
+from pathlib import Path, PurePosixPath
 import io
 import json
 import subprocess
@@ -10,11 +11,18 @@ from .budget_snapshot import SHA, key
 from .github import pages, repository
 import change_report
 
+ROOT = Path(__file__).resolve().parents[2]
+DIRECTORIES = frozenset({'source_directories', 'test_directories'})
+POLICY = 'lycaon/test/contract/maintainability-budgets.yaml'
+REVIEWS = 'lycaon/test/contract/maintainability-reviews/'
+EXCEPTIONS = 'lycaon/test/contract/maintainability-exceptions/'
 
-def ancestor(older, newer):
+
+def ancestor(root, older, newer):
     if not isinstance(older, str) or not SHA.fullmatch(older):
-        raise ValueError('invalid checkpoint commit')
-    result = subprocess.run(['git', 'merge-base', '--is-ancestor', older, newer], capture_output=True, text=True)
+        raise ValueError('invalid ancestry commit')
+    result = subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', older, newer],
+                            capture_output=True, text=True)
     if result.returncode not in {0, 1}:
         raise ValueError('cannot establish main commit ancestry')
     return result.returncode == 0
@@ -55,18 +63,16 @@ def merged_pulls(run, repo):
 
 def intake(run, rows, prior):
     identities = {identity for identity, row in rows.items() if row['touched']}
-    root = Path(__file__).resolve().parents[2]
+    root, head = ROOT, run['head_sha']
     base = prior['source_sha'] if prior else initial_base(root)
-    if base == run['head_sha']:
+    if base == head:
         return identities
-    if not ancestor(base, run['head_sha']):
+    if not ancestor(root, base, head):
         raise ValueError('main no longer descends from the reconciliation checkpoint; use explicit backfill')
-    if change_report.git(root, 'rev-parse', 'HEAD').stdout.strip() != run['head_sha']:
-        raise ValueError('the reconciliation checkout is not the measured main commit')
-    paths = change_report.changed_paths(root, base)
-    identities.update(changed_reviews(root, base, run['head_sha'], paths, rows))
-    lines = change_report.changed_lines(root, base, paths)
-    added, removed = change_report.added_and_removed(root, base)
+    paths = change_report.changed_paths(root, base, head)
+    identities.update(changed_records(root, base, head, paths, (REVIEWS,)) & set(rows))
+    lines = change_report.changed_lines(root, base, paths, head)
+    added, removed = change_report.added_and_removed(root, base, head)
     directories = {str(Path(path).parent) for path in added + removed}
     for identity, row in rows.items():
         category = row['category']
@@ -90,18 +96,55 @@ def initial_base(root):
     return change_report.git(root, 'rev-parse', commits[-1] + '^').stdout.strip()
 
 
-def changed_reviews(root, base, head, paths, rows):
+def changed_records(root, base, head, paths, prefixes):
+    """Identities named by review or exception records that changed between two commits."""
     identities = set()
-    prefix = 'lycaon/test/contract/maintainability-reviews/'
     for path in paths:
-        if not path.startswith(prefix) or not path.endswith('.json'):
+        if not path.startswith(prefixes) or not path.endswith('.json'):
             continue
         for revision in (base, head):
             entry = change_report.git(root, 'ls-tree', revision, '--', path)
             if not entry.stdout.strip():
                 continue
-            review = json.loads(change_report.git(root, 'show', f'{revision}:{path}').stdout)
-            identity = key(review['category'], review['artifact'])
-            if identity in rows:
-                identities.add(identity)
+            record = json.loads(change_report.git(root, 'show', f'{revision}:{path}').stdout)
+            identities.add(key(record['category'], record['artifact']))
     return identities
+
+
+def measured_scope(row):
+    """What a measurement reads: one file, or the immediate entries of a directory.
+
+    Go types are measured across their package directory. A reported source
+    outside that scope cannot be tied to it and refuses reconciliation.
+    """
+    category, artifact = row['category'], row['id']
+    if category.startswith('go_'):
+        scope = ('directory', artifact.rpartition('/')[0])
+        inside = all(str(PurePosixPath(source).parent) == scope[1] for source in row.get('sources', []))
+    else:
+        scope = ('directory' if category in DIRECTORIES else 'file', artifact)
+        inside = row.get('sources', [artifact]) == [artifact]
+    if not scope[1] or not inside:
+        raise ValueError(f'{category} {artifact} cannot be tied to its measured paths')
+    return scope
+
+
+class MainChanges:
+    """What changed on current main since the report source, as measurement inputs."""
+
+    def __init__(self, root, source):
+        change_report.git(root, 'fetch', '--quiet', '--no-tags', 'origin', 'refs/heads/main')
+        self.main = change_report.git(root, 'rev-parse', 'FETCH_HEAD').stdout.strip()
+        if not ancestor(root, source, self.main):
+            raise ValueError('the report source is not an ancestor of main')
+        self.paths = frozenset(change_report.changed_paths(root, source, self.main))
+        self.records = changed_records(root, source, self.main, self.paths, (REVIEWS, EXCEPTIONS))
+
+    def changed(self, row):
+        """Whether the artifact's measured paths, thresholds, exception, or review changed."""
+        kind, path = measured_scope(row)
+        if POLICY in self.paths or key(row['category'], row['id']) in self.records:
+            return True
+        if kind == 'file':
+            return path in self.paths
+        return any(str(PurePosixPath(changed_path).parent) == path for changed_path in self.paths)

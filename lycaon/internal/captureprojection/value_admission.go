@@ -169,7 +169,7 @@ func (s *valueScreen) number(value any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = s.count(int64(len(encoded)), int64(len(encoded))); err != nil {
+	if err := s.count(int64(len(encoded)), int64(len(encoded))); err != nil {
 		return nil, err
 	}
 	if number, ok := value.(json.Number); ok {

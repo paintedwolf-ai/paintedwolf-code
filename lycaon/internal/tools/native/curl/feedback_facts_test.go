@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -16,10 +17,10 @@ func TestCurlLimitFeedbackCarriesByteUnits(t *testing.T) {
 	var compressed bytes.Buffer
 	z := gzip.NewWriter(&compressed)
 	if _, err := z.Write(bytes.Repeat([]byte("a"), 128)); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "compress response fixture", err)
 	}
 	if err := z.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "finish compressed fixture", err)
 	}
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -502,7 +502,8 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 	executionTimeout := testutil.Timeout(time.Second)
 	handle, err := reg.StartPipeline(context.Background(), bgprocess.PipelineSpec{
 		SessionID: "sess-1", Runner: runner, Mode: bgprocess.JobModeBackground,
-		OriginTool: "verify", Timeout: executionTimeout,
+		// The execution deadline covers native launch handoff as well as payload time.
+		OriginTool: "verify", Timeout: time.Second,
 		Request: hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
 			ProjectDir: t.TempDir(),
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},

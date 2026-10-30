@@ -5,7 +5,6 @@ package projectpaths_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/commandprogram"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -49,7 +49,7 @@ func TestProgramPathSharesActualTemporaryBytesWithAProcess(t *testing.T) {
 	testutil.FailErr(t, "bind process-produced file", err)
 	file, err := bound.Open()
 	testutil.FailErr(t, "open process-produced bytes natively", err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	got := make([]byte, len("external bytes"))
 	n, err := file.Read(got)
 	testutil.FailErr(t, "read process-produced bytes", err)
@@ -121,14 +121,14 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	testutil.FailErr(t, "bind exact native operand", err)
 	file, err := bound.Open()
 	testutil.FailErr(t, "open native identity", err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	native, err := io.ReadAll(file)
 	testutil.FailErr(t, "read actual native identity", err)
 	absoluteLink, err := p.Bind(t.Context(), root+"/absolute-link", false)
 	testutil.FailErr(t, "bind absolute symlink target", err)
 	linked, err := absoluteLink.Open()
 	testutil.FailErr(t, "open exact absolute symlink target", err)
-	defer linked.Close()
+	defer func() { _ = linked.Close() }()
 	linkBytes, err := io.ReadAll(linked)
 	testutil.FailErr(t, "read exact absolute symlink target", err)
 	if string(linkBytes) != "actual identity" {
@@ -162,9 +162,8 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 }
 
 func TestLiteralTemporaryAbsolutePathIsNotRemapped(t *testing.T) {
-	temporary, err := os.MkdirTemp("/tmp", "portable-path-fixture-")
-	testutil.FailErr(t, "create literal temporary fixture", err)
-	t.Cleanup(func() { _ = os.RemoveAll(temporary) })
+	t.Setenv("TMPDIR", "/tmp")
+	temporary := t.TempDir()
 	tc, _, _ := scratchToolContext(t)
 	tc.Source.Roots[0].Path = temporary
 	operand := temporary + "/literal"

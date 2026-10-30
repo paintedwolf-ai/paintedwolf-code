@@ -13,10 +13,12 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	tx, err := f.database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin unrelated output rows", err)
+	defer func() { _ = tx.Rollback() }()
 	statement, err := tx.PrepareContext(t.Context(), `INSERT INTO invocation_program_outputs
 		(id,program_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,created_at)
 		VALUES(?,?, 'stdout', ?, ?, ?, ?, ?, 1, 0, '[]', '2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "prepare output rows", err)
+	defer func() { testutil.FailErr(t, "close output statement on exit", statement.Close()) }()
 	for i := range 1024 {
 		id := fmt.Sprintf("blob-%04d", i)
 		_, err = statement.ExecContext(t.Context(), fmt.Sprintf("output-%04d", i), f.program, id, "retention-"+id, "initiating-"+id, id, fmt.Sprintf(`{"ID":%q}`, id))

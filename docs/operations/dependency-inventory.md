@@ -110,7 +110,7 @@ Policy files retain every declared entry, package rating, rationale, and verific
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
 | Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
-| Development, build, and verification tools | 8 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
+| Development, build, and verification tools | 10 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 6 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
 | Backend Go modules (`lycaon`) | 77 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |

@@ -84,8 +84,8 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	frames := make([]*frame, len(stages))
 	releases := make([]func(), 0, len(stages))
 	defer func() {
-		for _, release := range releases {
-			release()
+		for i := len(releases) - 1; i >= 0; i-- {
+			releases[i]()
 		}
 	}()
 	for i := range stages {

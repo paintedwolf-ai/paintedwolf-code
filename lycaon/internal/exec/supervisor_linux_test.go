@@ -45,8 +45,10 @@ while not os.path.exists(path):
 
 func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
 	t.Helper()
-	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
-	cmd, cleanup, err := superviseCommand(cmd, cleanup, ProcessPriorityNormal)
+	cmd, releaseInputs, path := detachedDaemonCommand(t, context.Background(), true)
+	// Captured inputs outlive the supervisor; closing its engine pipe is the EOF under test.
+	t.Cleanup(releaseInputs)
+	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
 	testutil.FailErr(t, "supervise daemon fixture", err)
 	return cmd, cleanup, path
 }
@@ -62,7 +64,7 @@ func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T)
 func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T) {
 	other, otherCleanup, otherPath := supervisedDaemonCommand(t)
 	defer otherCleanup()
-	testutil.FailErr(t, "start independent supervisor", other.Start())
+	testutil.FailErr(t, "start independent supervisor", StartPreparedWith(other, other.Start, TrackProcessGroup))
 	otherPID := waitForPIDFile(t, otherPath)
 	defer func() { otherCleanup(); _ = other.Wait() }()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,17 +89,27 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
-	testutil.FailErr(t, "start supervisor", cmd.Start())
+	testutil.FailErr(t, "start supervisor", StartPreparedWith(cmd, cmd.Start, TrackProcessGroup))
 	pid := waitForPIDFile(t, path)
+	owned := commandDescendants(cmd.Process.Pid)
+	t.Cleanup(func() { killFixtureDescendants(owned) })
 	cleanup()
-	_ = cmd.Wait()
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		<-done
+		t.Fatal("engine lifetime EOF did not settle the supervisor before fixture expiry")
+	}
 	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(t.Context(), pid))
 }
 
 func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
 	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
-	testutil.FailErr(t, "start supervised command", cmd.Start())
+	testutil.FailErr(t, "start supervised command", StartPreparedWith(cmd, cmd.Start, TrackProcessGroup))
 	pid := waitForPIDFile(t, path)
 	reapLines(fmt.Sprintf("+s%d\n", cmd.Process.Pid))
 	_ = cmd.Wait()

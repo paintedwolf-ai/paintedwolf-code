@@ -49,7 +49,7 @@ func requireRejectCode(t *testing.T, err error, code string) {
 func TestExecutionRevisionsCaptureDiskOutsideDocumentOwner(t *testing.T) {
 	f := newPinnedDiskFixture(t, map[string]string{"a.txt": "one\r\ntwo\r\n"})
 	if err := os.Mkdir(filepath.Join(f.dir, "dir"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create out-of-owner disk directory", err)
 	}
 	source, err := f.revisions.CaptureSource(t.Context(), f.tctx, "a.txt")
 	testutil.FailErr(t, "capture source", err)

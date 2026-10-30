@@ -45,6 +45,11 @@ type ProgramSupervisor struct {
 func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, program := range s.programs {
+		if program.sessionID == sessionID && program.closed && program.sessionJobs != nil {
+			return program.sessionJobs
+		}
+	}
 	if s.sessions == nil {
 		s.sessions = map[string]*SessionJobs{}
 	}
@@ -61,16 +66,28 @@ func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontrac
 	if s == nil || s.Background == nil {
 		return "", fmt.Errorf("program jobs require the session process registry")
 	}
-	return s.Jobs(invocation.SessionID, invocation.Scope.ProjectID).start(ctx, "background job "+invocation.Identity.ExecutionID, run)
+	id, _ := ctx.Value(supervisedKey{}).(string)
+	s.mu.Lock()
+	program := s.programs[id]
+	var jobs *SessionJobs
+	if program != nil && !program.closed && program.sessionID == invocation.SessionID {
+		jobs = program.sessionJobs
+	}
+	s.mu.Unlock()
+	if jobs == nil {
+		return "", ErrProgramStopped
+	}
+	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, run)
 }
 
 type supervisedProgram struct {
-	sessionID  string
-	closed     bool
-	cancel     context.CancelCauseFunc
-	jobs       map[int]*supervisedJob
-	nextJob    int
-	foreground bool
+	sessionID   string
+	sessionJobs *SessionJobs
+	closed      bool
+	cancel      context.CancelCauseFunc
+	jobs        map[int]*supervisedJob
+	nextJob     int
+	foreground  bool
 	// interrupted records a foreground the host interrupted.
 	interrupted bool
 	settle      func(stopped bool)
@@ -97,6 +114,18 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	if _, exists := s.programs[root.Identity.ProgramID]; exists {
 		s.mu.Unlock()
 		return toolcontract.ProducerResult{}, fmt.Errorf("program %s is already supervised", root.Identity.ProgramID)
+	}
+	program.sessionJobs = s.sessions[root.SessionID]
+	if admitted, ok := ctx.Value(sessionJobsKey{}).(*SessionJobs); ok && admitted != program.sessionJobs {
+		s.mu.Unlock()
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
+	}
+	if program.sessionJobs != nil {
+		closed := program.sessionJobs.closed.Load()
+		if closed {
+			s.mu.Unlock()
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
+		}
 	}
 	s.programs[root.Identity.ProgramID] = program
 	s.mu.Unlock()
@@ -307,4 +336,32 @@ func (s *ProgramSupervisor) finishIfIdle(programID string) {
 	settle, stopped := program.settle, program.closed || program.interrupted
 	s.mu.Unlock()
 	settle(stopped)
+}
+
+// DisposeSession closes the retained owner before draining registered jobs. A
+// failed drain keeps that owner closed for retry; no tombstone outlives it.
+func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	jobs := s.sessions[sessionID]
+	s.mu.Unlock()
+	if jobs != nil {
+		jobs.mu.Lock()
+		jobs.closed.Store(true)
+		jobs.mu.Unlock()
+	}
+	s.Stop(sessionID)
+	if s.Background != nil {
+		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	if s.sessions[sessionID] == jobs {
+		delete(s.sessions, sessionID)
+	}
+	s.mu.Unlock()
+	return nil
 }

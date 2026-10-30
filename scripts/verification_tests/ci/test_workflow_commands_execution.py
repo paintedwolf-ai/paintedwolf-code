@@ -88,4 +88,4 @@ class WorkflowCommandTests(unittest.TestCase):
             self.assertEqual(rows[0]['timing_basis'], 'measured')
             self.assertEqual(rows[0]['expected_seconds'], 250)
             self.assertIn('Estimate basis: `measured`', summary.read_text())
-            self.assertIn('Qualification timing sources: 42', summary.read_text())
+            self.assertIn('Nightly timing sources: 42', summary.read_text())

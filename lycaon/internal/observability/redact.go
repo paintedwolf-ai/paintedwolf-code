@@ -1,8 +1,6 @@
 package observability
 
 import (
-	"context"
-	"log/slog"
 	"regexp"
 	"strings"
 
@@ -54,69 +52,6 @@ func RedactString(s string) string {
 	s = secretFlagRE.ReplaceAllString(s, "${1}"+redacted)
 	s = secretEnvRE.ReplaceAllString(s, "${1}"+redacted)
 	return s
-}
-
-// RedactingHandler redacts secret-named attributes and secret patterns in string values.
-type RedactingHandler struct {
-	inner slog.Handler
-}
-
-// NewRedactingHandler wraps handler with secret redaction.
-func NewRedactingHandler(inner slog.Handler) *RedactingHandler {
-	return &RedactingHandler{inner: inner}
-}
-
-func (h *RedactingHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.inner.Enabled(ctx, level)
-}
-
-func (h *RedactingHandler) Handle(ctx context.Context, record slog.Record) error {
-	var attrs []slog.Attr
-	record.Attrs(func(a slog.Attr) bool {
-		attrs = append(attrs, redactAttr(a))
-		return true
-	})
-	cloned := slog.NewRecord(record.Time, record.Level, RedactString(record.Message), record.PC)
-	cloned.AddAttrs(attrs...)
-	return h.inner.Handle(ctx, cloned)
-}
-
-func (h *RedactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	out := make([]slog.Attr, 0, len(attrs))
-	for _, a := range attrs {
-		out = append(out, redactAttr(a))
-	}
-	return &RedactingHandler{inner: h.inner.WithAttrs(out)}
-}
-
-func (h *RedactingHandler) WithGroup(name string) slog.Handler {
-	return &RedactingHandler{inner: h.inner.WithGroup(name)}
-}
-
-func redactAttr(a slog.Attr) slog.Attr {
-	a.Value = a.Value.Resolve()
-	if IsSecretFieldName(a.Key) {
-		return slog.String(a.Key, redacted)
-	}
-	switch a.Value.Kind() {
-	case slog.KindString:
-		s := a.Value.String()
-		if a.Key == "session_id" {
-			s = ShortSessionID(s)
-		} else {
-			s = RedactString(s)
-		}
-		return slog.String(a.Key, s)
-	case slog.KindGroup:
-		attrs := a.Value.Group()
-		out := make([]slog.Attr, 0, len(attrs))
-		for _, inner := range attrs {
-			out = append(out, redactAttr(inner))
-		}
-		return slog.Attr{Key: a.Key, Value: slog.GroupValue(out...)}
-	default:
-		return a
-	}
 }
 
 // ShortSessionID truncates UUID session IDs in logs to reduce capability leakage.

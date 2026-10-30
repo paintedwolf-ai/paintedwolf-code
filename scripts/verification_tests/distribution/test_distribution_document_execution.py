@@ -44,8 +44,7 @@ class DocumentFixture(unittest.TestCase):
             'source_commit': 'a' * 40, 'source_tree': 'b' * 40, 'controller_commit': 'c' * 40,
             'signing_generation': 1, 'package_content_types': {}, 'repositories': [],
             'nix': {'source': {'git_url': 'github:paintedwolf-ai/paintedwolf-code/' + 'a' * 40,
-                              'commit': 'a' * 40, 'flake_lock_sha256': 'd' * 64}, 'cache': {'enabled': False}},
-            'aur': {'enabled': False}}
+                              'commit': 'a' * 40, 'flake_lock_sha256': 'd' * 64}, 'cache': {'enabled': False}}}
         for extension in row['package_extensions']:
             name = 'painted-wolf-code_v1.2.3_linux-x86_64.' + extension
             (self.artifacts / name).write_bytes(('actual signed ' + extension).encode())
@@ -110,21 +109,6 @@ class DistributionDocumentTests(DocumentFixture):
         with self.assertRaises(ValueError):
             validate(document)
 
-    def test_aur_origins_are_fixed_and_channel_bound(self):
-        stable = self.construct()
-        preview = json.loads(json.dumps(stable).replace('1.2.3', '1.2.4-rc.1'))
-        preview['channel'] = 'preview'
-        for document, names in [(stable, ['painted-wolf-code', 'painted-wolf-code-bin']),
-                                 (preview, ['painted-wolf-code-preview-bin'])]:
-            for name in names:
-                document['aur'] = {'enabled': True, 'git_url': 'https://aur.archlinux.org/' + name + '.git',
-                                   'commit': 'e' * 40, 'source_sha256': 'f' * 64, 'package_sha256': 'a' * 64}
-                self.assertIs(validate(document), document)
-            for url in ['https://foreign.invalid/package.git',
-                        'https://aur.archlinux.org/' + ('painted-wolf-code-preview-bin' if document is stable else 'painted-wolf-code-bin') + '.git']:
-                document['aur']['git_url'] = url
-                with self.assertRaises(ValueError):
-                    validate(document)
 
 
 class DistributionSigningTests(DocumentFixture):
@@ -205,3 +189,32 @@ class DistributionSigningTests(DocumentFixture):
         self.request['origin'] = 'https://downloads.paintedwolf.dev'
         with self.assertRaises(ValueError):
             self.prepare('foreign-registry')
+
+    def test_preview_setup_names_from_native_identity_survive_document_signing(self):
+        from scripts.linux_release.repository_setup_identity import package_identity
+        preview = '1.2.4-rc.1'
+        self.request['version'] = preview
+        updater = json.loads(self.updater.read_text())
+        updater['version'] = preview
+        self.updater.write_text(json.dumps(updater))
+        self.request['package_content_types'] = {}
+        for package in list(self.artifacts.iterdir()):
+            replacement = package.with_name(package.name.replace('1.2.3', preview))
+            package.rename(replacement)
+            self.request['package_content_types'][replacement.name] = 'application/octet-stream'
+        origin = self.request['origin']
+        artifact = lambda name: {'file': name, 'url': origin + '/releases/v' + preview + '/' + name,
+                                'sha256': 'e' * 64, 'bytes': 128, 'content_type': 'application/octet-stream'}
+        for family in ('deb', 'rpm'):
+            filename = package_identity(preview, family, 'preview', 1)['file']
+            self.assertIn('~', filename)
+            self.request['repositories'].append({'family': family, 'architecture': 'both', 'channel': 'preview',
+                'generation': 'f' * 64, 'inventory_sha256': 'd' * 64, 'activation_sha256': 'c' * 64,
+                'base_url': origin + '/linux/channels/' + family + '/preview',
+                'signing_generation': 1, 'key_fingerprint': 'A' * 40, 'setup': artifact(filename),
+                'public_key': artifact('linux-package-key.asc')})
+        result = self.prepare('preview', signer=lambda path, number, registry: feed_signature(number, path.name, preview))
+        document = decode((self.root / 'preview/distribution.v1.json').read_bytes())
+        self.assertEqual(document['channel'], 'preview')
+        self.assertEqual(len(document['repositories']), 2)
+        self.assertEqual(result['distribution_sha256'], hashlib.sha256(canonical(document)).hexdigest())

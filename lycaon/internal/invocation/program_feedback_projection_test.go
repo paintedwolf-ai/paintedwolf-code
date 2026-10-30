@@ -272,7 +272,7 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	}
 	releaseExact()
 	prepared.Close()
-	if memory.InUse().State != baseline || memory.InUse().State != baseline {
+	if memory.InUse().State != baseline || memory.InUse().Working != 0 {
 		t.Fatal("diagnostic snapshot leaked state")
 	}
 	limited := feedbackMemory(t, 1<<20)
@@ -280,7 +280,7 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	defer limitedFrame.Close()
 	limitedBaseline := limited.InUse().State
 	cause.Data["details"] = map[string]any{"oversized": strings.Repeat("x", 2<<20)}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), limitedFrame, f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != limitedBaseline || limited.InUse().State != limitedBaseline {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), limitedFrame, f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != limitedBaseline || limited.InUse().Working != 0 {
 		t.Fatal("oversized nested diagnostic escaped admission or leaked partial snapshot")
 	}
 	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.InUse().State != baseline {

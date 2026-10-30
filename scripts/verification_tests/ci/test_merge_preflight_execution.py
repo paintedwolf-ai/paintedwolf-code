@@ -1,10 +1,13 @@
 """Merge phases preserve the full recipe and stop before expensive work on failure."""
+import io
 import json
+import zipfile
 from datetime import datetime, timedelta, timezone
 import os
 import subprocess
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +16,125 @@ from ci_policy import hosted_plan
 
 
 class MergePreflightTests(unittest.TestCase):
+    def test_fast_coverage_measurements_ignore_unrelated_paths(self):
+        import coverage_changes as coverage
+        for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
+                      ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call') as call, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                scope = SimpleNamespace(paths=paths)
+                self.assertEqual(coverage.run_den(scope), ([], False, 'no changed frontend source'))
+                self.assertEqual(coverage.run_python(scope), ([], False, 'no changed scripts Python'))
+                call.assert_not_called()
+                measure.assert_not_called()
+
+    def history_archive(self, record=None, failures=None):
+        record = record if record is not None else {
+            'lane': 'ready', 'shard': '', 'status': 'failed',
+            'identity': {'run': '20', 'attempt': '2', 'sha': 'synthetic-merge'}}
+        failures = failures if failures is not None else [{'stage': 'budgets', 'status': 'failed'}]
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w') as archive:
+            archive.writestr('ci/run.json', json.dumps(record))
+            archive.writestr('ci/failures.json', json.dumps(failures))
+        return output.getvalue()
+
+    def test_previous_failure_is_bound_to_workflow_pull_and_attempt(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
+        previous = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
+                        run_attempt=2, status='completed', conclusion='failure', head_sha='pr-head')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        unrelated = [{**previous, 'id': 25, 'pull_requests': [{'number': 8}]},
+                     {**previous, 'id': 26, 'workflow_id': 11}, {**previous, 'id': 30}]
+        cases = [(previous, 'budgets'), ({**previous, 'conclusion': 'success'}, ''),
+                 ({**previous, 'conclusion': 'cancelled'}, ''), ({**previous, 'status': 'in_progress'}, '')]
+        for run, expected in cases:
+            with self.subTest(run=run), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
+                        {'workflow_runs': [run, {**previous, 'id': 19}, *unrelated]}, {'artifacts': [artifact]}]) as api, \
+                    patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()) as fetch:
+                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), expected)
+                self.assertEqual(fetch.call_count, int(bool(expected)))
+                self.assertIn('/workflows/10/runs?event=pull_request', api.call_args_list[1].args[0])
+        for event in ({}, {'pull_request': {}}):
+            with patch.object(preflight, 'api') as api:
+                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+                api.assert_not_called()
+
+    def test_uncertain_history_never_reorders(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
+        run = dict(id=20, run_attempt=2, workflow_id=10, event='pull_request',
+                   pull_requests=[{'number': 7}], status='completed', conclusion='failure')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        for artifacts, raw in [([], b''), ([artifact, artifact], b''),
+                               ([{**artifact, 'expired': True}], b''),
+                               ([{**artifact, 'size_in_bytes': preflight.HISTORY_LIMIT + 1}], b''),
+                               ([artifact], b'not a zip')]:
+            with patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
+                        {'workflow_runs': [run]}, {'artifacts': artifacts}]), \
+                    patch.object(preflight.subprocess, 'check_output', return_value=raw):
+                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+        with patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                patch.object(preflight, 'api', side_effect=OSError):
+            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+
+    def test_branch_query_finds_history_behind_unrelated_workflow_traffic(self):
+        run = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
+                   run_attempt=2, status='completed', conclusion='failure')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        def api(path):
+            if '/workflows/' in path:
+                branch_scoped = 'branch=fix%2Fa%26b&per_page=100' in path
+                return {'workflow_runs': [run] if branch_scoped else [{**run, 'pull_requests': [{'number': 8}]}] * 100}
+            return {'artifacts': [artifact]} if '/artifacts?' in path else {'workflow_id': 10}
+        with patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                patch.object(preflight, 'api', side_effect=api), \
+                patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()):
+            event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
+            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), 'budgets')
+
+    def test_receipt_requires_matching_identity_and_one_declared_failed_stage(self):
+        run = {'id': 20, 'run_attempt': 2}
+        record = dict(lane='ready', shard='', status='failed', identity={'run': '20', 'attempt': '2'})
+        for change in ({'lane': 'limits'}, {'status': 'passed'}, {'shard': '1/2'},
+                       {'identity': {'run': '21', 'attempt': '2'}}, {'identity': {'run': '20', 'attempt': '1'}}):
+            self.assertEqual(preflight.failed_target(self.history_archive({**record, **change}), run, ['budgets']), '')
+        for failures in ([], [None], [{'stage': 'test:contract', 'status': 'failed'}],
+                         [{'stage': 'budgets', 'status': 'unverified'}],
+                         [{'stage': stage, 'status': 'failed'} for stage in ('budgets', 'build')]):
+            self.assertEqual(preflight.failed_target(self.history_archive(failures=failures), run, ['budgets', 'build']), '')
+        repeated = [{'stage': 'budgets', 'status': 'failed'}] * 2
+        self.assertEqual(preflight.failed_target(self.history_archive(failures=repeated), run, ['budgets']), 'budgets')
+
+    def test_ready_history_checks_repeat_failure_before_native_compilation(self):
+        from ci_policy import hosted_execution as execution
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        targets = hosted_plan.lanes()['ready']['targets']
+        for early, hosted, verdict in [('budgets', 'true', 1), ('budgets', 'true', 0),
+                                      ('comments:check', 'true', 1), ('comments:check', 'true', 0),
+                                      ('budgets', 'true', 2), ('budgets', 'true', -15), ('', 'true', 0), ('unknown', 'true', 0), ('budgets', 'false', 0)]:
+            active = early in targets and hosted == 'true'
+            with self.subTest(early=early, hosted=hosted, verdict=verdict), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(execution, 'artifact_root', return_value=Path(directory)), \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[['./task', 'decide:test', '--', '--compile-only']]), \
+                    patch.dict(os.environ, GITHUB_ACTIONS=hosted, PW_CI_EARLY_TARGET=early), \
+                    patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: verdict if cmd == ['./task', early] else 0) as call:
+                self.assertEqual(execution.run_lane('ready'), verdict)
+                commands = [entry.args[0] for entry in call.call_args_list]
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']]]
+                compile_native = ['./task', 'decide:test', '--', '--compile-only']
+                if active:
+                    expected += [['./task', early]]
+                    if not verdict:
+                        expected += [compile_native, ['./task', *[target for target in targets if target != early]]]
+                else:
+                    expected += [compile_native, ['./task', *targets]]
+                self.assertEqual(commands, expected)
+                record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                self.assertEqual([phase['command'] for phase in record['phases']], expected[1:])
+
     def test_fixed_platform_arguments_survive_merge_preflight(self):
         for arguments in (["launch"], ["nix"]):
             lane = {"targets": ["test:confine:linux"], "arguments": arguments}

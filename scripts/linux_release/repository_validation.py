@@ -93,14 +93,23 @@ def rpm(directory: Path, catalog: Path, rehearsal: bool):
         check_bytes(selected_object(directory, location.attrib["href"]), checksum.text, int(size.text))
 
 
-def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
-    if (receipt.get("format_version") != 1 or receipt.get("family") not in {"deb", "rpm"}
+def validate_manifest(receipt: dict, catalog: Path, rehearsal=False):
+    if type(rehearsal) is not bool or not isinstance(receipt, dict):
+        raise ValueError("repository admission requires typed mode and manifest")
+    if (type(receipt.get("format_version")) is not int or receipt.get("format_version") != 1 or receipt.get("family") not in {"deb", "rpm"}
             or receipt.get("channel") not in {"stable", "preview"} or receipt.get("rehearsal") is not rehearsal
             or not re.fullmatch(r"[0-9a-f]{40}", receipt.get("source_commit", ""))
             or not isinstance(receipt.get("version"), str) or not receipt["version"]):
         raise ValueError("unsupported or cross-trust repository generation")
+    fields = {'format_version', 'family', 'channel', 'version', 'source_commit', 'rehearsal', 'signing_generation',
+              'key_fingerprint', 'inventory_sha256', 'objects', 'packages', 'publication_order', 'reader_consistency'}
+    if (set(receipt) != fields or receipt['publication_order'] != 'content-before-signed-metadata'
+            or receipt['reader_consistency'] != ('apt-inrelease-by-hash' if receipt['family'] == 'deb' else 'dnf-versioned-baseurl-mirrorlist')):
+        raise ValueError('repository manifest has an unsupported versioned shape')
+    from scripts.release_semver import parse
+    parse(receipt['version'])
     signer, _ = selection(catalog, rehearsal)
-    if receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
+    if type(receipt.get("signing_generation")) is not int or receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
         raise ValueError("repository generation differs from the selected signing identity")
     objects = receipt.get("objects")
     if not isinstance(objects, list) or not objects:
@@ -108,23 +117,41 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
     measured = hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if receipt.get("inventory_sha256") != measured:
         raise ValueError("repository inventory differs from its selected identity")
+    for row in objects:
+        name = row.get("path") if isinstance(row, dict) else None
+        if (not isinstance(row, dict) or set(row) != {'path', 'sha256', 'size'} or not isinstance(name, str) or not name or PurePosixPath(name).is_absolute()
+                or PurePosixPath(name).as_posix() != name or ".." in PurePosixPath(name).parts
+                or name == "generation.json" or type(row.get("size")) is not int or row["size"] < 0
+                or not isinstance(row.get("sha256"), str) or not re.fullmatch("[a-f0-9]{64}", row["sha256"])):
+            raise ValueError("repository manifest has an invalid selected object")
     names = [row["path"] for row in objects]
     if len(names) != len(set(names)):
         raise ValueError("repository inventory repeats an object")
+    packages = receipt.get("packages")
+    if (not isinstance(packages, list) or any(not isinstance(row, dict) or set(row) != {
+            'file', 'sha256', 'architecture', 'native_version', 'input_sha256'} for row in packages)
+            or len({row['file'] for row in packages}) != len(packages) or {row["file"] for row in packages} != {
+            name for name in names if name.endswith("." + receipt["family"])}):
+        raise ValueError("repository final package inventory is incomplete")
+    for row in packages:
+        if (row['architecture'] not in {'amd64', 'arm64'} or not isinstance(row['native_version'], str) or not row['native_version']
+                or not isinstance(row['input_sha256'], str) or not re.fullmatch('[a-f0-9]{64}', row['input_sha256'])):
+            raise ValueError('repository package has an invalid native identity')
+        selected = next(item for item in objects if item["path"] == row["file"])
+        if row["sha256"] != selected["sha256"]:
+            raise ValueError("repository final package hash differs from its inventory")
+    return objects
+
+
+def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
+    objects = validate_manifest(receipt, catalog, rehearsal)
+    names = [row["path"] for row in objects]
     observed = {p.relative_to(directory).as_posix() for p in directory.rglob("*")
                 if p.is_file() and p.name != "generation.json"}
     if observed != set(names):
         raise ValueError("selected repository inventory is incomplete or contains unexpected files")
     for row in objects:
         check_bytes(selected_object(directory, row["path"]), row["sha256"], row["size"])
-    packages = receipt.get("packages")
-    if not isinstance(packages, list) or {row["file"] for row in packages} != {
-            name for name in names if name.endswith("." + receipt["family"])}:
-        raise ValueError("repository final package inventory is incomplete")
-    for row in packages:
-        selected = next(item for item in objects if item["path"] == row["file"])
-        if row["sha256"] != selected["sha256"]:
-            raise ValueError("repository final package hash differs from its inventory")
     if receipt["family"] == "deb":
         apt(directory, receipt["channel"], catalog, rehearsal)
     else:

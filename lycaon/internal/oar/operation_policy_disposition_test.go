@@ -150,7 +150,8 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 		}
 		for _, op := range selected {
 			matches := func(gc *GuardContext) bool {
-				ok, err := ruleSelectorMatches(rule, gc)
+				facts := selectorFacts{context: gc}
+				ok, err := facts.match(rule)
 				testutil.FailErr(t, "match "+rule.ID, err)
 				return ok
 			}

@@ -74,10 +74,10 @@ func TestCommandGitInitDirectoryAndFlagsMatchGit(t *testing.T) {
 			}
 			if gotPath, wantPath := filepath.Join(h.root, tc.args[len(tc.args)-1]), filepath.Join(reference.root, tc.args[len(tc.args)-1]); tc.name == "bare" {
 				if _, err := os.Stat(filepath.Join(gotPath, "HEAD")); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "stat repository HEAD", err)
 				}
 				if _, err := os.Stat(filepath.Join(wantPath, "HEAD")); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "stat repository HEAD", err)
 				}
 			} else {
 				if gotHead, wantHead := h.git("-C", gotPath, "symbolic-ref", "HEAD"), reference.git("-C", wantPath, "symbolic-ref", "HEAD"); gotHead != wantHead {

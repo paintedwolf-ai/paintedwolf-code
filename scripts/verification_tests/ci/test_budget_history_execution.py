@@ -1,4 +1,4 @@
-"""Warning intake survives superseded qualification/reconciliation runs."""
+"""Warning intake survives superseded nightly/reconciliation runs."""
 import io
 import json
 import unittest
@@ -26,13 +26,14 @@ class HistoryTests(unittest.TestCase):
             (['pkg/server.go'], {}, [], {'source_files'}),
         ]:
             with self.subTest(changed=changed), patch.object(history, 'ancestor', return_value=True), \
-                    patch.object(history.change_report, 'git') as git, \
-                    patch.object(history.change_report, 'changed_paths', return_value=paths), \
-                    patch.object(history.change_report, 'changed_lines', return_value=changed), \
-                    patch.object(history.change_report, 'added_and_removed', return_value=(additions, [])):
-                git.return_value.stdout = 'a' * 40
+                    patch.object(history.change_report, 'changed_paths', return_value=paths) as diff, \
+                    patch.object(history.change_report, 'changed_lines', return_value=changed) as hunks, \
+                    patch.object(history.change_report, 'added_and_removed', return_value=(additions, [])) as entries:
                 identities = history.intake(run(), latest, prior)
             self.assertEqual({latest[identity]['category'] for identity in identities}, expected)
+            # Intake measures the report source, not whatever main the checkout holds.
+            for call in [diff, hunks, entries]:
+                self.assertEqual(call.call_args.args[-1], 'a' * 40)
 
     def test_removed_or_retargeted_review_enters_intake_without_source_change(self):
         import subprocess
@@ -59,23 +60,20 @@ class HistoryTests(unittest.TestCase):
             git('add', '--', path)
             git('commit', '-qm', 'Retarget decision')
             changed = git('rev-parse', 'HEAD')
-            self.assertEqual(history.changed_reviews(directory, base, changed,
-                             [path], {first: {}, second: {}}), {first, second})
+            self.assertEqual(history.changed_records(directory, base, changed, [path], (history.REVIEWS,)), {first, second})
             file.unlink()
             git('add', '--', path)
             git('commit', '-qm', 'Remove decision')
-            self.assertEqual(history.changed_reviews(directory, base, git('rev-parse', 'HEAD'),
-                             [path], {first: {}}), {first})
+            self.assertEqual(history.changed_records(directory, base, git('rev-parse', 'HEAD'), [path], (history.REVIEWS,)), {first})
+            self.assertEqual(history.changed_records(directory, base, changed, [path], (history.EXCEPTIONS,)), set())
 
     def test_initial_intake_uses_installation_baseline_without_backfilling_untouched_debt(self):
         _, latest = validate(report([{**row(), 'touched': False}]), 'a' * 40, 'b' * 40)
         with patch.object(history, 'initial_base', return_value='c' * 40), \
                 patch.object(history, 'ancestor', return_value=True), \
-                patch.object(history.change_report, 'git') as git, \
                 patch.object(history.change_report, 'changed_paths', return_value=[]), \
                 patch.object(history.change_report, 'changed_lines', return_value={}), \
                 patch.object(history.change_report, 'added_and_removed', return_value=([], [])):
-            git.return_value.stdout = 'a' * 40
             self.assertEqual(history.intake(run(), latest, None), set())
         with patch.object(history.change_report, 'git') as git:
             self.assertEqual(history.intake(run(), latest, {'source_sha': 'a' * 40}), set())
@@ -92,15 +90,10 @@ class HistoryTests(unittest.TestCase):
             git.return_value.stdout = ''
             history.initial_base('root')
 
-    def test_missing_history_and_mismatched_checkout_require_explicit_recovery(self):
+    def test_missing_history_requires_explicit_recovery(self):
         _, latest = validate(report(), 'a' * 40, 'b' * 40)
-        prior = dict(source_sha='c' * 40)
         with patch.object(history, 'ancestor', return_value=False), self.assertRaises(ValueError):
-            history.intake(run(), latest, prior)
-        with patch.object(history, 'ancestor', return_value=True), \
-                patch.object(history.change_report, 'git') as git, self.assertRaises(ValueError):
-            git.return_value.stdout = 'wrong-checkout'
-            history.intake(run(), latest, prior)
+            history.intake(run(), latest, dict(source_sha='c' * 40))
 
     def test_checkpoint_ignores_preview_artifacts_and_reads_applied_state(self):
         previous = dict(id=1, run_attempt=1)
@@ -131,7 +124,78 @@ class HistoryTests(unittest.TestCase):
         for code, result in [(0, True), (1, False)]:
             with patch.object(history.subprocess, 'run') as command:
                 command.return_value.returncode = code
-                self.assertEqual(history.ancestor('c' * 40, 'a' * 40), result)
+                self.assertEqual(history.ancestor('root', 'c' * 40, 'a' * 40), result)
         with patch.object(history.subprocess, 'run') as command, self.assertRaises(ValueError):
             command.return_value.returncode = 128
-            history.ancestor('c' * 40, 'a' * 40)
+            history.ancestor('root', 'c' * 40, 'a' * 40)
+
+
+class MeasuredContentTests(unittest.TestCase):
+    def test_measured_scope_ties_each_category_to_its_paths(self):
+        for entry, scope in [(row(), ('file', 'pkg/server.go')),
+                             ({**row('pkg', 'source_directories'), 'sources': ['pkg']}, ('directory', 'pkg')),
+                             (row('pkg/pkg.Server', 'go_receiver_methods'), ('directory', 'pkg')),
+                             ({'category': 'go_struct_fields', 'id': 'pkg/pkg.Server'}, ('directory', 'pkg')),
+                             ({'category': 'test_files', 'id': 'pkg/a_test.go'}, ('file', 'pkg/a_test.go'))]:
+            with self.subTest(entry=entry):
+                self.assertEqual(history.measured_scope(entry), scope)
+        for entry in [{**row(), 'sources': ['pkg/other.go']}, {**row(), 'sources': ['pkg/server.go', 'pkg/b.go']},
+                      {**row('pkg/pkg.Server', 'go_receiver_lines'), 'sources': ['other/server.go']},
+                      {'category': 'go_struct_fields', 'id': 'pkg.Server'}]:
+            with self.subTest(entry=entry), self.assertRaises(ValueError):
+                history.measured_scope(entry)
+
+    def changes(self, paths, records=()):
+        changes = history.MainChanges.__new__(history.MainChanges)
+        changes.main, changes.paths, changes.records = 'e' * 40, frozenset(paths), set(records)
+        return changes
+
+    def test_directory_scopes_cover_only_immediate_entries(self):
+        from ci_policy.budget_snapshot import key
+        directory = {'category': 'source_directories', 'id': 'pkg'}
+        nested = {'category': 'go_struct_fields', 'id': 'pkg/nested/nested.Server'}
+        paths = self.changes({'pkg/nested/file.go', 'pkg/server.go'})
+        self.assertTrue(paths.changed(row()))
+        self.assertFalse(paths.changed({'category': 'source_files', 'id': 'pkg/other.go'}))
+        self.assertTrue(paths.changed(nested))
+        self.assertFalse(paths.changed({'category': 'go_struct_fields', 'id': 'pkg/nested/deeper/deeper.Server'}))
+        self.assertTrue(self.changes({'pkg/server.go'}).changed(directory))
+        self.assertFalse(self.changes({'pkg/nested/file.go'}).changed(directory))
+        self.assertTrue(self.changes({history.POLICY}).changed(directory))
+        self.assertTrue(self.changes((), {key('source_directories', 'pkg')}).changed(directory))
+        self.assertFalse(self.changes((), {key('source_files', 'pkg')}).changed(directory))
+
+    def test_main_comparison_uses_the_report_source_and_fetched_main(self):
+        from ci_policy.budget_snapshot import key
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*arguments):
+                return subprocess.check_output(['git', '-C', directory, *arguments], text=True).strip()
+            def commit(path, text, message):
+                file = Path(directory) / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(text)
+                git('add', '--', path)
+                git('commit', '-qm', message)
+                return git('rev-parse', 'HEAD')
+            git('init', '-q', '-b', 'main')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            git('remote', 'add', 'origin', directory)
+            source = commit('pkg/server.go', 'one\n', 'Report source')
+            git('checkout', '-qb', 'side')
+            side = commit('pkg/side.go', 'side\n', 'Unmerged work')
+            git('checkout', '-q', 'main')
+            commit('other/file.go', 'two\n', 'Advance main')
+            review = 'lycaon/test/contract/maintainability-reviews/design.json'
+            main = commit(review, json.dumps({'category': 'source_files', 'artifact': 'pkg/server.go'}), 'Review')
+            changes = history.MainChanges(directory, source)
+            self.assertEqual((changes.main, changes.paths), (main, frozenset({'other/file.go', review})))
+            self.assertEqual(changes.records, {key('source_files', 'pkg/server.go')})
+            self.assertTrue(changes.changed({'category': 'source_files', 'id': 'pkg/server.go'}))
+            self.assertFalse(changes.changed({'category': 'source_files', 'id': 'pkg/other.go'}))
+            self.assertFalse(history.MainChanges(directory, main).paths)
+            with self.assertRaisesRegex(ValueError, 'not an ancestor'):
+                history.MainChanges(directory, side)

@@ -169,23 +169,37 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/gitengine-fetch.sh
 
   lint:fast:
-    desc: Go vet + fast golangci-lint
+    desc: GitHub workflows + Go vet + fast golangci-lint
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
       - .golangci.yml
       - .deadcode-exclude
+      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
+      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
+      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
+      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
+      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
       - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: Go vet + full golangci-lint + deadcode
+    desc: GitHub workflows + Go vet + full golangci-lint + deadcode
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
       - .golangci.yml
+      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
+      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
+      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
+      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
+      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
+      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
       - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
@@ -335,7 +349,7 @@ tasks:
   test:runner:
     desc: Verify execution scheduling, cancellation, and worker limits
     cmds:
-      - python3 -m unittest discover -s scripts -p 'test_*execution.py'
+      - python3 -m unittest discover -s scripts -p 'test_*execution.py' {{.CLI_ARGS}}
 
   test:stress:
     desc: Large database, source-tree, Git operation, attribution, and working-year storage fixtures
@@ -1815,7 +1829,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
   release:halt:
-    desc: 'Stop discovery on one release channel by restoring its last-good pointer. Pass --channel stable|preview --bad VERSION --last-good VERSION after --'
+    desc: 'Signed-feed and negative-ledger halt primitive; use the protected release-halt workflow for complete multi-surface withdrawal'
     preconditions:
       - sh: command -v curl && command -v jq && command -v python3
         msg: curl, jq, and python3 required for release:halt
@@ -1867,7 +1881,7 @@ tasks:
       - python3 -m scripts.linux_release.repository_rehearsal candidates {{.CLI_ARGS}}
 
   release:rehearse:pacman-repositories:
-    desc: 'Signed pacman repository and AUR recipe fixtures through isolated pacman, makepkg and yay roots on an Arch-family host. Pass --receipt PATH after --'
+    desc: 'Signed pacman repository fixtures through isolated pacman and makepkg roots on an Arch-family host. Pass --receipt PATH after --'
     cmds:
       - python3 -m scripts.linux_release.pacman_rehearsal fixtures {{.CLI_ARGS}}
 
@@ -1880,11 +1894,6 @@ tasks:
     desc: 'The pacman fixtures inside one owned SSH VM. Pass --ssh-host, --ssh-port, --ssh-identity, --ssh-known-hosts and --receipt after --'
     cmds:
       - python3 -m scripts.linux_release.repository_remote {{.CLI_ARGS}}
-
-  release:publish:aur-recipe:
-    desc: 'Admit a release-aur-delivery request and prepare its separately bound AUR recipe. Pass request, provenance, collect or prepare and its options after --'
-    cmds:
-      - python3 -m scripts.linux_release.aur_delivery_workflow {{.CLI_ARGS}}
 
   release:rehearse:package-probe:
     desc: 'Run the extracted-package engine diagnostic under an owned transient AppArmor userns profile on a disposable native Linux host (-- --tree DIR [--lease PATH --output PATH --require-baseline-refusal])'

@@ -186,7 +186,7 @@ func ConfirmProcessLaunch(ctx context.Context, cmd *exec.Cmd) error {
 	_ = state.releaseRead.Close()
 	ready, err := readLaunchRecord(ctx, state.readyRead, 1)
 	if err != nil {
-		return err
+		return fmt.Errorf("native helper readiness: %w", err)
 	}
 	if len(ready) != 1 || ready[0] != 1 {
 		return fmt.Errorf("native helper did not reach launch handoff")
@@ -206,7 +206,7 @@ func ConfirmProcessLaunch(ctx context.Context, cmd *exec.Cmd) error {
 	_ = state.releaseWrite.Close()
 	record, err := readLaunchRecord(ctx, state.readyRead, 16)
 	if err != nil {
-		return err
+		return fmt.Errorf("native exec acknowledgment: %w", err)
 	}
 	if len(record) == 5 && record[0] == 2 {
 		return fmt.Errorf("native exec: %w", syscall.Errno(binary.LittleEndian.Uint32(record[1:])))

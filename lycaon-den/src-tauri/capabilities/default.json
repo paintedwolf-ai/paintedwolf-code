@@ -33,6 +33,8 @@
     "allow-read-clipboard-text",
     "allow-read-clipboard-image",
     "allow-write-clipboard-text",
+    "allow-write-secret-text",
+    "allow-clear-secret-text",
     "allow-paste-into-focused-view",
     "allow-path-kind",
     "allow-import-path-kind",

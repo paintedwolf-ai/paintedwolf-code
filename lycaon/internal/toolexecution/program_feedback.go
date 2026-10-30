@@ -220,7 +220,7 @@ func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLe
 		return nil, err
 	}
 	defer end()
-	if err = frame.validateHostContext(ctx, tc); err != nil {
+	if err := frame.validateHostContext(ctx, tc); err != nil {
 		return nil, err
 	}
 	parent := frame.lifetime.facts.parent

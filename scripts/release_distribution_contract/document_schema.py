@@ -60,7 +60,7 @@ def url(value, origin):
 
 def artifact(row, origin):
     exact(row, ARTIFACT)
-    require(isinstance(row["file"], str) and re.fullmatch(r"[A-Za-z0-9+._-]+", row["file"]),
+    require(isinstance(row["file"], str) and re.fullmatch(r"[A-Za-z0-9+._~-]+", row["file"]),
             "invalid distribution artifact name")
     url(row["url"], origin)
     require(PurePosixPath(urlsplit(row["url"]).path).name == row["file"], "distribution artifact URL name differs")
@@ -128,7 +128,7 @@ def nix(value, origin, commit):
 def validate(document):
     exact(document, {"schema_version", "kind", "mode", "version", "channel", "notes", "pub_date", "origin",
                      "source", "controller_commit", "updater_manifest_sha256", "signing_generation", "platforms",
-                     "repositories", "nix", "aur"})
+                     "repositories", "nix"})
     require(type(document["schema_version"]) is int and document["schema_version"] == 1
             and document["kind"] == "painted-wolf-distribution" and document["mode"] in {"production", "rehearsal"},
             "unsupported distribution document")
@@ -176,17 +176,4 @@ def validate(document):
     nix(document["nix"], origin, source["commit"])
     if any(key.startswith("linux-") for key in document["platforms"]):
         require(document["nix"] is not None, "public Linux distribution requires its exact Nix source")
-    aur = document["aur"]
-    require(isinstance(aur, dict) and type(aur.get("enabled")) is bool, "AUR requires an explicit availability state")
-    if aur["enabled"]:
-        exact(aur, {"enabled", "git_url", "commit", "source_sha256", "package_sha256"})
-        origins = ({"https://aur.archlinux.org/painted-wolf-code.git",
-                    "https://aur.archlinux.org/painted-wolf-code-bin.git"} if document["channel"] == "stable"
-                   else {"https://aur.archlinux.org/painted-wolf-code-preview-bin.git"})
-        require(aur["git_url"] in origins, "foreign or cross-channel AUR source")
-        digest(aur["commit"], 40)
-        digest(aur["source_sha256"])
-        digest(aur["package_sha256"])
-    else:
-        exact(aur, {"enabled"})
     return document

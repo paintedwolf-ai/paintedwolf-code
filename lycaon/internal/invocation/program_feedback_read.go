@@ -118,10 +118,10 @@ func (r *SQLRecorder) ReadProgramFeedback(ctx context.Context, session, program,
 	if execution == "" && (out.Projection.Program.State != "rejected" || out.Projection.Program.ProgressState != "rejected" || out.Projection.Program.StopCode == "") {
 		return nil, fmt.Errorf("program feedback without execution requires rejected progress envelope")
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	accepted = true

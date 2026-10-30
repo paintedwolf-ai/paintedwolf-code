@@ -89,7 +89,7 @@ func (r *SQLRecorder) SettleProgramProgress(ctx context.Context, in ProgressSett
 	if err != nil {
 		return err
 	}
-	if err = chargeProgramTrace(ctx, tx, id.ProgramID, 1, int64(len(in.State)+len(in.DetailReference)+32), traceChargeProgressSettlement); err != nil {
+	if err := chargeProgramTrace(ctx, tx, id.ProgramID, 1, int64(len(in.State)+len(in.DetailReference)+32), traceChargeProgressSettlement); err != nil {
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_progress SET state=?,owner_invoked=?,detail_ref=?,settled_at=? WHERE execution_id=? AND program_id=? AND actor_id=? AND session_id=? AND root_session_id=? AND scope_json=? AND state='running'`, in.State, in.OwnerInvoked, in.DetailReference, time.Now().UTC().Format(time.RFC3339Nano), id.ExecutionID, id.ProgramID, id.ActorID, id.SessionID, id.RootSessionID, string(scope))

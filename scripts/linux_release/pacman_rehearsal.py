@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 import uuid
 
-from .aur_rehearsal import rehearse as rehearse_recipe
 from .openpgp import ephemeral
 from .pacman_installation import PACKAGE, install
 from .pacman_repository import assemble
@@ -122,7 +121,6 @@ package() {{
         install(destination / package.name, work / "native-root", catalog, PACKAGE, channel)
         if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
             raise ValueError("native pacman upgrade did not install the selected payload")
-        rehearse_recipe(work, receipt, destination, package, catalog, wrong, version, architecture)
         if version == "0.0.2":
             old_receipt, old_directory = retained
             restored = publish(old_receipt, old_directory, origin, "https://repository.example.invalid", original_catalog,
@@ -195,12 +193,10 @@ package() {{
             "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": results,
             "cases": ["native-makepkg", "signed-database-and-files", "embedded-package-signature",
                       "wrong-key", "production-refuses-fixture", "changed-package", "missing-object",
-                      "channel-mismatch", "retained-generations", "pinned-aur-makepkg",
-                      "aur-input-signature-and-checksum", "aur-srcinfo", "aur-payload-identity",
-                      "native-repository-Syu-upgrade", "aur-installed-upgrade", "yay-local-recipe-installed-upgrade", "actual-pacman-file-ownership",
+                      "channel-mismatch", "retained-generations", "native-repository-Syu-upgrade",
+                      "actual-pacman-file-ownership",
                       "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
                       "retained-repository-recovery", "withdrawal-preserves-installed-package",
-                      "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused",
                       "explicit-key-rotation", "installed-successor-key-refusal", "withdrawn-reoffer-refused"]
                      + (["r2-pacman-Syu-installed-upgrade", "r2-recovery-preserves-installed-package",
                          "r2-database-signature-mismatch-refused", "r2-stale-publisher-refused"]

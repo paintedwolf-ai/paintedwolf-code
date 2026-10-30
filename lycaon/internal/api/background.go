@@ -24,6 +24,9 @@ func (s *Server) StopBackground(ctx context.Context) {
 		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
+	if s.repoProvider != nil {
+		s.repoProvider.Stop()
+	}
 	s.Sources.Watch.Stop(ctx)
 }
 
@@ -56,6 +59,11 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
+	// Producers above can admit repository analysis. Its settled callback can
+	// publish a board before the final attention settlement.
+	if s.repoProvider != nil {
+		_ = s.repoProvider.Wait(ctx)
+	}
 	// Detached work may have scheduled an attention rebuild.
 	s.eventPublisher.SettleAttention(ctx)
 }

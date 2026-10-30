@@ -197,7 +197,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		gap = string(encoded)
 	}
 	var definitionPresent int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
 		return err
 	}
 	events := int64(2)

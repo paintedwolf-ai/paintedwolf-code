@@ -5,20 +5,22 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestProgramMemoryRefusesWithoutWaitingAndReleasesOnce(t *testing.T) {
 	memory, err := NewProgramMemory(ProgramMemoryLimits{Working: 100, State: 10})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create bounded program memory", err)
 	}
 	first, err := memory.Reserve(t.Context(), 60)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reserve working memory", err)
 	}
 	state, err := memory.ReserveProgramState(t.Context(), 10)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reserve persistent program state", err)
 	}
 	var limit *ProgramMemoryLimitError
 	if _, err := memory.Reserve(t.Context(), 41); !errors.As(err, &limit) || limit.Account != "working" || limit.Maximum != 100 || limit.Observed != 101 || limit.Error() == "" {
@@ -55,7 +57,7 @@ func TestProgramMemoryRejectsInvalidRequests(t *testing.T) {
 	}
 	memory, err := NewProgramMemory(ProgramMemoryLimits{Working: 1, State: 1})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create minimal program memory", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -74,7 +76,7 @@ func TestProgramMemoryRejectsInvalidRequests(t *testing.T) {
 func TestProgramMemoryConcurrentReservationsNeverExceedCapacity(t *testing.T) {
 	memory, err := NewProgramMemory(ProgramMemoryLimits{Working: 64, State: 1})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create concurrent reservation ledger", err)
 	}
 	var wg sync.WaitGroup
 	for range 32 {
@@ -97,11 +99,11 @@ func TestProgramMemoryConcurrentReservationsNeverExceedCapacity(t *testing.T) {
 func TestCatalogProgramMemoryLimitsUseFrozenCatalog(t *testing.T) {
 	limits, err := CatalogProgramMemoryLimits()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "load frozen catalog memory limits", err)
 	}
 	catalog, err := LanguageV1()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "load frozen language catalog", err)
 	}
 	want := ProgramMemoryLimits{}
 	for _, limit := range catalog.Language.Limits {

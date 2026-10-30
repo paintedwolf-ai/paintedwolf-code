@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/coverage_changes.py",
+  "kind": "module",
+  "workstream": "verification-tools",
+  "disposition": "retain",
+  "reason": "Retain the 309-line changed-coverage orchestrator within 309 lines. Go, Den, and Python measurement adapters share one change scope and finding report; pinned package preparation is shared through the toolchain module. Focused tests preserve selected-file coverage, fail-closed measurement, subprocess instrumentation, and exact dependency preparation.",
+  "ceiling": 309,
+  "boundaries": {
+    "scripts/verification_tests/evidence/test_coverage_execution.py": "0c74dce692d02c5c9b82d6f7adcd701760a15a267df5ba867ea729a86892d962",
+    "scripts/verification_tests/ci/test_python_coverage_execution.py": "f8063af98dd0f5bc75b829f594f5c1ab20931f887e31e6d5aad2279227c806fb"
+  },
+  "reviewed_commit": "8fb92f31286891a180769e95d687a30c500c10be"
+}

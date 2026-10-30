@@ -274,8 +274,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	}
 	// A token is placed at its issuer the same way; anywhere else the
 	// screen decides the disclosure before the value touches the wire.
-	destinationID, _ := requestDestination(spec)
-	placements, reject := placedTokens(outbound, tokenJar, destinationID)
+	placements, reject := placedTokens(outbound, tokenJar, spec)
 	if reject != nil {
 		return exchanged{}, reject
 	}
@@ -411,7 +410,7 @@ func send(
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
 		UnixSocket: spec.socket,
-		HostHeader: spec.hostHeader,
+		HostHeader: outbound.hostHeader,
 		Resolve:    spec.resolve,
 	}
 	// A socket request reaches only the reviewed socket; its URL host names

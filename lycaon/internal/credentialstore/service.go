@@ -22,6 +22,7 @@ const (
 	NamespaceSecretFingerprint = "secret-fingerprint"
 	NamespaceManagedSecrets    = "managed-secrets"
 	NamespaceGitCredentials    = "git-credentials"
+	NamespaceCredentialFiles   = "credential-file-evidence"
 )
 
 // Slot declares one validated namespace inside the shared encrypted vault.

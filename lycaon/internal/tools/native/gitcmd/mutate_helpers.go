@@ -54,10 +54,11 @@ func settleOperate(p Prepared, res git.OperationResult, out *meteredOutput, stde
 }
 
 func settleRestoreError(err error, stderr io.Writer) (toolcontract.ProducerResult, error) {
-	if strings.Contains(err.Error(), "during restore review") || strings.Contains(err.Error(), "changed during review") {
+	var precondition *git.OperationError
+	if errors.As(err, &precondition) {
 		return settleMutationError(&toolrejection.ToolReject{
 			Code: "GIT_OPERATION_PRECONDITION",
-			Data: map[string]any{"reason": "repository_changed_during_review", "tool": "git_restore"},
+			Data: map[string]any{"reason": precondition.Reason, "paths": precondition.Paths, "tool": "git_restore"},
 		}, toolcontract.NoEffect)
 	}
 	return settleGitError(err, stderr, toolcontract.NoEffect)

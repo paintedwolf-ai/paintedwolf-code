@@ -2,15 +2,19 @@ package llm
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -40,6 +44,9 @@ func TestRegistryReadsDoNotWaitForRebuildDiscovery(t *testing.T) {
 	yaml := "providers:\n  - id: ollama\n    kind: ollama\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models: []\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 
 	reloadDone := make(chan error, 1)
@@ -78,6 +85,9 @@ func TestRefreshModelsRechecksAmbientProvider(t *testing.T) {
 	yaml := "providers:\n  - id: ambient\n    kind: openai-compatible\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    ambient_auth: test-chain\n    models:\n      - id: model\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 
 	current := registry.snapshot.Load()
@@ -114,6 +124,9 @@ func TestEnsureConfiguredRecoversWhenAmbientCredentialsAppear(t *testing.T) {
 ` + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 	if registry.IsConfigured("vertex") {
 		t.Fatal("vertex unexpectedly configured before credentials exist")
@@ -145,11 +158,46 @@ func TestEffectiveModelsDoesNotRepeatCachedDiscoveryFailure(t *testing.T) {
 	credentials := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "store credential", credentials.Set("hosted", "secret"))
 	registry, err := NewRegistry(t.Context(), catalog, credentials)
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 
 	_ = registry.EffectiveModels(t.Context(), "hosted")
 	_ = registry.EffectiveModels(t.Context(), "hosted")
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("discovery requests = %d, want one cached failure", got)
+	}
+}
+
+func TestRegistryUnwiredScreenRefusesEveryRequest(t *testing.T) {
+	inner := &responseRetryStub{}
+	registry := &Registry{}
+	registry.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{
+		Providers: map[string]modelcall.Provider{inner.ID(): inner}, DefaultID: inner.ID(),
+	}))
+	selected, err := registry.Get(inner.ID())
+	testutil.FailErr(t, "get provider", err)
+	for _, provider := range []modelcall.Provider{selected, registry.Default()} {
+		if provider.ID() != inner.ID() || !reflect.DeepEqual(provider.Models(), inner.Models()) || !reflect.DeepEqual(provider.Profile(), inner.Profile()) {
+			t.Fatal("unwired screen changed catalog metadata")
+		}
+		_, completeErr := provider.Complete(t.Context(), modelcall.CompletionRequest{})
+		_, streamErr := provider.Stream(t.Context(), modelcall.CompletionRequest{})
+		for _, err := range []error{completeErr, streamErr} {
+			var fault *ModelRequestSecretScreenFaultError
+			if !errors.As(err, &fault) || fault.Stage != secretmatch.FaultStageScreenUnwired || !SecretScreenBlocked(err) {
+				t.Fatalf("request error = %v, want unwired screen fault", err)
+			}
+		}
+	}
+	if inner.completeCalls != 0 || inner.streamCalls != 0 {
+		t.Fatalf("unscreened dispatch: complete=%d stream=%d", inner.completeCalls, inner.streamCalls)
+	}
+	registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	provider, err := registry.Get(inner.ID())
+	testutil.FailErr(t, "get explicitly screened provider", err)
+	if _, ok := provider.(*lifecycleProvider); !ok {
+		t.Fatal("screen installation lost lifecycle wrapper")
 	}
 }

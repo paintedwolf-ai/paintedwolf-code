@@ -65,14 +65,11 @@ func (s *manifestTraceStmt) Close() error {
 }
 
 func (s *manifestTraceStmt) Exec(args []driver.Value) (driver.Result, error) {
-	if s.entry {
-		s.trace.arguments = append(s.trace.arguments, len(args))
+	named := make([]driver.NamedValue, len(args))
+	for index, value := range args {
+		named[index] = driver.NamedValue{Ordinal: index + 1, Value: value}
 	}
-	result, err := s.Stmt.Exec(args)
-	if s.entry && err == nil && s.trace.afterExec != nil {
-		s.trace.afterExec()
-	}
-	return result, err
+	return s.ExecContext(context.Background(), named)
 }
 
 func (s *manifestTraceStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
@@ -144,6 +141,7 @@ func TestManifestMigrationBatchBoundariesPreserveRowsAndBoundCalls(t *testing.T)
 			}
 			rows, err := tx.Query(`SELECT path,sha256,git_oid,identity,size,mode,modified_ns FROM source_manifest_entries WHERE chunk_id=? ORDER BY path`, chunk.id)
 			testutil.FailErr(t, "read persisted chunk", err)
+			defer rows.Close()
 			var got []layoutEntry
 			for rows.Next() {
 				var entry layoutEntry
@@ -174,6 +172,7 @@ func TestManifestMigrationBatchFailureAndCancellationRollBack(t *testing.T) {
 			testutil.FailErr(t, "begin interrupted conversion", err)
 			insert, err := prepareLayoutEntryInsert(t.Context(), tx, 64)
 			testutil.FailErr(t, "prepare interrupted writer", err)
+			defer insert.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			entries := manifestBatchEntries(130)
@@ -201,25 +200,32 @@ func manifestBatchState(t *testing.T, database *sql.DB) map[string][]string {
 	t.Helper()
 	state := map[string][]string{}
 	for _, table := range []string{"sqlite_schema", "source_manifest_chunks", "source_manifest_entries", "history_storage_clock"} {
-		rows, err := database.Query("SELECT * FROM " + table)
-		testutil.FailErr(t, "read conversion state", err)
-		columns, err := rows.Columns()
-		testutil.FailErr(t, "read conversion columns", err)
-		var records []string
-		for rows.Next() {
-			values, destinations := make([]any, len(columns)), make([]any, len(columns))
-			for index := range values {
-				destinations[index] = &values[index]
-			}
-			testutil.FailErr(t, "read conversion row", rows.Scan(destinations...))
-			encoded, err := json.Marshal(values)
-			testutil.FailErr(t, "encode conversion row", err)
-			records = append(records, string(encoded))
-		}
-		testutil.FailErr(t, "read complete conversion state", rows.Err())
-		testutil.FailErr(t, "close conversion state cursor", rows.Close())
-		sort.Strings(records)
-		state[table] = records
+		state[table] = manifestBatchTableState(t, database, table)
 	}
 	return state
+}
+
+// Each cursor releases the sole database connection before the next table.
+func manifestBatchTableState(t *testing.T, database *sql.DB, table string) []string {
+	t.Helper()
+	rows, err := database.Query("SELECT * FROM " + table)
+	testutil.FailErr(t, "read conversion state", err)
+	defer rows.Close()
+	columns, err := rows.Columns()
+	testutil.FailErr(t, "read conversion columns", err)
+	var records []string
+	for rows.Next() {
+		values, destinations := make([]any, len(columns)), make([]any, len(columns))
+		for index := range values {
+			destinations[index] = &values[index]
+		}
+		testutil.FailErr(t, "read conversion row", rows.Scan(destinations...))
+		encoded, err := json.Marshal(values)
+		testutil.FailErr(t, "encode conversion row", err)
+		records = append(records, string(encoded))
+	}
+	testutil.FailErr(t, "read complete conversion state", rows.Err())
+	testutil.FailErr(t, "close conversion state cursor", rows.Close())
+	sort.Strings(records)
+	return records
 }

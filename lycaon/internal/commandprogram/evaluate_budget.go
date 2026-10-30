@@ -103,6 +103,7 @@ type childRun struct {
 	producer bool
 	// recorded executions settle their receipt through ports.Executions.
 	recorded bool
+	ctx      context.Context
 }
 
 // beginRecorded allocates an execution the evaluator itself runs (pipelines,
@@ -122,7 +123,7 @@ func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLoca
 		child.close(ctx)
 		return nil, err
 	}
-	child.recorded = true
+	child.recorded, child.ctx = true, ctx
 	return child, nil
 }
 
@@ -170,7 +171,7 @@ func (c *childRun) close(ctx context.Context) {
 	}
 	c.settled = true
 	if c.recorded {
-		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(ctx), c.inv, c.record)
+		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(c.ctx), c.inv, c.record)
 	}
 	e := c.frame.e
 	e.mu.Lock()

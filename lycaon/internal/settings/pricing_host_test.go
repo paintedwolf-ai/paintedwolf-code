@@ -368,3 +368,48 @@ func (f *flakyFetcher) Get(context.Context, string) ([]byte, error) {
 	f.mu.Unlock()
 	return body, nil
 }
+
+// heldHostFeed answers Document only once released, whatever its context says.
+type heldHostFeed struct {
+	*hostStubFeed
+	release chan struct{}
+}
+
+func (h *heldHostFeed) Document(context.Context) (*modelfeed.Document, error) {
+	<-h.release
+	return h.doc, nil
+}
+
+func TestPricingHostCloseStopsWaitingWithItsContext(t *testing.T) {
+	store, err := settings.NewPricingStoreAt(filepath.Join(t.TempDir(), "pricing.yaml"))
+	testutil.FailErr(t, "NewPricingStoreAt", err)
+	cfg, err := pricing.LoadSourcesConfig()
+	testutil.FailErr(t, "LoadSourcesConfig", err)
+	feed := &heldHostFeed{hostStubFeed: newHostStubFeed(t), release: make(chan struct{})}
+	host := &settings.PricingHost{
+		Store: store, Catalog: cfg, CacheDir: t.TempDir(),
+		Tracker:   costtest.NewTracker(t, cost.NoopPricer{}),
+		GetBytes:  (&countingFetcher{}).Get,
+		ModelFeed: feed, Kinds: stubKinds{},
+	}
+	// The default selection fetches models-dev, which the held feed never answers.
+	testutil.FailErr(t, "SyncFromStore", host.SyncFromStore(t.Context()))
+	if meta := pricingSourceMeta(host, "models-dev"); !meta.Refreshing {
+		t.Fatalf("models-dev meta = %+v, want refreshing", meta)
+	}
+
+	ended, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := host.Close(ended); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Close with an ended context = %v, want context.Canceled", err)
+	}
+	if meta := pricingSourceMeta(host, "models-dev"); !meta.Refreshing {
+		t.Fatalf("models-dev meta after an unfinished close = %+v, want still refreshing", meta)
+	}
+
+	close(feed.release)
+	testutil.FailErr(t, "Close after the fetch settled", host.Close(t.Context()))
+	if meta := pricingSourceMeta(host, "models-dev"); meta.Refreshing {
+		t.Fatalf("models-dev meta after close = %+v, want settled", meta)
+	}
+}

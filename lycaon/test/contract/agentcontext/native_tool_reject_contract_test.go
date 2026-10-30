@@ -26,6 +26,11 @@ import (
 
 func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
+	return securityNativeRuntime(t).Executor
+}
+
+func securityNativeRuntime(t *testing.T) *toolhost.Runtime {
+	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -42,7 +47,7 @@ func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	rt.Executor.Metadata.SetToolSchemas(schemas)
-	return rt.Executor
+	return rt
 }
 
 func assertStructuredRejectCode(t *testing.T, err error, code string) {

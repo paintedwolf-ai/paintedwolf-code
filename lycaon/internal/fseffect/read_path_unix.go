@@ -15,7 +15,7 @@ func (r *ReadRoot) Canonical(rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return file.Name(), nil
 }
 
@@ -34,7 +34,7 @@ func (r *ReadRoot) Readlink(rel string, admit func(string) error) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	if admit != nil {
 		if err := admit(filepath.Join(parent.Name(), name)); err != nil {
 			return "", err
@@ -67,7 +67,6 @@ func OpenMetadataRoot(path string) (*MetadataRoot, error) {
 	}
 	return &MetadataRoot{root: root}, nil
 }
-func (r *MetadataRoot) Path() string { return r.root.path }
 func (r *MetadataRoot) Close() error { r.root.close(); return nil }
 func (r *MetadataRoot) OpenExact(rel string, directory bool) (*os.File, error) {
 	relative, err := exactReadRelative(rel)

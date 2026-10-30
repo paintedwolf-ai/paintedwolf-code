@@ -52,8 +52,30 @@ func TestTerminalPTYReusesBoundedExecGuards(t *testing.T) {
 			path: filepath.Join(root, "lycaon", "internal", "exec", "pty_start.go"),
 			markers: []string{
 				"toExecOpts",
+				"newRunGuard",
 				"prepareNativeCommand",
-				"ValidateProcessInputs",
+				"superviseCommand",
+				"confine.ValidateProcessInputs",
+				"startWithPTY",
+				"guard.onStarted",
+				"confine.ConfirmProcessLaunch",
+			},
+		},
+		{
+			path: filepath.Join(root, "lycaon", "internal", "exec", "prepared.go"),
+			markers: []string{
+				"configureStageCmdEnv",
+				"confine.CaptureProcessInputs",
+				"opts.Launch.validate()",
+				"opts.Launch.CurrentAuthority(current)",
+				"confine.BindProcessInputs",
+			},
+		},
+		{
+			path: filepath.Join(root, "lycaon", "internal", "exec", "pipeline.go"),
+			markers: []string{
+				"buildExecCmd",
+				"prepareNativeCommand",
 			},
 		},
 		{

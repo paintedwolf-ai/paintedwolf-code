@@ -60,7 +60,7 @@ func (r *ProgramOutputRetention) Restore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var claim, initiating, encoded string
 		if err := rows.Scan(&claim, &initiating, &encoded); err != nil {

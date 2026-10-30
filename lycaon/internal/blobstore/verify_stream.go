@@ -22,7 +22,7 @@ func (s Store) VerifyStream(ctx context.Context, blob Blob, scratch []byte) erro
 	digest := sha256.New()
 	var count int64
 	for {
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		n, readErr := reader.Read(scratch)

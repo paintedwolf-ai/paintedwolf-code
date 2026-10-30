@@ -99,7 +99,8 @@ func (c *Counter) words(p []byte) {
 func (c *Counter) decode(p []byte, metrics CountMetrics) {
 	data := p
 	if len(c.pending) > 0 {
-		data = append(c.pending, p...)
+		c.pending = append(c.pending, p...)
+		data = c.pending
 		c.pending = nil
 	}
 	for len(data) > 0 {

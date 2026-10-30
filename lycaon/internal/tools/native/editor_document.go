@@ -139,6 +139,11 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	preview := previews[0]
 	change := editorFileChange(tctx, resolved, preview)
 	if err := tctx.ReviewFileChanges(ctx, change); err != nil {
+		tctx.WithholdFileDelivery(ctx)
+		return landing{}, err
+	}
+	delivery, err := tctx.PrepareFileDelivery(ctx)
+	if err != nil {
 		return landing{}, err
 	}
 	edit.ReviewedRevision = preview.Before.Revision
@@ -146,6 +151,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	if err != nil {
 		return landing{}, err
 	}
+	delivery.Commit(ctx)
 	applied.Document.ReadWhole = true
 	if tool != "write" {
 		applied.Document.ReadWhole = st.Editor.ReadWhole

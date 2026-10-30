@@ -1,6 +1,9 @@
 name: Set up verification
 description: Install pinned toolchains and dependencies for hosted verification
 inputs:
+  lookup-only:
+    description: Resolve reusable cache identities without provisioning or restoring payloads
+    default: 'false'
   setup:
     description: >-
       What the lane builds: verification (shared toolchains), shell (also the Tauri
@@ -28,7 +31,7 @@ inputs:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
   repository-tools:
-    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+    description: Install native package and signature tools used by repository and script-coverage fixtures
     default: 'false'
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
@@ -41,6 +44,24 @@ inputs:
     default: 'false'
     required: false
 outputs:
+  analysis-base-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.analysis.outputs.base-cache-hit }}
+  analysis-lint-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.analysis.outputs.lint-cache-hit }}
+  analysis-vulnerabilities-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.analysis.outputs.vulnerabilities-cache-hit }}
+  notices-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.notices.outputs.cache-hit }}
+  opengrep-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.opengrep.outputs.cache-hit }}
+  bun-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.bun.outputs.cache-hit }}
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
@@ -60,6 +81,7 @@ runs:
   using: composite
   steps:
     - name: Set verification compiler profiles
+      if: inputs.lookup-only != 'true'
       shell: bash
       run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
 
@@ -69,6 +91,7 @@ runs:
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
     - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      if: inputs.lookup-only != 'true'
       with:
         go-version-file: lycaon/go.mod
         cache: false
@@ -79,28 +102,34 @@ runs:
       if: inputs.setup != 'frontend'
       uses: ./.github/actions/cache-go
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         exact: ${{ inputs.save-caches }}
 
     - name: Restore analysis tools
+      id: analysis
       uses: ./.github/actions/cache-analysis-tools
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         tools: ${{ inputs.analysis }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      if: inputs.lookup-only != 'true'
       with:
         bun-version-file: .bun-version
         no-cache: true
 
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      if: inputs.lookup-only != 'true'
       with:
         node-version-file: .node-version
 
     - name: Install the pinned Rust toolchain
+      if: inputs.lookup-only != 'true'
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
     - name: Allow verification engines to create user namespaces
-      if: runner.os == 'Linux'
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux')
       shell: bash
       run: |
         if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
@@ -115,129 +144,160 @@ runs:
         fi
 
     - name: Provision Linux native test dependencies
-      if: runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true'))
       uses: ./.github/actions/setup-linux-native
       with:
         save: ${{ inputs.save-caches }}
 
     - uses: ./.github/actions/cache-document-core
       id: document
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
 
     - uses: ./.github/actions/cache-rust
       id: rust
       if: inputs.setup == 'shell' || inputs.setup == 'harness'
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
 
     - name: Restore the decision engine build
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
 
     - name: Provision pinned Go modules
-      if: inputs.setup != 'frontend'
+      if: inputs.lookup-only != 'true' && (inputs.setup != 'frontend')
       shell: bash
       run: ./task setup-dev -- --ci-inputs
 
     - name: Set up maintained OpenGrep
+      id: opengrep
       if: inputs.setup != 'frontend'
       uses: ./.github/actions/setup-opengrep
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         save: ${{ inputs.save-caches }}
 
-    # Source-scanning frontend tests shell out to ripgrep.
-    - name: Install ripgrep
-      if: inputs.setup != 'harness'
+    # The native search differential contract targets ripgrep 15 JSON.
+    - name: Install ripgrep reference
+      if: inputs.lookup-only != 'true' && (inputs.setup != 'harness')
       shell: bash
       run: |
         set -euo pipefail
-        command -v rg >/dev/null && exit 0
         if [[ "${RUNNER_OS}" == macOS ]]; then
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          command -v rg >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
         else
-          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ripgrep
+          case "${RUNNER_ARCH}" in
+            X64)
+              target=x86_64-unknown-linux-musl
+              digest=253ad0fd5fef0d64cba56c70dccdacc1916d4ed70ad057cc525fcdb0c3bbd2a7
+              ;;
+            ARM64)
+              target=aarch64-unknown-linux-gnu
+              digest=15f8cc2fab12d88491c54d49f38589922a9d6a7353c29b0a0856727bcdf80754
+              ;;
+            *) echo "Unsupported ripgrep reference architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          reference_dir="${RUNNER_TEMP}/ripgrep-reference-15.0.0"
+          mkdir -p "${reference_dir}"
+          archive="${reference_dir}/release.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-${target}.tar.gz" -o "${archive}"
+          printf '%s  %s\n' "${digest}" "${archive}" | sha256sum --check --strict
+          tar -xzf "${archive}" --strip-components=1 -C "${reference_dir}"
+          "${reference_dir}/rg" --version
+          printf '%s\n' "${reference_dir}" >> "${GITHUB_PATH}"
         fi
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
-      if: inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.setup != 'frontend' && inputs.runtime-engines == 'true')
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true')
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
     - name: Restore pinned frontend packages
+      id: bun
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         path: ~/.bun/install/cache
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
 
     - name: Provision frontend native test inputs
-      if: inputs.setup == 'frontend'
+      if: inputs.lookup-only != 'true' && (inputs.setup == 'frontend')
       shell: bash
       run: |
         ./task --version
         cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml
 
     - name: Provision native dependencies
-      if: inputs.setup == 'shell' || inputs.notices == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.setup == 'shell' || inputs.setup == 'harness' || inputs.notices == 'true')
       shell: bash
       run: cargo fetch --locked --manifest-path lycaon-den/src-tauri/Cargo.toml
 
     - name: Install frontend dependencies
+      if: inputs.lookup-only != 'true'
       shell: bash
       working-directory: lycaon-den
       run: bun install --frozen-lockfile
 
     # The notices script pins both tools; cargo-about otherwise compiles from source on every runner.
     - name: Restore notices tools
+      id: notices
       if: inputs.setup == 'shell' || inputs.notices == 'true'
       uses: ./.github/actions/cache-notices-tools
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
 
     # Preparation writes resources into this checkout; verification checks use isolated snapshots.
     - name: Prepare shell resource notices
-      if: inputs.setup == 'shell'
+      if: inputs.lookup-only != 'true' && (inputs.setup == 'shell')
       shell: bash
       run: ./task setup-dev -- --shell-resources
 
     # The lane's own licenses:notices check generates them; an offline lane needs only the tools.
     - name: Provision notices tools
-      if: inputs.setup != 'shell' && inputs.notices == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.setup != 'shell' && inputs.notices == 'true')
       shell: bash
       run: ./task setup-dev -- --notices-tools
 
     # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
     - name: Provision analysis tools
-      if: inputs.analysis != 'none'
+      if: inputs.lookup-only != 'true' && (inputs.analysis != 'none')
       shell: bash
       env:
         TOOLS: ${{ inputs.analysis }}
       run: python3 scripts/analysis_tools.py ensure "$TOOLS"
 
     - name: Restore lint diagnostics
-      if: runner.os == 'Linux' && (inputs.analysis == 'lint' || inputs.analysis == 'all')
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && (inputs.analysis == 'lint' || inputs.analysis == 'all'))
       uses: ./.github/actions/cache-lint-diagnostics
 
     - name: Set up WebKitGTK accessibility images
-      if: inputs.containers == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.containers == 'true')
       uses: ./.github/actions/setup-webkit-atspi-images
 
     - name: Install native repository tools
-      if: runner.os == 'Linux' && inputs.repository-tools == 'true'
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && inputs.repository-tools == 'true')
       shell: bash
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg pacman-package-manager rpm
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
 
     - name: Provision pinned browser
-      if: inputs.browser == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.browser == 'true')
       shell: bash
       run: ./task test:confine:linux -- --prepare
 
     - name: Provision pinned Nix and locked inputs
-      if: inputs.nix == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.nix == 'true')
       shell: bash
       run: ./task nix:check -- --prepare
 
@@ -246,7 +306,7 @@ runs:
       uses: ./.github/actions/setup-reference-userlands
 
     - name: Save pinned frontend packages
-      if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'
+      if: inputs.lookup-only != 'true' && (inputs.save-caches == 'true' && github.ref == 'refs/heads/main' && steps.bun.outputs.cache-hit != 'true')
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.bun/install/cache

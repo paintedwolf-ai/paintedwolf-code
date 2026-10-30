@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -16,13 +17,13 @@ func TestTypedNullOutputDoesNotAdmitAnOrdinaryPath(t *testing.T) {
 		}
 	}
 	bound := projectpaths.BoundPath{Null: true}
-	if output, err := bound.OpenNullOutput(nil); err == nil || output != nil {
+	if output, err := bound.OpenNullOutput(nil); err == nil || output != nil { //nolint:staticcheck // SA1012: nil is the deliberately malformed context this admission contract rejects.
 		t.Fatal("nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	output, err := bound.OpenNullOutput(ctx)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "open descriptor-backed null output", err)
 	}
 	data := []byte{'a', 0, 'b'}
 	if n, err := output.Write(data); err != nil || n != len(data) {
@@ -33,10 +34,10 @@ func TestTypedNullOutputDoesNotAdmitAnOrdinaryPath(t *testing.T) {
 		t.Fatalf("canceled n=%d err=%v", n, err)
 	}
 	if err := output.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close canceled null output", err)
 	}
 	if err := output.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "repeat idempotent null output close", err)
 	}
 	if n, err := output.Write(data); n != 0 || !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatalf("closed n=%d err=%v", n, err)

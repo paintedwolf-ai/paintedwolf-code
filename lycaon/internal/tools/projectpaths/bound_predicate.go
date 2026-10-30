@@ -27,7 +27,7 @@ func (p BoundPath) TestPath(operator string) (bool, error) {
 			err = openErr
 			break
 		}
-		defer root.Close()
+		defer func() { _ = root.Close() }()
 		value, err = root.Access(p.exactRelative, mode, p.admitRead)
 	case "-e", "-f", "-d", "-L", "-s":
 		var stat fseffect.EntryStat

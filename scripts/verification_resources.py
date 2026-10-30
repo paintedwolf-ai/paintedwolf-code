@@ -7,6 +7,7 @@ import time
 import uuid
 
 from verification_health import owner_identity
+from verification_lifecycle.terminal import retained
 from verification_history import estimate, read_history
 
 if os.name != "nt":
@@ -130,12 +131,17 @@ def order_of(entry):
         return 0
 
 
-def lease_operations(queue):
+def lease_operations(queue, held_reservations=()):
     """Admission held or awaited through a lease rather than a reservation file."""
     result = []
     for entry in queue.entries():
         kind = entry.get("kind")
-        if kind == "batch":
+        settling = entry.get("terminal_settlement", {}).get("state") in {"settling", "blocked"}
+        if settling and entry.get("reservation") not in held_reservations and not (
+                kind == "batch" and entry.get("phase") == "capture"):
+            admission = entry.get("admission", {"workers": entry.get("workers", capacity()), "locks": ["*"]})
+            result.append({**entry, **admission, "batch": entry["ticket"]})
+        elif kind == "batch":
             if entry["state"] == "running" and entry.get("phase") == "capture":
                 result.append({"ticket": entry["ticket"], "name": "Source capture", "workers": 1,
                                "state": "running", "locks": ["snapshot"], "batch": entry["ticket"],
@@ -156,10 +162,23 @@ def entries(queue, lock_file):
             try:
                 lock_file(lease, blocking=False)
             except BlockingIOError:
-                result.append(json.load(lease))
+                try:
+                    result.append(json.load(lease))
+                except json.JSONDecodeError:
+                    result.append({"ticket": path.stem, "name": "Unreadable resource reservation",
+                                   "state": "running", "workers": capacity(), "locks": ["*"],
+                                   "metadata_status": "unreadable"})
             else:
-                path.unlink()
-    result.extend(lease_operations(queue))
+                try:
+                    entry = json.load(lease)
+                except json.JSONDecodeError:
+                    path.unlink()
+                    continue
+                if retained(entry):
+                    result.append(entry)
+                else:
+                    path.unlink()
+    result.extend(lease_operations(queue, {entry["ticket"] for entry in result}))
     return sorted(result, key=lambda entry: (order_of(entry), entry["ticket"]))
 
 

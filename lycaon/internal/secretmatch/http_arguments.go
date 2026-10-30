@@ -9,7 +9,7 @@ import (
 func HTTPArgumentConsumed(args map[string]any, path string) bool {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	switch parts[0] {
-	case "url", "body_text", "body_json":
+	case "url", "host_header", "body_text", "body_json":
 		return true
 	case "headers", "query", "body_form":
 		return len(parts) == 3 && (parts[2] == "name" || parts[2] == "value")

@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestOwnedCancellationPreservesAnUnrelatedProcess(t *testing.T) {
 	unrelated := exec.Command("sleep", "30")
 	if err := unrelated.Start(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "start unrelated process fixture", err)
 	}
 	defer func() { _ = unrelated.Process.Kill(); _ = unrelated.Wait() }()
 	before, ok := osprocess.StartTime(unrelated.Process.Pid)
@@ -26,7 +27,7 @@ func TestOwnedCancellationPreservesAnUnrelatedProcess(t *testing.T) {
 	defer cancel()
 	owned, cleanup, err := PrepareCommand(ctx, "sleep", []string{"30"}, ExecOpts{Launch: HostLaunch("synthetic cancellation fixture")})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare owned cancellation command", err)
 	}
 	defer cleanup()
 	if err := RunInOwnGroup(t.Context(), owned); err == nil {

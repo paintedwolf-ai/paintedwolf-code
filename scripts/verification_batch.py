@@ -17,6 +17,8 @@ from verification_resources import blocked_reason, foreground_git_environment, o
 from verification_health import annotate, identity, owner_identity, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
+from verification_lifecycle.terminal import Capability, TerminalSettlement
+from verification_lifecycle.completion import Witness, recovered_outcome, sealed_receipt
 
 
 MAX_REQUESTS = 32
@@ -54,11 +56,15 @@ def recover_abandoned(entry):
     plan = read_optional(directory / "plan.json")
     if plan is None or (directory / "finished.json").exists():
         return
+    unverify_cleanup(directory, plan["requests"])
     for request in plan["requests"]:
         receipt = directory / (request["ticket"] + ".json")
         if not receipt.exists():
             write_json(receipt, unfinished_receipt(directory, request, "All batch execution processes exited"))
-    write_json(directory / "finished.json", {"finished_at": time.time()})
+    outcome = ({"status": "unverified", "exit_code": 2} if
+               entry.get("terminal_settlement", {}).get("unverified") is True else
+               recovered_outcome(directory, plan["requests"]))
+    write_json(directory / "finished.json", {"finished_at": time.time(), **outcome})
 
 
 def active_members(queue, members):
@@ -251,6 +257,14 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         sys.stdout.buffer.flush()
                     receipt = directory / (lease.entry["ticket"] + ".json")
                     if receipt.exists():
+                        value = read_json(receipt)
+                        if value["status"] == "passed" and not sealed_receipt(directory, value):
+                            if not (directory / "finished.json").exists() and any(
+                                    e["ticket"] == assignment["ticket"] for e in entries):
+                                time.sleep(0.05)
+                                continue
+                            value.update(status="unverified", exit_code=2, reason="Request ownership was not sealed")
+                            write_json(receipt, value)
                         batch_plan = read_optional(directory / "plan.json") or {}
                         members = batch_plan.get("batch", {}).get("members", [])
                         live = {e["ticket"] for e in entries}.intersection(members) - {lease.entry["ticket"]}
@@ -262,9 +276,12 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         if output:
                             sys.stdout.buffer.write(output)
                             sys.stdout.buffer.flush()
-                        result = read_json(receipt)
+                        result = value
                         print(f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})",
                               file=sys.stderr, flush=True)
+                        final = read_optional(directory / "finished.json") or {}
+                        if final.get("status") == "unverified":
+                            return 2
                         # The receipt keeps the tool's own code; the caller gets
                         # the runner's verdict.
                         return outcome_exit(result["exit_code"], result["status"] != "unverified")
@@ -349,6 +366,62 @@ def inherited_lease(queue, entry, lock_file):
         return False
 
 
+def wait_members(queue, entry, child, witness=None):
+    while child.poll() is None:
+        if witness is not None:
+            witness.drain()
+        if not active_members(queue, entry["members"]):
+            stop_child(child)
+            break
+        time.sleep(0.1)
+    code = child.wait()
+    if witness is not None:
+        witness.drain()
+    return code
+
+
+def restore_batch_descriptor(capability):
+    # This single-threaded supervisor owns reserved descriptor 200. Stage threads
+    # use their reservation's current descriptor and never restore FD numbers.
+    if capability.file.fileno() != LEASE_FD:
+        os.dup2(capability.file.fileno(), LEASE_FD, inheritable=True)
+        capability.file.close()
+        capability.file = os.fdopen(LEASE_FD, "r+")
+    os.environ["PW_TEST_EXECUTION_FD"] = str(LEASE_FD)
+
+
+def capture_source(queue, directory, capability):
+    command = ["bash", "scripts/repo-snapshot-lock.sh", "read", "--", "bash",
+               "scripts/test-source-snapshot.sh", "capture"]
+    captured = directory / "capture.commit"
+    with captured.open("wb") as output:
+        child = subprocess.Popen(command, cwd=capability.entry["source"], stdout=output, **child_options())
+        with queue.locked():
+            capability.entry.update(child_pid=child.pid, child_identity=identity(child.pid))
+            write_lease(capability.file, capability.entry)
+        terminal = False
+        blocked = False
+        try:
+            code = wait_members(queue, capability.entry, child)
+            terminal = True
+        finally:
+            stop_child(child)
+            if terminal:
+                blocked = TerminalSettlement(queue, capability, child).finish()
+            restore_batch_descriptor(capability)
+    return (2 if blocked else code), captured.read_text().strip()
+
+
+def unverify_cleanup(directory, requests, witness=None):
+    for request in requests:
+        path = directory / (request["ticket"] + ".json")
+        receipt = read_optional(path)
+        sealed = receipt is not None and (witness.sealed(receipt) if witness else sealed_receipt(directory, receipt))
+        if receipt and receipt["status"] == "passed" and not sealed:
+            receipt.update(status="unverified", exit_code=2, reason="Terminal producer cleanup was unverified")
+            write_json(path, receipt)
+
+
 def supervise(queue, directory, inherited_fd):
     directory = Path(directory)
     plan = read_json(directory / "plan.json")
@@ -356,46 +429,71 @@ def supervise(queue, directory, inherited_fd):
     os.dup2(inherited_fd, LEASE_FD, inheritable=True)
     if inherited_fd != LEASE_FD:
         os.close(inherited_fd)
-    lease = os.fdopen(LEASE_FD, "r+")
+    capability = Capability(queue.root / (entry["ticket"] + ".lease"), os.fdopen(LEASE_FD, "r+"), entry)
     os.environ["PW_TEST_EXECUTION_FD"] = str(LEASE_FD)
     child = None
+    witness = Witness(directory)
+    cleanup_blocked = False
+    code = 2
     try:
         with queue.locked():
             entry["pid"] = os.getpid()
             entry["owner_identity"] = owner_identity(os.getpid())
             entry["phase"] = "capture"
-            write_lease(lease, entry)
+            write_lease(capability.file, entry)
         print(f"test execution: admitted batch {entry['batch_id']} ({len(plan['requests'])} requests, worker budget {entry['workers']})", flush=True)
-        command = ["bash", "scripts/test-source-snapshot.sh", "run", "--", sys.executable,
-                   "scripts/test-execution.py", "batch-execute", "--", str(directory)]
-        child = subprocess.Popen(command, cwd=entry["source"], **child_options())
-        with queue.locked():
-            lease.seek(0)
-            entry = json.load(lease)
-            entry["child_pid"] = child.pid
-            entry["child_identity"] = identity(child.pid)
-            write_lease(lease, entry)
-        while child.poll() is None:
-            completed = all((directory / (member + ".json")).exists() for member in entry["members"])
-            if not completed and not active_members(queue, entry["members"]):
-                stop_child(child)
-                break
-            time.sleep(0.1)
-        return child.wait()
+        code, commit = capture_source(queue, directory, capability)
+        if code == 0 and active_members(queue, entry["members"]):
+            if len(commit) not in {40, 64} or any(c not in "0123456789abcdef" for c in commit):
+                raise ValueError("Source capture did not produce a commit identity")
+            command = ["bash", "scripts/test-source-snapshot.sh", "run-commit", commit, "--", sys.executable,
+                       "scripts/test-execution.py", "batch-execute", "--", str(directory)]
+            with queue.locked():
+                entry.pop("terminal_settlement", None)
+                options = child_options()
+                options["pass_fds"] = (*options.get("pass_fds", ()), witness.writer)
+                environment = dict(os.environ, PW_TEST_COMPLETION_FD=str(witness.writer))
+                child = subprocess.Popen(command, cwd=entry["source"], env=environment, **options)
+                witness.launched(commit)
+                entry.update(child_pid=child.pid, child_identity=identity(child.pid))
+                write_lease(capability.file, entry)
+            code = wait_members(queue, entry, child, witness)
     finally:
         if child is not None:
             stop_child(child)
+            # The executor may have updated phase/operation facts during execution.
+            capability.file.seek(0)
+            capability.entry = json.load(capability.file)
+            witness.drain()
+            unverify_cleanup(directory, plan["requests"], witness)
+            summary = read_optional(directory / "summary.json") or {}
+            normal = (witness.completed(child.returncode) and type(summary.get("requests")) is int
+                      and summary["requests"] == len(plan["requests"])
+                      and summary.get("source_commit") == commit
+                      and all((directory / (r["ticket"] + ".json")).exists() for r in plan["requests"]))
+            if normal:
+                cleanup_blocked = TerminalSettlement(queue, capability, child).finish(
+                    lambda: unverify_cleanup(directory, plan["requests"], witness))
+            else:
+                # A dead executor cannot declare its still-running stages terminal.
+                # Preserve inherited kernel/source custody and the existing orphan recovery.
+                cleanup_blocked = True
+                unverify_cleanup(directory, plan["requests"], witness)
         for member in plan["requests"]:
             receipt = directory / (member["ticket"] + ".json")
             if not receipt.exists():
                 write_json(receipt, unfinished_receipt(directory, member,
                                                        "Verification interrupted or source capture failed"))
-        # Descendants retain admission after supervisor exit.
-        lease.close()
+        witness.close()
         with queue.locked():
+            # Publish the live owner's verdict before empty-custody recovery can run.
+            write_json(directory / "finished.json", {"finished_at": time.time(),
+                       "status": "unverified" if cleanup_blocked or code in {2, 130, 143} else "completed",
+                       "exit_code": 2 if cleanup_blocked else code})
+            capability.file.close()
             queue.entries()
-        write_json(directory / "finished.json", {"finished_at": time.time()})
         prune(queue, Path(entry["source"]))
+    return 2 if cleanup_blocked else code
 
 
 def prune(queue, root):

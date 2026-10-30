@@ -32,3 +32,9 @@ mkdir -p lycaon-den/src-tauri/engine-root
 cd lycaon-den
 bun install --frozen-lockfile
 CI=false bun run tauri build --no-bundle --target "$(rustc --print host-tuple)"
+
+# Retain dependencies for both the host and selected release target.
+export CARGO_TARGET_DIR="${ROOT}/lycaon-den/src-tauri/target"
+PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon-den/src-tauri/Cargo.toml"
+PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon-den/src-tauri/Cargo.toml" \
+  --target "$(rustc --print host-tuple)"

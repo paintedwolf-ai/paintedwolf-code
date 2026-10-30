@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -31,38 +32,9 @@ func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
 	}
 	after := ""
 	for {
-		rows, err := tx.QueryContext(ctx, `SELECT id,payload_json FROM checkpoints
- WHERE kind='tool_approval' AND payload_json IS NOT NULL AND payload_json<>''
- AND id>? ORDER BY id LIMIT 32`, after)
+		batch, err := readEffectPermitIdentityBatch(ctx, tx, after)
 		if err != nil {
 			return err
-		}
-		type update struct {
-			id      string
-			payload []byte
-		}
-		batch := []update{}
-		for rows.Next() {
-			var id string
-			var raw []byte
-			if err := rows.Scan(&id, &raw); err != nil {
-				rows.Close()
-				return err
-			}
-			converted, err := structuredEffectPermitPayload(raw)
-			if err != nil {
-				rows.Close()
-				return fmt.Errorf("checkpoint authority format: %w", err)
-			}
-			batch = append(batch, update{id, converted})
-		}
-		err = rows.Err()
-		closeErr := rows.Close()
-		if err != nil {
-			return err
-		}
-		if closeErr != nil {
-			return closeErr
 		}
 		if len(batch) == 0 {
 			return nil
@@ -76,6 +48,36 @@ func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
 		}
 		after = batch[len(batch)-1].id
 	}
+}
+
+type effectPermitUpdate struct {
+	id      string
+	payload []byte
+}
+
+// readEffectPermitIdentityBatch retires its read cursor before the caller writes.
+func readEffectPermitIdentityBatch(ctx context.Context, tx *sql.Tx, after string) (batch []effectPermitUpdate, err error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id,payload_json FROM checkpoints
+ WHERE kind='tool_approval' AND payload_json IS NOT NULL AND payload_json<>''
+ AND id>? ORDER BY id LIMIT 32`, after)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, rows.Close()) }()
+	batch = []effectPermitUpdate{}
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		converted, err := structuredEffectPermitPayload(raw)
+		if err != nil {
+			return nil, fmt.Errorf("checkpoint authority format: %w", err)
+		}
+		batch = append(batch, effectPermitUpdate{id, converted})
+	}
+	return batch, rows.Err()
 }
 
 // Revision6 contains only structured once descriptors. Make that empty child

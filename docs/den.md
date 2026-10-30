@@ -28,8 +28,9 @@ The Linux release uses the same host contracts and client stores. An OS adapter
 owns native effects and reports capability facts; feature code must not infer
 support from a platform name or treat a successful no-op as implementation.
 The release target catalog is [`packaging/release-platforms.json`](../packaging/release-platforms.json).
-Both Linux architectures are candidates, not qualified public releases. Broad
-compatibility uses shared workflows and protocol-based native effects; a named
+Both Linux architectures are public release targets. Catalog selection does not
+establish installed or final-artifact qualification. Broad compatibility uses
+shared workflows and protocol-based native effects; a named
 adapter owns an environment-specific effect when standards or toolkit behavior
 do not preserve the required outcome.
 
@@ -42,9 +43,10 @@ implementation owns the workflow on every platform. Verification has three tiers
   runs applied confinement on amd64 and arm64. `den:webkit:atspi` checks
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
-- **Candidate:** the `linux-candidates` release job builds, stages, and audits
-  deb/rpm for both architectures without publishing. Pacman and Nix candidate
-  builds are owned by #940 and #927/#932; a deb/rpm result does not qualify them.
+- **Package source:** the independent `linux-candidates` workflow builds, stages
+  and audits DEB, RPM and pacman packages without publication authority. Regular
+  releases build both public architectures through the shared release lane; Nix
+  delivery builds the native closures. A build does not qualify installation.
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).
@@ -59,6 +61,7 @@ implementation owns the workflow on every platform. Verification has three tiers
 | Files, editor, search, review, and watching | Host `internal/editordoc`, `internal/projectsource`, `internal/search`, `internal/repochange`; Den `files/`; inotify watching reports `watch_limit_reached` on the wire, but Den does not show it yet | CI: `test:full`. Installed: outside edits, atomic save, rename, watch overflow, permissions, recovery | [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452) |
 | Local decision model (Bialy) | Host `internal/decide/bialy`; the engine runs on a hardware Vulkan GPU on Linux, as on MLX on macOS, never on the processor or a software rasterizer. Without one it reports `no_gpu`, the app says a Vulkan graphics card is needed, and decisions fall back to their lexical and default paths ([Decision engine](decision-engine.md#where-it-runs)) | CI: `decide:test`, `test:full`. Installed: GPU host meets the 1000 ms reference budget on Vulkan; a GPU-less guest shows the `no_gpu` notice | [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
 | Command, terminal, background work, and authenticated Git | Host `internal/exec`, `internal/userpath`, `internal/gitexec`, `internal/gitcredential`; the desktop launch resolves the account's login shell; SSH-agent discovery; bundled static Git with `GIT_SSL_CAINFO` and a per-host proxy ([Git](git.md)) | CI: `test:full`. Installed: desktop-launched PATH, SSH and signing, HTTPS and LFS, on KDE and arm64 | [#47](https://github.com/paintedwolf-ai/paintedwolf-code/issues/47), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
+| Execute code admitted by the platform authority | Immutable application generation plus administrator-installed module roots in the protected Linux mount view; user-writable files cannot supply executable mappings. macOS uses Apple signatures and library validation. An unneeded root-installed library remains admissible; in-memory loading by already compromised code is a residual on both platforms ([Security](security.md#protected-linux-launch)) | Native launch and late-volume attachment contracts; installed qualification on both architectures. Residual authority follows the platform contract | [#1145](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1145), [#1121](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1121) |
 | Stored credentials survive restart and recovery | Host `internal/credentialstore`; on packaged installs the `pw-vault-identity` system service holds the identity, with no app-password fallback ([Secrets § Credential vault](secrets.md#credential-vault)); launcher verification and non-dumpable processes protect it | CI: `test:full` (`vaultidentity`, `launchverify`, custody). Installed: fresh, existing, and damaged vaults; missing service; backup and restore; refused launchers; ptrace denial | [#448](https://github.com/paintedwolf-ai/paintedwolf-code/issues/448), [#756](https://github.com/paintedwolf-ai/paintedwolf-code/issues/756), [#754](https://github.com/paintedwolf-ai/paintedwolf-code/issues/754) |
 | Confirm the person before reveal or unlock | Den `src-tauri/src/presence/linux.rs`: polkit `CheckAuthorization` on `dev.paintedwolf.code.confirm-presence` (`linux_user_presence`); unavailable system authentication refuses the operation ([Secrets § Unlocking a chat](secrets.md#unlocking-a-chat-and-revealing-a-value)) | CI: `den:test:rust`, `test:full`. Installed: a typed-password reveal and unlock, the KDE agent, cancel, expiry, wrong window, and lock during the prompt | [#755](https://github.com/paintedwolf-ai/paintedwolf-code/issues/755) |
 | End unlocks when the person steps away | Host vault owns unlock lifetime; Den `src-tauri/src/vault_lock/linux.rs` ends unlocks on lock, sleep and user switch as macOS does wherever the locker is observable (logind's session with an answering screen saver service, or a `LockedHint` seen true); where it is not, as with lockers that bypass logind on wlroots compositors, Hyprland and i3, it falls back to the display server's input idle (`vault_lock/linux/idle.rs`: Wayland `ext_idle_notifier_v1`, GNOME Shell's idle monitor bound to the compositor process, X11 MIT-SCREEN-SAVER) at the engine's unlock idle period and locks with `away`. With neither, presence is unavailable with a typed reason | CI: `den:test:rust` (private logind, screen-saver and idle-monitor buses; in-test compositor; Xvfb). Installed: GNOME, KDE and Xfce lock with `screen_locked` and no `away`; sway, Hyprland and i3 idle with `away`; real suspend; lock during a presence prompt | [#45](https://github.com/paintedwolf-ai/paintedwolf-code/issues/45) |
@@ -152,12 +155,12 @@ Installation modes remain separate even when they share the same payload:
 | Installation mode | Installation and integration | Updates and qualification |
 |-------------------|------------------------------|---------------------------|
 | deb and rpm | #758 owns package identity; #736 owns launchers | #759/#450 own delivery and notices; #456 qualifies installed workflows |
-| pacman, including packages installed through AUR/yay | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories and AUR recipes; #943 qualifies installed workflows |
+| pacman | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories; #943 qualifies installed workflows |
 | NixOS system module | #927/#928 own the closure and running layout; #929 owns administrator-selected generation trust | #931 owns pins and generation updates; #932 qualifies installed workflows |
 | Nix package-only, user profile, Home Manager and temporary `nix run` | #927/#928 own four distinct installation modes; system service trust requires separate administrator integration | #931 owns the actual installation owner's update/rollback contract; #932 qualifies each mode |
 
-A package installed through yay is pacman-owned. Nix-on-Arch is an additional
-installation mode and cannot satisfy a native pacman row. Store immutability,
+Nix-on-Arch is an additional installation mode and cannot satisfy a native pacman
+row. Store immutability,
 Nix build sandboxing and application command confinement are distinct: #930
 owns Nix development and daemon authority inside the application boundary.
 Nix generation rollback does not roll back the application's mutable data or

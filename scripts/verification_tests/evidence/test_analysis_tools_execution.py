@@ -10,7 +10,7 @@ import analysis_tools as tools
 class AnalysisToolsTests(unittest.TestCase):
     def test_pins_are_exact_and_match_the_existing_inventory_sources(self):
         self.assertEqual(tools.SETS["base"], ["task", "sqlc"])
-        self.assertEqual(tools.SETS["all"], ["task", "sqlc", "golangci-lint", "deadcode", "govulncheck"])
+        self.assertEqual(tools.SETS["all"], ["task", "sqlc", "golangci-lint", "deadcode", "actionlint", "govulncheck"])
         for name in tools.TOOLS:
             package, module, version = tools.pin(name)
             self.assertTrue(package.startswith(module + "/"))

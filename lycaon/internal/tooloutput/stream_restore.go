@@ -28,7 +28,7 @@ func RestoreRetainedStreamBody(ctx context.Context, store blobstore.Store, refer
 	if ctx == nil || memory == nil || releaseDisk == nil || releaseState == nil || store.Retained == nil {
 		return nil, fmt.Errorf("stream recovery requires durable retention and admitted body leases")
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	blob := reference.Blob
@@ -63,7 +63,7 @@ func RestoreRetainedStreamBody(ctx context.Context, store blobstore.Store, refer
 		return nil, fmt.Errorf("stream recovery reader admission returned no lease")
 	}
 	defer releaseReader()
-	if err = store.VerifyStream(ctx, blob, make([]byte, 32<<10)); err != nil {
+	if err := store.VerifyStream(ctx, blob, make([]byte, 32<<10)); err != nil {
 		return nil, err
 	}
 	return &RetainedStreamBody{reference: reference, store: store, release: releaseDisk, memory: memory, releaseState: releaseState}, nil

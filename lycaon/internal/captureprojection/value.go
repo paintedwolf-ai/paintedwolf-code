@@ -15,7 +15,7 @@ func (p *Projector) JSON(ctx context.Context, scope Scope, label string, raw []b
 		return nil, Metadata{}, ErrUnavailable
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = scopeContext(ctx, scope)
 	}
 	if len(raw) == 0 {
 		return nil, Metadata{StructuredCoverage: true}, nil

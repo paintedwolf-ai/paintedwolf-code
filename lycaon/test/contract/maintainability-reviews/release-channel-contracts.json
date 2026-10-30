@@ -4,11 +4,12 @@
   "kind": "test_suite",
   "workstream": "release-admission",
   "disposition": "retain",
-  "reason": "The measured 603 code-bearing lines hold release channel, manifest, and candidate isolation invariants across the packaging path. Keep these fixture-backed publication contracts together at that ceiling; the hosted capacity suite separately owns caller scheduling and runner bounds.",
-  "reviewed_commit": "f1b979762ef516fb786b49211f311e5e2a85030f",
+  "reason": "Retain the release channel, manifest, catalog, updater/channel, signing-custody and candidate isolation contracts within 603 code-bearing lines. The complete collector and public-artifact contracts live in the shared lane-model suite. These fixture-backed publication contracts share the packaging path; the hosted capacity suite separately owns caller scheduling, bounded source metadata and runner bounds. Candidate source metadata grants no installed or publication authority.",
+  "reviewed_commit": "a9b7288ebbceab62011ac3d92133b78e3d65d159",
   "ceiling": 603,
   "boundaries": {
-    "lycaon/test/contract/runner/release_channel_invariants_test.go": "f61d94ff9d9578141abea85c14151e215cdfe85eae959d4bef4889e7afa475c7",
-    "lycaon/test/contract/hosted/linux_candidate_capacity_contract_test.go": "4f180c4c9a1e652cb05efd2e8e48da185a5468fe155eca8b6a484449c143481f"
+    "lycaon/test/contract/runner/release_channel_invariants_test.go": "bd9b5db675364519eebdb59edb5710fc6cd1b27b9ee91237e93d8ac8051eb4bb",
+    "lycaon/test/contract/runner/release_public_artifacts_contract_test.go": "495764c9c5399bb28d7c3f760344dab439af8ccacd47259e6972cf9d5a55ba83",
+    "lycaon/test/contract/hosted/linux_candidate_capacity_contract_test.go": "9837752ed8e2c7420d31eba9b7b8eecebd03922c5fc45d106e36802b2040dc98"
   }
 }

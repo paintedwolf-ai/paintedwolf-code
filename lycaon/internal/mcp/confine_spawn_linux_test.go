@@ -3,6 +3,7 @@
 package mcp
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"os/user"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -35,7 +37,7 @@ func TestLinuxStdioMCPAppliedBoundary(t *testing.T) {
 	testutil.FailErr(t, "native outside write control", os.WriteFile(guard, []byte("before"), 0o600))
 	root := t.TempDir()
 	const script = `import errno, sys
-open('allowed.txt', 'w').write('allowed')
+open(sys.argv[2], 'w').write('allowed')
 try:
     open(sys.argv[1], 'w').write('escaped')
 except OSError as error:
@@ -43,15 +45,16 @@ except OSError as error:
 else:
     raise RuntimeError('MCP process wrote outside its grant')
 `
-	spawn, err := prepareStdioCommand(t.Context(), "linux-boundary-fixture", python, []string{"-I", "-c", script, guard}, stdioEnv{
+	spawn, err := prepareStdioCommand(t.Context(), "linux-boundary-fixture", python, []string{"-I", "-c", script, guard, filepath.Join(root, "allowed.txt")}, stdioEnv{
 		base: []string{"PATH=" + os.Getenv("PATH")},
 	}, []string{root})
 	testutil.FailErr(t, "prepare confined MCP fixture", err)
 	defer spawn.cleanup()
 	defer spawn.releaseEgress()
-	spawn.cmd.Dir = root
-	if output, err := spawn.cmd.CombinedOutput(); err != nil {
-		t.Fatalf("applied MCP fixture: %v: %s", err, output)
+	var output bytes.Buffer
+	spawn.cmd.Stdout, spawn.cmd.Stderr = &output, &output
+	if err := execpkg.RunPrepared(spawn.cmd); err != nil {
+		t.Fatalf("applied MCP fixture: %v: %s", err, output.String())
 	}
 	data, err := os.ReadFile(guard)
 	testutil.FailErr(t, "read outside fixture", err)

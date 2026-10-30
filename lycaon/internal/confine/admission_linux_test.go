@@ -14,8 +14,7 @@ func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
 	TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	previous := linuxCapabilities()
-	t.Cleanup(func() { linuxHost.caps = previous })
+	restoreLinuxCapabilities(t)
 	for _, code := range []string{
 		linuxsandbox.UnavailableUserNamespacesDenied,
 		linuxsandbox.UnavailableUserNamespacesAppArmor,
@@ -24,9 +23,9 @@ func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
 		linuxsandbox.UnavailableHelper,
 	} {
 		t.Run(code, func(t *testing.T) {
-			linuxHost.caps = linuxsandbox.Capabilities{
+			setProbedLinuxCapabilities(linuxsandbox.Capabilities{
 				Unavailable: []linuxsandbox.Unavailability{{Code: code}},
-			}
+			})
 			if Enforcing() {
 				t.Fatal("unavailable boundary reported active enforcement")
 			}
@@ -49,4 +48,27 @@ func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
 			testutil.FailErr(t, "admit approved host execution", RequireApplied(applied))
 		})
 	}
+}
+
+// restoreLinuxCapabilities puts the process capability cache back after the
+// test, including the probe time that decides when an unavailable result is
+// re-probed.
+func restoreLinuxCapabilities(t *testing.T) {
+	t.Helper()
+	linuxHost.mu.Lock()
+	caps, probed, probedAt := linuxHost.caps, linuxHost.probed, linuxHost.probedAt
+	linuxHost.mu.Unlock()
+	t.Cleanup(func() {
+		linuxHost.mu.Lock()
+		linuxHost.caps, linuxHost.probed, linuxHost.probedAt = caps, probed, probedAt
+		linuxHost.mu.Unlock()
+	})
+}
+
+// setProbedLinuxCapabilities installs caps as the result of a probe that just
+// ran, so the cache reports them instead of re-probing the real host.
+func setProbedLinuxCapabilities(caps linuxsandbox.Capabilities) {
+	linuxHost.mu.Lock()
+	defer linuxHost.mu.Unlock()
+	linuxHost.caps, linuxHost.probed, linuxHost.probedAt = caps, true, linuxHost.now()
 }

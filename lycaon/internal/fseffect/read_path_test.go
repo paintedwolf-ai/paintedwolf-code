@@ -19,7 +19,7 @@ func TestReadPathOperationsUseTheSameContainedWalk(t *testing.T) {
 	testutil.FailErr(t, "create leaf link", os.Symlink("target", filepath.Join(dir, "inside", "link")))
 	root, err := OpenReadRoot(dir)
 	testutil.FailErr(t, "open contained root", err)
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	canonical, err := root.Canonical("alias/link")
 	testutil.FailErr(t, "resolve contained canonical name", err)
 	if canonical != filepath.Join(root.Path(), "inside", "target") {

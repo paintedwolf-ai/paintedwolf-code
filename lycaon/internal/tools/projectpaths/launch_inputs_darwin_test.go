@@ -14,6 +14,7 @@ import (
 	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -25,14 +26,14 @@ func TestActualLaunchUsesCheckedProgramPathHandles(t *testing.T) {
 	tc.Source.Roots = append(tc.Source.Roots, projectroot.RootRef{ID: "native-fixture", Label: "native-fixture", Path: "/bin"})
 	paths, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "pkg")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "bind exact program path authority", err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	plan := hostexec.AgentLaunch(hostexec.LaunchAgentCommand, "synthetic checked path launch", &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}).WithPathAuthority(paths)
 	cmd, cleanup, err := hostexec.PrepareCommand(ctx, "/bin/echo", []string{"literal argument"}, hostexec.ExecOpts{Launch: plan, Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare checked path launch", err)
 	}
 	defer cleanup()
 	var output bytes.Buffer
@@ -48,12 +49,12 @@ func TestActualLaunchUsesCheckedProgramPathHandles(t *testing.T) {
 func TestLaunchInputsPreserveActualTargetReadRefusal(t *testing.T) {
 	tc, root := readSessionContext(t)
 	if err := os.Symlink("../a.go", filepath.Join(root, "pkg", "alias")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create symlink-refusal fixture", err)
 	}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg", "pkg/**"}}})
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "pkg")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "bind restricted read path authority", err)
 	}
 	if file, err := paths.OpenExecutable(t.Context(), "alias"); err == nil {
 		file.Close()

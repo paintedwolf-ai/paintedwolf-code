@@ -5,44 +5,17 @@ package exec
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"golang.org/x/sys/unix"
 )
-
-type linuxPinnedPaths struct {
-	cwd, entry string
-	revoked    bool
-}
-
-func (p *linuxPinnedPaths) OpenExecutable(ctx context.Context, name string) (*os.File, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if p.revoked || name != p.entry {
-		return nil, os.ErrPermission
-	}
-	return os.Open(name)
-}
-func (p *linuxPinnedPaths) OpenCwd(ctx context.Context) (*os.File, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if p.revoked {
-		return nil, os.ErrPermission
-	}
-	return os.Open(p.cwd)
-}
 
 type linuxPinnedPayload struct {
 	Args               []string
@@ -50,69 +23,15 @@ type linuxPinnedPayload struct {
 	ProtocolFDs        []int
 }
 
-func TestPinnedLinuxPayload(t *testing.T) {
-	if os.Getenv("PW_PINNED_PAYLOAD") != "1" {
-		return
-	}
-	cwd, err := os.Getwd()
-	testutil.FailErr(t, "observe native cwd", err)
-	aux, err := linuxPayloadExecfn()
-	testutil.FailErr(t, "observe native AT_EXECFN", err)
-	payload := linuxPinnedPayload{Args: os.Args, Cwd: cwd, AuxExecutable: aux}
-	// The final trusted helper's image/control descriptors are all below16.
-	for fd := 3; fd < 16; fd++ {
-		var stat unix.Stat_t
-		if unix.Fstat(fd, &stat) == nil && (stat.Mode&unix.S_IFMT == unix.S_IFSOCK || stat.Mode&unix.S_IFMT == unix.S_IFIFO || stat.Mode&unix.S_IFMT == unix.S_IFREG) {
-			payload.ProtocolFDs = append(payload.ProtocolFDs, fd)
-		}
-	}
-	raw, err := json.Marshal(payload)
-	testutil.FailErr(t, "encode native payload facts", err)
-	_, err = os.Stdout.Write(raw)
-	if err != nil {
-		os.Exit(3)
-	}
-	os.Exit(0)
-}
-
-// Read the kernel auxiliary vector and the exact pointed-to executable name.
-// No reconstructed argv value substitutes for the actual AT_EXECFN observation.
-func linuxPayloadExecfn() (string, error) {
-	data, err := os.ReadFile("/proc/self/auxv")
-	if err != nil {
-		return "", err
-	}
-	word := int(unsafe.Sizeof(uintptr(0)))
-	for offset := 0; offset+2*word <= len(data); offset += 2 * word {
-		var key, value uint64
-		if word == 8 {
-			key = binary.NativeEndian.Uint64(data[offset:])
-			value = binary.NativeEndian.Uint64(data[offset+word:])
-		} else {
-			key = uint64(binary.NativeEndian.Uint32(data[offset:]))
-			value = uint64(binary.NativeEndian.Uint32(data[offset+word:]))
-		}
-		if key != 31 {
-			continue
-		}
-		file, err := os.Open("/proc/self/mem")
-		if err != nil {
-			return "", err
-		}
-		defer file.Close()
-		var buffer [4096]byte
-		n, err := file.ReadAt(buffer[:], int64(value))
-		if zero := bytes.IndexByte(buffer[:n], 0); zero >= 0 {
-			return string(buffer[:zero]), nil
-		}
-		return "", fmt.Errorf("unterminated native execfn: %w", err)
-	}
-	return "", fmt.Errorf("native AT_EXECFN absent")
-}
-
 func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *testing.T) {
-	self, err := os.Executable()
-	testutil.FailErr(t, "locate native fixture", err)
+	confine.TestingSetAutoConfine(t)
+	// Execute-only images are intentionally non-dumpable. Read AT_EXECFN from
+	// the process's initial auxiliary vector rather than reopening /proc/self.
+	self := filepath.Join(t.TempDir(), "native-payload")
+	compile := osexec.CommandContext(t.Context(), "cc", "testdata/pinned_payload.c", "-o", self)
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("build native payload fixture: %v: %s", err, output)
+	}
 	image, err := os.ReadFile(self)
 	testutil.FailErr(t, "read source fixture", err)
 	root := t.TempDir()
@@ -127,27 +46,37 @@ func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *test
 		{"relative PATH", "synthetic-argv-zero", "bin:/usr/bin:/bin", "bin/synthetic-argv-zero"},
 		{"empty PATH", "synthetic-argv-zero", ":/usr/bin:/bin", "synthetic-argv-zero"},
 	} {
-		t.Run(fixture.label, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-			defer cancel()
-			args := []string{"-test.run=^TestPinnedLinuxPayload$", "--", "literal space", "--launch-ready-fd", "user data"}
-			cmd, cleanup, err := PrepareCommand(ctx, fixture.name, args, ExecOpts{Launch: HostLaunch("synthetic native binary fixture"), Dir: root, Env: []string{"PATH=" + fixture.path, "PW_PINNED_PAYLOAD=1"}})
-			testutil.FailErr(t, "prepare native filename fixture", err)
-			defer cleanup()
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout, cmd.Stderr = &stdout, &stderr
-			if err := RunInOwnGroup(t.Context(), cmd); err != nil {
-				t.Fatalf("native launch: %v; diagnostic %s", err, stderr.String())
+		for _, confined := range []bool{false, true} {
+			name := fixture.label
+			if confined {
+				name += "/confined"
 			}
-			var payload linuxPinnedPayload
-			testutil.FailErr(t, "decode actual native facts", json.Unmarshal(stdout.Bytes(), &payload))
-			if !slices.Equal(payload.Args, append([]string{fixture.name}, args...)) || payload.Cwd != root || len(payload.ProtocolFDs) != 0 {
-				t.Fatalf("native facts changed: %+v", payload)
-			}
-			if payload.AuxExecutable != fixture.execfn {
-				t.Fatalf("native AT_EXECFN spelling changed: %q", payload.AuxExecutable)
-			}
-		})
+			t.Run(name, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+				defer cancel()
+				args := []string{"-test.run=^TestPinnedLinuxPayload$", "--", "literal space", "--launch-ready-fd", "user data"}
+				plan := HostLaunch("synthetic native binary fixture")
+				if confined {
+					plan = AgentLaunch(LaunchAgentCommand, "synthetic native binary fixture", &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}).WithPathAuthority(confine.NativeLaunchPaths(root))
+				}
+				cmd, cleanup, err := PrepareCommand(ctx, fixture.name, args, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=" + fixture.path}})
+				testutil.FailErr(t, "prepare native filename fixture", err)
+				defer cleanup()
+				var stdout, stderr bytes.Buffer
+				cmd.Stdout, cmd.Stderr = &stdout, &stderr
+				if err := RunInOwnGroup(ctx, cmd); err != nil {
+					t.Fatalf("native launch: %v; diagnostic %s; stdout %s", err, stderr.String(), stdout.String())
+				}
+				var payload linuxPinnedPayload
+				testutil.FailErr(t, "decode actual native facts", json.Unmarshal(stdout.Bytes(), &payload))
+				if !slices.Equal(payload.Args, append([]string{fixture.name}, args...)) || payload.Cwd != root || len(payload.ProtocolFDs) != 0 {
+					t.Fatalf("native facts changed: %+v", payload)
+				}
+				if payload.AuxExecutable != fixture.execfn {
+					t.Fatalf("native AT_EXECFN spelling changed: %q", payload.AuxExecutable)
+				}
+			})
+		}
 	}
 }
 

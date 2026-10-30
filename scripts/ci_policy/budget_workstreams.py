@@ -111,7 +111,7 @@ def block(identity, rows, observation):
         renewed = sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in findings)
         summary = f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |"
         if len('\n'.join(lines).encode()) + len(summary.encode()) > 40000:
-            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete qualification report.']
+            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete nightly report.']
             break
         lines.append(summary)
         visible.append((name, findings))
@@ -135,10 +135,10 @@ def block(identity, rows, observation):
         lines += notes + ['', '</details>']
         if len('\n'.join(lines).encode()) > 55000:
             del lines[detail_start:]
-            lines += ['', 'Additional module details are in the linked complete qualification report.']
+            lines += ['', 'Additional module details are in the linked complete nightly report.']
             break
     lines += ['', f"[Measured main snapshot and complete report]({observation['run_url']}) at `{observation['source_sha']}`.", '',
-              'The qualification report retains full source membership, exceptions, and review evidence. '
+              'The nightly report retains full source membership, exceptions, and review evidence. '
               'The area fingerprint covers all those facts. This issue closes only when all admitted findings '
               'are removed, below threshold, or retained by valid bounded review.', END]
     return '\n'.join(lines)
@@ -152,7 +152,14 @@ def body_for(issue, managed):
     return body.rstrip() + ('\n\n' if body.strip() else '') + managed
 
 
-def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
+def plan(issues, artifacts, observation, backfill=False, intake_keys=None, held=lambda row: False):
+    """`held` marks artifacts whose measurement inputs changed after the report source.
+
+    A held artifact keeps the listing its open area issue already records and is
+    never admitted from this report. An area whose held artifact would leave or
+    reopen it is not written. Intake that a hold withholds is returned as a `hold`
+    operation, which is never written.
+    """
     intake_keys = intake_keys if intake_keys is not None else {k for k, r in artifacts.items() if r['touched']}
     groups, old, previous, states = {}, {}, {}, {}
     for issue in sorted(issues, key=lambda i: (START not in (i.get('body') or ''), i['number'])):
@@ -167,6 +174,16 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             if row:
                 old.setdefault(workstream(row), []).append(issue)
                 previous.setdefault(row['key'], (issue, row))
+    holds, frozen, areas = set(), set(), {}
+    for identity in sorted(set(artifacts) | set(previous)):
+        row = artifacts.get(identity) or previous[identity][1]
+        areas.setdefault(workstream(row), set()).add((row['category'], row['id']))
+        if not held(row):
+            continue
+        holds.add(identity)
+        prior = previous.get(identity)
+        if prior and (identity not in artifacts or prior[0]['state'] != 'open'):
+            frozen.add(workstream(row))
     dismissed_areas = set()
     for number, state in states.items():
         issue = next(i for i in issues if i['number'] == number)
@@ -179,6 +196,10 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
     active, suppressed = {}, 0
     for identity, row in sorted(artifacts.items()):
         prior = previous.get(identity)
+        if identity in holds:
+            if prior:
+                active.setdefault(workstream(row), []).append(row)
+            continue
         legacy_dismissal = (prior and prior[0]['number'] not in states
                             and prior[0]['state'] == 'closed' and prior[0].get('state_reason') == 'not_planned'
                             and identity not in intake_keys and not row.get('review') and unchanged(row, prior[1]))
@@ -196,6 +217,8 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
         ancestors = sorted(old.get(identity, []), key=lambda i: i['number'])
         canonical = (candidates or [i for i in ancestors if i['state'] == 'open'] or ancestors or [None])[0]
         rows = active.get(identity, [])
+        if identity in frozen:
+            continue
         if canonical is None:
             if rows:
                 operations.append({'action': 'create', 'key': identity, 'body': {
@@ -224,6 +247,14 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             operations.append({'action': 'consolidate', 'key': identity, 'number': duplicate['number'], 'expected': expected(duplicate), 'body': {
                 'state': 'closed', 'state_reason': 'not_planned', 'body': (duplicate.get('body') or '') +
                 f"\n\nConsolidated into #{canonical['number']}; the debt remains tracked there.\n{SUPERSEDED}{identity} -->"}})
-    if any(len(op['body']['body'].encode()) > 60000 for op in operations):
+    for operation in operations:
+        operation['artifacts'] = [{'category': c, 'id': i} for c, i in sorted(areas.get(operation['key'], ()))]
+    listed = {identity for identity, (issue, _) in previous.items() if issue['state'] == 'open'}
+    waiting = {}
+    for identity, row in sorted(artifacts.items()):
+        if identity in intake_keys and identity not in listed and (identity in holds or workstream(row) in frozen):
+            waiting.setdefault(workstream(row), []).append({'category': row['category'], 'id': row['id']})
+    operations += [{'action': 'hold', 'key': area, 'artifacts': rows} for area, rows in sorted(waiting.items())]
+    if any(len(op['body']['body'].encode()) > 60000 for op in operations if 'body' in op):
         raise ValueError('workstream summary exceeds the issue size bound')
     return operations, suppressed

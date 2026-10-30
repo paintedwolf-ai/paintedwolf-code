@@ -47,7 +47,7 @@ func (e *Executor) prepareOwnerDispatch(ctx context.Context, qualifiedName, prof
 	}
 	// The screened save is a file tool's transport.
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
-		if err := tc.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		if err := tc.Effects.Secrets.Precheck(ctx, nil); err != nil {
 			return ctx, nil, e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, canonicalArgs, toolrejection.HeldHandOffReject(string(secretmatch.SurfaceFile), err))
 		}
 	}

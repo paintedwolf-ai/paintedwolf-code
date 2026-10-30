@@ -25,7 +25,7 @@ func (f OSGlobFiles) ListDir(_ context.Context, dir string, maximum int) ([]Glob
 	if err != nil {
 		return nil, nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	listed, _ := file.ReadDir(maximum + 1)
 	entries := make([]GlobEntry, 0, len(listed))
 	for _, entry := range listed {
@@ -47,6 +47,7 @@ func (f OSGlobFiles) Entry(_ context.Context, path string) (GlobEntry, bool, err
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
+		//nolint:nilerr // Unstatable glob candidates are absent, not readable authority.
 		return GlobEntry{}, false, nil
 	}
 	return GlobEntry{Name: filepath.Base(abs), Dir: info.IsDir()}, true, nil

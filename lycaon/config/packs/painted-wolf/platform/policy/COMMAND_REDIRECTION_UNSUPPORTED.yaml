@@ -23,20 +23,20 @@ copy:
   what: '`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue
     }}).'
   cause: '{% if paintedwolf.redirection_terminal %}This surface runs its program in a terminal, which owns stdin,
-    stdout, and stderr.{% else %}{% if paintedwolf.redirection_conflict %}The line redirects a stream that the `verify` call
-    also names with `stdin`, `stdin_from`, `stdout_to`, or `stderr_to`.{% else %}{% if paintedwolf.redirection_pipe
+    stdout, and stderr.{% else %}{% if paintedwolf.redirection_conflict %}The same stream is redirected inline and
+    by a structured argument.{% else %}{% if paintedwolf.redirection_pipe
     %}A stage before `|` must send output into the pipe, and a stage after `|` reads only the pipe.{% else %}Only
     stdin (0), stdout (1), and stderr (2) redirect, with `<`, `>`, `>>`, `&>`, and `N>&M`; one file cannot be both
     truncated and appended in one stage.{% endif %}{% endif %}{% endif %}'
   why: The host wires every stream itself instead of handing the line to a shell, so each redirection must name one
     destination it can open, review, and record.
   fix: '{% if paintedwolf.redirection_terminal %}Drop the file redirection here, or run the program through
-    `command`, which writes redirected output through the declared write scope.{% else %}{% if
+    `command` without capture, which writes redirected output through the same write scope as `write`.{% else %}{% if
     paintedwolf.redirection_conflict %}Keep either the inline redirection or the structured field, not both.{% else
     %}{% if paintedwolf.redirection_pipe %}Move the file redirection to the last stage for output or the first stage
     for input, or join the programs with `&&` and a file between them.{% else %}Use `>`, `>>`, `2>`, `2>>`, `&>`,
     `2>&1`, or `<` with stdin, stdout, or stderr.{% endif %}{% endif %}{% endif %}'
-  instead: Redirect stdin, stdout, and stderr with `<`, `>`, `>>`, `2>`, `&>`, or `2>&1` on the stage that owns the stream
+  instead: '{% if paintedwolf.redirection_terminal %}Omit file redirection on this terminal surface; use `command` without capture for a redirected program{% else %}Redirect stdin, stdout, and stderr with `<`, `>`, `>>`, `2>`, `&>`, or `2>&1` on the stage that owns the stream{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: redirection cannot run as written
@@ -76,3 +76,5 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
   - owns stdin,
+  - Omit file redirection on this terminal surface
+  - without capture for a redirected program

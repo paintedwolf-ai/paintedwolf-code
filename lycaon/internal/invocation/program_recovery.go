@@ -27,7 +27,7 @@ func (r *SQLRecorder) InterruptPrograms(ctx context.Context, sessionID, detailRe
 	if err != nil {
 		return 0, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -78,7 +78,7 @@ func (r *SQLRecorder) interruptModelAndPrograms(ctx context.Context, sessionID s
 	if err != nil {
 		return 0, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return count, nil

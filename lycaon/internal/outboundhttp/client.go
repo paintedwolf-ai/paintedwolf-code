@@ -326,7 +326,7 @@ func (in Request) processRedirect(
 	timing *HopTiming,
 ) (redirectAdvance, error) {
 	if hop >= redirectLimit {
-		return redirectAdvance{}, &RedirectError{Reason: "too many redirects", Hops: hops}
+		return redirectAdvance{}, &RedirectError{LimitExceeded: true, Reason: "too many redirects", Hops: hops}
 	}
 	location := resp.Header.Get("Location")
 	status := resp.StatusCode

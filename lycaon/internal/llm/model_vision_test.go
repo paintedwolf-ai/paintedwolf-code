@@ -32,6 +32,9 @@ func TestRegistryModelHasVision(t *testing.T) {
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
 	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	if err == nil {
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "registry", err)
 	reg.discoveryClient = srv.Client()
 	if !reg.ModelHasVision(t.Context(), "openai", "gpt-4o") {

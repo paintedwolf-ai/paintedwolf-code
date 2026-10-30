@@ -185,7 +185,7 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	if entry == nil || entry.body == nil {
 		return nil, fmt.Errorf("durable output body has not been reconciled")
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	reader, err := entry.body.Open(ctx)

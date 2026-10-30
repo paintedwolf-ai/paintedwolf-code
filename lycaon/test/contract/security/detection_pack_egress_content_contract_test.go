@@ -196,6 +196,11 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 	}
 	confine.SetEgressDetectionSource(stub)
 	t.Cleanup(func() { confine.SetEgressDetectionSource(nil) })
+	// Each decision below caches its verdict under its session; release them so
+	// a repeated run asks the resolver again instead of reading this run's answer.
+	for _, sessionID := range []string{"connect-hold-s1", "connect-hold-s2", "connect-hold-s3", "connect-hold-s4", "connect-hold-s5"} {
+		t.Cleanup(func() { confine.ForgetEgressSession(sessionID) })
+	}
 
 	cmd := confine.EgressCommand{SessionID: "connect-hold-s1", ToolCallID: "tc1"}
 

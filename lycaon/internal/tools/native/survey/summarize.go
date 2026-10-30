@@ -266,6 +266,9 @@ func (t *SummarizeTool) Summarize(ctx context.Context, in SummarizeRequest, tctx
 		return SummarizeResponse{}, nil, err
 	}
 
+	if err := deliverSummaryCredentials(ctx, reads, tctx, res); err != nil {
+		return SummarizeResponse{}, nil, err
+	}
 	res.NextActions = validateNextActions(ctx, t.Boundary, tctx, gatherer.sources.actionableSources(res.NextActions))
 	gatherer.stampWork(&res)
 	if t.Observe != nil {
