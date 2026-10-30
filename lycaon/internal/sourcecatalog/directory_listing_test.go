@@ -14,12 +14,14 @@ import (
 
 func TestDirectoryNamespaceReusesMembershipAndRetainsByteOrder(t *testing.T) {
 	catalog, root := indexFixture(t)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	t.Cleanup(func() { testutil.FailErr(t, "close namespace reader", reader.Close(context.Background())) })
 	for _, rel := range []string{"a.txt", "Z/child", ".git/config", ".hidden/child", "node_modules/package/index.js"} {
 		writeIndexFile(t, root.Path, rel, "source")
 	}
-	first, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 0)
+	first, err := reader.ReadDirectory(t.Context(), ".", 0, nil)
 	testutil.FailErr(t, "read cold namespace", err)
-	second, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 0)
+	second, err := reader.ReadDirectory(t.Context(), ".", 0, nil)
 	testutil.FailErr(t, "reuse namespace", err)
 	names := make([]string, 0, len(second.Entries))
 	for _, entry := range second.Entries {
@@ -29,7 +31,7 @@ func TestDirectoryNamespaceReusesMembershipAndRetainsByteOrder(t *testing.T) {
 		t.Fatalf("first reused=%t second=%+v names=%v", first.Reused, second, names)
 	}
 	writeIndexFile(t, root.Path, "added", "source")
-	third, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 0)
+	third, err := reader.ReadDirectory(t.Context(), ".", 0, nil)
 	testutil.FailErr(t, "revalidate changed namespace", err)
 	if third.Reused || len(third.Entries) != len(second.Entries)+1 {
 		t.Fatalf("changed membership=%+v", third)
@@ -38,9 +40,11 @@ func TestDirectoryNamespaceReusesMembershipAndRetainsByteOrder(t *testing.T) {
 
 func TestDirectoryNamespaceCannotClaimAnOmittedLink(t *testing.T) {
 	catalog, root := indexFixture(t)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	t.Cleanup(func() { testutil.FailErr(t, "close namespace reader", reader.Close(context.Background())) })
 	writeIndexFile(t, root.Path, "kept", "source")
 	testutil.FailErr(t, "create dangling link", os.Symlink("missing", filepath.Join(root.Path, "dangling")))
-	_, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 0)
+	_, err := reader.ReadDirectory(t.Context(), ".", 0, nil)
 	if !errors.Is(err, ErrDirectoryNamespace) {
 		t.Fatalf("omitted link completeness=%v", err)
 	}
@@ -48,10 +52,12 @@ func TestDirectoryNamespaceCannotClaimAnOmittedLink(t *testing.T) {
 
 func TestDirectoryNamespacePreparationRespectsConsumerBounds(t *testing.T) {
 	catalog, root := indexFixture(t)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	t.Cleanup(func() { testutil.FailErr(t, "close namespace reader", reader.Close(context.Background())) })
 	for _, name := range []string{"a", "b", "c", "d", "e"} {
 		writeIndexFile(t, root.Path, name, "source")
 	}
-	listing, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 2)
+	listing, err := reader.ReadDirectory(t.Context(), ".", 2, nil)
 	if !errors.Is(err, ErrDirectoryNamespace) || !listing.Prepared {
 		t.Fatalf("bounded preparation=%+v error=%v", listing, err)
 	}
@@ -62,7 +68,7 @@ func TestDirectoryNamespacePreparationRespectsConsumerBounds(t *testing.T) {
 	if observation.Complete || observation.Entries != 3 {
 		t.Fatalf("bounded observation=%+v", observation)
 	}
-	complete, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 5)
+	complete, err := reader.ReadDirectory(t.Context(), ".", 5, nil)
 	testutil.FailErr(t, "extend bounded observation", err)
 	if len(complete.Entries) != 5 {
 		t.Fatalf("complete entries=%+v", complete)
@@ -71,11 +77,13 @@ func TestDirectoryNamespacePreparationRespectsConsumerBounds(t *testing.T) {
 
 func TestDirectoryNamespacePagesPreserveEveryNameAndKind(t *testing.T) {
 	catalog, root := indexFixture(t)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	t.Cleanup(func() { testutil.FailErr(t, "close namespace reader", reader.Close(context.Background())) })
 	for i := range indexBatchSize + 9 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("file-%04d", i), "source")
 	}
 	writeIndexFile(t, root.Path, "Middle/child", "source")
-	listing, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", indexBatchSize+10)
+	listing, err := reader.ReadDirectory(t.Context(), ".", indexBatchSize+10, nil)
 	testutil.FailErr(t, "read paged membership", err)
 	if len(listing.Entries) != indexBatchSize+10 || listing.Entries[0].Name != "Middle" || !listing.Entries[0].IsDir {
 		t.Fatalf("paged namespace=%+v", listing)
@@ -89,13 +97,15 @@ func TestDirectoryNamespacePagesPreserveEveryNameAndKind(t *testing.T) {
 
 func TestDirectoryNamespaceRejectsCanceledAndEscapingRequests(t *testing.T) {
 	catalog, root := indexFixture(t)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	t.Cleanup(func() { testutil.FailErr(t, "close namespace reader", reader.Close(context.Background())) })
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := catalog.Directories.ReadDirectory(ctx, "p", root, ".", 10); !errors.Is(err, context.Canceled) {
+	if _, err := reader.ReadDirectory(ctx, ".", 10, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled namespace=%v", err)
 	}
 	for _, dir := range []string{"..", "../outside", root.Path} {
-		if _, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, dir, 10); !errors.Is(err, os.ErrPermission) {
+		if _, err := reader.ReadDirectory(t.Context(), dir, 10, nil); !errors.Is(err, os.ErrPermission) {
 			t.Fatalf("escaping directory %q=%v", dir, err)
 		}
 	}
