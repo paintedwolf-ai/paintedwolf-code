@@ -28,7 +28,7 @@ function CallOutputLink(props: CallProps) {
   return <Show when={props.call.outputReference || props.call.output}>
     <ToolContentLink pane={`activity:${props.activity.fact.id}:call-output:${props.call.id}`} label="Call output"
       messageId={props.call.messageId} toolCallId={props.call.toolCallId}
-      content={props.call.outputReference ? { kind: "retained", reference: props.call.outputReference } : { kind: "inline", text: props.call.output ?? "" }}
+      content={props.call.outputReference ? { kind: "retained", reference: props.call.outputReference } : { kind: "inline", text: props.call.output ?? "", redaction: props.call.redaction ?? undefined }}
       revealOffset={offset()} projectId={props.projectId} />
   </Show>;
 }

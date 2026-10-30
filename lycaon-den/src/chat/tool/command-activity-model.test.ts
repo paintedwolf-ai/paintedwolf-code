@@ -153,3 +153,17 @@ it("lets the group title follow active work without splitting its rows", () => {
  expect(commandActivityHeadline(rows,"Running commands")).toBe("Running programs");
  expect(commandActivityHeadline([],"Inspecting changes")).toBe("Inspecting changes");
 });
+
+
+it("keeps a program-level failure visible after successful child activities", () => {
+ const project=createCommandActivityProjection();
+ const before=entry("call",[fact("read")]);
+ project([before]);
+ const failed=entry("call",[fact("read")]);
+ if(failed.kind==="tool") failed.part.commandProgram={...failed.part.commandProgram!,state:"failed",stop_code:"PROGRAM_TRACE_LIMIT"};
+ const rows=parts(project([failed]));
+ expect(rows.map(row=>row.id)).toEqual(["call","call:activity:program:call:result"]);
+ expect(rows[0]!.status).toBe("completed");
+ expect(rows[1]!.status).toBe("error");
+ expect(rows[1]!.commandActivity!.fact.subject).toBe("PROGRAM_TRACE_LIMIT");
+});

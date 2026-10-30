@@ -194,6 +194,12 @@ function statusFromToolResult(
       ? "running"
       : "completed";
   }
+  const program = resultMsg?.tool_result?.command_program;
+  if (program) {
+    if (program.state === "running" || program.state === "waiting") return "running";
+    if (program.state !== "completed") return "error";
+    return withHandle(resultMsg?.tool_result?.process)?.running ? "running" : "completed";
+  }
   if (!output && !resultMsg?.tool_result?.content_ref) return "running";
   const outcome = resultMsg?.tool_result?.outcome;
   if (outcome === "rejected" || outcome === "error") return "error";

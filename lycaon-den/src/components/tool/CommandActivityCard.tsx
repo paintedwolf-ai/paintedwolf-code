@@ -60,7 +60,8 @@ function CommandActivityDetails(props: Props) {
     return activity().continuation ? receipts : activityExecutions(activity(), receipts);
   });
   const facts = createMemo(() => {
-    const result = commandActivityFacts(activity(), executions(), props.part.feedback);
+    const feedback = activity().fact.execution_ids.length === 0 ? props.part.feedback : props.part.feedback?.filter(entry => executions().some(row => row.stop_code === entry.code || row.host_stop_code === entry.code));
+    const result = commandActivityFacts(activity(), executions(), feedback);
     const stop = loaded()[0]?.program.stop_code;
     if (activity().fact.execution_ids.length === 0 && stop && !result.some(fact => fact.value === stop)) result.push({ label: "Code", value: stop });
     const notStarted = loaded().flatMap(page => page.nodes).filter(node => node.state === "not_started");

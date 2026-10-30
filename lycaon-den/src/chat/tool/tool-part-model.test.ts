@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
-import type { Message } from "../../api/types.ts";
+import type { CommandProgramReceipt, Message } from "../../api/types.ts";
 import {
   classifyToolKind,
   isBenignToolResult,
@@ -546,4 +546,13 @@ it("shows a background activity's observed process outcome rather than its launc
  part.status="completed";applyBackgroundProcessOutputs("activity-job",[]);
  expect(toolCompletionLabel(part,"activity-job")).toBe("Completed");
  resetBackgroundProcessStoreForTests();
+});
+
+
+it("uses explicit program state for a result with an empty output body", () => {
+ for (const state of ["running","waiting","completed","failed","rejected","interrupted"] as const) {
+  const result:Message={id:"result",role:"tool",content:"",created_at:"2026-10-30T10:00:00Z",tool_result:{tool:"command",content:"",command_program:{id:"program",state} as CommandProgramReceipt}};
+  const part=toolPartFromCall({id:"call",name:"command",args:{}},result,"assistant");
+  expect(part.status).toBe(state==="running"||state==="waiting"?"running":state==="completed"?"completed":"error");
+ }
 });

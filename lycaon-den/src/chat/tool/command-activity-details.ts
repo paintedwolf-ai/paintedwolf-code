@@ -22,6 +22,7 @@ export function commandActivityFacts(view: CommandActivityView, executions: read
     if (row.host_stop_code && row.host_stop_code !== row.stop_code) facts.push({ label: "Host stop", value: row.host_stop_code });
     if (row.effect_certainty !== "none") facts.push({ label: row.command, value: EFFECTS[row.effect_certainty] });
     if (row.owner_started && !row.owner_invoked && row.state !== "completed") facts.push({ label: "Owner", value: "Started, invocation unknown" });
+    if (row.evidence_ref) facts.push({ label: "Evidence", value: row.evidence_ref });
     if (row.approval_ref) facts.push({ label: "Approval", value: row.approval_ref });
     if (row.revision_conflict) {
       facts.push({ label: "Conflict", value: row.revision_conflict.path }, { label: "Expected revision", value: row.revision_conflict.expected_revision }, { label: "Observed revision", value: row.revision_conflict.observed_revision });

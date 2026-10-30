@@ -59,6 +59,10 @@ export function createCommandActivityProjection() {
         knownFacts.set(program.id, retained);
         facts = [...retained.values()];
       }
+      if (program && facts?.length && (program.state === "failed" || program.state === "rejected" || program.state === "interrupted") && !facts.some(fact => status(fact) === "error")) {
+        const terminal = commandActivityPart({ ...entry.part, commandProgram: program }).commandActivity!.fact;
+        if (!facts.some(fact => fact.id === terminal.id)) facts = [...facts, terminal];
+      }
       if (entry.part.tool === "command_output") {
         const handle = entry.part.process?.handle ?? (typeof entry.part.args?.process_id === "string" ? entry.part.args.process_id : undefined);
         let assigned = outputAssignments.get(entry.part.id);
@@ -108,6 +112,7 @@ export function createCommandActivityProjection() {
           result.push({ ...entry, part: row });
         }
         const view = row.commandActivity!;
+        if (fact.id === `${program.id}:result` && fact.execution_ids.length === 0) view.continuation = { cursor: "" };
         if (!view.calls.some(call => call.id === entry.part.id)) view.calls.push({ ...entry.part, commandProgram: program });
         if (!view.members.some(member => member.id === fact.id)) view.members.push(fact);
         if (status(fact) === "error" || status(fact) === "running") {
