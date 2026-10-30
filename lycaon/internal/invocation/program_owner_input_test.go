@@ -33,7 +33,7 @@ func (h *countedOwnerTransactions) BeginTx(ctx context.Context, options *sql.TxO
 func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 	for _, progress := range []bool{false, true} {
 		for _, size := range []int{16, 17 << 10} {
-			for _, outcome := range []string{"commit", "owner-refused", "input-refused", "wrong-model-call", "cancelled"} {
+			for _, outcome := range []string{"commit", "owner-refused", "input-refused", "wrong-model-call", "parent-revoked", "cancelled"} {
 				t.Run(fmt.Sprintf("progress=%t/bytes=%d/%s", progress, size, outcome), func(t *testing.T) {
 					f := newProgramReceiptFixture(t)
 					bound := f.child(t)
@@ -60,6 +60,10 @@ func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 					if outcome == "input-refused" {
 						_, err = f.database.ExecContext(t.Context(), `CREATE TRIGGER fixture_input_fault BEFORE INSERT ON invocation_program_outputs BEGIN SELECT RAISE(ABORT,'fixture fault'); END`)
 						testutil.FailErr(t, "install input attachment fault", err)
+					}
+					if outcome == "parent-revoked" {
+						_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_receipts SET status='interrupted' WHERE id=?`, f.parent)
+						testutil.FailErr(t, "revoke running model receipt", err)
 					}
 					call := "actual-model-call"
 					if outcome == "wrong-model-call" {
