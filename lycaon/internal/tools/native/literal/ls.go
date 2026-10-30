@@ -203,6 +203,13 @@ func runLs(inv *invocation) error {
 // a nested one as minor; du treats both as minor.
 func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
 	opened, err := dir.OpenDir()
+	var names []string
+	if err == nil {
+		names, err = opened.Names(0)
+		if err != nil {
+			_ = opened.Close()
+		}
+	}
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			verb, status := "open", 1
@@ -218,7 +225,6 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		return nil, false, err
 	}
 	defer opened.Close()
-	names := opened.Names()
 	if opts.all {
 		names = append([]string{"."}, names...)
 	}

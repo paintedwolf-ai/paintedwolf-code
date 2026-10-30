@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
@@ -18,26 +19,24 @@ type entry struct {
 	bound   projectpaths.BoundPath
 	stat    fseffect.EntryStat
 	depth   int
-	// start is the starting point the entry was reached from.
-	start string
-	// link reports that the entry itself is a symbolic link; followed that
-	// it was one whose target now describes it.
+	start   string
+	// Followed entries carry target metadata while retaining their path spelling.
 	link, followed bool
+	metadata       *entryMetadata
 }
 
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
 func (e entry) file() bool { return e.stat.Mode.IsRegular() }
 
-// walker lists directories through the invocation's held roots. Every listed
-// name counts against traversal_visits; going over refuses the operation.
-// Entries the read boundary protects are not visited, as in the structured
-// discovery tools.
+// Every listed name charges traversal_visits before read filtering.
 type walker struct {
 	inv     *invocation
 	visited int64
 	maximum int64
 	filters map[string]sandbox.ReadFilter
 	roots   map[string]*fseffect.ReadRoot
+	lazy    bool
+	work    discoveryWork
 }
 
 func newWalker(inv *invocation) *walker {
@@ -45,6 +44,7 @@ func newWalker(inv *invocation) *walker {
 }
 
 func (w *walker) close() {
+	w.report()
 	for k, r := range w.roots {
 		_ = r.Close()
 		delete(w.roots, k)
@@ -70,6 +70,7 @@ func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	if err != nil {
 		return nil
 	}
+	w.work.roots++
 	w.roots[path] = r
 	return r
 }
@@ -95,12 +96,14 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	if bound.Null {
 		return entry{}, w.inv.usage(spelling, "a directory entry, not the null device")
 	}
+	w.work.metadata++
 	st, err := bound.Stat(false)
 	if err != nil {
 		return entry{}, err
 	}
 	e := entry{display: spelling, name: baseName(spelling), bound: bound, stat: st, start: spelling, link: st.Mode&fs.ModeSymlink != 0}
 	if e.link && follow {
+		w.work.metadata++
 		if target, err := bound.Stat(true); err == nil {
 			e.stat, e.link, e.followed = target, false, true
 		}
@@ -116,8 +119,25 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	w.work.handles++
 	defer opened.Close()
-	names := opened.Names()
+	if entries, indexed, err := w.indexedChildren(dir, follow, opened); indexed || err != nil {
+		return entries, err
+	}
+	maximum := 0
+	if w.maximum > 0 {
+		maximum = int(max(1, w.maximum-w.visited))
+	}
+	names, err := opened.Names(maximum)
+	if err != nil {
+		var exceeded *projectpaths.DirectoryEntriesLimitError
+		if errors.As(err, &exceeded) {
+			w.visited = w.maximum
+			return nil, w.visit()
+		}
+		return nil, err
+	}
+	w.work.listed++
 	filter, err := w.filter(dir.bound)
 	if err != nil {
 		return nil, err
@@ -130,6 +150,8 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		if err := w.visit(); err != nil {
 			return nil, err
 		}
+		w.work.metadata++
+		w.work.relative++
 		child, st, err := opened.StatChild(name)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
@@ -143,6 +165,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		}
 		e := entry{display: display, name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
+			w.work.metadata++
 			if target, err := opened.StatChildFollowed(child); err == nil {
 				e.stat, e.link, e.followed = target, false, true
 			}

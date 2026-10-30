@@ -1,14 +1,5 @@
-// Package search is the command frontend for grep, egrep, fgrep, rg, find
-// and tree.
-// Each utility binds argv through the catalog, walks the invocation's held
-// roots, pins every read through execution revisions and selects records with
-// the shared textsearch operation the structured grep tool also uses.
-//
-// Hidden and ignored entries: grep -r visits hidden entries and applies no
-// ignore files; rg skips hidden entries and applies the project ignore owner
-// unless -u/--hidden say otherwise; find visits everything. All three skip
-// entries the read boundary protects, as the structured tools do, and visit
-// names in unsigned byte order.
+// Package search implements native search and discovery through held roots,
+// shared directory observations, execution revisions, and textsearch.
 package search
 
 import (
@@ -69,10 +60,8 @@ type Owners struct {
 	// Now is find's reference time for -mtime; nil reads the clock once per
 	// invocation.
 	Now func() time.Time
-	// Catalog accelerates grep and rg walks: a file whose cached Bloom filter
-	// was built from bytes with the file's current size, mode and mtime, and
-	// which proves the pattern's required literals absent, is a complete
-	// zero-match without being read. Nil searches every file live.
+	// Catalog shares validated directory membership and content filters.
+	// Nil uses live traversal and content reads.
 	Catalog *sourcecatalog.Catalog
 
 	// overrides replaces catalog limits in fixtures that cannot reach them.
