@@ -9,6 +9,8 @@ export function observeCommandActivity(event: ActivityEvent): void {
   const program = event.progress?.command_program;
   if (!event.tool_call_id || !program) return;
   const key = `${event.session_id}:${event.tool_call_id}`;
+  const previous = programs.get(key);
+  if (previous?.activity_revision !== undefined && program.activity_revision !== undefined && program.activity_revision < previous.activity_revision) return;
   programs.delete(key);
   programs.set(key, program);
   while (programs.size > MAX_CALLS) programs.delete(programs.keys().next().value!);

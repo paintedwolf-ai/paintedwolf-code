@@ -20,7 +20,7 @@ type Props = {
 };
 
 const CALL_PAGE = 3;
-const PREVIEW_BYTES = 800;
+const PREVIEW_BYTES = 480;
 
 export function CommandActivityCard(props: Props) {
   return <ToolPartShell {...props}><CommandActivityDetails {...props} /></ToolPartShell>;
@@ -29,20 +29,25 @@ export function CommandActivityCard(props: Props) {
 function CommandActivityDetails(props: Props) {
   const activity = () => props.part.commandActivity!;
   const [callPage, setCallPage] = createSignal(0);
+  const [receiptCursors, setReceiptCursors] = createSignal<string[]>([]);
+  const receiptCursor = () => receiptCursors().at(-1) ?? activity().continuation?.cursor;
   const calls = createMemo(() => activity().calls.slice(callPage() * CALL_PAGE, (callPage() + 1) * CALL_PAGE));
   const [pages] = createResource(
     () => {
       const client = props.client ?? getLycaonClient();
       if (!client || !props.sessionId) return undefined;
-      return { client, sessionId: props.sessionId, calls: calls(), state: activity().fact.state };
+      return { client, sessionId: props.sessionId, calls: calls(), state: activity().fact.state, cursor: receiptCursor() };
     },
-    async ({ client, sessionId, calls }) => Promise.all(calls.map(async call => {
+    async ({ client, sessionId, calls, cursor }) => Promise.all(calls.map(async call => {
       const program = call.commandProgram;
-      return program ? client.getCommandProgramReceipt(sessionId, program.id, { limit: 32 }) : undefined;
+      return program ? client.getCommandProgramReceipt(sessionId, program.id, { limit: activity().continuation ? 6 : 32, cursor }) : undefined;
     })),
   );
   const loaded = () => pages.state === "ready" || pages.state === "refreshing" ? pages.latest ?? [] : [];
-  const executions = createMemo(() => activityExecutions(activity(), loaded().flatMap(page => page?.executions ?? [])));
+  const executions = createMemo(() => {
+    const receipts = loaded().flatMap(page => page?.executions ?? []);
+    return activity().continuation ? receipts : activityExecutions(activity(), receipts);
+  });
   const facts = createMemo(() => {
     const value = activity().fact;
     const result = [{ label: "Outcome", value: value.outcome }];
@@ -73,15 +78,19 @@ function CommandActivityDetails(props: Props) {
     <Show when={executions().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Execution">
         <h4 class="den-tool-part-card-section-label">Execution</h4>
-        <For each={executions().slice(0, 6)}>{execution => <div class="den-command-activity-step"><code>{execution.command}</code><span>{execution.state}{execution.status_code !== undefined ? ` · exit ${execution.status_code}` : ""}</span></div>}</For>
+        <For each={executions().slice(0, 6)}>{execution => <div class="den-command-activity-step"><code>{execution.command.slice(0, 192)}{execution.command.length > 192 ? "…" : ""}</code><span>{execution.state}{execution.status_code !== undefined ? ` · exit ${execution.status_code}` : ""}</span></div>}</For>
         <Show when={executions().length > 6}><p class="den-tool-part-card-note">{executions().length} steps in this activity</p></Show>
+        <Show when={activity().continuation}><div class="den-command-program-paging" role="group" aria-label="Execution pages">
+          <button type="button" class="den-chat-content-link" disabled={receiptCursors().length === 0} onClick={() => setReceiptCursors(value => value.slice(0,-1))}>Previous operations</button>
+          <button type="button" class="den-chat-content-link" disabled={!loaded()[0]?.executions_omitted} onClick={() => { const next = loaded()[0]?.next_cursor; if (next) setReceiptCursors(value => [...value,next]); }}>Next operations</button>
+        </div></Show>
         <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts" content={{ kind: "inline", text: JSON.stringify(executions(), null, 2) }} projectId={props.projectId} />
       </section>
     </Show>
     <Show when={previews().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Output">
         <h4 class="den-tool-part-card-section-label">Output preview</h4>
-        <For each={previews().slice(-2)}>{output => <div>
+        <For each={previews().slice(-1)}>{output => <div>
           <pre class="den-command-program-output-preview">{output.preview.slice(0, PREVIEW_BYTES)}</pre>
           <Show when={!output.complete}><p class="den-tool-part-card-note">Incomplete {output.stream} stream</p></Show>
           <ToolContentLink pane={`activity:${activity().fact.id}:${output.execution.id}:${output.stream}`} label={`${output.stream} preview`} content={{ kind: "inline", text: output.preview }} projectId={props.projectId} />

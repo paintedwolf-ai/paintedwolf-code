@@ -273,7 +273,7 @@ export function ActivitySpanCard(props: Props) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-          <span class="den-activity-span-hint">{summary().detail}</span>
+          <span class="den-activity-span-hint" data-tooltip={summary().detail}>{summary().detail}</span>
         </span>
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">

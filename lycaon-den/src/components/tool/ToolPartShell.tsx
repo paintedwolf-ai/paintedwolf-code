@@ -181,6 +181,7 @@ export function ToolPartShell(props: Props) {
       class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
       data-testid={props.testId ?? "tool-part-card"}
       data-tool={props.part.tool}
+      data-command-activity={props.part.commandActivity ? "" : undefined}
       data-tool-call-id={props.part.toolCallId}
       data-invocation-owner={props.part.invocation?.owner}
       data-invocation-lifecycle={props.part.invocation?.lifecycle}
@@ -212,7 +213,7 @@ export function ToolPartShell(props: Props) {
           <span class="den-tool-part-title" data-tooltip={summary().title}>{summary().title}</span>
         </Show>
         <Show when={completion()}>
-          {(label) => <span class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
+          {(label) => <span data-tooltip={label()} class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel

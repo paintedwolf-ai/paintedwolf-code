@@ -325,12 +325,12 @@
 
 
 /* Activity headers reserve outcome and disclosure space at every width. */
-.den-tool-part:has(.den-command-activity-details) .den-tool-part-chicklet-main {
+.den-tool-part[data-command-activity] .den-tool-part-chicklet-main {
   flex-wrap: nowrap;
   overflow: hidden;
 }
-.den-tool-part:has(.den-command-activity-details) .den-tool-part-title,
-.den-tool-part[data-expanded="true"]:has(.den-command-activity-details) .den-tool-part-title {
+.den-tool-part[data-command-activity] .den-tool-part-title,
+.den-tool-part[data-expanded="true"][data-command-activity] .den-tool-part-title {
   min-width: 0;
   flex: 1 1 auto;
   white-space: nowrap;
@@ -383,4 +383,20 @@
 .den-command-activity-details .den-tool-part-card-facts dd {
   overflow-wrap: anywhere;
   margin-left: auto;
+}
+
+.den-tool-part[data-command-activity] .den-tool-part-name {
+  min-width: 0;
+  max-width: 45%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-command-activity-command,
+.den-command-activity-details .den-command-program-output-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
 }

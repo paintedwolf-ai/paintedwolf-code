@@ -6,6 +6,7 @@ export type CommandActivityView = {
   fact: CommandActivity;
   calls: ToolPartView[];
   members: CommandActivity[];
+  continuation?: { cursor: string; remaining: number };
 };
 
 type Assignment = { key: string; label: string; group: string; subject: string };
@@ -19,15 +20,20 @@ function status(fact: CommandActivity): ToolPartView["status"] {
 /** Assignments are sealed when a fact first enters the visible projection. */
 export function createCommandActivityProjection() {
   const assignments = new Map<string, Assignment>();
+  const positions = new Map<string, number>();
+  const remembered = new Map<string, CommandProgramReceipt>();
+  let nextPosition = 0;
   return (entries: readonly ActivitySpanEntry[], live: (part: ToolPartView) => CommandProgramReceipt | undefined = () => undefined): ActivitySpanEntry[] => {
     const result: ActivitySpanEntry[] = [];
     const rows = new Map<string, ToolPartView>();
     let previous: ToolPartView | undefined;
     for (const entry of entries) {
       if (entry.kind !== "tool") { result.push(entry); previous = undefined; continue; }
-      const program = entry.part.commandProgram ?? live(entry.part);
+      const canonical = entry.part.commandProgram;
+      const program = canonical && canonical.state !== "running" && canonical.state !== "waiting" ? canonical : live(entry.part) ?? remembered.get(entry.part.toolCallId) ?? canonical;
+      if (program) remembered.set(entry.part.toolCallId, program);
       const facts = program?.activities;
-      if (!facts?.length) {
+      if (!program || !facts?.length) {
         if (!(entry.part.tool === "command" && entry.part.status === "running" && !program)) result.push(entry);
         previous = undefined; continue;
       }
@@ -59,7 +65,20 @@ export function createCommandActivityProjection() {
         }
         previous = row;
       }
+      if (program.activities_cursor && program.activities_omitted) {
+        const id = `${entry.part.id}:activity:remaining`;
+        if (!rows.has(id)) {
+          const fact: CommandActivity = { id, group: "Working on the project", label: "More operations", subject: `${program.activities_omitted} additional execution records`, state: program.state === "running" || program.state === "waiting" ? program.state : "completed", outcome: "Recorded", execution_ids: [], spans: [] };
+          const row: ToolPartView = { ...entry.part, id, commandProgram: program, commandActivity: { fact, calls: [{ ...entry.part, commandProgram: program }], members: [], continuation: { cursor: program.activities_cursor, remaining: program.activities_omitted } } };
+          rows.set(id, row); result.push({ ...entry, part: row }); previous = undefined;
+        }
+      }
     }
+    const key = (entry: ActivitySpanEntry) => entry.kind === "tool" ? entry.part.id : entry.key;
+    for (const entry of result) if (!positions.has(key(entry))) positions.set(key(entry), nextPosition++);
+    result.sort((a, b) => positions.get(key(a))! - positions.get(key(b))!);
+    const activeCalls = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.toolCallId] : []));
+    for (const call of remembered.keys()) if (!activeCalls.has(call)) remembered.delete(call);
     return result;
   };
 }
