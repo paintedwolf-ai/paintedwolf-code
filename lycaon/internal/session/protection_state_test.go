@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/protection"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -137,8 +138,18 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rev", handle) })
 
 	rt := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(rt.Close)
 	approved, resolved := tempSocket(t)
-	rt.GrantChat("sess-rev", confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}, "grant_t", "cp", "d", nil)
+	grant := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
+	if socketref.Platform().Command == socketref.RetainedObject {
+		owner, err := socketref.Capture(approved)
+		testutil.FailErr(t, "capture actual socket authority", err)
+		t.Cleanup(func() { owner.Close() })
+		grant.Binding = owner.Binding()
+	}
+	if !rt.GrantChat("sess-rev", grant, "grant_t", "cp", "d", nil) {
+		t.Fatal("actual socket grant was not installed")
+	}
 	if len(rt.AppliedGrants("sess-rev")) != 1 {
 		t.Fatal("expected live chat grant")
 	}
