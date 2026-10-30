@@ -3,15 +3,12 @@ package search_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -44,15 +41,9 @@ func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
 	}
 	catalog := sourcecatalog.New()
 	catalog.SetScopes(partialCommandIndexScope{})
-	snapshot, err := catalog.Observe(t.Context(), "project", []sourcecatalog.Root{{ID: "root", Path: f.Dir}})
+	t.Cleanup(func() { testutil.FailErr(t, "drain command source catalog", catalog.Drain(context.Background())) })
+	_, err := catalog.Observe(t.Context(), "project", []sourcecatalog.Root{{ID: "root", Path: f.Dir}})
 	testutil.FailErr(t, "observe partial index", err)
-	_, err = catalog.Literals.LiteralCandidates(t.Context(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "root", Base: ".", Require: litprefilter.AnyOf("warm-up"),
-		Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-			return os.Open(filepath.Join(f.Dir, filepath.FromSlash(entry.Path)))
-		},
-	})
-	testutil.FailErr(t, "prepare indexed literals", err)
 	searches, err := search.NewOwners(native.ExecutionRevisions{Boundary: f.Runtime.Boundary}, f.Recorder, nil)
 	testutil.FailErr(t, "prepare search operations", err)
 	searches.Catalog = catalog
@@ -94,10 +85,9 @@ func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
 		}
 	}
 	check("src/indexed.go", "vendor/unindexed.go")
+	check("src/indexed.go", "vendor/unindexed.go")
 	changed := filepath.Join(f.Dir, "src", "noise.go")
 	testutil.FailErr(t, "change indexed file", os.WriteFile(changed, []byte("NeedleToken after indexing\n"), 0o600))
-	later := time.Now().Add(time.Hour)
-	testutil.FailErr(t, "mark changed revision", os.Chtimes(changed, later, later))
 	check("src/indexed.go", "src/noise.go", "vendor/unindexed.go")
 	find := func(want ...string) {
 		t.Helper()
