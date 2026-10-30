@@ -10,9 +10,10 @@ use std::path::Path;
 use crate::decoder::{Config, Decoder, Weights};
 use crate::error::{Error, Result};
 
-/// Upper bound on one staging read: the largest tensor the E4B layout carries
-/// (embed table, f32) plus slack. Guards a corrupt header from driving allocation.
-const MAX_TENSOR_BYTES: u64 = 2 << 30;
+/// Upper bound on one staging read. The E4B token embedding stored as F32 is
+/// about 2.5 GiB on its own, so the bound must clear it with slack; a corrupt
+/// header still cannot drive allocation past the file's real size.
+const MAX_TENSOR_BYTES: u64 = 4 << 30;
 
 /// Device names this service accepts, and whether the host can serve them.
 pub fn device_supported(device: &str) -> bool {

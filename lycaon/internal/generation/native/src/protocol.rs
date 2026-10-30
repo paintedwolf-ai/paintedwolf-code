@@ -33,7 +33,8 @@ pub fn read_frame<R: std::io::Read>(r: &mut R) -> Result<Option<Vec<u8>>> {
     Ok(Some(buf))
 }
 
-/// A request frame's body.
+/// A request frame's body. Every request carries a host-generated `id`; every
+/// reply echoes it, so the adapter can correlate across concurrent calls.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum Request {
@@ -42,6 +43,14 @@ pub enum Request {
     Generate(GenerateRequest),
     Cancel { request_id: String },
     Shutdown,
+}
+
+/// One inbound frame: the correlation id plus its body.
+#[derive(Debug, Deserialize)]
+pub struct Inbound {
+    pub id: u64,
+    #[serde(flatten)]
+    pub body: Request,
 }
 
 /// One generation request. The host owns identity; the service never trusts it as authorization.

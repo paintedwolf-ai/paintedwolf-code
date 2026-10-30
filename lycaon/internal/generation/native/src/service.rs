@@ -23,7 +23,6 @@ use crate::sampler::{self, Rng};
 struct Outbound<W: Write + Send + 'static> {
     writer: Mutex<BufWriter<W>>,
     active: Mutex<Option<(String, Arc<AtomicU64>)>>,
-    sequence: AtomicU64,
 }
 
 impl<W: Write + Send + 'static> Outbound<W> {
@@ -73,11 +72,25 @@ impl Service {
         let stop: std::collections::HashSet<u32> = req.stop_tokens.iter().copied().collect();
         let gen_mark = self.generation;
 
+        // A fully cached prompt has nothing left to prefill; resume from retained logits.
+        let fully_cached = tokens.is_empty();
+        let mut emitted: Vec<u32> = Vec::new();
+        let mut final_logits: Option<Vec<f32>> = None;
+
         let outcome = (|| -> Result<StopReason> {
-            // Prefill the un-cached tail.
-            let next_pos = cache.committed_len();
-            let (mut logits, staged_kv) = self.decoder.step(&tokens, &cache, next_pos)?;
-            cache.stage(&staged_kv)?;
+            // Positions advance through provisional state (committed plus staged), so
+            // every step starts where the previous one ended. A fully cached prompt
+            // resumes from the logits retained at its last commit.
+            let mut logits: Vec<f32> = if fully_cached {
+                cache.retained_logits().ok_or_else(|| {
+                    Error::Capacity("handle matched a prompt with no retained logits".into())
+                })?.to_vec()
+            } else {
+                let next_pos = cache.provisional_len();
+                let (l, staged_kv) = self.decoder.step(&tokens, &cache, next_pos)?;
+                cache.stage(&staged_kv)?;
+                l
+            };
             if cancel.load(Ordering::SeqCst) == gen_mark {
                 return Ok(StopReason::Canceled);
             }
@@ -99,19 +112,28 @@ impl Service {
                 out.push(&Event::Token { request_id: req.request_id.clone(), seq, token })?;
                 seq += 1;
                 generated += 1;
+                emitted.push(token);
 
-                let (next, kv) = self.decoder.step(&[token], &cache, cache.committed_len())?;
-                logits = next;
+                let (next, kv) = self.decoder.step(&[token], &cache, cache.provisional_len())?;
+                logits = next.clone();
+                final_logits = Some(next);
                 cache.stage(&kv)?;
             }
         })();
 
         match outcome {
-            // Terminal success: fold everything staged and publish the prefix.
+            // Terminal success: fold staged appends and publish the exact token state
+            // the KV now represents — prompt plus generated tokens.
             Ok(reason) => {
-                cache.commit();
-                if matches!(reason, StopReason::Eos | StopReason::StopToken | StopReason::MaxTokens) {
-                    cache.publish(&format!("{}/{}", req.request_id, gen_mark), req.prompt_tokens.clone());
+                if reason == StopReason::Canceled {
+                    cache.rollback();
+                } else {
+                    let mut state = req.prompt_tokens.clone();
+                    state.extend(emitted.iter().copied());
+                    cache.commit(final_logits.unwrap_or_default());
+                    if matches!(reason, StopReason::Eos | StopReason::StopToken | StopReason::MaxTokens) {
+                        cache.publish(&format!("{}/{}", req.request_id, gen_mark), state);
+                    }
                 }
                 out.push(&Event::Usage {
                     request_id: req.request_id.clone(),
@@ -148,14 +170,12 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
     let outbound = Arc::new(Outbound {
         writer: Mutex::new(BufWriter::new(writer)),
         active: Mutex::new(None),
-        sequence: AtomicU64::new(0),
     });
     let service: Arc<Mutex<Option<Arc<Service>>>> = Arc::new(Mutex::new(None));
 
     // Reader thread: stdin stays live during generation. Requests it reads while a
     // generation runs queue behind the cache lock; cancel applies by id.
     let reader_outbound = Arc::clone(&outbound);
-    let reader_service = Arc::clone(&service);
     let (tx, rx) = std::sync::mpsc::channel::<Request>();
     std::thread::spawn(move || {
         let mut reader = BufReader::new(reader);

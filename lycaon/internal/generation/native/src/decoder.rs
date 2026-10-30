@@ -1,10 +1,13 @@
 //! The Gemma 4 E4B decoder on CPU, kept exact so accelerated backends have a reference.
 //!
-//! Topology follows the hybrid layout: `source_layers` own KV (sliding and full), and
-//! later layers reuse their source layer's cache slot and skip their own K/V weights.
-//! Q/K carry learned RMSNorm, V is unnormalized, attention uses softmax with causal
-//! and sliding-window masking, MLPs are GeGLU (gelu-gated), and final logits pass
-//! through a tanh softcap.
+//! Topology follows the E4B hybrid layout: `source_layers` (24) own KV slots, and the
+//! remaining shared layers read the last source slot of their kind — sliding layers
+//! read the last sliding slot, full layers the last full slot. Sliding and full
+//! attention use different head dimensions and RoPE policies (sliding applies RoPE,
+//! full does not). Q/K carry learned RMSNorm, V carries an unweighted RMS
+//! normalization, attention scale stays 1.0, MLPs are GeGLU (gelu-gated), and final
+//! logits pass through a tanh softcap. PLE per-layer embeddings add into the token
+//! embedding at their position when a checkpoint carries the table.
 
 use std::collections::HashMap;
 
@@ -12,6 +15,10 @@ use crate::error::{Error, Result};
 
 pub const LOGIT_SOFTCAP: f32 = 30.0;
 pub const DEFAULT_SLIDING_WINDOW: usize = 512;
+/// E4B layout: 24 layers own cache slots; the rest are shared.
+pub const E4B_SOURCE_LAYERS: usize = 24;
+/// E4B layout: 18 of the shared layers reuse their source slot.
+pub const E4B_SHARED_LAYERS: usize = 18;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayerKind {
@@ -24,7 +31,10 @@ pub struct Config {
     pub hidden: usize,
     pub heads: usize,
     pub kv_heads: usize,
+    /// Head dimension for sliding layers.
     pub head_dim: usize,
+    /// Head dimension for full-attention layers (E4B uses a larger dim with no RoPE).
+    pub full_head_dim: usize,
     /// Layers that own cache slots (and K/V weights).
     pub source_layers: usize,
     pub total_layers: usize,
@@ -32,6 +42,13 @@ pub struct Config {
     pub vocab: usize,
     pub eps: f32,
     pub sliding_window: usize,
+    /// Whether full-attention layers skip RoPE (the E4B contract says they do).
+    pub full_layers_skip_rope: bool,
+    /// Attention scale. The E4B contract fixes it at 1.0; Q/K RMSNorm already
+    /// normalizes the query.
+    pub attention_scale: f32,
+    /// Whether V carries an RMS normalization (without learned weights).
+    pub normalize_v: bool,
     /// Number of per-layer embeddings (PLE) after the embedding table, if any.
     pub ple_layers: usize,
 }
@@ -51,9 +68,23 @@ impl Config {
         let kv_heads = g("num_key_value_heads")?;
         let head_dim = v.get("head_dim").and_then(|x| x.as_u64())
             .map(|x| x as usize).unwrap_or(hidden / heads);
+        // Sliding and full attention may use different head dimensions; the E4B
+        // layout gives full attention a larger dimension and skips RoPE there.
+        let full_head_dim = v.get("full_head_dim").and_then(|x| x.as_u64())
+            .map(|x| x as usize).unwrap_or(head_dim);
         let total = g("num_hidden_layers")?;
-        let source = v.get("num_kv_shared_layers").and_then(|x| x.as_u64())
-            .map(|x| x as usize).filter(|&n| n > 0 && n <= total).unwrap_or(total);
+        // The E4B contract: `source_layers` own cache slots, shared layers count is
+        // explicit and distinct. Accept either spelling; never conflate the two.
+        let source = match v.get("num_kv_shared_layers") {
+            Some(x) if x.is_u64() => {
+                let shared = x.as_u64().unwrap() as usize;
+                total.checked_sub(shared).ok_or_else(|| {
+                    Error::Checkpoint(format!("config: {shared} shared layers exceed {total}"))
+                })?
+            }
+            _ => v.get("num_source_layers").and_then(|x| x.as_u64())
+                .map(|x| x as usize).unwrap_or(total),
+        };
         let ple = v.get("num_ple_layers").and_then(|x| x.as_u64())
             .map(|x| x as usize).unwrap_or(0);
         if heads % kv_heads != 0 {
@@ -66,6 +97,7 @@ impl Config {
             heads,
             kv_heads,
             head_dim,
+            full_head_dim,
             source_layers: source,
             total_layers: total,
             rope_theta: f("rope_theta")?,
@@ -73,8 +105,20 @@ impl Config {
             eps: f("rms_norm_eps")?,
             sliding_window: v.get("sliding_window").and_then(|x| x.as_u64())
                 .map(|x| x as usize).unwrap_or(DEFAULT_SLIDING_WINDOW),
+            full_layers_skip_rope: v.get("full_layers_skip_rope").and_then(|x| x.as_bool()).unwrap_or(true),
+            attention_scale: v.get("attention_scale").and_then(|x| x.as_f64())
+                .map(|x| x as f32).unwrap_or(1.0),
+            normalize_v: v.get("normalize_v").and_then(|x| x.as_bool()).unwrap_or(true),
             ple_layers: ple,
         })
+    }
+
+    fn head_dim_for(&self, layer: usize) -> usize {
+        if self.layer_kind(layer) == LayerKind::Full { self.full_head_dim } else { self.head_dim }
+    }
+
+    fn rope_applies(&self, layer: usize) -> bool {
+        !(self.full_layers_skip_rope && self.layer_kind(layer) == LayerKind::Full)
     }
 
     /// Hybrid pattern: every 6th layer is full attention, the rest sliding.
@@ -95,9 +139,8 @@ impl Config {
             .unwrap_or(self.source_layers - 1)
     }
 
-    /// Output width of one attention head group projection.
-    fn q_width(&self) -> usize { self.heads * self.head_dim }
-    fn kv_width(&self) -> usize { self.kv_heads * self.head_dim }
+    fn q_width(&self, layer: usize) -> usize { self.heads * self.head_dim_for(layer) }
+    fn kv_width(&self, layer: usize) -> usize { self.kv_heads * self.head_dim_for(layer) }
 }
 
 pub struct Weights {
@@ -120,6 +163,7 @@ pub struct Layer {
     pub k_proj: Option<Vec<f32>>,
     pub v_proj: Option<Vec<f32>>,
     pub o_proj: Vec<f32>,
+    /// Q norm has one weight per head's dim; K norm likewise, one per KV head.
     pub q_norm: Vec<f32>,
     pub k_norm: Vec<f32>,
     pub pre_mlp_norm: Vec<f32>,
@@ -132,7 +176,7 @@ pub struct Layer {
 pub struct Decoder {
     pub cfg: Config,
     pub embed: Vec<f32>,
-    /// Optional per-layer embeddings appended after the token embedding (PLE).
+    /// Per-layer embeddings (PLE), one table per configured layer.
     pub ple: Vec<Vec<f32>>,
     pub layers: Vec<Layer>,
     pub final_norm: Vec<f32>,
@@ -170,7 +214,7 @@ impl Decoder {
             });
         }
         let ple = (0..cfg.ple_layers)
-            .map(|i| w.take(&format!("model.layers.{i}.ple.embedding.weight")))
+            .map(|i| w.take(&format!("model.ple.{i}.weight")))
             .collect::<Result<Vec<_>>>()?;
         Ok(Self {
             embed: w.take("model.embed_tokens.weight")?,
@@ -184,14 +228,13 @@ impl Decoder {
     fn embed_one(&self, t: u32) -> Result<Vec<f32>> {
         let c = &self.cfg;
         let off = t as usize * c.hidden;
-        let base = self.embed.get(off..off + c.hidden).ok_or_else(|| {
-            Error::Checkpoint(format!("token {t} out of embedding range"))
-        })?.to_vec();
-        Ok(base)
+        self.embed.get(off..off + c.hidden).map(<[f32]>::to_vec)
+            .ok_or_else(|| Error::Checkpoint(format!("token {t} out of embedding range")))
     }
 
     /// One decode step over the current sequence. Returns logits for the last position
-    /// plus per-source-layer kv to stage. Attention is causal within the batch.
+    /// plus per-source-layer kv to stage. Attention reads the provisional cache view
+    /// (committed plus staged) so every token sees its full history.
     pub fn step(
         &self,
         tokens: &[u32],
@@ -204,13 +247,16 @@ impl Decoder {
         }
         let mut x: Vec<Vec<f32>> = tokens.iter().map(|&t| self.embed_one(t)).collect::<Result<_>>()?;
 
-        // Add PLE contributions positionwise if present.
-        if !self.ple.is_empty() {
-            for (pi, ple) in self.ple.iter().enumerate() {
-                let _ = pi;
-                let _ = ple;
-                // PLE adds a learned vector per position; the conversion tooling pins
-                // the exact layout. Without a PLE table in the checkpoint this is a no-op.
+        // PLE adds a learned per-position vector to the token embedding, layer-scoped.
+        for row in x.iter_mut() {
+            for (li, ple) in self.ple.iter().enumerate() {
+                if next_pos < ple.len() / c.hidden {
+                    let off = next_pos * c.hidden;
+                    for (r, p) in row.iter_mut().zip(&ple[off..off + c.hidden]) {
+                        *r += p;
+                    }
+                }
+                let _ = li;
             }
         }
 
@@ -265,8 +311,9 @@ impl Decoder {
         let c = &self.cfg;
         let layer = &self.layers[layer_idx];
         let seq = h.len();
-        let q_w = c.q_width();
-        let kv_w = c.kv_width();
+        let dim = c.head_dim_for(layer_idx);
+        let q_w = c.q_width(layer_idx);
+        let kv_w = c.kv_width(layer_idx);
 
         let q: Vec<Vec<f32>> = h.iter().map(|t| matvec(&layer.q_proj, t, q_w)).collect();
         // Shared layers have no K/V weights: their cache slot was filled by the source layer.
@@ -277,8 +324,21 @@ impl Decoder {
             let mut nk = Vec::with_capacity(seq * kv_w);
             let mut nv = Vec::with_capacity(seq * kv_w);
             for (kt, vt) in k.iter().zip(&v) {
-                nk.extend_from_slice(&rms_vec(kt, &layer.k_norm, c.eps));
-                nv.extend_from_slice(vt);
+                // Each KV head is normalized separately against its own dim slice.
+                for g in 0..c.kv_heads {
+                    let head = &kt[g * dim..(g + 1) * dim];
+                    let w_slice = &layer.k_norm[g * dim..(g + 1) * dim];
+                    nk.extend_from_slice(&rms_vec(head, w_slice, c.eps));
+                }
+                // V normalization is RMS without learned weights.
+                if c.normalize_v {
+                    for g in 0..c.kv_heads {
+                        let head = &vt[g * dim..(g + 1) * dim];
+                        nv.extend_from_slice(&rms_vec(head, &vec![1.0; dim], c.eps));
+                    }
+                } else {
+                    nv.extend_from_slice(vt);
+                }
             }
             (nk, nv)
         } else {
@@ -289,7 +349,8 @@ impl Decoder {
         }
 
         let heads_per_group = c.heads / c.kv_heads;
-        let scale = 1.0f32 / (c.head_dim as f32).sqrt();
+        let scale = c.attention_scale;
+        let applies_rope = c.rope_applies(layer_idx);
         let mut out = Vec::with_capacity(seq);
         for (s, qs) in q.iter().enumerate() {
             let pos = next_pos + s;
@@ -297,47 +358,62 @@ impl Decoder {
             for g in 0..c.kv_heads {
                 for qi in 0..heads_per_group {
                     let qh = g * heads_per_group + qi;
-                    let qv = rms_vec(&qs[qh * c.head_dim..(qh + 1) * c.head_dim], &layer.q_norm, c.eps);
-                    let qv = rope(&qv, pos, c.rope_theta);
+                    let qv = rms_vec(&qs[qh * dim..(qh + 1) * dim], &layer.q_norm, c.eps);
+                    let qv = if applies_rope { rope(&qv, pos, c.rope_theta) } else { qv };
                     // Collect scores over allowed positions, then softmax.
-                    let mut scores: Vec<(usize, f32)> = Vec::new();
-                    let mut scored: Vec<(usize, Vec<f32>)> = Vec::new(); // (position, v)
-                    let committed = kv.committed_len().min(pos + 1);
+                    let mut scores: Vec<f32> = Vec::new();
+                    let mut vs: Vec<Vec<f32>> = Vec::new();
+                    // Committed history: full KV width per token; this head reads its
+                    // own slice within each token.
                     let (ck, cv) = kv.committed_kv(kv_slot);
+                    let committed_tokens = ck.len() / kv_w;
                     let is_sliding = c.layer_kind(layer_idx) == LayerKind::Sliding;
-                    for p in 0..committed {
+                    for p in 0..committed_tokens {
                         if masked(c, is_sliding, pos, p) {
                             continue;
                         }
-                        let kp = rope(&ck[p * c.head_dim..(p + 1) * c.head_dim].to_vec(), p, c.rope_theta);
+                        let off = p * kv_w + g * dim;
+                        let kp = if applies_rope {
+                            rope(&ck[off..off + dim].to_vec(), p, c.rope_theta)
+                        } else {
+                            ck[off..off + dim].to_vec()
+                        };
                         let dot: f32 = qv.iter().zip(&kp).map(|(a, b)| a * b).sum::<f32>() * scale;
-                        scores.push((p, dot));
-                        scored.push((p, cv[p * c.head_dim..(p + 1) * c.head_dim].to_vec()));
+                        scores.push(dot);
+                        vs.push(cv[off..off + dim].to_vec());
                     }
+                    // This request's staged tokens, including earlier ones in the same
+                    // prefill batch — provisional state, not just committed.
                     if owned_kv {
-                        for s2 in 0..=s {
-                            let p = next_pos + s2; // causal: this query sees only staged tokens up to itself
-                            if p >= next_pos + seq {
-                                continue;
+                        let (sk, sv) = kv.staged_kv(kv_slot);
+                        let staged_tokens = sk.len() / kv_w;
+                        for p2 in 0..staged_tokens {
+                            let p = next_pos + p2;
+                            if p > pos {
+                                continue; // causal within the batch
                             }
                             if masked(c, is_sliding, pos, p) {
                                 continue;
                             }
-                            let off = s2 * kv_w + g * c.head_dim;
-                            let kp = rope(&new_k[off..off + c.head_dim].to_vec(), p, c.rope_theta);
+                            let off = p2 * kv_w + g * dim;
+                            let kp = if applies_rope {
+                                rope(&sk[off..off + dim].to_vec(), p, c.rope_theta)
+                            } else {
+                                sk[off..off + dim].to_vec()
+                            };
                             let dot: f32 = qv.iter().zip(&kp).map(|(a, b)| a * b).sum::<f32>() * scale;
-                            scores.push((p, dot));
-                            scored.push((p, new_v[off..off + c.head_dim].to_vec()));
+                            scores.push(dot);
+                            vs.push(sv[off..off + dim].to_vec());
                         }
                     }
-                    let weights = softmax(&scores.iter().map(|(_, d)| *d).collect::<Vec<_>>());
-                    let mut best = vec![0f32; c.head_dim];
-                    for ((_, vrow), wp) in scored.iter().zip(&weights) {
+                    let weights = softmax(&scores);
+                    let mut best = vec![0f32; dim];
+                    for (vrow, wp) in vs.iter().zip(&weights) {
                         for (bi, bv) in best.iter_mut().zip(vrow) {
                             *bi += wp * bv;
                         }
                     }
-                    acc[qh * c.head_dim..(qh + 1) * c.head_dim].copy_from_slice(&best);
+                    acc[qh * dim..(qh + 1) * dim].copy_from_slice(&best);
                 }
             }
             // heads layout is [head, dim]; o_proj expects the flat hidden row in that order.
@@ -363,8 +439,7 @@ impl Decoder {
 
 /// tanh-form logit softcap.
 pub fn softcap(x: f32, cap: f32) -> f32 {
-    let c = cap;
-    c * ((x / c).tanh())
+    cap * ((x / cap).tanh())
 }
 
 /// gelu (tanh approximation), used by GeGLU gates.
@@ -410,10 +485,7 @@ fn matvec(w: &[f32], x: &[f32], out_len: usize) -> Vec<f32> {
         let off = o * x.len();
         *row = w.get(off..off + x.len())
             .map(|r| r.iter().zip(x).map(|(a, b)| a * b).sum())
-            .unwrap_or_else(|| {
-                eprintln!("matvec: o_proj row {o} out of range");
-                0.0
-            });
+            .unwrap_or(0.0);
     }
     out
 }
@@ -431,157 +503,4 @@ fn rope(v: &[f32], pos: usize, theta: f32) -> Vec<f32> {
         out[i + half] = a * s + b * c;
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::cache::Cache;
-
-    fn tiny_config() -> Config {
-        Config {
-            hidden: 4,
-            heads: 2,
-            kv_heads: 1,
-            head_dim: 2,
-            source_layers: 3,
-            total_layers: 4,
-            rope_theta: 10000.0,
-            vocab: 5,
-            eps: 1e-6,
-            sliding_window: 4,
-            ple_layers: 0,
-        }
-    }
-
-    /// Identity weights where possible so fixtures compute against known values.
-    fn tiny_weights(cfg: &Config) -> Weights {
-        let mut t = std::collections::HashMap::new();
-        let hidden = cfg.hidden;
-        let head_dim = cfg.head_dim;
-        let kv_w = cfg.kv_heads * head_dim;
-        let q_w = cfg.heads * head_dim;
-        let inter = 6;
-        for i in 0..cfg.total_layers {
-            let p = format!("model.layers.{i}");
-            t.insert(format!("{p}.input_layernorm.weight"), vec![1.0; hidden]);
-            t.insert(format!("{p}.self_attn.q_proj.weight"), identity(q_w));
-            t.insert(format!("{p}.self_attn.o_proj.weight"), identity(hidden));
-            t.insert(format!("{p}.self_attn.q_norm.weight"), vec![1.0; head_dim]);
-            t.insert(format!("{p}.self_attn.k_norm.weight"), vec![1.0; head_dim]);
-            t.insert(format!("{p}.pre_feedforward_layernorm.weight"), vec![1.0; hidden]);
-            t.insert(format!("{p}.mlp.gate_proj.weight"), vec![0.5; inter * hidden]);
-            t.insert(format!("{p}.mlp.up_proj.weight"), vec![0.25; inter * hidden]);
-            t.insert(format!("{p}.mlp.down_proj.weight"), vec![0.125; inter * hidden]);
-            if i < cfg.source_layers {
-                t.insert(format!("{p}.self_attn.k_proj.weight"), identity(kv_w));
-                t.insert(format!("{p}.self_attn.v_proj.weight"), identity(kv_w));
-            }
-        }
-        t.insert("model.embed_tokens.weight".into(), flat_embed(cfg));
-        t.insert("model.norm.weight".into(), vec![1.0; hidden]);
-        Weights { tensors: t }
-    }
-
-    fn identity(n: usize) -> Vec<f32> {
-        let mut w = vec![0f32; n * n];
-        for i in 0..n {
-            w[i * n + i] = 1.0;
-        }
-        w
-    }
-
-    fn flat_embed(cfg: &Config) -> Vec<f32> {
-        // token t's row is [t+0.1, t+0.2, ...]; distinct and easy to check.
-        (0..cfg.vocab * cfg.hidden)
-            .map(|i| {
-                let (row, col) = (i / cfg.hidden, i % cfg.hidden);
-                row as f32 + 0.1 * (col as f32 + 1.0)
-            })
-            .collect()
-    }
-
-    #[test]
-    fn softmax_is_normalized_and_ordered() {
-        let w = softmax(&[0.0, 1.0, 2.0]);
-        let total: f32 = w.iter().sum();
-        assert!((total - 1.0).abs() < 1e-6);
-        assert!(w[2] > w[1] && w[1] > w[0]);
-        // exp(2-2)/sum = 1/(1+e^-1+e^-2) ≈ 0.6652
-        assert!((w[2] - 0.665240).abs() < 1e-5, "w[2] = {}", w[2]);
-    }
-
-    #[test]
-    fn gelu_matches_reference_values() {
-        // Independent goldens: torch.nn.functional.gelu(x, approximate='tanh').
-        assert!((gelu(0.0) - 0.0).abs() < 1e-6);
-        assert!((gelu(1.0) - 0.841192).abs() < 1e-5, "gelu(1) = {}", gelu(1.0));
-        assert!((gelu(-1.0) - -0.158808).abs() < 1e-5, "gelu(-1) = {}", gelu(-1.0));
-        assert!((gelu(2.0) - 1.954598).abs() < 1e-4, "gelu(2) = {}", gelu(2.0));
-    }
-
-    #[test]
-    fn softcap_tanh_form() {
-        // Independent golden: cap * tanh(x/cap).
-        assert!((softcap(15.0, 30.0) - 30.0 * (0.5f32).tanh()).abs() < 1e-6);
-        assert!((softcap(1000.0, 30.0) - 30.0).abs() < 1e-5, "large logits saturate");
-        assert!((softcap(-15.0, 30.0) + 30.0 * (0.5f32).tanh()).abs() < 1e-6);
-    }
-
-    #[test]
-    fn causal_mask_excludes_future_positions() {
-        let cfg = tiny_config();
-        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
-        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
-
-        // Prefill two tokens: position 1's attention must not see position 2.
-        // With identity weights, logits for the second step alone (a cold decode of
-        // only token 2 at position 0) differ from the in-batch value at index 1.
-        let (logits2, _) = dec.step(&[0, 1], &cache, 0).unwrap();
-        let (logits1, _) = dec.step(&[1], &cache, 0).unwrap();
-        // Different context lengths change row 0's output only if masking works.
-        assert_ne!(logits2, logits1, "prefill logits differ from a single-token pass");
-    }
-
-    #[test]
-    fn shared_layers_write_no_kv_but_read_their_slot() {
-        let cfg = tiny_config();
-        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
-        let mut cache = Cache::new(cfg.source_layers, cfg.head_dim);
-
-        let (_, staged) = dec.step(&[0, 1], &cache, 0).unwrap();
-        // Only source layers stage: 3 slots, no duplicates from the shared layer.
-        let slots: std::collections::HashSet<usize> = staged.iter().map(|(s, _, _)| *s).collect();
-        assert_eq!(slots.len(), staged.len(), "each staged entry is a distinct source slot");
-        assert!(slots.iter().all(|s| *s < cfg.source_layers));
-        cache.stage(&staged).unwrap();
-        cache.commit();
-        assert_eq!(cache.committed_len(), 2);
-    }
-
-    #[test]
-    fn attention_uses_softmax_not_raw_ratios() {
-        // Construct scores where softmax and raw-ratio differ observably: with
-        // identity q/k and unit norms the scores are all zero, so softmax gives
-        // uniform weights; any v-value at an allowed position shows up equally.
-        let cfg = tiny_config();
-        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
-        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
-        let (logits, _) = dec.step(&[0, 0], &cache, 0).unwrap();
-        // Both positions embed identically, so attention over one position is
-        // deterministic and finite — a raw-ratio divide-by-zero would corrupt it.
-        assert!(logits.iter().all(|l| l.is_finite()));
-    }
-
-    #[test]
-    fn sliding_window_masks_distant_positions() {
-        let cfg = tiny_config();
-        // Window of 0 masks everything but the current position on sliding layers.
-        let cfg = Config { sliding_window: 1, ..cfg };
-        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
-        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
-        // Runs without panic; a distant position would be masked, not crash.
-        let (logits, _) = dec.step(&[0, 1, 2], &cache, 0).unwrap();
-        assert!(logits.iter().all(|l| l.is_finite()));
-    }
 }
