@@ -14,16 +14,7 @@ func (c *SimpleCompactor) Baseline() *SimpleCompactor {
 
 // EnrichContinuation synthesizes a captured source page without publishing it.
 func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionInfo, rows []api.Message, record *messageview.Continuation) (*messageview.Continuation, error) {
-	selected := make(map[string]bool, len(record.Sources))
-	for _, source := range record.Sources {
-		selected[source.MessageID] = true
-	}
-	var prefix []ContextMessage
-	for _, row := range ContextMessagesFromAPI(rows) {
-		if selected[row.ID] {
-			prefix = append(prefix, row)
-		}
-	}
+	prefix := ContextMessagesFromAPI(rows)
 	summary, sources, err := c.summarizePrefix(ctx, info, prefix)
 	accepted := false
 	for _, source := range sources {

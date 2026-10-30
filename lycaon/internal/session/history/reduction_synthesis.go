@@ -11,7 +11,7 @@ import (
 
 func (m *Service) scheduleProjectionSynthesis(ctx context.Context, sc *compaction.SimpleCompactor, info compaction.SessionInfo, originals []api.Message, prepared []compaction.ContextMessage, report compaction.CompactionReport, snapshot store.CompactionView) {
 	if report.SessionCompacted {
-		m.scheduleSynthesis(ctx, sc, info, originals, snapshot)
+		m.scheduleSynthesis(ctx, sc, info, compaction.ContextMessagesToAPI(report.SynthesisSources, originals), snapshot)
 	} else if report.Reason == "insufficient_savings" {
 		m.scheduleReductionSynthesis(ctx, sc, info, originals, prepared, snapshot)
 	}

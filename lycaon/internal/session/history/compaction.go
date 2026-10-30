@@ -89,6 +89,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 		if cerr == nil && (sessionReport.SessionCompacted || sessionReport.ChunksCompacted > 0) {
 			working = summarized
 			report.Continuation = sessionReport.Continuation
+			report.SynthesisSources = sessionReport.SynthesisSources
 			report.SessionCompacted = sessionReport.SessionCompacted
 			report.ChunksCompacted += sessionReport.ChunksCompacted
 			changed = true
