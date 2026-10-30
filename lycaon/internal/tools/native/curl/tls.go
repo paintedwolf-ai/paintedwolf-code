@@ -87,7 +87,10 @@ func (inv *invocation) readCAPath(operand string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = dir.Close() }()
-	names := dir.Names()
+	names, err := bound.ReadDir()
+	if err != nil {
+		return nil, err
+	}
 	maximum := inv.owners.limits["stream_bytes"]
 	var bundle []byte
 	for _, name := range names {
