@@ -98,5 +98,5 @@ func joinSettle(err, settle error) error {
 	if err == nil {
 		return settle
 	}
-	return fmt.Errorf("%w; settlement: %v", err, settle)
+	return fmt.Errorf("%w; settlement: %w", err, settle)
 }

@@ -144,7 +144,10 @@ func (r *jqRun) evaluateAll() error {
 		for v, ok := r.stream.Next(); ok; v, ok = r.stream.Next() {
 			all = append(all, v)
 		}
-		if r.stream.stop != nil || r.stream.broken {
+		if r.stream.stop != nil {
+			return r.stream.stop
+		}
+		if r.stream.broken {
 			return nil
 		}
 		_, err := r.evaluate(all, true)

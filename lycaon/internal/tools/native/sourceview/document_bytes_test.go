@@ -47,7 +47,7 @@ func TestDocumentBytesEncodeTheRecordedRepresentation(t *testing.T) {
 	if _, err := DocumentBytes(tools.EditorDocumentText{Text: "toolong\n", Encoding: textfile.UTF8, SHA256: textfile.SHA256([]byte("toolong\n")), Dirty: true}, resolved, 4); err == nil {
 		t.Fatal("over-budget document encoded")
 	}
-	if _, err := DocumentBytes(tools.EditorDocumentText{Text: "a\n", Encoding: "ebcdic", Dirty: true}, resolved, 64); !errors.Is(err, ErrDocumentUnrepresentable) {
+	if _, err := DocumentBytes(tools.EditorDocumentText{Text: "a\n", Encoding: "ebcdic", Dirty: true}, resolved, 64); !errors.Is(err, ErrDocumentUnrepresentable) || !errors.Is(err, textfile.ErrUnsupported) {
 		t.Fatalf("unknown encoding = %v", err)
 	}
 }

@@ -47,3 +47,13 @@ func TestOriginalRuneBoundaryKeepsInvalidBytesAndWholeRunes(t *testing.T) {
 		t.Fatalf("binary windows did not progress: %v", windows)
 	}
 }
+
+func TestScreenBytesRejectsNilContextBeforeReadingOrWriting(t *testing.T) {
+	input := bytes.NewBufferString("untouched source")
+	var output bytes.Buffer
+	m := &Matcher{}
+	result, err := m.ScreenBytes(nil, input, &output, "", StreamBounds{InputBytes: 1024, OutputBytes: 1024, MemoryBytes: 8192, DetectorWork: 1024}, nil, nil, nil) //nolint:staticcheck -- SA1012: nil is the deliberately malformed context this contract rejects.
+	if err == nil || input.String() != "untouched source" || output.Len() != 0 || result.InputBytes != 0 || result.OutputBytes != 0 {
+		t.Fatalf("nil context admitted screening: err=%v input=%q output=%q result=%+v", err, input.String(), output.String(), result)
+	}
+}

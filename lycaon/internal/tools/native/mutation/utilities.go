@@ -182,7 +182,7 @@ func runMkdir(inv *invocation) error {
 			}
 			if info, err := os.Stat(filepath.Dir(bound.Resolved.Abs)); err != nil || !info.IsDir() {
 				inv.fail(operand, "No such file or directory")
-				return 0, nil
+				return 0, nil //nolint:nilerr -- A missing parent settles mkdir as an ordinary command failure before entering the write door.
 			}
 		}
 		// The owner reports the requested directory; -pv also names each

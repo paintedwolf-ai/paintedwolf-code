@@ -31,9 +31,11 @@ func (s *substitution) apply(m *Machine) error {
 			break
 		}
 		start, end := match[0], match[1]
-		if start == end && start == previousEnd {
-			from = start + scalarWidth(space, start)
-			continue
+		if start == end {
+			if end == previousEnd {
+				from = start + scalarWidth(space, start)
+				continue
+			}
 		}
 		count++
 		if count >= ordinal && (s.global || count == ordinal) {
@@ -56,7 +58,8 @@ func (s *substitution) apply(m *Machine) error {
 	if !replaced {
 		return nil
 	}
-	m.space.pattern = append(out, space[copied:]...)
+	out = append(out, space[copied:]...)
+	m.space.pattern = out
 	m.stream.replaced = true
 	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
 		return err

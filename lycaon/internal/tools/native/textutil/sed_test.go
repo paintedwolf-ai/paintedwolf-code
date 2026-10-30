@@ -151,7 +151,7 @@ func TestSedGNUForms(t *testing.T) {
 		request.OperationID, request.Argv = words[0], argv
 		request.Invocation.Kind = toolcontract.ProgramChildInvocation
 		request.Statement.Span = request.Invocation.Span
-		prepared, err := h.owners.Prepare(request)
+		prepared, err := h.owners.Prepare(t.Context(), request)
 		if err != nil || prepared.Mode != mode {
 			t.Fatalf("%s mode %q, %v; want %q", source, prepared.Mode, err, mode)
 		}

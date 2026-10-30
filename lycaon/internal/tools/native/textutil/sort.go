@@ -247,7 +247,7 @@ func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
 		if err != nil {
 			return err
 		}
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 		cursor := &mergeCursor{reader: reader, index: index}
 		if ok, err := cursor.advance(); err != nil {
 			return err

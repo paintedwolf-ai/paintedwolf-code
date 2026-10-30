@@ -42,7 +42,7 @@ func (s *grepSearch) forEachTextMatch(rel string, content []byte, yield func(gre
 			entry.ContextBefore, entry.ContextAfter = grepLineContext(content, line.Start, grepLineEnd(content, line.Start), s.contextLines)
 		}
 		if !yield(entry) {
-			return textsearch.StopScan
+			return textsearch.ErrStopScan
 		}
 		return nil
 	})

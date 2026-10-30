@@ -67,7 +67,7 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	held, err := root.OpenExact(".", true)
 	if err != nil {
 		return nil, err

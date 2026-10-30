@@ -366,7 +366,10 @@ func (t *posixTranslator) escape() error {
 				t.atom(`\` + string(r))
 				return nil
 			}
-			return t.quantify(byte(r))
+			if r == '+' {
+				return t.quantify('+')
+			}
+			return t.quantify('?')
 		}
 	}
 	switch {
@@ -375,10 +378,11 @@ func (t *posixTranslator) escape() error {
 		if group > t.groups || !t.closed[group] {
 			return t.invalid("invalid back reference")
 		}
-		if t.offset+group > regexp2.MaxMarkedGroup {
+		markedGroup := t.offset + group
+		if markedGroup < 0 || markedGroup > regexp2.MaxMarkedGroup {
 			return t.unsupported("back reference beyond the marked group ceiling")
 		}
-		t.marker(regexp2.MarkerBackref+rune(t.offset+group), true)
+		t.marker(regexp2.MarkerBackref+rune(markedGroup), true)
 	case r == '<':
 		t.marker(regexp2.MarkerWordStart, false)
 	case r == '>':

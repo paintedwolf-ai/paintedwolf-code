@@ -232,7 +232,7 @@ func readScriptFile(inv *invocation, word commandprogram.Field) (string, error) 
 		}
 		return "", pathRejection(err, word)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	text, err := io.ReadAll(reader)
 	return string(text), err
 }

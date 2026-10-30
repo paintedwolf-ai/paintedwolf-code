@@ -26,12 +26,11 @@ type invocation struct {
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
 	// streams has non-nil Input and Error; Output is reached through out.
-	streams   commandprogram.Streams
-	out       *nativeutility.Output
-	errors    strings.Builder
-	status    int
-	published bool
-	releases  []func()
+	streams  commandprogram.Streams
+	out      *nativeutility.Output
+	errors   strings.Builder
+	status   int
+	releases []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {

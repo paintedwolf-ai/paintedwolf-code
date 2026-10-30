@@ -32,8 +32,8 @@ func TestRegexBudgets(t *testing.T) {
 	if _, ok, err := linear.Select(ctx, at); err != nil || ok {
 		t.Fatalf("record at the step ceiling: %v %v", ok, err)
 	}
-	over := append(at, 'a')
-	if _, _, err := linear.Select(ctx, over); budgetResource(t, err) != "regex_work_steps" {
+	at = append(at, 'a')
+	if _, _, err := linear.Select(ctx, at); budgetResource(t, err) != "regex_work_steps" {
 		t.Fatalf("record over the step ceiling: %v", err)
 	}
 

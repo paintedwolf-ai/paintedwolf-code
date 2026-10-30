@@ -81,7 +81,7 @@ func TestScanLinesStopsOnRecordErrorsAndStopScan(t *testing.T) {
 	seen := 0
 	n, err := ScanLines(t.Context(), []byte("a\na\na\n"), m, ScanOptions{MaxSelected: -1}, func(Line) error {
 		seen++
-		return StopScan
+		return ErrStopScan
 	})
 	if err != nil || n != 1 || seen != 1 {
 		t.Fatalf("stop: n=%d seen=%d err=%v", n, seen, err)

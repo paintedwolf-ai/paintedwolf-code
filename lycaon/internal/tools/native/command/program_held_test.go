@@ -221,3 +221,23 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		}
 	}
 }
+
+func TestHeldEffectPreservesInvocationAndSettlementErrors(t *testing.T) {
+	invokeErr, settleErr := errors.New("owner failed"), errors.New("receipt failed")
+	probe := &heldProbe{}
+	effect := probe.effect("held-errors")
+	effect.Invoke = func(context.Context) (toolcontract.ProducerResult, error) {
+		probe.invoked++
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed}, invokeErr
+	}
+	effect.Settle = func(context.Context, toolcontract.ProducerResult, string) error { return settleErr }
+	held := &command.ProgramHeldEffects{}
+	testutil.FailErr(t, "park failed owner", held.Park(effect))
+	_, err := held.Resume(t.Context(), effect.Identity)
+	if !errors.Is(err, invokeErr) || !errors.Is(err, settleErr) {
+		t.Fatalf("lost error identity: %v", err)
+	}
+	if _, err := held.Resume(t.Context(), effect.Identity); toolrejection.AsToolReject(err) == nil || probe.invoked != 1 {
+		t.Fatalf("failed owner replayed: %v, calls=%d", err, probe.invoked)
+	}
+}

@@ -180,9 +180,9 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if request.EffectMode == "" {
 		if m, ok := builtin.(interface {
-			EffectMode(commandprogram.OperationRequest) string
+			EffectMode(context.Context, commandprogram.OperationRequest) string
 		}); ok {
-			request.EffectMode = m.EffectMode(request)
+			request.EffectMode = m.EffectMode(ctx, request)
 		}
 	}
 	child, err := d.prepare(ctx, spec, request, nil)

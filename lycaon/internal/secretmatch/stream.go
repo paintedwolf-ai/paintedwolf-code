@@ -17,10 +17,7 @@ const referenceContextBytes = len(referenceTokenPrefix) + 36 + 2
 // admission charges actual allocations against an aggregate ledger. Pure local
 // reference callers may pass nil; production capture requires aggregate admission.
 func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer, label string, bounds StreamBounds, admission StreamMemoryAdmission, check func() error, observe func(context.Context, StreamSpan) error) (result StreamResult, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if m == nil || src == nil || dst == nil || bounds.InputBytes <= 0 || bounds.OutputBytes <= 0 || bounds.MemoryBytes <= 0 || bounds.DetectorWork <= 0 {
+	if ctx == nil || m == nil || src == nil || dst == nil || bounds.InputBytes <= 0 || bounds.OutputBytes <= 0 || bounds.MemoryBytes <= 0 || bounds.DetectorWork <= 0 {
 		return result, errors.New("invalid stream screening contract")
 	}
 	memory := &streamMemory{maximum: bounds.MemoryBytes, ctx: ctx, admission: admission}
@@ -84,10 +81,8 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 		if err := ctx.Err(); err != nil {
 			return state.result, err
 		}
-		if check != nil {
-			if err := check(); err != nil {
-				return state.result, err
-			}
+		if err := check(); err != nil {
+			return state.result, err
 		}
 		// A complete detector window plus the largest exact spelling and token
 		// context makes every candidate beginning in the next committed prefix whole.
@@ -126,10 +121,7 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 			return state.result, err
 		}
 		if eof && state.emit == state.base+int64(len(state.buffer)) {
-			if check != nil {
-				err = check()
-			}
-			return state.result, err
+			return state.result, check()
 		}
 	}
 }
