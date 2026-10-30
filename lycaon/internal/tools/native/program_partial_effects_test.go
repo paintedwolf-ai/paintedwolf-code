@@ -53,9 +53,8 @@ func (r *retainedReviewInputs) RetainReviewedProgramInputs(_ context.Context, in
 func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
-	database := ledger.LedgerDB()
-	testdbseed.InsertSession(t, database, "s1", "p1")
-	recorder := invocation.NewSQLRecorder(database)
+	testdbseed.InsertSession(t, ledger.LedgerDB(), "s1", "p1")
+	recorder := invocation.NewSQLRecorder(ledger.LedgerDB())
 
 	var requests atomic.Int32
 	received := make(chan struct{})
@@ -148,7 +147,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	writeArgs := map[string]any{"path": "new.txt", "content": "created before the loss\n"}
 	write := prepare(writeDefinition, "write-node", "tee", "tee new.txt", writeArgs)
 	var journal string
-	writeEffect := partialEffectsWrite(write, writeArgs, boundary, database, &journal)
+	writeEffect := partialEffectsWrite(write, writeArgs, boundary, ledger.LedgerDB(), &journal)
 	written, err := executor.InvokeNative(t.Context(), frame, surface, memory, programDoorProgress{owner}, observer, writeEffect, tc)
 	testutil.FailErr(t, "invoke actual mutation door", err)
 	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
@@ -172,7 +171,8 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		t.Fatal("HTTP attempt never reached the remote side")
 	}
 
-	// Recover the outstanding attempt without its live owner or any retry.
+	// The supervisor is lost while the attempt is outstanding. Recovery settles
+	// the ledger without the live owner and without retrying anything.
 	count, err := recorder.InterruptPrograms(t.Context(), "s1", "output:supervisor-loss")
 	testutil.FailErr(t, "reconcile lost supervisor", err)
 	if count != 1 {
