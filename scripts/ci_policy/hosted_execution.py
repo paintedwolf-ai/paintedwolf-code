@@ -131,8 +131,8 @@ def run_lane(name, shard="", merge_group=False):
             early = environment.pop('PW_CI_EARLY_TARGET', '')
             if os.environ.get('GITHUB_ACTIONS') == 'true' and early in targets:
                 from ci_policy.merge_preflight import commands as ordered_commands
-                commands = [*commands[:-1], *ordered_commands({**lane, 'early_targets': [early]},
-                                                             hosted_plan.invocation(targets))]
+                ordered = ordered_commands({**lane, 'early_targets': [early]}, hosted_plan.invocation(targets))
+                commands = [ordered[0], *commands[:-1], *ordered[1:]]
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
