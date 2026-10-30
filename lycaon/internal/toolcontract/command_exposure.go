@@ -22,7 +22,7 @@ func (d OperationDefinition) ValidateNativeCommands() error {
 			if selected.Name != declared.Name {
 				continue
 			}
-			//nolint:errchkjson // Facts is detached from the immutable definition whose complete JSON was validated at construction.
+			//nolint:errchkjson // Facts comes from the immutable definition validated as JSON at construction.
 			selectedBytes, _ := json.Marshal(selected)
 			//nolint:errchkjson // The private operationLanguage catalog is parsed JSON with no mutable escape or custom marshaler.
 			declaredBytes, _ := json.Marshal(declared)

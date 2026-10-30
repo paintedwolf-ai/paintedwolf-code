@@ -51,7 +51,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	if err != nil {
 		return err
 	}
-	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
+	//nolint:contextcheck // Settlement retains BeginExecution values without cancellation to seal earlier effects.
 	defer run.close()
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -112,7 +112,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}(i)
 	}
 	wg.Wait()
-	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
+	//nolint:contextcheck // Settlement retains BeginExecution values without cancellation to seal earlier effects.
 	return f.settlePipeline(run, stages, pipes, results)
 }
 

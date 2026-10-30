@@ -82,7 +82,7 @@ func Upload(ctx context.Context, store blobstore.Store, caps Caps, video VideoDe
 		return Receipt{}, attacherr.Unsupported(unsupportedMessage(detected))
 	}
 
-	//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
+	//nolint:contextcheck // The host-blob API is contextless; admitted program streams carry their own context.
 	blob, err := store.Put(name, reader, caps.Materialization.MaxBody)
 	if err != nil {
 		return Receipt{}, materializeError(name, err)

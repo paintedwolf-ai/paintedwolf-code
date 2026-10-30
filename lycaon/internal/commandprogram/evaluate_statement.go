@@ -268,7 +268,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	if err != nil {
 		return err
 	}
-	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
+	//nolint:contextcheck // Settlement retains BeginExecution values without cancellation to seal earlier effects.
 	defer run.close()
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
@@ -278,7 +278,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	_, err = g.statements(ctx, list)
 	f.publish.mark(g.publish.eligible())
-	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
+	//nolint:contextcheck // Settlement retains BeginExecution values without cancellation to seal earlier effects.
 	return f.settleFrame(run, g, err)
 }
 

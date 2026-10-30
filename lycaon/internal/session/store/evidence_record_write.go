@@ -74,7 +74,7 @@ func marshalEvidenceBody(ctx context.Context, q *db.Queries, dataDir, projectID 
 		return "", fmt.Errorf("marshal evidence body: %w", err)
 	}
 	blobStore := contentblob.StoreFor(dataDir, projectID)
-	//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
+	//nolint:contextcheck // The host-blob API is contextless; admitted program streams carry their own context.
 	sha, byteSize, storedSize, err := contentblob.Write(blobStore, raw)
 	if err != nil {
 		return "", fmt.Errorf("write evidence body blob: %w", err)

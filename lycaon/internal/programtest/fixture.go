@@ -113,7 +113,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	callID := fmt.Sprintf("model-call-%d", f.calls)
 	args := map[string]any{"command": source}
 	contract, _ := toolcontract.Lookup("command")
-	//nolint:contextcheck // Parent receipt setup uses the test lifetime so canceled execution still has an initiating receipt.
+	//nolint:contextcheck // The test context keeps the initiating receipt available after execution cancellation.
 	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}

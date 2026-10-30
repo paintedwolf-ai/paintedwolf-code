@@ -107,7 +107,7 @@ func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLoca
 		return child, err
 	}
 	if err := f.e.ports.Executions.BeginExecution(ctx, child.inv, command); err != nil {
-		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
+		//nolint:contextcheck // Settlement retains BeginExecution values without cancellation to seal earlier effects.
 		child.close()
 		return nil, err
 	}

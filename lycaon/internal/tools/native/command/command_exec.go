@@ -289,7 +289,7 @@ func runCommandForeground(
 		out.Network = networkLife.complete(ctx)
 		out.Refusals = bound.lease.SettledRefusals(ctx)
 		out.LeftRunning = networkLife.leftBehind()
-		out.SpillPath = spillCommandOutput(tctx, snap) //nolint:contextcheck // Completed screened output is archived by the contextless retention owner after the caller lifetime.
+		out.SpillPath = spillCommandOutput(tctx, snap) //nolint:contextcheck // The contextless retention owner archives screened output after the caller lifetime.
 		ft.record(failureAttempt, out.Snapshot.ExitCode == 0)
 		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.Identity.SessionID, handle)
 		registry.Lifecycle.Discard(tctx.Identity.SessionID, handle)
