@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 func TestGrantKeyVariesWithSocketAndDirectBoundary(t *testing.T) {
@@ -27,16 +28,28 @@ func TestGrantKeyVariesWithSocketAndDirectBoundary(t *testing.T) {
 	k0 := hitl.GrantKey(base)
 
 	withSockets := base
-	withSockets.Execution.Contained.SocketPathsDigest = "digest-a"
-	withSockets.Execution.Contained.SocketCount = 1
+	withSockets.Sockets.SocketGrants = []confine.SocketGrant{{
+		ApprovedPath: "/run/a.sock", ResolvedPath: "/run/a.sock",
+		Binding: socketref.Binding{Enforcement: socketref.RetainedObject, ID: "service-a"},
+	}}
 	if hitl.GrantKey(withSockets) == k0 {
 		t.Fatal("socket boundary must change GrantKey")
 	}
 
 	otherSocket := withSockets
-	otherSocket.Execution.Contained.SocketPathsDigest = "digest-b"
+	otherSocket.Sockets.SocketGrants = []confine.SocketGrant{{
+		ApprovedPath: "/run/b.sock", ResolvedPath: "/run/b.sock",
+		Binding: socketref.Binding{Enforcement: socketref.RetainedObject, ID: "service-b"},
+	}}
 	if hitl.GrantKey(otherSocket) == hitl.GrantKey(withSockets) {
 		t.Fatal("a different socket boundary must change GrantKey")
+	}
+
+	displayOnly := base
+	displayOnly.Execution.Contained.SocketPathsDigest = "display-digest"
+	displayOnly.Execution.Contained.SocketCount = 1
+	if hitl.GrantKey(displayOnly) != k0 {
+		t.Fatal("socket display projection must not create grant authority")
 	}
 
 	direct := base
