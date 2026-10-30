@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/launchguard/launchguard.mountEntry",
+  "kind": "data_record",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "The complete kernel mountinfo row is one topology identity: parent, root, device, filesystem, propagation and security flags must be compared together. Retain the thirteen-field record at a thirteen-field ceiling; separating fields into bags would obscure epoch equality rather than create an authority boundary.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/launchguard/mount_topology_linux_test.go": "0ee5efd1f3d5d03da089e499eb89d74ad8871bf5a37cbd937f16c3408899f05d",
+    "lycaon/internal/launchguard/mount_epoch_linux_test.go": "75cb289d614e7d799c5346f84d384be828384215390eb5347f97df8826e080d8"
+  },
+  "reviewed_shape": "884480875fb6f07e1b022e88df2f2b875efc0f6b05088efdf9122b39b8e95533"
+}

@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 # The install root belongs to the package; refuse to unpack over foreign content.
-if [ "$1" = "install" ] && [ -d /opt/painted-wolf-code ] && [ -n "$(ls -A /opt/painted-wolf-code 2>/dev/null)" ]; then
+# Generations a previous installation's running launch still held may remain.
+if [ "$1" = "install" ] && [ -d /opt/painted-wolf-code ] && [ -n "$(ls -A /opt/painted-wolf-code 2>/dev/null | grep -vx generations)" ]; then
   echo "painted-wolf-code: /opt/painted-wolf-code already exists and is not owned by this package" >&2
   exit 1
 fi

@@ -33,7 +33,9 @@ class LinuxPayloadTests(unittest.TestCase):
             bundle = root / "bundle"
             bundle.mkdir()
             staged = root / "staged"
-            (staged / "data").mkdir(parents=True)
+            bootstrap = staged / "data/usr/libexec/painted-wolf-code/pw-launch"
+            bootstrap.parent.mkdir(parents=True)
+            bootstrap.write_bytes(b"bootstrap")
             optional = root / "maintained-hook"
             optional.write_bytes(b"native hook")
             config = type("Config", (), {"optional_files": lambda self, _root, family:
@@ -198,6 +200,7 @@ class LinuxPayloadTests(unittest.TestCase):
                 root / "VERSION",
                 root / "manifest.json",
                 root / "packaging/linux" / f"{config.APP_ID}.desktop",
+                tauri / "binaries" / f"{catalog['setuid_bootstrap']['name']}-{target}",
                 *(tauri / "binaries" / f"{helper}-{target}" for helper in catalog["helpers"]),
                 *(root / "packaging/linux/bin" / entry for entry in catalog["entry_points"]),
             ):

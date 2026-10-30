@@ -20,4 +20,10 @@ def load(path=CATALOG):
             raise ValueError(f"payload.{field} must name distinct executable roles")
     if not set(catalog["entry_points"]).issubset(catalog["helpers"]):
         raise ValueError("Linux entry points must name required helpers")
+    bootstrap = catalog.get("setuid_bootstrap")
+    if (not isinstance(bootstrap, dict) or set(bootstrap) != {"name", "path"}
+            or not isinstance(bootstrap["name"], str) or not NAME.fullmatch(bootstrap["name"])
+            or bootstrap["name"] in catalog["helpers"]
+            or bootstrap["path"] != "/usr/libexec/painted-wolf-code/" + bootstrap["name"]):
+        raise ValueError("payload.setuid_bootstrap must name one program installed outside the payload under /usr/libexec/painted-wolf-code")
     return catalog

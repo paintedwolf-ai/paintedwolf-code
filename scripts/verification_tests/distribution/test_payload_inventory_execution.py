@@ -19,7 +19,7 @@ class CompletePayloadTests(unittest.TestCase):
             root = Path(temporary)
             payload = root / OWNER.INSTALL_ROOT.lstrip("/")
             required = [OWNER.SHELL_EXECUTABLE, *(OWNER.INSTALL_ROOT + "/bin/" + name for name in OWNER.HELPERS),
-                        *("/usr/bin/" + name for name in OWNER.ENTRY_POINTS)]
+                        *("/usr/bin/" + name for name in OWNER.ENTRY_POINTS), OWNER.BOOTSTRAP["path"]]
             for name in required:
                 target = root / name.lstrip("/")
                 target.parent.mkdir(parents=True, exist_ok=True)

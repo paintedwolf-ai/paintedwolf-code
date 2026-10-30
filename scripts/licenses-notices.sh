@@ -78,7 +78,7 @@ GO_IGNORE_DUAL_LICENSED=(
   --ignore=github.com/spdx/tools-golang
 )
 # This package list matches the staged executables.
-SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
+SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-launch ./cmd/pw-launch-entry ./cmd/pw-generations)
 (
   cd "${GO_DIR}"
   "${GO_LICENSES}" check "${SHIPPED_GO_PACKAGES[@]}" \

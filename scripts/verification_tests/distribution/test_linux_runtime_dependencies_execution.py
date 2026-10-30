@@ -97,6 +97,9 @@ class LinuxRuntimeDependencyTests(unittest.TestCase):
             shell = tree / "opt/painted-wolf-code/bin/painted-wolf-code"
             shell.parent.mkdir(parents=True)
             shell.write_text("fixture")
+            bootstrap = tree / self.assemble.BOOTSTRAP['path'].lstrip('/')
+            bootstrap.parent.mkdir(parents=True)
+            bootstrap.write_text("fixture bootstrap")
             control = self.assemble.deb_control(ROOT, tree, "1.0.2~rc.1", "x86_64")
             spec = self.assemble.rpm_spec(ROOT, tree, "1.0.2~rc.1", 3)
         self.assert_hard("deb", control_field(control, "Depends"), control_field(control, "Recommends"))

@@ -54,14 +54,15 @@ type GenerationPolicy struct {
 // Generation retains the directory and executable identities selected once at
 // launch. Package lifecycle owns the generation's shared lifetime lock.
 type Generation struct {
-	Lifetime     *os.File
-	Directory    *os.File
-	Policy       GenerationPolicy
-	Root         *os.Root
-	Manifest     *pkgmanifest.Manifest
-	Desktop      *os.File
-	DesktopImage pkgmanifest.Executable
-	Entry        *os.File
+	Lifetime        *os.File
+	Directory       *os.File
+	Policy          GenerationPolicy
+	Root            *os.Root
+	Manifest        *pkgmanifest.Manifest
+	Desktop         *os.File
+	DesktopImage    pkgmanifest.Executable
+	Entry           *os.File
+	MountTransition *os.File
 }
 
 func (g *Generation) Close() {
@@ -70,6 +71,9 @@ func (g *Generation) Close() {
 	}
 	if g.Entry != nil {
 		_ = g.Entry.Close()
+	}
+	if g.MountTransition != nil {
+		_ = g.MountTransition.Close()
 	}
 	if g.Root != nil {
 		_ = g.Root.Close()
@@ -152,6 +156,10 @@ func CaptureGeneration() (*Generation, error) {
 		return nil, err
 	}
 	generation.Entry, _, err = generation.openRole("bin/pw-launch-entry")
+	if err != nil {
+		return nil, err
+	}
+	generation.MountTransition, _, err = generation.openRole("bin/pw-mount-intake-transition")
 	if err != nil {
 		return nil, err
 	}

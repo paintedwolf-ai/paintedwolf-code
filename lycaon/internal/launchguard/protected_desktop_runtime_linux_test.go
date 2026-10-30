@@ -121,7 +121,7 @@ func runActualDesktop(t *testing.T, dir string, uid, gid int, groups []uint32, a
 	testutil.FailErr(t, "desktop birth after namespace observation", desktop.current())
 	t.Logf("actual Den source=%s tree=%s manifest=%s engine_pid=%d desktop_pid=%d health=passed package_registration=absent external_network=absent fixture_manifest=%s", artifact.SourceCommit, artifact.SourceTree, artifact.ManifestSHA256, enginePID, desktopPID, policy.ManifestSHA256)
 	stopApp()
-	if !fixtureProcessExited(engine.fd, 10*time.Second) {
+	if !desktopFixtureProcessExited(engine.fd, 10*time.Second) {
 		t.Fatal("owned engine survived desktop teardown")
 	}
 }
@@ -196,7 +196,7 @@ func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy
 			if _, err := exec.Command("curl", "--fail", "--silent", "--max-time", "2", endpoint.String()).Output(); err != nil {
 				continue
 			}
-			pinnedEngine, err := pinFixtureProcess(manifest.PID, 0)
+			pinnedEngine, err := pinDesktopFixtureProcess(manifest.PID, 0)
 			if err != nil {
 				continue
 			}
@@ -229,7 +229,7 @@ func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy
 			if parent != pinnedEngine.parent {
 				t.Fatal("engine parent changed during observation")
 			}
-			pinnedDesktop, err := pinFixtureProcess(parent, 0)
+			pinnedDesktop, err := pinDesktopFixtureProcess(parent, 0)
 			testutil.FailErr(t, "retain actual desktop birth", err)
 			desktopFD = pinnedDesktop.fd
 			desktop, err := os.Stat(fmt.Sprintf("/proc/%d/exe", parent))

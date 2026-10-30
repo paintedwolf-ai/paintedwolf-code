@@ -1,0 +1,4 @@
+# The protected launch's bootstrap is setuid root by design: it creates the
+# root-owned user namespace that keeps same-user processes out of the app, then
+# drops every privilege (docs/security.md, Protected Linux launch).
+painted-wolf-code: elevated-privileges 4755 root/root [usr/libexec/painted-wolf-code/pw-launch]

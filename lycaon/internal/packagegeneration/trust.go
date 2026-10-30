@@ -13,12 +13,15 @@ import (
 // layout fixes where generations and lifetime locks live and which owner they trust.
 // Every directory from a store path up to anchor must be controlled; the native
 // layout anchors at "/" so the whole ancestry is checked.
+// staged names the store when it lives inside the package's staged payload, so
+// staging verification leaves it to the installer.
 type layout struct {
 	store, locks, anchor string
 	owner                uint32
+	staged               string
 }
 
-var native = layout{store: nativeStore, locks: lifetimeLocks, anchor: "/", owner: 0}
+var native = layout{store: nativeStore, locks: lifetimeLocks, anchor: "/", owner: 0, staged: "generations"}
 
 // controlledParents validates existing ancestors before creating store-owned leaves.
 func (l layout) controlledParents(name string) error {
@@ -54,4 +57,11 @@ func controlledObject(name string, info os.FileInfo, owner uint32) error {
 		return fmt.Errorf("native generation: uncontrolled payload object %q: uid %d mode %v", name, stat.Uid, info.Mode())
 	}
 	return nil
+}
+
+func (l layout) stagedExclusions() []string {
+	if l.staged == "" {
+		return nil
+	}
+	return []string{l.staged}
 }

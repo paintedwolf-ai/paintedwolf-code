@@ -30,6 +30,9 @@ import (
 
 // Facts mirrors the test's decoding of this report.
 type Facts struct {
+	ProcessStarts   map[int]uint64              `json:"process_starts"`
+	DetachedStart   uint64                      `json:"detached_start"`
+	LineagePIDs     []int                       `json:"lineage_pids,omitempty"`
 	PID             int                         `json:"pid"`
 	UIDs            [3]int                      `json:"uids"`
 	GIDs            [3]int                      `json:"gids"`
@@ -73,6 +76,20 @@ type vaultCommand struct {
 var desktopBroker *os.File
 
 func main() {
+	if lineageRole() {
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--exit-status" {
+		code, err := strconv.ParseUint(os.Args[2], 10, 8)
+		if err != nil {
+			os.Exit(254)
+		}
+		os.Exit(int(code))
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--self-sigkill" {
+		_ = unix.Kill(os.Getpid(), unix.SIGKILL)
+		os.Exit(254)
+	}
 	if len(os.Args) == 5 && os.Args[1] == "--browser-engine-victim" {
 		os.Exit(runBrowserEngineVictim(os.Args[2], os.Args[3], os.Args[4]))
 	}
@@ -100,6 +117,13 @@ func main() {
 	facts.GenerationFrame = frameRaw
 	facts.ProtectedLaunch = os.Getenv("PW_PROTECTED_LAUNCH")
 	facts.PID = os.Getpid()
+	facts.ProcessStarts = map[int]uint64{}
+	self, err := lineageProcessBirth(os.Getpid(), 0)
+	if err != nil {
+		facts.ReadError = err.Error()
+	} else {
+		facts.ProcessStarts[self.PID] = self.Start
+	}
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()
 	facts.GIDs[0], facts.GIDs[1], facts.GIDs[2] = unix.Getresgid()
 	facts.Groups, _ = unix.Getgroups()
@@ -140,6 +164,16 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--broker-probe" {
 			brokerProbe(&facts)
+		}
+		if arg == "--lineage-probe" {
+			births, err := lineageProbe()
+			for _, birth := range births {
+				facts.LineagePIDs = append(facts.LineagePIDs, birth.PID)
+				facts.ProcessStarts[birth.PID] = birth.Start
+			}
+			if err != nil {
+				facts.ReadError = err.Error()
+			}
 		}
 		if arg == "--exec-probe" {
 			scratch, err := os.MkdirTemp("", "pw-protected-exec-")
@@ -266,7 +300,7 @@ func brokerProbe(facts *Facts) {
 		return
 	}
 	detachedCall, err := launchbroker.Send(broker, launchbroker.Request{
-		Argv:        []string{"sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!"},
+		Argv:        []string{"sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & child=$!; echo $child; echo $$; cat /proc/$child/stat"},
 		Environment: []string{"PATH=/usr/bin:/bin"},
 		Dir:         "/",
 		Detach:      true,
@@ -280,7 +314,19 @@ func brokerProbe(facts *Facts) {
 	rawPID, _ := io.ReadAll(detachedRead)
 	_ = detachedRead.Close()
 	_ = detachedCall.Close()
-	facts.DetachedPID, _ = strconv.Atoi(strings.TrimSpace(string(rawPID)))
+	lines := strings.SplitN(strings.TrimSpace(string(rawPID)), "\n", 3)
+	if len(lines) != 3 {
+		facts.BrokerError = "ordinary detached birth was not reported"
+		return
+	}
+	facts.DetachedPID, _ = strconv.Atoi(lines[0])
+	parent, _ := strconv.Atoi(lines[1])
+	birth, err := decodeLineageBirth([]byte(lines[2]), facts.DetachedPID, parent)
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	facts.DetachedStart = birth.Start
 }
 
 // moduleProbe maps a file of the caller's own, and one from the fixture's

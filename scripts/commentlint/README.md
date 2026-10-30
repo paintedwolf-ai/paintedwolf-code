@@ -14,6 +14,8 @@ Run the configured checks from the repository root:
 
 Directory traversal stops at nested checkouts identified by a `.git` file or directory. To scan one separately, select that checkout with `--root`.
 
+C uses the lexical route for complete physical-line comments and quoted literals, including GNU assembly strings. Logical-line splices, trigraphs, incomplete literals and incomplete block comments require the syntax parser. Potential comment findings retain syntax validation. The C compiler owns validation of the native transition itself.
+
 ## Rules
 
 - `line-length` limits the longest line in a comment.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -28,6 +29,8 @@ const (
 	stageLifetimeFD
 	stageSelfFD
 	stageServerFD
+	stageMountTransitionFD
+	stageGuardianFD
 )
 
 // RunBootstrap is the installed setuid program's caller-facing half. It
@@ -35,6 +38,7 @@ const (
 // administrator's generation, starts the privileged stage, then drops every
 // privilege and remains as the unprivileged supervisor of the launch.
 func RunBootstrap(arguments []string) (int, error) {
+	runtime.LockOSThread()
 	sessionEnv := ScrubBootstrapEnvironment()
 	caller, err := CaptureCaller()
 	if err != nil {
@@ -47,6 +51,9 @@ func RunBootstrap(arguments []string) (int, error) {
 			reportStandardStreamReplacements(streamReplacements)
 		}
 		return 1, err
+	}
+	if unix.Gettid() != os.Getpid() {
+		return fail(errors.New("bootstrap must run on the original process leader"))
 	}
 	streamReplacements, err = sanitizeStandardStreams()
 	if err != nil {
@@ -81,13 +88,34 @@ func RunBootstrap(arguments []string) (int, error) {
 		return fail(err)
 	}
 	defer func() { _ = frame.Close() }()
-	// Descendants the stage leaves behind are reparented here when the stage
-	// exits; once the stage has handed off entry and broker-agent, subreaper
-	// is cleared so detached desktop launches reparent outside the launch.
+	// Only fixed setup roles exist below this pre-admission subreaper.
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		_ = broker.Close()
 		return fail(err)
 	}
+	children, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/children", os.Getpid(), unix.Gettid()))
+	if err != nil {
+		_ = broker.Close()
+		return fail(err)
+	}
+	defer func() { _ = children.Close() }()
+	proc, err := os.Open("/proc")
+	if err != nil {
+		_ = broker.Close()
+		return fail(err)
+	}
+	defer func() { _ = proc.Close() }()
+	handoff, err := mountSocketPair("bootstrap-guardian", "guardian-bootstrap")
+	if err != nil {
+		_ = broker.Close()
+		return fail(err)
+	}
+	defer func() { _ = handoff[0].Close(); _ = handoff[1].Close() }()
+	if err := guardianProtocolSocket(int(handoff[0].Fd())); err != nil {
+		_ = broker.Close()
+		return fail(err)
+	}
+	stagePIDFD := -1
 	stage := &exec.Cmd{
 		// The child executes its own copy of the retained image, at a
 		// descriptor number that survives the remapping below.
@@ -97,17 +125,41 @@ func RunBootstrap(arguments []string) (int, error) {
 		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime, self, broker},
+		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime, self, broker, generation.MountTransition, handoff[1]},
 		SysProcAttr: &syscall.SysProcAttr{
+			PidFD:      &stagePIDFD,
 			Cloneflags: unix.CLONE_NEWNS,
 			Credential: &syscall.Credential{Uid: 0, Gid: 0, Groups: []uint32{}},
 		},
 	}
-	if err := stage.Run(); err != nil {
+	if err := stage.Start(); err != nil {
 		_ = broker.Close()
-		return fail(fmt.Errorf("privileged stage: %w", err))
+		return fail(fmt.Errorf("start protected stage: %w", err))
 	}
-	_ = unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0)
+	_ = handoff[1].Close()
+	stagePin := os.NewFile(uintptr(stagePIDFD), "protected-stage-pidfd")
+	defer func() { _ = stagePin.Close(); _ = stage.Process.Release() }()
+	if err := awaitGuardianHandoff(handoff[0], stage.Process.Pid, stagePIDFD, caller, origin); err != nil {
+		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
+		_ = broker.Close()
+		return fail(err)
+	}
+	if err := dropBootstrapSupervisor(caller); err != nil {
+		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
+		_ = broker.Close()
+		return fail(err)
+	}
+	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0); err != nil {
+		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
+		_ = broker.Close()
+		return 1, err
+	}
+	if err := sendGuardianMessage(int(handoff[0].Fd()), guardianAdmit, 0); err != nil {
+		_ = unix.PidfdSendSignal(stagePIDFD, unix.SIGTERM, nil, 0)
+	}
 	lifetime := generation.Lifetime
 	generation.Lifetime = nil
 	generation.Close()
@@ -116,12 +168,8 @@ func RunBootstrap(arguments []string) (int, error) {
 	_ = origin.Close()
 	_ = self.Close()
 	_ = broker.Close()
-	if err := dropPrivileges(caller); err != nil {
-		_ = lifetime.Close()
-		return 1, err
-	}
 	reportStandardStreamReplacements(streamReplacements)
-	return superviseLaunch(lifetime), nil
+	return superviseGuardianLaunch(lifetime, handoff[0], stage.Process.Pid, stagePIDFD, caller), nil
 }
 
 // sanitizeProcess removes state a caller can hand a set-ID program: the

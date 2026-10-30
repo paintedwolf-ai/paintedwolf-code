@@ -37,16 +37,27 @@ func lexicalComments(language string, src []byte) ([]comment, bool) {
 		return nil, true
 	}
 	text := string(src)
+	// C translation phase 2 can join delimiters and continue line comments.
+	// These inputs require syntax validation until the lexer maps logical lines.
+	if language == "c" && cLogicalLineSyntax(text) {
+		return nil, false
+	}
 	var comments []comment
 	for offset, row, column := 0, 1, 1; offset < len(text); {
 		if quote, ok := matchingQuote(text, offset, syntax.quotes); ok {
-			next := quotedEnd(text, offset, quote)
+			next, closed := quotedEnd(text, offset, quote)
+			if language == "c" && (!closed || strings.ContainsAny(text[offset:next], "\r\n") || text[offset] == '\'' && offset > 0 && text[offset-1] >= '0' && text[offset-1] <= '9') {
+				return nil, false
+			}
 			advancePosition(text[offset:next], &row, &column)
 			offset = next
 			continue
 		}
 		if block, ok := matchingBlock(text, offset, syntax.blocks); ok {
-			end := blockEnd(text, offset, block)
+			end, closed := blockEnd(text, offset, block)
+			if language == "c" && !closed {
+				return nil, false
+			}
 			comments = append(comments, comment{
 				Language: language, Kind: "block_comment", StartRow: row, StartCol: column, Text: text[offset:end],
 			})
@@ -74,7 +85,7 @@ func lexicalComments(language string, src []byte) ([]comment, bool) {
 	return comments, true
 }
 
-func blockEnd(text string, offset int, token blockToken) int {
+func blockEnd(text string, offset int, token blockToken) (int, bool) {
 	position := offset + len(token.start)
 	depth := 1
 	for position < len(text) {
@@ -87,13 +98,13 @@ func blockEnd(text string, offset int, token blockToken) int {
 			depth--
 			position += len(token.end)
 			if depth == 0 {
-				return position
+				return position, true
 			}
 			continue
 		}
 		position++
 	}
-	return len(text)
+	return len(text), false
 }
 
 func matchingQuote(text string, offset int, tokens []quoteToken) (quoteToken, bool) {
@@ -129,22 +140,37 @@ func matchingLine(text string, offset, column int, tokens []lineToken) bool {
 	return false
 }
 
-func quotedEnd(text string, offset int, token quoteToken) int {
+func quotedEnd(text string, offset int, token quoteToken) (int, bool) {
 	position := offset + len(token.start)
 	for position < len(text) {
 		if token.escaped && text[position] == '\\' {
 			position += 2
+			if position > len(text) {
+				return len(text), false
+			}
 			continue
 		}
 		if strings.HasPrefix(text[position:], token.end) {
-			return position + len(token.end)
+			return position + len(token.end), true
 		}
 		if !token.multiline && text[position] == '\n' {
-			return position
+			return position, false
 		}
 		position++
 	}
-	return len(text)
+	return len(text), false
+}
+
+func cLogicalLineSyntax(text string) bool {
+	if strings.Contains(text, "\\"+"\n") || strings.Contains(text, "\\"+"\r") {
+		return true
+	}
+	for _, trigraph := range []string{"??=", "??/", "??'", "??(", "??)", "??!", "??<", "??>", "??-"} {
+		if strings.Contains(text, trigraph) {
+			return true
+		}
+	}
+	return false
 }
 
 func advancePosition(text string, row, column *int) {
@@ -188,7 +214,7 @@ func lexicalSyntaxFor(language string) lexicalSyntax {
 				{start: `'`, end: `'`, escaped: true},
 			},
 		}
-	case "css", "dart", "groovy", "java", "javascript", "solidity", "swift", "tsx", "typescript":
+	case "c", "css", "dart", "groovy", "java", "javascript", "solidity", "swift", "tsx", "typescript":
 		return slash
 	case "go", "gomod":
 		slash.quotes = append([]quoteToken{{start: "`", end: "`", multiline: true}}, slash.quotes...)
