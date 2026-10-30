@@ -265,38 +265,16 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
-	pending, err := m.store.preparedApprovalOperations(ctx)
-	if err != nil {
-		return err
-	}
-	if len(pending) == 0 {
-		return nil
-	}
-	recovery, ok := m.authorityInstaller.(approvalAuthorityRecovery)
-	if !ok {
-		return fmt.Errorf("approval authority recovery is not configured")
-	}
-	for _, op := range pending {
-		if err := m.recoverApprovalOperation(ctx, recovery, op); err != nil {
+	return m.store.eachPreparedApprovalOperation(ctx, m.nativeAdmission, func(op preparedApprovalOperation) error {
+		recovery, ok := m.authorityInstaller.(approvalAuthorityRecovery)
+		if !ok {
+			return fmt.Errorf("approval authority recovery is not configured")
+		}
+		if err := recovery.RollbackApprovalOption(ctx, op.CheckpointID, op.Option); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func (m *ApprovalAuthority) recoverApprovalOperation(ctx context.Context, recovery approvalAuthorityRecovery, op preparedApprovalOperation) error {
-	if op.authorityFormat != "" {
-		option, release, err := m.store.nativeAuthority().approvedOption(ctx, m.nativeAdmission, operationAuthoritySource(op.CheckpointID), op.Option)
-		if err != nil {
-			return err
-		}
-		defer release()
-		op.Option = option
-	}
-	if err := recovery.RollbackApprovalOption(ctx, op.CheckpointID, op.Option); err != nil {
-		return err
-	}
-	return m.store.rollbackApprovalOperation(ctx, op.CheckpointID)
+		return m.store.rollbackApprovalOperation(ctx, op.CheckpointID)
+	})
 }
 
 type ApprovalAuthority struct {
@@ -319,8 +297,8 @@ type approvalAuthorityStore interface {
 	prepareApprovalOperation(context.Context, string, string, approvedAuthority) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error
-	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
-	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
+	eachPreparedApprovalOperation(context.Context, toolcontract.ReviewStateAdmission, func(preparedApprovalOperation) error) error
+	eachChatGrant(context.Context, toolcontract.ReviewStateAdmission, time.Time, func(ChatGrant) error) error
 	forgetChatGrant(context.Context, string) (bool, error)
 	nativeAuthority() nativeAuthorityReader
 }

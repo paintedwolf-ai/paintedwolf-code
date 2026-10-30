@@ -27,7 +27,7 @@ func encodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 	payload := int64(0)
 	switch v := value.(type) {
 	case string:
-		payload = int64(base64.StdEncoding.EncodedLen(len(v)))
+		payload = 2 * int64(base64.StdEncoding.EncodedLen(len(v)))
 	case map[string]any:
 		payload = int64(len(v)) * 128
 	case []any:

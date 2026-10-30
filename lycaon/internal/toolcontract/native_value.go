@@ -104,21 +104,17 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 	decoder.UseNumber()
 	var envelope []any
 	if err := decoder.Decode(&envelope); err != nil {
-		leases.close()
 		return nil, nil, err
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		leases.close()
 		return nil, nil, fmt.Errorf("native value has trailing data")
 	}
 	if len(envelope) != 3 || envelope[0] != string(v.domain) || envelope[1] != json.Number("1") {
-		leases.close()
 		return nil, nil, fmt.Errorf("unknown native value envelope")
 	}
 	value, err := decodeReviewValue(ctx, state, leases, envelope[2])
 	if err != nil {
-		leases.close()
 		return nil, nil, err
 	}
 	release := leases.release()
@@ -126,8 +122,7 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 	return value, release, nil
 }
 
-// RestoreNativeValue verifies persisted version, domain, digest and canonical
-// grammar under admission before hashing/copying. Domain confusion refuses.
+// RestoreNativeValue returns validated canonical bytes and their admitted decoded tree.
 func RestoreNativeValue(ctx context.Context, state ReviewStateAdmission, domain NativeValueDomain, representation, digest, canonical string) (NativeValue, any, func(), error) {
 	if !domain.valid() || representation != string(domain)+"_v1" {
 		return NativeValue{}, nil, nil, fmt.Errorf("unknown native value representation")

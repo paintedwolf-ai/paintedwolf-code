@@ -188,6 +188,9 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 		if err != nil {
 			return err
 		}
+		if strconv.FormatInt(value, 10) != string(number) {
+			return fmt.Errorf("native authority integer is not canonical")
+		}
 		dst.SetInt(value)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -198,6 +201,9 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 		value, err := strconv.ParseUint(string(number), 10, dst.Type().Bits())
 		if err != nil {
 			return err
+		}
+		if strconv.FormatUint(value, 10) != string(number) {
+			return fmt.Errorf("native authority integer is not canonical")
 		}
 		dst.SetUint(value)
 		return nil
