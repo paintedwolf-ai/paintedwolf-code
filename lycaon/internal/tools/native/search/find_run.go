@@ -50,6 +50,8 @@ func unavailable(form, reason string) error {
 func runFind(inv *invocation) error {
 	inv.failure = 1
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
+	r.walker.lazy = true
+	defer r.walker.report()
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}
@@ -137,6 +139,16 @@ func expressionWord(word string) bool { return word == "!" || word == "(" || wor
 func (r *findRun) visit(e entry) error {
 	if err := r.inv.ctx.Err(); err != nil {
 		return err
+	}
+	if e.dir() || e.link {
+		var err error
+		e, err = r.walker.inspect(e, r.followAll)
+		if err != nil {
+			if _, ok := ordinary(err); ok {
+				return nil
+			}
+			return err
+		}
 	}
 	inRange := e.depth >= r.minDepth && (r.maxDepth < 0 || e.depth <= r.maxDepth)
 	descend := e.dir() && !e.link && (r.maxDepth < 0 || e.depth < r.maxDepth) && (!r.sameDevice || e.stat.Device == r.device)
