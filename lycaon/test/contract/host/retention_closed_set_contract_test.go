@@ -62,8 +62,6 @@ var retentionAnswers = map[string]retentionAnswer{
 	"lycaon/internal/session/approvalstate/sandbox_ask_guard.go#bySession":        retentionReleased,
 	"lycaon/internal/session/projectcontrol/service.go#lastSessionPosture":        retentionJustified,
 	"lycaon/internal/session/projectcontrol/service.go#lastSessionExternalHidden": retentionJustified,
-	"lycaon/internal/tools/native/command/program_supervision.go#sessions":        retentionReleased,
-	"lycaon/internal/tools/native/command/program_supervision.go#jobs":            retentionReleased,
 	"lycaon/internal/settings/session_grants.go#bySession":                        retentionReleased,
 	"lycaon/internal/settings/ask_quiet.go#byChat":                                retentionReleased,
 	"lycaon/internal/grantedpath/grantedpath.go#byRoot":                           retentionReleased,

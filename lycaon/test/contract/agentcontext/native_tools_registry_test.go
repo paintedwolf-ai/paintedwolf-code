@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/nativemanifest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
@@ -26,7 +25,7 @@ func loadNativeToolsManifestFlat(t *testing.T) []string {
 func TestNativeToolsManifestMatchesServeRegistry(t *testing.T) {
 	manifest := loadNativeToolsManifestFlat(t)
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := tools.RegisteredToolSet(reg)
+	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	for _, tool := range manifest {
 		if !registered[tool] {
 			t.Fatalf("native-tools.yaml lists %q but serve registry has no handler", tool)

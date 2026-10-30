@@ -9,23 +9,32 @@ import (
 )
 
 var implementNativeToolkit = []string{
-	"read", "write", "edit", "replace_lines", "restore_version", "code_rewrite",
-	"grep", "find", "stat", "wc", "list_dir", "chmod", "delete",
-	"copy", "move", "mkdir", "chown", "diff", "jq", "jq_edit", "extract_archive",
-	"source_history", "command",
+	"edit",
+	"replace_lines",
+	"restore_version",
+	"code_rewrite",
+	"chmod",
+	"chown",
+	"jq_edit",
+	"source_history",
+	"command",
 }
 
 var coordinatorNativeCeiling = []string{
-	"read", "write", "edit", "replace_lines", "restore_version", "code_rewrite",
-	"grep", "find", "stat", "wc", "list_dir", "chmod", "delete",
-	"diff", "jq",
-	"git_status", "git_diff", "git_log", "git_commit", "git_show",
-	"git_blame", "source_history", "git_restore", "git_ref", "git_branches",
+	"edit",
+	"replace_lines",
+	"restore_version",
+	"code_rewrite",
+	"chmod",
+	"git_commit",
+	"source_history",
+	"git_restore",
+	"command",
 }
 
 var readOnlyNativeSurvey = []string{
-	"read", "grep", "find", "jq", "stat", "wc", "list_dir",
-	"git_status", "git_diff", "git_log", "git_show", "git_blame", "source_history", "git_ref", "git_branches",
+	"source_history",
+	"command",
 }
 
 var readOnlyNativeMutations = []string{
