@@ -17,6 +17,9 @@ export function toolPartFindCorpus(part: ToolPartView): string {
 export async function searchToolPart(part: ToolPartView, sessionId: string | undefined, query: string, sensitive: boolean, signal: AbortSignal): Promise<VirtualListMatch[]> {
   const matches: VirtualListMatch[] = [];
   if (part.commandActivity) {
+    const fact = part.commandActivity.fact;
+    const header = [fact.label, fact.subject, fact.outcome].join(" · ");
+    matches.push(...findLiteralOffsets(header, query, sensitive, 10000).map(match => ({ from: match.start, to: match.start + match.length, field: "title", toolCallId: part.toolCallId })));
     for (const call of part.commandActivity.calls) {
       if (signal.aborted || matches.length >= 10000) break;
       const found = await searchToolPart(call, sessionId, query, sensitive, signal);

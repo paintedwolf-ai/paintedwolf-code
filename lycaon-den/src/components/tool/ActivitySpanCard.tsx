@@ -168,7 +168,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     if (entry?.kind !== "tool") return;
     restoreFind?.(); restoreFind = revealTemporarily();
     setFindToolKey(entry.part.id); revealRow?.(entry.part.id);
-    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-call-id="${CSS.escape(entry.part.toolCallId)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
+    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-part-id="${CSS.escape(entry.part.id)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
   };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   createEffect(() => {

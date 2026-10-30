@@ -1,10 +1,11 @@
+import { bindVirtualListFind } from "../../find/virtual-list-find.ts";
 import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { createChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { ToolContentProvider } from "../../chat/tool/tool-content.tsx";
-import { TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
+import { TOOL_CONTENT_REVEAL_EVENT, searchToolPart, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
 import {
@@ -88,15 +89,15 @@ export function ToolPartShell(props: Props) {
   const accessibleSummary = () => {
     const title = summary().title;
     const target = title !== toolName() && title !== toolLabel() ? title : "";
-    return [toolLabel(), target, props.part.commandActivity?.fact.outcome, statusDot(summary().status)].filter(Boolean).join(", ");
+    return [toolLabel(), target, props.part.commandActivity ? completion() : undefined, statusDot(summary().status)].filter(Boolean).join(", ");
   };
-  const completion = () => props.part.commandActivity?.fact.outcome ?? toolCompletionLabel(props.part);
+  const completion = () => { processRevision(); return toolCompletionLabel(props.part, props.sessionId); };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   const [summaryEl, setSummaryEl] = createSignal<HTMLElement | null>(null);
   const findId = () =>
-    `tool-body:${props.part.toolCallId || props.part.id}`;
+    `tool-body:${props.part.id}`;
   const revealId = () =>
-    `tool-reveal:${props.part.toolCallId || props.part.id}`;
+    `tool-reveal:${props.part.id}`;
 
   // Activity-span membership stays fixed for this mount.
   const accordion = useActivitySpanAccordion();
@@ -135,6 +136,7 @@ export function ToolPartShell(props: Props) {
     onCleanup(() => host.removeEventListener(TOOL_CONTENT_REVEAL_EVENT, reveal));
   });
   const contentAccess = (field: "output" | "args") => createMemo(() => {
+    if (props.part.commandActivity) return undefined;
     const client = props.client ?? getLycaonClient();
     const reference = field === "output" ? props.part.outputReference : props.part.argsReference;
     if (!client || !props.sessionId || !reference) return undefined;
@@ -152,6 +154,7 @@ export function ToolPartShell(props: Props) {
   bindFindableView({
     id: findId(),
     root: hostEl,
+    enabled: () => !props.part.commandActivity,
     scrollMatchIntoView: (match) => {
       const node = match.range.startContainer;
       const element = node instanceof HTMLElement ? node : node.parentElement;
@@ -163,8 +166,15 @@ export function ToolPartShell(props: Props) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    collapsedCorpus: () => toolPartFindCorpus(props.part),
+    collapsedCorpus: () => props.part.commandActivity ? "" : toolPartFindCorpus(props.part),
     collapsedCorpusAnchor: summaryEl,
+  });
+
+  bindVirtualListFind({
+    items: () => [props.part], host: () => hostEl() ?? undefined,
+    enabled: () => !!props.part.commandActivity,
+    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal),
+    reveal: (_index, match) => hostEl()?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })),
   });
 
   const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (
@@ -187,6 +197,7 @@ export function ToolPartShell(props: Props) {
       data-tool={props.part.tool}
       data-command-activity={props.part.commandActivity ? "" : undefined}
       data-tool-call-id={props.part.toolCallId}
+      data-tool-part-id={props.part.id}
       data-invocation-owner={props.part.invocation?.owner}
       data-invocation-lifecycle={props.part.invocation?.lifecycle}
       data-invocation-status={props.part.invocation?.status}

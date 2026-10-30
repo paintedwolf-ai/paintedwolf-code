@@ -133,10 +133,13 @@ it("does not absorb an already visible output row when launch facts arrive later
 
 it("retains live activity rows when the terminal receipt has no presentation snapshot", () => {
  const project=createCommandActivityProjection();
- project([entry("a",[fact("read")])]);
+ project([entry("a",[fact("read",{state:"running",outcome:"Running"})])]);
  const terminal=entry("a");
  if(terminal.kind==="tool") terminal.part.commandProgram={id:"program:a",state:"completed"} as CommandProgramReceipt;
- expect(parts(project([terminal]))[0]!.commandActivity!.fact.id).toBe("read");
+ const row=parts(project([terminal]))[0]!;
+ expect(row.commandActivity!.fact.id).toBe("read");
+ expect(row.commandActivity!.fact.outcome).toBe("Outcome unavailable");
+ expect(row.status).toBe("completed");
 });
 
 

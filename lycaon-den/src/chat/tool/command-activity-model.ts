@@ -36,7 +36,14 @@ export function createCommandActivityProjection() {
       let program = canonical && canonical.state !== "running" && canonical.state !== "waiting" ? canonical : live(entry.part) ?? remembered.get(entry.part.toolCallId) ?? canonical;
       const retainedProgram = remembered.get(entry.part.toolCallId);
       if (program && !program.activities && retainedProgram?.id === program.id && retainedProgram.activities) {
-        program = { ...program, activities: retainedProgram.activities, activity_executions: retainedProgram.activity_executions, activities_cursor: retainedProgram.activities_cursor, activities_omitted: retainedProgram.activities_omitted };
+        const settled = program.state !== "running" && program.state !== "waiting";
+        const executions = program.activity_executions ?? (settled ? undefined : retainedProgram.activity_executions);
+        const activities = retainedProgram.activities.map(fact => {
+          const execution = executions?.find(value => value.id === fact.id);
+          if (execution) return { ...fact, state: execution.state, outcome: execution.outcome, status_code: execution.status_code };
+          return settled && (fact.state === "running" || fact.state === "waiting") ? { ...fact, state: "unknown" as const, outcome: "Outcome unavailable", status_code: undefined } : fact;
+        });
+        program = { ...program, activities, activity_executions: executions, activities_cursor: retainedProgram.activities_cursor, activities_omitted: retainedProgram.activities_omitted };
       }
       if (program) remembered.set(entry.part.toolCallId, program);
       let facts = program?.activities;

@@ -5,7 +5,7 @@ type Fact = { label: string; value: string };
 const EFFECTS = { none: "No effect", completed: "Completed effect", attempted: "Attempted, outcome unknown", unknown: "Unknown outcome" };
 
 export function commandActivityFacts(view: CommandActivityView, executions: readonly CommandExecutionReceipt[], feedback?: readonly ToolFeedback[]): Fact[] {
-  const facts: Fact[] = [{ label: "Outcome", value: view.fact.outcome }];
+  const facts: Fact[] = [{ label: view.fact.job_handle && view.calls.some(call => call.tool === "command") ? "Launch outcome" : "Outcome", value: view.fact.outcome }];
   if (executions.some(row => row.effect_certainty === "attempted" || row.effect_certainty === "unknown")) {
     facts.push({ label: "Effects", value: executions.some(row => row.effect_certainty === "completed") ? "Partial effects; unknown outcome" : "Unknown outcome" });
   }

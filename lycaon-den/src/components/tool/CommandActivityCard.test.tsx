@@ -96,3 +96,29 @@ it("pages additional operations without changing the activity identity", async (
  fireEvent.click(view.getByRole("button",{name:"Previous operations"}));
  await waitFor(()=>expect(view.container.textContent).toContain("first operation"));
 });
+
+it("reveals a folded call on a later detail page through Find", async () => {
+ const { createSignal }=await import("solid-js");
+ const { bindFindableView }=await import("../../find/use-findable-view.ts");
+ const { openFind,setFindQuery,findNext,findController,resetFindControllerForTests }=await import("../../find/find-controller.ts");
+ const { registerOpenFilesSurfaceSink,resetOpenFilesSurfaceForTests }=await import("../../platform/navigation/open-files-surface.ts");
+ const { onTestFinished }=await import("vitest");
+ onTestFinished(()=>{resetFindControllerForTests();resetOpenFilesSurfaceForTests();});
+ const sink=vi.fn();registerOpenFilesSurfaceSink(sink);
+ const value=part();
+ value.commandActivity!.calls=Array.from({length:5},(_,index)=>({...value.commandActivity!.calls[0]!,id:`source-${index}`,toolCallId:`source-${index}`,args:{command:index===4?"UNIQUE_FOLDED_NEEDLE":"other command"}}));
+ const client=stubClient({getCommandProgramReceipt:vi.fn().mockResolvedValue({program,executions:[receipt()],nodes:[],executions_omitted:0,nodes_omitted:0})});
+ const view=render(()=>{
+  const [host,setHost]=createSignal<HTMLElement>();
+  bindFindableView({id:"session-transcript-activity-find",root:host,primary:true});
+  return <div ref={setHost}><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project" client={client}/></div>;
+ });
+ openFind();setFindQuery("UNIQUE_FOLDED_NEEDLE");
+ await waitFor(()=>expect(findController.matches().length).toBeGreaterThan(0));
+ findNext();
+ await waitFor(()=>expect(view.container.textContent).toContain("5–5 of 5"));
+ await waitFor(()=>expect(sink).toHaveBeenCalled());
+ const opened=sink.mock.calls.at(-1)?.[0];
+ expect(opened.document.toolCallId).toBe("source-4");
+ expect(opened.document.pane).toContain("input");
+});

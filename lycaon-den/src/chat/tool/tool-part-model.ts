@@ -213,7 +213,10 @@ export function toolPartDisplayStatus(
   const sid = sessionId?.trim();
   if (!sid) return live.running ? "running" : "completed";
   const snap = getBackgroundProcessSnapshot(sid, live.handle);
-  if (snap) return snap.running ? "running" : "completed";
+  if (snap) {
+    if (part.commandActivity && !snap.running && snap.exitCode !== undefined && snap.exitCode !== 0) return "error";
+    return snap.running ? "running" : "completed";
+  }
   if (hasHydratedBackgroundProcesses(sid)) return "completed";
   return live.running ? "running" : "completed";
 }
@@ -375,7 +378,16 @@ export function toolSummaryFields(
   };
 }
 
-export function toolCompletionLabel(part: ToolPartView): string | undefined {
+export function toolCompletionLabel(part: ToolPartView, sessionId?: string): string | undefined {
+  if (part.commandActivity) {
+    if (part.process && part.status !== "error") {
+      const process = sessionId ? getBackgroundProcessSnapshot(sessionId, part.process.handle) : undefined;
+      if (toolPartDisplayStatus(part, sessionId) === "running") return "Running";
+      if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
+      return "Completed";
+    }
+    return part.commandActivity.fact.outcome;
+  }
   const completion = part.completion;
   const operation = completion?.operation.trim().replaceAll("_", " ");
   const state = completion?.state.trim().replaceAll("_", " ");

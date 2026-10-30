@@ -532,3 +532,18 @@ describe("tool-part-model", () => {
     );
   });
 });
+
+it("shows a background activity's observed process outcome rather than its launch status", () => {
+ resetBackgroundProcessStoreForTests();
+ const part:ToolPartView={id:"activity",toolCallId:"launch",assistantMessageId:"assistant",messageId:"result",tool:"command",kind:"command",status:"completed",process:{handle:"job",running:true},commandActivity:{fact:{id:"process",group:"Running programs",label:"Run process",subject:"helper",state:"completed",outcome:"Exited 0",execution_ids:[],spans:[]},members:[],calls:[]}};
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Running");
+ applyBackgroundProcessEvent({session_id:"activity-job",process_id:"job",stream:"exit",end_offset:0,running:false,exit_code:7});
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Exited 7");
+ expect(toolPartDisplayStatus(part,"activity-job")).toBe("error");
+ part.status="error";part.commandActivity!.fact.outcome="Output read failed";
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Output read failed");
+ resetBackgroundProcessStoreForTests();
+ part.status="completed";applyBackgroundProcessOutputs("activity-job",[]);
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Completed");
+ resetBackgroundProcessStoreForTests();
+});
