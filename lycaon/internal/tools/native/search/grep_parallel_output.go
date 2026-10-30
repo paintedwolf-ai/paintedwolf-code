@@ -29,6 +29,13 @@ type grepFileWriter struct {
 	stderr bool
 }
 
+func (w *grepFileWriter) close() {
+	if w.sink.buffer != nil {
+		w.sink.buffers.put(w.sink.buffer)
+		w.sink.buffer = nil
+	}
+}
+
 func (w *grepFileWriter) errorWriter() *grepFileWriter {
 	return &grepFileWriter{sink: w.sink, stderr: true}
 }

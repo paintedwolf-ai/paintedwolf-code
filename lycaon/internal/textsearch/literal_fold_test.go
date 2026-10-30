@@ -138,15 +138,22 @@ func TestFoldedLiteralChecksWorkAndCancellation(t *testing.T) {
 }
 
 func TestFoldedLiteralFailedProofSharesTheVMWorkCeiling(t *testing.T) {
-	m, err := Compile(t.Context(), Spec{Dialect: Basic, Patterns: []string{"K"}, IgnoreCase: true}, catalogLimits(t))
-	testutil.FailErr(t, "compile failed-proof fixture", err)
-	engine := m.engine.(vmEngine)
-	engine.limits.WorkSteps = 50
-	m.engine = engine
-	input := []byte("K" + strings.Repeat("a", 31) + "K")
-	_, _, err = m.Select(t.Context(), input)
-	var budget *BudgetError
-	if !errors.As(err, &budget) || budget.Resource != "regex_work_steps" || budget.Maximum != 50 || budget.Observed != 68 {
-		t.Fatalf("failed literal proof work = %v", err)
+	for _, pattern := range []string{"K", "z"} {
+		t.Run(pattern, func(t *testing.T) {
+			m, err := Compile(t.Context(), Spec{Dialect: Basic, Patterns: []string{pattern}, IgnoreCase: true}, catalogLimits(t))
+			testutil.FailErr(t, "compile failed-proof fixture", err)
+			engine := m.engine.(vmEngine)
+			engine.limits.WorkSteps = 50
+			m.engine = engine
+			input := []byte("K" + strings.Repeat("a", 31) + "K")
+			if pattern == "z" && m.Requirement().Matches(input) {
+				t.Fatal("negative requirement fixture matched")
+			}
+			_, _, err = m.Select(t.Context(), input)
+			var budget *BudgetError
+			if !errors.As(err, &budget) || budget.Resource != "regex_work_steps" || budget.Maximum != 50 || budget.Observed != 68 {
+				t.Fatalf("failed literal proof work = %v", err)
+			}
+		})
 	}
 }

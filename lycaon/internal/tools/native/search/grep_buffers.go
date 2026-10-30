@@ -1,6 +1,9 @@
 package search
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // grepBuffers transfers fixed storage from workers to the ordered reducer.
 type grepBuffers struct{ available chan []byte }
@@ -17,8 +20,8 @@ func (b *grepBuffers) get(ctx context.Context) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if b == nil {
-		return make([]byte, 0, grepOutputChunk), ctx.Err()
+	if b == nil || b.available == nil {
+		return nil, errors.New("grep output requires a bounded buffer owner")
 	}
 	select {
 	case <-ctx.Done():
@@ -29,7 +32,7 @@ func (b *grepBuffers) get(ctx context.Context) ([]byte, error) {
 }
 
 func (b *grepBuffers) put(buffer []byte) {
-	if b == nil || buffer == nil {
+	if buffer == nil {
 		return
 	}
 	b.available <- buffer[:0]
