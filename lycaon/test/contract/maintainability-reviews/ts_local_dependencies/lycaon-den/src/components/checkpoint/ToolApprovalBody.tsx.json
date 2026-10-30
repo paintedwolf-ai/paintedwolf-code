@@ -1,0 +1,17 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/checkpoint/ToolApprovalBody.tsx",
+  "kind": "module",
+  "workstream": "approval-decision-feedback",
+  "disposition": "retain",
+  "reason": "The tool card composes typed host offers, recipient and scope details, consequences, disclosure and shared card primitives. Grant-menu interaction and decision submission are separate boundaries. Retain these explicit presentation dependencies; the ladder, secret-recipient and failure contracts bound their use.",
+  "reviewed_commit": "9048ab1b26588517749373aaf600c07d757725c4",
+  "ceiling": 22,
+  "boundaries": {
+    "lycaon-den/src/components/checkpoint/ApprovalCard.behaviors.test.tsx": "3da8c45f8c70e97462fa474b51a5e777a9d3dff6573e7bf4d95080cfdd9aaafb",
+    "lycaon-den/src/components/checkpoint/approval-ladder-slots.test.tsx": "458c2cce95af6708a10c147451ec5167aed4c7d5493f8f07c124c44b5c805188",
+    "lycaon-den/src/components/checkpoint/secret-ladder.test.tsx": "840cc07a568c02f5646bdc91f0cb8ed8224588484c364f49f6023dc1e3d2c86f",
+    "lycaon-den/src/components/checkpoint/CheckpointCards.failure.test.tsx": "c20dc018211ac3288dea25e7abffe45353bee0992f4da49c77953b56f393de97"
+  },
+  "reviewed_shape": "83ba7bbb78f2fd8af0894f8aeccb71168460c691d9e18e0e7ccaf9294845e907"
+}
