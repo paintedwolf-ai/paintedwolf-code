@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -39,7 +41,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"os"
 )
 
 func (b *serveBuilder) wireRuntimeServices() error {

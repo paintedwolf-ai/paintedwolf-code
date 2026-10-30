@@ -2,6 +2,8 @@ package observations
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/internal/workscope"
-	"strings"
 )
 
 type RepositoryChanges interface{ Changed(context.Context, string) }

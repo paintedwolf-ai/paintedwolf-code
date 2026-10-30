@@ -2,6 +2,9 @@ package toolfixture
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -59,8 +62,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"path/filepath"
-	"testing"
 )
 
 func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
