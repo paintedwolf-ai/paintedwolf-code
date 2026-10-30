@@ -7,8 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// approvedOption restores the single approved option a native
-// operation or chat grant row records, bound to that row's display copy.
+// approvedOption binds the saved native option to its display copy.
 func (s authoritySnapshot) approvedOption(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource, display ApprovalOption) (ApprovalOption, func(), error) {
 	projection, releaseProjection, err := s.read(ctx, state, source)
 	if err != nil {

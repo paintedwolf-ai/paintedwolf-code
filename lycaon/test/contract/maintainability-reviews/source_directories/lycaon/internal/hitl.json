@@ -2,17 +2,18 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/hitl",
   "kind": "module",
-  "workstream": "unix-socket-grants",
+  "workstream": "approval-authority-lifecycle",
   "disposition": "retain",
-  "reason": "HITL owns checkpoint admission, settlement, authority installation and recovery. Socket ownership and unavailable-intent recovery stay alongside the resolution locks and SQL transaction owner; another package would separate journal commitment from capability transfer. Freeze this reviewed shape at 52 files; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
-  "ceiling": 52,
+  "reason": "HITL owns admission, decision settlement and durable authority recovery. Native schema binding, measured reads, capacity admission and replay are distinct internal boundaries around the same transaction owner. Keep them beside checkpoint lifecycle and socket ownership; a separate package would split commitment from capability installation. Freeze membership at this reviewed composition.",
+  "reviewed_commit": "1493abb5c9439ab1a69df28b974f2ca011b18475",
+  "ceiling": 63,
   "boundaries": {
-    "lycaon/internal/hitl/checkpoint_expiry_test.go": "208fae3de9908d220200f08279b6edae18047b84322b2e1418fad9851fe69e5c",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "9b31a80db071a85866026f0099eb1d4947f1abbbda314310e11998a45bf8184c",
+    "lycaon/internal/hitl/native_authority_capacity_test.go": "c825cb9d4114d27e3bab4eed3ffe3d64db8508d04af05be520af89324f7442e0",
+    "lycaon/internal/hitl/native_authority_replay_capacity_test.go": "2e1011a781e248ece2b5e0b621fbfbfb3007c71dd85263eec918652da90839cb",
+    "lycaon/internal/hitl/native_authority_projection_test.go": "564102bbfc50ccee40b4901b0a75d9ef568272aa1dab371003eaeea473183e8e",
     "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c",
-    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
-    "lycaon/internal/hitl/grant_socket_binding_identity_test.go": "d3c76c978a9025cede822d1322158da1a000f6f64ae042e6e8b222b78dbec831"
+    "lycaon/internal/hitl/checkpoint_admission_test.go": "3b3f379046a7d23d372e3dff20f25504193381bb0cd311948cb068291e168b31",
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "208fae3de9908d220200f08279b6edae18047b84322b2e1418fad9851fe69e5c"
   },
-  "reviewed_shape": "bb3c1d7b48f3fcfbce25a4cb6f95502e739fac0bbdb4470ae67fcb9fffd55ad3"
+  "reviewed_shape": "128cedd6025f0d1af2533a662c4ff2d5ea2eb853727e552c7c073781cfbe3c77"
 }

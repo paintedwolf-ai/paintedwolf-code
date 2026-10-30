@@ -1,0 +1,14 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/toolcontract",
+  "kind": "module",
+  "workstream": "approval-authority-lifecycle",
+  "disposition": "retain",
+  "reason": "The tool contract package defines shared operation values, catalog facts and admitted native representations. Native encoding, restore grammar and storage bounds are one codec boundary used by operation review and authority persistence. Keep their domain checks and resource admission together; they introduce no permission owner. Freeze this reviewed member set.",
+  "reviewed_commit": "1493abb5c9439ab1a69df28b974f2ca011b18475",
+  "ceiling": 31,
+  "boundaries": {
+    "lycaon/internal/toolcontract/reviewed_inputs_test.go": "64b1ddc723117d9ae3ec74570b1dcf71ce04286de7f1b76973a6236c8f60ec46"
+  },
+  "reviewed_shape": "d6d2874a038cabf66a8dfac97aceb5bf534a59f3f3466bd57ffe1cd1ac4a859c"
+}

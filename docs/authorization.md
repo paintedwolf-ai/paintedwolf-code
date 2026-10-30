@@ -279,7 +279,7 @@ and typed binding share one admitted tree; encoding scratch is released after
 the canonical bytes are retained.
 
 Before publishing a native approval, the host exercises restoration, display
-binding and preparation of every offered choice under the production decision
+binding and preparation of every enabled choice under the production decision
 budget. This includes the measured read and person provenance. Resolution,
 recovery and saved-grant replay serialize against the same authority owner;
 recovery and replay release each record before reading the next. Rejection and

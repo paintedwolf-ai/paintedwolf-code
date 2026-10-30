@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/hitl/native_authority_projection_test.go",
+  "kind": "test_suite",
+  "workstream": "approval-authority-lifecycle",
+  "disposition": "retain",
+  "reason": "This suite binds raw-byte identity, declared typed grammar, screened exports, restart resolution, unavailable socket intent and interrupted-operation recovery to one reusable host fixture. These scenarios verify the same durable authority contract. Keep the shared fixture and contract together at the measured ceiling.",
+  "reviewed_commit": "1493abb5c9439ab1a69df28b974f2ca011b18475",
+  "ceiling": 465,
+  "boundaries": {
+    "lycaon/internal/hitl/native_authority_projection_test.go": "564102bbfc50ccee40b4901b0a75d9ef568272aa1dab371003eaeea473183e8e"
+  }
+}

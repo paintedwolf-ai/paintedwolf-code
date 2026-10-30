@@ -104,10 +104,7 @@ func chatGrantAuthoritySource(chatSessionID, id string) authoritySource {
 	}
 }
 
-// nativeAuthorityReader is the one reader of native authority bodies. It
-// measures a body and reserves aggregate state before Scan copies it, reads
-// the body from that same snapshot only while its identity still matches, and
-// restores it through the strict versioned codec. Nothing falls back to JSON.
+// nativeAuthorityReader admits measured bodies from one consistent snapshot.
 type nativeAuthorityReader struct {
 	db      db.Handle
 	queries *db.Queries
@@ -196,9 +193,7 @@ func validateNativeAuthorityDisplay(ctx context.Context, state toolcontract.Revi
 	return nil
 }
 
-// approvedOption returns the option to install and its durable record. A
-// structured row's payload plan is its authority. A native row's option comes
-// only from the measured reader, bound to the displayed plan it was shown as.
+// approvedOption binds the selected authority to its displayed plan and deciding person.
 func approvedOption(ctx context.Context, store approvalAuthorityStore, state toolcontract.ReviewStateAdmission, row StoredCheckpoint, plan *ApprovalPlan, display ApprovalOption, resolution Resolution) (ApprovalOption, approvedAuthority, func(), error) {
 	if row.AuthorityFormat == "" {
 		option := display.grantedBy(resolution)
