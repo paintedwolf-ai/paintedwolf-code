@@ -17,10 +17,8 @@ type entry struct {
 	bound   projectpaths.BoundPath
 	stat    fseffect.EntryStat
 	depth   int
-	// start is the starting point the entry was reached from.
-	start string
-	// link reports that the entry itself is a symbolic link; followed that
-	// it was one whose target now describes it.
+	start   string
+	// Followed entries carry target metadata while retaining their path spelling.
 	link, followed bool
 	metadata       *entryMetadata
 }
@@ -28,10 +26,7 @@ type entry struct {
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
 func (e entry) file() bool { return e.stat.Mode.IsRegular() }
 
-// walker lists directories through the invocation's held roots. Every listed
-// name counts against traversal_visits; going over refuses the operation.
-// Entries the read boundary protects are not visited, as in the structured
-// discovery tools.
+// Every listed name charges traversal_visits before read filtering.
 type walker struct {
 	inv     *invocation
 	visited int64
