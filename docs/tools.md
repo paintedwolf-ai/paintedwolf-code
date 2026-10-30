@@ -355,6 +355,15 @@ printed matches validate the current entry through its held root. Discovery
 completion logs distinguish entry metadata reads, directory preparations,
 membership reuse, and live listings.
 
+File-backed grep and rg searches use at most eight workers, bounded by the
+process CPU allowance. One reducer publishes files in operand and traversal
+order, including diagnostics, source mappings and revision pins. Pending work
+is limited to twice the worker count; output travels in 64 KiB chunks with a
+two-event queue per file, charged to the program's aggregate memory admission.
+The first output record is released promptly. Quiet matches, closed downstream
+pipes and cancellation stop pending workers and release their held roots and
+memory. Stdin and process substitutions retain sequential stream consumption.
+
 ### Stream queries and format-aware edits
 
 `internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
