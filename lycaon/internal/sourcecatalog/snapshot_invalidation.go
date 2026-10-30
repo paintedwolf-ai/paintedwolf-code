@@ -39,6 +39,7 @@ func (c *Catalog) InvalidateProject(projectID string) {
 	for root := range roots {
 		c.Trees.invalidateTrees(root, nil)
 		c.Literals.cache.invalidate(root, nil)
+		c.Trees.invalidateContent(root)
 	}
 }
 
@@ -90,6 +91,7 @@ func (c *Catalog) invalidateRootContent(rootPath string, paths []string) string 
 	rootPath = c.markRootStale(rootPath, true, paths...)
 	if rootPath != "" {
 		c.Literals.cache.invalidate(rootPath, paths)
+		c.Trees.invalidateContent(rootPath)
 	}
 	return rootPath
 }

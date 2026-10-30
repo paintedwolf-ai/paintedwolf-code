@@ -13,8 +13,8 @@ import (
 
 func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 	root := t.TempDir()
-	markLiteralWatch(t, root)
 	index := New().Literals
+	index.cache.versionOf = fixtureFileVersion
 	contents := []string{"NeedleToken", "ébc", "Kelvin ſource Σigma", "İstanbul ıSTANBUL", "ÉLAN élan", "abc abbc abcd", "start\nend", "", "\xffNeedleToken", "\ufeffNeedleToken", "\x00NeedleToken", "\xff\xfeN\x00e\x00e\x00d\x00l\x00e\x00"}
 	entries := make([]Entry, len(contents))
 	for i, content := range contents {
@@ -23,7 +23,7 @@ func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 		info, err := os.Stat(filepath.Join(root, rel))
 		testutil.FailErr(t, "stat content", err)
 		entries[i] = Entry{Path: rel, Size: info.Size(), Mode: uint32(info.Mode()), Modified: info.ModTime()}
-		index.BeginRead(root, entries[i], fileVersion(root, entries[i])).Observe(t.Context(), []byte(content))
+		captureObserved(index.BeginRead(root, entries[i], index.cache.versionOf(root, entries[i])), t.Context(), []byte(content))
 	}
 	limits, err := textsearch.CatalogLimits()
 	testutil.FailErr(t, "matcher limits", err)
@@ -50,7 +50,7 @@ func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 					for i, content := range contents {
 						_, matched, matchErr := matcher.Select(t.Context(), []byte(content))
 						testutil.FailErr(t, "match corpus", matchErr)
-						if matched && index.CanPruneBytes(root, matcher.Requirement(), entries[i], fileVersion(root, entries[i])) {
+						if matched && index.CanPruneBytes(root, matcher.Requirement(), entries[i], index.cache.versionOf(root, entries[i])) {
 							t.Fatalf("filter excluded dialect=%v pattern=%q fold=%v word=%v content=%q", dialect, pattern, fold, word, content)
 						}
 					}
@@ -63,7 +63,7 @@ func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 func TestCanonicalByteFiltersPreserveEveryByteSubstring(t *testing.T) {
 	const content = "ébc Kelvin ſource Σigma"
 	root, entry, index := captureFixture(t, content)
-	index.BeginRead(root, entry, fileVersion(root, entry)).Observe(t.Context(), []byte(content))
+	captureObserved(index.BeginRead(root, entry, index.cache.versionOf(root, entry)), t.Context(), []byte(content))
 	limits, err := textsearch.CatalogLimits()
 	testutil.FailErr(t, "matcher limits", err)
 	for start := 0; start < len(content); start++ {
@@ -74,7 +74,7 @@ func TestCanonicalByteFiltersPreserveEveryByteSubstring(t *testing.T) {
 				testutil.FailErr(t, "compile byte patterns", err)
 				_, matched, err := matcher.Select(t.Context(), []byte(content))
 				testutil.FailErr(t, "match byte substring", err)
-				if !matched || index.CanPruneBytes(root, matcher.Requirement(), entry, fileVersion(root, entry)) || index.CanPruneBytes(root, litprefilter.AnyOf(patterns...), entry, fileVersion(root, entry)) {
+				if !matched || index.CanPruneBytes(root, matcher.Requirement(), entry, index.cache.versionOf(root, entry)) || index.CanPruneBytes(root, litprefilter.AnyOf(patterns...), entry, index.cache.versionOf(root, entry)) {
 					t.Fatalf("excluded byte interval %d:%d patterns=%q", start, end, patterns)
 				}
 			}

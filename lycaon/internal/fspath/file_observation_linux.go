@@ -12,5 +12,5 @@ func ObserveFile(info fs.FileInfo) FileObservation {
 	if !ok {
 		return FileObservation{}
 	}
-	return FileObservation{Identity: AllocationIdentity{Device: uint64(stat.Dev), Inode: stat.Ino}, Changed: stat.Ctim.Sec*1e9 + stat.Ctim.Nsec, Links: uint64(stat.Nlink), Known: true}
+	return FileObservation{Identity: AllocationIdentity{Device: uint64(stat.Dev), Inode: stat.Ino}, Changed: stat.Ctim.Sec*1e9 + stat.Ctim.Nsec, Links: uint64(stat.Nlink), Size: info.Size(), Known: true}
 }

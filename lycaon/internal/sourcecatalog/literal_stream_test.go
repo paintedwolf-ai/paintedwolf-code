@@ -94,3 +94,24 @@ func TestLiteralStreamBoundsCallerWriteQuanta(t *testing.T) {
 		t.Fatal("valid large chunk was rejected")
 	}
 }
+
+func TestContentProjectionAccountingChargesSharedStorageOnce(t *testing.T) {
+	plain := newLiteralContent(16)
+	_, err := plain.Write([]byte("ordinary text"))
+	testutil.FailErr(t, "write plain text", err)
+	plainFacts, err := plain.finish()
+	testutil.FailErr(t, "finish plain text", err)
+	encoded := newLiteralContent(16)
+	_, err = encoded.Write([]byte("\ufeffordinary text"))
+	testutil.FailErr(t, "write encoded text", err)
+	encodedFacts, err := encoded.finish()
+	testutil.FailErr(t, "finish encoded text", err)
+	a := literalFileCacheEntry{bloom: plainFacts.decoded.bloom, rawBloom: plainFacts.raw.bloom, shared: plainFacts.shared}
+	b := literalFileCacheEntry{bloom: encodedFacts.decoded.bloom, rawBloom: encodedFacts.raw.bloom, shared: encodedFacts.shared}
+	if !a.shared || b.shared {
+		t.Fatal("projection storage was not represented explicitly")
+	}
+	if delta := literalFileCost(8, 1, b) - literalFileCost(8, 1, a); delta != int64(len(b.bloom)*8) {
+		t.Fatalf("independent projection cost=%d", delta)
+	}
+}

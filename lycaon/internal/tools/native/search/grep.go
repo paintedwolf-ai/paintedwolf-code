@@ -485,10 +485,7 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 		}
 		return err
 	}
-	if r.inv.owners.Catalog != nil {
-		actual, canonicalErr := inv.paths.Canonical(inv.ctx, operand)
-		e.followed = e.followed || canonicalErr != nil || actual != e.bound.Resolved.Abs
-	}
+
 	if !e.dir() {
 		if !r.selection.commandLineFile(operand) {
 			return nil
@@ -531,7 +528,6 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 		return err
 	}
 	for _, child := range children {
-		child.followed = child.followed || dir.followed
 		if r.stopped {
 			return nil
 		}

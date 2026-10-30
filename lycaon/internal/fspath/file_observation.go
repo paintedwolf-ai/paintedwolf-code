@@ -1,9 +1,10 @@
 package fspath
 
-// FileObservation identifies file changes that restored size and mtime cannot hide.
+// FileObservation binds content facts to native identity, change metadata, and size.
 type FileObservation struct {
 	Identity AllocationIdentity
 	Changed  int64
+	Size     int64
 	Links    uint64
 	Known    bool
 }
