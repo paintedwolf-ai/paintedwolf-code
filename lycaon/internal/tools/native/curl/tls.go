@@ -113,7 +113,7 @@ func (inv *invocation) readCAPath(operand string) ([]byte, error) {
 		}
 		bundle = append(append(bundle, data...), '\n')
 		if int64(len(bundle)) > maximum {
-			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(bundle))}}
+			return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(bundle))}}
 		}
 	}
 	return bundle, nil

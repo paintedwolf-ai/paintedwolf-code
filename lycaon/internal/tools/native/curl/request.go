@@ -158,7 +158,7 @@ func (inv *invocation) uploadBody() (string, error) {
 		return "", err
 	}
 	if int64(len(data)) > maximum {
-		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(data))}}
+		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(data))}}
 	}
 	return string(data), nil
 }

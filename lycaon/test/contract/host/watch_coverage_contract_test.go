@@ -132,7 +132,7 @@ func inspectEpochFunc(rel string, fn *ast.FuncDecl) *epochFunc {
 		switch node := n.(type) {
 		case *ast.BinaryExpr:
 			if (node.Op == token.EQL || node.Op == token.NEQ) &&
-				!isLiteralOperand(node.X) && !isLiteralOperand(node.Y) &&
+				!isConstantEpochOperand(node.X) && !isConstantEpochOperand(node.Y) &&
 				(namesEpoch(node.X) || namesEpoch(node.Y)) {
 				info.comparesEpochs = true
 			}
@@ -206,9 +206,15 @@ func epochCallName(call *ast.CallExpr) (name, pkg string) {
 	return "", ""
 }
 
-func isLiteralOperand(expr ast.Expr) bool {
-	_, ok := expr.(*ast.BasicLit)
-	return ok
+// Presence checks do not compare observation generations. In particular, a
+// parsed Unix timestamp pointer being non-nil says nothing about watch freshness.
+func isConstantEpochOperand(expr ast.Expr) bool {
+	expr = ast.Unparen(expr)
+	if _, ok := expr.(*ast.BasicLit); ok {
+		return true
+	}
+	ident, ok := expr.(*ast.Ident)
+	return ok && ident.Name == "nil"
 }
 
 // namesEpoch ignores package qualifiers when identifying epoch operands.
@@ -233,4 +239,27 @@ func namesEpoch(expr ast.Expr) bool {
 		return true
 	})
 	return found
+}
+
+func TestEpochComparisonDistinguishesPresenceFromFreshness(t *testing.T) {
+	for _, tc := range []struct {
+		expression string
+		freshness  bool
+	}{
+		{"epoch != nil", false},
+		{"nil == state.epoch", false},
+		{"(epoch) != (nil)", false},
+		{"epoch == observed", true},
+		{"state.epoch != captured.epoch", true},
+		{"repochange.EpochCurrent(root, epoch)", true},
+	} {
+		t.Run(tc.expression, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), "probe.go", "package probe; func probe() { if "+tc.expression+" {} }", 0)
+			contractcheck.FailErr(t, "parse epoch comparison fixture", err)
+			result := inspectEpochFunc("probe.go", file.Decls[0].(*ast.FuncDecl))
+			if result.comparesEpochs != tc.freshness {
+				t.Fatalf("freshness comparison=%v want %v", result.comparesEpochs, tc.freshness)
+			}
+		})
+	}
 }

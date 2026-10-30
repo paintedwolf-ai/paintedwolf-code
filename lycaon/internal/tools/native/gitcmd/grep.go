@@ -229,7 +229,11 @@ func (g *gitGrep) search(source grepSource) error {
 	}
 	return git.ReadBlobs(g.ctx, g.root, oids, g.limit, func(i int, content []byte, err error) error {
 		if errors.Is(err, git.ErrBlobTooLarge) {
-			return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": g.limit, "path": files[i].path}}
+			observed, sizeErr := g.p.owners.Git.BlobSize(g.ctx, g.root, files[i].oid)
+			if sizeErr != nil {
+				return sizeErr
+			}
+			return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": g.limit, "observed": observed, "path": files[i].path}}
 		}
 		if g.mode == "quiet" && g.matched {
 			return nil
@@ -297,7 +301,7 @@ func (g *gitGrep) readWorktree(rel string) ([]byte, bool, error) {
 	defer func() { _ = f.Close() }()
 	content, err := io.ReadAll(io.LimitReader(f, g.limit+1))
 	if err == nil && int64(len(content)) > g.limit {
-		return nil, false, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": g.limit, "path": rel}}
+		return nil, false, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": g.limit, "observed": int64(len(content)), "path": rel}}
 	}
 	return content, err == nil, err
 }
