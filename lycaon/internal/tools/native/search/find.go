@@ -15,8 +15,7 @@ import (
 	"mvdan.cc/sh/v3/pattern"
 )
 
-// findNode is one parsed expression node. Boolean nodes short-circuit; a
-// primary's test may act (print, exec, delete) and reports its truth.
+// Boolean nodes short-circuit before reaching predicates or actions.
 type findNode struct {
 	op          string // "and", "or", "not" or "primary"
 	left, right *findNode
@@ -55,8 +54,7 @@ func (n *findNode) eval(r *findRun, e entry) (bool, error) {
 	return n.test(r, e)
 }
 
-// findParser builds the expression with GNU precedence: ! and -not bind
-// tightest, then implicit or explicit -a, then -o; parentheses group.
+// Negation binds before conjunction, then disjunction; parentheses group.
 type findParser struct {
 	run   *findRun
 	items []commandprogram.BoundItem
@@ -401,14 +399,14 @@ func (r *findRun) ownerTest(value, key string, id func(entry) uint32) (*findNode
 	}}, nil
 }
 
-// depthTest is BSD's -depth N: the entry's depth below its starting point.
+// depthTest compares depth below the starting point.
 func (r *findRun) depthTest(value string) (*findNode, error) {
 	compare, digits := splitSign(value)
 	n, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil {
 		return nil, r.inv.usage(value, "-depth [+-]N")
 	}
-	return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) { return compare(int64(e.depth), n), nil }}, nil
+	return &findNode{op: "primary", structural: true, test: func(_ *findRun, e entry) (bool, error) { return compare(int64(e.depth), n), nil }}, nil
 }
 
 // timeOf selects the timestamp an age primary reads.

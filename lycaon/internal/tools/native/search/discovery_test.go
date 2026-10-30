@@ -73,7 +73,7 @@ func TestFindLearnsAndReusesStructureWithoutStattingNonmatches(t *testing.T) {
 		if work["entries"] != 47 || work["entry_metadata_reads"] != 7 {
 			t.Fatalf("attempt %d work=%v", attempt, work)
 		}
-		if attempt == 0 && work["directory_reads"] != 4 || attempt == 1 && (work["directory_reuses"] != 4 || work["directory_reads"] != 0) {
+		if attempt == 0 && work["directory_preparations"] != 4 || attempt == 1 && (work["directory_reuses"] != 4 || work["directory_live_lists"] != 0 || work["directory_preparations"] != 0) {
 			t.Fatalf("attempt %d membership work=%v", attempt, work)
 		}
 	}
@@ -119,4 +119,15 @@ func TestFindRefreshesChangedMembershipAndLiveMetadata(t *testing.T) {
 	h.exec("", "find", "src", "-name", "renamed.go", "-size", "3c").expect(t, "initial metadata", "src/renamed.go\n", "", 0)
 	testutil.FailErr(t, "rewrite metadata", os.WriteFile(filepath.Join(h.root, "src/renamed.go"), []byte("longer source"), 0o644))
 	h.exec("", "find", "src", "-name", "renamed.go", "-size", "3c").expect(t, "live metadata", "", "", 0)
+}
+
+func TestFindChargesEveryNameBeforePredicateElimination(t *testing.T) {
+	h := newHarness(t, map[string]string{"a": "source", "b": "source", "c": "source"})
+	h.owners.overrides = map[string]int64{"traversal_visits": 2}
+	h.owners.Catalog = discoveryCatalog(t)
+	h.exec("", "find", ".", "-name", "absent").refused(t, "bounded cold discovery", "COMMAND_LIMIT_EXCEEDED")
+	h.owners.overrides["traversal_visits"] = 4
+	h.exec("", "find", ".", "-name", "absent").expect(t, "exact traversal allowance", "", "", 0)
+	h.owners.overrides["traversal_visits"] = 2
+	h.exec("", "find", ".", "-name", "absent").refused(t, "bounded reused discovery", "COMMAND_LIMIT_EXCEEDED")
 }
