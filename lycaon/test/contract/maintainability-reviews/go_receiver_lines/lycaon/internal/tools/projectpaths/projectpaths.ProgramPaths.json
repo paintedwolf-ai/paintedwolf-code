@@ -4,14 +4,15 @@
   "kind": "runtime_service",
   "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Retain the measured 437 lines without growth. One invocation frame owns initial/current cwd identity, exact operand resolution and current read/mutation scope. Launch metadata now uses the same descriptor walk with explicit executable/cwd purpose, without reading executable content or granting execution authority. The normative checked-handle launch and actual-target refusal fixtures replace the withdrawn stopped-image requirement; native pathname execution and current owner checks remain in the executor. Splitting another path service would duplicate or hide the current-root/held-cwd relationship. Exact-name, symlink/dot-dot, interchange and bounded-output contracts remain separate tests; their current fixtures and the real checked-handle Darwin launch passed. Any structural or measured growth requires renewed review.",
-  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
-  "ceiling": 437,
+  "reason": "Retain the measured 547 receiver lines for one invocation path frame. Current and previous directories, attached-root identity, exact native operand binding, and live read/mutation callbacks share this frame and authority. The entry callback now excludes the actual recovery namespace after a held parent moves, preserving the same namespace rule as direct binding. A second resolver or callback service would obscure current-root and held-directory relationships. Exact spelling, native component order, root replacement, scope refresh, and recovery mutation contracts support this bounded retention; further growth requires renewed review.",
+  "reviewed_commit": "e25e60380643ade0100d500a04e2c253feee052f",
+  "ceiling": 547,
   "boundaries": {
-    "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
+    "lycaon/internal/tools/projectpaths/program_paths_test.go": "0fc0d2578f696831883df193d061d75cab978b258bff4dafb2e20a90be676148",
     "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
-    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "a77ec2ad77163bb115a316572f9e27942b9f8c76cfc40d091d51f5fce887b80f",
-    "lycaon/internal/tools/projectpaths/launch_inputs_darwin_test.go": "52b5a2f8eeabbcc2bef19eb23db5a67fd9058246952c0ff2683e8bce84506f5e"
+    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "93a5811868e649849387eae8b780b11b3a28c07e6cd55c23563d96abb25fd9b3",
+    "lycaon/internal/tools/projectpaths/launch_inputs_darwin_test.go": "9828f7199dc82b5b7c8c28d41c00701fccf35b31e68f65b087621925e8df2f0a",
+    "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "a437c18f5cb946bfba0b5c672081b56040d2e0cad910d59d1913d772533b07cf"
   },
-  "reviewed_shape": "e7385bf620d6a71a08c8d4c18757a1c50dabee71a0974a8da47efe02917202fe"
+  "reviewed_shape": "a1c024bd998370bf426a695dc3e8613f2d9228dd9d19c5415c1f3b34fd45f455"
 }

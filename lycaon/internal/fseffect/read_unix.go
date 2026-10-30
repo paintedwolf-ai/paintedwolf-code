@@ -126,10 +126,11 @@ func (r *ReadRoot) Open(rel string) (*os.File, error) {
 		return nil, err
 	}
 	if clean.Rel == "." {
-		fd, err := unix.Dup(r.root.fd)
+		fd, err := unix.FcntlInt(uintptr(r.root.fd), unix.F_DUPFD_CLOEXEC, 0)
 		if err != nil {
 			return nil, fmt.Errorf("duplicate effect root: %w", err)
 		}
+		r.root.readOpens.Add(1)
 		return os.NewFile(uintptr(fd), r.root.path), nil
 	}
 	return r.openReadContained(clean.Rel)
@@ -165,6 +166,7 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 				fd, err := openLeafReadAt(r.lastDirFD, leaf)
 				r.mu.Unlock()
 				if err == nil {
+					root.readOpens.Add(1)
 					return os.NewFile(uintptr(fd), filepath.Join(root.path, filepath.FromSlash(relPath))), nil
 				}
 			} else {
@@ -187,6 +189,7 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 				ok = false
 				break
 			}
+			root.readOpens.Add(1)
 			if ownsCur {
 				_ = unix.Close(curFD)
 			}
@@ -197,6 +200,9 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 			leaf := parts[len(parts)-1]
 			if leaf != "" && leaf != "." && leaf != ".." {
 				fd, err := openLeafReadAt(curFD, leaf)
+				if err == nil {
+					root.readOpens.Add(1)
+				}
 				if ownsCur {
 					if err == nil {
 						dirRel := strings.Join(parts[:len(parts)-1], "/")
@@ -221,11 +227,16 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 			_ = unix.Close(curFD)
 		}
 	}
+	return openReadWalk(root, relPath)
+}
+
+func openReadWalk(root *openedRoot, relPath string) (*os.File, error) {
 	return walkReadContained(root, relPath, true, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
 		fd, err := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 		if err != nil {
 			return nil, &fs.PathError{Op: "open effect target", Path: name, Err: err}
 		}
+		root.readOpens.Add(1)
 		return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
 	})
 }
@@ -233,10 +244,11 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 // walkReadContained shares the same held-directory confinement for content and
 // metadata operations. Only an explicit no-follow query receives link metadata.
 func walkReadContained(root *openedRoot, relPath string, follow bool, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
-	baseFD, err := unix.Dup(root.fd)
+	baseFD, err := unix.FcntlInt(uintptr(root.fd), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate effect root: %w", err)
 	}
+	root.readOpens.Add(1)
 	w := &readWalk{}
 	w.push(os.NewFile(uintptr(baseFD), root.path))
 	defer w.close()
@@ -292,6 +304,7 @@ func walkReadContained(root *openedRoot, relPath string, follow bool, visit func
 		if openErr != nil {
 			return nil, &fs.PathError{Op: "open effect directory", Path: name, Err: openErr}
 		}
+		root.readOpens.Add(1)
 		w.push(os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)))
 	}
 	// A fully consumed path names a directory.

@@ -160,7 +160,8 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 		ancestors[id] = true
 		defer delete(ancestors, id)
 	}
-	children, err := r.walker.children(dir, r.follow)
+	children, release, err := r.walker.children(dir, r.follow)
+	defer release()
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			if err := r.flushFiles(); err != nil {

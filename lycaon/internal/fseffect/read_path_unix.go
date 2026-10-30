@@ -49,6 +49,9 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	if relative == "." {
+		return r.Open(relative)
+	}
 	return r.openReadContained(relative)
 }
 
