@@ -6,6 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -127,4 +130,32 @@ func TestStopPreservesSettledCallbackJoin(t *testing.T) {
 	}
 	finish()
 	testutil.FailErr(t, "close stopped provider", p.Close())
+}
+
+func TestWaitSettlesNewDiscoveryGenerationBeforePacing(t *testing.T) {
+	var calls atomic.Int32
+	p := newProviderWithAnalyze(func(context.Context, string) (*Brief, error) {
+		if calls.Add(1) == 1 {
+			return &Brief{Generation: 7, Partial: true, Refreshing: true}, nil
+		}
+		return &Brief{Generation: 8, FileCount: 2}, nil
+	})
+	t.Cleanup(func() { _ = p.Close() })
+	p.resolveCatalogRoot = func(context.Context, string) (CatalogRoot, bool, error) {
+		return CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
+	}
+	p.catalog = refinementCatalog{status: sourcecatalog.TreeStatus{Revision: 8, Complete: true}}
+	root := t.TempDir()
+	p.Warm(root)
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
+	defer cancel()
+	testutil.FailErr(t, "join completed discovery", p.Wait(ctx))
+	brief := p.load(root)
+	if !Current(brief) || brief.Generation != 8 || brief.FileCount != 2 {
+		t.Fatalf("completed discovery left a partial generation: %+v", brief)
+	}
+	p.Warm(root)
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("discovery settlement performed %d measurements, want initial and final only", got)
+	}
 }

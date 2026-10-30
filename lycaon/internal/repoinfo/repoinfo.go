@@ -343,10 +343,15 @@ func (p *fileProvider) awaitRefinement(projectDir string, brief *Brief, delay ti
 			p.notifySettled(projectDir)
 			return delay, false
 		}
+		// Finish initial discovery with one final measurement. Later settled-root
+		// refreshes still enter through the normal measurement pacing.
+		if files.complete {
+			return briefDiscoveryPoll, true
+		}
 		if time.Since(brief.GeneratedAt) < max(briefRevalidateAfter, 10*brief.measurementDuration) {
 			continue
 		}
-		if files.complete || files.failed {
+		if files.failed {
 			return briefDiscoveryPoll, true
 		}
 
