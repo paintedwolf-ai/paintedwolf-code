@@ -359,7 +359,9 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 			_ = finishAgentMutation(ctx, tctx, mutation, journal, idErr)
 			return idErr
 		}
-		return finishAgentMutation(ctx, tctx, mutation, journal, fseffect.RemoveTreeGuarded(target.Location, identity))
+		return applyPreparedAgentMutation(ctx, tctx, mutation, journal, func() error {
+			return fseffect.RemoveTreeGuarded(target.Location, identity)
+		})
 	}
 	remove := fseffect.RemoveRequest{Location: target.Location}
 	if mutation.IsLink {
@@ -381,7 +383,9 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 			return nil
 		}
 	}
-	return finishAgentMutation(ctx, tctx, mutation, journal, fseffect.Remove(remove))
+	return applyPreparedAgentMutation(ctx, tctx, mutation, journal, func() error {
+		return fseffect.Remove(remove)
+	})
 }
 
 func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mode os.FileMode) (int, error) {
@@ -400,8 +404,13 @@ func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 	if err != nil {
 		return 0, err
 	}
-	created, effectErr := fseffect.MkdirAll(target.Location, mode)
-	return created, finishAgentMutation(ctx, tctx, mutation, journal, effectErr)
+	var created int
+	effectErr := applyPreparedAgentMutation(ctx, tctx, mutation, journal, func() error {
+		var err error
+		created, err = fseffect.MkdirAll(target.Location, mode)
+		return err
+	})
+	return created, effectErr
 }
 
 func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, memory *toolcontract.ProgramMemory) error {
@@ -470,6 +479,9 @@ func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to muta
 			if idErr != nil {
 				return idErr
 			}
+			if err := checkAgentMutationPolicies(ctx, tctx, displaced); err != nil {
+				return err
+			}
 			if err := fseffect.RemoveTreeGuarded(to.Location, identity); err != nil {
 				return err
 			}
@@ -479,7 +491,9 @@ func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to muta
 	if err != nil {
 		return err
 	}
-	return finishAgentMutation(ctx, tctx, mutation, journal, rename(from.Location.Root, from.Location.Rel, to.Location.Rel))
+	return applyPreparedAgentMutation(ctx, tctx, mutation, journal, func() error {
+		return rename(from.Location.Root, from.Location.Rel, to.Location.Rel)
+	})
 }
 
 // captureRemovedEntry reads the entry itself, including literal link text.
@@ -587,7 +601,7 @@ func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, targe
 	if err != nil {
 		return err
 	}
-	return finishAgentMutation(ctx, tctx, mutation, journal, apply())
+	return applyPreparedAgentMutation(ctx, tctx, mutation, journal, apply)
 }
 
 // publishAgentStreams closes the durable-intent transaction before touching any

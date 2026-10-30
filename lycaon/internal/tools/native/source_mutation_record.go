@@ -55,6 +55,14 @@ func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation 
 	return journal, err
 }
 
+func applyPreparedAgentMutation(ctx context.Context, tc tools.ToolContext, mutation agentMutation, journal sourceeffect.Pending, apply func() error) error {
+	err := checkAgentMutationPolicies(ctx, tc, mutation)
+	if err == nil {
+		err = apply()
+	}
+	return finishAgentMutation(ctx, tc, mutation, journal, err)
+}
+
 func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, journal sourceeffect.Pending, effectErr error) error {
 	if effectErr == nil && !mutation.IsDir && !mutation.IsLink && mutation.Op != api.SourceChangeOpDelete {
 		tctx.RecordModelAuthoredCredentials(ctx, mutation.AbsPath, mutation.After)
