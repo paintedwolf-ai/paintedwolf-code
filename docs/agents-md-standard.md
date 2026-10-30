@@ -80,7 +80,9 @@ unchanged. Deferred guidance grants no mutation coverage. A narrower held
 operation promotes its chain on the next completion without a new human request.
 Other live control facts and the current human instruction remain protected.
 
-The final prepared model request determines its immutable policy manifest.
+Candidate authentication and physical workspace bindings are frozen before request
+fitting. The exact final model messages determine the immutable policy manifest;
+omitted or modified blocks supply no mutation coverage.
 Reached native mutations check the current applicable revisions before review
 and publication. External launches check their resolved working directory;
 arbitrary external arguments do not establish complete file-level policy coverage.

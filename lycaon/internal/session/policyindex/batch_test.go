@@ -24,7 +24,7 @@ func TestBoundPolicyResolvesOneSnapshotForManyOperands(t *testing.T) {
 	})
 	delivery, err := m.ResolveCurrent(t.Context(), sess, nil)
 	testutil.FailErr(t, "shared policy delivery", err)
-	check, err := m.Bind(t.Context(), sess, delivery.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind shared policy", err)
 	var targets []agentpolicy.Target
 	for i := 0; i < 1000; i++ {
@@ -41,7 +41,7 @@ func TestBoundPolicyResolvesOneSnapshotForManyOperands(t *testing.T) {
 	}
 	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
 	testutil.FailErr(t, "repeat shared policy delivery", err)
-	fresh, err := m.Bind(t.Context(), sess, delivery.Messages)
+	fresh, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind repeat request", err)
 	testutil.FailErr(t, "repeat many-operand effect", fresh(t.Context(), targets))
 }
@@ -52,7 +52,7 @@ func TestPolicyScopeLimitIsExplicitAndNarrowWorkRecovers(t *testing.T) {
 	writePolicy(t, root.Path, "AGENTS.md", "Root policy")
 	delivery, err := m.ResolveCurrent(t.Context(), sess, nil)
 	testutil.FailErr(t, "root policy delivery", err)
-	check, err := m.Bind(t.Context(), sess, delivery.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind root policy", err)
 	var targets []agentpolicy.Target
 	for i := 0; i < maxObservedScopes+5; i++ {

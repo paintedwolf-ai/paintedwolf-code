@@ -108,7 +108,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			return presence
 		},
 		BuildMessages:         m.Runtime.BuildCompletionMessages,
-		BindAgentPolicy:       m.PolicyIndex.Bind,
+		PrepareAgentPolicy:    m.PolicyIndex.PrepareBinding,
 		WebSearchEnabled:      m.WebSearchEnabled,
 		CoordinatorFrame:      m.Frame,
 		ImplementSessionState: m.WorkerState.ForSession,

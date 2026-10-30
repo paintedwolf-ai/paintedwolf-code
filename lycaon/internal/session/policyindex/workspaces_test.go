@@ -32,7 +32,7 @@ func TestPolicyUsesTheInvokedWorkerWorkspaceForEverySurface(t *testing.T) {
 	if len(delivery.Messages) != 1 || !strings.Contains(delivery.Messages[0].Content, "Worker-branch policy") || strings.Contains(delivery.Messages[0].Content, "Project-tree policy") {
 		t.Fatal("worker policy delivery read another physical workspace")
 	}
-	check, err := m.Bind(t.Context(), sess, delivery.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "worker policy binding", err)
 	testutil.FailErr(t, "worker root write", check(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: filepath.Join(branch, "new.go"), Mutation: true}}))
 	policyReject(t, check(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: filepath.Join(branch, "worker-only/new.go"), Mutation: true}}), "POLICY_CONTEXT_CHANGED")

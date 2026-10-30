@@ -8,10 +8,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AgentPolicyCheck is frozen from the request that proposed the operation.
 type AgentPolicyCheck func(context.Context, []agentpolicy.Target) error
+
+// AgentPolicyBinding seals candidate authentication against the final request.
+type AgentPolicyBinding func([]api.Message) AgentPolicyCheck
 
 type agentPolicyKey struct{}
 

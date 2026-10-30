@@ -47,7 +47,7 @@ func TestPolicyFrameFitsAndNarrowWorkRecoversWithoutNewIntent(t *testing.T) {
 	rows := []api.Message{intent}
 	delivery, err := m.ResolveCurrent(t.Context(), sess, rows)
 	testutil.FailErr(t, "deliver baseline chain", err)
-	initial, err := m.Bind(t.Context(), sess, delivery.Messages)
+	initial, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind baseline chain", err)
 	var targets []agentpolicy.Target
 	for i := 0; i < maxObservedScopes+5; i++ {
@@ -102,12 +102,12 @@ func TestPolicyFrameFitsAndNarrowWorkRecoversWithoutNewIntent(t *testing.T) {
 	if deferred.Path == "" {
 		t.Fatal("wide policy frame did not defer a leaf")
 	}
-	check, err := m.Bind(t.Context(), sess, fitted.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, fitted.Messages)
 	testutil.FailErr(t, "bind fitted request", err)
 	target := agentpolicy.Target{RootID: root.ID, Path: filepath.ToSlash(filepath.Join(filepath.Dir(deferred.Path), "file.go")), Mutation: true}
 	policyReject(t, check(t.Context(), []agentpolicy.Target{target}), "POLICY_CONTEXT_CHANGED")
 	_, next := fit()
-	fresh, err := m.Bind(t.Context(), sess, next.Messages)
+	fresh, err := bindPolicyRequest(m, t.Context(), sess, next.Messages)
 	testutil.FailErr(t, "bind narrowed request", err)
 	testutil.FailErr(t, "admit remaining narrow effect", fresh(t.Context(), []agentpolicy.Target{target}))
 	policyReject(t, check(t.Context(), []agentpolicy.Target{target}), "POLICY_CONTEXT_CHANGED")
@@ -163,6 +163,8 @@ func TestPolicyFitFreezesAuthenticationBeforeBudgetWork(t *testing.T) {
 	if len(m.ManifestFor(delivery.Messages).Files) == 0 {
 		t.Fatal("original delivery was not authenticated before fitting")
 	}
+	binding, err := m.PrepareBinding(t.Context(), sess, delivery.Messages)
+	testutil.FailErr(t, "freeze candidate binding", err)
 	fitted, err := (&history.Service{}).FitRequest(t.Context(), sess, nil, modelcall.CompletionRequest{Messages: delivery.Messages}, budget, m)
 	testutil.FailErr(t, "fit after authentication cache eviction", err)
 	retained := 0
@@ -176,6 +178,39 @@ func TestPolicyFitFreezesAuthenticationBeforeBudgetWork(t *testing.T) {
 	if retained == 0 || retained >= len(delivery.Messages) || len(m.ManifestFor(delivery.Messages).Files) != 0 {
 		t.Fatalf("frozen selection did not survive cache eviction: retained=%d", retained)
 	}
+	kept := map[string]bool{}
+	for _, message := range fitted.Messages {
+		kept[message.ID] = true
+	}
+	var included, omitted agentpolicy.Target
+	var includedID string
+	for index, message := range delivery.Messages {
+		file := delivery.Manifest.Files[index]
+		if !strings.HasPrefix(file.Path, "scope-") {
+			continue
+		}
+		target := agentpolicy.Target{RootID: root.ID, Path: filepath.ToSlash(filepath.Join(filepath.Dir(file.Path), "file.go")), Mutation: true}
+		if kept[message.ID] {
+			included, includedID = target, message.ID
+		} else {
+			omitted = target
+		}
+	}
+	if included.Path == "" || omitted.Path == "" {
+		t.Fatal("fixture needs retained and deferred leaf policies")
+	}
+	check := binding(fitted.Messages)
+	testutil.FailErr(t, "admit retained scope after authentication eviction", check(t.Context(), []agentpolicy.Target{included}))
+	policyReject(t, check(t.Context(), []agentpolicy.Target{omitted}), "POLICY_CONTEXT_CHANGED")
+	altered := append([]api.Message(nil), fitted.Messages...)
+	for index := range altered {
+		if altered[index].ID == includedID {
+			altered[index].Content += " Altered after fitting"
+		}
+	}
+	policyReject(t, binding(altered)(t.Context(), []agentpolicy.Target{included}), "POLICY_CONTEXT_CHANGED")
+	testutil.FailErr(t, "retained scope remains independent of another finalization", check(t.Context(), []agentpolicy.Target{included}))
+	testutil.FailErr(t, "publish retained scope effect", os.WriteFile(filepath.Join(root.Path, included.Path), []byte("effect"), 0o600))
 }
 
 func TestFreshReachedRootCannotBeStarvedByTheActiveRoot(t *testing.T) {
@@ -196,7 +231,7 @@ func TestFreshReachedRootCannotBeStarvedByTheActiveRoot(t *testing.T) {
 		return fitted
 	}
 	initial := fit()
-	check, err := m.Bind(t.Context(), sess, initial.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, initial.Messages)
 	testutil.FailErr(t, "bind active root request", err)
 	target := agentpolicy.Target{RootID: second.ID, Path: "file.go", Mutation: true}
 	policyReject(t, check(t.Context(), []agentpolicy.Target{target}), "POLICY_CONTEXT_CHANGED")
@@ -209,7 +244,7 @@ func TestFreshReachedRootCannotBeStarvedByTheActiveRoot(t *testing.T) {
 	if seen[second.ID] != 2 || seen[first.ID] != 0 {
 		t.Fatalf("active root starved the freshly reached root: %+v", manifest)
 	}
-	fresh, err := m.Bind(t.Context(), sess, next.Messages)
+	fresh, err := bindPolicyRequest(m, t.Context(), sess, next.Messages)
 	testutil.FailErr(t, "bind next root request", err)
 	testutil.FailErr(t, "admit reached root mutation", fresh(t.Context(), []agentpolicy.Target{target}))
 	policyReject(t, fresh(t.Context(), []agentpolicy.Target{{RootID: first.ID, Path: "file.go", Mutation: true}}), "POLICY_CONTEXT_CHANGED")

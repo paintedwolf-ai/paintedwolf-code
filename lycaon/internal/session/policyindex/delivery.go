@@ -53,14 +53,26 @@ func (m *Service) recordDeliveries(messages []api.Message, revisions [][]agentpo
 
 // ManifestFor records only intact host policy blocks in the final model request.
 func (m *Service) ManifestFor(messages []api.Message) agentpolicy.Manifest {
-	manifest := agentpolicy.Manifest{}
-	if m == nil {
-		return manifest
+	return manifestForRecords(messages, m.policyRecords(messages))
+}
+
+func (m *Service) policyRecords(messages []api.Message) map[string]deliveredPolicy {
+	records := map[string]deliveredPolicy{}
+	for _, message := range messages {
+		if record, ok := m.deliveredMessage(message); ok {
+			record.files = append([]agentpolicy.Revision(nil), record.files...)
+			records[message.ID] = record
+		}
 	}
+	return records
+}
+
+func manifestForRecords(messages []api.Message, records map[string]deliveredPolicy) agentpolicy.Manifest {
+	manifest := agentpolicy.Manifest{}
 	seen := map[agentpolicy.Revision]bool{}
 	for _, message := range messages {
-		record, ok := m.deliveredMessage(message)
-		if !ok {
+		record, ok := records[message.ID]
+		if !ok || !policyMessageMatches(message, record) {
 			continue
 		}
 		for _, revision := range record.files {
@@ -71,6 +83,12 @@ func (m *Service) ManifestFor(messages []api.Message) agentpolicy.Manifest {
 		}
 	}
 	return manifest
+}
+
+func policyMessageMatches(message api.Message, record deliveredPolicy) bool {
+	return message.Role == api.MessageRoleSystem && message.Origin == api.MessageOriginProject &&
+		message.Authority == api.ContentAuthorityDeveloper && message.TrustTier == api.ContentTrustTierTrusted &&
+		len(message.ContentParts) == 0 && sha256.Sum256([]byte(message.Content)) == record.content
 }
 
 func (m *Service) deliveredMessage(message api.Message) (deliveredPolicy, bool) {
@@ -88,7 +106,7 @@ func (m *Service) deliveredMessage(message api.Message) (deliveredPolicy, bool) 
 		return deliveredPolicy{}, false
 	}
 	record, ok := group[message.ID]
-	return record, ok && sha256.Sum256([]byte(message.Content)) == record.content
+	return record, ok && policyMessageMatches(message, record)
 }
 
 // PolicyMessageGroups returns authenticated chains in working-scope priority order.

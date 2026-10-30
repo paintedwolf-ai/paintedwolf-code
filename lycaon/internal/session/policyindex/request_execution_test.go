@@ -81,6 +81,8 @@ func TestFittedReachedRootExecutesThroughNativeHostedAndExternalDispatch(t *test
 			delivery, err := m.ResolveCurrent(t.Context(), sess, rows)
 			testutil.FailErr(t, "resolve reached guidance", err)
 			request := modelcall.CompletionRequest{Messages: append(append([]api.Message(nil), rows...), delivery.Messages...)}
+			binding, err := m.PrepareBinding(t.Context(), sess, request.Messages)
+			testutil.FailErr(t, "prepare request binding", err)
 			fitted, err := (&history.Service{}).FitRequest(t.Context(), sess, rows, request, &policyFitBudget{window: 9000}, m)
 			testutil.FailErr(t, "fit reached root only", err)
 			for _, file := range m.ManifestFor(fitted.Messages).Files {
@@ -88,8 +90,7 @@ func TestFittedReachedRootExecutesThroughNativeHostedAndExternalDispatch(t *test
 					t.Fatal("fixture retained entry-root mutation coverage")
 				}
 			}
-			check, err := m.Bind(t.Context(), sess, fitted.Messages)
-			testutil.FailErr(t, "bind reached request", err)
+			check := binding(fitted.Messages)
 			raw, err := f.Call(t, tools.WithAgentPolicy(t.Context(), check), "cd @library; pwd; tee native.txt; external -- /usr/bin/touch external.txt")
 			testutil.FailErr(t, "execute fitted request", err)
 			var result struct {

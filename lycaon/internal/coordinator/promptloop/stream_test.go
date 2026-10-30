@@ -273,18 +273,28 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 
 func TestPolicyBindingUsesTheFinalFittedRequest(t *testing.T) {
 	var delivered []api.Message
+	prepared := false
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
 			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}}},
 			BuildMessages: func(_ context.Context, _ *api.Session, rows []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return append([]api.Message{{ID: "candidate-policy", Role: api.MessageRoleSystem, Content: "candidate"}}, rows...), nil
 			},
-			BindAgentPolicy: func(_ context.Context, _ *api.Session, messages []api.Message) (tools.AgentPolicyCheck, error) {
-				delivered = append([]api.Message(nil), messages...)
-				return func(context.Context, []agentpolicy.Target) error { return nil }, nil
+			PrepareAgentPolicy: func(_ context.Context, _ *api.Session, messages []api.Message) (tools.AgentPolicyBinding, error) {
+				if len(messages) == 0 || messages[0].ID != "candidate-policy" {
+					t.Fatal("policy candidates were not captured before fitting")
+				}
+				prepared = true
+				return func(final []api.Message) tools.AgentPolicyCheck {
+					delivered = append([]api.Message(nil), final...)
+					return func(context.Context, []agentpolicy.Target) error { return nil }
+				}, nil
 			},
 		},
 		Model: ModelDeps{FitRequest: func(_ context.Context, _ *api.Session, _ []api.Message, request modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+			if !prepared {
+				t.Fatal("request fitting started before policy binding preparation")
+			}
 			request.Messages = []api.Message{{ID: "fitted-policy", Role: api.MessageRoleSystem, Content: "fitted"}}
 			return request, nil
 		}},

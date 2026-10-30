@@ -124,7 +124,7 @@ func TestUnavailableReadScopePreservesIndependentPolicyAndEffects(t *testing.T) 
 	if delivery.Status != StatusUnavailable || len(delivery.Manifest.Files) != 1 || !strings.Contains(delivery.Messages[0].Content, "Independent policy") {
 		t.Fatal("one unavailable scope discarded independent guidance")
 	}
-	check, err := m.Bind(t.Context(), sess, delivery.Messages)
+	check, err := bindPolicyRequest(m, t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind independent policy", err)
 	testutil.FailErr(t, "independent mutation alongside unavailable read", check(t.Context(), []agentpolicy.Target{
 		{RootID: first.ID, Path: "file.go"},
