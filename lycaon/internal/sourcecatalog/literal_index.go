@@ -91,12 +91,24 @@ type literalFileRead struct {
 	invalidated    bool
 }
 
-type literalFileCacheEntry struct {
-	size       int64
-	mode       uint32
-	modifiedNS int64
-	searchable bool
+type literalProjection struct {
 	bloom      literalBloom
+	searchable bool
+}
+
+type literalFileBlooms struct {
+	decoded literalProjection
+	raw     literalProjection
+}
+
+type literalFileCacheEntry struct {
+	size          int64
+	mode          uint32
+	modifiedNS    int64
+	searchable    bool
+	bloom         literalBloom
+	rawBloom      literalBloom
+	rawSearchable bool
 }
 
 func newLiteralIndexCache() *literalIndexCache {
@@ -468,21 +480,18 @@ func (c *literalIndexCache) fileBloom(
 	c.fileReads[read] = struct{}{}
 	c.fileMu.Unlock()
 	defer func() { c.fileMu.Lock(); delete(c.fileReads, read); c.fileMu.Unlock() }()
-	bloom, searchable, err := buildLiteralBloom(ctx, entry, open)
+	facts, err := buildLiteralBloom(ctx, entry, open)
 	if err != nil {
 		return nil, false, err
 	}
 	if entryStillMatches(rootPath, entry) {
 		c.fileMu.Lock()
 		if !read.invalidated {
-			c.files.store(rootPath, entry.Path, literalFileCacheEntry{
-				size: entry.Size, mode: entry.Mode, modifiedNS: entry.Modified.UnixNano(),
-				searchable: searchable, bloom: bloom,
-			})
+			c.storeFile(rootPath, entry, facts)
 		}
 		c.fileMu.Unlock()
 	}
-	return bloom, searchable, nil
+	return facts.decoded.bloom, facts.decoded.searchable, nil
 }
 
 // entryStillMatches reports whether the file on disk still carries the
@@ -507,7 +516,7 @@ func entryUnderBase(entryPath, base string) bool {
 }
 
 func literalFileCost(keyBytes int, entry literalFileCacheEntry) int64 {
-	return int64(keyBytes + len(entry.bloom)*8 + 128)
+	return int64(keyBytes + (len(entry.bloom)+len(entry.rawBloom))*8 + 128)
 }
 
 func literalScopeIncludes(entry Entry, query LiteralQuery, base string) bool {

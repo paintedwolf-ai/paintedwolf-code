@@ -167,14 +167,10 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 }
 
 // Requirement is what a record must contain to hold any match, for index
-// pruning; empty when the spec cannot state one exactly (case folding,
-// assertions and references, the PCRE grammar, an empty pattern).
+// pruning; empty when the compiled engine cannot prove a required literal.
 func (m *Matcher) Requirement() litprefilter.Requirement { return m.require }
 
 func requirement(e engine, patterns []string, spec Spec) litprefilter.Requirement {
-	if spec.IgnoreCase {
-		return litprefilter.Requirement{}
-	}
 	switch e := e.(type) {
 	case literalEngine:
 		for _, p := range patterns {

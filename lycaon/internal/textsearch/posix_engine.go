@@ -19,12 +19,7 @@ type PosixRegex interface {
 	Groups() int
 }
 
-// POSIXEngine compiles BRE and ERE text for a pattern space (sed): the same
-// GNU dialects grep uses, plus the \n and \t escapes, with "." matching any
-// scalar including LF and ^ and $ anchoring the whole subject. Every pattern
-// runs on the bounded engine, so subexpression offsets follow POSIX: the
-// longest overall match, then for each group in order the earliest start and
-// the longest extent. Each Find is metered as one record.
+// POSIXEngine meters leftmost-longest matching and subexpression offsets.
 type POSIXEngine struct{ Limits Limits }
 
 // NewPOSIXEngine reads the catalog regex ceilings.
