@@ -1,9 +1,11 @@
 package commandprogram
 
 import (
+	"context"
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -39,5 +41,48 @@ func TestIsolatedFrameRefusesPrefixAdmissionBeforeDispatchFork(t *testing.T) {
 				t.Fatalf("refused prefix escaped admission: forks=%d memory=%+v", fixture.log.forks, memory.InUse())
 			}
 		})
+	}
+}
+
+// capturedSettlementRecorder observes the context at the actual execution port.
+type capturedSettlementRecorder struct {
+	admitted, settled context.Context
+	identity          toolcontract.ExecutionIdentity
+	settlements       int
+}
+
+func (r *capturedSettlementRecorder) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, _ string) error {
+	r.admitted, r.identity = ctx, invocation.Identity
+	return nil
+}
+func (r *capturedSettlementRecorder) SettleExecution(ctx context.Context, invocation toolcontract.OperationInvocation, record ChildRecord) error {
+	r.settled = ctx
+	if invocation.Identity != r.identity || record.Identity != r.identity {
+		return errors.New("settlement identity changed")
+	}
+	r.settlements++
+	return nil
+}
+
+func TestRecordedSettlementKeepsAdmissionMetadataAfterCancellation(t *testing.T) {
+	fixture := newEvalFixture(t)
+	recorder := &capturedSettlementRecorder{}
+	fixture.ports.Executions = recorder
+	limits, err := catalogEvaluationLimits()
+	testutil.FailErr(t, "load execution settlement bounds", err)
+	evaluation := &evaluation{ports: fixture.ports, limits: limits, programName: "recorded"}
+	type operationKey struct{}
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), operationKey{}, "admitted-operation"))
+	defer cancel()
+	frame, release, err := evaluation.rootFrame(ctx)
+	testutil.FailErr(t, "create recorded frame", err)
+	defer release()
+	child, err := frame.beginRecorded(ctx, commandsurface.SyntaxLocation{ID: "node", Span: toolcontract.SourceSpan{Line: 1, Column: 1}}, ":")
+	testutil.FailErr(t, "admit recorded execution", err)
+	cancel()
+	child.settle(ordinaryResult(0), nil)
+	child.close()
+	if recorder.settlements != 1 || recorder.admitted.Err() == nil || recorder.settled == nil || recorder.settled.Err() != nil || recorder.settled.Done() != nil || recorder.settled.Value(operationKey{}) != "admitted-operation" {
+		t.Fatalf("settlement lost captured context or once-only physical completion: settlements=%d admitted=%v settled=%v", recorder.settlements, recorder.admitted, recorder.settled)
 	}
 }
