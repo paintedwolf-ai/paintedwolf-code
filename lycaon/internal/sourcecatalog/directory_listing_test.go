@@ -1,7 +1,9 @@
 package sourcecatalog
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -65,5 +67,37 @@ func TestDirectoryNamespacePreparationRespectsConsumerBounds(t *testing.T) {
 	testutil.FailErr(t, "extend bounded observation", err)
 	if len(complete.Entries) != 5 {
 		t.Fatalf("complete entries=%+v", complete)
+	}
+}
+
+func TestDirectoryNamespacePagesPreserveEveryNameAndKind(t *testing.T) {
+	catalog, root := indexFixture(t)
+	for i := range indexBatchSize + 9 {
+		writeIndexFile(t, root.Path, fmt.Sprintf("file-%04d", i), "source")
+	}
+	writeIndexFile(t, root.Path, "Middle/child", "source")
+	listing, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", indexBatchSize+10)
+	testutil.FailErr(t, "read paged membership", err)
+	if len(listing.Entries) != indexBatchSize+10 || listing.Entries[0].Name != "Middle" || !listing.Entries[0].IsDir {
+		t.Fatalf("paged namespace=%+v", listing)
+	}
+	for i, entry := range listing.Entries[1:] {
+		if entry.Name != fmt.Sprintf("file-%04d", i) || entry.IsDir || entry.IsSymlink {
+			t.Fatalf("entry %d=%+v", i, entry)
+		}
+	}
+}
+
+func TestDirectoryNamespaceRejectsCanceledAndEscapingRequests(t *testing.T) {
+	catalog, root := indexFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := catalog.Directories.ReadDirectory(ctx, "p", root, ".", 10); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled namespace=%v", err)
+	}
+	for _, dir := range []string{"..", "../outside", root.Path} {
+		if _, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, dir, 10); !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("escaping directory %q=%v", dir, err)
+		}
 	}
 }
