@@ -234,43 +234,6 @@ func (r *SQLRecorder) RevisionPins(ctx context.Context, sessionID, executionID s
 	return readRevisionPinRange(ctx, tx, executionID, 0, sealed+unsealed)
 }
 
-// ProgramRevisionPins returns every execution capture recorded under a program
-// in this session.
-func (r *SQLRecorder) ProgramRevisionPins(ctx context.Context, sessionID, programID string) ([]toolcontract.ExecutionRevision, error) {
-	if r == nil || r.database == nil {
-		return nil, fmt.Errorf("invocation recorder is not configured")
-	}
-	rows, err := r.database.QueryContext(ctx, `SELECT e.id FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE e.program_id=? AND rec.session_id=? ORDER BY e.created_at, e.id`, programID, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var execIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		execIDs = append(execIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	var all []toolcontract.ExecutionRevision
-	for _, id := range execIDs {
-		pins, err := r.RevisionPins(ctx, sessionID, id)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, pins...)
-	}
-	return all, nil
-}
-
 // revisionPinCounts reports the sealed segment prefix and the rows after it.
 func revisionPinCounts(ctx context.Context, tx *sql.Tx, executionID string) (sealed, unsealed int, err error) {
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(first_ordinal+pin_count),0) FROM invocation_program_revision_pin_segments WHERE execution_id=?`, executionID).Scan(&sealed); err != nil {
