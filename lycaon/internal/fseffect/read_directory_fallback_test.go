@@ -148,3 +148,23 @@ func TestConcurrentDirectoryIdentityValidationReportsRootAggregateWork(t *testin
 		t.Fatalf("aggregate peak=%d held=%d opens=%d", peak, held, reader.DescriptorOpens()-before)
 	}
 }
+
+func TestDirectoryPathRefusesUnlinkedAndReplacedRootAndClosedReader(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "admitted")
+	testutil.FailErr(t, "create empty root", os.Mkdir(root, 0700))
+	reader, err := OpenReadRoot(root)
+	testutil.FailErr(t, "open root", err)
+	defer reader.Close()
+	file, err := reader.OpenExact(".")
+	testutil.FailErr(t, "hold root directory", err)
+	defer file.Close()
+	testutil.FailErr(t, "unlink held empty root", os.Remove(root))
+	testutil.FailErr(t, "replace configured root", os.Mkdir(root, 0700))
+	if _, err := reader.DirectoryPath(file); !errors.Is(err, ErrSymlink) {
+		t.Fatalf("unlinked root accepted replacement: %v", err)
+	}
+	testutil.FailErr(t, "close reader", reader.Close())
+	if _, err := reader.DirectoryPath(file); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("closed reader accepted held directory: %v", err)
+	}
+}
