@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -120,9 +121,7 @@ func TestCancellationInterrupts(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	prepared, err := h.owners.Prepare(mustPaths(t, h), requestFor(h, "cat", "input"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "prepare native literal command", err)
 	result, err := prepared.InvokeOwner(ctx, h.tc, streamsFor(""))
 	if err == nil || result.Terminal != toolcontract.ProducerInterrupted || result.PublicationEligible {
 		t.Fatalf("canceled = %+v %v", result, err)

@@ -134,7 +134,7 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 		t.Fatalf("child receipts %v", executions)
 	}
 	if _, err := os.Stat(filepath.Join(f.dir, ".git", "HEAD")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stat repository HEAD", err)
 	}
 }
 

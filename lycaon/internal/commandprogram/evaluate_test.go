@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -97,7 +98,7 @@ func TestEvaluateNounsetRefusesUnsetParameters(t *testing.T) {
 func TestEvaluateEnvironmentIsInvocationLocal(t *testing.T) {
 	f := newEvalFixture(t)
 	if _, err := f.run(t, t.Context(), "export A=1; B=2; FOO=bar env; env; export B; env"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "run evaluated command program", err)
 	}
 	if got := f.stdout.String(); got != "A=1\nFOO=bar\nA=1\nA=1\nB=2\n" {
 		t.Fatalf("environment %q", got)
@@ -107,9 +108,7 @@ func TestEvaluateEnvironmentIsInvocationLocal(t *testing.T) {
 func TestEvaluateChildIdentitiesAreUniquePerExecution(t *testing.T) {
 	f := newEvalFixture(t)
 	out, err := f.run(t, t.Context(), "for i in a b c; do echo $i; done")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "run evaluated command program", err)
 	seen := map[string]bool{}
 	var node string
 	for _, call := range f.log.calls {
@@ -191,9 +190,7 @@ func TestEvaluateRefusesExcludedConstructsBeforeAnyEffect(t *testing.T) {
 func TestEvaluateRedirectsPublishOnlyEligibleOutput(t *testing.T) {
 	f := newEvalFixture(t)
 	out, err := f.run(t, t.Context(), "echo a > out; echo b >> out; grep z > nomatch; fail 1 > none; echo c 2>&1 > both; cat < input.txt > copy; echo d > denied; echo $?")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "run evaluated command program", err)
 	published := f.publication.published
 	// Native comparison status 1 is complete and publishable; unclassified
 	// external status 1 is not.
@@ -212,7 +209,7 @@ func TestEvaluateHereDocumentIsStdin(t *testing.T) {
 	f := newEvalFixture(t)
 	program := "x=value\ncat <<EOF\nline $x\nEOF\ncat <<'EOF'\nraw $x\nEOF\n"
 	if _, err := f.run(t, t.Context(), program); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "run evaluated command program", err)
 	}
 	if got := f.stdout.String(); got != "line value\nraw $x\n" {
 		t.Fatalf("here-document stdin %q", got)
@@ -266,9 +263,7 @@ func TestUntakenBranchesNeverExpand(t *testing.T) {
 func TestFailedSubstitutionNeverLaunchesItsCommand(t *testing.T) {
 	f := newEvalFixture(t)
 	out, err := f.run(t, t.Context(), "echo before; echo $(fail 3) never; echo status $?; x=$(fail 4); echo assigned $?")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "run evaluated command program", err)
 	if got := f.log.argv(); !slices.Equal(got, []string{"echo before", "fail 3", "echo status 3", "fail 4", "echo assigned 4"}) {
 		t.Fatalf("dispatched %q", got)
 	}

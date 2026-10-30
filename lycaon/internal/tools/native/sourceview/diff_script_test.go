@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // TestDiffScriptComparesTransformedLinesAndBoundsItsTable covers the shared
@@ -11,9 +13,7 @@ import (
 func TestDiffScriptComparesTransformedLinesAndBoundsItsTable(t *testing.T) {
 	oldLines, newLines := []string{"a", "b", "c", "d"}, []string{"a", "B", "c", "d", "e"}
 	ops, err := DiffScript(oldLines, newLines, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compute bounded diff script", err)
 	var tags strings.Builder
 	for _, op := range ops {
 		tags.WriteByte(op.Tag)

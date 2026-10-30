@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func budgetResource(t *testing.T, err error) string {
@@ -25,9 +27,7 @@ func TestRegexBudgets(t *testing.T) {
 	limits := catalogLimits(t)
 	ctx := t.Context()
 	linear, err := Compile(ctx, Spec{Patterns: []string{`b`}, Dialect: Extended}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	at := []byte(strings.Repeat("a", int(limits.WorkSteps)-1))
 	if _, ok, err := linear.Select(ctx, at); err != nil || ok {
 		t.Fatalf("record at the step ceiling: %v %v", ok, err)
@@ -70,18 +70,14 @@ func TestRegexBudgets(t *testing.T) {
 	small.InputBytes = 4
 	for _, dialect := range []Dialect{Fixed, Basic, Perl} {
 		m, err := Compile(ctx, Spec{Patterns: []string{"a"}, Dialect: dialect}, small)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "compile text-search pattern", err)
 		if _, _, err := m.Select(ctx, []byte("aaaaa")); budgetResource(t, err) != "regex_input_bytes" {
 			t.Fatalf("%s record bytes: %v", dialect, err)
 		}
 	}
 
 	m, err := Compile(ctx, Spec{Patterns: []string{`(a|b)*c`}, Dialect: Perl}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	vm := m.engine.(vmEngine)
 	vm.limits.CPU = time.Nanosecond
 	m.engine = vm
@@ -95,14 +91,10 @@ func TestRegexBudgets(t *testing.T) {
 func TestBoundedSessionStepBoundary(t *testing.T) {
 	limits := catalogLimits(t)
 	m, err := Compile(t.Context(), Spec{Patterns: []string{`(?=a)`}, Dialect: Perl}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	program := m.engine.(vmEngine).program
 	session, err := program.Session(t.Context(), limits.syntaxBudget())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open bounded regex session", err)
 	defer session.Close()
 	if err := session.Charge(limits.WorkSteps); err != nil {
 		t.Fatalf("at ceiling: %v", err)
@@ -130,9 +122,7 @@ func TestErrorsNameTheirCodes(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	m, err := Compile(t.Context(), Spec{Dialect: Basic}, catalogLimits(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	if err := m.Each(ctx, []byte("a"), func(Span) error { return nil }); !errors.Is(err, context.Canceled) {
 		t.Fatalf("empty each: %v", err)
 	}

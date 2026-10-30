@@ -6,15 +6,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func frameSpec(t *testing.T, name string) toolcontract.CommandSpecification {
 	t.Helper()
 	catalog, err := toolcontract.LanguageV1()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load command language catalog", err)
 	for _, command := range catalog.Commands {
 		if command.Name == name {
 			return command
@@ -33,9 +32,7 @@ func frameArgv(t *testing.T, scope *Variables, source string) Fields {
 	words := func(items []commandsurface.DeferredWord) {
 		for _, word := range items {
 			fields, err := expander.ExpandFields(t.Context(), scope, word)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "expand frame argument fields", err)
 			argv = append(argv, fields...)
 		}
 	}
@@ -46,9 +43,7 @@ func frameArgv(t *testing.T, scope *Variables, source string) Fields {
 		argv = append(argv, Field{Value: "export", Span: command.Span})
 		for _, assignment := range command.Assignments {
 			value, err := expander.ExpandScalar(t.Context(), scope, assignment.Value)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "expand frame assignment", err)
 			argv = append(argv, Field{Value: assignment.Name + "=" + value, Span: assignment.Span})
 		}
 		words(command.Words)
@@ -63,7 +58,7 @@ func TestFrameCommandsExportAndUnset(t *testing.T) {
 		return FrameCommand(t.Context(), frame, frameSpec(t, name), frameArgv(t, frame, source))
 	}
 	if err := frame.Assign(t.Context(), "LOCAL", "x"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "assign frame variable", err)
 	}
 	for _, step := range []struct{ name, source string }{
 		{"export", "export LOCAL 'NEW=a b' LATER"},
@@ -77,9 +72,7 @@ func TestFrameCommandsExportAndUnset(t *testing.T) {
 		}
 	}
 	env, err := frame.Environment(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compose frame environment", err)
 	if want := []string{"KEEP=1", "LOCAL=x", "NEW=a b"}; !reflect.DeepEqual(env, want) {
 		t.Fatalf("environment %q, want %q", env, want)
 	}

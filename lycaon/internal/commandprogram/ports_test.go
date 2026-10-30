@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -15,7 +16,7 @@ func TestOperationRequestBindsPlanNodeToChildInvocation(t *testing.T) {
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(invocation.Identity.NodeID), Span: invocation.Span}}
 	request := OperationRequest{Invocation: invocation, OperationID: "read", Statement: statement, Argv: argvFields("cat", "file")}
 	if err := request.Validate(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate child operation request", err)
 	}
 	for name, mutate := range map[string]func(*OperationRequest){
 		"operation": func(r *OperationRequest) { r.OperationID = "" },
@@ -36,13 +37,9 @@ func TestOperationRequestBindsPlanNodeToChildInvocation(t *testing.T) {
 
 func TestBytePipeConsumerEndClosesAsConsumerStop(t *testing.T) {
 	budget, err := NewByteBudget("stream_bytes", 1<<20)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create byte budget", err)
 	pipe, err := NewBytePipe(t.Context(), budget)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create byte pipe", err)
 	streams := Streams{Input: pipe.ConsumerEnd()}
 	written := make(chan error, 1)
 	go func() {
@@ -57,7 +54,7 @@ func TestBytePipeConsumerEndClosesAsConsumerStop(t *testing.T) {
 		t.Fatalf("read %q %v", buffer, err)
 	}
 	if err := streams.Input.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close consumer input", err)
 	}
 	if err := <-written; !errors.Is(err, ErrConsumerClosed) {
 		t.Fatalf("producer saw %v, want consumer closure", err)

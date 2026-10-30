@@ -156,7 +156,7 @@ func TestNullDeviceIsAVirtualSink(t *testing.T) {
 	h := newHarness(t, nil)
 	staged, destination := stage(t, h, ">", "/dev/null", "discarded\n")
 	if _, err := staged.Publish(t.Context()); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "publish staged null-device output", err)
 	}
 	entries, _ := os.ReadDir(h.root)
 	if len(entries) != 0 || len(h.pins.pins[destination.Invocation.Identity.ExecutionID]) != 0 {
@@ -367,9 +367,9 @@ func TestTeeDestinationsAfterARedirectInOneExecution(t *testing.T) {
 
 func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
 	h := newHarness(t, map[string]string{
-		"file.txt":   "alpha\nbeta\ngamma\n",
-		"main.go":    "package p\n\nfunc f() int {\n\treturn 1 + 2\n}\n",
-		"script.sh":  "echo ok\n",
+		"file.txt":  "alpha\nbeta\ngamma\n",
+		"main.go":   "package p\n\nfunc f() int {\n\treturn 1 + 2\n}\n",
+		"script.sh": "echo ok\n",
 	})
 	if r := h.run("", "edit", "--path", "file.txt", "--old-string", "beta", "--new-string", "BETA"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\nBETA\ngamma\n" {
 		t.Fatalf("edit: %+v %v %q", r.result, r.err, h.read("file.txt"))

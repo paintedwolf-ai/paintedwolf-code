@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -19,7 +20,7 @@ func TestArchivePreflightIncludesHiddenMetadataLinks(t *testing.T) {
 		t.Run(directory, func(t *testing.T) {
 			h := newHarness(t, map[string]string{"src/target": "data", "src/" + directory + "/keep": "data"})
 			if err := os.Symlink("../target", filepath.Join(h.root, "src", directory, "link")); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "create metadata fixture symlink", err)
 			}
 			result := h.run("", "cp", "-a", "src", "copy")
 			reject := toolrejection.AsToolReject(result.err)
@@ -72,7 +73,7 @@ func TestMutationTreePreflightCountsRootAndPreservesReadPolicy(t *testing.T) {
 	}
 	missing := filepath.Join(h.root, "missing")
 	if err := inv.visitTree(missing, missingEntry, visit); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "visit missing tree entry", err)
 	}
 	if err := inv.visitTree(missing, nil, visit); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("strict root %v", err)
@@ -93,9 +94,7 @@ func TestVerboseRemovalSurveysMetadataDirectories(t *testing.T) {
 	}
 	inv := &invocation{ctx: t.Context(), owners: h.owners, argv: argv}
 	dirs, err := inv.directoriesUnder(filepath.Join(h.root, "tree"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "inventory removal directories", err)
 	for _, rel := range []string{"tree", "tree/.hidden", "tree/.git", "tree/.paintedwolf"} {
 		if !dirs[filepath.Join(h.root, rel)] {
 			t.Fatalf("directory missing from preflight: %s", rel)

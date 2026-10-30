@@ -47,7 +47,7 @@ func TestHeldEffectResumesExactlyOnceAfterFreshRecheck(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-1")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	if err := held.Park(effect); err == nil {
 		t.Fatal("same execution parked twice")
@@ -74,7 +74,7 @@ func TestHeldEffectStaleInputConflictsWithoutRecomputation(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-stale")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	result, err := held.Resume(t.Context(), effect.Identity)
 	if err == nil || result.Terminal != toolcontract.ProducerRefused || result.StopCode != "EDIT_TARGET_CHANGED_BY_OTHERS" || probe.invoked != 0 {
@@ -90,10 +90,10 @@ func TestHeldEffectDenialSettlesWithoutInvoking(t *testing.T) {
 	held := &command.ProgramHeldEffects{}
 	effect := probe.effect("held-denied")
 	if err := held.Park(effect); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "park held effect", err)
 	}
 	if err := held.Stop(t.Context(), effect.Identity); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stop held effect", err)
 	}
 	if _, err := held.Resume(t.Context(), effect.Identity); err == nil || probe.invoked != 0 || probe.rechecked != 0 {
 		t.Fatal("denied effect resumed")

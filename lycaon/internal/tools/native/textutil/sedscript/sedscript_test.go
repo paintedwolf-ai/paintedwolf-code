@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textsearch"
 )
 
@@ -55,9 +56,7 @@ type fixture struct {
 func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buffer, int, error) {
 	t.Helper()
 	posix, err := textsearch.NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create sed POSIX engine", err)
 	program, err := Parse(t.Context(), f.script, f.extended, engine{posix})
 	if err != nil {
 		return "", nil, 0, err
@@ -74,9 +73,7 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 		writers[name] = buffers[name]
 	}
 	m, err := NewMachine(t.Context(), program, Config{Quiet: f.quiet || program.Quiet(), Delimiter: delimiter, SpaceLimit: 1 << 20, StepLimit: 1000, Stdout: &stdout, Writers: writers, Files: f.files})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create bounded sed machine", err)
 	if separate {
 		for i, input := range f.inputs {
 			if quit, err := m.Stream(&lines{name: "f" + string(rune('0'+i)), text: input, delimiter: delimiter}, nil); err != nil || quit {

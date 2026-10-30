@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func receiptVersion() ProgramVersion {
@@ -12,7 +14,7 @@ func receiptVersion() ProgramVersion {
 
 func TestProgramVersionBindsFrozenCatalogAndExactSource(t *testing.T) {
 	if err := receiptVersion().Validate(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate program receipt version", err)
 	}
 	for name, mutate := range map[string]func(*ProgramVersion){
 		"parent":        func(v *ProgramVersion) { v.ParentReceiptID = "" },
@@ -31,23 +33,17 @@ func TestProgramVersionBindsFrozenCatalogAndExactSource(t *testing.T) {
 
 func TestProgramChildStartRequiresFrozenDefinitionAndInputs(t *testing.T) {
 	memory, err := NewProgramMemory(ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create receipt program memory", err)
 	inputs, release, err := NewReviewedOperationInputs(t.Context(), memory, map[string]any{"path": "a"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "retain reviewed operation inputs", err)
 	defer release()
 	contract, _ := Lookup("read")
 	definition, err := ToolOperation("read", json.RawMessage(`{"type":"object"}`), contract)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "bind tool operation definition", err)
 	invocation := OperationInvocation{Kind: ProgramChildInvocation, Identity: ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "execution"}, ActorID: "actor", SessionID: "session", Scope: OperationScope{Kind: ProjectOperationScope, ProjectID: "project"}, SourceUnitID: "unit", Span: SourceSpan{Line: 1, Column: 1}, CatalogDigest: LanguageCatalogDigest()}
 	valid := ProgramChildStart{ParentReceiptID: "receipt", Invocation: invocation, Definition: definition, ArgumentsReference: "args", ExpandedInputs: inputs}
 	if err := valid.Validate(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate child receipt start", err)
 	}
 	for name, mutate := range map[string]func(*ProgramChildStart){
 		"inputs":     func(c *ProgramChildStart) { c.ExpandedInputs = ReviewedOperationInputs{} },

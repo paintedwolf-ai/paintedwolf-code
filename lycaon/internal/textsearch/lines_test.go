@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // render prints scanned lines as grep -n does: N:TEXT, N-TEXT and "--".
@@ -31,9 +33,7 @@ func render(t *testing.T, content string, sel Selector, opts ScanOptions) (strin
 
 func TestScanLinesContextAndLimits(t *testing.T) {
 	m, err := Compile(t.Context(), Spec{Patterns: []string{"m"}, Dialect: Basic}, catalogLimits(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	const text = "1\n2\nm\n3\n4\n5\n6\nm\n7\n"
 	for _, c := range []struct {
 		name    string
@@ -77,9 +77,7 @@ func TestScanLinesStopsOnRecordErrorsAndStopScan(t *testing.T) {
 		t.Fatalf("record error: %v", err)
 	}
 	m, err := Compile(t.Context(), Spec{Patterns: []string{"a"}, Dialect: Fixed}, catalogLimits(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile text-search pattern", err)
 	seen := 0
 	n, err := ScanLines(t.Context(), []byte("a\na\na\n"), m, ScanOptions{MaxSelected: -1}, func(Line) error {
 		seen++
