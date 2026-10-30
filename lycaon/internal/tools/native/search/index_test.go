@@ -36,6 +36,7 @@ func indexedHarness(t *testing.T, files map[string]string) (*harness, *sourcecat
 		_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
 		testutil.FailErr(t, "observe fixture stream", err)
 		testutil.FailErr(t, "close fixture stream", file.Close())
+		observation.Commit()
 		observation.Close()
 	}
 	return h, catalog, observable
