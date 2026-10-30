@@ -12,7 +12,7 @@ CATALOG = Path(__file__).with_name("verification-plan.json")
 GO_MODULE = CATALOG.parent.parent / "lycaon"
 DEN = CATALOG.parent.parent / "lycaon-den"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
-SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD",
+SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD", "PW_TEST_COMPLETION_FD",
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
                  "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
                  "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
@@ -22,7 +22,7 @@ SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RE
 NETWORK_ENV = {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
                "http_proxy", "https_proxy", "all_proxy", "no_proxy",
                "NODE_USE_ENV_PROXY", "GIT_SSH_COMMAND"}
-SELECTION_GRAMMARS = {"go", "vitest", "playwright"}
+SELECTION_GRAMMARS = {"go", "vitest", "playwright", "unittest"}
 PASSTHROUGH = "passthrough"
 INFO_ARGUMENTS = {"--help", "-h", "-help", "--version", "--usage"}
 SELECTOR_FLAGS = {"-run", "-skip"}
@@ -319,6 +319,12 @@ def validate_selection(names, arguments):
         if missing:
             raise ValueError(f"{names[0]}: {' '.join(missing)} matches no test file under {DEN.name}/src. "
                              "No verification was queued")
+    elif grammar == "unittest":
+        if len(arguments) % 2 or any(
+                arguments[index] != "-k" or not arguments[index + 1].strip()
+                or arguments[index + 1].startswith("-") for index in range(0, len(arguments), 2)):
+            raise ValueError(f"{names[0]} accepts only repeated -k <nonempty pattern> selections. "
+                             "No verification was queued")
     elif grammar == "playwright":
         missing = unmatched_playwright_filters(selection_filters(arguments, PLAYWRIGHT_FLAGS, names[0]))
         if missing:
@@ -349,7 +355,7 @@ def expand(names, cli=()):
                            "packages": packages, "flags": flags})
         elif name in data["tasks"]:
             arguments = list(data["tasks"][name])
-            if name in {"den:test:digest", "den:harness:test"} and cli:
+            if cli and data["selection"].get(name) in SELECTION_GRAMMARS:
                 arguments.extend(["--", *cli])
             stages.append({"kind": "task", "name": name, "arguments": arguments})
         else:
@@ -414,11 +420,13 @@ def request(arguments, environment):
 
 def compatibility(root, binary, environment):
     """`environment` is the declared execution environment, exactly what shared stages receive."""
-    files = [CATALOG, *Path(__file__).parent.glob("verification_*.py"),
-             Path(__file__).with_name("test-execution.py")]
+    directory = Path(__file__).parent
+    files = [CATALOG, *directory.glob("verification_*.py"),
+             *directory.joinpath("verification_lifecycle").glob("*.py"), directory / "test-execution.py"]
     return identity({"source": str(Path(root).resolve()), "binary": str(Path(binary).resolve()),
                      "python": [sys.executable, sys.version], "environment": environment,
-                     "planner": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+                     "planner": {p.relative_to(directory).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                                 for p in files}})
 
 
 def stage_key(stage):

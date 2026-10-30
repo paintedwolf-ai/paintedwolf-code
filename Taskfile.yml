@@ -349,7 +349,7 @@ tasks:
   test:runner:
     desc: Verify execution scheduling, cancellation, and worker limits
     cmds:
-      - python3 -m unittest discover -s scripts -p 'test_*execution.py'
+      - python3 -m unittest discover -s scripts -p 'test_*execution.py' {{.CLI_ARGS}}
 
   test:stress:
     desc: Large database, source-tree, Git operation, attribution, and working-year storage fixtures

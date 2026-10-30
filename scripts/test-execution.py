@@ -16,6 +16,7 @@ import time
 import uuid
 
 from verification_advisories import admission_notice
+from verification_lifecycle.terminal import TerminalSettlement, retained
 from verification_history import record_duration
 from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment,
                                     foreground_git_environment, order_of, worker_budget)
@@ -243,13 +244,16 @@ class Queue:
                 except BlockingIOError:
                     entries.append(json.load(lease))
                 else:
-                    stale = True
                     from verification_batch import recover_abandoned
                     try:
                         entry = json.load(lease)
                     except json.JSONDecodeError:
                         entry = {}
-                    recover_abandoned(entry)
+                    if retained(entry):
+                        entries.append(entry)
+                    else:
+                        stale = True
+                        recover_abandoned(entry)
             if stale:
                 path.unlink()
                 path.with_suffix(".batch.json").unlink(missing_ok=True)
@@ -424,6 +428,8 @@ def run(queue, name, command, spec=EXCLUSIVE):
                 lease.write()
         process_options = {"pass_fds": (fd, reservation.file.fileno()), "start_new_session": True} if fd is not None else {}
         child = None
+        cleanup_blocked = False
+        terminal = False
         try:
             print(f"test execution: {name} admitted (worker budget {workers})", file=sys.stderr, flush=True)
             started = time.time()
@@ -441,12 +447,13 @@ def run(queue, name, command, spec=EXCLUSIVE):
             while True:
                 try:
                     code = child.wait(timeout=SAMPLE_SECONDS)
+                    terminal = True
                 except subprocess.TimeoutExpired:
                     report(queue, lease.entry["ticket"])
                     continue
                 if code not in {130, 143}:
                     record_duration(queue, [name], time.time() - started)
-                return code
+                break
         finally:
             if child is not None and child.poll() is None:
                 if os.name == "nt":
@@ -462,10 +469,16 @@ def run(queue, name, command, spec=EXCLUSIVE):
                     else:
                         os.killpg(child.pid, signal.SIGKILL)
                     child.wait()
+            # An interrupted owner cannot turn its own cleanup kill into terminal authority.
+            if terminal:
+                cleanup_blocked = TerminalSettlement(queue, reservation, child).finish()
             if fd is not None:
                 os.close(fd)
+            if terminal:
+                cleanup_blocked |= TerminalSettlement(queue, lease, child).finish()
             if progress is not None:
                 progress.unlink(missing_ok=True)
+        return 2 if cleanup_blocked else code
 
 
 def main():

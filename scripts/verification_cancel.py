@@ -3,13 +3,13 @@
 import json
 import os
 from pathlib import Path
-import shutil
 import signal
 import subprocess
 import time
 
 from verification_batch import status_details
 from verification_health import ownership, process_snapshot
+import verification_lifecycle.custody as custody
 from verification_state import read_state, write_json
 
 USAGE = 'usage: ./task test:cancel -- <ticket> --reason "<why>" [--force]'
@@ -123,39 +123,6 @@ def await_release(queue, ticket, seconds):
     return released(queue, ticket)
 
 
-def lease_holders(path):
-    """Processes with the lease file open, by inode so a renamed path still matches."""
-    target = path.stat()
-    if Path("/proc/self/fd").is_dir():
-        found = set()
-        for descriptor in Path("/proc").glob("[0-9]*/fd/*"):
-            try:
-                opened = descriptor.stat()
-            except OSError:
-                continue
-            if (opened.st_dev, opened.st_ino) == (target.st_dev, target.st_ino):
-                found.add(int(descriptor.parts[2]))
-        return found
-    lsof = shutil.which("lsof") or "/usr/sbin/lsof"
-    result = subprocess.run([lsof, "-t", "-w", "--", str(path)], capture_output=True, text=True, timeout=30)
-    # lsof exits 1 when nothing has the file open.
-    if result.returncode not in {0, 1}:
-        raise OSError(f"lsof could not list holders of {path}: {result.stderr.strip()}")
-    return {int(pid) for pid in result.stdout.split()}
-
-
-def commands(pids):
-    if not pids:
-        return {}
-    result = subprocess.run(["ps", "-o", "pid=,comm=", "-p", ",".join(map(str, sorted(pids)))],
-                            capture_output=True, text=True, timeout=5)
-    named = {}
-    for line in result.stdout.splitlines():
-        pid, _, command = line.strip().partition(" ")
-        named[int(pid)] = command.strip()
-    return named
-
-
 def reclaim(queue, ticket):
     """Stop every process holding the request's lease so a withdrawal always releases admission.
 
@@ -168,10 +135,10 @@ def reclaim(queue, ticket):
     for signum in (signal.SIGTERM, signal.SIGKILL):
         with queue.locked():
             try:
-                holders = lease_holders(path) - {os.getpid()}
+                holders = custody.lease_holders(path) - {os.getpid()}
             except FileNotFoundError:
                 break
-            names = commands(holders)
+            names = custody.commands(holders)
             for pid in sorted(holders):
                 try:
                     os.kill(pid, signum)

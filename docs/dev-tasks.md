@@ -786,6 +786,12 @@ executing them. They use the same resources and pinned features as the complete
 test targets; a compile-only pass does not establish runtime verification.
 No other native selection flags are accepted.
 
+`./task test:runner -- -k terminal -k test_cancel_execution` selects unittest
+cases by their fully qualified test names. Repeated `-k <nonempty pattern>`
+selectors are ORed, using unittest's substring/glob matching. Other discovery,
+output, fail-fast, directory, or worker arguments are refused before admission.
+Without selectors the existing complete runner suite executes, including in CI.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target
@@ -817,6 +823,38 @@ those tools apply. Arguments that passthrough targets and non-catalog targets
 forward are still parsed by their own scripts when the run starts.
 
 ### Health and queue advisories
+
+A live supervisor settles descendants after its normal producer wait completes,
+or after explicit subscriber withdrawal stops and reaps that producer. Reaping
+solely during exception cleanup does not establish this authority. It uses
+that operation's retained reservation, or the capture/final batch lease at those
+boundaries, and rechecks process birth and file identity before signalling a
+holder. Normal completion probes kernel custody before scanning holders. Queue
+and live-owner admission guards cover descriptor retirement and reacquisition;
+source-slot descriptors remain held until their owners finish. A crashed
+supervisor or executor does not declare surviving work terminal.
+
+Stage completion settles its own reservation before publishing passing results.
+The executor seals exact request receipts through a private completion channel
+that stage children do not inherit. Subscribers require its exact durable seal
+before returning a passing receipt. A live executor can finish and seal its
+already settled work if the supervisor dies; abandoned recovery accepts its
+final completion fact only after kernel custody becomes empty. These files
+never authorize signals or early custody release. A later executor crash preserves those
+independently completed receipts; unsealed or changed passing files become
+unverified. Final batch settlement additionally requires the executor's actual
+completion fact, including a legitimate failing outcome, rather than the outer
+snapshot wrapper's exit or a summary file alone.
+
+If terminal cleanup cannot be verified, `cleanup_blocked` reports an unverified
+outcome while the original supervisor retains admission and source custody.
+A holder's own exit can let cleanup finish, but does not turn that unverified
+outcome into a pass. A caller waiting for final batch cleanup receives exit 2
+from that private batch outcome; exact earlier request and stage facts remain
+unchanged. This diagnostic adds no cancellation permission: unshared
+work still requires one of the documented adverse health flags below, or an
+explicit `--force` for known unwanted work. No process basename grants an
+exception or identifies a safe cleanup target.
 
 Health observations appear in `test:status` and existing queue notices. On macOS
 and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is

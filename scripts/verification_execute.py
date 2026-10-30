@@ -18,6 +18,8 @@ from verification_plan import catalog, digest_command, expand, resolve_request, 
 from verification_resources import (Reservation, blocked_reason, bounded_environment, capacity, demand, entries,
                                     order_of, profile)
 from verification_health import identity
+from verification_lifecycle.terminal import TerminalSettlement
+from verification_lifecycle.completion import Publisher
 from verification_cache import Maintenance
 from verification_state import read_json, read_state, write_json
 
@@ -265,6 +267,7 @@ class Executor:
         self.requests = self.plan["requests"]
         self.members = self.plan["batch"]["members"]
         self.source = os.environ["PW_SOURCE_SNAPSHOT_COMMIT"]
+        self.completion = Publisher(self.source, self.directory)
         self.tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
         self.completed = {r["ticket"]: set() for r in self.requests}
         self.running = {r["ticket"]: set() for r in self.requests}
@@ -312,6 +315,9 @@ class Executor:
             output = files.enter_context(log.open("wb"))
             error_output = files.enter_context(errors.open("wb")) if errors else subprocess.STDOUT
             child = None
+            cleanup_blocked = False
+            terminal = False
+            cancelled = False
             try:
                 with self.queue.locked():
                     child = subprocess.Popen(command, stdout=output, stderr=error_output,
@@ -326,14 +332,19 @@ class Executor:
                 while child.poll() is None:
                     if not interested():
                         stop_child(child)
-                        return 130
+                        cancelled = True
+                        break
                     time.sleep(0.1)
-                return child.wait()
+                code = child.wait()
+                terminal = True
             finally:
                 if child is not None:
                     stop_child(child)
+                    if terminal:
+                        cleanup_blocked = TerminalSettlement(self.queue, reservation, child).finish()
                     with self.queue.locked():
                         self.operation_pid(log.stem, None)
+            return -1 if cleanup_blocked else (130 if cancelled else code)
 
     def operation_pid(self, name, pid):
         path = self.queue.root / (self.plan["batch"]["ticket"] + ".lease")
@@ -388,6 +399,7 @@ class Executor:
         if reason:
             value["reason"] = reason
         write_json(self.directory / (ticket + ".json"), value)
+        self.completion.receipt(value)
         self.finished.add(ticket)
         print(f"test execution: {', '.join(value['names'])}: {status}; receipt {self.directory / (ticket + '.json')}", flush=True)
         tiers = tier_tags(self.catalog)
@@ -627,7 +639,9 @@ class Executor:
                    "started_at": self.started, "finished_at": time.time()})
         if self.store is not None:
             reuse.prune(self.store)
-        return 0 if all(read_json(self.directory / (r["ticket"] + ".json"))["exit_code"] == 0 for r in self.requests) else 1
+        code = 0 if all(read_json(self.directory / (r["ticket"] + ".json"))["exit_code"] == 0 for r in self.requests) else 1
+        self.completion.finish(code)
+        return code
 
     def next_stages(self, ready, pending):
         """Stages to start now, longest first. A batch keeps at most one reservation waiting, so one large
