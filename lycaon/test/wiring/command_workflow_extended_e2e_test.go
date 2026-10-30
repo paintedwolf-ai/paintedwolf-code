@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -52,7 +52,7 @@ func TestWorkflowRecommendedApprovalRunsExternalCommand(t *testing.T) {
 	}()
 	kind := wire.CheckpointKindToolApproval
 	var checkpoint wire.CheckpointEvent
-	testutil.WaitFor(t, 30*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, err := f.h.Sessions.Checkpoints.ListPending(ctx, f.session, &kind)
 		if err == nil && len(pending) == 1 {
 			checkpoint = pending[0]
@@ -111,6 +111,7 @@ func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
 }
 
 func TestWorkflowGitFreshRepositoryIgnoresUnrelatedNestedRepository(t *testing.T) {
+	gitengine.TestingEnableBundledBinary()
 	f := newCommandWorkflowFixture(t, []workflowTurn{
 		{callID: "git-init", command: `git init; git status --short`},
 		{callID: "git-commit", command: `git add README.txt; git commit -m 'Initial files'; git status --short`},
