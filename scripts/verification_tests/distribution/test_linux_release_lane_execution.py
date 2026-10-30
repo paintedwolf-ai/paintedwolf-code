@@ -61,18 +61,23 @@ class LinuxReleaseSigningTests(unittest.TestCase):
             (self.directory / (path.name + ".sha256")).write_text(sha(path.read_bytes()) + "\n")
         (self.directory / "candidate-packages.json").write_text("{}\n")
 
-    def sign(self, payload=lambda path: ("painted-wolf-code 1.2.3-1 x86_64", "payload")):
-        def rpm(kind, subject, destination, catalog, private):
+    def sign(self, payload=lambda path: ("painted-wolf-code 1.2.3-1 x86_64", "payload"), rehearsal=False):
+        modes = []
+
+        def rpm(kind, subject, destination, catalog, private, mode):
+            modes.append(mode)
             destination.write_bytes(subject.read_bytes() + b" signed header")
             return {"kind": kind}
 
-        def detached(subject, destination, catalog, private, rehearsal):
-            self.assertFalse(rehearsal)
+        def detached(subject, destination, catalog, private, mode):
+            modes.append(mode)
             destination.write_bytes(b"signature of " + subject.read_bytes())
         with patch.object(release_signing, "sign", side_effect=rpm), \
                 patch.object(release_signing, "binary_signature", side_effect=detached):
-            return release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE,
-                                               private=self.directory / "key", payload=payload)
+            result = release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE,
+                                                 private=self.directory / "key", payload=payload, rehearsal=rehearsal)
+        self.assertEqual(modes, [rehearsal] * 3)
+        return result
 
     def test_final_signed_bytes_rebind_checksums_and_inventory(self):
         result = self.sign()
@@ -101,6 +106,13 @@ class LinuxReleaseSigningTests(unittest.TestCase):
         (self.directory / f"{self.stem}.pkg.tar.zst.sha256").unlink()
         with self.assertRaisesRegex(ValueError, "incomplete"):
             self.sign()
+
+    def test_explicit_rehearsal_signs_every_package_with_disposable_trust(self):
+        self.sign(rehearsal=True)
+        self.assertTrue((self.directory / f"{self.stem}.deb.sig").is_file())
+        for mode in (None, 1, "true"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "explicit trust mode"):
+                release_signing.sign_staged(self.directory, "linux-x86_64", "x86_64", VERSION, SOURCE, rehearsal=mode)
 
     def test_private_key_is_owner_only_and_consumed_once(self):
         with patch.dict(os.environ, {"LINUX_PACKAGE_SIGNING_KEY": "private material"}):
@@ -174,7 +186,7 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
     def test_assembly_signs_each_selected_family_with_the_release_key(self):
         calls = []
 
-        def native(family, manifest, inputs, destination, channel, catalog, private, architectures=None):
+        def native(family, manifest, inputs, destination, channel, catalog, private, architectures=None, rehearsal=False):
             if architectures is not None:
                 self.assertEqual((manifest["packages"], architectures), ([], ["amd64", "arm64"]))
                 destination.mkdir()
@@ -183,7 +195,7 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
             destination.mkdir()
             return {"family": family}
 
-        def pacman(manifest, inputs, destination, channel, catalog, private):
+        def pacman(manifest, inputs, destination, channel, catalog, private, rehearsal=False):
             if not manifest["packages"]:
                 destination.mkdir()
                 return {"family": "pacman", "withdrawal": True}
@@ -195,19 +207,19 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
         with patch.object(release_repositories, "native_version", side_effect=lambda family, path: read.append(family) or "1.2.3-1"), \
                 patch.object(release_repositories.native_repositories, "assemble", side_effect=native), \
                 patch.object(release_repositories.pacman_repository, "assemble", side_effect=pacman):
-            assemble({"deb", "rpm"}, self.artifacts, self.work / "native", VERSION, SOURCE, "stable", Path("key"))
+            assemble({"deb", "rpm"}, self.artifacts, self.work / "native", VERSION, SOURCE, ["stable"], Path("key"))
             self.assertEqual(sorted(set(read)), ["deb", "rpm"])
             read.clear()
-            assemble({"pacman"}, self.artifacts, self.work / "pacman", VERSION, SOURCE, "stable", Path("key"))
+            assemble({"pacman"}, self.artifacts, self.work / "pacman", VERSION, SOURCE, ["stable"], Path("key"))
             self.assertEqual(set(read), {"pacman"})
         self.assertEqual(calls, [("deb", "stable", CATALOG, Path("key")), ("rpm", "stable", CATALOG, Path("key")),
                                  ("pacman", "stable", CATALOG, Path("key")), ("pacman", "stable", CATALOG, Path("key"))])
         index = json.loads((self.work / "pacman/generations.json").read_text())
-        self.assertEqual(index, [{"name": "pacman-aarch64", "family": "pacman"},
-                                 {"name": "pacman-x86_64", "family": "pacman"},
-                                 {"name": "pacman-aarch64-withdrawal", "family": "pacman"},
-                                 {"name": "pacman-x86_64-withdrawal", "family": "pacman"}])
-        self.assertEqual(json.loads((self.work / "native/rpm/generation.json").read_text()), {"family": "rpm"})
+        self.assertEqual(index, [{"name": "stable/pacman-aarch64", "family": "pacman"},
+                                 {"name": "stable/pacman-x86_64", "family": "pacman"},
+                                 {"name": "stable/pacman-aarch64-withdrawal", "family": "pacman"},
+                                 {"name": "stable/pacman-x86_64-withdrawal", "family": "pacman"}])
+        self.assertEqual(json.loads((self.work / "native/stable/rpm/generation.json").read_text()), {"family": "rpm"})
 
     def generations(self, **changes):
         roots = [self.work / "native", self.work / "pacman"]
@@ -219,9 +231,9 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
             receipt["packages"] = [{"file": "pool/x/" + item["file"] if row["family"] != "pacman" else item["file"],
                                     "sha256": item["sha256"]} for item in row["manifest"]["packages"]]
             root = roots[row["family"] == "pacman"]
-            (root / row["name"]).mkdir(exist_ok=True)
-            (root / row["name"] / "generation.json").write_text(json.dumps(receipt))
-            indexes[root].append({"name": row["name"], "family": row["family"]})
+            (root / "stable" / row["name"]).mkdir(exist_ok=True, parents=True)
+            (root / "stable" / row["name"] / "generation.json").write_text(json.dumps(receipt))
+            indexes[root].append({"name": "stable/" + row["name"], "family": row["family"]})
         for root, rows in indexes.items():
             (root / "generations.json").write_text(json.dumps(rows))
         return roots
@@ -229,7 +241,7 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
     def publish(self, roots, qualified, active=None):
         published, reads, self.retained = [], [], []
 
-        def retain(receipt, offer, directory, base_url, qualified):
+        def retain(receipt, offer, directory, base_url, qualified, **configuration):
             self.assertEqual((receipt["packages"], directory.name), ([], offer_name(offer) + "-withdrawal"))
             self.assertFalse(any(item[:2] == (offer["family"], offer.get("architecture")) for item in published))
             self.retained.append(directory.name)
@@ -247,7 +259,7 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
         def read(key, directory):
             reads.append(key)
             return active
-        result = publish(roots, self.artifacts, VERSION, SOURCE, "stable", "https://downloads.example.invalid", qualified,
+        result = publish(roots, self.artifacts, VERSION, SOURCE, ["stable"], "https://downloads.paintedwolf.dev", qualified,
                          read_current=read, publishers={"deb": publisher, "rpm": publisher, "pacman": publisher},
                          retain=retain)
         return result, published, reads
@@ -273,22 +285,22 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "selected release"):
                 self.publish(self.generations(**changes), lambda _source: None)
         roots = self.generations()
-        receipt = json.loads((roots[1] / "pacman-x86_64/generation.json").read_text())
+        receipt = json.loads((roots[1] / "stable/pacman-x86_64/generation.json").read_text())
         receipt["packages"][0]["sha256"] = "c" * 64
-        (roots[1] / "pacman-x86_64/generation.json").write_text(json.dumps(receipt))
+        (roots[1] / "stable/pacman-x86_64/generation.json").write_text(json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, "signed public packages"):
             self.publish(roots, lambda _source: None)
         roots = self.generations()
-        (roots[1] / "generations.json").write_text(json.dumps([{"name": "pacman-x86_64", "family": "pacman"}]))
+        (roots[1] / "generations.json").write_text(json.dumps([{"name": "stable/pacman-x86_64", "family": "pacman"}]))
         with self.assertRaisesRegex(ValueError, "catalog-public"):
             self.publish(roots, lambda _source: None)
 
     def test_authority_refuses_other_targets_and_operations(self):
-        authority = ReleaseAuthority(self.artifacts, VERSION, SOURCE, "stable", "https://downloads.example.invalid",
+        authority = ReleaseAuthority(self.artifacts, VERSION, SOURCE, "stable", "https://downloads.paintedwolf.dev",
                                      lambda _source: None, self.platforms)
         manifest = {**self.plan()[0]["manifest"], "family": "deb", "channel": "stable", "rehearsal": False}
         request = {"manifest": manifest, "catalog": CATALOG, "storage_prefix": "linux",
-                   "base_url": "https://downloads.example.invalid", "operation": "publish"}
+                   "base_url": "https://downloads.paintedwolf.dev", "operation": "publish"}
         self.assertTrue(authority(request))
         for changes in [{"operation": "withdraw"}, {"storage_prefix": "release-system-tests/x"},
                         {"base_url": "https://other.example.invalid"}, {"catalog": Path("rehearsal.json")}]:

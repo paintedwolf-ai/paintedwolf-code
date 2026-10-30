@@ -4,13 +4,14 @@ from __future__ import annotations
 import hashlib
 import json
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import re
 import shutil
 import tempfile
 import uuid
 
 from .adapter import path_info, verify
-from .admission import closure_projection, inventory, validate_request
+from .admission import closure_projection, inventory, validate_request, nar_sha256
 
 
 def encoded(value: dict) -> bytes:
@@ -23,26 +24,78 @@ def verified_report(cache: Path, report: dict) -> dict:
     if (not isinstance(report, dict) or set(report) != fields or type(report["schema_version"]) is not int
             or report["schema_version"] != 1 or report["status"] != "passed"):
         raise ValueError("cache publication requires a complete construction report")
-    request = report["request"]
-    validate_request(request, {"schema_version": 1, "mode": request["mode"], "public_keys": report["public_keys"]})
+    receipt = availability(report)
+    request, closure = receipt['request'], receipt['closure']
     if report["upstream_dependencies"] != [] or report["dependency_policy"] != "complete-closure-in-this-cache":
         raise ValueError("cache publication requires its complete runtime closure")
-    closure = report["closure"]
-    if not isinstance(closure, dict) or not set(request["outputs"]) <= closure.keys():
-        raise ValueError("cache report omits a selected output")
-    for row in closure.values():
-        if (not isinstance(row, dict) or type(row.get("nar_bytes")) is not int or row["nar_bytes"] <= 0
-                or not isinstance(row.get("references"), list) or not set(row["references"]) <= closure.keys()):
-            raise ValueError("cache report omits a referenced closure path")
-    digest = hashlib.sha256(json.dumps(closure, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    if digest != report["closure_sha256"] or inventory(cache, closure, report["public_keys"]) != report["objects"]:
-        raise ValueError("cache files or closure differ from their construction report")
+    if inventory(cache, closure, report["public_keys"]) != report["objects"]:
+        raise ValueError("cache files differ from their construction report")
     verify(cache, request["outputs"], report["public_keys"])
     actual = closure_projection(path_info(cache.as_uri(), request["outputs"]), request["outputs"])
     if set(actual) != set(closure) or any(actual[path][field] != closure[path][field]
                                           for path in actual for field in ("nar_hash", "nar_bytes", "references")):
         raise ValueError("Nix cache bytes differ from the reported closure identities")
     return report
+
+
+def availability(report):
+    record = {key: report[key] for key in ('request', 'closure_sha256', 'closure', 'objects', 'public_keys')}
+    return validate_availability({'schema_version': 1, **record})
+
+
+def validate_availability(record, policy=None):
+    fields = {'schema_version', 'request', 'closure_sha256', 'closure', 'objects', 'public_keys'}
+    if (not isinstance(record, dict) or set(record) != fields or type(record['schema_version']) is not int
+            or record['schema_version'] != 1):
+        raise ValueError('cache availability has an unsupported versioned shape')
+    request = record['request']
+    if not isinstance(request, dict):
+        raise ValueError('cache availability requires its typed request')
+    selected = {'schema_version': 1, 'mode': request.get('mode'), 'public_keys': record['public_keys']}
+    validate_request(request, selected)
+    if policy is not None and selected != policy:
+        raise ValueError('cache availability differs from selected trust')
+    closure = record['closure']
+    from .admission import STORE_PATH
+    if (not isinstance(closure, dict) or not set(request['outputs']) <= closure.keys()
+            or any(not isinstance(path, str) or not re.fullmatch(STORE_PATH, path) for path in closure)):
+        raise ValueError('cache availability omits its selected closure')
+    for row in closure.values():
+        if (not isinstance(row, dict) or set(row) != {'nar_hash', 'nar_bytes', 'references', 'derivation'}
+                or not isinstance(row['nar_hash'], str) or not row['nar_hash']
+                or type(row['nar_bytes']) is not int or row['nar_bytes'] <= 0
+                or not isinstance(row['references'], list) or any(not isinstance(path, str) for path in row['references'])
+                or len(set(row['references'])) != len(row['references']) or not set(row['references']) <= closure.keys()
+                or row['derivation'] is not None and (not isinstance(row['derivation'], str)
+                    or not re.fullmatch(STORE_PATH, row['derivation']))):
+            raise ValueError('cache availability has inconsistent closure metadata')
+    for row in closure.values():
+        nar_sha256(row['nar_hash'])
+    if hashlib.sha256(json.dumps(closure, sort_keys=True, separators=(',', ':')).encode()).hexdigest() != record['closure_sha256']:
+        raise ValueError('cache availability differs from its closure identity')
+    objects, seen = record['objects'], set()
+    if not isinstance(objects, list) or not objects:
+        raise ValueError('cache availability requires its declared object inventory')
+    for row in objects:
+        if not isinstance(row, dict) or set(row) != {'name', 'phase', 'bytes', 'sha256', 'content_type', 'cache_control'}:
+            raise ValueError('cache availability has an unsupported object shape')
+        name = row['name']
+        if (not isinstance(name, str) or not name or PurePosixPath(name).is_absolute() or '..' in PurePosixPath(name).parts
+                or PurePosixPath(name).as_posix() != name or name in seen
+                or row['phase'] not in {'nar', 'narinfo', 'cache-info'} or type(row['bytes']) is not int or row['bytes'] <= 0
+                or not isinstance(row['sha256'], str) or not re.fullmatch('[a-f0-9]{64}', row['sha256'])
+                or row['content_type'] != ('application/octet-stream' if row['phase'] == 'nar' else 'text/plain; charset=utf-8')
+                or row['cache_control'] != ('public, max-age=31536000, immutable' if row['phase'] == 'nar' else 'no-cache, no-store, must-revalidate')):
+            raise ValueError('cache availability has inconsistent object metadata')
+        seen.add(name)
+    expected_metadata = {Path(path).name.split('-', 1)[0] + '.narinfo' for path in closure} | {'nix-cache-info'}
+    if ({row['name'] for row in objects if row['phase'] != 'nar'} != expected_metadata
+            or not any(row['phase'] == 'nar' for row in objects)
+            or any((row['phase'] == 'nar' and not row['name'].startswith('nar/'))
+                   or (row['phase'] == 'cache-info' and row['name'] != 'nix-cache-info')
+                   or (row['phase'] == 'narinfo' and not row['name'].endswith('.narinfo')) for row in objects)):
+        raise ValueError('cache availability inventory omits its declared closure metadata')
+    return record
 
 
 def metadata_upgrade(previous: bytes, incoming: bytes) -> bool:
@@ -93,8 +146,7 @@ def _publish_objects(cache: Path, checked: dict, backend, operation: str | None)
         name = record_name(request)
         if backend.read(name + ".withdrawn") is not None:
             raise ValueError("withdrawn cache release cannot be published again")
-        receipt = {"schema_version": 1, "request": request, "closure_sha256": checked["closure_sha256"],
-                   "closure": checked["closure"], "objects": checked["objects"], "public_keys": checked["public_keys"]}
+        receipt = availability(checked)
         previous = backend.read(name)
         if previous is not None and previous != encoded(receipt):
             old = json.loads(previous)
@@ -129,7 +181,8 @@ def withdraw(request: dict, *, authorize, backend_factory) -> None:
         raise ValueError("cache withdrawal requires explicit controller authority")
     with backend_factory(request).serialized(uuid.uuid4().hex) as backend:
         name = record_name(request)
-        if backend.read(name) is None:
-            raise ValueError("cache withdrawal requires an existing published release")
+        raw = backend.read(name)
+        if raw is None or validate_availability(json.loads(raw))["request"] != request:
+            raise ValueError("cache withdrawal requires its exactly selected published release")
         backend.put_bytes(name + ".withdrawn", encoded({"schema_version": 1, "request": request, "withdrawn": True}),
                           "application/json", "no-cache, no-store, must-revalidate")

@@ -12,6 +12,7 @@ from scripts.release_semver import parse
 
 
 STORE_PATH = r"/nix/store/[0123456789abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._=-]+"
+SYSTEMS = ("x86_64-linux", "aarch64-linux")
 REHEARSAL_KEY = "paintedwolf-rehearsal-"
 
 
@@ -27,6 +28,18 @@ def public_key(value: str) -> str:
     return name
 
 
+def nar_sha256(value):
+    if not isinstance(value, str) or not value.startswith('sha256-'):
+        raise ValueError('Nix cache output requires its canonical SHA-256 NAR identity')
+    try:
+        raw = base64.b64decode(value[7:], validate=True)
+    except ValueError as error:
+        raise ValueError('Nix cache NAR identity has invalid SHA-256 bytes') from error
+    if len(raw) != 32 or base64.b64encode(raw).decode() != value[7:]:
+        raise ValueError('Nix cache NAR identity requires canonical SHA-256 bytes')
+    return raw.hex()
+
+
 def validate_source_request(request: dict) -> None:
     fields = {"schema_version", "version", "application_commit", "flake_lock_sha256", "system", "outputs"}
     if (not isinstance(request, dict) or set(request) != fields or type(request["schema_version"]) is not int
@@ -36,7 +49,7 @@ def validate_source_request(request: dict) -> None:
     for key, length in [("application_commit", 40), ("flake_lock_sha256", 64)]:
         if not isinstance(request[key], str) or not re.fullmatch(r"[a-f0-9]{" + str(length) + "}", request[key]):
             raise ValueError(f"Nix cache request has an invalid {key}")
-    if request["system"] not in {"x86_64-linux", "aarch64-linux"}:
+    if request["system"] not in SYSTEMS:
         raise ValueError("Nix cache request has an unsupported system")
     outputs = request["outputs"]
     if not isinstance(outputs, list) or not outputs or len(outputs) > 128 or any(
@@ -53,21 +66,26 @@ def validate_request(request: dict, policy: dict) -> None:
         raise ValueError("Nix cache mode must be explicit")
     validate_source_request({key: request[key] for key in
                              ("schema_version", "version", "application_commit", "flake_lock_sha256", "system", "outputs")})
-    prefix = request["cache_prefix"]
-    if request["mode"] == "production":
+    validate_scope(request["mode"], request["cache_prefix"], policy)
+
+
+def validate_scope(mode, prefix, policy):
+    if mode not in {"production", "rehearsal"}:
+        raise ValueError("Nix cache mode must be explicit")
+    if mode == "production":
         if prefix != "nix-cache":
             raise ValueError("production Nix cache requires its dedicated prefix")
     elif not isinstance(prefix, str) or not re.fullmatch(r"release-system-tests/[A-Za-z0-9_-]+/nix-cache", prefix):
         raise ValueError("rehearsal Nix cache requires an isolated test prefix")
     if (not isinstance(policy, dict) or set(policy) != {"schema_version", "mode", "public_keys"}
-            or type(policy["schema_version"]) is not int or policy["schema_version"] != 1 or policy["mode"] != request["mode"]):
+            or type(policy["schema_version"]) is not int or policy["schema_version"] != 1 or policy["mode"] != mode):
         raise ValueError("Nix cache trust policy differs from the requested mode")
     keys = policy["public_keys"]
     if not isinstance(keys, list) or not keys or any(not isinstance(key, str) for key in keys) or len(keys) != len(set(keys)):
         raise ValueError("Nix cache requires an explicit nonempty public trust set")
     for key in keys:
         name = public_key(key)
-        if (request["mode"] == "rehearsal") != name.startswith(REHEARSAL_KEY):
+        if (mode == "rehearsal") != name.startswith(REHEARSAL_KEY):
             raise ValueError("Nix rehearsal key identity cannot enter production trust")
 
 

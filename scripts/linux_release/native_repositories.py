@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime, parsedate_to_datetime
 import gzip
 import hashlib
 import json
@@ -50,10 +52,15 @@ def signed_rpm(path: Path, catalog: Path, rehearsal: bool) -> bool:
 def apt_indexes(destination: Path, channel: str, architectures: list[str], catalog: Path,
                 private: Path | None, rehearsal: bool):
     distribution = destination / "dists" / channel
+    # Release files are named by platform, so apt-ftparchive's filename-based -a filter would drop
+    # them; each index selects its stanzas by their own Architecture field instead.
+    listing = subprocess.check_output(["apt-ftparchive", "packages", "pool"], cwd=destination).decode()
+    stanzas = [stanza.strip("\n") for stanza in listing.split("\n\n") if stanza.strip()]
     for arch in architectures:
         binary = distribution / "main" / ("binary-" + arch)
         binary.mkdir(parents=True)
-        data = subprocess.check_output(["apt-ftparchive", "-a", arch, "packages", "pool"], cwd=destination)
+        data = "".join(stanza + "\n\n" for stanza in stanzas
+                       if re.search(r"^Architecture: (\S+)$", stanza, re.M).group(1) in {arch, "all"}).encode()
         (binary / "Packages").write_bytes(data)
         (binary / "Packages.gz").write_bytes(gzip.compress(data, mtime=0))
         for path in [binary / "Packages", binary / "Packages.gz"]:
@@ -62,6 +69,20 @@ def apt_indexes(destination: Path, channel: str, architectures: list[str], catal
                 hashed = binary / "by-hash" / algorithm / value
                 hashed.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, hashed)
+    apt_release(destination, channel, catalog, private, rehearsal)
+
+
+def release_date(raw: bytes) -> datetime:
+    match = re.search(rb"^Date: (.+)$", raw, re.M)
+    if match is None:
+        raise ValueError("apt Release has no Date")
+    return parsedate_to_datetime(match.group(1).decode())
+
+
+def apt_release(destination: Path, channel: str, catalog: Path, private: Path | None, rehearsal: bool,
+                *, after: datetime | None = None):
+    """Write and sign the generation's Release; `after` makes its Date later than an earlier Release."""
+    distribution = destination / "dists" / channel
     # InRelease is the one mutable signed object; detached pairs stay generation-local.
     release = distribution / "Release"
     data = subprocess.check_output(["apt-ftparchive", "-o", "APT::FTPArchive::Release::Acquire-By-Hash=yes",
@@ -69,11 +90,51 @@ def apt_indexes(destination: Path, channel: str, architectures: list[str], catal
                                    "-o", "APT::FTPArchive::Release::Suite=" + channel,
                                    "-o", "APT::FTPArchive::Release::Codename=" + channel,
                                    "release", str(distribution.relative_to(destination))], cwd=destination)
-    release.write_bytes(data)
     if b"Acquire-By-Hash: yes\n" not in data:
         raise ValueError("apt Release must advertise content-addressed indexes")
+    if after is not None and release_date(data) <= after:
+        stamp = format_datetime(after.astimezone(timezone.utc) + timedelta(seconds=1)).encode()
+        data = re.sub(rb"^Date: .+$", b"Date: " + stamp, data, count=1, flags=re.M)
+    release.write_bytes(data)
     sign("release", release, distribution / "InRelease", catalog, private, rehearsal)
     sign("detached", release, distribution / "Release.gpg", catalog, private, rehearsal)
+
+
+def authority(channel: str) -> set[str]:
+    return {f"dists/{channel}/{name}" for name in ("Release", "InRelease", "Release.gpg")}
+
+
+def inventory(destination: Path) -> tuple[list[dict], str]:
+    objects = [{"path": path.relative_to(destination).as_posix(), "sha256": digest(path), "size": path.stat().st_size}
+               for path in sorted(destination.rglob("*")) if path.is_file() and path.name != "generation.json"]
+    return objects, hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def same_restore(retained: dict, resigned: dict):
+    """A re-signed apt restore keeps every fact and index of its retained generation; only Release changes."""
+    signed = authority(retained["channel"])
+    facts = lambda receipt: {key: value for key, value in receipt.items() if key not in {"objects", "inventory_sha256"}}
+    unsigned = lambda receipt: sorted((row for row in receipt["objects"] if row["path"] not in signed), key=lambda row: row["path"])
+    if (retained.get("family") != "deb" or not retained.get("packages") or facts(retained) != facts(resigned)
+            or unsigned(retained) != unsigned(resigned)
+            or not signed <= {row["path"] for row in resigned["objects"]}):
+        raise ValueError("re-signed apt restore differs from its retained generation")
+
+
+def resign(retained: dict, directory: Path, catalog: Path, private: Path, rehearsal: bool, *, after: datetime) -> dict:
+    """Sign a fresh Release over a retained apt generation so clients drop an index cached from a later one."""
+    signer, _ = selection(catalog, rehearsal)
+    if (retained.get("family") != "deb" or not retained.get("packages") or retained.get("rehearsal") is not rehearsal
+            or (retained.get("signing_generation"), retained.get("key_fingerprint")) != (signer["generation"], signer["fingerprint"])):
+        raise ValueError("only a retained apt offer under the selected signing identity can be re-signed")
+    for name in authority(retained["channel"]):
+        (directory / name).unlink(missing_ok=True)
+    (directory / "generation.json").unlink(missing_ok=True)
+    apt_release(directory, retained["channel"], catalog, private, rehearsal, after=after)
+    objects, inventory_sha256 = inventory(directory)
+    resigned = {**retained, "objects": objects, "inventory_sha256": inventory_sha256}
+    same_restore(retained, resigned)
+    return resigned
 
 
 def assemble(family: str, manifest: dict, inputs: Path, destination: Path, channel: str,
@@ -126,9 +187,8 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
             "source_commit": manifest["source_commit"], "version": manifest["version"], "packages": final,
             "publication_order": "content-before-signed-metadata",
             "reader_consistency": "apt-inrelease-by-hash" if family == "deb" else "dnf-versioned-baseurl-mirrorlist",
-            "objects": [{"path": path.relative_to(destination).as_posix(), "sha256": digest(path),
-                         "size": path.stat().st_size} for path in sorted(destination.rglob("*")) if path.is_file()]}
-    result["inventory_sha256"] = hashlib.sha256(json.dumps(result["objects"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            "objects": []}
+    result["objects"], result["inventory_sha256"] = inventory(destination)
     return result
 
 

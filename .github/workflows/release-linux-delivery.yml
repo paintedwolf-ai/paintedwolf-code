@@ -1,7 +1,7 @@
 name: Release Linux delivery
 
-# Called by release.yml after the shared gates, the Linux repository activation and the
-# announced release. Each job holds one runner and only its own delivery credential.
+# Called after the shared gates and Linux repository activation, before discovery
+# metadata and announcement. Each job holds one runner and its own credential.
 on:
   workflow_call:
     inputs:
@@ -104,4 +104,10 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane publish --outputs nix-closures/outputs \
-            --source-commit "${SOURCE_SHA}" --version "${VERSION}"
+            --source-commit "${SOURCE_SHA}" --version "${VERSION}" --output "${RUNNER_TEMP}/nix-publication.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-cache-publication
+          path: ${{ runner.temp }}/nix-publication.json
+          if-no-files-found: error
+          retention-days: 90

@@ -1,5 +1,6 @@
 """Native apt/dnf assembly and candidate retention sign only selected package identities."""
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -7,15 +8,54 @@ import subprocess
 import tempfile
 import unittest
 
+from scripts.linux_release import repository_withdrawal
 from scripts.linux_release.candidate_repositories import retain
-from scripts.linux_release.native_repositories import assemble
+from scripts.linux_release.native_repositories import assemble, release_date, resign, same_restore
+from scripts.linux_release.repository_objects import encoded
+from scripts.linux_release.repository_r2 import publish_r2
 from scripts.linux_release.openpgp import ephemeral
 from scripts.linux_release.repository_validation import admit
 from scripts.linux_release.signing import digest, sign
 from scripts.verification_tests.distribution.native_repository_fixtures import (
     NATIVE, PACKAGE, TESTDATA, inputs, manifest, native_tools)
+from scripts.verification_tests.distribution.repository_fixture_support import halt_distribution
 
 SOURCE = "f" * 40
+ORIGIN = "https://rehearsal.example.invalid"
+PREFIX = "release-system-tests/apt-restore"
+
+
+class Origin:
+    """An isolated object store with the release transport's operations."""
+
+    def __init__(self):
+        self.objects = {}
+
+    def current(self, key, directory=None):
+        return json.loads(self.objects[key]) if key in self.objects else None
+
+    def put(self, key, source, mutable=False):
+        if not mutable and self.objects.get(key, source.read_bytes()) != source.read_bytes():
+            raise ValueError("immutable collision")
+        self.objects[key] = source.read_bytes()
+
+    def public_bytes(self, url, source, mutable=False):
+        if self.objects.get(url.removeprefix(ORIGIN + "/")) != source.read_bytes():
+            raise ValueError("public bytes differ")
+
+    def prefixes(self, prefix):
+        return sorted(key.removesuffix("generation.json") for key in self.objects
+                      if key.startswith(prefix) and key.endswith("/generation.json"))
+
+    def fetch(self, base_url, row, directory):
+        for item in row["receipt"]["objects"]:
+            target = directory / item["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(self.objects[f"{PREFIX}/generations/{row['replacement']}/{item['path']}"])
+        (directory / "generation.json").write_bytes(encoded(row["receipt"]))
+
+    def read(self, base_url, row, generation, path):
+        return self.objects[f"{PREFIX}/generations/{generation}/{path}"]
 
 
 class NativeRepositoryAssemblyTests(unittest.TestCase):
@@ -40,6 +80,90 @@ class NativeRepositoryAssemblyTests(unittest.TestCase):
         destination = destination or self.work / (family + "-generation")
         arguments = {"catalog": self.catalog, "private": self.private, "rehearsal": True, "package": PACKAGE, **options}
         return assemble(family, selected, self.inputs, destination, "preview", **arguments), destination
+
+    def test_apt_indexes_list_platform_named_release_packages_by_their_architecture(self):
+        released = "paintedwolf-repository-fixture_v0.0.1_linux-x86_64.deb"
+        selected = manifest("deb", self.inputs, file=released)
+        (self.inputs / NATIVE["deb"]).rename(self.inputs / released)
+        receipt, directory = self.assemble("deb", selected)
+        admit(receipt, directory, self.catalog, True)
+        amd64 = (directory / "dists/preview/main/binary-amd64/Packages").read_text()
+        self.assertIn("Package: " + PACKAGE + "\n", amd64)
+        self.assertIn("Filename: " + receipt["packages"][0]["file"] + "\n", amd64)
+        self.assertEqual(sorted(path.name for path in (directory / "dists/preview/main").iterdir()), ["binary-amd64"])
+
+    def test_apt_restore_signs_a_later_release_over_unchanged_indexes(self):
+        receipt, directory = self.assemble("deb", manifest("deb", self.inputs))
+        original = (directory / "dists/preview/Release").read_bytes()
+        halted = release_date(original)
+        restored = self.work / "restored"
+        shutil.copytree(directory, restored)
+        resigned = resign(receipt, restored, self.catalog, self.private, True, after=halted)
+        admit(resigned, restored, self.catalog, True)
+        fresh = (restored / "dists/preview/Release").read_bytes()
+        self.assertGreater(release_date(fresh), halted)
+        undated = lambda raw: [line for line in raw.splitlines() if not line.startswith(b"Date: ")]
+        self.assertEqual(undated(fresh), undated(original))
+        same_restore(receipt, resigned)
+        self.assertNotEqual(resigned["inventory_sha256"], receipt["inventory_sha256"])
+        index = next(row for row in resigned["objects"] if row["path"].endswith("binary-amd64/Packages"))
+        for changed in ({**resigned, "version": "0.0.2"},
+                        {**resigned, "objects": [{**row, "sha256": "0" * 64} if row is index else row for row in resigned["objects"]]}):
+            with self.assertRaisesRegex(ValueError, "differs from its retained generation"):
+                same_restore(receipt, changed)
+        rpm, rpm_directory = self.assemble("rpm", manifest("rpm", self.inputs))
+        with self.assertRaisesRegex(ValueError, "retained apt offer"):
+            resign(rpm, rpm_directory, self.catalog, self.private, True, after=halted)
+
+    def test_halted_apt_channel_restores_its_retained_offer_under_a_fresh_release(self):
+        origin = Origin()
+        published = {}
+        for version in ("1.2.2", "1.2.3"):
+            receipt, directory = self.assemble("deb", manifest("deb", self.inputs, version=version), self.work / version)
+            expected = published["1.2.2"]["generation"] if published else None
+            published[version] = publish_r2(receipt, directory, self.catalog, PREFIX, ORIGIN, expected, True, transport=origin)
+        options = {"rehearsal": True, "catalog": self.catalog, "storage_prefix": PREFIX}
+        rows = repository_withdrawal.prepare(halt_distribution("1.2.3", "1.2.2", channels=("preview",)),
+                                             base_url=ORIGIN, transport=origin, **options)
+        [row] = [row for row in rows if row["action"] == "withdraw"]
+        self.assertEqual((row["family"], row["replacement"], row["resign"]), ("deb", published["1.2.2"]["generation"], True))
+        before = dict(origin.objects)
+        with self.assertRaisesRegex(ValueError, "re-signed generation"):
+            repository_withdrawal.apply(rows, ORIGIN, transport=origin, **options)
+        self.assertEqual(origin.objects, before)
+        signed = self.work / "signed"
+        signed.mkdir()
+        resigned = repository_withdrawal.resign(rows, ORIGIN, signed, self.private, fetch=origin.fetch,
+                                                read=origin.read, **options)
+        repository_withdrawal.apply(resigned, ORIGIN, signed=signed, transport=origin, **options)
+        state = origin.current(f"{PREFIX}/channels/deb/preview/current.json")
+        [restore] = [row for row in resigned if row["action"] == "withdraw"]
+        self.assertEqual((state["operation"], state["version"], state["generation"], state["previous"]),
+                         ("withdraw", "1.2.2", restore["replacement"], published["1.2.3"]["generation"]))
+        halted = origin.objects[f"{PREFIX}/generations/{published['1.2.3']['generation']}/dists/preview/Release"]
+        served = origin.objects[f"{PREFIX}/channels/deb/preview/dists/preview/InRelease"]
+        self.assertGreater(release_date(served), release_date(halted))
+        for name in ("Packages", "Packages.gz"):
+            self.assertEqual(origin.objects[f"{PREFIX}/channels/deb/preview/dists/preview/main/binary-amd64/{name}"],
+                             origin.objects[f"{PREFIX}/generations/{published['1.2.2']['generation']}/dists/preview/main/binary-amd64/{name}"])
+        self.assertTrue(all(row["action"] == "keep" for row in repository_withdrawal.prepare(
+            halt_distribution("1.2.3", "1.2.2", channels=("preview",)), base_url=ORIGIN, transport=origin, **options)))
+        # A later halt selecting 1.2.2 again finds the original and its re-signed copy: one apt restore.
+        receipt, directory = self.assemble("deb", manifest("deb", self.inputs, version="1.2.4"), self.work / "1.2.4")
+        publish_r2(receipt, directory, self.catalog, PREFIX, ORIGIN, restore["replacement"], True, transport=origin)
+        rows = repository_withdrawal.prepare(halt_distribution("1.2.4", "1.2.2", channels=("preview",)),
+                                             base_url=ORIGIN, transport=origin, **options)
+        [again] = [row for row in rows if row["action"] == "withdraw"]
+        self.assertEqual(again["receipt"]["version"], "1.2.2")
+        self.assertIn(again["replacement"], {restore["replacement"], restore["restores"]})
+        self.assertTrue(again["resign"])
+        # Any other retained generation naming 1.2.2 is a real ambiguity.
+        other = {**restore["retained"], "source_commit": "e" * 40}
+        origin.objects[f"{PREFIX}/generations/{hashlib.sha256(encoded(other)).hexdigest()}/generation.json"] = encoded(other)
+        with self.assertRaises(repository_withdrawal.MissingRetainedGeneration) as failure:
+            repository_withdrawal.prepare(halt_distribution("1.2.4", "1.2.2", channels=("preview",)),
+                                          base_url=ORIGIN, transport=origin, **options)
+        self.assertEqual(failure.exception.reason["code"], "NATIVE_REPLACEMENT_AMBIGUOUS")
 
     def test_signed_generations_admit_and_retain_post_signing_package_identity(self):
         for family in ["deb", "rpm"]:

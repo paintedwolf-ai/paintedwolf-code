@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/contract/runner/release_blast_radius_contract_test.go",
+  "kind": "test_suite",
+  "workstream": "release-admission",
+  "disposition": "retain",
+  "reason": "The measured 434 code-bearing lines bind the retained upgrade corpus, source admission, immutable deposit order and halt/recovery contract to one release blast-radius boundary. Keep the shared corpus fixtures and publication-order checks together at this measured ceiling; graph topology and public-artifact flow are enforced by the separate shared lane model. The halt needle now names the job-level barrier that gates its apply job; the measured size is unchanged.",
+  "reviewed_commit": "a77b283e25cd1b8fbf694bab6652ee25536fff71",
+  "ceiling": 434,
+  "boundaries": {
+    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "7525dc67b675fabcc68b8ae68d1b2d5ed94e2114446306aa3807a7872beb9d0b",
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "beeca6ee53a62894a8f756a3b9cf707e4db4dbec9a5eb380a5189a6aea421d96"
+  }
+}

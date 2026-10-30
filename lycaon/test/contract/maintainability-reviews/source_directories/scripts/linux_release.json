@@ -4,14 +4,18 @@
   "kind": "module",
   "workstream": "linux-release-distribution",
   "disposition": "retain",
-  "reason": "The 63 modules keep package-format assembly, native repository effects and qualification adapters explicit while sharing signing, inventories, publication authority and recovery contracts. Retain this bounded membership with each lifecycle at its existing owner; the Nix cache has its own package.",
-  "reviewed_commit": "fb94c47eb9145b640bad4151ea0e7ca0078b66c7",
-  "ceiling": 63,
-  "reviewed_shape": "e6cc4b7095ca27769261cd686ece71029f83ee08b481ac29871bd604141aaabb",
+  "reason": "The measured 67 modules retain format-specific assembly and repository effects while sharing signing, inventories, publication authority and recovery. Setup orchestration uses the existing setup constructor and independent admission, and apt restore re-signing reuses the release-time apt signing owner and the existing withdrawal module; neither adds a second publisher. Three installed-qualification modules (installed_coverage, installed_evidence, installed_results) share the directory and own installed evidence, not publication. Retain this exact membership at 67, with Nix in its existing package and complete release graph, setup and withdrawal contracts supporting the boundary.",
+  "reviewed_commit": "6364b0a89fe968808ec290a7f74b11df52b6f60d",
+  "ceiling": 67,
+  "reviewed_shape": "ef1010da6d232cb9aeef3e9d631d437b0e417f51b840e6ffb1c71694270b09b9",
   "boundaries": {
-    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "280137748c1ad4df793c0d7282546e4057604ce8fa053a163907bfd46512848a",
-    "scripts/verification_tests/distribution/test_linux_repository_withdrawal_execution.py": "348813ad65ae5c238ad2c6f8824d7a1207814fa67532fd5bc00bfbb5e4038400",
-    "scripts/verification_tests/distribution/nix_cache/test_nix_cache_release_lane_execution.py": "84dfee8e8dc3257278a1c4366338f872505a26ed0cd122af437fb1f3487ebeb0",
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "beeca6ee53a62894a8f756a3b9cf707e4db4dbec9a5eb380a5189a6aea421d96",
+    "lycaon/test/contract/runner/release_public_artifacts_contract_test.go": "495764c9c5399bb28d7c3f760344dab439af8ccacd47259e6972cf9d5a55ba83",
+    "scripts/verification_tests/distribution/test_release_repository_setup_execution.py": "62ba41a59aae9125c433df51e761ade2393bde17e585831786c6cdf99b47b28a",
+    "scripts/verification_tests/distribution/test_repository_setup_admission_execution.py": "c54782f61c6eb08bc466b7264f7692be2fa9879a91bac73d67b628f311838915",
+    "scripts/verification_tests/distribution/test_linux_repository_withdrawal_execution.py": "9317739b1075dca91b84b551e52b21210a1f4a2ed1a3783f21421a7ea2e09e18",
+    "scripts/verification_tests/distribution/test_linux_first_release_withdrawal_execution.py": "960f7cc896989af6d7f306ca3e28611a99a39286e86ffdbee7b6895ec65b03cb",
+    "scripts/verification_tests/distribution/nix_cache/test_nix_cache_release_lane_execution.py": "c1b1bb5599d5a750c51526f8831cf9d043ccf4639f75b34ae41b8fd16f80455a",
     "scripts/verification_tests/distribution/pacman/test_pacman_rehearsal_contract_execution.py": "46d3d1c3847982ff91c72400f83282681de3afd7dd40f9d7543dc46695e249cc"
   }
 }

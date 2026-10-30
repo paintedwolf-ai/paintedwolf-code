@@ -44,3 +44,20 @@ class PublicIdentityTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'typed admitted'):
                         owner.public_bytes('https://example.invalid/payload', path, expected_identity=expected)
                     request.assert_not_called()
+
+    def test_retry_budget_is_typed_bounded_and_shared_by_public_object_verification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'payload'
+            path.write_bytes(b'abc')
+            for attempts in (0, 25, True):
+                with self.subTest(attempts=attempts), patch.object(owner.urllib.request, 'urlopen') as request:
+                    with self.assertRaisesRegex(ValueError, 'bounded retry'):
+                        owner.public_bytes('https://example.invalid/payload', path, attempts=attempts)
+                    request.assert_not_called()
+            calls = []
+            def request(*args, **kwargs):
+                calls.append(args)
+                return Response(b'abc' if len(calls) == 3 else b'bad')
+            with patch.object(owner.urllib.request, 'urlopen', side_effect=request), patch.object(owner.time, 'sleep') as sleep:
+                owner.public_bytes('https://example.invalid/payload', path, attempts=3)
+            self.assertEqual((len(calls), sleep.call_count), (3, 2))

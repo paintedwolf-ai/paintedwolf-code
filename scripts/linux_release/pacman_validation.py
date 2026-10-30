@@ -27,15 +27,23 @@ def fields(raw: bytes) -> dict:
     return result
 
 
-def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
-    if (receipt.get("format_version") != 1 or receipt.get("family") != "pacman" or receipt.get("rehearsal") is not rehearsal
+def validate_manifest(receipt: dict, catalog: Path, rehearsal=False):
+    if type(rehearsal) is not bool or not isinstance(receipt, dict):
+        raise ValueError("repository admission requires typed mode and manifest")
+    if (type(receipt.get("format_version")) is not int or receipt.get("format_version") != 1 or receipt.get("family") != "pacman" or receipt.get("rehearsal") is not rehearsal
             or receipt.get("channel") not in {"stable", "preview"}
             or receipt.get("architecture") not in ARCHITECTURES
             or not re.fullmatch(r"[0-9a-f]{40}", receipt.get("source_commit", ""))
             or not NAME.fullmatch(receipt.get("version", ""))):
         raise ValueError("unsupported or cross-trust pacman generation")
+    fields = {'format_version', 'family', 'channel', 'version', 'source_commit', 'rehearsal', 'signing_generation',
+              'key_fingerprint', 'inventory_sha256', 'objects', 'packages', 'architecture', 'repository', 'reader_consistency'}
+    if set(receipt) != fields or receipt['reader_consistency'] != 'required-signature-fail-closed-retry':
+        raise ValueError('pacman manifest has an unsupported versioned shape')
+    from scripts.release_semver import parse
+    parse(receipt['version'])
     signer, _ = selection(catalog, rehearsal)
-    if receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
+    if type(receipt.get("signing_generation")) is not int or receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
         raise ValueError("pacman generation differs from the selected signing identity")
     repository = "painted-wolf-code" + ("-preview" if receipt["channel"] == "preview" else "")
     if receipt.get("repository") != repository:
@@ -44,9 +52,35 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
     measured = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if receipt.get("inventory_sha256") != measured:
         raise ValueError("pacman inventory differs from its selected identity")
+    if not isinstance(rows, list):
+        raise ValueError("pacman inventory must be explicit")
+    for row in rows:
+        if (not isinstance(row, dict) or set(row) != {'path', 'sha256', 'size'} or not isinstance(row.get("path"), str) or not NAME.fullmatch(row["path"])
+                or row["path"] == "generation.json" or type(row.get("size")) is not int or row["size"] < 0
+                or not isinstance(row.get("sha256"), str) or not re.fullmatch("[a-f0-9]{64}", row["sha256"])):
+            raise ValueError("pacman manifest has an invalid selected object")
     names = [row["path"] for row in rows]
+    if not rows or len(set(names)) != len(names):
+        raise ValueError("pacman generation inventory repeats or omits selected objects")
+    packages = receipt.get("packages")
+    if (not isinstance(packages, list) or any(not isinstance(row, dict) or set(row) != {
+            'file', 'sha256', 'architecture', 'native_version'} for row in packages)
+            or len({row['file'] for row in packages}) != len(packages) or {row["file"] for row in packages} != {
+            name for name in names if name.endswith(".pkg.tar.zst")}):
+        raise ValueError("pacman final package inventory is incomplete")
+    for row in packages:
+        selected = next(item for item in rows if item["path"] == row["file"])
+        if not isinstance(row["native_version"], str) or not row["native_version"] or row["sha256"] != selected["sha256"] or row["architecture"] != receipt["architecture"]:
+            raise ValueError("pacman final package identity differs from its selected inventory")
+    return rows
+
+
+def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
+    rows = validate_manifest(receipt, catalog, rehearsal)
+    names = [row["path"] for row in rows]
+    packages, repository = receipt["packages"], receipt["repository"]
     observed = {p.name for p in directory.iterdir() if p.name != "generation.json"}
-    if not rows or len(set(names)) != len(names) or observed != set(names):
+    if observed != set(names):
         raise ValueError("pacman generation inventory differs from its selected objects")
     for row in rows:
         name = row["path"]
@@ -57,14 +91,6 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
                 or not path.is_file() or path.resolve().parent != directory.resolve()
                 or path.stat().st_size != row["size"] or digest(path) != row["sha256"]):
             raise ValueError("pacman object differs from its selected final bytes")
-    packages = receipt.get("packages")
-    if not isinstance(packages, list) or {row["file"] for row in packages} != {
-            name for name in names if name.endswith(".pkg.tar.zst")}:
-        raise ValueError("pacman final package inventory is incomplete")
-    for row in packages:
-        selected = next(item for item in rows if item["path"] == row["file"])
-        if row["sha256"] != selected["sha256"] or row["architecture"] != receipt["architecture"]:
-            raise ValueError("pacman final package identity differs from its selected inventory")
     for suffix in ["db", "files"]:
         archive = directory / f"{repository}.{suffix}.tar.gz"
         verify("detached", archive, archive.with_name(archive.name + ".sig"), catalog, rehearsal)

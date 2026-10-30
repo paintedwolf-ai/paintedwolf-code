@@ -1,0 +1,17 @@
+{
+  "notes": "First release candidate for 1.0.2, published on the preview channel for upgrade testing.\n\n### Changed\n\n- Moving large folders updates their directory identity without rewriting every\n  descendant's history. File operation completion reaches Files immediately.\n- New Move to Trash operations use native Trash recovery without first copying\n  or hashing the tree. Undo requires the item to remain in Trash; existing\n  retained recovery history keeps its previous guarantees.\n- Undoing a new create or duplicate preserves the actual output, including later\n  edits, through native Trash. Copies retain no redundant full-tree backup.\n- Source history upgrades transactionally to directory identities, preserving\n  saved pins and retained content while removing redundant checkpoint copies.\n\n- The previous \u201ccheck for updates\u201d preference now enables automatic checks and\n  silent downloads, with installation on quit. Turning automatic updates off\n  keeps manual update actions available.\n- Workflow runs pin sealed definitions and guidance. Project guidance overlays\n  do not change a sealed run; retained shipped workflow versions remain available.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQTJiWVVYc1pCYTZLYytsU3MzWWhCdnlUVDhQbURVelg0K2VrWS8zcTg2a1FpVXYvNURMR2FNdnJEWkZSenZwc281NkxTSTJCUHdpdkpIQjlkWmNnbndRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNzkxNTM3CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjMQpHUVRocFV0ZVlqRkZybkMrV3R5ZTI4d2hsWUZNOTlYK0ovLy8xYmRPSXZzWGR6M3Jxc1R4Vnpld3JkUVEvTlRiMmxiRkNwcEZUK1ZVU3JXM1dNeGRCZz09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc1/painted-wolf-code_v1.0.2-rc1_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-12T04:50:13Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc1"
+}

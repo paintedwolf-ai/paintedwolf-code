@@ -189,7 +189,7 @@ func TestReleaseBlastRadiusPublishOrder(t *testing.T) {
 			t.Fatal("release.yml deposit order must be prior read → committed corpus → updater artifact")
 		}
 	}
-	if !strings.Contains(extractYAMLJob(rel, "publish-immutable"), "scripts/release_distribution.py advance --file release-metadata/latest.json") {
+	if !strings.Contains(extractYAMLJob(rel, "publish-artifacts"), "scripts/release_distribution.py advance --file release-metadata/latest.json") {
 		t.Fatal("publication must check authenticated channel state before depositing release objects")
 	}
 	for _, needle := range []string{
@@ -263,7 +263,8 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 		"environment: release-publication",
 		"scripts/release_withdrawal.py prepare",
 		"scripts/release_withdrawal.py apply",
-		"steps.distribution_plan.outcome == 'success'",
+		"steps.distribution_plan.outcome",
+		"needs.halt.outputs.barrier == 'success'",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("release halt workflow missing %q", needle)

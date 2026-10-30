@@ -42,7 +42,9 @@ def rpm_payload(path: Path) -> tuple[str, str]:
 
 
 def sign_staged(directory: Path, platform: str, architecture: str, version: str, source_commit: str,
-                catalog: Path = CATALOG, private: Path | None = None, *, payload=rpm_payload) -> dict:
+                catalog: Path = CATALOG, private: Path | None = None, *, payload=rpm_payload, rehearsal=False) -> dict:
+    if type(rehearsal) is not bool:
+        raise ValueError("Linux release signing requires an explicit trust mode")
     stem = f"painted-wolf-code_v{version}_{platform}"
     packages = {extension: directory / f"{stem}.{extension}" for extension in ("deb", "rpm", "pkg.tar.zst")}
     for path in packages.values():
@@ -52,12 +54,12 @@ def sign_staged(directory: Path, platform: str, architecture: str, version: str,
             raise ValueError(f"staged Linux package is already signed: {path.name}")
     rpm = packages["rpm"]
     audited = payload(rpm)
-    receipts = [sign("rpm", rpm, rpm, catalog, private)]
+    receipts = [sign("rpm", rpm, rpm, catalog, private, rehearsal)]
     if payload(rpm) != audited:
         raise ValueError("RPM signing changed the audited package identity or payload")
     for extension in DETACHED:
         subject = packages[extension]
-        binary_signature(subject, subject.with_name(subject.name + ".sig"), catalog, private, False)
+        binary_signature(subject, subject.with_name(subject.name + ".sig"), catalog, private, rehearsal)
         receipts.append({"kind": "detached", "subject_sha256": digest(subject),
                          "output_sha256": digest(subject.with_name(subject.name + ".sig"))})
     for path in packages.values():

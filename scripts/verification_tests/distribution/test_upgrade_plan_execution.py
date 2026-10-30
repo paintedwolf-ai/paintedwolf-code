@@ -144,7 +144,7 @@ class FeedCaptureTests(unittest.TestCase):
         manifest = {"version": version, "notes": "Upgrade source", "pub_date": "2026-01-01T00:00:00Z",
                     "update_keys": release_binding(registry, version), "platforms": {}}
         for platform in catalog["platforms"]:
-            if platform["publication"] == "public":
+            if platform["publication"] == "public" and platform["updater_extension"] is not None:
                 key = platform["updater_key"]
                 manifest["platforms"][key] = {"signature": rehearsal_signature(version),
                     "url": f"{feeds.ORIGIN}/releases/v{version}/painted-wolf-code_v{version}_{key}.{platform['updater_extension']}"}

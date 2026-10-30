@@ -1,0 +1,17 @@
+{
+  "notes": "Painted Wolf Code 1.0 is here: our first stable release.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQXkvTldlelBMRGFtSlE2bElJdG00WXE5VWZQOEFIa0pjMCtJTWxiZElkSmQySXVYTjJuRU02M1JWejhacGp4aEttajlXU2M3aGxOMXNRVDQ3U3FHa1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwOTYwMjExCWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4wCm1JTEJPQ005NEdaVXBOOGppeHQxWEtwNXFwOTNBSHBaZU9mWWdkeGkvVm95SU9zdkF5N2ZZK1U0dndKNEZ1T2l1ajMwM0QvNGQ2RUhzcHVwV29ncUF3PT0K",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.0/painted-wolf-code_v1.0.0_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-02T09:36:33-07:00",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.0"
+}

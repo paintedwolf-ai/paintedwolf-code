@@ -5,7 +5,7 @@ import copy
 import hashlib
 from pathlib import Path
 
-from .publication import encoded, record_name, verified_report
+from .publication import availability, encoded, record_name, verified_report
 from .release_authority import authorize
 
 
@@ -26,8 +26,7 @@ def observe(cache: Path, report: dict, *, selection: dict, trust_policy: dict, b
     withdrawn = original + '.withdrawn'
     if backend.read(withdrawn) is not None:
         raise ValueError('withdrawn cache release cannot be advertised as available')
-    receipt = {'schema_version': 1, 'request': request, 'closure_sha256': checked['closure_sha256'],
-               'closure': checked['closure'], 'objects': checked['objects'], 'public_keys': checked['public_keys']}
+    receipt = availability(checked)
     raw = encoded(receipt)
     name = original
     if backend.read(name) != raw:

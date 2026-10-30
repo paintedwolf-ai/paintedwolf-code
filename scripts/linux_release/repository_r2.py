@@ -15,8 +15,13 @@ from .r2_objects import prefix, public_bytes, current, put
 from .repository_operations import OPERATIONS, transition, identity, withdrawal, version_marker
 
 def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: str,
-               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate", *, authorize=None) -> dict:
+               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate", *, authorize=None, transport=None) -> dict:
     """The release workflow owns cross-host serialization and final production admission."""
+    read = current if transport is None else transport.current
+    upload = put if transport is None else transport.put
+    verify_public = public_bytes if transport is None else transport.public_bytes
+    if type(rehearsal) is not bool:
+        raise ValueError("repository trust mode must be explicit")
     if phase not in {"stage", "activate"}:
         raise ValueError("unsupported repository publication phase")
     prefix(storage_prefix, rehearsal)
@@ -27,7 +32,7 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         request = {"manifest": json.loads(encoded(receipt)), "directory": directory, "catalog": catalog,
                    "storage_prefix": storage_prefix, "base_url": base_url, "expected": expected,
                    "operation": operation, "phase": phase}
-        if not rehearsal and authorize(request) is not True:
+        if authorize is not None and authorize(request) is not True:
             raise ValueError("production repository publication authorization was refused")
 
     origin = base_url.rstrip("/") + "/" + storage_prefix
@@ -38,35 +43,35 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         record = publish(receipt, directory, work / "origin", origin, catalog, None, rehearsal)
         generation = work / "origin/generations" / identity(receipt)
         permission()
-        active = current(state_key, work)
+        active = read(state_key, work)
         record = {**transition(receipt, active, expected, operation), "configuration": record["configuration"]}
         pending_key = storage_prefix + "/" + channel + "/pending.json"
-        plan = activation_plan(record, expected, storage_prefix, base_url, phase, active, current(pending_key, work))
+        plan = activation_plan(record, expected, storage_prefix, base_url, phase, active, read(pending_key, work))
 
         def retain_activation(state):
             payload = activation_marker_record(plan, state)
             target = work / "pending-state.json"
             target.write_bytes(encoded(payload))
-            put(pending_key, target, True)
-            public_bytes(base_url.rstrip("/") + "/" + pending_key, target, True)
+            upload(pending_key, target, True)
+            verify_public(base_url.rstrip("/") + "/" + pending_key, target, True)
             return payload
 
         selected = identity(receipt)
-        if current(storage_prefix + "/withdrawn/" + selected + ".json", work) is not None:
+        if read(storage_prefix + "/withdrawn/" + selected + ".json", work) is not None:
             raise ValueError("a withdrawn R2 generation cannot be offered again")
         # An empty withdrawal generation offers no version, so a retry stays possible.
-        if receipt["packages"] and current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
+        if receipt["packages"] and read(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
             raise ValueError("a withdrawn repository version cannot be offered again")
         if operation in {"recover", "withdraw"}:
             retained_key = storage_prefix + "/generations/" + selected + "/generation.json"
-            if current(retained_key, work) != receipt:
+            if read(retained_key, work) != receipt:
                 raise ValueError("R2 recovery or withdrawal requires the exact retained healthy generation")
         # Immutable generation contents precede every mutable channel object.
         for source in sorted(generation.rglob("*")):
             if source.is_file():
                 relative = source.relative_to(work / "origin").as_posix()
-                put(storage_prefix + "/" + relative, source)
-                public_bytes(origin + "/" + relative, source)
+                upload(storage_prefix + "/" + relative, source)
+                verify_public(origin + "/" + relative, source)
         authority = f"dists/{receipt['channel']}/InRelease" if receipt["family"] == "deb" else "mirrorlist"
         channels = work / "origin" / channel
         if phase == "activate":
@@ -81,16 +86,16 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             if phase == "stage" and not immutable:
                 continue
             remote = storage_prefix + "/" + channel + "/" + relative
-            put(remote, source, not immutable)
-            public_bytes(base_url.rstrip("/") + "/" + remote, source, not immutable)
+            upload(remote, source, not immutable)
+            verify_public(base_url.rstrip("/") + "/" + remote, source, not immutable)
         # Recheck after uploads: interrupted work leaves only unreferenced retained bytes.
         if phase == "stage":
-            if current(state_key, work) != active:
+            if read(state_key, work) != active:
                 raise ValueError("repository changed during immutable staging")
             return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "staged"}
-        if current(state_key, work) != active:
+        if read(state_key, work) != active:
             raise ValueError("R2 repository changed while its generation was uploading")
-        if current(pending_key, work) != pending:
+        if read(pending_key, work) != pending:
             raise ValueError("repository pending activation changed during publication")
         permission()
         marker = withdrawal(record)
@@ -98,19 +103,19 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             tombstone = work / "withdrawal.json"
             tombstone.write_bytes(encoded(marker))
             marker_key = storage_prefix + "/withdrawn/" + marker["generation"] + ".json"
-            put(marker_key, tombstone)
-            public_bytes(base_url.rstrip("/") + "/" + marker_key, tombstone)
+            upload(marker_key, tombstone)
+            verify_public(base_url.rstrip("/") + "/" + marker_key, tombstone)
             version_key = storage_prefix + "/" + version_marker(marker).as_posix()
-            put(version_key, tombstone)
-            public_bytes(base_url.rstrip("/") + "/" + version_key, tombstone)
+            upload(version_key, tombstone)
+            verify_public(base_url.rstrip("/") + "/" + version_key, tombstone)
         selected = channels / authority
         remote = storage_prefix + "/" + channel + "/" + authority
-        put(remote, selected, True)
-        public_bytes(base_url.rstrip("/") + "/" + remote, selected, True)
+        upload(remote, selected, True)
+        verify_public(base_url.rstrip("/") + "/" + remote, selected, True)
         state = work / "state.json"
         state.write_bytes(encoded(record))
-        put(state_key, state, True)
-        public_bytes(base_url.rstrip("/") + "/" + state_key, state, True)
+        upload(state_key, state, True)
+        verify_public(base_url.rstrip("/") + "/" + state_key, state, True)
         retain_activation("completed")
         return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "activated"}
 

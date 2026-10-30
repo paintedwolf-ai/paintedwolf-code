@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "scripts/verification_tests/distribution/test_linux_first_release_withdrawal_execution.py",
+  "kind": "test_suite",
+  "workstream": "linux-release-recovery",
+  "disposition": "retain",
+  "reason": "The measured 427 code-bearing lines own the first-release signed-empty lifecycle and complete prepare/apply compositions using one disposable key, retained generation and object state. Previously duplicated first-release assertions were consolidated here. Keep this bounded operation fixture together: it proves actual pacman x86 recovery on both selected channels, legacy feed/website restoration, missing-document refusal and idempotent retry; other native families and architectures retain their separate contracts.",
+  "reviewed_commit": "a4270f6bf4d58a44d6fc3993ffc1a22d494d0a86",
+  "ceiling": 427,
+  "boundaries": {
+    "scripts/verification_tests/distribution/test_linux_first_release_withdrawal_execution.py": "960f7cc896989af6d7f306ca3e28611a99a39286e86ffdbee7b6895ec65b03cb",
+    "scripts/verification_tests/distribution/release_provider_fixtures.py": "f9b6e35ff54db34c98a25edf7698192c9098e7b571db3383e302cfa815e76966"
+  }
+}

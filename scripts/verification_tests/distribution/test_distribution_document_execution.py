@@ -189,3 +189,32 @@ class DistributionSigningTests(DocumentFixture):
         self.request['origin'] = 'https://downloads.paintedwolf.dev'
         with self.assertRaises(ValueError):
             self.prepare('foreign-registry')
+
+    def test_preview_setup_names_from_native_identity_survive_document_signing(self):
+        from scripts.linux_release.repository_setup_identity import package_identity
+        preview = '1.2.4-rc.1'
+        self.request['version'] = preview
+        updater = json.loads(self.updater.read_text())
+        updater['version'] = preview
+        self.updater.write_text(json.dumps(updater))
+        self.request['package_content_types'] = {}
+        for package in list(self.artifacts.iterdir()):
+            replacement = package.with_name(package.name.replace('1.2.3', preview))
+            package.rename(replacement)
+            self.request['package_content_types'][replacement.name] = 'application/octet-stream'
+        origin = self.request['origin']
+        artifact = lambda name: {'file': name, 'url': origin + '/releases/v' + preview + '/' + name,
+                                'sha256': 'e' * 64, 'bytes': 128, 'content_type': 'application/octet-stream'}
+        for family in ('deb', 'rpm'):
+            filename = package_identity(preview, family, 'preview', 1)['file']
+            self.assertIn('~', filename)
+            self.request['repositories'].append({'family': family, 'architecture': 'both', 'channel': 'preview',
+                'generation': 'f' * 64, 'inventory_sha256': 'd' * 64, 'activation_sha256': 'c' * 64,
+                'base_url': origin + '/linux/channels/' + family + '/preview',
+                'signing_generation': 1, 'key_fingerprint': 'A' * 40, 'setup': artifact(filename),
+                'public_key': artifact('linux-package-key.asc')})
+        result = self.prepare('preview', signer=lambda path, number, registry: feed_signature(number, path.name, preview))
+        document = decode((self.root / 'preview/distribution.v1.json').read_bytes())
+        self.assertEqual(document['channel'], 'preview')
+        self.assertEqual(len(document['repositories']), 2)
+        self.assertEqual(result['distribution_sha256'], hashlib.sha256(canonical(document)).hexdigest())

@@ -1,121 +1,11 @@
-"""Publication confirmation must agree with the served download page."""
-import io
+"""Release activation, authenticated storage and feed-plan preparation share durable controls."""
 import json
 import unittest
 from unittest.mock import patch
 
 import release_distribution as distribution
-
-
-class Response(io.BytesIO):
-    def __init__(self, body, cache="no-store"):
-        super().__init__(body)
-        self.headers = {"Cache-Control": cache}
-
-
-class WebsitePublicationTests(unittest.TestCase):
-    def setUp(self):
-        self.expected = {"channel": "stable", "version": "1.0.0", "manifest_sha256": "a" * 64, "withdrawn_version": None}
-        self.receipt = json.dumps({"schema_version": 1, **self.expected}).encode()
-        self.page = b'<a data-release-channel="stable" download href="https://downloads.paintedwolf.dev/releases/v1.0.0/painted-wolf-code_v1.0.0_darwin-aarch64.dmg">Download</a>'
-
-    def test_awaits_actual_download_page_with_matching_confirmation(self):
-        with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(self.page)]) as get:
-            distribution.wait_for_website("https://paintedwolf.ai", self.expected, seconds=0)
-        self.assertEqual(get.call_count, 2)
-        self.assertEqual(get.call_args_list[1].args[0].full_url, "https://paintedwolf.ai/download/")
-
-    def test_preview_waits_on_the_unlisted_preview_page(self):
-        expected = {**self.expected, "channel": "preview", "version": "1.0.0-rc.3"}
-        receipt = json.dumps({"schema_version": 1, **expected}).encode()
-        page = self.page.replace(b"stable", b"preview").replace(b"1.0.0", b"1.0.0-rc.3")
-        with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(receipt), Response(page)]) as get:
-            distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0)
-        self.assertEqual(get.call_args_list[1].args[0].full_url, "https://paintedwolf.ai/download/preview/")
-
-    def test_stale_page_or_cache_headers_cannot_confirm_a_release(self):
-        for page, headers in [(self.page.replace(b"1.0.0", b"0.9.0"), "no-store"), (self.page, "public, max-age=3600")]:
-            with self.subTest(headers=headers), patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(page, headers)]):
-                with self.assertRaisesRegex(ValueError, "not verified"):
-                    distribution.wait_for_website("https://paintedwolf.ai", self.expected, seconds=0)
-
-    def test_unpublished_channel_has_no_download_link(self):
-        expected = {**self.expected, "version": None, "manifest_sha256": None, "withdrawn_version": "1.0.0"}
-        distribution.validate_website_downloads('<p>Downloads unavailable</p>', expected)
-        with self.assertRaises(ValueError):
-            distribution.validate_website_downloads(self.page.decode(), expected)
-
-    def test_stable_verifies_preview_when_it_advances(self):
-        for previous, expected in [(None, ["stable", "preview"]), ({"version": "1.0.0-rc.1"}, ["stable", "preview"]),
-                                   ({"version": "1.0.0"}, ["stable", "preview"]), ({"version": "1.1.0-rc.1"}, ["stable"])]:
-            with patch.object(distribution, "read_storage", return_value=previous):
-                self.assertEqual(distribution.publication_channels("stable", "1.0.0", 1), expected)
-        with patch.object(distribution, "read_storage") as read:
-            self.assertEqual(distribution.publication_channels("preview", "1.0.0-rc.1", 1), ["preview"])
-            read.assert_not_called()
-
-    def test_preview_storage_failure_cannot_be_treated_as_first_publication(self):
-        with patch.object(distribution, "read_storage", side_effect=ValueError("storage unavailable")) as read:
-            with self.assertRaisesRegex(ValueError, "storage unavailable"):
-                distribution.publication_channels("stable", "1.0.0", 2)
-            read.assert_called_once_with("updates/preview/key-2/latest.json")
-
-    def test_stable_confirmation_preserves_preview_from_interrupted_activation(self):
-        expected = {**self.expected, "channel": "preview"}
-        newer = {**expected, "version": "1.1.0-rc.1", "manifest_sha256": "b" * 64}
-        page = self.page.replace(b"stable", b"preview").replace(b"1.0.0", b"1.1.0-rc.1")
-        responses = [Response(json.dumps({"schema_version": 1, **newer}).encode()), Response(page)]
-        with patch.object(distribution.urllib.request, "urlopen", side_effect=responses):
-            distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0, allow_newer=True)
-        wrong_channel = {"schema_version": 1, **newer, "channel": "stable"}
-        with patch.object(distribution.urllib.request, "urlopen", return_value=Response(json.dumps(wrong_channel).encode())):
-            with self.assertRaisesRegex(ValueError, "not verified"):
-                distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0, allow_newer=True)
-
-    def test_incorrect_confirmation_never_accepts_a_valid_page(self):
-        with patch.object(distribution.urllib.request, "urlopen", return_value=Response(b'{}')) as get:
-            with self.assertRaisesRegex(ValueError, "not verified"):
-                distribution.wait_for_website("https://paintedwolf.ai", self.expected, seconds=0)
-        self.assertEqual(get.call_count, 1)
-
-
-class WebsiteWithdrawalTests(unittest.TestCase):
-    def test_first_release_withdrawal_sends_null_replacement_and_checks_live_page(self):
-        import release_withdrawal as withdrawal
-        prepared = {"bad_versions": [], "channels": [{"channel": "stable", "bad": "1.0.0", "last_good": None,
-            "path": "repos/owner/tap/contents/Casks/painted-wolf-code.rb", "sha": "current", "change_tap": True, "content": None, "manifest_sha256": None}]}
-        with patch.dict(withdrawal.os.environ, {"HOMEBREW_TAP_TOKEN": "tap", "WWW_DISPATCH_TOKEN": "site"}), \
-             patch.object(withdrawal, "api") as api, patch.object(withdrawal, "wait_for_withdrawal") as wait:
-            withdrawal.apply(prepared)
-        self.assertEqual(api.call_args_list[0].args[2], "DELETE")
-        event = api.call_args_list[1].args[3]
-        self.assertEqual(event, {"event_type": "painted-wolf-release-halt", "client_payload": {
-            "channel": "stable", "bad_version": "1.0.0", "last_good_version": None, "manifest_sha256": None}})
-        self.assertEqual(wait.call_args.args[0], prepared["channels"][0])
-
-    def test_package_failure_does_not_prevent_website_withdrawal(self):
-        import release_withdrawal as withdrawal
-        prepared = {"bad_versions": [], "channels": [{"channel": "preview", "bad": "1.0.0-rc.2", "last_good": "1.0.0-rc.1",
-            "path": "repos/owner/tap/contents/Casks/painted-wolf-code@preview.rb", "sha": "current", "change_tap": True, "content": "replacement", "manifest_sha256": "a" * 64}]}
-        with patch.dict(withdrawal.os.environ, {"HOMEBREW_TAP_TOKEN": "tap", "WWW_DISPATCH_TOKEN": "site"}), \
-             patch.object(withdrawal, "api", side_effect=[ValueError("tap unavailable"), None]) as api, \
-             patch.object(withdrawal, "wait_for_withdrawal") as wait:
-            with self.assertRaisesRegex(ValueError, "tap unavailable"):
-                withdrawal.apply(prepared)
-        self.assertEqual(api.call_args_list[1].args[3]["client_payload"]["last_good_version"], "1.0.0-rc.1")
-        self.assertEqual(wait.call_count, 1)
-
-    def test_missing_github_object_is_distinct_from_permission_failure(self):
-        import release_withdrawal as withdrawal
-        import urllib.error
-        for status in (404, 403):
-            error = urllib.error.HTTPError("https://api.github.com", status, "failure", {}, None)
-            with patch.object(withdrawal.urllib.request, "urlopen", side_effect=error):
-                if status == 404:
-                    self.assertIsNone(withdrawal.api("token", "repos/owner/site"))
-                else:
-                    with self.assertRaisesRegex(ValueError, "HTTP 403"):
-                        withdrawal.api("token", "repos/owner/site")
+from scripts.release_distribution_contract import ledger
+from scripts.verification_tests.distribution.repository_fixture_support import halt_distribution
 
 
 class ReleaseControlTests(unittest.TestCase):
@@ -157,6 +47,70 @@ class ReleaseControlTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "converge"):
                 distribution.read_storage("release")
 
+    def test_present_nonobject_storage_controls_refuse_ledger_without_writes(self):
+        import hashlib
+        env = {'CLOUDFLARE_ACCOUNT_ID': 'account', 'R2_BUCKET': 'bucket', 'CLOUDFLARE_API_TOKEN': 'fixture',
+               'RELEASE_R2_TRANSPORT': ''}
+        key = 'release-metadata/1.2.3/withdrawn.json'
+        for raw in (b'null', b'[]', b'42', b'"value"'):
+            found = {'success': True, 'result': [{'key': key, 'etag': hashlib.md5(raw).hexdigest()}]}
+            with self.subTest(raw=raw), patch.dict(distribution.os.environ, env), \
+                 patch.object(distribution, 'storage_json', return_value=(b'', found)), \
+                 patch.object(distribution, 'storage_bytes', return_value=raw), patch.object(ledger.subprocess, 'run') as write:
+                for operation in (lambda: distribution.read_storage(key), lambda: ledger.require_publishable('1.2.3'),
+                                  lambda: ledger.prepare(['1.2.3']),
+                                  lambda: ledger.record([{'version': '1.2.3', 'action': 'withdraw'}], ['1.2.3'])):
+                    with self.assertRaisesRegex(ValueError, 'JSON object'):
+                        operation()
+                write.assert_not_called()
+        with patch.dict(distribution.os.environ, env), patch.object(distribution, 'storage_json',
+                return_value=(b'', {'success': True, 'result': []})):
+            ledger.require_publishable('1.2.3')
+            self.assertEqual(ledger.prepare(['1.2.3']), [{'version': '1.2.3', 'action': 'withdraw'}])
+
+    def test_unknown_marker_objects_refuse_real_read_preparation_and_complete_barrier(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from urllib.parse import parse_qs, urlsplit
+        from scripts.release_distribution_contract import halt_effects
+        versions = ['1.2.3', '1.2.4']
+        selected = halt_distribution('1.2.4', None, channels=())
+        selected['bad_versions'] = versions
+        env = {'CLOUDFLARE_ACCOUNT_ID': 'account', 'R2_BUCKET': 'bucket', 'CLOUDFLARE_API_TOKEN': 'fixture',
+               'RELEASE_R2_TRANSPORT': ''}
+        cases = [{'version': '1.2.4', 'withdrawn': value} for value in (1, 0, 1.0, False, 'true')]
+        cases.extend([{}, {'version': '1.2.4', 'withdrawn': True, 'extra': None},
+                      {'version': True, 'withdrawn': True}, {'version': '1.2.3', 'withdrawn': True}])
+        for marker in cases:
+            raw = json.dumps(marker).encode()
+            key = 'release-metadata/1.2.4/withdrawn.json'
+            def listing(url, token):
+                prefix = parse_qs(urlsplit(url).query)['prefix'][0]
+                return b'', {'success': True, 'result': [{'key': key, 'etag': hashlib.md5(raw).hexdigest()}] if prefix == key else []}
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as temporary, \
+                 patch.dict(distribution.os.environ, env), patch.object(distribution, 'storage_json', side_effect=listing), \
+                 patch.object(distribution, 'storage_bytes', return_value=raw), patch.object(ledger.subprocess, 'run') as effect:
+                root = Path(temporary)
+                (root / halt_effects.FILES['selection']).write_text(json.dumps(selected))
+                outcomes = {owner: 'skipped' for owner in halt_effects.FILES}
+                outcomes['selection'] = 'success'
+                try:
+                    ledger.prepare(versions)
+                except ValueError as error:
+                    outcomes['ledger'] = 'failure'
+                    (root / 'halt-ledger-refusal.log').write_text(str(error))
+                else:
+                    self.fail('unknown marker passed real authenticated ledger preparation')
+                evidence = halt_effects.admit(root, outcomes)
+                self.assertFalse(evidence['complete'])
+                self.assertEqual(evidence['effects']['ledger']['actions'][0]['action'], 'refuse')
+                self.assertIn('unexpected content', evidence['effects']['ledger']['actions'][0]['diagnostic'])
+                with self.assertRaisesRegex(ValueError, 'changed after preparation'):
+                    ledger.record([{'version': versions[0], 'action': 'withdraw'},
+                                   {'version': versions[1], 'action': 'keep'}], versions)
+                effect.assert_not_called()
+
     def test_authenticated_storage_preserves_the_signed_bytes(self):
         import hashlib
         raw = b'{ "version": "1.0.0" }\n'
@@ -191,12 +145,91 @@ class HaltPlanTests(unittest.TestCase):
         self.plan = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.plan)
 
+    def test_selection_rejects_effect_options_before_reading_release_state(self):
+        import sys
+        common = ['halt', '--bad', '1.2.3', '--select-only']
+        for options in [[], ['--write-plan', 'selected.json'],
+                        ['--write-plan', 'selected.json', '--distribution-output', 'distribution.json',
+                         '--prepare-output', 'prepared'],
+                        ['--write-plan', 'selected.json', '--distribution-output', 'distribution.json',
+                         '--apply-prepared', 'prepared']]:
+            with self.subTest(options=options), patch.object(sys, 'argv', common + options), \
+                 patch.object(self.plan, 'load_registry') as read, \
+                 patch.object(self.plan, 'prepare') as prepare, patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'selection requires'):
+                    self.plan.main()
+                read.assert_not_called()
+                prepare.assert_not_called()
+                apply.assert_not_called()
+
+    def test_cli_validates_prepared_authority_before_apply_and_honors_dry_run(self):
+        import sys
+        import tempfile
+        from pathlib import Path
+        reviewed = {'source_generation': 1, 'feeds': [], 'distribution': halt_distribution('1.2.3', None)}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan, ledger = root / 'plan.json', root / 'ledger.json'
+            plan.write_text(json.dumps(reviewed))
+            retained = [{'version': '1.2.3', 'action': 'withdraw'}]
+            ledger.write_text(json.dumps(retained))
+            common = ['halt', '--plan', str(plan)]
+            modes = [(['--prepare-output', str(root / 'prepared'), '--ledger-plan', str(ledger), '--dry-run'],
+                      ['prepare', 'validate']),
+                     (['--apply-prepared', str(root / 'prepared')], ['validate', 'apply']),
+                     ([], ['prepare', 'validate', 'apply'])]
+            for options, expected in modes:
+                with self.subTest(options=options), patch.object(sys, 'argv', common + options), \
+                     patch.object(self.plan, 'read_storage', return_value=None), \
+                     patch.object(self.plan, 'prepare') as prepare, \
+                     patch.object(self.plan, 'validate_prepared') as validate, \
+                     patch.object(self.plan, 'apply') as apply:
+                    order, prepared = [], {'reviewed': 'prepared authority'}
+                    prepare.side_effect = lambda *args, **kwargs: order.append('prepare')
+                    validate.side_effect = lambda *args: order.append('validate') or prepared
+                    apply.side_effect = lambda *args: order.append('apply')
+                    self.plan.main()
+                    self.assertEqual(order, expected)
+                    self.assertEqual(validate.call_args.args[1], reviewed)
+                    if '--ledger-plan' in options:
+                        self.assertEqual(prepare.call_args.kwargs['ledger_rows'], retained)
+                    if 'apply' in expected:
+                        self.assertIs(apply.call_args.args[0], prepared)
+            with patch.object(sys, 'argv', common + ['--apply-prepared', str(root / 'prepared')]), \
+                 patch.object(self.plan, 'read_storage', return_value=None), \
+                 patch.object(self.plan, 'validate_prepared', side_effect=ValueError('stale authority')), \
+                 patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'stale authority'):
+                    self.plan.main()
+                apply.assert_not_called()
+            with patch.object(sys, 'argv', common + ['--prepare-output', 'a', '--apply-prepared', 'b']), \
+                 patch.object(self.plan, 'read_storage', return_value=None), \
+                 patch.object(self.plan, 'prepare') as prepare, patch.object(self.plan, 'apply') as apply:
+                with self.assertRaisesRegex(ValueError, 'choose prepare-output or apply-prepared'):
+                    self.plan.main()
+                prepare.assert_not_called()
+                apply.assert_not_called()
+
+    def test_halt_selection_requires_typed_generation_and_channel_before_storage(self):
+        from update_keys import load_registry
+        registry = load_registry()
+        malformed = [{'source_generation': True, 'feeds': []},
+                     {'source_generation': 1, 'feeds': False}]
+        malformed += [{'source_generation': 1, 'feeds': [row]} for row in
+                      [None, {'generation': True, 'channel': 'stable'},
+                       {'generation': 0, 'channel': 'stable'}, {'generation': 1, 'channel': 'nightly'}]]
+        for plan in malformed:
+            with self.subTest(plan=plan), patch.object(self.plan, 'read_storage') as read:
+                with self.assertRaises(ValueError):
+                    self.plan.validate_selection(plan, registry)
+                read.assert_not_called()
+
     def test_withdrawal_attempts_other_feed_after_a_write_failure(self):
         import subprocess
         import sys
         import tempfile
         from pathlib import Path
-        index = {"distribution": {}, "feeds": [
+        index = {"distribution": {}, "ledger": [], "feeds": [
             {"generation": number, "channel": channel, "bad": "1.0.0", "pointer_sha256": "a", "signature_sha256": "b"}
             for number, channel in [(1, "stable"), (2, "preview")]]}
         with tempfile.TemporaryDirectory() as tmp:
@@ -224,7 +257,7 @@ class HaltPlanTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0)
             with patch.object(self.plan, "read_storage_bytes", return_value=b'{"version":"2.0.0"}'), patch.object(self.plan.subprocess, "run", side_effect=run) as calls:
                 with self.assertRaises(subprocess.CalledProcessError):
-                    self.plan.prepare(rows, {}, {}, directory)
+                    self.plan.prepare(rows, {}, {"bad_versions": []}, directory, ledger_rows=[])
                 self.assertFalse((directory / "prepared.json").exists())
                 self.assertTrue(all("--prepare-output" in call.args[0] for call in calls.call_args_list))
 
@@ -249,9 +282,9 @@ class HaltPlanTests(unittest.TestCase):
             item = {"generation": 1, "channel": "stable", "bad": "1.3.0", "before": before,
                     "pointer_sha256": self.plan.digest(pointer), "signature_sha256": self.plan.digest(signature),
                     "before_pointer_sha256": hashlib.sha256(json.dumps(before).encode()).hexdigest(), "before_signature_sha256": None}
-            index = {"format_version": 1, "plan": plan, "distribution": self.plan.distribution_plan(list(rows.values())), "feeds": [item]}
+            index = {"format_version": 1, "plan": plan, "distribution": self.plan.distribution_plan(list(rows.values())), "feeds": [item], "ledger": [{"version": "1.3.0", "action": "withdraw"}], "actions": [{"generation": 1, "channel": "stable", "action": "withdraw", "version": "1.3.0"}]}
             (directory / "prepared.json").write_text(json.dumps(index))
-            with patch("feed_signing.verify") as verify, patch.object(self.plan, "read_storage_bytes", side_effect=lambda key: None if key.endswith(".sig") else json.dumps(before).encode()) as read:
+            with patch.object(self.plan, "read_storage", return_value=None), patch("feed_signing.verify") as verify, patch.object(self.plan, "read_storage_bytes", side_effect=lambda key: None if key.endswith(".sig") else json.dumps(before).encode()) as read:
                 self.plan.validate_prepared(rows, plan, directory, registry)
                 read.side_effect = lambda key: signature.read_bytes() if key.endswith(".sig") else pointer.read_bytes()
                 self.plan.validate_prepared(rows, plan, directory, registry)
@@ -287,6 +320,35 @@ class HaltPlanTests(unittest.TestCase):
         self.assertEqual([row["channel"] for row in plan["feeds"] if "bad" in row], ["stable", "preview"])
         self.assertEqual(plan["feeds"][-1]["keep_version"], "1.1.0-rc.1")
         self.assertEqual([row["channel"] for row in self.plan.distribution_plan(plan["feeds"])["channels"]], ["stable"])
+
+    def test_selection_only_writes_valid_common_facts_without_effect_preparation(self):
+        import tempfile
+        from pathlib import Path
+        import sys
+        with tempfile.TemporaryDirectory() as temporary:
+            selected = Path(temporary) / 'selected.json'
+            distribution = Path(temporary) / 'distribution.json'
+            arguments = ['halt', '--bad', '1.2.3', '--select-only',
+                         '--write-plan', str(selected), '--distribution-output', str(distribution)]
+            with patch.object(sys, 'argv', arguments), patch.object(self.plan, 'read_storage', return_value=None), \
+                 patch.object(self.plan, 'prepare') as prepare, patch.object(self.plan, 'apply') as apply:
+                self.plan.main()
+            prepare.assert_not_called()
+            apply.assert_not_called()
+            self.assertEqual(json.loads(distribution.read_bytes())['channels'], [
+                halt_distribution('1.2.3', None)['channels'][index] for index, channel in enumerate(('stable', 'preview'))])
+            requested = Path(temporary) / 'requested.json'
+            malformed = json.loads(selected.read_bytes())
+            malformed['distribution']['channels'][0]['last_good'] = '1.1.0'
+            requested.write_text(json.dumps(malformed))
+            selected.unlink()
+            distribution.unlink()
+            arguments = ['halt', '--plan', str(requested), '--select-only', '--write-plan', str(selected), '--distribution-output', str(distribution)]
+            with patch.object(sys, 'argv', arguments), patch.object(self.plan, 'read_storage', return_value=None), \
+                 self.assertRaises(ValueError):
+                self.plan.main()
+            self.assertFalse(selected.exists())
+            self.assertFalse(distribution.exists())
 
 
 class ActivationRetryTests(unittest.TestCase):
@@ -331,33 +393,6 @@ class PackagePublicationTests(unittest.TestCase):
                 distribution.stage_casks(source, tap, "stable")
 
 
-class PartialWithdrawalTests(unittest.TestCase):
-    def test_package_preparation_preserves_an_unrelated_advertised_version(self):
-        import base64
-        import release_withdrawal as withdrawal
-        current = {"sha": "current", "content": base64.b64encode(b'  version "1.1.0"\n').decode()}
-        env = {"HOMEBREW_TAP_REPO": "owner/tap", "HOMEBREW_TAP_TOKEN": "tap", "WWW_DISPATCH_TOKEN": "site"}
-        plan = {"bad_versions": ["1.0.0"], "channels": [{"channel": "stable", "bad": "1.0.0", "last_good": None}]}
-        with patch.dict(withdrawal.os.environ, env), patch.object(withdrawal, "api", side_effect=[{}, {}, current]), patch.object(withdrawal, "download") as download:
-            result = withdrawal.prepare(plan)
-        self.assertFalse(result["channels"][0]["change_tap"])
-        self.assertIsNone(result["channels"][0]["sha"])
-        download.assert_not_called()
-
-    def test_website_confirmation_requires_recorded_withdrawal_and_real_download_state(self):
-        import base64
-        import release_withdrawal as withdrawal
-        row = {"channel": "stable", "bad": "1.0.0", "last_good": None}
-        channel = {"release": {"version": "1.1.0", "manifest_sha256": "b" * 64}, "withdrawn_versions": ["1.0.0"], "withdrawn_version": None}
-        stored = {"content": base64.b64encode(json.dumps({"channels": {"stable": channel}}).encode()).decode()}
-        with patch.dict(withdrawal.os.environ, {"WWW_DISPATCH_TOKEN": "site"}), patch.object(withdrawal, "api", return_value=stored), patch.object(withdrawal, "wait_for_website") as wait:
-            withdrawal.wait_for_withdrawal(row, seconds=0)
-        self.assertEqual(wait.call_args.args[1], {"channel": "stable", "version": "1.1.0", "manifest_sha256": "b" * 64, "withdrawn_version": None})
-        with patch.dict(withdrawal.os.environ, {"WWW_DISPATCH_TOKEN": "site"}), patch.object(withdrawal, "api", return_value=None):
-            with self.assertRaisesRegex(ValueError, "recorded"):
-                withdrawal.wait_for_withdrawal(row, seconds=0)
-
-
 class PermanentWithdrawalTests(unittest.TestCase):
     def test_unactivated_withdrawal_is_recorded_once_and_blocks_publication(self):
         captured = []
@@ -366,11 +401,11 @@ class PermanentWithdrawalTests(unittest.TestCase):
             captured.append(json.loads(Path(command[command.index("--file") + 1]).read_text()))
         plan = {"bad_versions": ["1.0.0"]}
         with patch.object(distribution, "read_storage", return_value=None), patch.object(distribution.subprocess, "run", side_effect=put):
-            distribution.record_withdrawals(plan)
+            ledger.record(ledger.prepare(plan["bad_versions"]), plan["bad_versions"])
         self.assertEqual(captured, [{"version": "1.0.0", "withdrawn": True}])
         with patch.object(distribution, "read_storage", return_value=captured[0]) as read, patch.object(distribution.subprocess, "run") as put_again:
-            distribution.record_withdrawals(plan)
+            ledger.record(ledger.prepare(plan["bad_versions"]), plan["bad_versions"])
             put_again.assert_not_called()
             with self.assertRaisesRegex(ValueError, "cannot be published"):
-                distribution.require_publishable("1.0.0")
+                ledger.require_publishable("1.0.0")
             read.assert_called_with("release-metadata/1.0.0/withdrawn.json")
