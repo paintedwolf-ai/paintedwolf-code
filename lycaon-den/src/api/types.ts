@@ -10198,6 +10198,13 @@ export interface components {
             execution_ids: string[];
             spans: components["schemas"]["CommandActivitySpan"][];
         };
+        CommandActivityExecution: {
+            id: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "refused" | "failed" | "interrupted" | "unknown";
+            outcome: string;
+            status_code?: number;
+        };
         /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
         CommandProgramOutputLimit: {
             /** @enum {string} */
@@ -10258,6 +10265,8 @@ export interface components {
             settled_at?: string;
             /** @description Initial host activity identities. Details loading must not regroup these rows. */
             activities?: components["schemas"]["CommandActivity"][];
+            /** @description Bounded live execution outcomes for rows whose presentation membership is already established. */
+            activity_executions?: components["schemas"]["CommandActivityExecution"][];
             /**
              * Format: int64
              * @description Monotonic receipt trace revision for live snapshot reconciliation.
@@ -30065,6 +30074,7 @@ export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
 export type CommandActivitySpan = components["schemas"]["CommandActivitySpan"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
+export type CommandActivityExecution = components["schemas"]["CommandActivityExecution"];
 export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
 export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
 export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
