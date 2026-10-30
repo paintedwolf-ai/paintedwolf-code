@@ -34,8 +34,17 @@ impl Service {
         let mut cache = self.cache.lock().map_err(|_| Error::Device("cache poisoned".into()))?;
         self.canceled.store(false, Ordering::SeqCst);
 
+        // A request without a cache handle starts from an empty prefix: the cache's
+        // committed tail belongs to earlier requests. Handles name a retained prefix.
+        let base = match cache.reuse(&req.cache_handle) {
+            Some(len) if len <= req.prompt_tokens.len().saturating_sub(1) => len,
+            _ => 0,
+        };
+        if req.cache_handle.is_none() {
+            cache.clear_committed();
+        }
         let mut tokens = req.prompt_tokens.clone();
-        let reused = cache.reuse(&req.cache_handle).unwrap_or(0).min(tokens.len().saturating_sub(1));
+        let reused = base.min(tokens.len().saturating_sub(1));
         if reused > 0 {
             tokens.drain(..reused); // prefix is already in the cache
         }
@@ -158,4 +167,48 @@ impl<W: Write> FrameSink<'_, W> {
 fn reply<W: Write>(w: &mut W, body: impl Serialize) -> Result<()> {
     let body = serde_json::to_vec(&body).map_err(|e| Error::Protocol(format!("serialize: {e}")))?;
     protocol::write_frame(w, &body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::checkpoint;
+
+    fn req(id: &str, handle: Option<String>) -> crate::protocol::GenerateRequest {
+        crate::protocol::GenerateRequest {
+            request_id: id.into(),
+            prompt_tokens: vec![1, 2, 3, 4],
+            max_new_tokens: 5,
+            seed: 42,
+            temperature: 1.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: handle,
+        }
+    }
+
+    fn tokens(events: &[Event]) -> Vec<u32> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Token { token, .. } => Some(*token),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn framed_generation_is_deterministic_and_terminates() {
+        let dir = std::env::var("TINYGEN_DIR").unwrap_or_else(|_| "/tmp/tinygen".into());
+        let dec = checkpoint::load_decoder(&dir, "cpu").expect("load tiny checkpoint");
+        let svc = Service::new(dec, 0);
+
+        let mut first: Vec<Event> = Vec::new();
+        svc.generate(&req("r1", None), |e| first.push(e.clone())).expect("generate");
+        assert!(matches!(first.last(), Some(Event::Done { .. })));
+
+        let mut second: Vec<Event> = Vec::new();
+        svc.generate(&req("r2", None), |e| second.push(e.clone())).expect("generate 2");
+        assert_eq!(tokens(&first), tokens(&second), "same seed must reproduce tokens");
+    }
 }

@@ -113,7 +113,7 @@ impl Decoder {
                 gate_proj: w.take(&format!("{p}.mlp.gate_proj.weight"))?,
                 up_proj: w.take(&format!("{p}.mlp.up_proj.weight"))?,
                 down_proj: w.take(&format!("{p}.mlp.down_proj.weight"))?,
-                is_sliding: (i - cfg.source_layers) % 2 == 0,
+                is_sliding: i >= cfg.source_layers && (i - cfg.source_layers) % 2 == 0,
             });
         }
         Ok(Self {
@@ -172,8 +172,8 @@ impl Decoder {
         let seq = h.len();
         // Project q, k, v. GQA expands kv heads to query head count.
         let q: Vec<Vec<f32>> = h.iter().map(|t| matvec(&self.layers[layer_idx].q_proj, t, c.hidden * c.heads)).collect();
-        let k: Vec<Vec<f32>> = h.iter().map(|t| matvec(&self.layers[layer_idx].k_proj, t, c.hidden * c.kv_heads)).collect();
-        let v: Vec<Vec<f32>> = h.iter().map(|t| matvec(&self.layers[layer_idx].v_proj, t, c.hidden * c.kv_heads)).collect();
+        let k: Vec<Vec<f32>> = h.iter().map(|t| matvec(&self.layers[layer_idx].k_proj, t, c.kv_heads * c.head_dim)).collect();
+        let v: Vec<Vec<f32>> = h.iter().map(|t| matvec(&self.layers[layer_idx].v_proj, t, c.kv_heads * c.head_dim)).collect();
 
         // New kv becomes the cache's staged tail; attention reads committed + staged.
         let mut new_k = Vec::with_capacity(seq * c.kv_heads * c.head_dim);
@@ -212,7 +212,7 @@ impl Decoder {
                         }
                     }
                     for s2 in 0..seq {
-                        let p = pos - seq + 1 + s2;
+                        let p = next_pos + s2;
                         if is_sliding && pos.saturating_sub(p) >= SLIDING_WINDOW {
                             continue;
                         }

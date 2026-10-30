@@ -60,7 +60,7 @@ pub struct GenerateRequest {
 }
 
 /// A streamed event. Sequence numbers are monotonic per request.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
     Accepted { request_id: String, generation: u64 },

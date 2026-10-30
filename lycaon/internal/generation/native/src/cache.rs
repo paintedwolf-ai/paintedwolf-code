@@ -71,9 +71,9 @@ impl Cache {
             self.staged = vec![LayerKv::new(); self.layers.len()];
         }
         for (layer, k, v) in per_layer {
-            if k.len() != self.head_dim || v.len() != self.head_dim {
+            if k.len() != v.len() || k.len() % self.head_dim != 0 {
                 return Err(Error::Capacity(format!(
-                    "layer {layer}: kv of {} dims does not match head_dim {}",
+                    "layer {layer}: kv of {} dims is not a multiple of head_dim {}",
                     k.len(),
                     self.head_dim
                 )));
@@ -106,6 +106,13 @@ impl Cache {
     /// Register the committed prefix under a host-provided handle.
     pub fn publish(&mut self, handle: &str) {
         self.handles.insert(handle.to_string(), self.committed_len);
+    }
+
+    /// Drop committed state; used when a request declines cache reuse.
+    pub fn clear_committed(&mut self) {
+        self.layers = vec![LayerKv::new(); self.layers.len()];
+        self.committed_len = 0;
+        self.staged.clear();
     }
 
     /// Prefix length a handle refers to, if still resident.
