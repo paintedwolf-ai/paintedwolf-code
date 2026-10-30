@@ -23,22 +23,28 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if identity.ProgramID != r.Inputs.ProgramID || identity.SessionID != r.Inputs.Scope.SessionID || identity.RootSessionID != r.Inputs.Scope.RootSessionID || identity.Scope.ProjectID != r.Inputs.Scope.ProjectID {
 		return fmt.Errorf("reviewed input capture does not match actual progress scope")
 	}
-	start := reviewedOwnerStart{programID: identity.ProgramID, executionID: identity.ExecutionID, progress: true}
-	start.record = func(ctx context.Context, tx *sql.Tx, reference string) error {
-		return r.Recorder.startProgressOwner(ctx, tx, identity, modelCallID, inputs, reference)
-	}
-	return r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs)
-}
-
-func (r *SQLRecorder) startProgressOwner(ctx context.Context, tx *sql.Tx, identity toolcontract.ProgramProgressIdentity, modelCallID string, inputs toolcontract.ReviewedOperationInputs, reference string) error {
 	scope, err := json.Marshal(identity.Scope)
 	if err != nil {
 		return err
 	}
-	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
+	prepared := preparedProgressStart{identity: identity, modelCallID: modelCallID, inputs: inputs, scope: scope}
+	start := reviewedOwnerStart{programID: identity.ProgramID, executionID: identity.ExecutionID, progress: true, record: prepared.record}
+	return r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs)
+}
+
+type preparedProgressStart struct {
+	identity    toolcontract.ProgramProgressIdentity
+	inputs      toolcontract.ReviewedOperationInputs
+	modelCallID string
+	scope       []byte
+}
+
+func (s preparedProgressStart) record(ctx context.Context, tx *sql.Tx, reference string) error {
+	identity, inputs, scope := s.identity, s.inputs, s.scope
+	if err := chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_representation,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.Representation(), inputs.ArgumentsDigest(), reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, modelCallID)
+	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_representation,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.Representation(), inputs.ArgumentsDigest(), reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, s.modelCallID)
 	if err != nil {
 		return err
 	}
