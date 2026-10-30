@@ -175,7 +175,15 @@ func (c *literalIndexCache) fileBloom(ctx context.Context, rootPath string, entr
 			return err
 		}
 		version := c.versionOf(rootPath, entry)
-		if !version.Known || version.Size <= 0 || version.Links == 0 {
+		if !version.Known || version.Links == 0 {
+			return nil
+		}
+		if version.Size <= 0 {
+			c.fileMu.Lock()
+			if !c.drained {
+				c.files.store(rootPath, entry.Path, literalFileCacheEntry{version: version, unavailable: true})
+			}
+			c.fileMu.Unlock()
 			return nil
 		}
 		c.fileMu.Lock()

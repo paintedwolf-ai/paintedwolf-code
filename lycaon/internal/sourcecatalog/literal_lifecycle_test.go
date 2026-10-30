@@ -164,7 +164,7 @@ func TestReportedZeroSizeCannotPublishNonemptyContent(t *testing.T) {
 			t.Fatalf("partial observation became proof: %+v", page)
 		}
 	}
-	if opens.Load() != 0 || c.Literals.cache.files.count != 0 {
+	if opens.Load() != 0 || !zeroSizeMarkerOnly(c.Literals.cache, root.Path, "dynamic.txt") {
 		t.Fatalf("opens=%d retained=%d", opens.Load(), c.Literals.cache.files.count)
 	}
 	testutil.FailErr(t, "drain incomplete observation", c.Drain(context.Background()))
@@ -247,11 +247,48 @@ func TestZeroSizeSourceAlwaysKeepsLiveCandidates(t *testing.T) {
 	for _, next := range []string{"", "needle", "", "more needle text"} {
 		content = next
 		page := preparedLiteralPage(t, c, reader, query, entries)
-		if page.Warming || len(page.Candidates) != 1 || c.Literals.cache.files.count != 0 {
+		if page.Warming || len(page.Candidates) != 1 || !zeroSizeMarkerOnly(c.Literals.cache, root.Path, "dynamic.txt") {
 			t.Fatalf("zero-size content was excluded: %+v", page)
 		}
 	}
 	if opens.Load() != 0 {
 		t.Fatalf("zero-size preparation opened %d inputs", opens.Load())
+	}
+}
+
+func zeroSizeMarkerOnly(cache *literalIndexCache, root, path string) bool {
+	cache.fileMu.Lock()
+	defer cache.fileMu.Unlock()
+	fact, found := cache.files.lookup(root, path)
+	return found && fact.unavailable && fact.version.Size == 0 && len(fact.bloom) == 0 && len(fact.rawBloom) == 0
+}
+
+func TestZeroSizeSourceRecoversPruningWithinPinnedMetadata(t *testing.T) {
+	c := treeTestCatalog(t)
+	root := Root{ID: "root", Path: t.TempDir()}
+	writeLiteralFixture(t, root.Path, "file.txt", "")
+	reader := readyIndex(t, c, root)
+	entries, err := reader.FilePage(t.Context(), FileScope{Audience: HumanAudience}, "", TreeFilePageLimit)
+	testutil.FailErr(t, "metadata page", err)
+	initialRevision := reader.Status.Revision
+	var opens atomic.Int32
+	query := LiteralQuery{IncludeKey: "zero-size-recovery", Require: litprefilter.AnyOf("absent-token"), Open: func(entry Entry) (io.ReadCloser, error) { opens.Add(1); return literalTestOpener(root.Path)(entry) }}
+	first := preparedLiteralPage(t, c, reader, query, entries)
+	if len(first.Candidates) != 1 || !zeroSizeMarkerOnly(c.Literals.cache, root.Path, "file.txt") {
+		t.Fatal("zero-size address lost its live fallback")
+	}
+	writeLiteralFixture(t, root.Path, "file.txt", "ordinary content")
+	warm := preparedLiteralPage(t, c, reader, query, entries)
+	if warm.Warming || len(warm.Candidates) != 0 || opens.Load() != 1 || reader.Status.Revision != initialRevision {
+		t.Fatalf("recovery changed generation or failed pruning: opens=%d page=%+v", opens.Load(), warm)
+	}
+	for range 5 {
+		page := c.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries)
+		if page.Warming || len(page.Candidates) != 0 {
+			t.Fatalf("recovered facts were not reused: %+v", page)
+		}
+	}
+	if opens.Load() != 1 {
+		t.Fatalf("recovered proof reopened %d times", opens.Load())
 	}
 }
