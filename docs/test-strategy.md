@@ -241,6 +241,28 @@ Docker. `./task test:conformance:live` runs the corpus in the images again,
 fails when any stored snapshot does not reproduce byte for byte, and compares
 every program through the command entry with the live results.
 
+Generated programs use recorded seeds `7`, `41` and `20261028`, with 16 programs
+per seed. Each program combines at most four bounded grammar fragments; loops
+iterate at most four times. The generator covers quoting, parameter and arithmetic
+expansion, braces, here-documents and here-strings, loops, conditionals, functions,
+pipelines, redirects, text transforms and file metadata. Programs share the corpus
+workspace, observation and normalization. Their userland set includes only shells
+that implement the generated grammar.
+
+`./task test:conformance:live -- --generated-only --seed 7 --programs 16` reruns
+one seed; repeat `--seed` to select more (at most 64), and `--programs` selects
+1–64 programs per seed. Without selection, the Linux reference-userlands lane
+runs the recorded set beside the corpus. A mismatch is reduced by deleting
+fragments and simplifying values while retaining its structured difference type,
+status pair, refusal code or file path. The report includes both observations,
+the original and reduced programs, and the seed. Candidate references are batched
+per reduction step; each userland starts once for that batch. Top-level rejections
+without a typed identity retain the original program rather than changing causes.
+A fixed point is minimal under
+those reductions; a 128-trial bound reports explicitly when minimization remains
+incomplete. Production fixes go to their command component, and their regressions
+join the permanent corpus.
+
 ## Size budgets and changed coverage
 
 Agents write code and prompt copy fast. These checks shape it through

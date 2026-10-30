@@ -15,11 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/commandconformance"
@@ -33,6 +33,7 @@ type runtimeObservation struct {
 	TopLevelReject string
 	Files          map[string]*commandconformance.File
 	ChildReceipts  []string
+	NativeGaps     []toolcontract.NativeGap
 	ApprovalPlans  []wire.ApprovalPlan
 	// Roots are the absolute spellings of the case's workspace.
 	Roots []string
@@ -49,8 +50,9 @@ func (o runtimeObservation) streams() commandconformance.Observation {
 }
 
 type conformanceRunner struct {
-	h    *wiring.Harness
-	seed commandconformance.GitSeed
+	h     *wiring.Harness
+	seed  commandconformance.GitSeed
+	model *caseModel
 }
 
 func loadGitSeed(t *testing.T) commandconformance.GitSeed {
@@ -60,26 +62,12 @@ func loadGitSeed(t *testing.T) commandconformance.GitSeed {
 	return seed
 }
 
-// newConformanceRunner serves every case's program to the mock model and runs it
-// under posture, answering approvals unless neverAsk.
-func newConformanceRunner(t *testing.T, cases []commandconformance.Case, posture gate.Posture, neverAsk bool) *conformanceRunner {
+// newConformanceRunner runs case programs through the assembled command entry.
+func newConformanceRunner(t *testing.T, posture gate.Posture, neverAsk bool) *conformanceRunner {
 	t.Helper()
-	entries := make([]llm.MockResponseEntry, 0, len(cases))
-	for _, c := range cases {
-		args := map[string]any{"command": c.Program}
-		if c.CapabilityRequest != "" {
-			var request map[string]any
-			testutil.FailErr(t, "decode capability request of "+c.ID, json.Unmarshal([]byte(c.CapabilityRequest), &request))
-			args["capability_request"] = request
-		}
-		entries = append(entries, llm.MockResponseEntry{
-			Pattern:      "run case " + c.ID,
-			ToolCalls:    []llm.MockToolCall{{ID: "call-" + c.ID, Name: "command", Args: args}},
-			FollowUpText: "Case finished.",
-		})
-	}
-	mock := llm.NewMockProvider(&llm.MockConfig{Responses: entries})
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
+	model := &caseModel{}
+
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(model))
 	testutil.FailErr(t, "set approval posture", h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{
 		Posture:  posture,
 		NeverAsk: &neverAsk,
@@ -88,7 +76,7 @@ func newConformanceRunner(t *testing.T, cases []commandconformance.Case, posture
 	testutil.FailErr(t, "resolve implement manifest", err)
 	m.Controls.ContentReview = nil
 	h.RegisterManifest(m)
-	return &conformanceRunner{h: h, seed: loadGitSeed(t)}
+	return &conformanceRunner{h: h, seed: loadGitSeed(t), model: model}
 }
 
 // seedWorkspace writes the case's workspace the way the reference driver seeds
@@ -136,6 +124,7 @@ func (r *conformanceRunner) runCase(t *testing.T, c commandconformance.Case) run
 // option, as a person would, and fails unless exactly expectedCards appear.
 func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c commandconformance.Case, expectedCards int) runtimeObservation {
 	t.Helper()
+	r.model.use(t, c)
 	dir := r.seedWorkspace(t, c)
 	projectID := uuid.NewString()
 	testdbseed.InsertProjectRoot(t, r.h.DB, projectID, dir)
@@ -151,9 +140,11 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 		plans = r.promptAnsweringApprovals(t, projectID, sess.ID, c.ID, expectedCards)
 	}
 
+	receipts := r.queryChildReceipts(t, sess.ID)
 	obs := runtimeObservation{
 		Files:         trackedFiles(t, dir, c.Tracked),
-		ChildReceipts: r.queryChildReceipts(t, sess.ID),
+		ChildReceipts: receipts.Children,
+		NativeGaps:    receipts.Gaps,
 		ApprovalPlans: plans,
 		Roots:         workspaceRoots(dir),
 	}
@@ -267,18 +258,28 @@ func trackedFiles(t *testing.T, dir string, tracked []string) map[string]*comman
 	return out
 }
 
-func (r *conformanceRunner) queryChildReceipts(t *testing.T, sessionID string) []string {
+type caseReceipts struct {
+	Children []string
+	Gaps     []toolcontract.NativeGap
+}
+
+func (r *conformanceRunner) queryChildReceipts(t *testing.T, sessionID string) caseReceipts {
 	t.Helper()
-	rows, err := r.h.DB.QueryContext(t.Context(), `SELECT e.operation_id, e.state FROM invocation_program_executions e
+	rows, err := r.h.DB.QueryContext(t.Context(), `SELECT e.operation_id, e.state, e.native_gap_json FROM invocation_program_executions e
 		JOIN invocation_programs p ON p.id = e.program_id JOIN invocation_receipts r ON r.id = p.parent_receipt_id
 		WHERE r.session_id = ? AND e.operation_id NOT LIKE 'program %' ORDER BY e.ordinal`, sessionID)
 	testutil.FailErr(t, "query child receipts", err)
 	defer rows.Close()
-	var out []string
+	var out caseReceipts
 	for rows.Next() {
-		var op, state string
-		testutil.FailErr(t, "scan child receipt", rows.Scan(&op, &state))
-		out = append(out, op+"="+state)
+		var op, state, gap string
+		testutil.FailErr(t, "scan child receipt", rows.Scan(&op, &state, &gap))
+		out.Children = append(out.Children, op+"="+state)
+		if gap != "" {
+			var fact toolcontract.NativeGap
+			testutil.FailErr(t, "decode native gap receipt", json.Unmarshal([]byte(gap), &fact))
+			out.Gaps = append(out.Gaps, fact)
+		}
 	}
 	testutil.FailErr(t, "iterate child receipts", rows.Err())
 	return out

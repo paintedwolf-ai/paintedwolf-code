@@ -81,7 +81,7 @@ func TestPortableCommandDifferentialConformance(t *testing.T) {
 	cases := corpus(t)
 	stored, err := commandconformance.LoadSnapshots()
 	testutil.FailErr(t, "load reference snapshots", err)
-	runner := newConformanceRunner(t, cases, gate.PostureLight, true)
+	runner := newConformanceRunner(t, gate.PostureLight, true)
 	for _, c := range cases {
 		t.Run(c.ID, func(t *testing.T) {
 			refs, err := stored.For(c, runner.seed)

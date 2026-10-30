@@ -500,7 +500,8 @@
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
-    "userlands:build": "passthrough"
+    "userlands:build": "passthrough",
+    "test:conformance:live": "passthrough"
   },
   "resources": {
     "den:harness:test": {

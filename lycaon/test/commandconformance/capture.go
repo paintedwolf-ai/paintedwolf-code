@@ -67,24 +67,24 @@ func Reproduces(stored, captured map[string]map[referenceuserland.ID]Snapshot) [
 				problems = append(problems, fmt.Sprintf("%s in %s: no stored snapshot", caseID, id))
 				continue
 			}
-			if diff := snapshotDiff(want, captured[caseID][id]); diff != "" {
-				problems = append(problems, fmt.Sprintf("%s in %s: %s", caseID, id, diff))
+			if diff := snapshotDiff(want, captured[caseID][id]); diff.Kind != "" {
+				problems = append(problems, fmt.Sprintf("%s in %s: %s", caseID, id, diff.Text))
 			}
 		}
 	}
 	return problems
 }
 
-func snapshotDiff(want, got Snapshot) string {
+func snapshotDiff(want, got Snapshot) Difference {
 	switch {
 	case want.Input != got.Input:
-		return fmt.Sprintf("input %s, captured from %s", want.Input, got.Input)
+		return Difference{Kind: "input", Text: fmt.Sprintf("input %s, captured from %s", want.Input, got.Input)}
 	case want.Status != got.Status:
-		return fmt.Sprintf("status %d, now %d", want.Status, got.Status)
+		return Difference{Kind: "status", ExpectedStatus: want.Status, ActualStatus: got.Status, Text: fmt.Sprintf("status %d, now %d", want.Status, got.Status)}
 	case string(want.Stdout) != string(got.Stdout):
-		return fmt.Sprintf("stdout %q, now %q", want.Stdout, got.Stdout)
+		return Difference{Kind: "stdout", Text: fmt.Sprintf("stdout %q, now %q", want.Stdout, got.Stdout)}
 	case string(want.Stderr) != string(got.Stderr):
-		return fmt.Sprintf("stderr %q, now %q", want.Stderr, got.Stderr)
+		return Difference{Kind: "stderr", Text: fmt.Sprintf("stderr %q, now %q", want.Stderr, got.Stderr)}
 	}
 	return filesDiff(want.Files, got.Files)
 }

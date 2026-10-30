@@ -1,4 +1,5 @@
-// Command conformance captures the reference snapshots of the command conformance corpus.
+// Command conformance captures the reference snapshots of the command conformance
+// corpus and runs the live differential against the reference userlands.
 package main
 
 import (

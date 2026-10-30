@@ -38,8 +38,8 @@ func TestMatchComparesEveryObservableResult(t *testing.T) {
 				}
 				return
 			}
-			if matched != "" || diffs[referenceuserland.GNU] != tc.want {
-				t.Fatalf("Match = %q %q, want the difference %q", matched, diffs[referenceuserland.GNU], tc.want)
+			if matched != "" || diffs[referenceuserland.GNU].Text != tc.want {
+				t.Fatalf("Match = %q %q, want the difference %q", matched, diffs[referenceuserland.GNU].Text, tc.want)
 			}
 		})
 	}

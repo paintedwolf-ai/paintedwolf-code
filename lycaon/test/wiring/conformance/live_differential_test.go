@@ -23,7 +23,7 @@ func TestLiveReferenceDifferential(t *testing.T) {
 	references, err := referenceuserland.NewRunner(t.Context())
 	testutil.FailErr(t, "open the reference runner", err)
 	t.Cleanup(func() { _ = references.Close() })
-	runner := newConformanceRunner(t, cases, gate.PostureLight, true)
+	runner := newConformanceRunner(t, gate.PostureLight, true)
 
 	live, err := commandconformance.Capture(t.Context(), references, cases, runner.seed)
 	testutil.FailErr(t, "run the corpus in the reference userlands", err)

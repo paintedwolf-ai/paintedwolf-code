@@ -418,10 +418,13 @@ tasks:
       - go run ./test/referenceuserland/cmd/userlands record {{.CLI_ARGS}}
 
   test:conformance:live:
-    desc: 'Command conformance against the live reference userlands: stored snapshots must reproduce from the verified images, and every corpus program through the command entry must match them (Docker)'
+    desc: 'Corpus and seeded programs against the verified reference userlands (Docker; --generated-only --seed N --programs N selects generated cases)'
+    dir: '{{.GO_DIR}}'
     cmds:
+      - go run ./test/commandconformance/cmd/conformance live --validate {{.CLI_ARGS}}
       - task: userlands:build
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags referenceuserland --name test:conformance:live -- ./test/wiring/conformance/... -run '^TestLiveReferenceDifferential$' -count=1
+        vars: {CLI_ARGS: ''}
+      - go run ./test/commandconformance/cmd/conformance live {{.CLI_ARGS}}
 
   conformance:capture:
     desc: 'Run the command conformance corpus in its verified reference userlands and store the snapshots (Docker; optional -git-seed and case IDs)'
