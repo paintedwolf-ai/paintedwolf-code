@@ -158,10 +158,6 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 	if err := inv.reserve(int64(len(captured.Content))); err != nil {
 		return nil, nil, err
 	}
-	// A credential file's bytes reach no stream until their exposure is recorded.
-	if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
-		return nil, nil, fmt.Errorf("record credential file read: %w", err)
-	}
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if execution == "" {
 		return nil, nil, errors.New("file operands require a program execution identity")

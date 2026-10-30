@@ -68,10 +68,6 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 	if err != nil {
 		return inv.ordinaryInput(operand, err)
 	}
-	// A credential file's bytes reach no stream until their exposure is recorded.
-	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
-		return nil, fmt.Errorf("record credential file read: %w", err)
-	}
 	if err := inv.recordPin(captured.Revision); err != nil {
 		return nil, err
 	}

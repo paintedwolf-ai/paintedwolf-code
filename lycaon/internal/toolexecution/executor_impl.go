@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -49,10 +48,8 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
-	if tc.Effects.CredentialFiles != nil {
-		if err := tc.Effects.CredentialFiles.EnsureProject(ctx, tc.Identity.ProjectID); err != nil {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, &toolrejection.ToolReject{Code: toolrejection.OutboundSecretScreenFailedCode, Data: map[string]any{"surface": qualifiedName, "fault_stage": secretmatch.FaultStageManagedSecretStore, "reason": err.Error()}})
-		}
+	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
+		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
 	if parseErr != nil {
@@ -216,6 +213,9 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
 	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+	}
+	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
 	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {
