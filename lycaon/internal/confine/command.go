@@ -31,7 +31,7 @@ func Command(
 		if err != nil {
 			return nil, func() {}, err
 		}
-		if err := preparePackageCacheDataRoots(c, func(location fseffect.Location, mode os.FileMode) error { _, err := fseffect.MkdirAll(location, mode); return err }); err != nil {
+		if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
 			return nil, func() {}, err
 		}
 		profile, err = renderProfile(c)

@@ -81,7 +81,7 @@ func TestPackageCachePreparationRefusesSymlinksBeforeAndAfterItsVerdict(t *testi
 				installLink()
 			}
 			first := true
-			mkdir := func(location fseffect.Location, mode os.FileMode) error {
+			mkdir := func(location fseffect.Location, mode os.FileMode) (int, error) {
 				if replace && first {
 					first = false
 					installLink()

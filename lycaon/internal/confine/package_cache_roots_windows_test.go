@@ -24,8 +24,8 @@ func TestStandardCacheDataRootsWindows(t *testing.T) {
 			filepath.Join(home, ".cache"), filepath.Join(home, ".local/share"), filepath.Join(home, ".local/state"),
 		})
 	})
-	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) error {
+	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) (int, error) {
 		t.Error("platform cache preparation attempted a filesystem effect")
-		return nil
+		return 0, nil
 	}))
 }
