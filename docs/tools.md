@@ -272,6 +272,27 @@ typed stop, never a no-match. `find -exec` dispatches each child through the
 evaluator frame as an ordinary program child. `find -delete` removes entries
 only through the recoverable removal owner.
 
+File-backed grep and rg searches use at most eight workers, bounded by the
+process CPU allowance. One reducer publishes files in operand and traversal
+order, including diagnostics, source mappings and revision pins. Pending work
+is limited to twice the worker count; output travels in 64 KiB chunks with a
+two-event queue per file, charged to the program's aggregate memory admission.
+The bounded buffer pool includes the reducer's current payload and recycles
+storage after each write, including mapped records and cancellation cleanup.
+The first output record is released promptly. Quiet matches, closed downstream
+pipes and cancellation stop pending workers and release their held roots and
+memory. Stdin and process substitutions retain sequential stream consumption.
+Worker count shrinks when available working capacity cannot fund the transport
+window. Reader scratch, record growth, retained context, regex sessions and
+transformed output share the program account. Simultaneous work can reach that
+aggregate ceiling before a per-file ceiling; it returns a typed resource stop
+and releases all workers rather than waiting on its own leases or retrying reads.
+
+Pure literal searches use exact byte matching for ASCII case-insensitive
+records without creating a regex session for each line. The compiled matcher
+proves literal eligibility once; records outside that proof retain the same
+bounded regex engine, including Unicode case folding and malformed-byte offsets.
+
 ### Stream queries and format-aware edits
 
 `internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with

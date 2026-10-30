@@ -232,7 +232,8 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 			if err != nil {
 				return false, err
 			}
-			return true, r.writeRecord(prefix(line.Start), replaced, nil, 0)
+			defer replaced.close()
+			return true, r.writeRecord(prefix(line.Start), replaced.bytes, nil, 0)
 		}
 		return true, r.writeRecord(prefix(line.Start), record, pin, line.Start)
 	}
@@ -243,7 +244,12 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 	err := r.matcher.Groups(r.inv.ctx, record, func(groups []int) error {
 		wrote = true
 		if r.replace != nil {
-			return r.writeRecord(prefix(line.Start+groups[0]), expandReplacement(*r.replace, record, groups), nil, 0)
+			replacement := &grepRecord{inv: r.inv}
+			defer replacement.close()
+			if err := replacement.replacement(*r.replace, record, groups); err != nil {
+				return err
+			}
+			return r.writeRecord(prefix(line.Start+groups[0]), replacement.bytes, nil, 0)
 		}
 		return r.writeRecord(prefix(line.Start+groups[0]), record[groups[0]:groups[1]], pin, line.Start+groups[0])
 	})
@@ -253,17 +259,6 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 // writeRecord prints one output record; text copied from a pinned capture
 // at offset is mapped back to it.
 func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
-	if r.inv.out.mappings == nil || pin == nil {
-		term := byte('\n')
-		if r.scan.NullData {
-			term = 0
-		}
-		r.inv.out.scratch = append(r.inv.out.scratch[:0], prefix...)
-		r.inv.out.scratch = append(r.inv.out.scratch, text...)
-		r.inv.out.scratch = append(r.inv.out.scratch, term)
-		_, err := r.inv.out.Write(r.inv.out.scratch)
-		return err
-	}
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}
@@ -293,16 +288,27 @@ func (r *grepRun) number(n int) string {
 	return strconv.Itoa(n)
 }
 
-func (r *grepRun) replaceAll(record []byte) ([]byte, error) {
-	var out []byte
+func (r *grepRun) replaceAll(record []byte) (*grepRecord, error) {
+	out := &grepRecord{inv: r.inv}
 	last := 0
 	err := r.matcher.Groups(r.inv.ctx, record, func(groups []int) error {
-		out = append(out, record[last:groups[0]]...)
-		out = append(out, expandReplacement(*r.replace, record, groups)...)
+		if err := out.data(record[last:groups[0]]); err != nil {
+			return err
+		}
+		if err := out.replacement(*r.replace, record, groups); err != nil {
+			return err
+		}
 		last = groups[1]
 		return nil
 	})
-	return append(out, record[last:]...), err
+	if err == nil {
+		err = out.data(record[last:])
+	}
+	if err != nil {
+		out.close()
+		return nil, err
+	}
+	return out, nil
 }
 
 // checkReplacement admits $N, ${N} and $$ for the groups the pattern has.
@@ -342,6 +348,11 @@ func replacementGroup(s string) (int, int, bool) {
 		}
 		body = s[:end]
 	}
+	for _, digit := range body {
+		if digit < '0' || digit > '9' {
+			return 0, 0, false
+		}
+	}
 	n, err := strconv.Atoi(body)
 	if body == "" || err != nil {
 		return 0, 0, false
@@ -350,32 +361,6 @@ func replacementGroup(s string) (int, int, bool) {
 		return n, len(body) + 2, true
 	}
 	return n, len(body), true
-}
-
-func expandReplacement(replacement string, record []byte, groups []int) []byte {
-	var out []byte
-	for i := 0; i < len(replacement); i++ {
-		c := replacement[i]
-		if c != '$' || i+1 >= len(replacement) {
-			out = append(out, c)
-			continue
-		}
-		if replacement[i+1] == '$' {
-			out = append(out, '$')
-			i++
-			continue
-		}
-		n, size, ok := replacementGroup(replacement[i+1:])
-		if !ok {
-			out = append(out, c)
-			continue
-		}
-		if 2*n+1 < len(groups) && groups[2*n] >= 0 {
-			out = append(out, record[groups[2*n]:groups[2*n+1]]...)
-		}
-		i += size
-	}
-	return out
 }
 
 // rgHelp is rg -h: the catalogued form list.

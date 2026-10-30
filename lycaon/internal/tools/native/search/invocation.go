@@ -317,7 +317,6 @@ type output struct {
 	beforeWrite      func() error
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
-	scratch          []byte
 	maximum, written int64
 }
 
@@ -375,20 +374,20 @@ func (o *output) Write(p []byte) (int, error) {
 }
 
 func (o *output) text(parts ...string) error {
-	if len(parts) == 1 {
-		if len(parts[0]) == 0 {
-			return nil
-		}
-		_, err := io.WriteString(o, parts[0])
-		return err
-	}
-	o.scratch = o.scratch[:0]
+	var size int64
 	for _, part := range parts {
-		o.scratch = append(o.scratch, part...)
+		size += int64(len(part))
 	}
-	if len(o.scratch) == 0 {
-		return nil
+	if o.maximum > 0 && size > o.maximum-o.written {
+		return tools.CommandLimitExceeded("stream_throughput_bytes", o.maximum, o.written+size)
 	}
-	_, err := o.Write(o.scratch)
-	return err
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		if _, err := io.WriteString(o, part); err != nil {
+			return err
+		}
+	}
+	return nil
 }

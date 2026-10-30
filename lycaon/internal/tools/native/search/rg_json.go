@@ -31,6 +31,13 @@ type rgStats struct {
 func (r *grepRun) jsonContent(label string, content []byte) error {
 	inv := r.inv
 	started := time.Now()
+	if memory := inv.owners.Revisions.Memory; memory != nil {
+		release, err := memory.Reserve(inv.ctx, int64(len(label))*20+256)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	var file rgStats
 	file.searches = 1
 	path := jsonData(label)
@@ -44,6 +51,13 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	if binaryOffset >= 0 {
 		// rg searches a named binary file with each NUL read as a line
 		// terminator; offsets are unchanged.
+		if memory := inv.owners.Revisions.Memory; memory != nil {
+			release, err := memory.Reserve(inv.ctx, int64(len(content)))
+			if err != nil {
+				return err
+			}
+			defer release()
+		}
 		content = bytes.ReplaceAll(content, []byte{0}, []byte{'\n'})
 	}
 	n, err := textsearch.ScanReader(inv.ctx, bytes.NewReader(content), 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
@@ -58,22 +72,36 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 			end++
 		}
 		record := content[line.Start:line.End]
-		kind, submatches := "context", "[]"
+		kind := "context"
 		if line.Kind == textsearch.SelectedLine {
 			kind = "match"
 			lastSelectedEnd = end
 			file.matchedLines++
-			if !r.scan.Invert {
-				list, count, err := r.jsonSubmatches(record)
-				if err != nil {
-					return err
-				}
-				submatches = list
-				file.matches += count
-			}
 		}
-		return emit(`{"type":"` + kind + `","data":{"path":` + path + `,"lines":` + jsonData(string(content[line.Start:end])) +
-			`,"line_number":` + strconv.Itoa(line.Number) + `,"absolute_offset":` + strconv.Itoa(line.Start) + `,"submatches":` + submatches + `}}`)
+		output := &grepRecord{inv: inv}
+		defer output.close()
+		if err := output.text(`{"type":"`, kind, `","data":{"path":`, path, `,"lines":`); err != nil {
+			return err
+		}
+		if err := output.jsonData(content[line.Start:end]); err != nil {
+			return err
+		}
+		if err := output.text(`,"line_number":`, strconv.Itoa(line.Number), `,"absolute_offset":`, strconv.Itoa(line.Start), `,"submatches":[`); err != nil {
+			return err
+		}
+		if line.Kind == textsearch.SelectedLine && !r.scan.Invert {
+			count, err := r.jsonSubmatches(output, record)
+			if err != nil {
+				return err
+			}
+			file.matches += count
+		}
+		if err := output.text(`]}}`, "\n"); err != nil {
+			return err
+		}
+		file.printed += int64(len(output.bytes))
+		_, err := inv.out.Write(output.bytes)
+		return err
 	})
 	if err != nil {
 		return err
@@ -101,17 +129,37 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 }
 
 // jsonSubmatches lists a selected record's matches, with replacements under -r.
-func (r *grepRun) jsonSubmatches(record []byte) (string, int64, error) {
-	var parts []string
+func (r *grepRun) jsonSubmatches(output *grepRecord, record []byte) (int64, error) {
+	var count int64
 	err := r.matcher.Groups(r.inv.ctx, record, func(groups []int) error {
-		part := `{"match":` + jsonData(string(record[groups[0]:groups[1]]))
-		if r.replace != nil {
-			part += `,"replacement":` + jsonData(string(expandReplacement(*r.replace, record, groups)))
+		if count > 0 {
+			if err := output.text(","); err != nil {
+				return err
+			}
 		}
-		parts = append(parts, part+`,"start":`+strconv.Itoa(groups[0])+`,"end":`+strconv.Itoa(groups[1])+`}`)
-		return nil
+		if err := output.text(`{"match":`); err != nil {
+			return err
+		}
+		if err := output.jsonData(record[groups[0]:groups[1]]); err != nil {
+			return err
+		}
+		if r.replace != nil {
+			replacement := &grepRecord{inv: r.inv}
+			defer replacement.close()
+			if err := replacement.replacement(*r.replace, record, groups); err != nil {
+				return err
+			}
+			if err := output.text(`,"replacement":`); err != nil {
+				return err
+			}
+			if err := output.jsonData(replacement.bytes); err != nil {
+				return err
+			}
+		}
+		count++
+		return output.text(`,"start":`, strconv.Itoa(groups[0]), `,"end":`, strconv.Itoa(groups[1]), "}")
 	})
-	return "[" + strings.Join(parts, ",") + "]", int64(len(parts)), err
+	return count, err
 }
 
 // summary closes a --json run; rg writes it with its keys sorted.

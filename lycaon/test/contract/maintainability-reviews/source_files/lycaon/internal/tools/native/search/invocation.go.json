@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/invocation.go",
+  "kind": "module",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the 334-line invocation module. Command I/O, per-operation path authority, source observations and resource admission belong to one call lifecycle. Direct part-wise output removes a gather allocation while preserving aggregate length refusal before publication. Focused transformed-output and bounded-worker contracts support this measured ceiling.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 334,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188"
+  }
+}
