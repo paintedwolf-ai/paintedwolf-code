@@ -153,7 +153,7 @@ func TestDirectoryReaderBorrowedDescriptorDoesNotPublishRenamedNamespace(t *test
 	testutil.FailErr(t, "open borrowed directory", err)
 	defer func() { testutil.FailErr(t, "close borrowed directory", held.Close()) }()
 	reader := catalog.Directories.NewDirectoryReader("p", root)
-	listing, err := reader.ReadDirectory(t.Context(), "dir", 0, held)
+	listing, err := reader.ReadDirectory(t.Context(), "dir", 0, &testDirectoryAdmission{file: held})
 	testutil.FailErr(t, "read borrowed directory", err)
 	if len(listing.Entries) != 1 || listing.Entries[0].Name != "kept" {
 		t.Fatalf("borrowed=%+v", listing)
