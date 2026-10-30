@@ -39,8 +39,11 @@ func (c *Directories) ReadDirectory(ctx context.Context, project string, root Ro
 	if err != nil {
 		return DirectoryListing{}, err
 	}
-	listing := DirectoryListing{Reused: previous.Complete && previous.Sequence == observation.Sequence}
-	listing.Prepared = !listing.Reused
+	return readDirectoryNamespace(ctx, store, dir, observation, maximum, previous.Complete && previous.Sequence == observation.Sequence)
+}
+
+func readDirectoryNamespace(ctx context.Context, store *indexStore, dir string, observation DirectoryObservation, maximum int, reused bool) (DirectoryListing, error) {
+	listing := DirectoryListing{Reused: reused, Prepared: !reused}
 	if !observation.Complete || observation.Failure != "" {
 		return listing, ErrDirectoryNamespace
 	}

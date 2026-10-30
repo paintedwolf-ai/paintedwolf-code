@@ -13,6 +13,7 @@ import (
 type discoveryWork struct {
 	metadata, listed, reused, prepared int64
 	roots, handles, relative           int64
+	readers                            map[string]*sourcecatalog.DirectoryReader
 }
 
 // Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
@@ -30,6 +31,12 @@ func structuralPrimary(key string) bool {
 }
 
 func (w *walker) report() {
+	for _, reader := range w.work.readers {
+		if err := reader.Close(w.inv.ctx); err != nil {
+			slog.DebugContext(w.inv.ctx, "command catalog observation drain", "error", err)
+		}
+	}
+
 	slog.InfoContext(w.inv.ctx, "command discovery completed",
 		"execution_id", w.inv.request.Invocation.Identity.ExecutionID,
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
@@ -81,8 +88,15 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	if w.maximum > 0 {
 		maximum = int(max(1, w.maximum-w.visited))
 	}
-	listing, err := catalog.Directories.ReadDirectory(w.inv.ctx, w.inv.tc.Identity.ProjectID,
-		sourcecatalog.Root{ID: root.ID, Path: root.Path}, dir.bound.Resolved.ScopeRel, maximum)
+	if w.work.readers == nil {
+		w.work.readers = make(map[string]*sourcecatalog.DirectoryReader)
+	}
+	reader := w.work.readers[root.ID]
+	if reader == nil {
+		reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
+		w.work.readers[root.ID] = reader
+	}
+	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, nil)
 	if listing.Prepared {
 		w.work.prepared++
 	}

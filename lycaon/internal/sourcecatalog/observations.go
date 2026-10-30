@@ -98,11 +98,6 @@ func (c *Directories) observeDirectory(ctx context.Context, store *indexStore, d
 		return cached, err
 	}
 	observation := DirectoryObservation{Path: dir, baseSequence: cached.Sequence, Invalidation: store.observationMark(dir), Epoch: repochange.CurrentEpoch(store.root.Path)}
-	root, release, err := store.navigation.Acquire(ctx, store.root.Path)
-	if err != nil {
-		return observation, err
-	}
-	defer release()
 	pin, err := store.retainGeneration(headGeneration, true)
 	if err != nil {
 		return observation, err
@@ -113,22 +108,47 @@ func (c *Directories) observeDirectory(ctx context.Context, store *indexStore, d
 		return observation, err
 	}
 	defer builder.close()
-	directory, err := c.openObservationDirectory(ctx, store, root, dir)
+	observation, reused, err := c.collectObservation(ctx, store, dir, cached, nil, demand, func(listing directoryDiscovery) error { return builder.observe(ctx, listing) })
 	if err != nil {
 		return observation, err
+	}
+	if reused {
+		publish(observation)
+		return observation, nil
+	}
+	if err := store.publishStructure(ctx, builder, pin.Generation); err != nil {
+		return observation, err
+	}
+	published, err := store.readObservation(ctx, dir)
+	if err != nil {
+		return observation, err
+	}
+	publish(published)
+	return published, nil
+}
+
+func (c *Directories) collectObservation(ctx context.Context, store *indexStore, dir string, cached DirectoryObservation, held *os.File, demand func() int, consume func(directoryDiscovery) error) (DirectoryObservation, bool, error) {
+	observation := DirectoryObservation{Path: dir, baseSequence: cached.Sequence, Invalidation: store.observationMark(dir), Epoch: repochange.CurrentEpoch(store.root.Path)}
+	root, release, err := store.navigation.Acquire(ctx, store.root.Path)
+	if err != nil {
+		return observation, false, err
+	}
+	defer release()
+	directory, err := c.observationDirectory(ctx, store, root, dir, held)
+	if err != nil {
+		return observation, false, err
 	}
 	defer directory.close()
 	observation.Stamp = directory.stamp
 	// Unwatched membership is reusable only after its directory has been re-statted.
 	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation == observation.Invalidation && cached.Epoch == observation.Epoch {
-		publish(cached)
-		return cached, nil
+		return cached, true, nil
 	}
 	reader := directoryBatch{file: directory.entries}
 	for {
 		finish, err := c.trees.broker.Acquire(ctx, store.observationRequest(dir))
 		if err != nil {
-			return observation, err
+			return observation, false, err
 		}
 		quantum := indexBatchSize
 		if maximum := demand(); maximum > 0 {
@@ -145,26 +165,33 @@ func (c *Directories) observeDirectory(ctx context.Context, store *indexStore, d
 		}
 		finish()
 		if readErr != nil {
-			return observation, readErr
+			return observation, false, readErr
 		}
 		observation.Entries += len(batch)
 		observation.Complete = complete
-		if err := builder.observe(ctx, directoryDiscovery{nodes: nodes, observation: observation}); err != nil {
-			return observation, err
+		if err := consume(directoryDiscovery{nodes: nodes, observation: observation}); err != nil {
+			return observation, false, err
 		}
 		if complete {
 			break
 		}
 	}
-	if err := store.publishStructure(ctx, builder, pin.Generation); err != nil {
-		return observation, err
+	return observation, false, nil
+}
+
+func (c *Directories) observationDirectory(ctx context.Context, store *indexStore, root *os.Root, dir string, held *os.File) (*observationDirectory, error) {
+	if held == nil {
+		return c.openObservationDirectory(ctx, store, root, dir)
 	}
-	published, err := store.readObservation(ctx, dir)
+	info, err := held.Stat()
 	if err != nil {
-		return observation, err
+		return nil, err
 	}
-	publish(published)
-	return published, nil
+	entries, err := directoryKinds(held)
+	if err != nil {
+		return nil, err
+	}
+	return &observationDirectory{entries: entries, resolved: dir, stamp: directoryStampOf(info), privateFilter: repochange.NewPrivateDirectoryFilter(filepath.Join(root.Name(), filepath.FromSlash(dir)))}, nil
 }
 
 func readObservationNodes(root *os.Root, directory *observationDirectory, dir string, batch []directoryEntry) []indexNode {
