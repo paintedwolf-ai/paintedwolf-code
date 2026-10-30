@@ -64,7 +64,7 @@ class UnittestSelectionTests(unittest.TestCase):
             self.assertIn("unselected case executed", default.stderr)
 
     def assert_actual_runner_recipe(self, flags, environment=None):
-        result = subprocess.run([str(ROOT / "task"), "--dry", "--force", "test:runner",
+        result = subprocess.run([str(ROOT / "task"), "--dry", "--force", "--color=false", "test:runner",
                                  *(["--", *flags] if flags else [])],
                                 cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -82,11 +82,12 @@ class UnittestSelectionTests(unittest.TestCase):
             with self.subTest(flags=flags):
                 self.assert_actual_runner_recipe(flags)
 
-    def test_actual_task_recipe_under_changed_coverage_exec_environment(self):
+    def test_actual_task_recipe_under_changed_coverage_and_hosted_color_environment(self):
         with tempfile.TemporaryDirectory(prefix="runner-recipe-coverage-") as directory:
             tools = python_tools.prepared(python_coverage.REQUIREMENTS)
             python, data = python_coverage.environment(Path(directory), [tools], ["scripts/test-execution.py"])
-            environment = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ['PATH']}"}
+            environment = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ['PATH']}",
+                           "CI": "true", "GITHUB_ACTIONS": "true", "FORCE_COLOR": "1"}
             for flags in ([], ["-k", "*Terminal*", "-k", "crash receipt"]):
                 with self.subTest(flags=flags):
                     self.assert_actual_runner_recipe(flags, environment)
