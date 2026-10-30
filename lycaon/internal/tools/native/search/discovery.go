@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -12,6 +13,11 @@ import (
 type discoveryWork struct {
 	metadata, listed, reused, prepared int64
 	roots, handles, relative           int64
+}
+
+// Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
+func entryMayBeRead(filter sandbox.ReadFilter, rel string) bool {
+	return filter == nil || filter(rel, false) || filter(rel, true)
 }
 
 func structuralPrimary(key string) bool {
@@ -98,6 +104,9 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 			return nil, true, err
 		}
 		child := dir.bound.Child(item.Name)
+		if !entryMayBeRead(filter, child.Resolved.ScopeRel) {
+			continue
+		}
 		e := entry{display: joinDisplay(dir.display, item.Name), name: item.Name, bound: child,
 			depth: dir.depth + 1, start: dir.start, link: item.IsSymlink}
 		if !w.lazy || item.IsDir || item.IsSymlink {

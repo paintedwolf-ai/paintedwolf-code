@@ -142,6 +142,10 @@ func TestFindCachedMembershipUsesTheCurrentReadBoundary(t *testing.T) {
 		ID: h.tc.ProfileID(), Tools: map[string]bool{"read": true, "find": true}, ReadGlobs: []string{".", "src", "src/**"},
 	}})
 	h.owners.Revisions.Boundary = h.boundary
+	catalog := h.owners.Catalog
+	h.owners.Catalog = nil
+	h.exec("", "find", ".", "-name", "target.go").expect(t, "restricted live scope", "./src/target.go\n", "", 0)
+	h.owners.Catalog = catalog
 	h.exec("", "find", ".", "-name", "target.go").expect(t, "restricted current scope", "./src/target.go\n", "", 0)
 }
 
