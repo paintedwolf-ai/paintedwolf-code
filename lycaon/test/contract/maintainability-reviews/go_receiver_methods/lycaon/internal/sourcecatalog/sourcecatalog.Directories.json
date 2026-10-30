@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.Directories",
+  "kind": "runtime_service",
+  "workstream": "indexed-command-discovery",
+  "disposition": "retain",
+  "reason": "Directories owns structural membership observations, their freshness, and generation retention. ReadDirectory projects those existing immutable pages with completeness and preparation bounds. Retain the shared owner below 500 receiver lines and 20 methods; a second discovery cache would duplicate invalidation and publication authority. Namespace, bounded preparation, and observation freshness contracts support this boundary.",
+  "reviewed_commit": "8efed260ad1d42cbc47a22c680bdd81c484ae354",
+  "ceiling": 20,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/directory_listing_test.go": "2298e36fb0f4ed24afdb467afba353aeff8fdb540ba4c4b7407c7c1bc45a156c",
+    "lycaon/internal/sourcecatalog/observations_test.go": "eb0db1fc497d9b803bc18dbbcccfdc2338ed9f8ccd9c9afd1525c05dd8baf76d",
+    "lycaon/internal/sourcecatalog/observation_invalidation_test.go": "90502ae5ea700c553ebd9cd30f2ccee55ab5e508f130b423e55d68f09b9135b9"
+  },
+  "reviewed_shape": "09b184269e517e4d1bb2bc90027b034160c8bfde1a19a6836403a1683e5ac2c0"
+}

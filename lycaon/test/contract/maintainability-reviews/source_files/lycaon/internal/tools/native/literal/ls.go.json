@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/literal/ls.go",
+  "kind": "algorithm",
+  "workstream": "indexed-command-discovery",
+  "disposition": "retain",
+  "reason": "The file owns one listing invocation, including ordering, recursion, formatting, and ordinary diagnostics. Its directory capability now loads names explicitly, while metadata remains descriptor-relative. Retain the existing listing algorithm below 525 lines; literal listing contracts and held-directory lifetime and bounded membership contracts support this boundary.",
+  "reviewed_commit": "8efed260ad1d42cbc47a22c680bdd81c484ae354",
+  "ceiling": 525,
+  "boundaries": {
+    "lycaon/internal/tools/native/literal/forms_test.go": "909dcb64c71e9b129830bdac4252624c9d45c9b62f20b1baaf5d82ee53d1f75d",
+    "lycaon/internal/tools/projectpaths/bound_directory_test.go": "ebbac5ed41bbbef63b98f78679e1057154edd44ba90f7ba3e2c7fad8ed24c4c1"
+  }
+}
