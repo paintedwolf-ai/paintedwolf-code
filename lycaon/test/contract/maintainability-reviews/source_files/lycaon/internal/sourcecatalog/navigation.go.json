@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/sourcecatalog/navigation.go",
+  "kind": "module",
+  "workstream": "indexed-command-discovery",
+  "disposition": "retain",
+  "reason": "Navigation keeps immutable generation navigation, directory row coordinates, and typed entry projection together. Entry projection derives kind from the pinned row before consulting directory-boundary policy. Retain the measured 313 source lines at a 313-line ceiling, supported by complete namespace and pinned-kind contracts across live path changes.",
+  "reviewed_commit": "dc03be199339dcddba58b0ebb633a1f2556b4876",
+  "ceiling": 313,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/directory_kind_projection_test.go": "49803ae765ef2b1c2bb751e6526162818a64faf1ada692b0a852bc5d00885277",
+    "lycaon/internal/sourcecatalog/directory_listing_test.go": "d0dee42c214055c6a0ef9dc112335f3ec3b1c7863b17050f952ebf719241e394"
+  }
+}
