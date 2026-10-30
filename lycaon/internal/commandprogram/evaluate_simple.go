@@ -198,6 +198,7 @@ func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name 
 	if err != nil && result.Validate() != nil {
 		result = ownerResult(err)
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	return f.settle(child, result, err)
 }
 
@@ -221,14 +222,16 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		if _, err := f.e.ports.Binder.Bind(spec, fields); err != nil {
 			var argv *ArgvError
 			if !errors.As(err, &argv) {
+				//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 				child.close()
 				return err
 			}
 			gap = f.nativeGap(spec, argv, fields, assigns)
 			if gap == nil {
 				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
+				//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
-				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
 				refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
 				return refusal
 			}
@@ -236,6 +239,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	}
 	environment, err := f.environment(assigns)
 	if err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		child.close()
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
@@ -245,12 +249,14 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
+			//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 			child.close()
 			return err
 		}
 		result, err = f.state.dispatch.Launch(ctx, request, f.streams)
 		f.e.release("concurrent_processes", 1)
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	return f.settle(child, result, err)
 }
 
@@ -409,6 +415,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declare
 	if err != nil {
 		return err
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	defer child.close()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
@@ -432,6 +439,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declare
 	if stop, ok := f.state.latch.Stop(); ok {
 		result = stop.Result
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	child.settle(result, err)
 	return err
 }

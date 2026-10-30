@@ -48,6 +48,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 	}
 	err = guard.onStarted(cmd)
 	if err == nil {
+		//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 		err = confine.ConfirmProcessLaunch(cmd)
 	}
 	if err != nil {

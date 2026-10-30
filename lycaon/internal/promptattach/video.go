@@ -85,9 +85,11 @@ func deriveVideoOverview(ctx context.Context, store blobstore.Store, caps Caps, 
 	if err != nil {
 		return VideoOverview{}, err
 	}
+	//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 	if err := store.PutDerived(blob.ID, videoOverviewFacts, bytes.NewReader(facts), maxVideoOverviewBytes); err != nil {
 		return VideoOverview{}, fmt.Errorf("keep video facts: %w", err)
 	}
+	//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 	if err := store.PutDerived(blob.ID, videoOverviewSheet, bytes.NewReader(overview.Sheet), maxVideoOverviewBytes); err != nil {
 		return VideoOverview{}, fmt.Errorf("keep video overview: %w", err)
 	}

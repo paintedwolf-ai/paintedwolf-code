@@ -28,6 +28,8 @@ func ExternalConsumerClosure(stage ExecutorClosure, producerID, consumerID strin
 
 // NativeConsumerClosure recognizes only the canonical close returned by this
 // exact byte endpoint. Other/joined utility errors cannot gain this exception.
+//
+//nolint:errorlint // Only the exact endpoint sentinel grants this exception; wrapped or joined causes must not.
 func NativeConsumerClosure(pipe *BytePipe, cause error, producerID, consumerID string) ConsumerClosure {
 	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: pipe != nil && cause == ErrConsumerClosed && pipe.Completion().Termination == StreamConsumerClosed}
 }
@@ -101,7 +103,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		if expected && !closure.external && (result.EffectCertainty == toolcontract.EffectAttempted || result.EffectCertainty == toolcontract.EffectUnknown) {
 			expected = false
 		}
-		if expected {
+		if expected && i+1 < len(stages) {
 			consumer := stages[i+1].Result
 			expected = result.StopCode == "" && (result.Terminal == toolcontract.ProducerFailed || result.Terminal == toolcontract.ProducerCompleted) && consumer.Validate() == nil && (consumer.Terminal == toolcontract.ProducerCompleted || consumer.Terminal == toolcontract.ProducerFailed) && consumer.StopCode == "" && stages[i+1].RequiredInputComplete
 		}

@@ -51,6 +51,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	if err != nil {
 		return err
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	defer run.close()
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -73,12 +74,18 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	}
 	stderr := &syncWriter{w: f.streams.Error}
 	frames := make([]*frame, len(stages))
+	releases := make([]func(), 0, len(stages))
+	defer func() {
+		for i := len(releases) - 1; i >= 0; i-- {
+			releases[i]()
+		}
+	}()
 	for i := range stages {
 		g, release, err := f.isolate(pctx, nil)
 		if err != nil {
 			return f.stateRefusal(s.SyntaxLocation, err)
 		}
-		defer release()
+		releases = append(releases, release)
 		g.parent, g.loops, g.returnable = run.inv, 0, false
 		g.streams = Streams{Input: f.streams.Input, Output: f.streams.Output, Error: stderr}
 		if i > 0 {
@@ -105,6 +112,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}(i)
 	}
 	wg.Wait()
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	return f.settlePipeline(run, stages, pipes, results)
 }
 

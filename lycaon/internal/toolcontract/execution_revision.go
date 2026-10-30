@@ -139,6 +139,8 @@ func (r ExecutionRevision) Same(other ExecutionRevision) bool {
 // absent destination has no content to pin.
 func (r ExecutionRevision) SourcePin() (SourcePin, bool) {
 	switch r.Mode {
+	case AbsentRevision:
+		return SourcePin{}, false
 	case AcceptedDocumentRevision:
 		return SourcePin{SourceID: "document:" + r.DocumentID, Revision: strconv.FormatInt(r.DocumentRevision, 10),
 			Representation: r.Representation, SHA256: r.ContentSHA256, EndByte: r.ContentBytes}, true

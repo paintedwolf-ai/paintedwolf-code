@@ -127,6 +127,15 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 		}
 	}
 	skeleton := out.String()
+	captures, err := predicateRepeatCaptures(ctx, skeleton, tags)
+	if err != nil {
+		return "", nil, err
+	}
+	return skeleton, captures, nil
+}
+
+// predicateRepeatCaptures maps normalized repeat tags to actual capture IDs.
+func predicateRepeatCaptures(ctx context.Context, skeleton string, tags []repeatTag) (map[int]repeatTag, error) {
 	byOffset := map[int]repeatTag{}
 	for _, tag := range tags {
 		byOffset[tag.at] = tag
@@ -137,7 +146,7 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 	// openings here ignores quoted delimiters and POSIX bracket subexpressions.
 	for i := 0; i < len(skeleton); i++ {
 		if err := ctx.Err(); err != nil {
-			return "", nil, err
+			return nil, err
 		}
 		if skeleton[i] == '\\' {
 			i++
@@ -177,7 +186,7 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 			}
 		}
 	}
-	return skeleton, captures, nil
+	return captures, nil
 }
 func predicateRepeatRange(text string) (int, int, bool) {
 	fields := strings.Split(text, ",")

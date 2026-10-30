@@ -36,7 +36,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 				return f.dispatch(ctx, s, fields, nil)
 			}
 			f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
-			refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+			refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
 			refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
 			return refusal
 		}
@@ -59,7 +59,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		for i, op := range operands {
 			if !VariableName(op.Value) {
 				f.hostRefusal("read", op.Value, "a valid variable name", argvOperandInvalid)
-				refusal := f.refuse(s.SyntaxLocation, argvOperandInvalid, "a valid variable name", nil).(*EvaluationRefusal)
+				refusal := f.refuse(s.SyntaxLocation, argvOperandInvalid, "a valid variable name", nil)
 				refusal.Command, refusal.Option, refusal.Form = "read", op.Value, spec.Argv
 				return refusal
 			}

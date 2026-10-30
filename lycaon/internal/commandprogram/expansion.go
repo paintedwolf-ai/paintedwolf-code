@@ -60,6 +60,7 @@ func (e *WordExpander) ExpandFields(ctx context.Context, scope ExpansionScope, w
 		return nil, err
 	}
 	defer run.close()
+	//nolint:contextcheck // The expansion run retains this exact operation context; substitution derives its child context from it.
 	if err := run.word(word.Parts); err != nil {
 		return nil, err
 	}
@@ -75,6 +76,7 @@ func (e *WordExpander) ExpandScalar(ctx context.Context, scope ExpansionScope, w
 		return "", err
 	}
 	defer run.close()
+	//nolint:contextcheck // The expansion run retains this exact operation context; substitution derives its child context from it.
 	if err := run.word(word.Parts); err != nil {
 		return "", err
 	}
@@ -87,6 +89,7 @@ func (e *WordExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, 
 		return nil, err
 	}
 	defer run.close()
+	//nolint:contextcheck // The expansion run retains this exact operation context; substitution derives its child context from it.
 	if err := run.word(word.Parts); err != nil {
 		return nil, err
 	}
@@ -116,6 +119,7 @@ func (e *WordExpander) ExpandDocument(ctx context.Context, scope ExpansionScope,
 	}
 	defer run.close()
 	run.document = &documentText{literal: delimiterQuoted(redirect.Target), stripTabs: redirect.Operator == "<<-", lineStart: true}
+	//nolint:contextcheck // The expansion run retains this exact operation context; substitution derives its child context from it.
 	if err := run.word(body.Parts); err != nil {
 		return "", err
 	}

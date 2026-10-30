@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -46,13 +47,11 @@ func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
 			var id string
 			var raw []byte
 			if err := rows.Scan(&id, &raw); err != nil {
-				rows.Close()
-				return err
+				return errors.Join(err, rows.Close())
 			}
 			converted, err := structuredEffectPermitPayload(raw)
 			if err != nil {
-				rows.Close()
-				return fmt.Errorf("checkpoint authority format: %w", err)
+				return errors.Join(fmt.Errorf("checkpoint authority format: %w", err), rows.Close())
 			}
 			batch = append(batch, update{id, converted})
 		}

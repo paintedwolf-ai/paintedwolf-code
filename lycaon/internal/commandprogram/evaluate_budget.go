@@ -107,6 +107,7 @@ func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLoca
 		return child, err
 	}
 	if err := f.e.ports.Executions.BeginExecution(ctx, child.inv, command); err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		child.close()
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func (f *frame) refuseLimit(loc commandsurface.SyntaxLocation, limit string, obs
 	return f.refuse(loc, limitExceeded, "bounded "+limit, cause)
 }
 
-func (f *frame) refuse(loc commandsurface.SyntaxLocation, code, expected string, cause error) error {
+func (f *frame) refuse(loc commandsurface.SyntaxLocation, code, expected string, cause error) *EvaluationRefusal {
 	_ = f.state.latch.Record(uuid.NewString(), toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, true)
 	return &EvaluationRefusal{Code: code, Node: loc, Expected: expected, Cause: cause}
 }

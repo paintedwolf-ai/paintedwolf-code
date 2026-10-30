@@ -90,6 +90,7 @@ func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string
 		index, err := strconv.Atoi(name)
 		positional := r.scope.Positional()
 		if err != nil || index > len(positional) {
+			//nolint:nilerr // An unrepresentable positional index is unset, as is any out-of-range index.
 			return "", false, nil
 		}
 		return positional[index-1], true, nil

@@ -27,6 +27,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	err = execpkg.RunPrepared(cmd)
 	return stdout.Bytes(), stderr.Bytes(), err
 }

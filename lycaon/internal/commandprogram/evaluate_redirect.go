@@ -62,6 +62,7 @@ type stagedRedirect struct {
 func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	if !publish {
 		err := o.output.Abandon(ctx)
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		o.run.settle(toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err)
 		return nil
 	}
@@ -69,12 +70,14 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	if err != nil {
 		result := ownerResult(err)
 		writeRedirectRefusal(o.errorStream, o.operator, o.target, result.StopCode)
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		return o.frame.settle(o.run, result, err)
 	}
 	certainty := toolcontract.EffectCompleted
 	if published.PublishedRevision == "" {
 		certainty = toolcontract.NoEffect
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	o.run.settle(toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
 	return nil
 }
@@ -113,15 +116,18 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
+			//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 			return nil, true, g.redirectFailure(child, r.Operator, target, err)
 		}
 		g.streams.Input = input
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		child.settle(ordinaryResult(0), nil)
 		return nil, false, nil
 	}
 	_, outputs := g.redirections()
 	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		return nil, true, g.redirectFailure(child, r.Operator, target, err)
 	}
 	errorStream := g.streams.Error

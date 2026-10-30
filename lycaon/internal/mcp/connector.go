@@ -151,6 +151,7 @@ type trackedTransport struct {
 
 func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
 	var connection sdkmcp.Connection
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	err := execpkg.StartPreparedWith(t.Command, func() error {
 		var err error
 		connection, err = t.CommandTransport.Connect(ctx)

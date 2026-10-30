@@ -27,6 +27,7 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	if err != nil {
 		return toolcontract.ProducerResult{}, err
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	defer run.close()
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
@@ -41,6 +42,7 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	run.settle(result, err)
 	if err == nil && f.substs != nil {
 		f.substs.record(run.inv.Identity.ExecutionID, result.Status)
@@ -78,22 +80,26 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	if err != nil {
 		return err
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	defer run.close()
 	parsed, captured, err := LoadSourceUnit(ctx, f.e.ports.Sources, run.inv, operands[0].Value, f.e.ports.Memory)
 	if captured.Pin.SourceID != "" {
 		f.e.recordSource(run.inv.Identity.ExecutionID, captured.Pin)
 	}
 	if err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		return f.sourceRefusal(run, s, err)
 	}
 	lease, err := parsed.SnapshotWithMemory(ctx, f.e.ports.Memory)
 	_ = parsed.Close()
 	if err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		run.settle(ownerResult(err), err)
 		return f.stateRefusal(s.SyntaxLocation, err)
 	}
-	defer lease.Close()
+	defer func() { _ = lease.Close() }()
 	if err := preflight(lease.Plan.Statements, f.e.ports); err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		run.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
 		var refusal *EvaluationRefusal
 		errors.As(err, &refusal)
@@ -101,6 +107,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	}
 	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
 		if err := registrar.RegisterSourceUnit(ctx, run.inv, captured, lease.Plan); err != nil {
+			//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 			run.settle(ownerResult(err), err)
 			return err
 		}
@@ -116,6 +123,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	if stop, ok := f.state.latch.Stop(); ok {
 		result = stop.Result
 	}
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	run.settle(result, err)
 	if err == nil && sig.kind == signalReturn {
 		return nil
@@ -155,6 +163,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	}
 	job, release, err := f.isolate(ctx, &OutcomeLatch{})
 	if err != nil {
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		run.close()
 		return f.stateRefusal(s.SyntaxLocation, err)
 	}
@@ -173,6 +182,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	})
 	if err != nil {
 		release()
+		//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 		return f.settle(run, ownerResult(err), err)
 	}
 	run.record.JobHandle = handle
@@ -180,6 +190,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	f.e.mu.Lock()
 	f.e.jobs = append(f.e.jobs, handle)
 	f.e.mu.Unlock()
+	//nolint:contextcheck // Settlement uses the captured BeginExecution context, detached only from cancellation to seal earlier effects.
 	return f.settle(run, ordinaryResult(0), nil)
 }
 

@@ -119,6 +119,7 @@ func retainNix(ctx context.Context, layout *nixgeneration.Layout, directory stri
 	command.Stdin = nil
 	var diagnostic boundedNixOutput
 	command.Stdout, command.Stderr = &diagnostic, &diagnostic
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	if err := execpkg.RunPrepared(command); err != nil {
 		release()
 		return nil, fmt.Errorf("retain running Nix generation: %w: %s", err, diagnostic.String())

@@ -76,6 +76,8 @@ func TestArithmeticExpansionUsesIntegerSemantics(t *testing.T) {
 		{`: $((N > 3 && N < 10)) $((N == 7 ? 1 : 2)) $((!N)) $((~0))`, "1 1 0 -1"},
 		{`: $((0 && 1 / 0)) $((1 || 1 / 0))`, "0 1"},
 		{`: "$((N * 6))"`, "42"},
+		{`: $((0xffffffffffffffff)) $((-0xffffffffffffffff)) $((0x8000000000000000))`, "-1 1 -9223372036854775808"},
+		{`: $((1 << -1)) $((-8 >> 65))`, "-9223372036854775808 -4"},
 	}
 	for _, c := range cases {
 		t.Run(c.source, func(t *testing.T) {

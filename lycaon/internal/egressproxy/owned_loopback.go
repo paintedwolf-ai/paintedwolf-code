@@ -51,7 +51,7 @@ func (c *ownedLoopbackConn) valid() bool {
 func (c *ownedLoopbackConn) Write(data []byte) (int, error) {
 	if !c.valid() {
 		c.once.Do(func() {
-			_ = c.Conn.Close()
+			_ = c.Close()
 			if c.refused != nil {
 				c.refused()
 			}

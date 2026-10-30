@@ -128,7 +128,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		return nil, nil, err
 	}
 	for name, value := range f.prefix {
-		if err := vars.Assign(ctx, name, value); err == nil {
+		if err = vars.Assign(ctx, name, value); err == nil {
 			err = vars.Export(ctx, name)
 		}
 		if err != nil {

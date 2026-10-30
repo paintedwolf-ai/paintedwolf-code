@@ -254,6 +254,7 @@ func parameterValue(scope ExpansionScope, part commandsurface.ParameterPart) (st
 		index, err := strconv.Atoi(name[len("PIPESTATUS[") : len(name)-1])
 		statuses := scopePipeStatuses(scope)
 		if err != nil || index < 0 || index >= len(statuses) {
+			//nolint:nilerr // An unrepresentable status index is unset, as is any out-of-range index.
 			return "", nil
 		}
 		return statuses[index], nil
@@ -268,6 +269,7 @@ func parameterValue(scope ExpansionScope, part commandsurface.ParameterPart) (st
 		index, err := strconv.Atoi(name)
 		positional := scope.Positional()
 		if err != nil || index > len(positional) {
+			//nolint:nilerr // An unrepresentable positional index is unset, as is any out-of-range index.
 			return "", nil
 		}
 		return positional[index-1], nil

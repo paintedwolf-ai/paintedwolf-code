@@ -116,6 +116,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
 			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted,
 		}
+		//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 		placement := placeResponseBody(resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
 		out.Body, out.BodyEncoding = placement.inline, placement.encoding
 		out.BodyOmitted, out.BodySpillPath = placement.omitted, placement.spillPath

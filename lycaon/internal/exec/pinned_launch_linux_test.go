@@ -20,30 +20,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type linuxPinnedPaths struct {
-	cwd, entry string
-	revoked    bool
-}
-
-func (p *linuxPinnedPaths) OpenExecutable(ctx context.Context, name string) (*os.File, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if p.revoked || name != p.entry {
-		return nil, os.ErrPermission
-	}
-	return os.Open(name)
-}
-func (p *linuxPinnedPaths) OpenCwd(ctx context.Context) (*os.File, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if p.revoked {
-		return nil, os.ErrPermission
-	}
-	return os.Open(p.cwd)
-}
-
 type linuxPinnedPayload struct {
 	Args               []string
 	Cwd, AuxExecutable string
@@ -99,9 +75,12 @@ func linuxPayloadExecfn() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer file.Close()
 		var buffer [4096]byte
 		n, err := file.ReadAt(buffer[:], int64(value))
+		closeErr := file.Close()
+		if closeErr != nil {
+			return "", closeErr
+		}
 		if zero := bytes.IndexByte(buffer[:n], 0); zero >= 0 {
 			return string(buffer[:zero]), nil
 		}

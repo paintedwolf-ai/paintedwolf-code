@@ -106,9 +106,9 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 		}
 		return result, nil
 	case "<<":
-		return left << (uint64(right) & 63), nil
+		return left << (uint64(right & 63)), nil
 	case ">>":
-		return left >> (uint64(right) & 63), nil
+		return left >> (uint64(right & 63)), nil
 	case "&":
 		return left & right, nil
 	case "|":
@@ -164,10 +164,16 @@ func parseArithmeticInteger(text string, span toolcontract.SourceSpan) (int64, e
 	if err != nil {
 		return 0, invalidValue(span, "an integer arithmetic operand")
 	}
-	if negative {
-		return -int64(value), nil
+	// Reconstruct the signed bit pattern without narrowing an unsigned value
+	// outside int64's positive range; arithmetic remains modulo 2^64.
+	signed := int64(value & math.MaxInt64)
+	if value > math.MaxInt64 {
+		signed += math.MinInt64
 	}
-	return int64(value), nil
+	if negative {
+		return -signed, nil
+	}
+	return signed, nil
 }
 
 func boolInt(value bool) int64 {

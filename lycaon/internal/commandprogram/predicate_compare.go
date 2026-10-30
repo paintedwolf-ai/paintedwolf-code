@@ -101,7 +101,7 @@ func compareDecimal(a, b decimalValue) int {
 		}
 		return 1
 	}
-	order := 0
+	var order int
 	if len(a.digits) < len(b.digits) {
 		order = -1
 	} else if len(a.digits) > len(b.digits) {

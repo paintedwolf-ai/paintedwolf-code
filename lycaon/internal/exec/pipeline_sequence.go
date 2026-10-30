@@ -140,6 +140,7 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	s.live, s.liveFiles = wired, files
 	s.mu.Unlock()
 
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	if err := startWiredStages(wired, s.opts.Started); err != nil {
 		s.mu.Lock()
 		s.live, s.liveFiles = nil, nil

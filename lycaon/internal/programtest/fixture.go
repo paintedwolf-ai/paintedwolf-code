@@ -113,6 +113,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	callID := fmt.Sprintf("model-call-%d", f.calls)
 	args := map[string]any{"command": source}
 	contract, _ := toolcontract.Lookup("command")
+	//nolint:contextcheck // Parent receipt setup uses the test lifetime so canceled execution still has an initiating receipt.
 	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
@@ -129,13 +130,14 @@ func (f *Fixture) Programs(t *testing.T) []string {
 	t.Helper()
 	rows, err := f.Database.QueryContext(t.Context(), `SELECT p.state FROM invocation_programs p ORDER BY p.started_at`)
 	testutil.FailErr(t, "read programs", err)
-	defer rows.Close()
+	defer func() { testutil.FailErr(t, "close program receipt rows", rows.Close()) }()
 	var out []string
 	for rows.Next() {
 		var state string
 		testutil.FailErr(t, "scan program", rows.Scan(&state))
 		out = append(out, state)
 	}
+	testutil.FailErr(t, "finish reading program receipt rows", rows.Err())
 	return out
 }
 
@@ -144,12 +146,13 @@ func (f *Fixture) Executions(t *testing.T) map[string]string {
 	t.Helper()
 	rows, err := f.Database.QueryContext(t.Context(), `SELECT operation_id, state FROM invocation_program_executions ORDER BY ordinal`)
 	testutil.FailErr(t, "read executions", err)
-	defer rows.Close()
+	defer func() { testutil.FailErr(t, "close program receipt rows", rows.Close()) }()
 	out := map[string]string{}
 	for rows.Next() {
 		var operation, state string
 		testutil.FailErr(t, "scan execution", rows.Scan(&operation, &state))
 		out[operation] += state + ";"
 	}
+	testutil.FailErr(t, "finish reading program receipt rows", rows.Err())
 	return out
 }

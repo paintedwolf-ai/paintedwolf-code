@@ -133,9 +133,7 @@ func resolveBoundStage(tokens []string) resolvedStage {
 		return resolvedStage{}
 	}
 	argv := make([]string, len(toks))
-	for i, t := range toks {
-		argv[i] = t
-	}
+	copy(argv, toks)
 	image := strings.ToLower(filepath.Base(argv[0]))
 	argv[0] = image
 	return resolvedStage{image: image, argv: argv}

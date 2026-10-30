@@ -82,7 +82,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
 		return nil, fmt.Errorf("screened stream spill requires explicit bounded input, claim and quota admission")
 	}
-	defer input.reader.Close()
+	defer func() { _ = input.reader.Close() }()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

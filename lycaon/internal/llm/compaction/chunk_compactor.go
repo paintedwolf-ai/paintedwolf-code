@@ -91,6 +91,7 @@ func (c *ChunkCompactor) CompactChunk(ctx context.Context, chunk ContentChunk, c
 		meta.CompactedTokens = meta.OriginalTokens
 		return content, meta, nil
 	case evidence.TranscriptDietAnchorResidue:
+		//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 		spillOut, strategy, ok := c.compactSpillSummarize(chunk, content, meta.OriginalTokens)
 		if ok {
 			meta.Strategy = strategy
@@ -139,6 +140,7 @@ func (c *ChunkCompactor) CompactChunk(ctx context.Context, chunk ContentChunk, c
 // compactSpillPointer spills full bytes and keeps a handle/spill-path residue.
 func (c *ChunkCompactor) compactSpillPointer(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string) {
 	if tooloutput.IsStructuredToolJSON(content) {
+		//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 		out, strategy := c.compactStructuredTool(chunk, content, originalTokens)
 		if strategy != "" {
 			strategy = "spill_pointer"
@@ -151,10 +153,12 @@ func (c *ChunkCompactor) compactSpillPointer(ctx context.Context, chunk ContentC
 // compactSpillIndex retains an outline and verbatim excerpts; lists use bounded windows.
 func (c *ChunkCompactor) compactSpillIndex(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string) {
 	if tooloutput.IsStructuredToolJSON(content) {
+		//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 		return c.compactStructuredTool(chunk, content, originalTokens)
 	}
 	retained := chunk.recallPointer()
 	if strings.TrimSpace(chunk.HostDataDir) != "" {
+		//nolint:contextcheck // This legacy host-blob API has no invocation context; admitted program streams carry theirs explicitly.
 		spill := tooloutput.SpillWholeRaw(chunk.HostDataDir, tooloutput.Screened(content), chunk.MaxToolSpillBytes)
 		if spill.SpillPath == "" || spill.SpillCapped || spill.RejectCode != "" {
 			return content, ""

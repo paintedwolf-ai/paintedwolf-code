@@ -61,7 +61,7 @@ func NewScreenedPipe(ctx context.Context, screen StreamScreen, source io.ReadClo
 	}()
 	go func() {
 		defer close(out.done)
-		defer out.closeSource()
+		defer func() { _ = out.closeSource() }()
 		metadata, err := screen.ScreenStream(screenCtx, source, pipe)
 		termination := StreamScreeningFailed
 		out.mu.Lock()

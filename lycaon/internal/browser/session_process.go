@@ -25,6 +25,7 @@ func launchBrowserProcess(ctx context.Context, l *launcher.Launcher, chromePath 
 	}
 	parser := launcher.NewURLParser().Context(ctx)
 	cmd.Stdout, cmd.Stderr = parser, parser
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	group, err := execpkg.StartInOwnGroup(cmd)
 	if err != nil {
 		cleanup()

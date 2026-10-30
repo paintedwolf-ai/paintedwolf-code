@@ -23,12 +23,19 @@ import (
 func requireAuthorityVocabularyCoverage(t *testing.T, covered map[hitl.AuthorityDeltaKind]bool) {
 	t.Helper()
 	root := filepath.Join(testutil.CheckoutRoot(t), "lycaon", "internal", "hitl")
-	packages, err := parser.ParseDir(token.NewFileSet(), root, func(info os.FileInfo) bool {
-		return !strings.HasSuffix(info.Name(), "_test.go")
-	}, parser.SkipObjectResolution)
-	testutil.FailErr(t, "read authority owner declarations", err)
+	entries, err := os.ReadDir(root)
+	testutil.FailErr(t, "read authority owner source inventory", err)
+	files := []*ast.File{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, entry.Name()), nil, parser.SkipObjectResolution)
+		testutil.FailErr(t, "read authority owner declaration file", err)
+		files = append(files, file)
+	}
 	declared := map[hitl.AuthorityDeltaKind]bool{}
-	for _, file := range packages["hitl"].Files {
+	for _, file := range files {
 		for _, declaration := range file.Decls {
 			group, ok := declaration.(*ast.GenDecl)
 			if !ok || group.Tok != token.CONST {
@@ -147,6 +154,7 @@ func approvalDatabaseSnapshot(t *testing.T, database *sql.DB) map[string][]strin
 	state := map[string][]string{"schema": approvalQuerySnapshot(t, database, "SELECT * FROM sqlite_schema")}
 	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='table'`)
 	testutil.FailErr(t, "enumerate retained tables", err)
+	defer func() { testutil.FailErr(t, "close retained table inventory", rows.Close()) }()
 	var tables []string
 	for rows.Next() {
 		var table string
