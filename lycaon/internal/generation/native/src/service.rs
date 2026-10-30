@@ -52,6 +52,7 @@ impl Service {
     /// time. All appends stay staged until the loop's terminal state; rollback and
     /// error paths drop them, leaving committed state as the request found it.
     fn run(&self, req: &GenerateRequest, out: &Outbound<impl Write + Send>, cancel: &Arc<AtomicU64>) -> Result<()> {
+        let canceled = || cancel.load(Ordering::SeqCst) == 0;
         let mut cache = self.cache.lock().map_err(|_| Error::Device("cache poisoned".into()))?;
 
         // A handle resolves only when its retained token state is still committed
@@ -91,12 +92,12 @@ impl Service {
                 cache.stage(&staged_kv)?;
                 l
             };
-            if cancel.load(Ordering::SeqCst) == gen_mark {
+            if canceled() {
                 return Ok(StopReason::Canceled);
             }
 
             loop {
-                if cancel.load(Ordering::SeqCst) == gen_mark {
+                if canceled() {
                     return Ok(StopReason::Canceled);
                 }
                 if generated >= req.max_new_tokens {
@@ -176,17 +177,22 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
     // Reader thread: stdin stays live during generation. Requests it reads while a
     // generation runs queue behind the cache lock; cancel applies by id.
     let reader_outbound = Arc::clone(&outbound);
-    let (tx, rx) = std::sync::mpsc::channel::<Request>();
+    let (tx, rx) = std::sync::mpsc::channel::<(u64, Request)>();
+    // The reader applies cancel directly: the main loop is inside a running
+    // generation and could not drain a queued cancel until it finished.
     std::thread::spawn(move || {
         let mut reader = BufReader::new(reader);
         loop {
             match protocol::read_frame(&mut reader) {
-                Ok(Some(bytes)) => match serde_json::from_slice::<Request>(&bytes) {
-                    Ok(req) => {
-                        if tx.send(req).is_err() {
-                            return;
+                Ok(Some(bytes)) => match serde_json::from_slice::<protocol::Inbound>(&bytes) {
+                    Ok(inbound) => match inbound.body {
+                        Request::Cancel { request_id } => apply_cancel(&reader_outbound, &request_id),
+                        body => {
+                            if tx.send((inbound.id, body)).is_err() {
+                                return;
+                            }
                         }
-                    }
+                    },
                     Err(e) => {
                         let _ = reader_outbound.push(&Event::Failed {
                             request_id: String::new(),
@@ -203,17 +209,26 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
         }
     });
 
-    for req in rx {
+    for (frame_id, req) in rx {
+        // Every reply echoes the request's frame id; streamed events correlate by
+        // their own request_id.
         match req {
             Request::Hello => outbound.push(&serde_json::json!({
+                "id": frame_id,
                 "service": "nativegen",
                 "protocol": 1,
             }))?,
             Request::Load { manifest: _, weights, device, .. } => {
-                let dec = crate::checkpoint::load_decoder(&weights, &device)?;
-                *service.lock().map_err(|_| Error::Device("service poisoned".into()))? =
-                    Some(Arc::new(Service::new(dec, 0)));
-                outbound.push(&serde_json::json!({"loaded": true}))?;
+                match crate::checkpoint::load_decoder(&weights, &device) {
+                    Ok(dec) => {
+                        *service.lock().map_err(|_| Error::Device("service poisoned".into()))? =
+                            Some(Arc::new(Service::new(dec, 0)));
+                        outbound.push(&serde_json::json!({"id": frame_id, "loaded": true}))?;
+                    }
+                    Err(e) => outbound.push(&serde_json::json!({
+                        "id": frame_id, "loaded": false, "error": e.to_string()
+                    }))?,
+                }
             }
             Request::Generate(g) => {
                 let svc = service.lock().map_err(|_| Error::Device("service poisoned".into()))?.clone();
@@ -226,17 +241,26 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
                     Some((g.request_id.clone(), Arc::clone(&cancel_mark)));
                 let result = svc.run(&g, &outbound, &cancel_mark);
                 *outbound.active.lock().map_err(|_| Error::Device("active poisoned".into()))? = None;
-                result?;
-            }
-            Request::Cancel { request_id } => {
-                if let Some(svc) = service.lock().map_err(|_| Error::Device("service poisoned".into()))?.as_ref() {
-                    svc.cancel(&outbound, &request_id);
+                if let Err(e) = result {
+                    outbound.push(&Event::Failed { request_id: g.request_id.clone(), error: e.to_string() })?;
                 }
             }
+            Request::Cancel { request_id } => apply_cancel(&outbound, &request_id),
             Request::Shutdown => return Ok(()),
         }
     }
     Ok(())
+}
+
+/// Cancel the named request if it is the active one. Safe from any thread.
+fn apply_cancel<W: Write + Send + 'static>(outbound: &Outbound<W>, request_id: &str) {
+    if let Ok(active) = outbound.active.lock() {
+        if let Some((id, mark)) = active.as_ref() {
+            if id == request_id {
+                mark.store(0, Ordering::SeqCst);
+            }
+        }
+    }
 }
 
 
