@@ -38,8 +38,8 @@ func TestDraftScratchUnlocksFolderModeCapabilities(t *testing.T) {
 		t.Fatal("folder mode missing command")
 	}
 	for _, name := range []string{"read", "grep"} {
-		if !folderPlan.Addressable(name) {
-			t.Fatalf("folder mode cannot address tool %q", name)
+		if folderPlan.Addressable(name) {
+			t.Fatalf("folder mode exposes retired standalone tool %q instead of command", name)
 		}
 	}
 	if !folderPlan.Addressable("pack_board") {

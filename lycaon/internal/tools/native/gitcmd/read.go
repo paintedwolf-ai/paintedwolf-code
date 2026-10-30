@@ -114,7 +114,7 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 	if spec.Name == "git config" {
 		// Repository configuration only: the hermetic invocation's own
 		// overrides are not the user's configuration.
-		c.args = append([]string{"config", "--local"}, c.args[1:]...)
+		c.args = configReadArgs(bound)
 	}
 
 	return c, nil
@@ -221,18 +221,6 @@ func remoteOperands(spec toolcontract.CommandSpecification, bound commandprogram
 		return nil
 	}
 	return operandInvalid(spec, operands[0], "-v or get-url NAME")
-}
-
-// configOperands: exactly one read action and nothing that sets a value.
-func configOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
-	actions := 0
-	for _, key := range []string{"--get", "--get-regexp", "--list", "-l"} {
-		actions += len(bound.Options(key))
-	}
-	if actions != 1 {
-		return operandInvalid(spec, spec.Name, "exactly one of --get KEY, --get-regexp PATTERN or --list")
-	}
-	return noOperands(spec, bound)
 }
 
 // reflogOperands admits the listing: an optional show and at most one REF.
