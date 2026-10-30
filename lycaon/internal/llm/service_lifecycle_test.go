@@ -93,6 +93,9 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 					return
 				}
 				registry, err := NewRegistry(ctx, catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+				if err == nil {
+					registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+				}
 				done <- result{registry != nil, err}
 			}()
 			select {
