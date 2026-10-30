@@ -165,8 +165,9 @@ func invalidRequest(format string, args ...any) *RequestInvalidError {
 
 // RedirectError records a refused redirect and the hops already followed.
 type RedirectError struct {
-	Reason string
-	Hops   []Hop
+	LimitExceeded bool
+	Reason        string
+	Hops          []Hop
 }
 
 func (e *RedirectError) Error() string { return e.Reason }
@@ -209,4 +210,3 @@ type ExchangeError struct {
 
 func (e *ExchangeError) Error() string { return e.Err.Error() }
 func (e *ExchangeError) Unwrap() error { return e.Err }
-

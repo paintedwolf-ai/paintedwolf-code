@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/commandsurface/commandsurface.programCompiler",
+  "kind": "algorithm",
+  "workstream": "portable-command-parser",
+  "disposition": "retain",
+  "reason": "Retain this pure syntax-validation and typed-lowering algorithm across three files at 416 lines and 25 methods. Shared source positions, syntax counters, quote proofs and allocation-ledger ordering form one boundary without effect or admission authority. Reviewed parser/lowering, live execution identity and independent snapshot-lease contracts support this shape; further growth or shape changes require renewed review.",
+  "reviewed_commit": "0f7b18249b7b85bcb53faab5839618eb3db19fef",
+  "ceiling": 416,
+  "boundaries": {
+    "lycaon/internal/commandsurface/program_parse_test.go": "463aae58ad77482ac77c7ffe0e5008521b3a7d54d1c9f8f292f5af4b011858f7",
+    "lycaon/internal/commandsurface/program_scratch_test.go": "3150c84e9bb2520d73ad1f8d3ff101bc36caada7e746b04049cf371981d46251",
+    "lycaon/internal/commandsurface/program_retention_test.go": "516f89c235845fd14a56ac37774982b6d1cfe3b39830d74de973a1eeff8c730f",
+    "lycaon/internal/commandsurface/program_identity_test.go": "0b94a4dd23979a0584393bdd7176787a1bd5ee1102467aa21800c94d328f1392"
+  },
+  "reviewed_shape": "8b47e979f889c0ed5f6776dca33913752bbf6a44fdd35fb712a9eac5883a56f9"
+}

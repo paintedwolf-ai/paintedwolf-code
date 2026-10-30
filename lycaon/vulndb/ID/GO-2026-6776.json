@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.21.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-77524",
+  "GHSA-637c-6jxx-4rwm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6776"
+ },
+ "details": "KEDA: Privilege escalation from namespace admin to cluster admin via KEDA TriggerAuthentication in github.com/kedacore/keda",
+ "id": "GO-2026-6776",
+ "modified": "2026-10-19T21:08:35Z",
+ "published": "2026-10-19T21:08:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kedacore/keda/security/advisories/GHSA-637c-6jxx-4rwm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-77524"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kedacore/keda/commit/1e21cc798dedd079e696cdb45388eddc5e18365d"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kedacore/keda/releases/tag/v2.21.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "KEDA: Privilege escalation from namespace admin to cluster admin via KEDA TriggerAuthentication in github.com/kedacore/keda"
+}

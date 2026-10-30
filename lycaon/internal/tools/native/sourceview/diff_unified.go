@@ -1,6 +1,7 @@
 package sourceview
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,23 +19,141 @@ func SplitLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
-type diffOp struct {
-	tag  byte
-	line string
+// DiffOp is one edit-script line: ' ' kept, '-' removed, '+' added. Old and
+// New are zero-based indexes into the compared inputs (-1 when absent).
+type DiffOp struct {
+	Tag      byte
+	Old, New int
 }
 
+// DiffHunk spans ops[StartOp:EndOp]; starts are one-based line numbers.
+type DiffHunk struct {
+	OldStart, OldCount, NewStart, NewCount int
+	StartOp, EndOp                         int
+}
+
+// ErrDiffTooLarge reports a comparison above the caller's work ceiling.
+var ErrDiffTooLarge = errors.New("diff comparison exceeds its work ceiling")
+
+// DiffScript computes a longest-common-subsequence edit script. equal decides
+// line identity (so whitespace-insensitive modes compare transformed lines
+// while ops still index the original lines). Common prefix and suffix are
+// matched directly; maxCells bounds the remaining comparison table, zero
+// meaning unbounded.
+func DiffScript(oldLines, newLines []string, equal func(a, b string) bool, maxCells int64) ([]DiffOp, error) {
+	if equal == nil {
+		equal = func(a, b string) bool { return a == b }
+	}
+	prefix := 0
+	for prefix < len(oldLines) && prefix < len(newLines) && equal(oldLines[prefix], newLines[prefix]) {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(oldLines)-prefix && suffix < len(newLines)-prefix && equal(oldLines[len(oldLines)-1-suffix], newLines[len(newLines)-1-suffix]) {
+		suffix++
+	}
+	a, b := oldLines[prefix:len(oldLines)-suffix], newLines[prefix:len(newLines)-suffix]
+	n, m := len(a), len(b)
+	if maxCells > 0 && int64(n+1)*int64(m+1) > maxCells {
+		return nil, ErrDiffTooLarge
+	}
+	width := m + 1
+	dp := make([]int32, (n+1)*width)
+	for i := 1; i <= n; i++ {
+		for j := 1; j <= m; j++ {
+			switch {
+			case equal(a[i-1], b[j-1]):
+				dp[i*width+j] = dp[(i-1)*width+j-1] + 1
+			case dp[(i-1)*width+j] >= dp[i*width+j-1]:
+				dp[i*width+j] = dp[(i-1)*width+j]
+			default:
+				dp[i*width+j] = dp[i*width+j-1]
+			}
+		}
+	}
+	middle := make([]DiffOp, 0, n+m)
+	for i, j := n, m; i > 0 || j > 0; {
+		switch {
+		case i > 0 && j > 0 && equal(a[i-1], b[j-1]):
+			middle = append(middle, DiffOp{Tag: ' ', Old: prefix + i - 1, New: prefix + j - 1})
+			i--
+			j--
+		case j > 0 && (i == 0 || dp[i*width+j-1] >= dp[(i-1)*width+j]):
+			middle = append(middle, DiffOp{Tag: '+', Old: -1, New: prefix + j - 1})
+			j--
+		default:
+			middle = append(middle, DiffOp{Tag: '-', Old: prefix + i - 1, New: -1})
+			i--
+		}
+	}
+	ops := make([]DiffOp, 0, prefix+len(middle)+suffix)
+	for k := 0; k < prefix; k++ {
+		ops = append(ops, DiffOp{Tag: ' ', Old: k, New: k})
+	}
+	for k := len(middle) - 1; k >= 0; k-- {
+		ops = append(ops, middle[k])
+	}
+	for k := 0; k < suffix; k++ {
+		ops = append(ops, DiffOp{Tag: ' ', Old: len(oldLines) - suffix + k, New: len(newLines) - suffix + k})
+	}
+	return ops, nil
+}
+
+// DiffHunks groups changed ops with context lines; changes closer than
+// 2*context+1 kept lines share one hunk. changed decides which op indexes count as
+// changes, so ignored changes neither open nor extend a hunk.
+func DiffHunks(ops []DiffOp, context int, changed func(index int) bool) []DiffHunk {
+	if context < 0 {
+		context = 0
+	}
+	if changed == nil {
+		changed = func(i int) bool { return ops[i].Tag != ' ' }
+	}
+	type span struct{ start, end int }
+	var merged []span
+	for i := range ops {
+		if !changed(i) {
+			continue
+		}
+		if len(merged) > 0 && i <= merged[len(merged)-1].end+2*context {
+			merged[len(merged)-1].end = i + 1
+			continue
+		}
+		merged = append(merged, span{i, i + 1})
+	}
+	hunks := make([]DiffHunk, 0, len(merged))
+	for _, c := range merged {
+		h := DiffHunk{StartOp: max(c.start-context, 0), EndOp: min(c.end+context, len(ops))}
+		oldLine, newLine := 1, 1
+		for _, op := range ops[:h.StartOp] {
+			if op.Tag != '+' {
+				oldLine++
+			}
+			if op.Tag != '-' {
+				newLine++
+			}
+		}
+		h.OldStart, h.NewStart = oldLine, newLine
+		for _, op := range ops[h.StartOp:h.EndOp] {
+			if op.Tag != '+' {
+				h.OldCount++
+			}
+			if op.Tag != '-' {
+				h.NewCount++
+			}
+		}
+		hunks = append(hunks, h)
+	}
+	return hunks
+}
+
+// UnifiedDiff renders the structured tools' unified preview.
 func UnifiedDiff(fromName, toName string, oldLines, newLines []string, context int) string {
 	if len(oldLines) == 0 && len(newLines) == 0 {
 		return ""
 	}
-	if context < 0 {
-		context = 0
-	}
-	ops := diffOpsFromLCS(oldLines, newLines)
-	if len(ops) == 0 {
-		return ""
-	}
-	hunks := buildUnifiedHunks(ops, context)
+	ops, _ := DiffScript(oldLines, newLines, nil, 0)
+	hunks := DiffHunks(ops, context, nil)
 	if len(hunks) == 0 {
 		return ""
 	}
@@ -45,138 +164,26 @@ func UnifiedDiff(fromName, toName string, oldLines, newLines []string, context i
 	b.WriteString(toName)
 	b.WriteString("\n")
 	for _, h := range hunks {
-		fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldCount, h.newStart, h.newCount)
-		for idx := h.startOp; idx < h.endOp; idx++ {
-			b.WriteByte(ops[idx].tag)
+		oldStart, newStart := h.OldStart, h.NewStart
+		if h.OldCount == 0 {
+			oldStart = max(oldStart-1, 1)
+		}
+		if h.NewCount == 0 {
+			newStart = max(newStart-1, 1)
+		}
+		fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", oldStart, h.OldCount, newStart, h.NewCount)
+		for _, op := range ops[h.StartOp:h.EndOp] {
+			b.WriteByte(op.Tag)
 			b.WriteByte(' ')
-			b.WriteString(ops[idx].line)
+			if op.Tag == '+' {
+				b.WriteString(newLines[op.New])
+			} else {
+				b.WriteString(oldLines[op.Old])
+			}
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
-}
-
-func diffOpsFromLCS(a, b []string) []diffOp {
-	n, m := len(a), len(b)
-	if n == 0 && m == 0 {
-		return nil
-	}
-	dp := make([][]int, n+1)
-	for i := range dp {
-		dp[i] = make([]int, m+1)
-	}
-	for i := 1; i <= n; i++ {
-		for j := 1; j <= m; j++ {
-			if a[i-1] == b[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
-			} else if dp[i-1][j] >= dp[i][j-1] {
-				dp[i][j] = dp[i-1][j]
-			} else {
-				dp[i][j] = dp[i][j-1]
-			}
-		}
-	}
-	i, j := n, m
-	ops := make([]diffOp, 0, n+m)
-	for i > 0 || j > 0 {
-		switch {
-		case i > 0 && j > 0 && a[i-1] == b[j-1]:
-			ops = append([]diffOp{{tag: ' ', line: a[i-1]}}, ops...)
-			i--
-			j--
-		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
-			ops = append([]diffOp{{tag: '+', line: b[j-1]}}, ops...)
-			j--
-		default:
-			ops = append([]diffOp{{tag: '-', line: a[i-1]}}, ops...)
-			i--
-		}
-	}
-	return ops
-}
-
-type unifiedHunk struct {
-	oldStart int // 1-based
-	oldCount int
-	newStart int // 1-based
-	newCount int
-	startOp  int
-	endOp    int // exclusive
-}
-
-func buildUnifiedHunks(ops []diffOp, context int) []unifiedHunk {
-	type span struct{ start, end int }
-	var changes []span
-	for i, op := range ops {
-		if op.tag != ' ' {
-			changes = append(changes, span{i, i + 1})
-		}
-	}
-	if len(changes) == 0 {
-		return nil
-	}
-	merged := []span{changes[0]}
-	for _, c := range changes[1:] {
-		last := &merged[len(merged)-1]
-		if c.start <= last.end+2*context+1 {
-			if c.end > last.end {
-				last.end = c.end
-			}
-			continue
-		}
-		merged = append(merged, c)
-	}
-	hunks := make([]unifiedHunk, 0, len(merged))
-	for _, c := range merged {
-		start := c.start - context
-		if start < 0 {
-			start = 0
-		}
-		end := c.end + context
-		if end > len(ops) {
-			end = len(ops)
-		}
-		h := unifiedHunk{startOp: start, endOp: end}
-		oldLine, newLine := 1, 1
-		for idx := 0; idx < h.startOp; idx++ {
-			switch ops[idx].tag {
-			case ' ':
-				oldLine++
-				newLine++
-			case '-':
-				oldLine++
-			case '+':
-				newLine++
-			}
-		}
-		h.oldStart = oldLine
-		h.newStart = newLine
-		for idx := h.startOp; idx < h.endOp; idx++ {
-			switch ops[idx].tag {
-			case ' ':
-				h.oldCount++
-				h.newCount++
-			case '-':
-				h.oldCount++
-			case '+':
-				h.newCount++
-			}
-		}
-		if h.oldCount == 0 {
-			h.oldStart--
-			if h.oldStart < 1 {
-				h.oldStart = 1
-			}
-		}
-		if h.newCount == 0 {
-			h.newStart--
-			if h.newStart < 1 {
-				h.newStart = 1
-			}
-		}
-		hunks = append(hunks, h)
-	}
-	return hunks
 }
 
 func TruncateDiffOutput(s string, maxBytes int) (string, bool) {

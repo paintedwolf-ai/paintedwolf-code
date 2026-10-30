@@ -3,13 +3,14 @@ id: CHMOD_SYMLINK_ESCAPE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.path
   - paintedwolf.path_escape
 when: paintedwolf.rejection_code == "CHMOD_SYMLINK_ESCAPE"

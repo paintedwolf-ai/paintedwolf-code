@@ -32,11 +32,15 @@ func SSHKnownHostsPath(c Confinement) string {
 
 // EgressCommand attributes a broker connection to its command.
 type EgressCommand struct {
-	SessionID     string
-	RootSessionID string // coordinator chat id when SessionID is a worker; empty ⇒ SessionID is the chat
-	ProjectID     string
-	ProjectDir    string
-	ToolCallID    string
+	// OwnedLoopbackPorts is conditional per-invocation admission, never a raw grant.
+	OwnedLoopbackPorts []uint16
+	SessionID          string
+	RootSessionID      string // coordinator chat id when SessionID is a worker; empty ⇒ SessionID is the chat
+	ProjectID          string
+	ProjectDir         string
+	ToolCallID         string
+	// ActionID is the native child execution, separate from the actual model call.
+	ActionID string
 	// ToolName is the argv-running tool associated with this token (command, verify, …).
 	ToolName    string
 	Image       string // semantic tool image when there is no command line
@@ -47,6 +51,14 @@ type EgressCommand struct {
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.
 	UserRule *EgressUserRule
+}
+
+// EffectActionID preserves retained model actions and separates native children.
+func (c EgressCommand) EffectActionID() string {
+	if c.ActionID != "" {
+		return c.ActionID
+	}
+	return c.ToolCallID
 }
 
 // EgressUserRule is a redaction-safe rule citation.
@@ -197,12 +209,13 @@ func PostureString(p EgressPosture) string {
 
 // egressBrokerT coordinates per-action network decisions.
 type egressBrokerT struct {
-	mu       sync.Mutex
-	verdict  scopedstore.LRU[bool]    // exact action + approval subject key → allow
-	waiters  map[string][]chan bool   // keys currently parked on the resolver
-	tokens   map[string]EgressCommand // action lineage → identity
-	egress   map[string][]EgressHost  // action lineage → bounded endpoint decisions
-	loopback map[string]func(uint16) bool
+	mu            sync.Mutex
+	verdict       scopedstore.LRU[bool]    // exact action + approval subject key → allow
+	waiters       map[string][]chan bool   // keys currently parked on the resolver
+	tokens        map[string]EgressCommand // action lineage → identity
+	egress        map[string][]EgressHost  // action lineage → bounded endpoint decisions
+	loopback      map[string]func(uint16) bool
+	ownedLoopback *ownedLoopbackRegistration
 	// lineages retains an action's identity past its lease so a process it left
 	// running can still be placed against its project.
 	lineages      map[string]EgressCommand
@@ -534,7 +547,7 @@ func (b *egressBrokerT) decideAttributedEndpoint(ctx context.Context, cmd Egress
 		return allow
 	}
 	cmd.UserRule = rule
-	return b.askOrCache(ctx, cmd, true, cmd.ToolCallID, ep, det)
+	return b.askOrCache(ctx, cmd, true, cmd.EffectActionID(), ep, det)
 }
 
 func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string, ep egressproxy.Endpoint) bool {
@@ -577,7 +590,7 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 	if src, posture := currentEgressDetection(cmd); src != nil {
 		observation := EgressDetectionObservation{
 			Endpoint: ep, Image: cmd.Image, CommandLine: cmd.CommandLine,
-			SessionID: cmd.SessionID, ActionID: cmd.ToolCallID,
+			SessionID: cmd.SessionID, ActionID: cmd.EffectActionID(),
 			Origin: origin, DecisionStage: "pre_dial",
 		}
 		if m, ok := src.Match(observation); ok && src.Escalates(m, posture) {

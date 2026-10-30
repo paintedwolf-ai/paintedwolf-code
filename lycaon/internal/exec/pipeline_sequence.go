@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // sequenceRun drives pipe groups and sequenced stages in order.
@@ -139,6 +140,7 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	s.live, s.liveFiles = wired, files
 	s.mu.Unlock()
 
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	if err := startWiredStages(wired, s.opts.Started); err != nil {
 		s.mu.Lock()
 		s.live, s.liveFiles = nil, nil
@@ -215,23 +217,29 @@ func (s *sequenceRun) recordLaunchFailure(group StageGroup, err error) {
 	s.lastExit = -1
 }
 
-// groupExit returns the exit code of the group's first failed stage.
+// groupExit returns the rightmost nonzero status after executor-classified
+// expected consumer closure, independently of redirect publication.
 func (s *sequenceRun) groupExit(group StageGroup) int {
+	statuses := make([]int, 0, group.End-group.Start)
 	for i := group.Start; i < group.End; i++ {
 		if s.stageFailed(group, i) {
-			return exitCodeFromWait(s.waitErrs[i])
+			statuses = append(statuses, exitCodeFromWait(s.waitErrs[i]))
 		}
 	}
-	return 0
+	return toolcontract.RightmostNonzeroStatus(statuses)
 }
 
 // stageFailed reports a non-zero status, except SIGPIPE ending a stage whose
 // reader finished first: that is a successful early-consumer exit.
 func (s *sequenceRun) stageFailed(group StageGroup, i int) bool {
-	if !group.Final(i) && killedBySIGPIPE(s.waitErrs[i]) {
+	if s.expectedConsumerClosure(group, i) {
 		return false
 	}
 	return exitCodeFromWait(s.waitErrs[i]) != 0
+}
+
+func (s *sequenceRun) expectedConsumerClosure(group StageGroup, i int) bool {
+	return (!group.Final(i) || s.opts.HostConsumer) && killedBySIGPIPE(s.waitErrs[i])
 }
 
 func (s *sequenceRun) stopped() bool {
@@ -272,6 +280,7 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 				code := exitCodeFromWait(s.waitErrs[i])
 				stageRuns[i].ExitCode = &code
 				stageRuns[i].Failed = s.stageFailed(group, i)
+				stageRuns[i].expectedConsumerClosure = s.expectedConsumerClosure(group, i)
 			}
 		}
 	}

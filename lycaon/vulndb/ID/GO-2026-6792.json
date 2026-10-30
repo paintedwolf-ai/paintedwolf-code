@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.7.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-77375",
+  "GHSA-q7pc-356p-hggc"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6792"
+ },
+ "details": "SFTPGo: Denial of service via malformed SSH channel request in github.com/drakkan/sftpgo",
+ "id": "GO-2026-6792",
+ "modified": "2026-10-19T21:08:35Z",
+ "published": "2026-10-19T21:08:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/drakkan/sftpgo/security/advisories/GHSA-q7pc-356p-hggc"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-77375"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/drakkan/sftpgo/commit/4f751232d7025cf2f7360e01ee8dca81e74b48b0"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SFTPGo: Denial of service via malformed SSH channel request in github.com/drakkan/sftpgo"
+}

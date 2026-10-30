@@ -2,17 +2,24 @@ package toolhost
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
+	owners            programOwnerTools
 	bgRegistry        *bgprocess.Registry
 	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
@@ -38,6 +45,9 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	}
 	if r.commandStopTool != nil {
 		r.commandStopTool.Registry = reg
+	}
+	if programs := r.programs(); programs != nil {
+		programs.Supervisor.Background = reg
 	}
 	if r.reviews != nil {
 		r.reviews.SetBackgroundCommandResolver(r.backgroundCommandLine)
@@ -100,4 +110,63 @@ func (r *CommandServices) backgroundCommandLine(sessionID, handle string) string
 		return ""
 	}
 	return command
+}
+
+// ProgramServices are the host owners the command program entry composes.
+type ProgramServices struct {
+	Recorder  *invocation.SQLRecorder
+	Blobs     blobstore.Store
+	Projector *captureprojection.Projector
+	HTTP      httpaction.Deps
+	Progress  toolexecution.ProgramProgressFacts
+	Sessions  command.SessionOwners
+	// ExternalHidden withdraws the explicit external selector.
+	ExternalHidden bool
+}
+
+func (r *CommandServices) programs() *command.ProgramRuntime {
+	if r == nil || r.commandTool == nil {
+		return nil
+	}
+	return r.commandTool.Programs
+}
+
+// SetProgramServices completes the program runtime at host composition. An
+// owner that cannot be composed fails host startup rather than leaving
+// programs without their native utilities.
+func (r *CommandServices) SetProgramServices(services ProgramServices) error {
+	programs := r.programs()
+	if programs == nil {
+		return nil
+	}
+	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
+	programs.Progress, programs.Sessions = services.Progress, services.Sessions
+	programs.Supervisor.Interrupter = services.Recorder
+	programs.ExternalHidden = services.ExternalHidden
+	if programs.Executor != nil {
+		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
+	}
+	owners, err := r.owners.compose(services)
+	if err != nil {
+		return fmt.Errorf("compose command program owners: %w", err)
+	}
+	programs.Owners = owners
+	return nil
+}
+
+// setProgramExecutor binds the executor that admits each native child.
+func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
+	if programs := r.programs(); programs != nil {
+		programs.Executor = executor
+		executor.SetProgramEntry("command", command.CaptureInvocation)
+	}
+}
+
+// DisposeProgramSession releases the session's program job owner after closing
+// admission and draining its registered jobs.
+func (r *CommandServices) DisposeProgramSession(ctx context.Context, sessionID string) error {
+	if programs := r.programs(); programs != nil {
+		return programs.Supervisor.DisposeSession(ctx, sessionID)
+	}
+	return nil
 }

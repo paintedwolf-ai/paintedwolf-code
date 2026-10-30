@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -49,6 +50,12 @@ func ensureIgnoreOverlayFormat(loc fseffect.Location) error {
 }
 
 func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string) error {
+	return applyAgentFileAdmitted(ctx, tctx, target, after, before, baseSHA256, nil)
+}
+
+// applyAgentFileAdmitted runs admit after review and the base check, just
+// before the reviewed bytes commit, so pinned inputs cannot move during review.
+func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string, admit func() error) error {
 	if before == nil && baseSHA256 != "" {
 		before = []byte{}
 	}
@@ -85,6 +92,11 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 			if err := verifyMutationSnapshot(target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
 			}
+			if admit != nil {
+				if err := admit(); err != nil {
+					return err
+				}
+			}
 			var err error
 			journal, err = prepareAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false)
 			if err != nil {
@@ -94,7 +106,7 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 			return err
 		},
 	})
-	if result.Committed {
+	if result.Publication.Committed() {
 		delivery.Commit(ctx)
 	}
 	return finishAgentMutation(ctx, tctx, mutation, journal, err)
@@ -168,7 +180,7 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			return prepareErr
 		},
 	})
-	if result.Committed {
+	if result.Publication.Committed() {
 		delivery.Commit(ctx)
 	}
 	return result, finishAgentMutation(ctx, tctx, mutation, journal, err)
@@ -352,9 +364,30 @@ func chmodAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 	})
 }
 
+// timesAgentPath sets access and modification times through the reviewed
+// metadata path; a nil time is left unchanged.
+func timesAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, access, modify *time.Time) error {
+	return applyAgentMetadataChange(ctx, tctx, target, timesDescription(access, modify), func() error {
+		_, err := fseffect.ChangeTimes(fseffect.TimesRequest{Location: target.Location, Access: access, Modify: modify})
+		return err
+	})
+}
+
+func timesDescription(access, modify *time.Time) string {
+	parts := make([]string, 0, 2)
+	if access != nil {
+		parts = append(parts, "access time "+access.UTC().Format(time.RFC3339))
+	}
+	if modify != nil {
+		parts = append(parts, "modification time "+modify.UTC().Format(time.RFC3339))
+	}
+	return "Set " + strings.Join(parts, " and ") + "."
+}
+
 func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, uid, gid int) error {
 	return applyAgentMetadataChange(ctx, tctx, target, fmt.Sprintf("Set file owner to uid %d and gid %d.", uid, gid), func() error {
-		return fseffect.Chown(target.Location, uid, gid)
+		_, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: target.Location, UID: uid, GID: gid})
+		return err
 	})
 }
 

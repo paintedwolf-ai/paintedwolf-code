@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.0.0"
+      },
+      {
+       "fixed": "3.8.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-41504",
+  "GHSA-prpw-wwv7-xjjr"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6669"
+ },
+ "details": "Coraza: Native audit-log format allows CRLF injection and log forgery via request body and header fields in github.com/corazawaf/coraza",
+ "id": "GO-2026-6669",
+ "modified": "2026-10-20T00:20:51Z",
+ "published": "2026-10-20T00:20:51Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/corazawaf/coraza/security/advisories/GHSA-prpw-wwv7-xjjr"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/corazawaf/coraza/commit/a3079325547c7c1e08522aed4d6468f25d080e25"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/corazawaf/coraza/releases/tag/v3.8.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Coraza: Native audit-log format allows CRLF injection and log forgery via request body and header fields in github.com/corazawaf/coraza"
+}

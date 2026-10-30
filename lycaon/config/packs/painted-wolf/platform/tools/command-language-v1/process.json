@@ -170,6 +170,7 @@
           "value_role": "signal",
           "fixture_id": "kill-option-s",
           "consumption": "fixed",
+          "shorthand": "word",
           "sample_values": [
             "TERM"
           ]
@@ -429,6 +430,7 @@
     },
     {
       "name": "external",
+      "operands_end_options": true,
       "aliases": [],
       "family": "process",
       "owner": "processes",

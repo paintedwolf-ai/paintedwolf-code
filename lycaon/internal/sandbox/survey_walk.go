@@ -57,6 +57,9 @@ type SurveyOptions struct {
 	OnNestedRepoPruned func(abs string)
 	// Budgets bound what the walk reads. Zero fields are unbounded.
 	Budgets SurveyBudgets
+	// OnReadError precedes OnBoundary for failed directory reads.
+	// A nil result continues traversal; a returned error stops it.
+	OnReadError func(rel string, err error) error
 	// OnBoundary reports scope, budget, and unreadable-directory boundaries.
 	OnBoundary func(SurveyBoundary)
 	// A nil Scope imposes no additional admission rules.

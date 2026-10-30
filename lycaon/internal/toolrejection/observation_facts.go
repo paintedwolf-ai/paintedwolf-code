@@ -306,6 +306,7 @@ var rejectCodeObservation = map[string]string{
 	"TOOL_ARGS_MALFORMED":                       "args_malformed",
 	"TOOL_ARGS_TRUNCATED":                       "args_truncated",
 	ToolOwnerFailedCode:                         "owner_failed",
+	ToolOwnerInterruptedCode:                    "owner_interrupted",
 	"TOOL_OUTPUT_SPILL_UNAVAILABLE":             "output_spill_unavailable",
 	"TOOL_OUTPUT_SPILL_CAP_EXCEEDED":            "output_spill_cap_exceeded",
 	"TOOL_PROFILE_DENIED":                       "profile_denied",
@@ -340,5 +341,6 @@ var rejectCodeObservation = map[string]string{
 	"WORKFLOW_DELEGATION_NOT_READY":             "delegation_not_ready",
 	"WORKFLOW_TRANSITION_INACTIVE":              "transition_inactive",
 	"WRITE_BINARY_DENIED":                       "binary_denied",
+	"WRITE_PATH_DENIED":                         "path_denied",
 	"WRITE_SCOPE_DENIED":                        "policy_denied",
 }

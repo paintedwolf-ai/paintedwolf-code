@@ -207,7 +207,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	if err := webresearch.RegisterToolsWithFactory(r.deps.Execution.Host.Registry, deps, r.deps.Execution.Host.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
-	if err := httpaction.Register(r.deps.Execution.Host.Registry, httpaction.Deps{
+	if err := r.deps.Execution.Host.RegisterHTTP(httpaction.Deps{
 		Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
 		Secrets: r.deps.Security.Capabilities,
 	}); err != nil {

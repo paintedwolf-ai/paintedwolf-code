@@ -44,6 +44,9 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 }
 
 func observationAllowsTrace(rec Record) bool {
+	if rec.SourceDelivery != nil {
+		return false
+	}
 	switch RecordShape(rec) {
 	case ShapeFileRegion, ShapeCommand, ShapeOpaque:
 		return true

@@ -381,7 +381,7 @@
       "summary": "Requested viewport {{ paintedwolf.viewport_width }} × {{ paintedwolf.viewport_height }} is outside the supported range: each edge must be between {{ paintedwolf.viewport_min_edge }} and {{ paintedwolf.viewport_max_edge }}."
     },
     "CHMOD_BULK_DENIED": {
-      "branch_instruction": "Branch on Code; reduce paths[] length",
+      "branch_instruction": "Branch on Code; reduce the explicit target batch",
       "category": "recoverable",
       "emit": "guard:chmod",
       "summary": "chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call."
@@ -393,7 +393,7 @@
       "summary": "chmod mode {{ paintedwolf.mode }} is not in the bundled allowlist."
     },
     "CHMOD_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; confirm path or remove from paths[]",
+      "branch_instruction": "Branch on Code; confirm the target or remove the unintended target",
       "category": "recoverable",
       "emit": "guard:chmod",
       "summary": "The target for chmod path {{ paintedwolf.path }} does not exist."
@@ -483,16 +483,16 @@
       "summary": "code_rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
     },
     "COMMAND_ARGV_CONFLICT": {
-      "branch_instruction": "Retry with `command` or `pipeline`, not both",
+      "branch_instruction": "Retry with one explicit command form, not both",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "`{{ tool }}()` received both `command` and `pipeline`."
+      "summary": "`{{ tool }}()` received conflicting explicit command forms."
     },
     "COMMAND_ARGV_REQUIRED": {
-      "branch_instruction": "Retry `command()` with `command` or `pipeline` (not both); omit-command is `verify()` only",
+      "branch_instruction": "Retry `command()` with explicit `command` text",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "`command()` was called with neither `command` nor `pipeline`."
+      "summary": "`command()` was called without explicit `command` text."
     },
     "COMMAND_CONCURRENCY_CAP_REACHED": {
       "branch_instruction": "Reduce the live awaited command set",
@@ -506,11 +506,23 @@
       "emit": "guard:command_job",
       "summary": "This exact command execution is already live ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_EFFECT_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_effect_admission",
+      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+    },
     "COMMAND_EXEC_DENIED": {
       "branch_instruction": "Resolve executable permissions or explicitly declare the required host_execution capability; do not poll a failed launch",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif %}"
+    },
+    "COMMAND_EXTERNAL_HIDDEN": {
+      "branch_instruction": "Run the command by its ordinary name without external --",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The external selector is turned off on this host, so this statement did not run."
     },
     "COMMAND_FAILURE_LOOP": {
       "branch_instruction": "Diagnose the failed outcome before retrying; changed source must be observed by the host.",
@@ -530,14 +542,26 @@
       "emit": "guard:command_job",
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_JOB_UNKNOWN": {
+      "branch_instruction": "Use jobs and a %N job number or $!; do not signal host processes",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The job reference names no job of this session."
+    },
+    "COMMAND_LIMIT_EXCEEDED": {
+      "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
+    },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",
+      "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
       "summary": "The requested native form was refused before its effect attempt."
     },
     "COMMAND_NOT_ARGV": {
-      "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}Use literal argv here, documented `verify` arguments for verification, or `command` without capture for composed programs{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_surface",
       "summary": "{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}"
@@ -548,11 +572,47 @@
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}"
     },
+    "COMMAND_OPERAND_INVALID": {
+      "branch_instruction": "Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "One command operand cannot be used as supplied."
+    },
+    "COMMAND_OPERATION_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_operation_admission",
+      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+    },
+    "COMMAND_OPTION_UNSUPPORTED": {
+      "branch_instruction": "Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details."
+    },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
+    },
+    "COMMAND_PLATFORM_UNAVAILABLE": {
+      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "This native command operation is unavailable on the current platform."
+    },
+    "COMMAND_PROGRAMS_DISABLED": {
+      "branch_instruction": "Continue with the other offered tools; do not resubmit this program",
+      "category": "blocked",
+      "emit": "guard:tool",
+      "summary": "Command programs are turned off on this host, so this program did not start."
+    },
+    "COMMAND_PUBLICATION_PENDING": {
+      "branch_instruction": "Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit",
+      "category": "recoverable",
+      "emit": "guard:command_publication_barrier",
+      "summary": "The dependent process did not start: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
     },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",
@@ -561,10 +621,34 @@
       "summary": "env.PWD ({{ paintedwolf.pwd }}) does not match the resolved working directory ({{ paintedwolf.cwd }}) for this {{ tool }} call."
     },
     "COMMAND_REDIRECTION_UNSUPPORTED": {
-      "branch_instruction": "Redirect stdin, stdout, and stderr with `\u003c`, `\u003e`, `\u003e\u003e`, `2\u003e`, `\u0026\u003e`, or `2\u003e\u00261` on the stage that owns the stream",
+      "branch_instruction": "{% if paintedwolf.redirection_terminal %}Omit file redirection on this terminal surface; use `command` without capture for a redirected program{% else %}Redirect stdin, stdout, and stderr with `\u003c`, `\u003e`, `\u003e\u003e`, `2\u003e`, `\u0026\u003e`, or `2\u003e\u00261` on the stage that owns the stream{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
+    },
+    "COMMAND_REVISION_CONFLICT": {
+      "branch_instruction": "Branch on Code; keep the concurrent change and do not replay the stale transform",
+      "category": "recoverable",
+      "emit": "guard:command_revision_pin",
+      "summary": "{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish."
+    },
+    "COMMAND_SYNTAX_INVALID": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+    },
+    "COMMAND_SYNTAX_UNSUPPORTED": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+    },
+    "COMMAND_TLS_VERIFICATION_REQUIRED": {
+      "branch_instruction": "Send the request without -k; do not retry through an external program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "The request asked to skip TLS certificate verification."
     },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",
@@ -1114,6 +1198,12 @@
       "emit": "guard:tool",
       "summary": "{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope."
     },
+    "GIT_REMOTE_HOST_DENIED": {
+      "branch_instruction": "Do not reach the remote through another network client or an external git",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The Git remote's host was not authorized."
+    },
     "GIT_REPO_CONFIG_UNSAFE": {
       "branch_instruction": "Report the refusal to the user; do not retry the git tool for this repository",
       "category": "recoverable",
@@ -1161,6 +1251,12 @@
       "category": "recoverable",
       "emit": "guard:grep",
       "summary": "grep received an invalid regex pattern: {{ paintedwolf.detail }}."
+    },
+    "GREP_REGEX_UNSUPPORTED": {
+      "branch_instruction": "Branch on Code; rewrite the pattern within the declared grammar",
+      "category": "recoverable",
+      "emit": "guard:grep",
+      "summary": "The search pattern uses a construct outside its declared regex dialect."
     },
     "GREP_SCOPE_REQUIRED": {
       "branch_instruction": "Branch on Code; re-emit grep with path or a narrowing path_glob",
@@ -3082,6 +3178,12 @@
       "emit": "guard:tool_owner",
       "summary": "The subsystem owner could not settle the action."
     },
+    "TOOL_OWNER_INTERRUPTED": {
+      "branch_instruction": "Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work",
+      "category": "recoverable",
+      "emit": "guard:tool_owner",
+      "summary": "The subsystem owner stopped the action before it settled."
+    },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",
       "category": "recoverable",
@@ -3637,6 +3739,12 @@
       "category": "recoverable",
       "emit": "guard:write",
       "summary": "{{ tool }} refused the proposed text for {{ paintedwolf.path }} ({{ paintedwolf.bytes }} bytes)."
+    },
+    "WRITE_PATH_DENIED": {
+      "branch_instruction": "Branch on Code WRITE_PATH_DENIED; preserve the protected-path boundary",
+      "category": "recoverable",
+      "emit": "guard:write",
+      "summary": "Writing is denied for {{ paintedwolf.path }}."
     },
     "WRITE_SCOPE_DENIED": {
       "branch_instruction": "Preserve the intended destination and respect the active write scope",

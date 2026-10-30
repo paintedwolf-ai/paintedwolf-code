@@ -65,8 +65,9 @@ func (b *LoopbackCheckpointBroker) Await(ctx context.Context, in tools.LoopbackC
 	// cannot be skipped by a retry.
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
-		b.Runtime.GrantSessionPorts(rootSessionID, ports)
-		return tools.LoopbackConnectResult{Authorized: true, Ports: ports}, nil
+		// An automatic ownership observation cannot become a sticky port lease.
+		// Independent explicit grants above retain their existing scope.
+		return tools.LoopbackConnectResult{Authorized: true, Ports: ports, RequiresOwnedListener: facts.CapabilityWidening.SelfSpawned}, nil
 	}
 
 	if b.Checkpoints == nil {

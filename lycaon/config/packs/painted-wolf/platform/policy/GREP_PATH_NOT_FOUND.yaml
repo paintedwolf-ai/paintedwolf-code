@@ -3,13 +3,14 @@ id: GREP_PATH_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - grep
 requires:
   profiles:
     - filesystem
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.path
 when: paintedwolf.rejection_code == "GREP_PATH_NOT_FOUND"

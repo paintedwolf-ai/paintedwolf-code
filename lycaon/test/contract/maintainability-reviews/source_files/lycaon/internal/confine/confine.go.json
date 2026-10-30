@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "required-confinement-admission",
   "disposition": "retain",
-  "reason": "Retain the unchanged 506-line launch and profile owner. Command still validates inputs, prepares the platform-selected package directories and renders the final profile through the same call site; the native root convention split changes no launch lifecycle or policy authority. The Linux cache owner keeps the actual verdict and descriptor-relative creator together, and non-Linux adapters declare no preparation. Admission and request contracts remain beside pure inspection, exact per-platform root sets, floors, symlink replacement, optional-store failures and the applied activation control. A forwarding launch layer would hide that composition without reducing its dependencies.",
+  "reason": "Retain the shared boundary declarations, pure profile validation/rendering and ordered filesystem rules under the unchanged existing ceiling. Command construction remains in command.go, which validates, performs authorized native cache preparation and renders before the existing protected process transport. Removing the unused BuildProfile forwarding wrapper leaves direct consumers on the actual boundary operations; BuildSeatbeltProfile remains the platform-independent policy inspection entry. Native cache preparation and process pinning do not create another authority resolver. Other changed boundary fingerprints remain unrenewed until their supporting contracts are verified.",
   "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
   "ceiling": 506,
   "boundaries": {

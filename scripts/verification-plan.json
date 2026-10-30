@@ -219,6 +219,7 @@
         "./internal/exec",
         "./internal/hitl",
         "./internal/mcp",
+        "./internal/programtest",
         "./internal/scan/drivers/bundled",
         "./internal/scan/drivers/external",
         "./internal/scan/installed",
@@ -229,7 +230,7 @@
         "./test/contract/security"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata)$"
       ],
       "bundled": true
     },
@@ -824,7 +825,9 @@
       "progress": "log"
     },
     "nix:build": {
-      "locks": ["*"],
+      "locks": [
+        "*"
+      ],
       "workers": 1,
       "progress": "log"
     },
@@ -952,8 +955,12 @@
   "ci": {
     "ready": {
       "compile_targets": {
-        "den:test:rust": ["lycaon-den/src-tauri/"],
-        "decide:test": ["lycaon/internal/decide/native/"]
+        "den:test:rust": [
+          "lycaon-den/src-tauri/"
+        ],
+        "decide:test": [
+          "lycaon/internal/decide/native/"
+        ]
       },
       "targets": [
         "build",

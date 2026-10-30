@@ -2,7 +2,6 @@ package jq
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,7 +36,9 @@ func parseFormat(explicit string) (string, error) {
 	}
 }
 
-func detectFormat(path, explicit string) (string, error) {
+// DetectFormat resolves an explicit format, or the path's extension; auto
+// means the content decides.
+func DetectFormat(path, explicit string) (string, error) {
 	resolved, err := parseFormat(explicit)
 	if err != nil {
 		return "", err
@@ -57,7 +58,9 @@ func detectFormat(path, explicit string) (string, error) {
 	}
 }
 
-func decodeInputs(data []byte, format string) ([]any, string, error) {
+// DecodeDocuments decodes every document of one input in format, reporting
+// the format it parsed as. Numbers keep integer and big-integer identity.
+func DecodeDocuments(data []byte, format string) ([]any, string, error) {
 	switch format {
 	case "json":
 		inputs, err := decodeJSONStream(data)
@@ -147,11 +150,7 @@ func candidateToAny(node *yqlib.CandidateNode) (any, error) {
 	if len(raw) == 0 {
 		return nil, io.EOF
 	}
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, err
-	}
-	return v, nil
+	return decodeJSONValue(raw)
 }
 
 func normalizedFormatNote(parsedAs string) string {
@@ -167,14 +166,14 @@ func normalizedFormatNote(parsedAs string) string {
 }
 
 func decodeJSONStream(data []byte) ([]any, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
+	stream := NewValueStream(bytes.NewReader(data))
 	var out []any
 	for {
-		var v any
-		if err := dec.Decode(&v); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
+		v, err := stream.Decode()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)

@@ -3,10 +3,11 @@ id: SUMMARIZE_CURSOR_STALE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - summarize
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   profiles:
   - tool

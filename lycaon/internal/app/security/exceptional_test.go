@@ -42,17 +42,17 @@ func TestExceptionalCapabilitiesReleasePermitsAtRunEndAndGrantsAtChatDisposal(t 
 	if !runtime.Sockets.GrantChat("chat", socket, "socket-grant", "checkpoint", "digest", nil) {
 		t.Fatal("socket grant was not installed")
 	}
-	runtime.Sockets.IssuePermit("chat", "call", "digest", socket)
+	runtime.Sockets.IssuePermit(hitl.EffectPermitIdentity{SessionID: "chat", ToolCallID: "call"}, "digest", socket)
 	lease := hitl.DirectIPLease{ActionDigest: "action", RequestDigest: "request", ConfinementDigest: "roots", ChatConfinementDigest: "chat-roots"}
 	if !runtime.DirectIP.GrantChat("chat", lease, "ip-grant", "checkpoint", nil) {
 		t.Fatal("direct-IP grant was not installed")
 	}
-	runtime.DirectIP.IssuePermit("chat", "call", "action", "request", "roots")
+	runtime.DirectIP.IssuePermit(hitl.EffectPermitIdentity{SessionID: "chat", ToolCallID: "call"}, "action", "request", "roots")
 	testutil.FailErr(t, "release run resources", host.Resources.Registry.Release(t.Context(), resourcelifecycle.SessionScope("chat")))
-	if ok, _ := runtime.Sockets.ConsumePermit("chat", "call", "digest", socket); ok {
+	if ok, _ := runtime.Sockets.ConsumePermit(hitl.EffectPermitIdentity{SessionID: "chat", ToolCallID: "call"}, "digest", socket); ok {
 		t.Fatal("run cleanup retained socket permit")
 	}
-	if runtime.DirectIP.Authorized("chat", "call", "action") {
+	if runtime.DirectIP.Authorized(hitl.EffectPermitIdentity{SessionID: "chat", ToolCallID: "call"}, "action") {
 		t.Fatal("run cleanup retained direct-IP permit")
 	}
 	if len(runtime.Sockets.ListChatGrants("chat")) != 1 || len(runtime.DirectIP.ListChatGrants("chat")) != 1 {

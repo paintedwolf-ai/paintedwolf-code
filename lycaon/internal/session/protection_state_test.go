@@ -22,6 +22,20 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// admittedDirectIPLaunch binds the fixture's actual action lease and carries its
+// live recheck as the agent launch's current authority, as tool producers do.
+func admittedDirectIPLaunch(t *testing.T, subject, sessionID, callID, dir string) exec.LaunchPlan {
+	t.Helper()
+	boundary := &confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDirectIP}
+	identity := confine.EgressCommand{SessionID: sessionID, ToolCallID: callID, ProjectDir: dir}
+	lease, err := confine.BindAction(boundary, identity)
+	testutil.FailErr(t, "admit direct-ip action", err)
+	t.Cleanup(func() { lease.Close(context.Background()) })
+	plan := exec.AgentLaunch(exec.LaunchAgentCommand, subject, boundary)
+	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
+	return plan
+}
+
 func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep-based fixture is unix-oriented")
@@ -34,10 +48,7 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protection test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "protection test", "sess-prot", "call-direct-1", dir),
 		},
 		Runner:     runner,
 		Mode:       bgprocess.JobModeBackground,
@@ -76,10 +87,7 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "reconstruct test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "reconstruct test", "sess-rec", "call-9", dir),
 		},
 		Runner: runner,
 		Mode:   bgprocess.JobModeBackground, ToolCallID: "call-9",
@@ -125,10 +133,7 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "revocation test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "revocation test", "sess-rev", "call-rev", dir),
 		},
 		Runner: runner,
 		Mode:   bgprocess.JobModeBackground,

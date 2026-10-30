@@ -85,6 +85,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 	durableContent := projection.content
 	limit := agentpresence.OutputLimit{}
 	if tool == "git_diff" {
+		//nolint:contextcheck // The host-blob API is contextless; admitted program streams carry their own context.
 		fitted, reject := projectGitDiff(hostDataDir, tooloutput.Screened(durableContent), maxSpillBytes)
 		if reject != nil {
 			return toolResultProjection{reject: reject}
@@ -120,6 +121,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 		rel := tooloutput.PromoteSpillRelPath(extractOverlayIDFromToolOutput(durableContent))
 		out = tooloutput.WireSpillOverlayPromote(hostDataDir, rel, screened, inline, maxBytes, maxSpillBytes)
 	} else {
+		//nolint:contextcheck // The host-blob API is contextless; admitted program streams carry their own context.
 		out = tooloutput.WireSpillToolOutput(hostDataDir, screened, maxBytes, maxSpillBytes)
 	}
 	if out.RejectCode != "" {

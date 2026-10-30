@@ -109,13 +109,12 @@ func start(ctx context.Context, binary string) (*process, error) {
 		frames: make(chan []byte, 1), done: make(chan struct{}), stopping: make(chan struct{}),
 	}
 	cmd.Stderr = p.stderr
-	if err := cmd.Start(); err != nil {
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
+	if err := execpkg.StartPrepared(cmd); err != nil {
 		release()
 		return nil, fmt.Errorf("document core start: %w", err)
 	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
 	go p.read(stdout, func() {
-		untrack()
 		release()
 	})
 	if err := p.handshake(ctx); err != nil {

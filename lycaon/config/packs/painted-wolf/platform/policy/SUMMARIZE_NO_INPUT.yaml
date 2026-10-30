@@ -3,10 +3,10 @@ id: SUMMARIZE_NO_INPUT
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - summarize
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.operation]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "SUMMARIZE_NO_INPUT"

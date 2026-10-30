@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/netip"
@@ -93,7 +94,13 @@ type Request struct {
 	// Resolve maps hostnames to specific target IP and port.
 	Resolve []ResolveMapping
 	// Jar scopes stored cookies to each hop's URL.
-	Jar          http.CookieJar
+	Jar http.CookieJar
+	// ConnectTimeout bounds each hop's connection establishment separately
+	// from Timeout; zero leaves only the exchange deadline.
+	ConnectTimeout time.Duration
+	// WireHeaders keeps complete response headers. Cleartext HTTP/1.x also
+	// retains the received block in Response.Wire; TLS headers are normalized.
+	WireHeaders  bool
 	AllowAddress func(netip.Addr, uint16) bool
 	BeforeHop    func(context.Context, *url.URL) error
 }
@@ -106,6 +113,12 @@ type Hop struct {
 	// Method is present only when the redirect changes it.
 	Method string     `json:"method,omitempty"`
 	Timing *HopTiming `json:"timing_ms,omitempty"`
+	// StatusLine and Headers describe the redirect response. Credential
+	// headers are withheld unless WireHeaders requests a complete command
+	// response; Wire then keeps observable cleartext bytes.
+	StatusLine string       `json:"-"`
+	Headers    []Header     `json:"-"`
+	Wire       *WireHeaders `json:"-"`
 }
 
 type Response struct {
@@ -122,6 +135,19 @@ type Response struct {
 	TLS         *TLSInfo   `json:"tls,omitempty"`
 	// BodyObserved excludes HEAD responses and discarded bodies.
 	BodyObserved bool `json:"-"`
+	// StatusLine is the final response's protocol and status as received,
+	// such as "HTTP/1.1 200 OK".
+	StatusLine string `json:"-"`
+	// Wire is the final response's header block as received, when requested
+	// and observable.
+	Wire *WireHeaders `json:"-"`
+}
+
+// WireHeaders is one received header block in wire order and spelling.
+type WireHeaders struct {
+	Raw        string
+	StatusLine string
+	Headers    []Header
 }
 
 func NormalizeURL(raw string) (*url.URL, error) {
@@ -191,6 +217,11 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			ioCancel()
 			return Response{}, err
 		}
+		boundConnect(transport, in.ConnectTimeout)
+		var wire *wireCapture
+		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
+			wire = captureWire(transport)
+		}
 		client := in.clientForHop(remaining, transport)
 		tracer, trace := newHopTracer()
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
@@ -230,9 +261,15 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			hopTiming.Total = time.Since(ioStarted).Milliseconds()
 			transport.CloseIdleConnections()
 			ioCancel()
+			if in.WireHeaders {
+				result.Headers = responseHeaders(resp.Header, true)
+			}
 			result.DurationMS = ioElapsed.Milliseconds()
 			result.Timing = hopTiming
 			result.TLS = tlsInfo
+			if wire != nil && readErr == nil {
+				result.Wire = wire.headers(resp.StatusCode)
+			}
 			return result, readErr
 		}
 		_ = resp.Body.Close()
@@ -243,6 +280,10 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hop, redirectLimit, hops, hopTiming)
 		if err != nil {
 			return Response{}, err
+		}
+		adv.record.StatusLine, adv.record.Headers = statusLine(resp), responseHeaders(resp.Header, in.WireHeaders)
+		if wire != nil {
+			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
 		hops = append(hops, adv.record)
 		method = adv.method
@@ -341,7 +382,7 @@ func (in Request) processRedirect(
 	timing *HopTiming,
 ) (redirectAdvance, error) {
 	if hop >= redirectLimit {
-		return redirectAdvance{}, &RedirectError{Reason: "too many redirects", Hops: hops}
+		return redirectAdvance{}, &RedirectError{LimitExceeded: true, Reason: "too many redirects", Hops: hops}
 	}
 	location := resp.Header.Get("Location")
 	status := resp.StatusCode
@@ -465,8 +506,8 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 			timing.Transfer = time.Since(readStart).Milliseconds()
 		}
 		return Response{
-			Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
-			Redirects: hops, ContentType: resp.Header.Get("Content-Type"),
+			Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
+			Redirects: hops, ContentType: resp.Header.Get("Content-Type"), StatusLine: statusLine(resp),
 		}, nil
 	}
 	if resp.ContentLength > limit {
@@ -491,9 +532,9 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 	}
 	sum := sha256.Sum256(body)
 	return Response{
-		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
+		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 		Redirects: hops, Body: body, Bytes: int64(len(body)), SHA256: hex.EncodeToString(sum[:]),
-		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true,
+		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp),
 	}, nil
 }
 
@@ -548,9 +589,9 @@ func streamResponse(resp *http.Response, finalURL string, hops []Hop, limit int6
 		return Response{}, err
 	}
 	return Response{
-		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
+		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 		Redirects: hops, Bytes: bounded.n, SHA256: hex.EncodeToString(hasher.Sum(nil)),
-		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true,
+		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp),
 	}, nil
 }
 
@@ -671,12 +712,14 @@ func validHeaderValue(value string) bool {
 	return true
 }
 
-func responseHeaders(in http.Header) []Header {
+func responseHeaders(in http.Header, complete bool) []Header {
 	out := make([]Header, 0, len(in))
 	for name, values := range in {
 		switch strings.ToLower(name) {
 		case "set-cookie", "proxy-authenticate":
-			continue
+			if !complete {
+				continue
+			}
 		}
 		for _, value := range values {
 			out = append(out, Header{Name: name, Value: value})
@@ -703,4 +746,21 @@ func isRedirect(code int) bool {
 
 func sameOrigin(a, b *url.URL) bool {
 	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
+}
+
+func statusLine(resp *http.Response) string {
+	return resp.Proto + " " + resp.Status
+}
+
+// boundConnect limits each dial on transport to timeout.
+func boundConnect(transport *http.Transport, timeout time.Duration) {
+	if timeout <= 0 || transport.DialContext == nil {
+		return
+	}
+	dial := transport.DialContext
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return dial(dialCtx, network, address)
+	}
 }

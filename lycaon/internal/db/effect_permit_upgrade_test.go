@@ -1,0 +1,105 @@
+package db
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	source := mainRevision6Store(t, path)
+	var err error
+	_, err = source.ExecContext(t.Context(), `INSERT INTO projects(id,last_opened_at,created_at) VALUES('fixture-project','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
+	testutil.FailErr(t, "seed project", err)
+	_, err = source.ExecContext(t.Context(), `INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('fixture-session','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
+	testutil.FailErr(t, "seed actual session scope", err)
+	const retained = `{"approval_plan":{"id":"plan","action_digest":"semantic","stage":"pre_dial","recommended_option_id":"once","options":[{"id":"once","authority":[{"kind":"direct_ip_permit","session_id":"fixture-session","tool_call_id":"actual-model-call","action_digest":"semantic","direct_ip_lease":{"ActionDigest":"semantic","RequestDigest":"requested","ConfinementDigest":"confined","ChatConfinementDigest":"","DeclaredDestinations":["fixture.invalid"],"CommandSummary":"fixture"}}]}]}}`
+	_, err = source.ExecContext(t.Context(), `INSERT INTO checkpoints(id,session_id,project_id,kind,status,created_at,payload_json) VALUES('fixture-checkpoint','fixture-session','fixture-project','tool_approval','pending','2026-01-01T00:00:00Z',?)`, retained)
+	testutil.FailErr(t, "seed retained once metadata", err)
+	retainedMain := seedNativeAuthorityMainData(t, source)
+	_, err = source.ExecContext(t.Context(), `PRAGMA user_version=6`)
+	testutil.FailErr(t, "claim exact known intermediate", err)
+	actual, err := inspectSchema(t.Context(), source)
+	testutil.FailErr(t, "inspect known source", err)
+	target, err := CurrentBaseline(t.Context())
+	testutil.FailErr(t, "inspect fresh target", err)
+	if actual != migrations.EffectPermitIdentity(target).From {
+		t.Fatalf("fixture differs from registered source: %+v", actual)
+	}
+	testutil.FailErr(t, "close source", source.Close())
+	testutil.FailErr(t, "upgrade isolated source", UpgradeStaged(t.Context(), path))
+	testutil.FailErr(t, "idempotent restart", UpgradeStaged(t.Context(), path))
+	upgraded, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "read upgraded store", err)
+	defer upgraded.Close()
+	for table, before := range retainedMain {
+		if got := namespaceTableContents(t, upgraded, table); got != before {
+			t.Fatalf("native authority migration changed main data in %s", table)
+		}
+	}
+	got, err := inspectSchema(t.Context(), upgraded)
+	testutil.FailErr(t, "inspect target", err)
+	if got != target {
+		t.Fatalf("wrong target: %+v", got)
+	}
+	var raw string
+	var count int
+	testutil.FailErr(t, "read migrated checkpoint", upgraded.QueryRow(`SELECT payload_json FROM checkpoints WHERE id='fixture-checkpoint'`).Scan(&raw))
+	var payload struct {
+		Plan struct {
+			Options []struct {
+				Authority []struct {
+					ExecutionID  *string `json:"execution_id"`
+					ToolCallID   string  `json:"tool_call_id"`
+					ActionDigest string  `json:"action_digest"`
+				} `json:"authority"`
+			} `json:"options"`
+		} `json:"approval_plan"`
+	}
+	testutil.FailErr(t, "decode migrated checkpoint", json.Unmarshal([]byte(raw), &payload))
+	delta := payload.Plan.Options[0].Authority[0]
+	if delta.ExecutionID == nil || *delta.ExecutionID != "" || delta.ToolCallID != "actual-model-call" || delta.ActionDigest != "semantic" {
+		t.Fatal("retained authority acquired native identity or changed model meaning")
+	}
+	testutil.FailErr(t, "read migration ledger", upgraded.QueryRow(`SELECT count(*) FROM schema_migrations WHERE id='native-child-once-authority'`).Scan(&count))
+	if count != 1 {
+		t.Fatalf("migration applied %d times", count)
+	}
+	var format, digest, body string
+	testutil.FailErr(t, "read retained authority columns", upgraded.QueryRow(`SELECT authority_format,authority_digest,authority_body FROM checkpoints WHERE id='fixture-checkpoint'`).Scan(&format, &digest, &body))
+	if format != "" || digest != "" || body != "" {
+		t.Fatal("retained structured authority acquired a native format")
+	}
+}
+
+// A store claiming revision7 without its native authority columns is an
+// unknown shape: planning refuses it and leaves its bytes untouched.
+func TestNativeAuthorityColumnlessRevision7IsRefusedWithoutMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	source := mainRevision6Store(t, path)
+	_, err := source.ExecContext(t.Context(), `PRAGMA user_version=7`)
+	testutil.FailErr(t, "claim revision7", err)
+	testutil.FailErr(t, "close source", source.Close())
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "read source bytes", err)
+	var incompatible *StoreIncompatibleError
+	if err := UpgradeStaged(t.Context(), path); !errors.As(err, &incompatible) || incompatible.Reason != RecoveryReasonSchemaMismatch || incompatible.StoreSchemaVersion != 7 {
+		t.Fatalf("columnless revision7 was not refused as a schema mismatch: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read refused bytes", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused store was mutated")
+	}
+	if _, err := PlanSchemaUpgrade(t.Context(), migrations.Baseline{Revision: 7, Shape: migrations.EffectPermitIdentity(migrations.Baseline{}).From.Shape}); !errors.Is(err, migrations.ErrUnsupported) {
+		t.Fatalf("columnless revision7 identity planned: %v", err)
+	}
+}

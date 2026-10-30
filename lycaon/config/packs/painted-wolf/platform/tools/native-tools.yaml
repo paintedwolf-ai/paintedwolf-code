@@ -475,7 +475,6 @@ resource_implied:
 grant_identity_neutral_args:
   command:
     - timeout_ms
-    - wait_ms
     - terminal_capture
   verify:
     - timeout_ms

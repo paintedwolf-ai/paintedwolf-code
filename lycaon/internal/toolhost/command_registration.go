@@ -1,12 +1,16 @@
 package toolhost
 
 import (
+	"time"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 )
 
 func registerCommandTools(
@@ -30,7 +34,15 @@ func registerCommandTools(
 		return err
 	}
 	ft := command.NewCommandFailureTracker()
-	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
+	hostUtilities, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, boundary)
+	if err != nil {
+		return err
+	}
+	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate,
+		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
+			return hostUtilities.Builtins(tc, nested, bound)
+		}}
+	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
 	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
 	*commandOutputTool = &command.CommandOutputTool{}
 	*commandStopTool = &command.CommandStopTool{}

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestLanguageV1SnapshotsAreDetached(t *testing.T) {
@@ -31,7 +31,7 @@ func TestLanguageV1PreservesDialectAndPublicationChoices(t *testing.T) {
 		name, flag, role string
 		arity            int
 	}{
-		{"sed", "-i", "optional-empty-suffix", -1}, {"stat", "-c", "gnu-format", 1}, {"stat", "-f", "bsd-format", 1}, {"base64", "-D", "boolean", 0}, {"rg", "-r", "replacement", 1}, {"grep", "-r", "boolean", 0}, {"jq", "--argjson", "name-json-pair", 2},
+		{"sed", "-i", "backup-suffix", -1}, {"stat", "-c", "gnu-format", 1}, {"stat", "-f", "bsd-format", 1}, {"base64", "-D", "boolean", 0}, {"rg", "-r", "replacement", 1}, {"grep", "-r", "boolean", 0}, {"jq", "--argjson", "name-json-pair", 2},
 	} {
 		found := false
 		for _, command := range c.Commands {

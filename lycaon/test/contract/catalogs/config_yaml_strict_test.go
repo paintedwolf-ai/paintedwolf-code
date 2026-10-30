@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -56,16 +57,17 @@ func TestConfigYAMLParsesStrictlyAgainstSchema(t *testing.T) {
 			glob:  "packs/painted-wolf/*/tools/profiles/*.yaml",
 			decode: func(raw []byte) error {
 				var v struct {
-					ID             string                      `yaml:"id"`
-					Description    string                      `yaml:"description"`
-					Tools          map[string]sandbox.ToolMode `yaml:"tools"`
-					DenyTools      []string                    `yaml:"deny_tools"`
-					MCPDeny        []string                    `yaml:"mcp_deny"`
-					ReadScope      string                      `yaml:"read_scope"`
-					WriteScope     string                      `yaml:"write_scope"`
-					ReadScopes     []string                    `yaml:"read_scopes"`
-					WriteScopes    []string                    `yaml:"write_scopes"`
-					WaitConditions []string                    `yaml:"wait_conditions"`
+					ID             string                            `yaml:"id"`
+					Description    string                            `yaml:"description"`
+					Tools          map[string]sandbox.ToolMode       `yaml:"tools"`
+					DenyTools      []string                          `yaml:"deny_tools"`
+					MCPDeny        []string                          `yaml:"mcp_deny"`
+					ReadScope      string                            `yaml:"read_scope"`
+					WriteScope     string                            `yaml:"write_scope"`
+					ReadScopes     []string                          `yaml:"read_scopes"`
+					WriteScopes    []string                          `yaml:"write_scopes"`
+					WaitConditions []string                          `yaml:"wait_conditions"`
+					CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
 				}
 				return config.DecodeYAML(raw, &v)
 			},

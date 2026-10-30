@@ -48,6 +48,9 @@ type ExecOpts struct {
 	// Stdout streams complete output to a host-owned consumer instead of capture.
 	// Stderr remains bounded diagnostics. The consumer must not block indefinitely.
 	Stdout io.Writer
+	// HostConsumer marks the final stage's stdout as read by a host consumer
+	// that may stop early, so its SIGPIPE death is an expected closure too.
+	HostConsumer bool
 	// ProcessPriority applies ScanProcessPolicy / engine below-normal posture when set.
 	ProcessPriority ProcessPriority
 	// Started observes each stage's process once it has started, so a service

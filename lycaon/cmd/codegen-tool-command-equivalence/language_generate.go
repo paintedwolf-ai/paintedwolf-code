@@ -140,6 +140,12 @@ func validateLanguageCatalog(root string, c toolcontract.LanguageCatalog) error 
 			if len(form.Spellings) == 0 || form.Arity < -2 || form.Arity > 2 || form.FixtureID == "" || form.Consumption == "" || (form.Arity >= 0 && len(form.SampleValues) != form.Arity) {
 				return fmt.Errorf("invalid option form for %s", command.Name)
 			}
+			if form.Shorthand != "" {
+				if (form.Shorthand != "numeric" && form.Shorthand != "word") || form.Arity != 1 || flags[form.Scope+":shorthand"] {
+					return fmt.Errorf("invalid %s option shorthand", command.Name)
+				}
+				flags[form.Scope+":shorthand"] = true
+			}
 			for _, flag := range form.Spellings {
 				if flags[form.Scope+":"+flag] {
 					return fmt.Errorf("duplicate %s option %s", command.Name, flag)

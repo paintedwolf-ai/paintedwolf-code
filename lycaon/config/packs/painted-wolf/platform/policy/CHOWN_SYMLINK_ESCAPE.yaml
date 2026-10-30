@@ -3,13 +3,14 @@ id: CHOWN_SYMLINK_ESCAPE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chown
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.path_escape
   - paintedwolf.path
 when: paintedwolf.rejection_code == "CHOWN_SYMLINK_ESCAPE"

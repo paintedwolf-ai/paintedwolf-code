@@ -24,10 +24,14 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 	}{{".zip", writeTestZip}, {".tar.gz", writeTestTarGz}} {
 		t.Run(tc.suffix, func(t *testing.T) {
 			t.Parallel()
+			maxEntries := int(archiveLimit("archive_extract_entries"))
+			if maxEntries < 1 {
+				t.Fatal("compiled archive entry ceiling is missing")
+			}
 			tmpDir := t.TempDir()
 			zipPath := filepath.Join(tmpDir, "many"+tc.suffix)
-			entries := make(map[string]string, hostExtractMaxEntries+1)
-			for i := range hostExtractMaxEntries + 1 {
+			entries := make(map[string]string, maxEntries+1)
+			for i := range maxEntries + 1 {
 				entries[fmt.Sprintf("f%d.txt", i)] = "x"
 			}
 			tc.write(t, zipPath, entries)
@@ -42,11 +46,11 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 			}
 			files, err := os.ReadDir(filepath.Join(tmpDir, "out"))
 			testutil.FailErr(t, "read partial extraction", err)
-			if len(files) != hostExtractMaxEntries {
-				t.Fatalf("wrote %d entries, cap %d", len(files), hostExtractMaxEntries)
+			if len(files) != maxEntries {
+				t.Fatalf("wrote %d entries, cap %d", len(files), maxEntries)
 			}
 			paths, ok := reject.Data["extracted_paths"].([]string)
-			if !ok || len(paths) != hostExtractMaxEntries || reject.Data["extracted_entries"] != hostExtractMaxEntries || reject.Data["extracted_bytes"] != int64(hostExtractMaxEntries) {
+			if !ok || len(paths) != maxEntries || reject.Data["extracted_entries"] != maxEntries || reject.Data["extracted_bytes"] != int64(maxEntries) {
 				t.Fatalf("partial extraction facts = %#v", reject.Data)
 			}
 			for _, path := range paths {

@@ -7,13 +7,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/installbinding"
 )
 
 // PipelineWaitDelay bounds output draining after a command leader exits.
@@ -27,6 +25,9 @@ type StageRun struct {
 	// Failed reports a status that fails the stage's group: non-zero, except
 	// SIGPIPE ending a stage whose reader finished first.
 	Failed bool
+	// expectedConsumerClosure is an executor-classified pipe settlement fact,
+	// separate from raw signal status and owner/publication outcomes.
+	expectedConsumerClosure bool
 	// Skipped means the preceding group's exit status did not satisfy the connector.
 	Skipped bool
 	// Connector is empty for the first stage and defaults to a pipe for subsequent stages.
@@ -41,6 +42,10 @@ func (s StageRun) ExitStatus() int {
 	return *s.ExitCode
 }
 
+// ExpectedConsumerClosure reports the executor's classified upstream closure.
+// It does not erase the raw exit status or authorize file publication.
+func (s StageRun) ExpectedConsumerClosure() bool { return s.expectedConsumerClosure }
+
 // PipelineResult is the outcome of RunPipeline.
 type PipelineResult struct {
 	Stages   []StageRun
@@ -51,43 +56,34 @@ type PipelineResult struct {
 	TimedOut bool
 }
 
-func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts) (*exec.Cmd, func(), error) {
-	// Installed helpers and the engine's own sandbox wrapper must come from the
-	// installation this engine started from.
-	if filepath.IsAbs(name) {
-		if err := installbinding.Verify(name); err != nil {
-			return nil, nil, err
-		}
-	}
-	confinement := opts.Launch.Confinement
-	if confinement != nil && confine.Available() {
-		self, err := os.Executable()
-		if err != nil {
-			return nil, nil, fmt.Errorf("locate self for sandbox: %w", err)
-		}
-		if err := installbinding.Verify(self); err != nil {
-			return nil, nil, err
-		}
-		confined, cleanup, err := confine.Command(ctx, self, name, args, *confinement)
-		if err != nil {
-			return nil, nil, fmt.Errorf("build sandboxed command: %w", err)
-		}
-		return confined, cleanup, nil
-	}
-	return exec.CommandContext(ctx, name, args...), func() {}, nil //nolint:gosec // G204 — validated argv stages, no shell
+func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts, stageEnv map[string]string) (*exec.Cmd, func(), error) {
+	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
 }
 
-func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
-	return configureStageCmdEnv(cmd, opts, nil)
+// ProcessEnvironment builds the sanitized base environment for a process launch
+// before OS-specific sandbox confinement variables (such as proxy or SSH
+// wrappers) are attached. Both the command program's native env builtin and
+// external child launches build their environment here.
+func ProcessEnvironment(opts ExecOpts) ([]string, error) {
+	return processEnvironment(opts, nil)
 }
 
-func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]string) error {
-	if opts.Dir != "" {
-		cmd.Dir = opts.Dir
-	}
+func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
 	provided := opts.Env
-	if opts.Launch.Environment == EnvironmentReduced {
+	if provided == nil && (opts.Launch.Environment == EnvironmentReduced || opts.Launch.Kind == LaunchAgentCommand) {
 		provided = ReducedEnviron()
+	}
+	if len(opts.Launch.ExtraEnv) > 0 {
+		if provided == nil {
+			provided = InheritedEnviron()
+		}
+		var extras []string
+		for _, e := range opts.Launch.ExtraEnv {
+			if strings.TrimSpace(e) != "" {
+				extras = append(extras, e)
+			}
+		}
+		provided = overlayProcessEnv(provided, extras)
 	}
 	inline := opts.InlineEnv
 	if len(stageEnv) > 0 {
@@ -102,23 +98,29 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 	}
 	env, err := buildProcessEnv(provided, inline, opts.PathExtra)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if env == nil && provided != nil {
 		// A non-nil empty environment prevents inheritance from the sidecar.
 		env = []string{}
 	}
-	cmd.Env = env
 	for _, e := range opts.AppendEnv {
 		if strings.TrimSpace(e) != "" {
-			cmd.Env = append(cmd.Env, e)
+			env = append(env, e)
 		}
 	}
-	for _, e := range opts.Launch.ExtraEnv {
-		if strings.TrimSpace(e) != "" {
-			cmd.Env = append(cmd.Env, e)
-		}
+	return env, nil
+}
+
+func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]string) error {
+	if opts.Dir != "" {
+		cmd.Dir = opts.Dir
 	}
+	env, err := processEnvironment(opts, stageEnv)
+	if err != nil {
+		return err
+	}
+	cmd.Env = env
 	if opts.Launch.Confinement != nil {
 		confinement := opts.Launch.Confinement
 		cmd.Env = confine.ProcessEnvironment(cmd.Env, *confinement)
@@ -143,12 +145,8 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 	if argv.ContainsShellMetacharacters(name) {
 		return nil, nil, fmt.Errorf("%w: command name", argv.ErrShellMetacharacters)
 	}
-	cmd, cleanup, err := buildExecCmd(ctx, name, args, opts)
+	cmd, cleanup, err := buildExecCmd(ctx, name, args, opts, nil)
 	if err != nil {
-		return nil, nil, err
-	}
-	if err := configureCmdEnv(cmd, opts); err != nil {
-		cleanup()
 		return nil, nil, err
 	}
 	if err := relayThroughBroker(cmd); err != nil {
@@ -327,7 +325,7 @@ func wirePipelineStages(
 			releaseWired(wired[:i])
 			return nil, err
 		}
-		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts)
+		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts, stage.Env)
 		if err != nil {
 			guard.release()
 			releaseWired(wired[:i])
@@ -335,12 +333,6 @@ func wirePipelineStages(
 		}
 		cmd, cleanup, err = superviseCommand(cmd, cleanup, opts.ProcessPriority)
 		if err != nil {
-			guard.release()
-			releaseWired(wired[:i])
-			return nil, err
-		}
-		if err := configureStageCmdEnv(cmd, opts, stage.Env); err != nil {
-			cleanup()
 			guard.release()
 			releaseWired(wired[:i])
 			return nil, err
@@ -381,7 +373,11 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 
 func startWiredStages(wired []wiredStage, started func(pid int)) error {
 	for i := range wired {
-		if err := wired[i].cmd.Start(); err != nil {
+		err := confine.ValidateProcessInputs(wired[i].cmd)
+		if err == nil {
+			err = wired[i].cmd.Start()
+		}
+		if err != nil {
 			killWired(wired[:i])
 			reapWired(wired[:i])
 			releaseWired(wired[:i+1])
@@ -391,7 +387,11 @@ func startWiredStages(wired []wiredStage, started func(pid int)) error {
 			_ = wired[i].pipeWriter.Close()
 			wired[i].pipeWriter = nil
 		}
-		if err := wired[i].guard.onStarted(wired[i].cmd); err != nil {
+		err = wired[i].guard.onStarted(wired[i].cmd)
+		if err == nil {
+			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+		}
+		if err != nil {
 			killWired(wired[:i+1])
 			reapWired(wired[:i+1])
 			releaseWired(wired[:i+1])

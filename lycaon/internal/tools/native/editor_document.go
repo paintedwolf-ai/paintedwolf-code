@@ -51,6 +51,11 @@ type landing struct {
 	// publicationError is why the file could not be written; nil when the
 	// edit is withheld for a diverged file.
 	publicationError error
+	// documentID, acceptedRevision and publishedSHA256 identify a pinned
+	// write's accepted document revision and the bytes the file holds.
+	documentID       string
+	acceptedRevision int64
+	publishedSHA256  string
 }
 
 // note is the receipt line stating the landing when it was not a plain file

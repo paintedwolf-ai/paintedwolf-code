@@ -2,11 +2,13 @@ package contract
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -15,6 +17,13 @@ import (
 func TestSandboxCapabilityRulesBindActualRefusals(t *testing.T) {
 	pipeline := stockRejectionPipeline(t)
 	checked := 0
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "load actual tool identities", err)
+	var toolNames []string
+	for tool := range schemas.Tools {
+		toolNames = append(toolNames, tool)
+	}
+	slices.Sort(toolNames)
 	loader, err := oar.NewLoader(filepath.Join(contractcheck.RepoRoot(t), "schemas"))
 	contractcheck.FailErr(t, "create policy loader", err)
 	rules, err := loader.LoadEffectivePolicy()
@@ -23,7 +32,16 @@ func TestSandboxCapabilityRulesBindActualRefusals(t *testing.T) {
 		if !strings.HasPrefix(rule.ID, "SANDBOX_") || rule.Anchor != oar.AnchorToolRejected {
 			continue
 		}
-		for _, tool := range rule.Selector["tool"] {
+		selected := append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...)
+		// Intrinsic code-only rules apply regardless of tool identity. Exercise
+		// every actual tool rather than skipping an unrestricted selector.
+		if len(rule.Selector) == 0 {
+			selected = toolNames
+		}
+		if len(selected) == 0 {
+			t.Fatalf("sandbox refusal %s has no exercised tool identities", rule.ID)
+		}
+		for _, tool := range selected {
 			assertIntrinsicRejection(t, pipeline, tool, rule.ID)
 			checked++
 		}

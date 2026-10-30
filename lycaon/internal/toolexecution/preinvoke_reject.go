@@ -39,6 +39,9 @@ func (e *Rejections) rejectBeforeInvoke(
 	args map[string]any,
 	rej *toolrejection.ToolReject,
 ) error {
+	if deferred, _ := ctx.Value(deferredProgramRejectionKey{}).(bool); deferred {
+		return rej
+	}
 	if e.blockPlane == nil {
 		return e.renderReject(rej)
 	}
@@ -57,6 +60,9 @@ func (e *Rejections) settleReject(
 	args map[string]any,
 	tr *toolrejection.ToolReject,
 ) error {
+	if deferred, _ := ctx.Value(deferredProgramRejectionKey{}).(bool); deferred {
+		return tr
+	}
 	if e.blockPlane != nil {
 		if ferr := e.blockPlane.RejectObservation(ctx, qualifiedName, profileID, args, tr); ferr != nil {
 			return ferr

@@ -3,11 +3,12 @@ id: CHOWN_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chown
 requires:
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.path
   profiles:
   - filesystem

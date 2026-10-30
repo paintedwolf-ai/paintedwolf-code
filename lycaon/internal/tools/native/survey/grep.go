@@ -620,14 +620,6 @@ func (t *GrepTool) encodeGrepResponse(root string, resp grepResponse) (string, e
 	})
 }
 
-func lineMatches(line string, re *regexp.Regexp) (bool, string) {
-	loc := re.FindStringIndex(line)
-	if loc == nil {
-		return false, ""
-	}
-	return true, line[loc[0]:loc[1]]
-}
-
 func isHiddenPath(relSlash string) bool {
 	base := filepath.Base(relSlash)
 	return strings.HasPrefix(base, ".")

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -59,6 +60,11 @@ func providerWith(t *testing.T, cfg Config, shell string, env map[string]string,
 			return nil, os.ErrNotExist
 		}
 		return executableStub{name: filepath.Base(path)}, nil
+	}
+	p.prepare = func(ctx context.Context, name string, args []string, opts execpkg.ExecOpts) (*osexec.Cmd, func(), error) {
+		cmd := osexec.CommandContext(ctx, name, args...)
+		cmd.Env = opts.Env
+		return cmd, func() {}, nil
 	}
 	p.run = func(cmd *osexec.Cmd) error {
 		if cmd.Stdout != nil && shellOut.stdout != "" {

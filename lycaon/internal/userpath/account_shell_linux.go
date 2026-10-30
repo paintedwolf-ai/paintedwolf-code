@@ -59,6 +59,7 @@ func linuxAccountShell(ctx context.Context, program string, uid int) (string, er
 	cmd.WaitDelay = probeWaitDelay
 	output := boundedBuffer{limit: 64 << 10}
 	cmd.Stdout = &output
+	//nolint:contextcheck // Prepared launch confirms against the handoff's captured command context and identity.
 	if err := defaultRun(cmd); err != nil {
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("account lookup canceled: %w", ctx.Err())

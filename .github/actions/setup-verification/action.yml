@@ -177,17 +177,34 @@ runs:
         lookup-only: ${{ inputs.lookup-only }}
         save: ${{ inputs.save-caches }}
 
-    # Source-scanning frontend tests shell out to ripgrep.
-    - name: Install ripgrep
+    # The native search differential contract targets ripgrep 15 JSON.
+    - name: Install ripgrep reference
       if: inputs.lookup-only != 'true' && (inputs.setup != 'harness')
       shell: bash
       run: |
         set -euo pipefail
-        command -v rg >/dev/null && exit 0
         if [[ "${RUNNER_OS}" == macOS ]]; then
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          command -v rg >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
         else
-          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ripgrep
+          case "${RUNNER_ARCH}" in
+            X64)
+              target=x86_64-unknown-linux-musl
+              digest=253ad0fd5fef0d64cba56c70dccdacc1916d4ed70ad057cc525fcdb0c3bbd2a7
+              ;;
+            ARM64)
+              target=aarch64-unknown-linux-gnu
+              digest=15f8cc2fab12d88491c54d49f38589922a9d6a7353c29b0a0856727bcdf80754
+              ;;
+            *) echo "Unsupported ripgrep reference architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          reference_dir="${RUNNER_TEMP}/ripgrep-reference-15.0.0"
+          mkdir -p "${reference_dir}"
+          archive="${reference_dir}/release.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-${target}.tar.gz" -o "${archive}"
+          printf '%s  %s\n' "${digest}" "${archive}" | sha256sum --check --strict
+          tar -xzf "${archive}" --strip-components=1 -C "${reference_dir}"
+          "${reference_dir}/rg" --version
+          printf '%s\n' "${reference_dir}" >> "${GITHUB_PATH}"
         fi
 
     # Git integration tests resolve the pinned engine from engine-root.

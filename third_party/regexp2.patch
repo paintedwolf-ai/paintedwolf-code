@@ -1,0 +1,1015 @@
+--- a/bounded.go
++++ b/bounded.go
+@@ -0,0 +1,96 @@
++package regexp2
++
++import (
++	"context"
++	"regexp/syntax"
++
++	"github.com/dlclark/regexp2/v2/internal/budget"
++	enginesyntax "github.com/dlclark/regexp2/v2/syntax"
++	posixsyntax "github.com/dlclark/regexp2/v2/syntax/posix"
++)
++
++// SyntaxBudget bounds the selected typed/pattern APIs and their compilation.
++// Reserve joins the host aggregate working-memory admission before allocation.
++// A nil Reserve selects pure local accounting and provides no aggregate claim.
++type SyntaxBudget = budget.Limits
++type SyntaxBudgetError = budget.Error
++type SyntaxParseError = posixsyntax.Error
++
++const ScalarCollation = posixsyntax.ScalarCollation
++
++// MatchSyntaxBounded executes only a host-validated regular tree. It exposes no
++// text parser, captures, generated engine, pool retention, or PCRE qualification.
++// Cancellation/deadline/work checks run before each VM iteration and scalar loop;
++// allocation payload accounting retains old/new growth overlap until return.
++func MatchSyntaxBounded(ctx context.Context, source *syntax.Regexp, input string, limits SyntaxBudget) (matched bool, err error) {
++	defer func() {
++		if recovered := recover(); recovered != nil {
++			if stopped, ok := recovered.(budget.Abort); ok {
++				matched = false
++				err = stopped.Err
++			} else {
++				panic(recovered)
++			}
++		}
++	}()
++	m := budget.New(ctx, limits)
++	defer m.Close()
++	return matchSyntaxWithMeter(source, input, m)
++}
++
++func matchSyntaxWithMeter(source *syntax.Regexp, input string, m *budget.Meter) (bool, error) {
++	count := 0
++	for range input {
++		m.Step(1)
++		count++
++	}
++	tree := enginesyntax.FromValidatedSyntax(source, m, count+1)
++	code, err := enginesyntax.WriteMetered(tree, m)
++	if err != nil {
++		return false, err
++	}
++	m.Alloc(1024)
++	re := &Regexp{code: code, capsize: 1, MatchTimeout: DefaultMatchTimeout, optimizations: OptimizationOptions{MaxBacktrackingStackSize: -1}}
++	runner := &Runner{re: re, code: code, budget: m}
++	m.Alloc(int64(count) * 4)
++	text := make([]rune, 0, count)
++	for _, ch := range input {
++		m.Step(1)
++		text = append(text, ch)
++	}
++	result, err := runner.scan(text, nil, 0, true, DefaultMatchTimeout)
++	if err != nil {
++		return false, err
++	}
++	m.Check()
++	return result != nil && result.matchcount[0] > 0, nil
++}
++
++// MatchPatternBounded meters the maintained selected Go syntax parser as well as
++// typed compilation and matching. Transform restores host-normalized counts;
++// it is host code over the detached tree and accepts no executable program.
++func MatchPatternBounded(ctx context.Context, source, input string, flags syntax.Flags, transform func(*syntax.Regexp) error, limits SyntaxBudget) (matched bool, err error) {
++	defer func() {
++		if recovered := recover(); recovered != nil {
++			if stopped, ok := recovered.(budget.Abort); ok {
++				matched = false
++				err = stopped.Err
++			} else {
++				panic(recovered)
++			}
++		}
++	}()
++	m := budget.New(ctx, limits)
++	defer m.Close()
++	ast, err := posixsyntax.ParseMetered(source, flags, m)
++	if err != nil {
++		return false, err
++	}
++	if transform != nil {
++		m.Step(1)
++		if err := transform(ast); err != nil {
++			return false, err
++		}
++	}
++	return matchSyntaxWithMeter(ast, input, m)
++}
+--- a/bounded_find.go
++++ b/bounded_find.go
+@@ -0,0 +1,212 @@
++package regexp2
++
++import (
++	"context"
++	"fmt"
++	"regexp/syntax"
++
++	"github.com/dlclark/regexp2/v2/internal/budget"
++	enginesyntax "github.com/dlclark/regexp2/v2/syntax"
++	posixsyntax "github.com/dlclark/regexp2/v2/syntax/posix"
++)
++
++// Host markers a validated tree may carry for assertions the standard syntax
++// tree cannot spell (see enginesyntax.FromMarkedSyntax).
++const (
++	MarkerBackref         = enginesyntax.MarkerBackref
++	MarkerWordStart       = enginesyntax.MarkerWordStart
++	MarkerWordEnd         = enginesyntax.MarkerWordEnd
++	MarkerNotAfterWord    = enginesyntax.MarkerNotAfterWord
++	MarkerNotBeforeWord   = enginesyntax.MarkerNotBeforeWord
++	MarkerWordBoundary    = enginesyntax.MarkerWordBoundary
++	MarkerNotWordBoundary = enginesyntax.MarkerNotWordBoundary
++	MaxMarkedGroup        = enginesyntax.MaxMarkedGroup
++)
++
++// IsMarker reports whether r is reserved for host markers.
++func IsMarker(r rune) bool { return enginesyntax.IsMarker(r) }
++
++// MarkedInputBound is the repetition bound a compile-once marked program
++// lowers with. It must exceed every scalar count the program will match.
++const MarkedInputBound = 1 << 30
++
++// ParseSyntaxBounded runs the maintained standard-grammar parser under a
++// meter and returns its detached tree for host validation and lowering.
++func ParseSyntaxBounded(ctx context.Context, source string, flags syntax.Flags, limits SyntaxBudget) (tree *syntax.Regexp, err error) {
++	defer recoverBudget(&err)
++	m := budget.New(ctx, limits)
++	defer m.Close()
++	return posixsyntax.ParseMetered(source, flags, m)
++}
++
++// BoundedProgram is one metered compilation that many bounded sessions run.
++// It retains no runner, pool or generated engine.
++type BoundedProgram struct {
++	code    *enginesyntax.Code
++	options RegexOptions
++}
++
++// CompileMarkedBounded compiles a host-validated standard tree with numbered
++// captures, references and host markers under a meter.
++func CompileMarkedBounded(ctx context.Context, source *syntax.Regexp, limits SyntaxBudget) (program *BoundedProgram, err error) {
++	defer recoverBudget(&err)
++	m := budget.New(ctx, limits)
++	defer m.Close()
++	tree := enginesyntax.FromMarkedSyntax(source, m, MarkedInputBound)
++	code, err := enginesyntax.WriteMetered(tree, m)
++	if err != nil {
++		return nil, err
++	}
++	return &BoundedProgram{code: code}, nil
++}
++
++// CompilePatternTextBounded compiles text in this engine's own grammar. The
++// caller validates the text against its declared grammar first; this entry
++// point is not a qualification of any wider syntax. Parsing is bounded by the
++// caller's pattern size ceiling; code generation is metered.
++func CompilePatternTextBounded(ctx context.Context, pattern string, options RegexOptions, limits SyntaxBudget) (program *BoundedProgram, err error) {
++	defer recoverBudget(&err)
++	m := budget.New(ctx, limits)
++	defer m.Close()
++	m.Step(int64(len(pattern)))
++	tree, err := enginesyntax.Parse(pattern, enginesyntax.ParseOptions{RegexOptions: enginesyntax.RegexOptions(options)})
++	if err != nil {
++		return nil, err
++	}
++	code, err := enginesyntax.WriteMetered(tree, m)
++	if err != nil {
++		return nil, err
++	}
++	return &BoundedProgram{code: code, options: options}, nil
++}
++
++// BoundedSession runs a program against records under one meter, for example
++// every search of one line. Close releases its admissions.
++type BoundedSession struct {
++	meter  *budget.Meter
++	runner *Runner
++}
++
++// Session opens a metered run. Steps, time and allocation accumulate across
++// every Find until Close.
++func (p *BoundedProgram) Session(ctx context.Context, limits SyntaxBudget) (session *BoundedSession, err error) {
++	defer recoverBudget(&err)
++	m := budget.New(ctx, limits)
++	re := &Regexp{code: p.code, options: p.options, caps: p.code.Caps, capsize: p.code.Capsize, MatchTimeout: DefaultMatchTimeout, optimizations: OptimizationOptions{MaxBacktrackingStackSize: -1}}
++	return &BoundedSession{meter: m, runner: &Runner{re: re, code: p.code, budget: m}}, nil
++}
++
++// Charge admits host work against the session's step ceiling.
++func (s *BoundedSession) Charge(steps int64) (err error) {
++	defer recoverBudget(&err)
++	s.meter.Step(steps)
++	return nil
++}
++
++// Steps reports the work this session admitted.
++func (s *BoundedSession) Steps() int64 { return s.meter.Steps() }
++
++// Close releases the session's admissions.
++func (s *BoundedSession) Close() { s.meter.Close() }
++
++// Find returns the first match at or after start as scalar offsets: group g
++// spans groups[2g:2g+2], -1 for an unset group. Without longest the match is
++// the backtracking engine's leftmost-first one. With longest each start
++// explores every path and returns its farthest group-0 end, which is the
++// POSIX leftmost-longest match with POSIX subexpression offsets.
++func (s *BoundedSession) Find(text []rune, start int, longest bool) (groups []int, err error) {
++	defer recoverBudget(&err)
++	if start < 0 || start > len(text) {
++		return nil, fmt.Errorf("bounded find start %d outside %d scalars", start, len(text))
++	}
++	r := s.runner
++	r.longest = longest
++	r.Runtext, r.Runtextstart, r.Runtextend = text, start, len(text)
++	r.timeout, r.ignoreTimeout = DefaultMatchTimeout, true
++	r.initMatch(nil)
++	defer func() { r.runmatch = nil }()
++	for pos := start; pos <= len(text); pos++ {
++		s.meter.Step(1)
++		r.Runtextpos = pos
++		r.best = nil
++		if err := executeDefault(r); err != nil {
++			return nil, err
++		}
++		if longest && r.best != nil {
++			return r.best, nil
++		}
++		if !longest && r.runmatch.matchcount[0] > 0 {
++			return r.captureVector(), nil
++		}
++		r.Runtrackpos = len(r.runtrack)
++		r.Runstackpos = len(r.runstack)
++		r.runcrawlpos = len(r.runcrawl)
++	}
++	s.meter.Check()
++	return nil, nil
++}
++
++// captureVector reads the current last capture of every group as scalar
++// offsets, -1 for an unset group.
++func (r *Runner) captureVector() []int {
++	m := r.runmatch
++	code := r.code
++	top := code.Capsize
++	if code.Caps != nil {
++		top = 0
++		for group := range code.Caps {
++			top = max(top, group+1)
++		}
++	}
++	r.budget.Alloc(int64(top) * 16)
++	out := make([]int, 2*top)
++	for group := range top {
++		out[2*group], out[2*group+1] = -1, -1
++		index := group
++		if code.Caps != nil {
++			mapped, ok := code.Caps[group]
++			if !ok {
++				continue
++			}
++			index = mapped
++		}
++		if count := m.matchcount[index]; count > 0 {
++			begin, length := m.matches[index][2*count-2], m.matches[index][2*count-1]
++			out[2*group], out[2*group+1] = begin, begin+length
++		}
++	}
++	return out
++}
++
++// posixPrefers orders two complete matches from one start: the farther
++// overall end, then group by group a set group over an unset one, the
++// earlier start and the farther end.
++func posixPrefers(candidate, best []int) bool {
++	if candidate[1] != best[1] {
++		return candidate[1] > best[1]
++	}
++	for i := 2; i+1 < len(candidate); i += 2 {
++		switch {
++		case candidate[i] == best[i] && candidate[i+1] == best[i+1]:
++			continue
++		case best[i] < 0:
++			return true
++		case candidate[i] < 0:
++			return false
++		case candidate[i] != best[i]:
++			return candidate[i] < best[i]
++		}
++		return candidate[i+1] > best[i+1]
++	}
++	return false
++}
++
++func recoverBudget(err *error) {
++	if recovered := recover(); recovered != nil {
++		if stopped, ok := recovered.(budget.Abort); ok {
++			*err = stopped.Err
++			return
++		}
++		panic(recovered)
++	}
++}
+--- a/internal/budget/budget.go
++++ b/internal/budget/budget.go
+@@ -0,0 +1,115 @@
++package budget
++
++import (
++	"context"
++	"fmt"
++	"time"
++)
++
++type Limits struct {
++	MaxBytes, MaxSteps int64
++	Timeout            time.Duration
++	Reserve            func(context.Context, int64) (func(), error)
++}
++type Error struct {
++	Resource          string
++	Maximum, Observed int64
++}
++
++func (e *Error) Error() string {
++	return fmt.Sprintf("regexp2 bounded %s: maximum %d observed %d", e.Resource, e.Maximum, e.Observed)
++}
++
++type Abort struct{ Err error }
++type Meter struct {
++	ctx          context.Context
++	limits       Limits
++	bytes, steps int64
++	deadline     time.Time
++	releases     []func()
++}
++
++func New(ctx context.Context, limits Limits) *Meter {
++	if ctx == nil || limits.MaxBytes < 1 || limits.MaxSteps < 1 || limits.Timeout <= 0 {
++		panic(Abort{fmt.Errorf("bounded regex requires context and positive limits")})
++	}
++	if limits.MaxBytes < 512 {
++		panic(Abort{&Error{"bytes", limits.MaxBytes, 512}})
++	}
++	var release func()
++	if limits.Reserve != nil {
++		var err error
++		release, err = limits.Reserve(ctx, 512)
++		if err == nil && release == nil {
++			err = fmt.Errorf("bounded regex admission returned no lease")
++		}
++		if err != nil {
++			panic(Abort{err})
++		}
++	}
++	m := &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout), bytes: 512}
++	if release != nil {
++		m.releases = []func(){release}
++	}
++	return m
++}
++func (m *Meter) Check() {
++	if m == nil {
++		return
++	}
++	if err := m.ctx.Err(); err != nil {
++		panic(Abort{err})
++	}
++	if !time.Now().Before(m.deadline) {
++		panic(Abort{&Error{"time", m.limits.Timeout.Nanoseconds(), m.limits.Timeout.Nanoseconds() + 1}})
++	}
++}
++func (m *Meter) Step(n int64) {
++	if m == nil {
++		return
++	}
++	m.Check()
++	if n < 0 || n > m.limits.MaxSteps-m.steps {
++		panic(Abort{&Error{"steps", m.limits.MaxSteps, m.steps + n}})
++	}
++	m.steps += n
++}
++
++// Alloc reserves cumulative allocation payload including old/new growth overlap.
++// Runtime metadata/allocator rounding and source-owned bytes are not heap claims.
++func (m *Meter) Alloc(n int64) {
++	if m == nil {
++		return
++	}
++	m.Check()
++	n += 32
++	if n < 0 || n > m.limits.MaxBytes-m.bytes {
++		panic(Abort{&Error{"bytes", m.limits.MaxBytes, m.bytes + n}})
++	}
++	if m.limits.Reserve != nil {
++		release, err := m.limits.Reserve(m.ctx, n)
++		if err == nil && release == nil {
++			err = fmt.Errorf("bounded regex admission returned no lease")
++		}
++		if err != nil {
++			panic(Abort{err})
++		}
++		m.releases = append(m.releases, release)
++	}
++	m.bytes += n
++}
++
++// Steps reports the work admitted so far.
++func (m *Meter) Steps() int64 {
++	if m == nil {
++		return 0
++	}
++	return m.steps
++}
++
++func (m *Meter) Close() {
++	for i := len(m.releases) - 1; i >= 0; i-- {
++		m.releases[i]()
++	}
++	m.releases = nil
++}
+--- a/runner.go
++++ b/runner.go
+@@ -5,0 +6 @@
++	"github.com/dlclark/regexp2/v2/internal/budget"
+@@ -18,3 +19,4 @@
+-	re    *Regexp
+-	code  *syntax.Code
+-	debug bool
++	budget *budget.Meter
++	re     *Regexp
++	code   *syntax.Code
++	debug  bool
+@@ -21,0 +24,7 @@
++	// longest makes Stop record the preferred capture vector and keep
++	// backtracking, so one attempt explores every path from its start: the
++	// farthest group-0 end, then for each group in order the earliest start
++	// and the farthest end (POSIX subexpression rules).
++	longest bool
++	best    []int
++
+@@ -157,0 +167 @@
++		r.budget.Step(1)
+@@ -224,0 +235 @@
++		r.budget.Step(1)
+@@ -237,0 +249,7 @@
++			if r.longest && r.runmatch.matchcount[0] > 0 {
++				candidate := r.captureVector()
++				if r.best == nil || posixPrefers(candidate, r.best) {
++					r.best = candidate
++				}
++				break
++			}
+@@ -537,0 +556 @@
++				r.budget.Step(1)
+@@ -556,0 +576 @@
++				r.budget.Step(1)
+@@ -703,0 +724 @@
++				r.budget.Step(1)
+@@ -722,0 +744 @@
++				r.budget.Step(1)
+@@ -742,0 +765 @@
++				r.budget.Step(1)
+@@ -763,0 +787 @@
++				r.budget.Step(1)
+@@ -788,0 +813 @@
++				r.budget.Step(1)
+@@ -813,0 +839 @@
++				r.budget.Step(1)
+@@ -971,0 +998,2 @@
++		r.budget.Step(int64(len(r.runstack)))
++		r.budget.Alloc(int64(len(r.runstack)) * 16)
+@@ -981,0 +1010,2 @@
++		r.budget.Step(int64(len(r.runstack)))
++		r.budget.Alloc(int64(len(r.runstack)) * 16)
+@@ -997,0 +1028,2 @@
++		r.budget.Step(int64(len(r.runcrawl)))
++		r.budget.Alloc(int64(len(r.runcrawl)) * 16)
+@@ -1067,0 +1100,2 @@
++	r.budget.Step(int64(oldLen))
++	r.budget.Alloc(int64(newLen) * 8)
+@@ -1278,0 +1313 @@
++			r.budget.Step(1)
+@@ -1286,0 +1322 @@
++			r.budget.Step(1)
+@@ -1325,0 +1362 @@
++			r.budget.Step(1)
+@@ -1335,0 +1373 @@
++			r.budget.Step(1)
+@@ -1429,0 +1468 @@
++			r.budget.Step(1)
+@@ -1436,0 +1476 @@
++			r.budget.Step(1)
+@@ -1562,0 +1603 @@
++			r.budget.Step(1)
+@@ -1563,0 +1605 @@
++				r.budget.Step(1)
+@@ -1580,0 +1623 @@
++		r.budget.Step(1)
+@@ -1587,0 +1631 @@
++			r.budget.Step(1)
+@@ -1617,0 +1662 @@
++		r.budget.Step(1)
+@@ -1645,0 +1691 @@
++		r.budget.Step(1)
+@@ -1674,0 +1721 @@
++		r.budget.Step(1)
+@@ -1703,0 +1751 @@
++		r.budget.Step(1)
+@@ -1711,0 +1760 @@
++			r.budget.Step(1)
+@@ -1730,0 +1780 @@
++		r.budget.Step(1)
+@@ -1738,0 +1789 @@
++			r.budget.Step(1)
+@@ -1751,0 +1803 @@
++			r.budget.Step(1)
+@@ -1880,0 +1933 @@
++		r.budget.Step(1)
+@@ -1926,0 +1980 @@
++			r.budget.Alloc(512 + int64(r.re.capsize)*32)
+@@ -1928,0 +1983 @@
++			r.budget.Alloc(512 + int64(r.re.capsize)*32)
+@@ -1961,0 +2017 @@
++	r.budget.Alloc(int64(tracksize+stacksize+32) * 8)
+@@ -2008,0 +2065,5 @@
++	if r.runmatch.matches[capnum] == nil {
++		r.budget.Alloc(16)
++	} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
++		r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
++	}
+@@ -2049,0 +2111,5 @@
++		if r.runmatch.matches[capnum] == nil {
++			r.budget.Alloc(16)
++		} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
++			r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
++		}
+@@ -2087,0 +2154 @@
++		r.budget.Step(1)
+@@ -2117,0 +2185 @@
++		r.budget.Step(1)
+@@ -2170,0 +2239 @@
++		r.budget.Step(1)
+@@ -2181,0 +2251 @@
++		r.budget.Step(1)
+@@ -2213,0 +2284 @@
++		r.budget.Step(1)
+@@ -2223,0 +2295 @@
++		r.budget.Step(1)
+@@ -2296,0 +2369 @@
++		r.budget.Step(1)
+--- a/syntax/bounded_tree.go
++++ b/syntax/bounded_tree.go
+@@ -0,0 +1,254 @@
++package syntax
++
++import (
++	"fmt"
++	"math"
++	"regexp/syntax"
++	"slices"
++	"unicode"
++
++	"github.com/dlclark/regexp2/v2/internal/budget"
++)
++
++// FromValidatedSyntax lowers a host-validated regular tree without accepting a
++// second textual grammar. Captures are unobservable for this boolean-only API.
++func FromValidatedSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexTree {
++	m.Alloc(512)
++	l := lowering{m: m, inputBound: inputBound}
++	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{l.lower(source)}}
++	root.Children[0].Parent = root
++	return &RegexTree{Root: root, Captop: 1}
++}
++
++// Host markers are private-use scalars that a host-validated tree carries for
++// assertions the standard syntax cannot spell. Only FromMarkedSyntax
++// interprets them; the boolean lowering keeps every scalar literal.
++const (
++	MarkerBackref         rune = 0x10FF00 // plus the group number, 1 through MaxMarkedGroup
++	MarkerWordStart       rune = 0x10FFF0 // GNU \<
++	MarkerWordEnd         rune = 0x10FFF1 // GNU \>
++	MarkerNotAfterWord    rune = 0x10FFF2 // not preceded by an ASCII word scalar
++	MarkerNotBeforeWord   rune = 0x10FFF3 // not followed by an ASCII word scalar
++	MarkerWordBoundary    rune = 0x10FFF4 // GNU \b over the ASCII word class
++	MarkerNotWordBoundary rune = 0x10FFF5 // GNU \B over the ASCII word class
++	MaxMarkedGroup             = 0xEF
++	markerFirst           rune = 0x10FF00
++	markerLast            rune = 0x10FFFF
++)
++
++// IsMarker reports whether r is reserved for host markers.
++func IsMarker(r rune) bool { return r >= markerFirst && r <= markerLast }
++
++// FromMarkedSyntax lowers a host-validated tree with numbered captures,
++// Unicode simple case folding for FoldCase literals and host markers.
++// Word assertions use the fixed ASCII word class [0-9A-Za-z_].
++func FromMarkedSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexTree {
++	m.Alloc(512)
++	l := lowering{m: m, inputBound: inputBound, marked: true}
++	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{l.lower(source)}}
++	root.Children[0].Parent = root
++	return &RegexTree{Root: root, Captop: source.MaxCap() + 1}
++}
++
++type lowering struct {
++	m          *budget.Meter
++	inputBound int
++	marked     bool
++}
++
++func (l lowering) lower(source *syntax.Regexp) *RegexNode {
++	m, inputBound := l.m, l.inputBound
++	m.Step(1)
++	m.Alloc(256 + int64(len(source.Sub))*8 + int64(len(source.Rune))*8)
++	node := &RegexNode{}
++	switch source.Op {
++	case syntax.OpNoMatch:
++		node.T = NtNothing
++	case syntax.OpEmptyMatch:
++		node.T = NtEmpty
++	case syntax.OpLiteral:
++		if l.marked {
++			return l.literal(source)
++		}
++		if source.Flags&syntax.FoldCase != 0 {
++			panic(budget.Abort{fmt.Errorf("bounded typed ERE does not admit casefold flags")})
++		}
++		if len(source.Rune) == 1 {
++			node.T = NtOne
++			node.Ch = source.Rune[0]
++		} else {
++			node.T = NtMulti
++			node.Str = append([]rune(nil), source.Rune...)
++		}
++	case syntax.OpCharClass:
++		node.T = NtSet
++		node.Set = &CharSet{}
++		node.Set.ranges = make([]SingleRange, 0, len(source.Rune)/2)
++		for i := 0; i < len(source.Rune); i += 2 {
++			m.Step(1)
++			node.Set.ranges = append(node.Set.ranges, SingleRange{First: source.Rune[i], Last: source.Rune[i+1]})
++		}
++	case syntax.OpAnyChar:
++		node.T = NtSet
++		node.Set = &CharSet{anything: true, ranges: []SingleRange{{First: 0, Last: 0x10ffff}}}
++	case syntax.OpAnyCharNotNL:
++		node.T = NtNotone
++		node.Ch = '\n'
++	case syntax.OpBeginLine:
++		node.T = NtBol
++	case syntax.OpEndLine:
++		node.T = NtEol
++	case syntax.OpBeginText:
++		node.T = NtBeginning
++	case syntax.OpEndText:
++		node.T = NtEnd
++	case syntax.OpWordBoundary:
++		if l.marked {
++			return l.boundary(true)
++		}
++		node.T = NtECMABoundary
++	case syntax.OpNoWordBoundary:
++		if l.marked {
++			return l.boundary(false)
++		}
++		node.T = NtNonECMABoundary
++	case syntax.OpCapture:
++		node.T = NtGroup
++		if l.marked {
++			node.T, node.M, node.N = NtCapture, source.Cap, -1
++		}
++	case syntax.OpConcat:
++		node.T = NtConcatenate
++	case syntax.OpAlternate:
++		node.T = NtAlternate
++	case syntax.OpStar:
++		node.T = NtLoop
++		node.N = math.MaxInt32
++	case syntax.OpPlus:
++		node.T = NtLoop
++		node.M = 1
++		node.N = math.MaxInt32
++	case syntax.OpQuest:
++		node.T = NtLoop
++		node.N = 1
++	case syntax.OpRepeat:
++		// Boolean matches on L input scalars need at most L+1 repetitions:
++		// any longer successful sequence contains an empty iteration which can
++		// be removed or duplicated without changing text/assertions. Captures and
++		// backreferences are absent in this typed API. This preserves arbitrary
++		// counts without introducing the VM's int32 counter as a grammar ceiling.
++		node.T = NtLoop
++		node.M = min(source.Min, inputBound)
++		node.N = source.Max
++		if node.N < 0 {
++			node.N = math.MaxInt32
++		} else {
++			node.N = min(node.N, inputBound)
++		}
++
++	default:
++		panic(budget.Abort{fmt.Errorf("unvalidated regex tree operation %d", source.Op)})
++	}
++	node.Children = make([]*RegexNode, len(source.Sub))
++	for i, sub := range source.Sub {
++		node.Children[i] = l.lower(sub)
++		node.Children[i].Parent = node
++	}
++	return node
++}
++
++// literal lowers one marked literal: markers become assertions or
++// references, FoldCase scalars become their simple-fold orbit.
++func (l lowering) literal(source *syntax.Regexp) *RegexNode {
++	parts := make([]*RegexNode, 0, len(source.Rune))
++	for _, r := range source.Rune {
++		l.m.Step(1)
++		l.m.Alloc(256)
++		switch {
++		case IsMarker(r):
++			node := l.marker(r)
++			if node.T == NtRef && source.Flags&syntax.FoldCase != 0 {
++				node.Options |= IgnoreCase
++			}
++			parts = append(parts, node)
++		case source.Flags&syntax.FoldCase != 0:
++			parts = append(parts, l.folded(r))
++		default:
++			parts = append(parts, &RegexNode{T: NtOne, Ch: r})
++		}
++	}
++	if len(parts) == 1 {
++		return parts[0]
++	}
++	return l.join(NtConcatenate, parts...)
++}
++
++func (l lowering) folded(r rune) *RegexNode {
++	orbit := []rune{r}
++	for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
++		l.m.Step(1)
++		orbit = append(orbit, f)
++	}
++	if len(orbit) == 1 {
++		return &RegexNode{T: NtOne, Ch: r}
++	}
++	slices.Sort(orbit)
++	set := &CharSet{}
++	for _, f := range orbit {
++		set.ranges = append(set.ranges, SingleRange{First: f, Last: f})
++	}
++	return &RegexNode{T: NtSet, Set: set}
++}
++
++func asciiWord() *CharSet {
++	return &CharSet{ranges: []SingleRange{{First: '0', Last: '9'}, {First: 'A', Last: 'Z'}, {First: '_', Last: '_'}, {First: 'a', Last: 'z'}}}
++}
++
++// look builds a one-scalar lookaround over the ASCII word class.
++func (l lowering) look(positive, behind bool) *RegexNode {
++	l.m.Alloc(512)
++	t := NtNegLook
++	if positive {
++		t = NtPosLook
++	}
++	child := &RegexNode{T: NtSet, Set: asciiWord()}
++	if behind {
++		child.Options |= RightToLeft
++	}
++	return l.join(t, child)
++}
++
++func (l lowering) marker(r rune) *RegexNode {
++	switch {
++	case r > MarkerBackref && r <= MarkerBackref+MaxMarkedGroup:
++		return &RegexNode{T: NtRef, M: int(r - MarkerBackref)}
++	case r == MarkerWordBoundary:
++		return l.boundary(true)
++	case r == MarkerNotWordBoundary:
++		return l.boundary(false)
++	case r == MarkerWordStart:
++		return l.join(NtConcatenate, l.look(false, true), l.look(true, false))
++	case r == MarkerWordEnd:
++		return l.join(NtConcatenate, l.look(true, true), l.look(false, false))
++	case r == MarkerNotAfterWord:
++		return l.look(false, true)
++	case r == MarkerNotBeforeWord:
++		return l.look(false, false)
++	}
++	panic(budget.Abort{fmt.Errorf("unknown host regex marker U+%06X", r)})
++}
++
++// boundary is an ASCII word boundary (or its negation) from lookarounds.
++func (l lowering) boundary(at bool) *RegexNode {
++	return l.join(NtAlternate,
++		l.join(NtConcatenate, l.look(true, true), l.look(!at, false)),
++		l.join(NtConcatenate, l.look(false, true), l.look(at, false)))
++}
++
++func (l lowering) join(t NodeType, children ...*RegexNode) *RegexNode {
++	node := &RegexNode{T: t, Children: children}
++	for _, child := range children {
++		child.Parent = node
++	}
++	return node
++}
+--- a/syntax/posix/bounded.go
++++ b/syntax/posix/bounded.go
+@@ -0,0 +1,32 @@
++package syntax
++
++import (
++	"unsafe"
++
++	"github.com/dlclark/regexp2/v2/internal/budget"
++)
++
++func ParseMetered(source string, flags Flags, m *budget.Meter) (*Regexp, error) {
++	return parse(source, flags, m)
++}
++func appendMetered[T any](m *budget.Meter, dst []T, values ...T) []T {
++	if m == nil {
++		return append(dst, values...)
++	}
++	m.Step(int64(len(values)))
++	if len(dst)+len(values) > cap(dst) {
++		capacity := max(2*cap(dst), len(dst)+len(values))
++		var item T
++		m.Alloc(int64(capacity) * int64(unsafe.Sizeof(item)))
++		m.Step(int64(len(dst)))
++		next := make([]T, len(dst), capacity)
++		copy(next, dst)
++		dst = next
++	}
++	return append(dst, values...)
++}
++
++// Unicode category aliases are immutable package data. Initialize them before
++// any operation can cancel halfway through sync.Once and retain a partial map.
++// Their storage remains module-static, outside per-operation scratch admission.
++func init() { categoryAliases.once.Do(func() { initCategoryAliases(nil) }) }
+--- a/syntax/posix/equal.go
++++ b/syntax/posix/equal.go
+@@ -0,0 +1,72 @@
++// Copyright 2011 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package syntax
++
++import "github.com/dlclark/regexp2/v2/internal/budget"
++
++// Equal reports whether x and y have identical structure.
++func equalMetered(x, y *Regexp, m *budget.Meter) bool {
++	m.Step(1)
++	if x == nil || y == nil {
++		return x == y
++	}
++	if x.Op != y.Op {
++		return false
++	}
++	switch x.Op {
++	case OpEndText:
++		// The parse flags remember whether this is \z or \Z.
++		if x.Flags&WasDollar != y.Flags&WasDollar {
++			return false
++		}
++
++	case OpLiteral, OpCharClass:
++		return x.Flags&FoldCase == y.Flags&FoldCase && equalRunes(x.Rune, y.Rune, m)
++
++	case OpAlternate, OpConcat:
++		return equalSubs(x.Sub, y.Sub, m)
++
++	case OpStar, OpPlus, OpQuest:
++		if x.Flags&NonGreedy != y.Flags&NonGreedy || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++
++	case OpRepeat:
++		if x.Flags&NonGreedy != y.Flags&NonGreedy || x.Min != y.Min || x.Max != y.Max || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++
++	case OpCapture:
++		if x.Cap != y.Cap || x.Name != y.Name || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++	}
++	return true
++}
++
++func equalRunes(x, y []rune, m *budget.Meter) bool {
++	if len(x) != len(y) {
++		return false
++	}
++	for i := range x {
++		m.Step(1)
++		if x[i] != y[i] {
++			return false
++		}
++	}
++	return true
++}
++func equalSubs(x, y []*Regexp, m *budget.Meter) bool {
++	if len(x) != len(y) {
++		return false
++	}
++	for i := range x {
++		m.Step(1)
++		if !equalMetered(x[i], y[i], m) {
++			return false
++		}
++	}
++	return true
++}
+--- a/syntax/posix/types.go
++++ b/syntax/posix/types.go
+@@ -0,0 +1,32 @@
++package syntax
++
++import standard "regexp/syntax"
++
++type Regexp = standard.Regexp
++type Op = standard.Op
++
++const (
++	OpNoMatch        = standard.OpNoMatch
++	OpEmptyMatch     = standard.OpEmptyMatch
++	OpLiteral        = standard.OpLiteral
++	OpCharClass      = standard.OpCharClass
++	OpAnyCharNotNL   = standard.OpAnyCharNotNL
++	OpAnyChar        = standard.OpAnyChar
++	OpBeginLine      = standard.OpBeginLine
++	OpEndLine        = standard.OpEndLine
++	OpBeginText      = standard.OpBeginText
++	OpEndText        = standard.OpEndText
++	OpWordBoundary   = standard.OpWordBoundary
++	OpNoWordBoundary = standard.OpNoWordBoundary
++	OpCapture        = standard.OpCapture
++	OpStar           = standard.OpStar
++	OpPlus           = standard.OpPlus
++	OpQuest          = standard.OpQuest
++	OpRepeat         = standard.OpRepeat
++	OpConcat         = standard.OpConcat
++	OpAlternate      = standard.OpAlternate
++	opPseudo         = 128
++)
++
++// ScalarCollation selects locale-independent single-scalar collating atoms.
++const ScalarCollation standard.Flags = 1 << 15
+--- a/syntax/writer.go
++++ b/syntax/writer.go
+@@ -5,0 +6 @@
++	"github.com/dlclark/regexp2/v2/internal/budget"
+@@ -10 +11,6 @@
+-func Write(tree *RegexTree) (*Code, error) {
++func Write(tree *RegexTree) (*Code, error) { return write(tree, nil) }
++
++func WriteMetered(tree *RegexTree, m *budget.Meter) (*Code, error) { return write(tree, m) }
++
++func write(tree *RegexTree, m *budget.Meter) (*Code, error) {
++	m.Alloc(2048)
+@@ -11,0 +18 @@
++	w.budget = m
+@@ -17,0 +25 @@
++		m.Alloc(2048)
+@@ -18,0 +27 @@
++		quickWriter.budget = m
+@@ -38,0 +48 @@
++	budget  *budget.Meter
+@@ -91,0 +102 @@
++		w.budget.Step(1)
+@@ -92,0 +104 @@
++			w.budget.Alloc(int64(w.count) * 8)
+@@ -101,0 +114 @@
++			w.budget.Step(1)
+@@ -143,0 +157,4 @@
++	if w.budget != nil {
++		w.budget.Alloc(512 + int64(capsize))
++		return &Code{Codes: w.emitted, Strings: w.stringtable, Sets: w.settable, TrackCount: w.trackcount, Caps: w.caps, Capsize: capsize, CaptureSlotInUse: captureSlotsInUse(w.emitted, capsize)}, nil
++	}
+@@ -407,0 +425,3 @@
++	if len(w.intStack) == cap(w.intStack) {
++		w.budget.Alloc(int64(cap(w.intStack)*2+1) * 8)
++	}
+@@ -443,0 +464 @@
++	w.budget.Alloc(256 + int64(len(set.ranges))*64)
+@@ -450,0 +472 @@
++		w.budget.Alloc(128)
+@@ -451,0 +474,3 @@
++		if len(w.settable) == cap(w.settable) {
++			w.budget.Alloc(int64(cap(w.settable)*2+1) * 8)
++		}
+@@ -463,0 +489 @@
++	w.budget.Alloc(int64(len(str)) * 4)
+@@ -467,0 +494 @@
++		w.budget.Alloc(128)
+@@ -468,0 +496,3 @@
++		if len(w.stringtable) == cap(w.stringtable) {
++			w.budget.Alloc(int64(cap(w.stringtable)*2+1) * 24)
++		}

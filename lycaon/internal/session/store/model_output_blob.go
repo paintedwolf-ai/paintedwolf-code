@@ -37,6 +37,7 @@ func (s *SQL) writeModelOutputBlob(ctx context.Context, q *db.Queries, projectID
 		return "", fmt.Errorf("marshal model output body: %w", err)
 	}
 	blobStore := contentblob.StoreFor(s.dataDir, projectID)
+	//nolint:contextcheck // The host-blob API is contextless; admitted program streams carry their own context.
 	sha, byteSize, storedSize, err := contentblob.Write(blobStore, raw)
 	if err != nil {
 		return "", fmt.Errorf("write model output blob: %w", err)

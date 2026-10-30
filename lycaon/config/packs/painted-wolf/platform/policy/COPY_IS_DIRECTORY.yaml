@@ -3,10 +3,11 @@ id: COPY_IS_DIRECTORY
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - copy
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
   profiles:

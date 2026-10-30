@@ -29,7 +29,8 @@ const (
 	defaultCopyMaxBytes int64 = 10 << 20 // 10 MiB
 )
 
-type filePair struct {
+// FilePair is one source and destination of a copy or move.
+type FilePair struct {
 	From string
 	To   string
 }
@@ -83,7 +84,7 @@ func parseDeletePaths(args map[string]any) ([]string, error) {
 	})
 }
 
-func parseCopyPairs(args map[string]any) ([]filePair, int64, error) {
+func parseCopyPairs(args map[string]any) ([]FilePair, int64, error) {
 	maxBytes := defaultCopyMaxBytes
 	if raw, present := args["max_file_bytes"]; present {
 		maxBytes = 0
@@ -106,7 +107,7 @@ func parseCopyPairs(args map[string]any) ([]filePair, int64, error) {
 	return pairs, maxBytes, err
 }
 
-func parseMovePairs(args map[string]any) ([]filePair, error) {
+func parseMovePairs(args map[string]any) ([]FilePair, error) {
 	return parseFilePairs(args, "moves", hostMoveMaxPairs, "MOVE_BULK_DENIED")
 }
 
@@ -119,7 +120,7 @@ func parseMkdirPaths(args map[string]any) ([]string, error) {
 	})
 }
 
-func parseFilePairs(args map[string]any, key string, maxItems int, bulkCode string) ([]filePair, error) {
+func parseFilePairs(args map[string]any, key string, maxItems int, bulkCode string) ([]FilePair, error) {
 	raw, ok := args[key].([]any)
 	if !ok || len(raw) == 0 {
 		return nil, toolkit.MissingArg(key)
@@ -130,7 +131,7 @@ func parseFilePairs(args map[string]any, key string, maxItems int, bulkCode stri
 			Data: map[string]any{"max_pairs": maxItems, "requested": len(raw)},
 		}
 	}
-	out := make([]filePair, 0, len(raw))
+	out := make([]FilePair, 0, len(raw))
 	for _, item := range raw {
 		pairMap, ok := item.(map[string]any)
 		if !ok {
@@ -141,7 +142,7 @@ func parseFilePairs(args map[string]any, key string, maxItems int, bulkCode stri
 		if strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" {
 			return nil, fmt.Errorf("invalid %q entry: need from and to", key)
 		}
-		out = append(out, filePair{
+		out = append(out, FilePair{
 			From: strings.TrimSpace(from),
 			To:   strings.TrimSpace(to),
 		})

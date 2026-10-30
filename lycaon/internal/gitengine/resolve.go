@@ -103,7 +103,7 @@ func versionOf(bin string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := execpkg.RunPrepared(cmd); err != nil {
 		return "", fmt.Errorf("git --version: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
 	return parseGitVersion(stdout.String())

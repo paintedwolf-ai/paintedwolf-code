@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -116,23 +117,6 @@ func openWindowsParent(loc Location, create, write bool) (*windowsParent, error)
 		currentPath = filepath.Join(currentPath, component)
 	}
 	return &windowsParent{handle: handle, path: currentPath, name: parts[len(parts)-1]}, nil
-}
-
-func openWindowsRoot(path string, write bool) (windows.Handle, error) {
-	objectName, err := windows.NewNTUnicodeString(windowsNTPath(path))
-	if err != nil {
-		return 0, err
-	}
-	access := uint32(windows.FILE_GENERIC_READ)
-	if write {
-		access |= windows.FILE_GENERIC_WRITE
-	}
-	oa := windows.OBJECT_ATTRIBUTES{
-		Length:     uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		ObjectName: objectName,
-		Attributes: windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
-	}
-	return ntCreate(&oa, access, windows.FILE_OPEN, windows.FILE_DIRECTORY_FILE)
 }
 
 func windowsNTPath(path string) string {
@@ -336,19 +320,21 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return result, fmt.Errorf("commit replacement: %w", err)
 	}
 	committed = true
-	result.Committed = true
+	result.Publication = PublicationReplaced
 	if err := injectAt(inject, stageRenamed); err != nil {
 		return result, err
 	}
 	if err := flushHandle(parent.handle); err != nil {
 		return result, fmt.Errorf("sync replacement directory: %w", err)
 	}
+	result.Publication = PublicationDurable
 	if err := injectAt(inject, stageDirSynced); err != nil {
 		return result, err
 	}
 	if err := verifyWindowsTarget(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
 		return result, err
 	}
+	result.Publication = PublicationVerified
 	return result, injectAt(inject, stageVerified)
 }
 
@@ -584,8 +570,10 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	return result, nil
 }
 
-// Chown is unsupported on this platform.
-func Chown(Location, int, int) error { return ErrUnsupported }
+// platformChown is unsupported on this platform.
+func platformChown(Location, int, int) error { return ErrUnsupported }
+
+func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
 
 // MkdirAll creates and flushes directories through held handles.
 func MkdirAll(loc Location, _ os.FileMode) error {
@@ -632,3 +620,5 @@ func MkdirAll(loc Location, _ os.FileMode) error {
 	}
 	return flushHandle(handle)
 }
+
+func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }

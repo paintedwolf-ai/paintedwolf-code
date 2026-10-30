@@ -1,0 +1,117 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/360EntSecGroup-Skylar/excelize/v2",
+      "symbols": [
+       "Decrypt",
+       "Encrypt",
+       "File.Save",
+       "File.SaveAs",
+       "File.Write",
+       "File.WriteTo",
+       "File.WriteToBuffer",
+       "OpenFile",
+       "OpenReader",
+       "agileDecrypt",
+       "convertPasswdToKey",
+       "createIV",
+       "crypt",
+       "cryptPackage",
+       "standardConvertPasswdToKey",
+       "standardDecrypt"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/360EntSecGroup-Skylar/excelize/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.3.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/xuri/excelize/v2",
+      "symbols": [
+       "Decrypt",
+       "Encrypt",
+       "File.Save",
+       "File.SaveAs",
+       "File.Write",
+       "File.WriteTo",
+       "File.WriteToBuffer",
+       "OpenFile",
+       "OpenReader",
+       "agileDecrypt",
+       "convertPasswdToKey",
+       "createIV",
+       "decrypt",
+       "decryptPackage",
+       "standardConvertPasswdToKey",
+       "standardDecrypt"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/xuri/excelize/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.11.1-0.20260915055537-22f76f9acb94"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-107214",
+  "GHSA-2j4c-ffch-9f23"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6684"
+ },
+ "details": "Excelize Decrypt: unrecoverable panics on malformed OLE/CFB encrypted workbooks in github.com/xuri/excelize",
+ "id": "GO-2026-6684",
+ "modified": "2026-10-19T21:08:21Z",
+ "published": "2026-10-19T21:08:21Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/qax-os/excelize/security/advisories/GHSA-2j4c-ffch-9f23"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/qax-os/excelize/commit/22f76f9acb94b85b3eb9c4365ab4f750cebbc565"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/qax-os/excelize/pull/2395"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Excelize Decrypt: unrecoverable panics on malformed OLE/CFB encrypted workbooks in github.com/xuri/excelize"
+}

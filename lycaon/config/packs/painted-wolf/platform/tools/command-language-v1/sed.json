@@ -1,26 +1,48 @@
 {
   "sed_contract": {
-    "addresses": "None, one positive line number, $, /BRE/ or two addresses separated comma; second regex search begins on the line after the first address matched (range at least two lines unless EOF), numeric end before start yields start line. Optional ! negates range.",
+    "addresses": "None, a positive line number, $, /REGEX/ or \\cREGEXc (optionally followed by I), first~step, or two addresses separated by comma; addr,+N and addr,~N extend a range; 0,/REGEX/ may end on line 1. A second regex search begins on the line after the first address matched; a numeric end at or before the start selects the start line only. Optional ! negates.",
     "commands": {
-      "p": "print current record",
-      "d": "delete current pattern space and start next cycle",
-      "q": "quit with complete early-consumer closure",
-      "a": "append literal text after cycle",
-      "i": "insert literal text before current record",
-      "c": "replace addressed range with literal text once",
-      "s": "s<delimiter>BRE<delimiter>replacement<delimiter>[g|p|positive match ordinal]; & whole match, \\1..\\9 captures, escaped delimiter literal"
+      "p": "print pattern space",
+      "P": "print through the first newline",
+      "d": "delete pattern space and start next cycle",
+      "D": "delete through the first newline and restart without reading when text remains",
+      "q": "print (unless -n), flush appends and quit with optional exit code",
+      "Q": "quit with optional exit code without printing",
+      "n": "print (unless -n) and read the next line",
+      "N": "append a newline and the next line; at end of input print and exit (GNU)",
+      "a": "append text after cycle",
+      "i": "insert text before",
+      "c": "replace addressed range with text once",
+      "s": "s<delim>REGEX<delim>replacement<delim>[g|p|N|I|w FILE]; & whole match, \\1..\\9, \\n, \\L \\U \\l \\u \\E case conversion, escaped delimiter literal",
+      "y": "y/SOURCE/DEST/ transliterates equal-length byte or scalar lists",
+      "h": "copy pattern to hold",
+      "H": "append newline and pattern to hold",
+      "g": "copy hold to pattern",
+      "G": "append newline and hold to pattern",
+      "x": "exchange pattern and hold",
+      "b": "branch to label or end",
+      "t": "branch if a substitution succeeded since the last input line or t",
+      "T": "branch if none succeeded",
+      ":": "label",
+      "=": "print the line number",
+      "l": "print unambiguously, wrapped at 70 columns (l N for N)",
+      "w": "write pattern space to FILE through publication",
+      "z": "empty the pattern space",
+      "#": "comment",
+      "{}": "group commands under an address",
+      "r": "queue FILE contents for the end of the cycle (missing file reads as nothing)",
+      "R": "queue the next line of FILE",
+      "W": "write the first line of pattern space to FILE",
+      "F": "print the input name",
+      "v": "no-op"
     },
-    "multi_script": "Semicolon/LF separates commands outside quoted text, regex and escaped delimiter; repeated -e concatenate in order; braces group addressed commands. Empty script copies records.",
-    "in_place": "-i consumes a separate empty suffix only if empty; otherwise next argument is script. Attached nonempty suffix rejects. No backups. Multiple files prepare/publish independently, stop on first failure.",
+    "multi_script": "Semicolon/LF separates commands outside text, regex and escaped delimiter; -e scripts and -f files concatenate in order with newlines; braces group addressed commands; labels end at newline or semicolon. Empty script copies records.",
+    "in_place": "-i[SUFFIX] (GNU, attached) or -i followed by an empty word (BSD) edits each file in place; SUFFIX backs up the original through the same publication, with * replaced by the file name. Each file pins its destination before its source and publishes complete output before the next file; stop on first failure, earlier files stay published.",
     "unsupported": [
-      "w",
-      "W",
-      "r",
-      "R",
       "e",
       "s///e",
-      "s///w",
-      "branches/labels/hold-space commands outside catalog"
+      "s///M",
+      "/regex/M"
     ],
     "fixtures": [
       {
@@ -49,9 +71,14 @@
         "stdout": "start\na\nend\n"
       },
       {
-        "program": "sed 'w ./out' ./input",
+        "program": "sed 'e date' ./input",
         "code": "COMMAND_OPTION_UNSUPPORTED",
         "effects": []
+      },
+      {
+        "program": "sed -n 'h;n;G;p' ./input",
+        "input": "a\nb\n",
+        "stdout": "b\na\n"
       }
     ],
     "reference": "https://www.gnu.org/software/sed/manual/html_node/Addresses.html"

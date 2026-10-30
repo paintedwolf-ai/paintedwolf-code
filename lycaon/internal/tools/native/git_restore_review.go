@@ -14,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (t *GitRestoreTool) reviewRestore(ctx context.Context, tc tools.ToolContext, files []git.RestoreFile) error {
-	return reviewGitFiles(ctx, tc, t.Boundary, "git_restore", files)
-}
-
 func reviewGitFiles(ctx context.Context, tc tools.ToolContext, boundary *sandbox.Boundary, tool string, files []git.RestoreFile) error {
 	changes := make([]tools.FileChange, 0, len(files))
 	for _, file := range files {

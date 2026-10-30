@@ -13,6 +13,20 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// admittedDirectIPLaunch binds the fixture's actual action lease and carries its
+// live recheck as the agent launch's current authority, as tool producers do.
+func admittedDirectIPLaunch(t *testing.T, subject, sessionID, callID, dir string) exec.LaunchPlan {
+	t.Helper()
+	boundary := &confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDirectIP}
+	identity := confine.EgressCommand{SessionID: sessionID, ToolCallID: callID, ProjectDir: dir}
+	lease, err := confine.BindAction(boundary, identity)
+	testutil.FailErr(t, "admit direct-ip action", err)
+	t.Cleanup(func() { lease.Close(context.Background()) })
+	plan := exec.AgentLaunch(exec.LaunchAgentCommand, subject, boundary)
+	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
+	return plan
+}
+
 func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep-based fixture is unix-oriented")
@@ -21,9 +35,7 @@ func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 	runner := hostcmd.NewRunner()
 	dir := t.TempDir()
 	handle, err := startBackground(context.Background(), reg, "sess-1", "proj-1", hostcmd.Request{
-		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "test", &confine.Confinement{
-			Roots: []string{dir}, Network: confine.NetworkDirectIP,
-		}),
+		Launch:     admittedDirectIPLaunch(t, "test", "sess-1", "call-direct", dir),
 		ProjectDir: dir,
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)

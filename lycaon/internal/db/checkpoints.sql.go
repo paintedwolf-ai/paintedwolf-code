@@ -102,14 +102,37 @@ func (q *Queries) DeleteExpiredChatGrants(ctx context.Context, now sql.NullStrin
 const getCheckpoint = `-- name: GetCheckpoint :one
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE id = ?
 `
 
-func (q *Queries) GetCheckpoint(ctx context.Context, id string) (Checkpoints, error) {
+type GetCheckpointRow struct {
+	ID                 string         `json:"id"`
+	SessionID          string         `json:"session_id"`
+	ProjectDir         string         `json:"project_dir"`
+	Kind               string         `json:"kind"`
+	Status             string         `json:"status"`
+	Type               string         `json:"type"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	ToolName           string         `json:"tool_name"`
+	Path               string         `json:"path"`
+	ArgsJson           sql.NullString `json:"args_json"`
+	FilesJson          sql.NullString `json:"files_json"`
+	PayloadJson        sql.NullString `json:"payload_json"`
+	ResultJson         sql.NullString `json:"result_json"`
+	CreatedAt          string         `json:"created_at"`
+	ResolvedAt         sql.NullString `json:"resolved_at"`
+	ResolvedBy         sql.NullString `json:"resolved_by"`
+	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
+	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+}
+
+func (q *Queries) GetCheckpoint(ctx context.Context, id string) (GetCheckpointRow, error) {
 	row := q.db.QueryRowContext(ctx, getCheckpoint, id)
-	var i Checkpoints
+	var i GetCheckpointRow
 	err := row.Scan(
 		&i.ID,
 		&i.SessionID,
@@ -130,6 +153,7 @@ func (q *Queries) GetCheckpoint(ctx context.Context, id string) (Checkpoints, er
 		&i.ResolvedBy,
 		&i.ResolvedByPersonID,
 		&i.ProjectID,
+		&i.AuthorityFormat,
 	)
 	return i, err
 }
@@ -156,8 +180,8 @@ const insertCheckpoint = `-- name: InsertCheckpoint :exec
 INSERT INTO checkpoints (
     id, session_id, project_dir, kind, status, type, title, description,
     tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-    project_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    project_id, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertCheckpointParams struct {
@@ -180,6 +204,9 @@ type InsertCheckpointParams struct {
 	ResolvedBy         sql.NullString `json:"resolved_by"`
 	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
 	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+	AuthorityDigest    string         `json:"authority_digest"`
+	AuthorityBody      string         `json:"authority_body"`
 }
 
 // Human-in-the-loop approval checkpoints.
@@ -204,22 +231,26 @@ func (q *Queries) InsertCheckpoint(ctx context.Context, arg InsertCheckpointPara
 		arg.ResolvedBy,
 		arg.ResolvedByPersonID,
 		arg.ProjectID,
+		arg.AuthorityFormat,
+		arg.AuthorityDigest,
+		arg.AuthorityBody,
 	)
 	return err
 }
 
 const listChatGrants = `-- name: ListChatGrants :many
-SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at
+SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at, authority_format
 FROM chat_grants
 ORDER BY created_at, chat_session_id, id
 `
 
 type ListChatGrantsRow struct {
-	ChatSessionID string         `json:"chat_session_id"`
-	ID            string         `json:"id"`
-	CheckpointID  string         `json:"checkpoint_id"`
-	DeltaJson     string         `json:"delta_json"`
-	ExpiresAt     sql.NullString `json:"expires_at"`
+	ChatSessionID   string         `json:"chat_session_id"`
+	ID              string         `json:"id"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	DeltaJson       string         `json:"delta_json"`
+	ExpiresAt       sql.NullString `json:"expires_at"`
+	AuthorityFormat string         `json:"authority_format"`
 }
 
 func (q *Queries) ListChatGrants(ctx context.Context) ([]ListChatGrantsRow, error) {
@@ -237,6 +268,7 @@ func (q *Queries) ListChatGrants(ctx context.Context) ([]ListChatGrantsRow, erro
 			&i.CheckpointID,
 			&i.DeltaJson,
 			&i.ExpiresAt,
+			&i.AuthorityFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -254,7 +286,7 @@ func (q *Queries) ListChatGrants(ctx context.Context) ([]ListChatGrantsRow, erro
 const listParentPendingCheckpoints = `-- name: ListParentPendingCheckpoints :many
 SELECT c.id, c.session_id, c.project_dir, c.kind, c.status, c.type, c.title, c.description,
        c.tool_name, c.path, c.args_json, c.files_json, c.payload_json, c.result_json, c.created_at, c.resolved_at, c.resolved_by, c.resolved_by_person_id,
-       c.project_id
+       c.project_id, c.authority_format
 FROM checkpoints c
 JOIN pending_checkpoint_scopes scope ON scope.checkpoint_id = c.id
 WHERE scope.session_id = ?1
@@ -267,15 +299,38 @@ type ListParentPendingCheckpointsParams struct {
 	Kind            interface{} `json:"kind"`
 }
 
-func (q *Queries) ListParentPendingCheckpoints(ctx context.Context, arg ListParentPendingCheckpointsParams) ([]Checkpoints, error) {
+type ListParentPendingCheckpointsRow struct {
+	ID                 string         `json:"id"`
+	SessionID          string         `json:"session_id"`
+	ProjectDir         string         `json:"project_dir"`
+	Kind               string         `json:"kind"`
+	Status             string         `json:"status"`
+	Type               string         `json:"type"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	ToolName           string         `json:"tool_name"`
+	Path               string         `json:"path"`
+	ArgsJson           sql.NullString `json:"args_json"`
+	FilesJson          sql.NullString `json:"files_json"`
+	PayloadJson        sql.NullString `json:"payload_json"`
+	ResultJson         sql.NullString `json:"result_json"`
+	CreatedAt          string         `json:"created_at"`
+	ResolvedAt         sql.NullString `json:"resolved_at"`
+	ResolvedBy         sql.NullString `json:"resolved_by"`
+	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
+	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+}
+
+func (q *Queries) ListParentPendingCheckpoints(ctx context.Context, arg ListParentPendingCheckpointsParams) ([]ListParentPendingCheckpointsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listParentPendingCheckpoints, arg.ParentSessionID, arg.Kind)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Checkpoints
+	var items []ListParentPendingCheckpointsRow
 	for rows.Next() {
-		var i Checkpoints
+		var i ListParentPendingCheckpointsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.SessionID,
@@ -296,6 +351,7 @@ func (q *Queries) ListParentPendingCheckpoints(ctx context.Context, arg ListPare
 			&i.ResolvedBy,
 			&i.ResolvedByPersonID,
 			&i.ProjectID,
+			&i.AuthorityFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -347,21 +403,44 @@ func (q *Queries) ListPendingCheckpointSessions(ctx context.Context) ([]ListPend
 const listPendingCheckpoints = `-- name: ListPendingCheckpoints :many
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE status = 'pending'
 ORDER BY created_at ASC, id ASC
 `
 
-func (q *Queries) ListPendingCheckpoints(ctx context.Context) ([]Checkpoints, error) {
+type ListPendingCheckpointsRow struct {
+	ID                 string         `json:"id"`
+	SessionID          string         `json:"session_id"`
+	ProjectDir         string         `json:"project_dir"`
+	Kind               string         `json:"kind"`
+	Status             string         `json:"status"`
+	Type               string         `json:"type"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	ToolName           string         `json:"tool_name"`
+	Path               string         `json:"path"`
+	ArgsJson           sql.NullString `json:"args_json"`
+	FilesJson          sql.NullString `json:"files_json"`
+	PayloadJson        sql.NullString `json:"payload_json"`
+	ResultJson         sql.NullString `json:"result_json"`
+	CreatedAt          string         `json:"created_at"`
+	ResolvedAt         sql.NullString `json:"resolved_at"`
+	ResolvedBy         sql.NullString `json:"resolved_by"`
+	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
+	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+}
+
+func (q *Queries) ListPendingCheckpoints(ctx context.Context) ([]ListPendingCheckpointsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listPendingCheckpoints)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Checkpoints
+	var items []ListPendingCheckpointsRow
 	for rows.Next() {
-		var i Checkpoints
+		var i ListPendingCheckpointsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.SessionID,
@@ -382,6 +461,7 @@ func (q *Queries) ListPendingCheckpoints(ctx context.Context) ([]Checkpoints, er
 			&i.ResolvedBy,
 			&i.ResolvedByPersonID,
 			&i.ProjectID,
+			&i.AuthorityFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -397,16 +477,17 @@ func (q *Queries) ListPendingCheckpoints(ctx context.Context) ([]Checkpoints, er
 }
 
 const listPreparedApprovalOperations = `-- name: ListPreparedApprovalOperations :many
-SELECT checkpoint_id, session_id, option_json
+SELECT checkpoint_id, session_id, option_json, authority_format
 FROM approval_operations
 WHERE status = 'prepared'
 ORDER BY created_at, checkpoint_id
 `
 
 type ListPreparedApprovalOperationsRow struct {
-	CheckpointID string `json:"checkpoint_id"`
-	SessionID    string `json:"session_id"`
-	OptionJson   string `json:"option_json"`
+	CheckpointID    string `json:"checkpoint_id"`
+	SessionID       string `json:"session_id"`
+	OptionJson      string `json:"option_json"`
+	AuthorityFormat string `json:"authority_format"`
 }
 
 func (q *Queries) ListPreparedApprovalOperations(ctx context.Context) ([]ListPreparedApprovalOperationsRow, error) {
@@ -418,7 +499,12 @@ func (q *Queries) ListPreparedApprovalOperations(ctx context.Context) ([]ListPre
 	var items []ListPreparedApprovalOperationsRow
 	for rows.Next() {
 		var i ListPreparedApprovalOperationsRow
-		if err := rows.Scan(&i.CheckpointID, &i.SessionID, &i.OptionJson); err != nil {
+		if err := rows.Scan(
+			&i.CheckpointID,
+			&i.SessionID,
+			&i.OptionJson,
+			&i.AuthorityFormat,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -435,7 +521,7 @@ func (q *Queries) ListPreparedApprovalOperations(ctx context.Context) ([]ListPre
 const listSessionCheckpoints = `-- name: ListSessionCheckpoints :many
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE session_id = ?1
   AND (?2 IS NULL OR status = ?2)
@@ -449,17 +535,40 @@ type ListSessionCheckpointsParams struct {
 	Kind      interface{} `json:"kind"`
 }
 
+type ListSessionCheckpointsRow struct {
+	ID                 string         `json:"id"`
+	SessionID          string         `json:"session_id"`
+	ProjectDir         string         `json:"project_dir"`
+	Kind               string         `json:"kind"`
+	Status             string         `json:"status"`
+	Type               string         `json:"type"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	ToolName           string         `json:"tool_name"`
+	Path               string         `json:"path"`
+	ArgsJson           sql.NullString `json:"args_json"`
+	FilesJson          sql.NullString `json:"files_json"`
+	PayloadJson        sql.NullString `json:"payload_json"`
+	ResultJson         sql.NullString `json:"result_json"`
+	CreatedAt          string         `json:"created_at"`
+	ResolvedAt         sql.NullString `json:"resolved_at"`
+	ResolvedBy         sql.NullString `json:"resolved_by"`
+	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
+	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+}
+
 // ListSessionCheckpoints applies the status and kind filters only when supplied,
 // so one prepared statement covers every caller combination.
-func (q *Queries) ListSessionCheckpoints(ctx context.Context, arg ListSessionCheckpointsParams) ([]Checkpoints, error) {
+func (q *Queries) ListSessionCheckpoints(ctx context.Context, arg ListSessionCheckpointsParams) ([]ListSessionCheckpointsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSessionCheckpoints, arg.SessionID, arg.Status, arg.Kind)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Checkpoints
+	var items []ListSessionCheckpointsRow
 	for rows.Next() {
-		var i Checkpoints
+		var i ListSessionCheckpointsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.SessionID,
@@ -480,6 +589,7 @@ func (q *Queries) ListSessionCheckpoints(ctx context.Context, arg ListSessionChe
 			&i.ResolvedBy,
 			&i.ResolvedByPersonID,
 			&i.ProjectID,
+			&i.AuthorityFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -529,14 +639,79 @@ func (q *Queries) ListSessionToolResults(ctx context.Context, sessionID string) 
 	return items, nil
 }
 
+const measureApprovalOperationAuthority = `-- name: MeasureApprovalOperationAuthority :one
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM approval_operations WHERE checkpoint_id = ?
+`
+
+type MeasureApprovalOperationAuthorityRow struct {
+	AuthorityFormat string `json:"authority_format"`
+	AuthorityDigest string `json:"authority_digest"`
+	BodyBytes       int64  `json:"body_bytes"`
+}
+
+func (q *Queries) MeasureApprovalOperationAuthority(ctx context.Context, checkpointID string) (MeasureApprovalOperationAuthorityRow, error) {
+	row := q.db.QueryRowContext(ctx, measureApprovalOperationAuthority, checkpointID)
+	var i MeasureApprovalOperationAuthorityRow
+	err := row.Scan(&i.AuthorityFormat, &i.AuthorityDigest, &i.BodyBytes)
+	return i, err
+}
+
+const measureChatGrantAuthority = `-- name: MeasureChatGrantAuthority :one
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM chat_grants WHERE chat_session_id = ? AND id = ?
+`
+
+type MeasureChatGrantAuthorityParams struct {
+	ChatSessionID string `json:"chat_session_id"`
+	ID            string `json:"id"`
+}
+
+type MeasureChatGrantAuthorityRow struct {
+	AuthorityFormat string `json:"authority_format"`
+	AuthorityDigest string `json:"authority_digest"`
+	BodyBytes       int64  `json:"body_bytes"`
+}
+
+func (q *Queries) MeasureChatGrantAuthority(ctx context.Context, arg MeasureChatGrantAuthorityParams) (MeasureChatGrantAuthorityRow, error) {
+	row := q.db.QueryRowContext(ctx, measureChatGrantAuthority, arg.ChatSessionID, arg.ID)
+	var i MeasureChatGrantAuthorityRow
+	err := row.Scan(&i.AuthorityFormat, &i.AuthorityDigest, &i.BodyBytes)
+	return i, err
+}
+
+const measureCheckpointAuthority = `-- name: MeasureCheckpointAuthority :one
+
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM checkpoints WHERE id = ?
+`
+
+type MeasureCheckpointAuthorityRow struct {
+	AuthorityFormat string `json:"authority_format"`
+	AuthorityDigest string `json:"authority_digest"`
+	BodyBytes       int64  `json:"body_bytes"`
+}
+
+// Native authority is read only by its measured reader: the size comes first,
+// then the body from the same snapshot only when its identity still matches.
+func (q *Queries) MeasureCheckpointAuthority(ctx context.Context, id string) (MeasureCheckpointAuthorityRow, error) {
+	row := q.db.QueryRowContext(ctx, measureCheckpointAuthority, id)
+	var i MeasureCheckpointAuthorityRow
+	err := row.Scan(&i.AuthorityFormat, &i.AuthorityDigest, &i.BodyBytes)
+	return i, err
+}
+
 const prepareApprovalOperation = `-- name: PrepareApprovalOperation :execrows
 INSERT INTO approval_operations (
-    checkpoint_id, session_id, option_id, option_json, status, created_at
-) VALUES (?, ?, ?, ?, 'prepared', ?)
+    checkpoint_id, session_id, option_id, option_json, status, created_at, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, 'prepared', ?, ?, ?, ?)
 ON CONFLICT(checkpoint_id) DO UPDATE SET
     session_id = excluded.session_id,
     option_id = excluded.option_id,
     option_json = excluded.option_json,
+    authority_format = excluded.authority_format,
+    authority_digest = excluded.authority_digest,
+    authority_body = excluded.authority_body,
     status = 'prepared',
     created_at = excluded.created_at,
     committed_at = NULL,
@@ -545,11 +720,14 @@ WHERE approval_operations.status = 'rolled_back'
 `
 
 type PrepareApprovalOperationParams struct {
-	CheckpointID string `json:"checkpoint_id"`
-	SessionID    string `json:"session_id"`
-	OptionID     string `json:"option_id"`
-	OptionJson   string `json:"option_json"`
-	CreatedAt    string `json:"created_at"`
+	CheckpointID    string `json:"checkpoint_id"`
+	SessionID       string `json:"session_id"`
+	OptionID        string `json:"option_id"`
+	OptionJson      string `json:"option_json"`
+	CreatedAt       string `json:"created_at"`
+	AuthorityFormat string `json:"authority_format"`
+	AuthorityDigest string `json:"authority_digest"`
+	AuthorityBody   string `json:"authority_body"`
 }
 
 func (q *Queries) PrepareApprovalOperation(ctx context.Context, arg PrepareApprovalOperationParams) (int64, error) {
@@ -559,11 +737,91 @@ func (q *Queries) PrepareApprovalOperation(ctx context.Context, arg PrepareAppro
 		arg.OptionID,
 		arg.OptionJson,
 		arg.CreatedAt,
+		arg.AuthorityFormat,
+		arg.AuthorityDigest,
+		arg.AuthorityBody,
 	)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const readApprovalOperationAuthority = `-- name: ReadApprovalOperationAuthority :one
+SELECT authority_body FROM approval_operations
+WHERE checkpoint_id = ?1 AND authority_format = ?2 AND authority_digest = ?3
+  AND length(CAST(authority_body AS BLOB)) = CAST(?4 AS INTEGER)
+`
+
+type ReadApprovalOperationAuthorityParams struct {
+	CheckpointID string `json:"checkpoint_id"`
+	Format       string `json:"format"`
+	Digest       string `json:"digest"`
+	BodyBytes    int64  `json:"body_bytes"`
+}
+
+func (q *Queries) ReadApprovalOperationAuthority(ctx context.Context, arg ReadApprovalOperationAuthorityParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, readApprovalOperationAuthority,
+		arg.CheckpointID,
+		arg.Format,
+		arg.Digest,
+		arg.BodyBytes,
+	)
+	var authority_body string
+	err := row.Scan(&authority_body)
+	return authority_body, err
+}
+
+const readChatGrantAuthority = `-- name: ReadChatGrantAuthority :one
+SELECT authority_body FROM chat_grants
+WHERE chat_session_id = ?1 AND id = ?2 AND authority_format = ?3
+  AND authority_digest = ?4 AND length(CAST(authority_body AS BLOB)) = CAST(?5 AS INTEGER)
+`
+
+type ReadChatGrantAuthorityParams struct {
+	ChatSessionID string `json:"chat_session_id"`
+	ID            string `json:"id"`
+	Format        string `json:"format"`
+	Digest        string `json:"digest"`
+	BodyBytes     int64  `json:"body_bytes"`
+}
+
+func (q *Queries) ReadChatGrantAuthority(ctx context.Context, arg ReadChatGrantAuthorityParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, readChatGrantAuthority,
+		arg.ChatSessionID,
+		arg.ID,
+		arg.Format,
+		arg.Digest,
+		arg.BodyBytes,
+	)
+	var authority_body string
+	err := row.Scan(&authority_body)
+	return authority_body, err
+}
+
+const readCheckpointAuthority = `-- name: ReadCheckpointAuthority :one
+SELECT authority_body FROM checkpoints
+WHERE id = ?1 AND authority_format = ?2 AND authority_digest = ?3
+  AND length(CAST(authority_body AS BLOB)) = CAST(?4 AS INTEGER)
+`
+
+type ReadCheckpointAuthorityParams struct {
+	ID        string `json:"id"`
+	Format    string `json:"format"`
+	Digest    string `json:"digest"`
+	BodyBytes int64  `json:"body_bytes"`
+}
+
+func (q *Queries) ReadCheckpointAuthority(ctx context.Context, arg ReadCheckpointAuthorityParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, readCheckpointAuthority,
+		arg.ID,
+		arg.Format,
+		arg.Digest,
+		arg.BodyBytes,
+	)
+	var authority_body string
+	err := row.Scan(&authority_body)
+	return authority_body, err
 }
 
 const resolveCheckpointForSession = `-- name: ResolveCheckpointForSession :execrows
@@ -656,22 +914,28 @@ func (q *Queries) UpdatePendingCheckpointPayload(ctx context.Context, arg Update
 
 const upsertChatGrant = `-- name: UpsertChatGrant :exec
 INSERT INTO chat_grants (
-    chat_session_id, id, checkpoint_id, delta_json, created_at, expires_at
-) VALUES (?, ?, ?, ?, ?, ?)
+    chat_session_id, id, checkpoint_id, delta_json, created_at, expires_at, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(chat_session_id, id) DO UPDATE SET
     checkpoint_id = excluded.checkpoint_id,
     delta_json = excluded.delta_json,
+    authority_format = excluded.authority_format,
+    authority_digest = excluded.authority_digest,
+    authority_body = excluded.authority_body,
     created_at = excluded.created_at,
     expires_at = excluded.expires_at
 `
 
 type UpsertChatGrantParams struct {
-	ChatSessionID string         `json:"chat_session_id"`
-	ID            string         `json:"id"`
-	CheckpointID  string         `json:"checkpoint_id"`
-	DeltaJson     string         `json:"delta_json"`
-	CreatedAt     string         `json:"created_at"`
-	ExpiresAt     sql.NullString `json:"expires_at"`
+	ChatSessionID   string         `json:"chat_session_id"`
+	ID              string         `json:"id"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	DeltaJson       string         `json:"delta_json"`
+	CreatedAt       string         `json:"created_at"`
+	ExpiresAt       sql.NullString `json:"expires_at"`
+	AuthorityFormat string         `json:"authority_format"`
+	AuthorityDigest string         `json:"authority_digest"`
+	AuthorityBody   string         `json:"authority_body"`
 }
 
 func (q *Queries) UpsertChatGrant(ctx context.Context, arg UpsertChatGrantParams) error {
@@ -682,6 +946,9 @@ func (q *Queries) UpsertChatGrant(ctx context.Context, arg UpsertChatGrantParams
 		arg.DeltaJson,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.AuthorityFormat,
+		arg.AuthorityDigest,
+		arg.AuthorityBody,
 	)
 	return err
 }

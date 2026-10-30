@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -23,11 +24,14 @@ const (
 
 // LaunchPlan carries mandatory process authority and attribution.
 type LaunchPlan struct {
-	Kind        LaunchKind
-	Subject     string
-	Confinement *confine.Confinement
-	Environment EnvironmentMode
-	ExtraEnv    []string
+	Kind             LaunchKind
+	Subject          string
+	Confinement      *confine.Confinement
+	Environment      EnvironmentMode
+	ExtraEnv         []string
+	PathAuthority    confine.LaunchPaths
+	InputLimits      confine.LaunchVectorLimits
+	CurrentAuthority func(context.Context) error
 }
 
 // EnvironmentMode selects the process environment.
@@ -37,6 +41,12 @@ const (
 	EnvironmentInherited EnvironmentMode = ""
 	EnvironmentReduced   EnvironmentMode = "reduced"
 )
+
+// WithPathAuthority binds the current invocation's existing path authority.
+func (p LaunchPlan) WithPathAuthority(paths confine.LaunchPaths) LaunchPlan {
+	p.PathAuthority = paths
+	return p
+}
 
 // WithReducedEnvironment removes ambient credentials.
 func (p LaunchPlan) WithReducedEnvironment() LaunchPlan {
@@ -81,8 +91,12 @@ const ScratchDirEnv = "SCRATCH_DIR"
 // AgentLaunch starts a confined agent process.
 func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confinement) LaunchPlan {
 	plan := LaunchPlan{Kind: kind, Subject: strings.TrimSpace(subject), Confinement: confinement}
+	if kind == LaunchAgentCommand {
+		plan.Environment = EnvironmentReduced
+	}
 	if confinement != nil && strings.TrimSpace(confinement.SessionScratchRoot) != "" {
-		plan.ExtraEnv = []string{ScratchDirEnv + "=" + strings.TrimSpace(confinement.SessionScratchRoot)}
+		scratch := confinement.SessionScratchRoot
+		plan.ExtraEnv = []string{ScratchDirEnv + "=" + scratch, "TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch}
 	}
 	return plan
 }
@@ -122,4 +136,43 @@ func (p LaunchPlan) validate() error {
 	default:
 		return fmt.Errorf("unknown process launch kind %q", p.Kind)
 	}
+}
+
+// AgentLaunchOptions are the directory and environment inputs of one confined
+// agent launch. Launches and launch lookups (which, type, command -v) build
+// their options here, so discovery selects exactly what a launch would run.
+// A program's exported NAME=value entries apply over the sanitized inherited
+// (or reduced) host environment; a key the host reserves refuses with
+// ErrBlockedEnvKey rather than being dropped.
+func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) (ExecOpts, error) {
+	launch = launch.WithReducedEnvironment()
+	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...)}
+	if len(environment) > 0 {
+		defaultPath := defaultAgentPath(pathExtra)
+		opts.InlineEnv = make(map[string]string, len(environment))
+		for _, entry := range environment {
+			name, value, _ := strings.Cut(entry, "=")
+			if defaultPath != "" && strings.EqualFold(strings.TrimSpace(name), "PATH") && value == defaultPath {
+				continue
+			}
+			opts.InlineEnv[name] = value
+		}
+		if err := ValidateInlineEnv(opts.InlineEnv); err != nil {
+			return ExecOpts{}, err
+		}
+	}
+	return opts, nil
+}
+
+func defaultAgentPath(pathExtra []string) string {
+	env, err := buildProcessEnv(ReducedEnviron(), nil, pathExtra)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range env {
+		if k, v, ok := strings.Cut(entry, "="); ok && k == "PATH" {
+			return v
+		}
+	}
+	return ""
 }

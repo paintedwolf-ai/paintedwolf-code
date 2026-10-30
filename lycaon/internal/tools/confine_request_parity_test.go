@@ -19,12 +19,12 @@ import (
 
 type parityDirectIPRuntime struct{}
 
-func (parityDirectIPRuntime) IssuePermit(string, string, string, string, string) {}
-func (parityDirectIPRuntime) ConsumePermit(string, string, string, string, string) (bool, error) {
+func (parityDirectIPRuntime) IssuePermit(hitl.EffectPermitIdentity, string, string, string) {}
+func (parityDirectIPRuntime) ConsumePermit(hitl.EffectPermitIdentity, string, string, string) (bool, error) {
 	return true, nil
 }
-func (parityDirectIPRuntime) Authorized(string, string, string) bool      { return true }
-func (parityDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool { return false }
+func (parityDirectIPRuntime) Authorized(hitl.EffectPermitIdentity, string) bool { return true }
+func (parityDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool       { return false }
 func (parityDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
 	return true
 }

@@ -4,19 +4,23 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	"github.com/lycaon/lycaon/internal/call"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -36,6 +40,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/heldtools"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
 	reporttools "github.com/lycaon/lycaon/internal/tools/native/reporting"
@@ -244,6 +249,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		contractcheck.FailErr(t, "heldtools.Register failed", err)
 	}
 	memStore := store.NewMemory()
+	wireContractProgramServices(t, rt, sqlDB, memStore)
 	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
 		Ledger: session.NewHost(memStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()).Verification.Evidence,
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
@@ -268,6 +274,18 @@ func RegisterCatalogToolsForContract(t *testing.T) *tools.DefaultRegistry {
 	contractcheck.FailErr(t, "NewCatalogRegistry", err)
 	registerCatalogToolsOnto(t, reg)
 	return reg
+}
+
+func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.Handle, sessions command.SessionOwners) {
+	t.Helper()
+	if err := rt.Commands.SetProgramServices(toolhost.ProgramServices{
+		Recorder:  invocation.NewSQLRecorder(sqlDB),
+		Blobs:     blobstore.Store{Root: t.TempDir()},
+		Projector: captureprojection.New(nil, nil),
+		Sessions:  sessions,
+	}); err != nil {
+		contractcheck.FailErr(t, "rt.Commands.SetProgramServices failed", err)
+	}
 }
 
 func BootRegisteredToolSet(t *testing.T, reg *tools.DefaultRegistry) map[string]bool {

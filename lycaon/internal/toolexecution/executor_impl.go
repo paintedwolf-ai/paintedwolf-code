@@ -7,14 +7,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
-	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -45,29 +40,16 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		profileID = e.defaultProfile
 	}
 	tc.Identity.Agent = profileID
-	ctx = people.WithoutCaller(ctx)
-	ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
-	ctx = tools.SandboxScopeContext(ctx, tc)
-	ctx = authzledger.WithInvocation(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID, tc.Identity.ToolCallID)
-	sessionFacts := curationctx.SessionFrom(ctx)
-	ctx = curationctx.WithSession(ctx, curationctx.Session{
-		SessionID:       tc.Identity.SessionID,
-		OwnerPersonID:   sessionFacts.OwnerPersonID,
-		Posture:         sessionFacts.Posture,
-		ProjectID:       tc.Identity.ProjectID,
-		Agent:           tc.Identity.Agent,
-		ParentSessionID: tc.Identity.ParentSessionID,
-		ToolCallID:      tc.Identity.ToolCallID,
-		ProjectDir:      tc.ActiveRootPath(),
-	})
+	ctx = invocationContext(ctx, tc)
+	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
+		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
+	}
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
-	if tc.Effects.CredentialFiles != nil {
-		if err := tc.Effects.CredentialFiles.EnsureProject(ctx, tc.Identity.ProjectID); err != nil {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, &toolrejection.ToolReject{Code: toolrejection.OutboundSecretScreenFailedCode, Data: map[string]any{"surface": qualifiedName, "fault_stage": secretmatch.FaultStageManagedSecretStore, "reason": err.Error()}})
-		}
+	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
+		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
 	if parseErr != nil {
@@ -83,31 +65,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		return "", err
 	}
 	canonicalArgs := args
-	// Handlers execute against resolved arguments and echo against these.
-	tc.Effects.CanonicalArgs = canonicalArgs
-	ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
-	executionArgs := tc.Effects.Secrets.Arguments
-	if err := e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
+	ctx, executionArgs, err := e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc, nil)
+	if err != nil {
 		return "", err
-	}
-	if err := e.Secrets.screenFileSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
-		return "", err
-	}
-	// The screened save is a file tool's transport.
-	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
-		if err := tc.Effects.Secrets.Precheck(ctx, nil); err != nil {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.HeldHandOffReject(string(secretmatch.SurfaceFile), err))
-		}
-	}
-	tc.Execution.ProcessReview = e.Process.processReviewer(qualifiedName, canonicalArgs, tc)
-	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(qualifiedName, canonicalArgs, tc)
-	if e.Rejections.blockPlane != nil {
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolPreInvoke, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return "", err
-		}
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolHandler, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return "", err
-		}
 	}
 	out, err = e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)
 	// A consumer may echo what it received; results carry references, never resolved values.
@@ -116,7 +76,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	if errors.Is(err, context.Canceled) {
 		return out, err
 	}
-	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.Identity.SessionID, tc.Identity.ToolCallID)
+	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.Identity.SessionID, tc.Identity.ToolCallID, tc.EffectActionID())
 
 	if err != nil {
 		if capabilityDenied && toolrejection.AsToolReject(err) == nil {
@@ -244,4 +204,29 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 		}
 	}
 	return tc.Source.WorkerCoord.EnsureBranch(ctx, tc)
+}
+
+// invokeProgramEntry validates only the command envelope against its schema
+// (TOOL_ARGS_INVALID with native-channel repair) and hands the program to its
+// entry. The entry validates the whole program before any effect; each reached
+// child then passes the full per-operation boundary through InvokeNative.
+func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
+	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
+		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+	}
+	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {
+		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+	}
+	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {
+		if def, ok := e.definitionFor(tool); ok {
+			tc.Invocation.Contract = def.Contract
+		}
+	}
+	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
+	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
+	if tr := toolrejection.AsToolReject(err); tr != nil {
+		return out, e.Rejections.settleReject(ctx, tool, profileID, args, toolrejection.CompleteFailureMetadata(tr, tool, tc.Invocation.Contract.Owner))
+	}
+	return out, err
 }

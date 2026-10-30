@@ -27,6 +27,11 @@ import (
 
 func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
+	return securityNativeRuntime(t).Executor
+}
+
+func securityNativeRuntime(t *testing.T) *toolhost.Runtime {
+	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -43,7 +48,7 @@ func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	rt.Executor.Metadata.SetToolSchemas(schemas)
-	return rt.Executor
+	return rt
 }
 
 func assertStructuredRejectCode(t *testing.T, err error, code string) {
@@ -308,15 +313,15 @@ func TestNativeMkdirFileExistsStructuredRejectE2E(t *testing.T) {
 
 func TestNativeCommandCpHabitRedirectMatcher(t *testing.T) {
 	t.Parallel()
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "cp src.txt dst.txt"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "copy"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_COPY_NATIVE")
+	fixture := newSecurityProgramFixture(t)
+	testutil.FailErr(t, "write native copy source", os.WriteFile(filepath.Join(fixture.seed.Dir, "src.txt"), []byte("copy bytes\n"), 0o644))
+	fixture.run(t, "implement", "cp src.txt dst.txt")
+	content, err := os.ReadFile(filepath.Join(fixture.seed.Dir, "dst.txt"))
+	testutil.FailErr(t, "read native copy destination", err)
+	if string(content) != "copy bytes\n" {
+		t.Fatalf("native program copied %q", content)
+	}
+	assertExactCommandReplacement(t, "cp src.txt dst.txt", "USE_COPY_NATIVE", "copy")
 }
 
 func TestNativeChownForeignUIDStructuredRejectE2E(t *testing.T) {
@@ -366,30 +371,21 @@ func TestNativeCommandChownExactRedirect(t *testing.T) {
 	}
 	account, err := user.Current()
 	testutil.FailErr(t, "resolve current account", err)
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err = exec.Invoke(context.Background(), "command", map[string]any{"command": "chown " + account.Uid + ":" + account.Gid + " scripts/run.sh"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "chown"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_CHOWN_NATIVE")
+	fixture := newSecurityProgramFixture(t)
+	testutil.FailErr(t, "create native ownership target", os.WriteFile(filepath.Join(fixture.seed.Dir, "run.sh"), []byte("exit 0\n"), 0o644))
+	line := "chown " + account.Uid + ":" + account.Gid + " run.sh"
+	fixture.run(t, "implement", line)
+	assertExactCommandReplacement(t, line, "USE_CHOWN_NATIVE", "chown")
 }
 
 func TestNativeCommandFindHabitRedirectE2E(t *testing.T) {
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{
-		"command": "find . -name '*.go'",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"find"}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "USE_FIND_NOT_COMMAND") {
-		t.Fatalf("err = %v want USE_FIND_NOT_COMMAND redirect", err)
+	fixture := newSecurityProgramFixture(t)
+	testutil.FailErr(t, "write native find source", os.WriteFile(filepath.Join(fixture.seed.Dir, "a.go"), []byte("package a\n"), 0o644))
+	outcome := fixture.run(t, "explore_readonly", "find . -name '*.go'")
+	if !strings.Contains(outcome.Stdout, "a.go") {
+		t.Fatalf("native find output = %q", outcome.Stdout)
 	}
+	assertExactCommandReplacement(t, "find . -name '*.go'", "USE_FIND_NOT_COMMAND", "find")
 }
 
 func TestNativeReadRejectsDirectoryE2E(t *testing.T) {

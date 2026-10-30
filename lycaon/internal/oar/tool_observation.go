@@ -5,6 +5,10 @@ import "github.com/lycaon/lycaon/internal/oarcore"
 // ObserveToolCall publishes identity and lazily fingerprints actual arguments.
 func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 	gc.Invocation.Tool = name
+	if gc.Published == nil {
+		gc.Published = map[string]any{}
+	}
+	gc.Published["paintedwolf.native_operation"] = ""
 	if arguments == nil {
 		arguments = map[string]any{}
 	}

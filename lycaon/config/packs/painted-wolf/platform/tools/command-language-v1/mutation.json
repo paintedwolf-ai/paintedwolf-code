@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
+      "argv": "cp [-a] [-r|-R] [-f|-n] [-p] [-v] [-c] [-X] [--] SOURCE ... DEST",
       "forms": [
         {
           "spellings": [
@@ -47,9 +47,51 @@
           "fixture_id": "cp-option-p",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--archive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-a-archive",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-X"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-X",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [--] SOURCE ... DEST",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -101,7 +143,7 @@
           }
         }
       },
-      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses.",
+      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses. -a is -R -p and refuses a tree holding a symbolic link, since links are copied as links and no owner creates links. -v prints GNU 'SRC' -> 'DEST' lines. BSD -c (clone) produces the same copy, and -X (no extended attributes) matches what the owner copies.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/copy.go",
         "tests": [
@@ -124,7 +166,11 @@
         "cp-option-r-R",
         "cp-option-f",
         "cp-option-n",
-        "cp-option-p"
+        "cp-option-p",
+        "cp-option-a-archive",
+        "cp-option-v-verbose",
+        "cp-option-c",
+        "cp-option-X"
       ]
     },
     {
@@ -132,7 +178,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "mv [-f|-n] [--] SOURCE ... DEST",
+      "argv": "mv [-f|-n] [-v] [--] SOURCE ... DEST",
       "forms": [
         {
           "spellings": [
@@ -153,9 +199,20 @@
           "fixture_id": "mv-option-n",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mv-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [-f|-n] [--] SOURCE ... DEST",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [--] SOURCE ... DEST",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -207,7 +264,7 @@
           }
         }
       },
-      "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive.",
+      "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive. -v prints GNU renamed 'SRC' -> 'DEST'.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/move.go",
         "tests": [
@@ -228,7 +285,8 @@
         "mv-operands-valid",
         "mv-rejection",
         "mv-option-f",
-        "mv-option-n"
+        "mv-option-n",
+        "mv-option-v-verbose"
       ]
     },
     {
@@ -236,7 +294,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "rm [-r|-R] [-f] [--] PATH ...",
+      "argv": "rm [-r|-R|-d] [-f] [-v] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -258,9 +316,31 @@
           "fixture_id": "rm-option-f",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--dir"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-d-dir",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [-r|-R] [-f] [--] PATH ...",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [--] PATH ...",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -312,7 +392,7 @@
           }
         }
       },
-      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit.",
+      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit. Never prompts; -i is not offered. -v prints GNU removed lines. -d removes empty directories, as GNU and BSD rm do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/delete.go",
         "tests": [
@@ -333,7 +413,9 @@
         "rm-operands-valid",
         "rm-rejection",
         "rm-option-r-R",
-        "rm-option-f"
+        "rm-option-f",
+        "rm-option-v-verbose",
+        "rm-option-d-dir"
       ]
     },
     {
@@ -422,7 +504,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "mkdir [-p] [-m MODE] [--] PATH ...",
+      "argv": "mkdir [-p] [-m MODE] [-v] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -446,6 +528,17 @@
           "sample_values": [
             "755"
           ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mkdir-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mkdir [-p] [--] PATH ...",
@@ -500,7 +593,7 @@
           }
         }
       },
-      "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged.",
+      "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged. -v prints GNU created directory lines, one per created parent with -p.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/mkdir.go",
         "tests": [
@@ -521,7 +614,8 @@
         "mkdir-operands-valid",
         "mkdir-rejection",
         "mkdir-option-p-parents",
-        "mkdir-option-m"
+        "mkdir-option-m",
+        "mkdir-option-v-verbose"
       ]
     },
     {
@@ -529,7 +623,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "touch [-c] [-m] [-a] [--] PATH ...",
+      "argv": "touch [-c] [-f] [-m] [-a] [-t STAMP|-d DATE|-r FILE] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -558,6 +652,54 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "touch-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "timestamp",
+          "fixture_id": "touch-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            "202610201200.30"
+          ]
+        },
+        {
+          "spellings": [
+            "-d",
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "touch-option-d-date",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-20 12:00:30"
+          ]
+        },
+        {
+          "spellings": [
+            "-r",
+            "--reference"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "touch-option-r-reference",
+          "consumption": "fixed",
+          "sample_values": [
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-f",
           "consumption": "fixed",
           "sample_values": []
         }
@@ -614,7 +756,7 @@
           }
         }
       },
-      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock.",
+      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock. -t [[CC]YY]MMDDhhmm[.ss], -d DATE (ISO 8601, RFC 5322, @SECONDS, now, today, yesterday, tomorrow, N UNIT ago) and -r FILE set explicit times; at most one of them; a new file receives them after creation. -f is accepted and ignored, as BSD and GNU touch do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/source_write.go",
         "tests": [
@@ -636,7 +778,11 @@
         "touch-rejection",
         "touch-option-c",
         "touch-option-m",
-        "touch-option-a"
+        "touch-option-a",
+        "touch-option-t",
+        "touch-option-d-date",
+        "touch-option-r-reference",
+        "touch-option-f"
       ]
     },
     {

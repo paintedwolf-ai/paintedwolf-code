@@ -56,37 +56,63 @@ func (t *ChownTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	if err != nil {
 		return "", err
 	}
-	prof := tctx.ProfileID()
-	resp := chownResponse{Results: make([]chownResult, 0, len(paths))}
-	defer func() {
-		if runErr != nil && len(resp.Results) > 0 {
-			output, runErr = interruptedMutationBatch(resp, runErr)
+	results, err := t.Chown(ctx, ChownInput{Paths: paths, UID: uid, GID: gid}, tctx)
+	resp := chownResponse{Results: results}
+	if resp.Results == nil {
+		resp.Results = []chownResult{}
+	}
+	if err != nil {
+		if len(resp.Results) > 0 {
+			return interruptedMutationBatch(resp, err)
 		}
-	}()
-	for _, relPath := range paths {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		target, uidBefore, gidBefore, err := assertChownTarget(ctx, t.Boundary, tctx, relPath, prof)
-		if err != nil {
-			return "", err
-		}
-		if err := chownAgentPath(ctx, tctx, target, uid, gid); err != nil {
-			return "", fmt.Errorf("chown %s: %w", relPath, err)
-		}
-		resp.Results = append(resp.Results, chownResult{
-			Path:      filepath.ToSlash(relPath),
-			UIDBefore: uidBefore,
-			GIDBefore: gidBefore,
-			UIDAfter:  uid,
-			GIDAfter:  gid,
-		})
+		return "", err
 	}
 	raw, err := surveyjson.Marshal(resp)
 	if err != nil {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+// ChownInput is one ownership change. UID and GID are resolved identities;
+// a negative GID keeps each path's current group.
+type ChownInput struct {
+	Paths    []string
+	UID, GID int
+}
+
+// ResolveChownIdentities applies the existing identity policy to numeric or
+// named owner and group specifications.
+func ResolveChownIdentities(owner, group string) (int, int, error) {
+	if !chownSupported() {
+		return 0, 0, &toolrejection.ToolReject{Code: "CHOWN_UNSUPPORTED", Data: nil}
+	}
+	return resolveChownIdentities(owner, group)
+}
+
+// Chown changes each path's ownership under scope, review and the source
+// journal, returning the paths already changed when one fails.
+func (t *ChownTool) Chown(ctx context.Context, in ChownInput, tctx tools.ToolContext) ([]chownResult, error) {
+	var results []chownResult
+	prof := tctx.ProfileID()
+	for _, relPath := range in.Paths {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
+		target, uidBefore, gidBefore, err := assertChownTarget(ctx, t.Boundary, tctx, relPath, prof)
+		if err != nil {
+			return results, err
+		}
+		gid := in.GID
+		if gid < 0 {
+			gid = gidBefore
+		}
+		if err := chownAgentPath(ctx, tctx, target, in.UID, gid); err != nil {
+			return results, fmt.Errorf("chown %s: %w", relPath, err)
+		}
+		results = append(results, chownResult{Path: filepath.ToSlash(relPath), UIDBefore: uidBefore, GIDBefore: gidBefore, UIDAfter: in.UID, GIDAfter: gid})
+	}
+	return results, nil
 }
 
 func recursiveArg(args map[string]any) bool {

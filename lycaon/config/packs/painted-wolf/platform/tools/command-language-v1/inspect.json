@@ -178,6 +178,7 @@
           "value_role": "count",
           "fixture_id": "head-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -308,6 +309,7 @@
           "value_role": "count-or-plus-start",
           "fixture_id": "tail-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -507,7 +509,7 @@
       ],
       "example": {
         "program": "nl -ba -w 1 -s ':' -- ./input",
-        "stdout": "1:alpha\n2:beta",
+        "stdout": "1:alpha\n2:beta\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -611,7 +613,7 @@
       ],
       "example": {
         "program": "file -b -- ./input",
-        "stdout": "UTF-8 Unicode text\n",
+        "stdout": "ASCII text\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -1560,7 +1562,7 @@
           }
         }
       },
-      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "notes": "Report root metadata at --depth 0. Positive depth limits observed descendants relative to --path; omitted depth keeps full subtree rollups. A warming inventory can return immediate children with its state shown.",
       "reuse": {
         "implementation": "lycaon/internal/survey/repo_tool.go",
         "tests": [

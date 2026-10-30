@@ -1,0 +1,455 @@
+--- /dev/null
++++ b/interp/budget.go
+@@ -0,0 +1,99 @@
++package interp
++
++import "strings"
++
++// Budget meters an embedding host's work and allocation ceilings. Step is
++// called before each backward jump, for-in iteration and user function call,
++// which bounds every unbounded execution path; Allocate is called before a
++// program builds a new string or array element of n bytes. A non-nil error
++// stops execution and is returned by Execute.
++type Budget interface {
++	Step() error
++	Allocate(n int) error
++}
++
++func (p *interp) step() error {
++	if p.budget == nil {
++		return nil
++	}
++	return p.budget.Step()
++}
++
++func (p *interp) allocate(n int) error {
++	if p.budget == nil {
++		return nil
++	}
++	return p.budget.Allocate(n)
++}
++
++// assignElement charges a new element's key and value before storing it.
++func (p *interp) assignElement(array map[string]value, key string, v value) error {
++	if _, exists := array[key]; !exists {
++		if err := p.allocate(len(key) + len(p.toString(v)) + elementOverhead); err != nil {
++			return err
++		}
++	}
++	array[key] = v
++	return nil
++}
++
++// elementOverhead covers one map entry and value header beyond its bytes.
++const elementOverhead = 64
++
++// formatBound is an upper bound on the bytes fmt.Sprintf produces for a
++// parsed format: its literal bytes, every width and precision (including *
++// arguments) and each argument's own size.
++func formatBound(format string, args []any) int {
++	bound, arg := 0, 0
++	argSize := func() int {
++		if arg >= len(args) {
++			return 0
++		}
++		switch v := args[arg].(type) {
++		case string:
++			return len(v)
++		case []byte:
++			return len(v)
++		}
++		return 32
++	}
++	for i := 0; i < len(format); i++ {
++		if format[i] != '%' {
++			bound++
++			continue
++		}
++		i++
++		number := 0
++		for i < len(format) && strings.IndexByte(" .-+*#0123456789", format[i]) >= 0 {
++			switch c := format[i]; {
++			case c >= '0' && c <= '9':
++				number = number*10 + int(c-'0')
++				if number > 1<<30 {
++					number = 1 << 30
++				}
++			case c == '*':
++				if arg < len(args) {
++					if width, ok := args[arg].(int64); ok && width > 0 {
++						if width > 1<<30 {
++							width = 1 << 30
++						}
++						bound += int(width)
++					}
++				}
++				arg++
++			default:
++				bound += number
++				number = 0
++			}
++			i++
++		}
++		bound += number
++		if i < len(format) && format[i] == '%' {
++			bound++
++			continue
++		}
++		bound += argSize()
++		arg++
++	}
++	return bound
++}
+--- /dev/null
++++ b/interp/budget_test.go
+@@ -0,0 +1,81 @@
++package interp_test
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"github.com/benhoyt/goawk/interp"
++	"github.com/benhoyt/goawk/parser"
++)
++
++type countingBudget struct {
++	steps, bytes, maxSteps, maxBytes int
++}
++
++var errBudget = errors.New("budget exhausted")
++
++func (b *countingBudget) Step() error {
++	b.steps++
++	if b.steps > b.maxSteps {
++		return errBudget
++	}
++	return nil
++}
++
++func (b *countingBudget) Allocate(n int) error {
++	b.bytes += n
++	if b.bytes > b.maxBytes {
++		return errBudget
++	}
++	return nil
++}
++
++func run(t *testing.T, src string, budget *countingBudget) (string, error) {
++	t.Helper()
++	program, err := parser.ParseProgram([]byte(src), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var out strings.Builder
++	_, err = interp.ExecProgram(program, &interp.Config{Stdin: strings.NewReader("a b\n"), Output: &out, Environ: []string{}, Budget: budget})
++	return out.String(), err
++}
++
++func TestBudgetMetersBackwardJumpsCallsAndIterations(t *testing.T) {
++	for _, c := range []struct {
++		src   string
++		steps int
++	}{
++		// Loops test their condition at the bottom: n iterations jump back n-1 times.
++		{"BEGIN { for (i = 0; i < 5; i++) ; }", 4},
++		{"BEGIN { i = 0; while (i < 3) i++ }", 2},
++		{"BEGIN { i = 0; do i++; while (i < 4) }", 3},
++		{"BEGIN { a[1]; a[2]; for (k in a) ; }", 2},
++		{"function f() { return 1 } BEGIN { f(); f() }", 2},
++		{"BEGIN { print 1 }", 0},
++	} {
++		budget := &countingBudget{maxSteps: 1 << 20, maxBytes: 1 << 20}
++		if _, err := run(t, c.src, budget); err != nil || budget.steps != c.steps {
++			t.Errorf("%s: steps %d err %v, want %d", c.src, budget.steps, err, c.steps)
++		}
++	}
++	if _, err := run(t, "BEGIN { while (1) ; }", &countingBudget{maxSteps: 10, maxBytes: 1 << 20}); !errors.Is(err, errBudget) {
++		t.Fatalf("unbounded loop: %v", err)
++	}
++}
++
++func TestBudgetMetersCreatedValues(t *testing.T) {
++	budget := &countingBudget{maxSteps: 1 << 20, maxBytes: 1 << 20}
++	out, err := run(t, `{ s = $1 "-" $2; t = toupper(s); n = split("x,yy", parts, ","); gsub(/a/, "AA", s); printf "%s %s %d\n", s, t, n; a["k"] = "v" }`, budget)
++	if err != nil || out != "AA-b A-B 2\n" {
++		t.Fatalf("out %q err %v", out, err)
++	}
++	// ConcatMulti 3, toupper 3, split 1+2+128 overhead, gsub 4, sprintf bound, element 1+1+64.
++	if budget.bytes < 3+3+3+128+4+65 {
++		t.Fatalf("metered %d bytes", budget.bytes)
++	}
++	if _, err := run(t, `BEGIN { printf "%100000d", 1 }`, &countingBudget{maxSteps: 1, maxBytes: 1000}); !errors.Is(err, errBudget) {
++		t.Fatalf("wide format: %v", err)
++	}
++}
+--- a/interp/functions.go
++++ b/interp/functions.go
+@@ -277,0 +278,7 @@
++	}
++	size := 0
++	for _, part := range parts {
++		size += len(part) + elementOverhead
++	}
++	if err := p.allocate(size); err != nil {
++		return 0, err
+@@ -517,0 +525,3 @@
++	if err := p.allocate(formatBound(format, converted)); err != nil {
++		return "", err
++	}
+--- a/interp/interp.go
++++ b/interp/interp.go
+@@ -84,0 +85 @@
++	budget        Budget
+@@ -260,0 +262,3 @@
++
++	// Budget, when set, meters work and allocation for an embedding host.
++	Budget Budget
+@@ -578,0 +583 @@
++	p.budget = config.Budget
+--- a/interp/vm.go
++++ b/interp/vm.go
+@@ -187 +187,3 @@
+-			array[p.toString(index)] = v
++			if err := p.assignElement(array, p.toString(index), v); err != nil {
++				return err
++			}
+@@ -194 +196,3 @@
+-			array[p.toString(index)] = v
++			if err := p.assignElement(array, p.toString(index), v); err != nil {
++				return err
++			}
+@@ -445 +449,5 @@
+-			p.replaceTop(str(p.toString(l) + p.toString(r)))
++			ls, rs := p.toString(l), p.toString(r)
++			if err := p.allocate(len(ls) + len(rs)); err != nil {
++				return err
++			}
++			p.replaceTop(str(ls + rs))
+@@ -450,0 +459,9 @@
++			parts := make([]string, len(values))
++			size := 0
++			for i, v := range values {
++				parts[i] = p.toString(v)
++				size += len(parts[i])
++			}
++			if err := p.allocate(size); err != nil {
++				return err
++			}
+@@ -452,3 +469,3 @@
+-
+-			for _, v := range values {
+-				sb.WriteString(p.toString(v))
++			sb.Grow(size)
++			for _, part := range parts {
++				sb.WriteString(part)
+@@ -489,0 +507,5 @@
++			if offset < 0 {
++				if err := p.step(); err != nil {
++					return err
++				}
++			}
+@@ -496,0 +519,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -504,0 +532,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -520,0 +553,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -536,0 +574,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -552,0 +595,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -568,0 +616,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -584,0 +637,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -600,0 +658,5 @@
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+@@ -638,0 +701,3 @@
++				if err := p.step(); err != nil {
++					return err
++				}
+@@ -730,0 +796,3 @@
++			if err := p.step(); err != nil {
++				return err
++			}
+@@ -984,0 +1053,3 @@
++		if err == nil {
++			err = p.allocate(len(out))
++		}
+@@ -1072,0 +1144,3 @@
++		if err == nil {
++			err = p.allocate(len(out))
++		}
+@@ -1150 +1224,5 @@
+-		p.replaceTop(str(strings.ToLower(p.toString(p.peekTop()))))
++		text := p.toString(p.peekTop())
++		if err := p.allocate(len(text)); err != nil {
++			return err
++		}
++		p.replaceTop(str(strings.ToLower(text)))
+@@ -1153 +1231,5 @@
+-		p.replaceTop(str(strings.ToUpper(p.toString(p.peekTop()))))
++		text := p.toString(p.peekTop())
++		if err := p.allocate(len(text)); err != nil {
++			return err
++		}
++		p.replaceTop(str(strings.ToUpper(text)))
+--- /dev/null
++++ b/parser/inspect.go
+@@ -0,0 +1,86 @@
++package parser
++
++import (
++	"github.com/benhoyt/goawk/internal/ast"
++	"github.com/benhoyt/goawk/lexer"
++)
++
++// Construct is one program feature an embedding host may refuse before
++// execution, at the start of the statement that contains it.
++type Construct struct {
++	// Kind is "system", "output-pipe", "input-pipe", "getline-file",
++	// "output-file" or "regex".
++	Kind string
++	// Regex is the literal pattern text of a "regex" construct.
++	Regex  string
++	Line   int
++	Column int
++}
++
++// Constructs lists every system() call, command pipe in either direction,
++// getline from a file, print or printf redirection to a file, and regex
++// literal, in source order. It inspects the parsed program only.
++func (p *Program) Constructs() []Construct {
++	v := &inspector{}
++	for _, stmts := range p.Begin {
++		ast.WalkStmtList(v, stmts)
++	}
++	for _, action := range p.Actions {
++		ast.WalkExprList(v, action.Pattern)
++		ast.WalkStmtList(v, action.Stmts)
++	}
++	for _, stmts := range p.End {
++		ast.WalkStmtList(v, stmts)
++	}
++	for _, function := range p.Functions {
++		v.at = function.Pos
++		ast.WalkStmtList(v, function.Body)
++	}
++	return v.found
++}
++
++type inspector struct {
++	at    lexer.Position
++	found []Construct
++}
++
++func (v *inspector) add(kind, regex string) {
++	v.found = append(v.found, Construct{Kind: kind, Regex: regex, Line: v.at.Line, Column: v.at.Column})
++}
++
++func (v *inspector) Visit(node ast.Node) ast.Visitor {
++	if stmt, ok := node.(ast.Stmt); ok {
++		v.at = stmt.StartPos()
++	}
++	switch n := node.(type) {
++	case *ast.CallExpr:
++		if n.Func == lexer.F_SYSTEM {
++			v.add("system", "")
++		}
++	case *ast.GetlineExpr:
++		if n.Command != nil {
++			v.add("input-pipe", "")
++		}
++		if n.File != nil {
++			v.add("getline-file", "")
++		}
++	case *ast.PrintStmt:
++		v.redirect(n.Redirect, n.Dest)
++	case *ast.PrintfStmt:
++		v.redirect(n.Redirect, n.Dest)
++	case *ast.RegExpr:
++		v.add("regex", n.Regex)
++	}
++	return v
++}
++
++func (v *inspector) redirect(redirect lexer.Token, dest ast.Expr) {
++	if dest == nil {
++		return
++	}
++	if redirect == lexer.PIPE {
++		v.add("output-pipe", "")
++		return
++	}
++	v.add("output-file", "")
++}
+--- /dev/null
++++ b/parser/inspect_test.go
+@@ -0,0 +1,33 @@
++package parser_test
++
++import (
++	"reflect"
++	"testing"
++
++	"github.com/benhoyt/goawk/parser"
++)
++
++func TestConstructsListsRefusableFeaturesInSourceOrder(t *testing.T) {
++	src := `BEGIN { system("x") }
++/re+/ { print > "f"; printf "%s" | "sort"; "cmd" | getline; getline v < "file" }
++function g() { print >> "f" }`
++	program, err := parser.ParseProgram([]byte(src), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var kinds []string
++	for _, c := range program.Constructs() {
++		kinds = append(kinds, c.Kind+":"+c.Regex)
++		if c.Line < 1 || c.Column < 1 {
++			t.Fatalf("construct without a position: %+v", c)
++		}
++	}
++	want := []string{"system:", "regex:re+", "output-file:", "output-pipe:", "input-pipe:", "getline-file:", "output-file:"}
++	if !reflect.DeepEqual(kinds, want) {
++		t.Fatalf("constructs %q, want %q", kinds, want)
++	}
++	plain, _ := parser.ParseProgram([]byte(`{ print $1 } END { getline; print }`), nil)
++	if got := plain.Constructs(); len(got) != 0 {
++		t.Fatalf("plain program constructs %+v", got)
++	}
++}

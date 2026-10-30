@@ -8,10 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
-
-	"github.com/itchyny/gojq"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -102,11 +99,11 @@ func (t *Tool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCont
 		return "", err
 	}
 
-	resolvedFormat, err := detectFormat(displayPath, formatArg)
+	resolvedFormat, err := DetectFormat(displayPath, formatArg)
 	if err != nil {
 		return "", err
 	}
-	inputs, parsedAs, err := decodeInputs(data, resolvedFormat)
+	inputs, parsedAs, err := DecodeDocuments(data, resolvedFormat)
 	if err != nil {
 		if errors.Is(err, errDocumentDepthExceeded) {
 			return "", safecmd.Reject("JQ_DOCUMENT_DEPTH", map[string]any{
@@ -118,14 +115,14 @@ func (t *Tool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCont
 		})
 	}
 
-	code, err := compileQuery(query)
+	program, err := CompileProgram(query, ProgramOptions{})
 	if err != nil {
 		return "", safecmd.Reject("JQ_QUERY_INVALID", map[string]any{
 			"query": query, "detail": err.Error(),
 		})
 	}
 
-	results, truncatedScan, err := runQuery(ctx, code, inputs, query)
+	results, truncatedScan, err := runQuery(ctx, program, inputs, query)
 	if err != nil {
 		return "", err
 	}
@@ -215,70 +212,34 @@ func readInput(resolved projectpaths.Resolved, displayPath string, maxSpillBytes
 	return data, nil
 }
 
-// compileQuery disables environment and input extensions.
-func compileQuery(query string) (*gojq.Code, error) {
-	code, _, err := compileQueryWithVars(query, nil)
-	return code, err
-}
-
-func compileQueryWithVars(query string, vars map[string]any) (*gojq.Code, []any, error) {
-	q, err := gojq.Parse(query)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(vars) == 0 {
-		code, err := gojq.Compile(q, gojq.WithEnvironLoader(func() []string { return nil }))
-		return code, nil, err
-	}
-	keys := make([]string, 0, len(vars))
-	for k := range vars {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	varNames := make([]string, len(keys))
-	varValues := make([]any, len(keys))
-	for i, k := range keys {
-		varNames[i] = "$" + strings.TrimPrefix(k, "$")
-		varValues[i] = vars[k]
-	}
-	code, err := gojq.Compile(q,
-		gojq.WithEnvironLoader(func() []string { return nil }),
-		gojq.WithVariables(varNames),
-	)
-	return code, varValues, err
-}
-
-func runQuery(ctx context.Context, code *gojq.Code, inputs []any, query string) ([]any, bool, error) {
+// runQuery collects a structured call's results up to the scan cap.
+func runQuery(ctx context.Context, program *Program, inputs []any, query string) ([]any, bool, error) {
 	caps := safecmd.JQCaps()
 	runCtx, cancel := caps.WithTimeout(ctx)
 	defer cancel()
-
 	var results []any
+	errScanCap := errors.New("scan cap")
 	for _, input := range inputs {
-		iter := code.RunWithContext(runCtx, input)
-		for {
-			v, ok := iter.Next()
-			if !ok {
-				break
-			}
-			if verr, isErr := v.(error); isErr {
-				if runCtx.Err() != nil {
-					return nil, false, safecmd.Reject("JQ_TIMEOUT", map[string]any{
-						"query": query, "timeout_ms": caps.Timeout.Milliseconds(),
-					})
-				}
-				var halt *gojq.HaltError
-				if errors.As(verr, &halt) {
-					break
-				}
-				return nil, false, safecmd.Reject("JQ_QUERY_ERROR", map[string]any{
-					"query": query, "detail": verr.Error(),
-				})
-			}
+		halt, err := program.Run(runCtx, input, func(v any) error {
 			results = append(results, v)
 			if len(results) >= safecmd.JQScanCap {
-				return results, true, nil
+				return errScanCap
 			}
+			return nil
+		})
+		switch {
+		case errors.Is(err, errScanCap):
+			return results, true, nil
+		case runCtx.Err() != nil && ctx.Err() == nil:
+			return nil, false, safecmd.Reject("JQ_TIMEOUT", map[string]any{"query": query, "timeout_ms": caps.Timeout.Milliseconds()})
+		case err != nil:
+			var queryErr *QueryError
+			if errors.As(err, &queryErr) {
+				return nil, false, safecmd.Reject("JQ_QUERY_ERROR", map[string]any{"query": query, "detail": queryErr.Error()})
+			}
+			return nil, false, err
+		case halt != nil:
+			return results, false, nil
 		}
 	}
 	return results, false, nil

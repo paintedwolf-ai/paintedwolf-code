@@ -43,6 +43,9 @@ groups:
       github.com/odvcencio/gotreesitter:
         notes: |
           Replaced by the vendored copy; see the vendored catalogs section.
+      github.com/benhoyt/goawk:
+        notes: |
+          Replaced by the vendored copy; see the vendored catalogs section.
 
   - title: Protocols, providers, and security engines
     packages:

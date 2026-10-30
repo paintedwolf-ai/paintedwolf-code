@@ -9,14 +9,17 @@ import (
 )
 
 type ApprovalOperations struct {
-	CheckpointID string         `json:"checkpoint_id"`
-	SessionID    string         `json:"session_id"`
-	OptionID     string         `json:"option_id"`
-	OptionJson   string         `json:"option_json"`
-	Status       string         `json:"status"`
-	CreatedAt    string         `json:"created_at"`
-	CommittedAt  sql.NullString `json:"committed_at"`
-	RolledBackAt sql.NullString `json:"rolled_back_at"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	SessionID       string         `json:"session_id"`
+	OptionID        string         `json:"option_id"`
+	OptionJson      string         `json:"option_json"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	CommittedAt     sql.NullString `json:"committed_at"`
+	RolledBackAt    sql.NullString `json:"rolled_back_at"`
+	AuthorityFormat string         `json:"authority_format"`
+	AuthorityDigest string         `json:"authority_digest"`
+	AuthorityBody   string         `json:"authority_body"`
 }
 
 type ArtifactGcQueue struct {
@@ -151,12 +154,15 @@ type CallReservations struct {
 }
 
 type ChatGrants struct {
-	ChatSessionID string         `json:"chat_session_id"`
-	ID            string         `json:"id"`
-	CheckpointID  string         `json:"checkpoint_id"`
-	DeltaJson     string         `json:"delta_json"`
-	CreatedAt     string         `json:"created_at"`
-	ExpiresAt     sql.NullString `json:"expires_at"`
+	ChatSessionID   string         `json:"chat_session_id"`
+	ID              string         `json:"id"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	DeltaJson       string         `json:"delta_json"`
+	CreatedAt       string         `json:"created_at"`
+	ExpiresAt       sql.NullString `json:"expires_at"`
+	AuthorityFormat string         `json:"authority_format"`
+	AuthorityDigest string         `json:"authority_digest"`
+	AuthorityBody   string         `json:"authority_body"`
 }
 
 type CheckpointAnchors struct {
@@ -211,6 +217,9 @@ type Checkpoints struct {
 	ResolvedBy         sql.NullString `json:"resolved_by"`
 	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
 	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+	AuthorityDigest    string         `json:"authority_digest"`
+	AuthorityBody      string         `json:"authority_body"`
 }
 
 type ChunkProjections struct {
@@ -672,6 +681,188 @@ type HistoryPrunedBodies struct {
 type HistoryStorageClock struct {
 	ID         int64 `json:"id"`
 	Generation int64 `json:"generation"`
+}
+
+type InvocationProgramDefinitions struct {
+	ProgramID        string `json:"program_id"`
+	DefinitionDigest string `json:"definition_digest"`
+	OperationID      string `json:"operation_id"`
+	Owner            string `json:"owner"`
+	Lifecycle        string `json:"lifecycle"`
+	DefinitionJson   string `json:"definition_json"`
+}
+
+type InvocationProgramDeliveries struct {
+	ID             string `json:"id"`
+	OutputID       string `json:"output_id"`
+	ResponseID     string `json:"response_id"`
+	DeliveryID     string `json:"delivery_id"`
+	StartByte      int64  `json:"start_byte"`
+	EndByte        int64  `json:"end_byte"`
+	SourceOwnerRef string `json:"source_owner_ref"`
+	MappingsJson   string `json:"mappings_json"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type InvocationProgramExecutions struct {
+	ID                              string         `json:"id"`
+	ProgramID                       string         `json:"program_id"`
+	NodeID                          string         `json:"node_id"`
+	Ordinal                         int64          `json:"ordinal"`
+	ParentExecutionID               string         `json:"parent_execution_id"`
+	ActorID                         string         `json:"actor_id"`
+	ScopeJson                       string         `json:"scope_json"`
+	OperationID                     string         `json:"operation_id"`
+	DefinitionDigest                string         `json:"definition_digest"`
+	ArgumentsRepresentation         string         `json:"arguments_representation"`
+	ArgumentsDigest                 string         `json:"arguments_digest"`
+	ReviewedArgumentsRepresentation string         `json:"reviewed_arguments_representation"`
+	ReviewedArgumentsDigest         string         `json:"reviewed_arguments_digest"`
+	ReviewedArgumentsRef            string         `json:"reviewed_arguments_ref"`
+	NativeCommand                   string         `json:"native_command"`
+	EffectMode                      string         `json:"effect_mode"`
+	EffectClassesJson               string         `json:"effect_classes_json"`
+	ArgumentsRef                    string         `json:"arguments_ref"`
+	Canonical                       string         `json:"canonical"`
+	State                           string         `json:"state"`
+	Owner                           string         `json:"owner"`
+	Lifecycle                       string         `json:"lifecycle"`
+	OwnerStarted                    int64          `json:"owner_started"`
+	OwnerInvoked                    int64          `json:"owner_invoked"`
+	StatusCode                      sql.NullInt64  `json:"status_code"`
+	StopCode                        string         `json:"stop_code"`
+	HostStopCode                    string         `json:"host_stop_code"`
+	OutputPublishable               int64          `json:"output_publishable"`
+	Complete                        int64          `json:"complete"`
+	PublicationEligible             int64          `json:"publication_eligible"`
+	PublicationBasis                int64          `json:"publication_basis"`
+	EffectCertainty                 string         `json:"effect_certainty"`
+	EvidenceKind                    string         `json:"evidence_kind"`
+	EvidenceRef                     string         `json:"evidence_ref"`
+	OwnerRef                        string         `json:"owner_ref"`
+	RecoveryRef                     string         `json:"recovery_ref"`
+	HeldVersionID                   string         `json:"held_version_id"`
+	AcceptedRevision                string         `json:"accepted_revision"`
+	PublishedRevision               string         `json:"published_revision"`
+	DetailRef                       string         `json:"detail_ref"`
+	ApprovalRef                     string         `json:"approval_ref"`
+	JobHandle                       string         `json:"job_handle"`
+	ConflictPath                    string         `json:"conflict_path"`
+	ConflictExpectedRevision        string         `json:"conflict_expected_revision"`
+	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
+	StartedAt                       string         `json:"started_at"`
+	SettledAt                       sql.NullString `json:"settled_at"`
+	NativeGapJson                   string         `json:"native_gap_json"`
+}
+
+type InvocationProgramNodes struct {
+	ProgramID    string `json:"program_id"`
+	NodeID       string `json:"node_id"`
+	SourceUnitID string `json:"source_unit_id"`
+	StartByte    int64  `json:"start_byte"`
+	EndByte      int64  `json:"end_byte"`
+	Line         int64  `json:"line"`
+	ColumnNumber int64  `json:"column_number"`
+	State        string `json:"state"`
+}
+
+type InvocationProgramOutputs struct {
+	ID                string         `json:"id"`
+	ProgramID         string         `json:"program_id"`
+	ExecutionID       sql.NullString `json:"execution_id"`
+	Stream            string         `json:"stream"`
+	Reference         string         `json:"reference"`
+	RetentionClaimID  string         `json:"retention_claim_id"`
+	InitiatingClaimID string         `json:"initiating_claim_id"`
+	BlobID            string         `json:"blob_id"`
+	BlobJson          string         `json:"blob_json"`
+	Complete          int64          `json:"complete"`
+	Redacted          int64          `json:"redacted"`
+	MappingsJson      string         `json:"mappings_json"`
+	Preview           string         `json:"preview"`
+	PreviewTruncated  int64          `json:"preview_truncated"`
+	CreatedAt         string         `json:"created_at"`
+}
+
+type InvocationProgramProgress struct {
+	ExecutionID             string         `json:"execution_id"`
+	ProgramID               string         `json:"program_id"`
+	ActorID                 string         `json:"actor_id"`
+	SessionID               string         `json:"session_id"`
+	RootSessionID           string         `json:"root_session_id"`
+	ScopeJson               string         `json:"scope_json"`
+	ArgumentsRepresentation string         `json:"arguments_representation"`
+	ArgumentsDigest         string         `json:"arguments_digest"`
+	ArgumentsRef            string         `json:"arguments_ref"`
+	State                   string         `json:"state"`
+	OwnerInvoked            int64          `json:"owner_invoked"`
+	DetailRef               string         `json:"detail_ref"`
+	StartedAt               string         `json:"started_at"`
+	SettledAt               sql.NullString `json:"settled_at"`
+}
+
+type InvocationProgramRevisionPinSegments struct {
+	ProgramID    string `json:"program_id"`
+	ExecutionID  string `json:"execution_id"`
+	FirstOrdinal int64  `json:"first_ordinal"`
+	PinCount     int64  `json:"pin_count"`
+	Encoding     string `json:"encoding"`
+	Body         []byte `json:"body"`
+	BodySha256   string `json:"body_sha256"`
+}
+
+type InvocationProgramRevisionPins struct {
+	ProgramID        string `json:"program_id"`
+	ExecutionID      string `json:"execution_id"`
+	Ordinal          int64  `json:"ordinal"`
+	Role             string `json:"role"`
+	Mode             string `json:"mode"`
+	Basis            string `json:"basis"`
+	RootID           string `json:"root_id"`
+	Path             string `json:"path"`
+	DocumentID       string `json:"document_id"`
+	DocumentRevision int64  `json:"document_revision"`
+	DiskSha256       string `json:"disk_sha256"`
+	Representation   string `json:"representation"`
+	ContentSha256    string `json:"content_sha256"`
+	ContentBytes     int64  `json:"content_bytes"`
+	CapturedAt       string `json:"captured_at"`
+}
+
+type InvocationProgramSources struct {
+	ProgramID      string `json:"program_id"`
+	SourceUnitID   string `json:"source_unit_id"`
+	SourceID       string `json:"source_id"`
+	Revision       string `json:"revision"`
+	Representation string `json:"representation"`
+	Sha256         string `json:"sha256"`
+	StartByte      int64  `json:"start_byte"`
+	EndByte        int64  `json:"end_byte"`
+	DetailRef      string `json:"detail_ref"`
+}
+
+type InvocationPrograms struct {
+	ID              string         `json:"id"`
+	ParentReceiptID string         `json:"parent_receipt_id"`
+	RootExecutionID string         `json:"root_execution_id"`
+	LanguageVersion int64          `json:"language_version"`
+	CatalogDigest   string         `json:"catalog_digest"`
+	SourceUnitID    string         `json:"source_unit_id"`
+	SourceDigest    string         `json:"source_digest"`
+	SourceRef       string         `json:"source_ref"`
+	SourceExact     int64          `json:"source_exact"`
+	PlanRef         string         `json:"plan_ref"`
+	SyntaxValidated int64          `json:"syntax_validated"`
+	State           string         `json:"state"`
+	StatusCode      sql.NullInt64  `json:"status_code"`
+	StopCode        string         `json:"stop_code"`
+	DetailRef       string         `json:"detail_ref"`
+	ProgressState   string         `json:"progress_state"`
+	ProgressRef     string         `json:"progress_ref"`
+	TraceEvents     int64          `json:"trace_events"`
+	TraceBytes      int64          `json:"trace_bytes"`
+	StartedAt       string         `json:"started_at"`
+	SettledAt       sql.NullString `json:"settled_at"`
 }
 
 type InvocationReceipts struct {

@@ -3,12 +3,13 @@ id: GIT_RESTORE_BULK_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - git_restore
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.bulk_denied
   - paintedwolf.requested

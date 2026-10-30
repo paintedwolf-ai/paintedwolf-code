@@ -3,12 +3,13 @@ id: DIFF_FILE_TOO_LARGE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - diff
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.max_path_bytes
   - paintedwolf.path

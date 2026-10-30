@@ -1,0 +1,37 @@
+oar: '1.0'
+id: COMMAND_OPTION_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.expected_form
+when: paintedwolf.rejection_code == "COMMAND_OPTION_UNSUPPORTED"
+effect: block
+copy:
+  what: 'An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details.'
+  cause: 'Supported form: {{ paintedwolf.expected_form }}.'
+  why: This host has no native form of {{ paintedwolf.command }} with that option and no installed {{ paintedwolf.command }} to run it.
+  fix: Rewrite the statement with the supported form, or reach the same result with another supported command. A replacement_text detail, when present, is the only validated correction for that span; submitting it is a new command call. Earlier statements' output and effects are in this result.
+  instead: Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: native command option is unsupported
+x-paintedwolf-scenarios:
+- id: path_option
+  vars:
+    tool: command
+    command: basename
+    expected_form: 'basename [--] PATH [SUFFIX]'
+  expect_contains:
+  - 'Code: COMMAND_OPTION_UNSUPPORTED'
+  - basename
+  - PATH
+  - supported form

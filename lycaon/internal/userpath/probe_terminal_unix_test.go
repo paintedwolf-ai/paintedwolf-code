@@ -4,6 +4,7 @@ package userpath
 
 import (
 	"context"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"io"
 	"os"
 	osexec "os/exec"
@@ -71,6 +72,7 @@ func TestProbeTerminalHelperProcess(t *testing.T) {
 	p := providerWith(t, cfg, "/bin/zsh", map[string]string{
 		"SHELL": "/bin/zsh", "PATH": "/usr/bin:/bin", "HOME": t.TempDir(),
 	}, fakeShell{})
+	p.prepare = execpkg.PrepareCommand
 	p.run = defaultRun
 
 	snap := p.Resolve(context.Background())

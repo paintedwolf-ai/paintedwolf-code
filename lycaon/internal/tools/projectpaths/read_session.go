@@ -22,9 +22,21 @@ type ReadSession struct {
 	// admitted reports that the call's attached roots passed validation.
 	admitted bool
 
-	mu     sync.Mutex
-	roots  map[string]*fseffect.ReadRoot
-	closed bool
+	mu      sync.Mutex
+	roots   map[string]*fseffect.ReadRoot
+	closed  bool
+	observe ReadObserver
+}
+
+// ReadObserver sees each file a session opens, before any byte is consumed.
+// An error refuses the open; the observer must not move the file offset.
+type ReadObserver func(Resolved, *os.File) error
+
+// Observe installs the observer for every later open through this session.
+func (s *ReadSession) Observe(observer ReadObserver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.observe = observer
 }
 
 // NewReadSession admits tctx's attached roots for the reads of one call.
@@ -95,7 +107,7 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 		return true
 	}
 	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
-	path := filepath.Clean(strings.TrimSpace(modelPath))
+	path := filepath.Clean(modelPath)
 	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
 }
 
@@ -107,7 +119,20 @@ func (s *ReadSession) Open(resolved Resolved) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return root.Open(loc.Rel)
+	file, err := root.Open(loc.Rel)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	observe := s.observe
+	s.mu.Unlock()
+	if observe != nil {
+		if err := observe(resolved, file); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+	}
+	return file, nil
 }
 
 func (s *ReadSession) heldRoot(path string) (*fseffect.ReadRoot, error) {

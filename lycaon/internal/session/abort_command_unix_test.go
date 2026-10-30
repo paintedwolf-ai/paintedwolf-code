@@ -14,16 +14,12 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/osprocess"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,22 +41,10 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
-	root := t.TempDir()
-	pidFile := filepath.Join(root, "job.pid")
-	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(root, "serve.sh"),
+	programs := programtest.New(t, programtest.Options{Session: sess.ID, Background: reg})
+	pidFile := filepath.Join(programs.Dir, "job.pid")
+	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(programs.Dir, "serve.sh"),
 		[]byte("set -m\nsleep 1000 &\necho $! > \"$1\"\nwait\n"), 0o600))
-	tool := &command.CommandTool{
-		Runner: hostcmd.NewRunner(),
-		Boundary: sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
-			{ID: "implement", Tools: map[string]bool{"command": true}},
-		}),
-		Background: reg,
-	}
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sess.ID,
-			Agent: "implement"},
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
-	}
 
 	turnDone := make(chan commandTurnResult, 1)
 	go func() {
@@ -69,7 +53,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 		defer lock.Unlock()
 		turnCtx := mgr.Runner.Execution.Attach(context.Background(), sess.ID)
 		defer mgr.Runner.Execution.Cancel(sess.ID)
-		output, err := tool.Run(turnCtx, map[string]any{"command": "sh serve.sh " + pidFile}, tctx)
+		output, err := programs.Call(t, turnCtx, "sh serve.sh "+strconv.Quote(pidFile))
 		turnDone <- commandTurnResult{output: output, err: err}
 	}()
 	job := waitForJobPID(t, pidFile)
