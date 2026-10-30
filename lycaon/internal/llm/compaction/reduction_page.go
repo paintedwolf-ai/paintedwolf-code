@@ -12,7 +12,6 @@ type reductionPage struct {
 	source      []ContextMessage
 	retained    []ContextMessage
 	replacement []ContextMessage
-	record      *messageview.Continuation
 }
 
 // reductionPage bounds source work while keeping each producing call with its results.
@@ -33,7 +32,7 @@ func (c *SimpleCompactor) reductionPage(ctx context.Context, info SessionInfo, a
 		if err != nil {
 			return reductionPage{}, err
 		}
-		page = reductionPage{source: prefix, retained: remainingCompactionRows(all, retainedMessageIDs(prefix)), record: record}
+		page = reductionPage{source: prefix, retained: remainingCompactionRows(all, retainedMessageIDs(prefix))}
 		page.replacement = compactionReplacement(info, prefix, nil, priorSummary(info.PriorContinuation), text)
 		useful, err := c.usefulCompaction(info, prefix, page.replacement, c.cfg.SessionMinSavingsTokens)
 		if err != nil || useful || len(prefix) == len(bounded) {
