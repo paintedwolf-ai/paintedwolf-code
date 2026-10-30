@@ -336,19 +336,8 @@ func Command(
 	return cmd, cleanup, nil
 }
 
-// BuildProfile renders the boundary the helper applies on this platform: the
-// Seatbelt profile on macOS, the boundary plan on Linux.
-func BuildProfile(c Confinement) (string, error) {
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return "", err
-	}
-	return renderProfile(c)
-}
-
-// BuildSeatbeltProfile renders the macOS profile for c. It is what BuildProfile
-// applies on macOS and renders on every platform, so the policy it expresses
-// can be read anywhere.
+// BuildSeatbeltProfile renders the macOS profile for c on every platform,
+// so the policy it expresses can be inspected anywhere.
 func BuildSeatbeltProfile(c Confinement) (string, error) {
 	c, err := validateProfileInputs(c)
 	if err != nil {
