@@ -1,6 +1,7 @@
 """Bounded unittest selection from admission through the actual runner recipe."""
 
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -8,6 +9,8 @@ import sys
 import tempfile
 import unittest
 
+import python_coverage
+from toolchain import python_tools
 import verification_plan as planning
 import verification_resources as resources
 from verification_tests import support
@@ -60,18 +63,34 @@ class UnittestSelectionTests(unittest.TestCase):
             self.assertIn("Ran 3 tests", default.stderr)
             self.assertIn("unselected case executed", default.stderr)
 
+    def assert_actual_runner_recipe(self, flags, environment=None):
+        result = subprocess.run([str(ROOT / "task"), "--dry", "--force", "test:runner",
+                                 *(["--", *flags] if flags else [])],
+                                cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = [line for line in (result.stdout + result.stderr).splitlines()
+                 if line.startswith("task: [test:runner] ")]
+        self.assertEqual(len(lines), 1,
+                         f"expected one actual runner recipe; stdout={result.stdout!r}; "
+                         f"stderr={result.stderr!r}")
+        command = shlex.split(lines[0].partition("] ")[2])
+        self.assertEqual(command, ["python3", "-m", "unittest", "discover", "-s", "scripts",
+                                   "-p", "test_*execution.py", *flags])
+
     def test_actual_task_runner_recipe_forwards_patterns_without_changing_default(self):
         for flags in ([], ["-k", "*Terminal*", "-k", "crash receipt"]):
             with self.subTest(flags=flags):
-                result = subprocess.run([str(ROOT / "task"), "--dry", "--force", "test:runner",
-                                         *(["--", *flags] if flags else [])],
-                                        cwd=ROOT, capture_output=True, text=True, timeout=30)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                line = next(line for line in (result.stdout + result.stderr).splitlines()
-                            if line.startswith("task: [test:runner] "))
-                command = shlex.split(line.partition("] ")[2])
-                self.assertEqual(command, ["python3", "-m", "unittest", "discover", "-s", "scripts",
-                                           "-p", "test_*execution.py", *flags])
+                self.assert_actual_runner_recipe(flags)
+
+    def test_actual_task_recipe_under_changed_coverage_exec_environment(self):
+        with tempfile.TemporaryDirectory(prefix="runner-recipe-coverage-") as directory:
+            tools = python_tools.prepared(python_coverage.REQUIREMENTS)
+            python, data = python_coverage.environment(Path(directory), [tools], ["scripts/test-execution.py"])
+            environment = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ['PATH']}"}
+            for flags in ([], ["-k", "*Terminal*", "-k", "crash receipt"]):
+                with self.subTest(flags=flags):
+                    self.assert_actual_runner_recipe(flags, environment)
+            self.assertTrue(list(data.glob("started.*")), "actual task wrapper never started coverage")
 
 
 class UnittestAdmissionTests(support.BatchFixture):
