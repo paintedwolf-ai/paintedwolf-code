@@ -1,6 +1,6 @@
 ---
 name: verify-a-change
-description: Choose useful validation for a change and report outcomes and unchecked areas.
+description: Choose and run the right checks after a code change, triage failing tests or builds, and report what passed and what stayed unverified.
 ---
 
 # Verify a change
