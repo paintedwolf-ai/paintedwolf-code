@@ -149,7 +149,7 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	}
 	_, invalid := verifyIntakeRoot(-1, selected)
 	var identity *intakeIdentityError
-	facts.SyscallFailurePreserved = errors.Is(invalid, unix.ENOENT) && errors.As(invalid, &identity) && !intakeLookupUnavailable(invalid) && !errors.Is(invalid, errIntakeEpochChanged)
+	facts.SyscallFailurePreserved = errors.Is(invalid, unix.EBADF) && errors.As(invalid, &identity) && !intakeLookupUnavailable(invalid) && !errors.Is(invalid, errIntakeEpochChanged)
 	originalRoot := root
 	movedRoot := root + "-moved"
 	if err := os.Rename(root, movedRoot); err != nil {

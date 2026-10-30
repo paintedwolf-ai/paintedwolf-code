@@ -16,7 +16,7 @@ import (
 // The privileged stage must not issue getattr against a caller's FUSE daemon.
 func mountDescriptorIdentity(fd int) (id, inode uint64, err error) {
 	if fd < 0 {
-		return 0, 0, errors.New("invalid held source descriptor")
+		return 0, 0, unix.EBADF
 	}
 	// #nosec G703 -- only a nonnegative decimal descriptor selects fixed proc fdinfo; no caller path or filesystem getattr is used.
 	file, err := os.Open("/proc/thread-self/fdinfo/" + strconv.Itoa(fd))
