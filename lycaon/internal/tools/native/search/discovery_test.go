@@ -179,7 +179,7 @@ func TestFindNamespaceExclusionsDoNotSpendTraversalAllowance(t *testing.T) {
 	h.owners.overrides = map[string]int64{"traversal_visits": 2}
 	h.exec("", "find", ".").expect(t, "live exact allowance", ".\n./visible\n", "", 0)
 	h.owners.Catalog = discoveryCatalog(t)
-	for attempt := range 2 {
+	for range 2 {
 		h.exec("", "find", ".").expect(t, "indexed exact allowance", ".\n./visible\n", "", 0)
 	}
 	h.owners.overrides["traversal_visits"] = 3
