@@ -13,6 +13,7 @@ import (
 type discoveryWork struct {
 	metadata, listed, reused, prepared    int64
 	roots, handles, relative, peak, opens int64
+	identityPeak, identityHeld            int64
 }
 
 // Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
@@ -35,7 +36,7 @@ func (w *walker) report() {
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
-		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "relative_child_stats", w.work.relative)
+		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld, "relative_child_stats", w.work.relative)
 }
 
 type entryMetadata struct {

@@ -126,7 +126,7 @@ func (r *ReadRoot) Open(rel string) (*os.File, error) {
 		return nil, err
 	}
 	if clean.Rel == "." {
-		fd, err := unix.Dup(r.root.fd)
+		fd, err := unix.FcntlInt(uintptr(r.root.fd), unix.F_DUPFD_CLOEXEC, 0)
 		if err != nil {
 			return nil, fmt.Errorf("duplicate effect root: %w", err)
 		}
@@ -244,7 +244,7 @@ func openReadWalk(root *openedRoot, relPath string) (*os.File, error) {
 // walkReadContained shares the same held-directory confinement for content and
 // metadata operations. Only an explicit no-follow query receives link metadata.
 func walkReadContained(root *openedRoot, relPath string, follow bool, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
-	baseFD, err := unix.Dup(root.fd)
+	baseFD, err := unix.FcntlInt(uintptr(root.fd), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate effect root: %w", err)
 	}

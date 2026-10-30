@@ -48,6 +48,9 @@ func newWalker(inv *invocation) *walker {
 func (w *walker) close() {
 	for _, r := range w.roots {
 		w.work.opens += r.DescriptorOpens()
+		peak, held := r.DirectoryIdentityDescriptors()
+		w.work.identityPeak = max(w.work.identityPeak, peak)
+		w.work.identityHeld += held
 	}
 	w.report()
 	for k, r := range w.roots {
@@ -64,6 +67,9 @@ func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	if err := bound.Validate(); err != nil {
 		if old, ok := w.roots[path]; ok {
 			w.work.opens += old.DescriptorOpens()
+			peak, held := old.DirectoryIdentityDescriptors()
+			w.work.identityPeak = max(w.work.identityPeak, peak)
+			w.work.identityHeld += held
 			_ = old.Close()
 			delete(w.roots, path)
 		}

@@ -79,7 +79,37 @@ func (d *BoundDir) currentPath() (string, error) {
 	}
 	path, err := d.root.DirectoryPath(d.file)
 	if errors.Is(err, fseffect.ErrUnsupported) {
-		return d.file.Name(), nil
+		return d.namedDirectoryPath()
 	}
 	return path, err
+}
+
+// AdmitDirectoryRead checks the held directory's current physical address and read floor.
+func (d *BoundDir) AdmitDirectoryRead() error {
+	actual, err := d.currentPath()
+	if err == nil && d.dir.admitRead != nil {
+		err = d.dir.admitRead(actual)
+	}
+	return PathOperationError(d.dir.Resolved.DisplayPath, err)
+}
+
+// namedDirectoryPath reopens through the bound authority when native handle paths are unavailable.
+func (d *BoundDir) namedDirectoryPath() (string, error) {
+	current, err := d.dir.OpenDir()
+	if err != nil {
+		return "", err
+	}
+	defer current.Close()
+	expected, err := d.file.Stat()
+	if err != nil {
+		return "", err
+	}
+	actual, err := current.file.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !os.SameFile(expected, actual) {
+		return "", fseffect.ErrSymlink
+	}
+	return current.file.Name(), nil
 }

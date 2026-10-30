@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestHeldDirectoryOpensAreRelativeAndCounted(t *testing.T) {
@@ -21,6 +22,11 @@ func TestHeldDirectoryOpensAreRelativeAndCounted(t *testing.T) {
 	parent, err := reader.OpenExact(".")
 	testutil.FailErr(t, "open parent", err)
 	defer parent.Close()
+	flags, err := unix.FcntlInt(parent.Fd(), unix.F_GETFD, 0)
+	testutil.FailErr(t, "inspect root clone flags", err)
+	if flags&unix.FD_CLOEXEC == 0 {
+		t.Fatal("retained root descriptor survives exec")
+	}
 	child, err := reader.OpenChildDirectory(parent, "a")
 	testutil.FailErr(t, "open child", err)
 	defer child.Close()
