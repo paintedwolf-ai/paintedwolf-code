@@ -22,14 +22,6 @@ func buildLiteralBloom(
 		return literalFileBlooms{}, err
 	}
 	defer func() { _ = f.Close() }()
-	reader := bufio.NewReaderSize(f, 64*1024)
-	prefix, _ := reader.Peek(3)
-	hasBOM := len(prefix) >= 2 && (prefix[0] == 0xff && prefix[1] == 0xfe || prefix[0] == 0xfe && prefix[1] == 0xff) || len(prefix) >= 3 && prefix[0] == 0xef && prefix[1] == 0xbb && prefix[2] == 0xbf
-	if !hasBOM {
-		bloom, searchable, err := buildLiteralBloomReader(ctx, reader, entry.Size)
-		projection := literalProjection{bloom: bloom, searchable: searchable}
-		return literalFileBlooms{decoded: projection, raw: projection}, err
-	}
 	builder := newLiteralContent(entry.Size)
 	buf := make([]byte, 64*1024)
 	for {
@@ -47,7 +39,6 @@ func buildLiteralBloom(
 			return literalFileBlooms{}, err
 		}
 	}
-
 }
 
 // buildLiteralBloomReader carries split UTF-8 runes across chunks before folding.

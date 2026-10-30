@@ -15,6 +15,7 @@ func TestFileBloomCannotPublishAcrossAnObservedWrite(t *testing.T) {
 	for _, scope := range []string{"relative", "absolute", "root"} {
 		t.Run(scope, func(t *testing.T) {
 			root := t.TempDir()
+			markLiteralWatch(t, root)
 			writeLiteralFixture(t, root, "a.txt", "old text")
 			info, err := os.Stat(filepath.Join(root, "a.txt"))
 			testutil.FailErr(t, "stat observation", err)
