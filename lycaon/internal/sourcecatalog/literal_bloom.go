@@ -1,7 +1,6 @@
 package sourcecatalog
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -9,10 +8,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
-	"github.com/lycaon/lycaon/internal/textfile"
-	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/transform"
 )
+
+var errLiteralReadIncomplete = errors.New("content observation was incomplete")
 
 type literalBloom []uint64
 
@@ -20,70 +18,38 @@ func buildLiteralBloom(
 	ctx context.Context,
 	entry Entry,
 	open func(Entry) (io.ReadCloser, error),
-) (literalBloom, bool, error) {
+) (literalFileBlooms, error) {
+	if err := ctx.Err(); err != nil {
+		return literalFileBlooms{}, err
+	}
 	f, err := open(entry)
 	if err != nil {
-		return literalBloom{}, false, err
+		return literalFileBlooms{}, err
 	}
 	defer func() { _ = f.Close() }()
-	reader := bufio.NewReaderSize(f, 64*1024)
-	prefix, _ := reader.Peek(3)
-	var decoded io.Reader = reader
-	if len(prefix) >= 2 && prefix[0] == 0xff && prefix[1] == 0xfe {
-		decoded = transform.NewReader(reader, unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder())
-	} else if len(prefix) >= 2 && prefix[0] == 0xfe && prefix[1] == 0xff {
-		decoded = transform.NewReader(reader, unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder())
-	} else if len(prefix) >= 3 && prefix[0] == 0xef && prefix[1] == 0xbb && prefix[2] == 0xbf {
-		_, _ = reader.Discard(3)
-	}
-	return buildLiteralBloomReader(ctx, decoded, entry.Size)
-}
-
-// buildLiteralBloomReader carries split UTF-8 runes across chunks before folding.
-func buildLiteralBloomReader(ctx context.Context, reader io.Reader, contentBytes int64) (literalBloom, bool, error) {
-	bloom := newLiteralBloom(contentBytes)
-	validator := textfile.UTF8Validator{}
-	window := [3]byte{}
-	filled := 0
+	builder := newLiteralContent(entry.Size)
+	var total int64
 	buf := make([]byte, 64*1024)
-	folded := make([]byte, 0, 64*1024+8)
-	var carry []byte
 	for {
 		if err := ctx.Err(); err != nil {
-			return literalBloom{}, false, err
+			return literalFileBlooms{}, err
 		}
-		n, readErr := reader.Read(buf)
-		atEOF := errors.Is(readErr, io.EOF)
-		if !validator.Add(buf[:n], atEOF) {
-			return literalBloom{}, false, nil
+		n, err := f.Read(buf)
+		total += int64(n)
+		if total > entry.Size {
+			return literalFileBlooms{}, errLiteralReadIncomplete
 		}
-		chunk := buf[:n]
-		if len(carry) > 0 {
-			chunk = append(carry, chunk...)
+		if _, buildErr := builder.Write(buf[:n]); buildErr != nil {
+			return literalFileBlooms{}, buildErr
 		}
-		complete := chunk
-		if !atEOF {
-			complete = trimIncompleteUTF8Tail(chunk)
-		}
-		folded = litprefilter.AppendCanonicalFold(folded[:0], complete)
-		carry = append(carry[:0], chunk[len(complete):]...)
-		for _, b := range folded {
-			if filled < len(window) {
-				window[filled] = b
-				filled++
-				if filled < len(window) {
-					continue
-				}
-			} else {
-				window[0], window[1], window[2] = window[1], window[2], b
+		if errors.Is(err, io.EOF) {
+			if total != entry.Size {
+				return literalFileBlooms{}, errLiteralReadIncomplete
 			}
-			bloom.add(window)
+			return builder.finish()
 		}
-		if atEOF {
-			return bloom, true, nil
-		}
-		if readErr != nil {
-			return literalBloom{}, false, readErr
+		if err != nil {
+			return literalFileBlooms{}, err
 		}
 	}
 }
@@ -131,7 +97,11 @@ func foldRequirement(req litprefilter.Requirement) foldedRequirement {
 	for _, clause := range req.Clauses {
 		folded := make([][]byte, 0, len(clause))
 		for _, lit := range clause {
-			folded = append(folded, litprefilter.AppendCanonicalFold(nil, lit.Bytes))
+			if !utf8.Valid(lit.Bytes) {
+				folded = append(folded, nil)
+			} else {
+				folded = append(folded, litprefilter.AppendCanonicalFold(nil, lit.Bytes))
+			}
 		}
 		out = append(out, folded)
 	}
@@ -154,7 +124,7 @@ func (b literalBloom) admitsRequirement(req litprefilter.Requirement) bool {
 	for _, clause := range req.Clauses {
 		matched := false
 		for _, lit := range clause {
-			if b.mayContain(litprefilter.AppendCanonicalFold(buf[:0], lit.Bytes)) {
+			if !utf8.Valid(lit.Bytes) || b.mayContain(litprefilter.AppendCanonicalFold(buf[:0], lit.Bytes)) {
 				matched = true
 				break
 			}

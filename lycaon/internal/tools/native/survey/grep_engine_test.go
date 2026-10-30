@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -133,14 +132,7 @@ func TestGrepEngine_BloomFilterPrunesNonMatchingFiles(t *testing.T) {
 	snapshot, err := catalog.Observe(context.Background(), "test-proj", []sourcecatalog.Root{{ID: "r1", Path: dir}})
 	testutil.FailErr(t, "observe root", err)
 
-	// Populate Bloom filters.
-	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
-	}
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("TargetNeedleToken"), Open: opener,
-	})
-	testutil.FailErr(t, "populate blooms", err)
+	observable := warmSurveyContent(t, catalog, dir, snapshot.Entries)
 
 	stats := &grepEngineStats{}
 	re, err := compileGrepRegex("TargetNeedleToken", false)
@@ -166,11 +158,14 @@ func TestGrepEngine_BloomFilterPrunesNonMatchingFiles(t *testing.T) {
 	if len(search.resp.Matches) != 1 {
 		t.Fatalf("matches=%d want 1", len(search.resp.Matches))
 	}
-	if pruned := stats.IndexBloomPruned.Load(); pruned < 20 {
+	if pruned := stats.IndexBloomPruned.Load(); observable && pruned < 20 {
 		t.Fatalf("pruned by bloom=%d want >= 20", pruned)
 	}
-	if opened := stats.FilesOpened.Load(); opened > 5 {
+	if opened := stats.FilesOpened.Load(); observable && opened > 5 {
 		t.Fatalf("files opened=%d want <= 5", opened)
+	}
+	if !observable && stats.IndexBloomPruned.Load() != 0 {
+		t.Fatal("unobservable content was pruned")
 	}
 }
 
@@ -182,13 +177,7 @@ func TestGrepEngine_UncachedFileScannedDirectly(t *testing.T) {
 	snapshot, err := catalog.Observe(context.Background(), "test-proj", []sourcecatalog.Root{{ID: "r1", Path: dir}})
 	testutil.FailErr(t, "observe root", err)
 
-	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
-	}
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("fresh_token"), Open: opener,
-	})
-	testutil.FailErr(t, "populate blooms", err)
+	warmSurveyContent(t, catalog, dir, snapshot.Entries)
 
 	// Write unindexed file.
 	testutil.FailErr(t, "write new", os.WriteFile(filepath.Join(dir, "new.txt"), []byte("contains fresh_token here\n"), 0o644))
@@ -217,13 +206,7 @@ func TestGrepEngine_BloomFilterPrunesAlternations(t *testing.T) {
 	catalog := sourcecatalog.New()
 	snapshot, err := catalog.Observe(context.Background(), "test-proj", []sourcecatalog.Root{{ID: "r1", Path: dir}})
 	testutil.FailErr(t, "observe root", err)
-	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
-	}
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("projection_marker"), Open: opener,
-	})
-	testutil.FailErr(t, "populate blooms", err)
+	observable := warmSurveyContent(t, catalog, dir, snapshot.Entries)
 
 	const pattern = "projection_marker|ProjectionMarker"
 	stats := &grepEngineStats{}
@@ -243,11 +226,14 @@ func TestGrepEngine_BloomFilterPrunesAlternations(t *testing.T) {
 	if len(search.resp.Matches) != 2 {
 		t.Fatalf("matches=%d want 2", len(search.resp.Matches))
 	}
-	if pruned := stats.IndexBloomPruned.Load(); pruned < 20 {
+	if pruned := stats.IndexBloomPruned.Load(); observable && pruned < 20 {
 		t.Fatalf("pruned by bloom=%d want >= 20", pruned)
 	}
-	if opened := stats.FilesOpened.Load(); opened > 7 {
+	if opened := stats.FilesOpened.Load(); observable && opened > 7 {
 		t.Fatalf("files opened=%d want <= 7", opened)
+	}
+	if !observable && stats.IndexBloomPruned.Load() != 0 {
+		t.Fatal("unobservable content was pruned")
 	}
 }
 

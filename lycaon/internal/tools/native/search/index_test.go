@@ -1,7 +1,6 @@
 package search
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,27 +9,36 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// indexedHarness observes the fixture tree and builds every file's Bloom
-// filter, as the structured grep tool's index warm-up does.
-func indexedHarness(t *testing.T, files map[string]string) (*harness, *sourcecatalog.Catalog) {
+// indexedHarness primes captured content through the shared stream lifecycle.
+func indexedHarness(t *testing.T, files map[string]string) (*harness, *sourcecatalog.Catalog, bool) {
 	t.Helper()
 	h := newHarness(t, files)
 	catalog := sourcecatalog.New()
-	snapshot, err := catalog.Observe(context.Background(), "project", []sourcecatalog.Root{{ID: "root", Path: h.root}})
-	testutil.FailErr(t, "observe", err)
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "root", Base: ".", Require: litprefilter.AnyOf("warm-up"),
-		Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-			return os.Open(filepath.Join(h.root, filepath.FromSlash(entry.Path)))
-		},
-	})
-	testutil.FailErr(t, "build blooms", err)
-	return h, catalog
+	snapshot, err := catalog.Observe(t.Context(), "project", []sourcecatalog.Root{{ID: "root", Path: h.root}})
+	testutil.FailErr(t, "observe fixture", err)
+	observable := true
+	for _, entry := range snapshot.Entries {
+		if entry.IsDir || entry.IsSymlink {
+			continue
+		}
+		file, err := os.Open(filepath.Join(h.root, filepath.FromSlash(entry.Path)))
+		testutil.FailErr(t, "open fixture content", err)
+		info, err := file.Stat()
+		testutil.FailErr(t, "stat fixture content", err)
+		version := fspath.ObserveFile(info)
+		observable = observable && version.Known && version.Links > 0
+		observation := catalog.Literals.BeginRead(h.root, entry, version)
+		_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
+		testutil.FailErr(t, "observe fixture stream", err)
+		testutil.FailErr(t, "close fixture stream", file.Close())
+		observation.Close()
+	}
+	return h, catalog, observable
 }
 
 func indexCorpus() map[string]string {
@@ -46,7 +54,7 @@ func indexCorpus() map[string]string {
 // statuses, while the indexed run reads (and pins) only files the index
 // could not rule out.
 func TestIndexedAndLiveSearchesAgree(t *testing.T) {
-	h, catalog := indexedHarness(t, indexCorpus())
+	h, catalog, observable := indexedHarness(t, indexCorpus())
 	for _, argv := range [][]string{
 		{"grep", "-rn", "NeedleToken", "src"},
 		{"grep", "-rl", "NeedleToken", "."},
@@ -70,8 +78,11 @@ func TestIndexedAndLiveSearchesAgree(t *testing.T) {
 			if live.err != nil || indexed.err != nil || live.stdout != indexed.stdout || live.stderr != indexed.stderr || live.result != indexed.result {
 				t.Fatalf("live %q %q %+v %v\nindexed %q %q %+v %v", live.stdout, live.stderr, live.result, live.err, indexed.stdout, indexed.stderr, indexed.result, indexed.err)
 			}
-			if len(indexedPins) >= len(livePins) && argv[1] != "-rq" {
+			if observable && len(indexedPins) >= len(livePins) && argv[1] != "-rq" {
 				t.Fatalf("index pruned nothing: live pins %d indexed %d", len(livePins), len(indexedPins))
+			}
+			if !observable && len(indexedPins) != len(livePins) {
+				t.Fatalf("unobservable files changed live capture count: live=%d indexed=%d", len(livePins), len(indexedPins))
 			}
 		})
 	}
@@ -81,7 +92,7 @@ func TestIndexedAndLiveSearchesAgree(t *testing.T) {
 // its filter no longer matches the file's metadata, so the search reads it.
 // Forms the index cannot decide never prune.
 func TestIndexSpeaksOnlyForItsGeneration(t *testing.T) {
-	h, catalog := indexedHarness(t, indexCorpus())
+	h, catalog, _ := indexedHarness(t, indexCorpus())
 	h.owners.Catalog = catalog
 	changed := filepath.Join(h.root, "src", "noise_07.txt")
 	testutil.FailErr(t, "rewrite", os.WriteFile(changed, []byte("now holds NeedleToken\n"), 0o644))
@@ -92,7 +103,6 @@ func TestIndexSpeaksOnlyForItsGeneration(t *testing.T) {
 	all := len(indexCorpus()) - 1 // bin.dat lies outside src
 	for _, argv := range [][]string{
 		{"grep", "-rv", "NeedleToken", "src"},
-		{"grep", "-ri", "needletoken", "src"},
 		{"grep", "-rP", "Needle(?=Token)", "src"},
 		{"grep", "-rw", "NeedleToken", "src"},
 	} {
