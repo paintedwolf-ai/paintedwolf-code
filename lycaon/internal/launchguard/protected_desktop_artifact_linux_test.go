@@ -21,6 +21,7 @@ import (
 // den:bundle is passthrough preparation: its before/after tree and output hashes
 // are retained separately from the managed runtime receipt.
 type desktopArtifact struct {
+	LibraryRoots            []string `json:"library_roots"`
 	SystemExecutables       []string `json:"system_executables"`
 	Version                 int      `json:"version"`
 	Root                    string   `json:"root"`
@@ -71,6 +72,16 @@ func loadDesktopArtifact(path, sourceTree string) (desktopArtifact, *pkgmanifest
 	}
 	if !filepath.IsAbs(artifact.Root) || filepath.Clean(artifact.Root) != artifact.Root || artifact.Root == "/" {
 		return artifact, nil, errors.New("desktop artifact root is invalid")
+	}
+	if len(artifact.LibraryRoots) == 0 || len(artifact.LibraryRoots) > 32 {
+		return artifact, nil, errors.New("desktop artifact requires bounded explicit library roots")
+	}
+	seenRoots := map[string]bool{}
+	for _, root := range artifact.LibraryRoots {
+		if !filepath.IsAbs(root) || filepath.Clean(root) != root || root == "/" || seenRoots[root] {
+			return artifact, nil, errors.New("desktop artifact library root is invalid or duplicated")
+		}
+		seenRoots[root] = true
 	}
 	resultRaw, err := checkedBytes(artifact.PreparationResult, artifact.PreparationResultSHA256)
 	if err != nil {

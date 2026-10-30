@@ -20,6 +20,9 @@ Filters = [
     # The bundled browser ships identical locale and hyphenation files.
     "files-duplicated-waste",
     "files-duplicate",
+    # The protected launch's bootstrap is setuid root by design and only that
+    # file (docs/security.md, Protected Linux launch).
+    "(setuid-binary|non-standard-executable-perm) /usr/libexec/painted-wolf-code/pw-launch\\b",
     # Domain vocabulary in the package summary and description.
     "spelling-error \\('(Agentic|toolchain)',",
 ]

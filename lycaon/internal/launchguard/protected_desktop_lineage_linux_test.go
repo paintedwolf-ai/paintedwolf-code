@@ -24,7 +24,7 @@ type fixtureProcess struct {
 
 // The pidfd is acquired before procfs observation and checked again afterwards;
 // retaining a pidfd alone does not stop a reaped numeric PID being reused.
-func pinFixtureProcess(pid, parent int) (fixtureProcess, error) {
+func pinDesktopFixtureProcess(pid, parent int) (fixtureProcess, error) {
 	fd, err := unix.PidfdOpen(pid, 0)
 	if err != nil {
 		return fixtureProcess{}, err
@@ -145,7 +145,7 @@ func settleDesktopLineage() error {
 					continue
 				}
 				seen[pid] = true
-				process, err := pinFixtureProcess(pid, os.Getpid())
+				process, err := pinDesktopFixtureProcess(pid, os.Getpid())
 				if err != nil {
 					continue
 				} // Exit or adoption races are re-observed, never signalled by number.
@@ -163,7 +163,7 @@ func settleDesktopLineage() error {
 	return errors.New("owned desktop descendants did not settle; preserve fixture for inspection")
 }
 
-func fixtureProcessExited(fd int, timeout time.Duration) bool {
+func desktopFixtureProcessExited(fd int, timeout time.Duration) bool {
 	descriptors := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -188,11 +188,11 @@ func verifyDesktopLineageCleanup(t *testing.T) {
 	testutil.FailErr(t, "owned early-exit lineage control", err)
 	pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
 	testutil.FailErr(t, "adopted child identity", err)
-	process, err := pinFixtureProcess(pid, os.Getpid())
+	process, err := pinDesktopFixtureProcess(pid, os.Getpid())
 	testutil.FailErr(t, "kernel adoption by fixture subreaper", err)
 	defer unix.Close(process.fd)
 	testutil.FailErr(t, "settle pre-health orphan control", settleDesktopLineage())
-	if !fixtureProcessExited(process.fd, time.Second) {
+	if !desktopFixtureProcessExited(process.fd, time.Second) {
 		t.Fatal("pre-health owned child survived cleanup")
 	}
 	t.Log("pre-health direct/adopted-child cleanup and kernel exit control passed")

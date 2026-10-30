@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"runtime"
 	"testing"
@@ -134,7 +135,7 @@ func TestBrokerAgentSealsDumpableAndVerifiesIdentity(t *testing.T) {
 	// runBrokerAgent error and clean-shutdown paths.
 	unsealed := filepathJoinTempFile(t, "{}")
 	dummyBroker := filepathJoinTempFile(t, "")
-	if err := runBrokerAgent(unsealed, dummyBroker); err == nil {
+	if err := runBrokerAgent(unsealed, dummyBroker, nil); err == nil {
 		t.Fatal("runBrokerAgent accepted unsealed frame")
 	}
 
@@ -142,29 +143,38 @@ func TestBrokerAgentSealsDumpableAndVerifiesIdentity(t *testing.T) {
 	badSpec.UID++
 	badFrame, err := sealEntrySpec(badSpec)
 	testutil.FailErr(t, "seal badSpec", err)
-	if err := runBrokerAgent(badFrame, filepathJoinTempFile(t, "")); err == nil {
+	if err := runBrokerAgent(badFrame, filepathJoinTempFile(t, ""), nil); err == nil {
 		t.Fatal("runBrokerAgent accepted mismatched UID")
 	}
 
 	validFrame1, err := sealEntrySpec(spec)
 	testutil.FailErr(t, "seal validFrame1", err)
-	if err := runBrokerAgent(validFrame1, filepathJoinTempFile(t, "")); err == nil {
+	if err := runBrokerAgent(validFrame1, filepathJoinTempFile(t, ""), nil); err == nil {
 		t.Fatal("runBrokerAgent accepted non-socket broker")
 	}
 
 	validFrame2, err := sealEntrySpec(spec)
 	testutil.FailErr(t, "seal validFrame2", err)
 	_ = s1.Close()
-	testutil.FailErr(t, "runBrokerAgent clean EOF", runBrokerAgent(validFrame2, s0))
+	readyR, readyW, err := os.Pipe()
+	testutil.FailErr(t, "create broker readiness pipe", err)
+	defer func() { _ = readyR.Close(); _ = readyW.Close() }()
+	testutil.FailErr(t, "runBrokerAgent clean EOF", runBrokerAgent(validFrame2, s0, readyW))
+	var marker [1]byte
+	_, err = io.ReadFull(readyR, marker[:])
+	testutil.FailErr(t, "read caller-ready broker marker", err)
+	if marker[0] != 1 {
+		t.Fatal("broker caller-ready marker differs")
+	}
 
 	// enterDesktop and SealEntry on a dedicated locked OS thread so
 	// PR_SET_NO_NEW_PRIVS only affects the terminated thread.
-	if err := enterDesktop(filepathJoinTempFile(t, ""), filepathJoinTempFile(t, "{}"), filepathJoinTempFile(t, ""), -1, filepathJoinTempFile(t, "")); err == nil {
+	if err := enterDesktop(filepathJoinTempFile(t, ""), filepathJoinTempFile(t, "{}"), filepathJoinTempFile(t, ""), -1, filepathJoinTempFile(t, ""), nil); err == nil {
 		t.Fatal("enterDesktop accepted unsealed frame")
 	}
 	badFrame2, err := sealEntrySpec(badSpec)
 	testutil.FailErr(t, "seal badFrame2", err)
-	if err := enterDesktop(filepathJoinTempFile(t, ""), badFrame2, filepathJoinTempFile(t, ""), -1, filepathJoinTempFile(t, "")); err == nil {
+	if err := enterDesktop(filepathJoinTempFile(t, ""), badFrame2, filepathJoinTempFile(t, ""), -1, filepathJoinTempFile(t, ""), nil); err == nil {
 		t.Fatal("enterDesktop accepted mismatched UID")
 	}
 	done := make(chan error, 1)
@@ -183,7 +193,7 @@ func TestBrokerAgentSealsDumpableAndVerifiesIdentity(t *testing.T) {
 		}
 		img := filepathJoinTempFile(t, "")
 		life := filepathJoinTempFile(t, "")
-		done <- enterDesktop(img, vf, orig, -1, life)
+		done <- enterDesktop(img, vf, orig, -1, life, nil)
 	}()
 	if err := <-done; err == nil {
 		t.Fatal("enterDesktop succeeded in initial user namespace")

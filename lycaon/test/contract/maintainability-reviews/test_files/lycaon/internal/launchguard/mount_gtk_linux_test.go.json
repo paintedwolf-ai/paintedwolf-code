@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/mount_gtk_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain 391 code-bearing lines for the single real GTK component contract: ordinary marked-module execution, protected constructor refusal, mapped chooser/engine reads, concurrent FUSE cycles and an explicitly retained/released file. The late watch lane starts before volume arrival and exercises a nested generation store. These cases share the same bounded component protocol and native preparation, not a production service or a generic UI framework. Keep 391 as the measured ceiling and preserve one command Wait owner.",
+  "ceiling": 391,
+  "reviewed_commit": "3e89dc173aa9de7829f873d4f778416eed055dda",
+  "boundaries": {
+    "lycaon/internal/launchguard/mount_gtk_linux_test.go": "e4270cdde01cf40cd58eb0ba062170904d651cce65a27cb4a7a60f82fba9fba1",
+    "lycaon/internal/launchguard/testdata/gtkdesktop/main.c": "ddc6d591fadc849633d7d9d8b5a4118a9d66d9da8959df3c5c2bac55812bae61"
+  }
+}

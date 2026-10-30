@@ -17,6 +17,7 @@ from pathlib import Path
 import sys
 
 from linux_release.payload import load as load_payload
+from linux_release.protected_launch import CATALOG as LAUNCH_CATALOG, PAYLOAD_NAME as LAUNCH_PAYLOAD, load as load_launch
 
 PAYLOAD = load_payload()
 
@@ -25,6 +26,7 @@ PACKAGE_NAME = "painted-wolf-code"
 APP_ID = "dev.paintedwolf.code"
 HELPERS = tuple(PAYLOAD["helpers"])
 ENTRY_POINTS = tuple(PAYLOAD["entry_points"])
+BOOTSTRAP = PAYLOAD["setuid_bootstrap"]
 
 # Optional packaging fragments: repository directory -> (destination directory,
 # accepted suffixes, package families).
@@ -72,6 +74,11 @@ def required_files(root: Path, tauri_dir: Path, target: str, manifest: Path) -> 
     files[f"{INSTALL_ROOT}/release-version"] = root / "VERSION"
     files[f"{INSTALL_ROOT}/THIRD-PARTY-NOTICES.md"] = tauri_dir / "THIRD-PARTY-NOTICES.md"
     files[f"{INSTALL_ROOT}/manifest.json"] = manifest
+    # The protected launch's catalog is sealed payload; its setuid bootstrap is
+    # installed outside the payload, whose modes never carry setuid.
+    load_launch(LAUNCH_CATALOG)
+    files[f"{INSTALL_ROOT}/{LAUNCH_PAYLOAD}"] = LAUNCH_CATALOG
+    files[BOOTSTRAP["path"]] = tauri_dir / "binaries" / f"{BOOTSTRAP['name']}-{target}"
     for entry in ENTRY_POINTS:
         files[f"/usr/bin/{entry}"] = root / "packaging" / "linux" / "bin" / entry
     files[f"/usr/share/applications/{APP_ID}.desktop"] = root / "packaging" / "linux" / f"{APP_ID}.desktop"

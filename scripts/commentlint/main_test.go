@@ -224,3 +224,55 @@ func TestLargeDiffReportsCommentsWithoutSyntaxParsing(t *testing.T) {
 		t.Fatalf("diff scan = %+v", result)
 	}
 }
+
+func TestMountIntakeHeaderComments(t *testing.T) {
+	path := filepath.Join("..", "..", "packaging", "linux", "mount-intake", "syscall.h")
+	result := scanFile(options{maxLineLength: 120, parseTimeout: 30 * time.Second},
+		fileJob{path: path, rel: "packaging/linux/mount-intake/syscall.h"},
+		map[string]syntaxParser{}, &languageRegistry{values: map[string]*gotreesitter.Language{}})
+	if result.err != nil || result.timedOut || !result.scanned || result.comments != 1 || len(result.findings) != 0 {
+		t.Fatalf("scan actual GNU assembly header: %+v", result)
+	}
+}
+
+func TestCCommentsRespectAssemblyStrings(t *testing.T) {
+	source := `__asm__ volatile("/* literal */ // literal");
+char *escaped = "escaped\" // literal"; // actual
+char marker = '/';
+/* block */
+`
+	comments, supported := lexicalComments("c", []byte(source))
+	if !supported || len(comments) != 2 || comments[0].Text != "// actual" || comments[1].Text != "/* block */" {
+		t.Fatalf("C comments outside assembly and character strings: supported=%t comments=%+v", supported, comments)
+	}
+	if comments[0].StartRow != 2 || comments[1].StartRow != 4 {
+		t.Fatalf("C comment source rows: %+v", comments)
+	}
+}
+
+func TestCIncompleteAndLogicalLineSyntaxRequiresParser(t *testing.T) {
+	cases := []string{`"unterminated`, `'unterminated`, `/* unterminated`, `"escaped\"`, `"dangling\`, "\"line\rbreak\"", `1'000 // digit separator`}
+	for _, newline := range []string{"\n", "\r\n", "\r"} {
+		cases = append(cases, "// comment "+"\\"+newline+"continued"+newline, "/"+"\\"+newline+"* hidden block */")
+	}
+	for _, trigraph := range []string{"??=", "??/", "??'", "??(", "??)", "??!", "??<", "??>", "??-"} {
+		cases = append(cases, trigraph, `"escaped`+trigraph+`" // hidden`)
+	}
+	for _, source := range cases {
+		if comments, supported := lexicalComments("c", []byte(source)); supported || comments != nil {
+			t.Fatalf("C incomplete or logical-line syntax accepted by physical-line lexer: %q %+v", source, comments)
+		}
+	}
+}
+
+func TestCCommentFindingsStillValidateSyntax(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.c")
+	if err := os.WriteFile(path, []byte("/* this comment exceeds the limit */\nint value;\n"), 0o600); err != nil {
+		t.Fatalf("write C comment fixture: %v", err)
+	}
+	result := scanFile(options{maxLineLength: 10, parseTimeout: 30 * time.Second},
+		fileJob{path: path, rel: "fixture.c"}, map[string]syntaxParser{}, &languageRegistry{values: map[string]*gotreesitter.Language{}})
+	if result.err != nil || result.timedOut || !result.validated || len(result.findings) != 1 || result.findings[0].Rule != "line-length" {
+		t.Fatalf("C potential finding lost syntax validation: %+v", result)
+	}
+}

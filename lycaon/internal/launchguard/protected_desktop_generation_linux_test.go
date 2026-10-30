@@ -93,7 +93,7 @@ func installDesktopGeneration(dir string, artifact desktopArtifact, input *pkgma
 		return err
 	}
 	generation = selected
-	policy := GenerationPolicy{Version: 1, GenerationRoot: generation, LogicalInstallRoot: install, ManifestSHA256: hex.EncodeToString(sum[:]), SystemExecutables: artifact.SystemExecutables}
+	policy := GenerationPolicy{Version: 1, GenerationRoot: generation, LogicalInstallRoot: install, ManifestSHA256: hex.EncodeToString(sum[:]), SystemExecutables: artifact.SystemExecutables, LibraryRoots: artifact.LibraryRoots}
 	raw, err = json.Marshal(policy)
 	if err != nil {
 		return err

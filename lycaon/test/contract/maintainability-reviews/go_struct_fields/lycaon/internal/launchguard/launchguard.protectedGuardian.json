@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/launchguard/launchguard.protectedGuardian",
+  "kind": "runtime_service",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "The seventeen fields belong to one protected-only subreaper transaction: selected role pins, central wait state, admission and health channels, consumed-role status and lifetime custody. Retain seventeen fields; splitting wait ownership or hiding descriptors in a context bag would weaken settlement. Child census and kernel identity verification remain separate focused functions.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/internal/launchguard/guardian_linux_test.go": "7026b7a81f85f518b443b28349e0348c80179bc09482a2b152035f5124403ec2",
+    "lycaon/internal/launchguard/guardian_metadata_linux_test.go": "ff68082d5b7236a8a7de6a95606d39498e54072cdb2252e1be607fd7134492f5",
+    "lycaon/internal/launchguard/guardian_lineage_linux_test.go": "6e69889d4730d8ee4e0efe4654bf3b1f316b2d5b902b36a5284df9fe8773009d",
+    "lycaon/internal/launchguard/guardian_exec_failure_linux_test.go": "ad04f3fc26a6894ed4bd2da24506576ac8c1f7855694f3686d3a50db2ca3630b"
+  },
+  "reviewed_shape": "0eab72ad4b9c4538d9eea48d7bcb7cefb0fbd4a25a68292d9196ce5337dff5e3"
+}

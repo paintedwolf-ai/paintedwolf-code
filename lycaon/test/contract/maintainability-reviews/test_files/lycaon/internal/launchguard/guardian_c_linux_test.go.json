@@ -1,0 +1,15 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/guardian_c_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain the 484 code-bearing lines of one actual initial-root C-transition fixture at a 484-line ceiling. The shared sixteen-role transaction binds positive same-PID exec, caller credentials, namespace provenance, bounded descriptor inventory, ordinary ptrace control and malformed-role refusals. Its fixed C probe reports kernel facts; separate real-launch tests own Go guardian settlement.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 484,
+  "boundaries": {
+    "lycaon/internal/launchguard/guardian_c_linux_test.go": "f20ab553133afa1c8acd7cab89d3687a44b83b5929e4b241aac12666d3d70ec1",
+    "lycaon/internal/launchguard/testdata/guardianprobe/main.c": "95cd9a47cd6fca6528133450ef59743f2184f6b43cc0f7b1add534b907cbfd00",
+    "packaging/linux/mount-intake/guardian.h": "4b9d69c980a8102f2f1f2bdc2366639df7b4d84be6f419356076ecc12f02f3ad"
+  }
+}

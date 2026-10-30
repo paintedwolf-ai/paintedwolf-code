@@ -1,5 +1,6 @@
 {
   "format_version": 1,
-  "helpers": ["pw", "pw-logs", "pw-document-core", "pw-desktop-settings", "bialy", "pw-vault-identity"],
-  "entry_points": ["pw", "pw-logs"]
+  "helpers": ["pw", "pw-logs", "pw-document-core", "pw-desktop-settings", "bialy", "pw-vault-identity", "pw-launch-entry", "pw-generations", "pw-mount-intake-transition"],
+  "entry_points": ["pw", "pw-logs"],
+  "setuid_bootstrap": {"name": "pw-launch", "path": "/usr/libexec/painted-wolf-code/pw-launch"}
 }
