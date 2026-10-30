@@ -7,8 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // TestDiffScriptComparesTransformedLinesAndBoundsItsStorage covers the shared

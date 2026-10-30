@@ -6,7 +6,7 @@
 
 1. List the open decisions as questions with an assignee. Separate current external claims ("what does this API return in v3?") from repository questions ("where is this validated today?") — they need different researchers.
 2. Mark each question **blocking** or **supplemental**. Blocking means a dependent builder cannot start; supplemental means the builder has a safe default and can proceed while the answer arrives.
-3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and the survey tools (`summarize`, bounded `grep` / `find` / `sed -n` in `command`) for repository questions. When substantial blocking research informs a substantial build, use a researcher leg followed by a builder leg; the dependency makes them sequential, not one worker plus coordinator-only research.
+3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and `summarize` and bounded search and line-inspection programs in `command` for repository questions. When substantial blocking research informs a substantial build, use a researcher leg followed by a builder leg; the dependency makes them sequential, not one worker plus coordinator-only research.
 4. Require each researcher to return facts with evidence handles or URLs, scope limits, conflicts found, and remaining uncertainty — not an implementation plan outside its assignment.
 5. Synthesize the answers into a decision packet, which is the artifact this skill exists to produce:
 
