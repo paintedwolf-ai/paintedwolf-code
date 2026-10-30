@@ -13,6 +13,9 @@ func (e literalEngine) foldedCandidate(ctx context.Context, record []byte, first
 		if err := ctx.Err(); err != nil {
 			return -1, err
 		}
+		if asciiFold(record[from]) == lower {
+			return from, nil
+		}
 		next := min(end, from+4096)
 		chunk := record[from:next]
 		at := bytes.IndexByte(chunk, lower)
