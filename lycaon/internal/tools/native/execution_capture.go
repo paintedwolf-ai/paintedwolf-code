@@ -76,7 +76,13 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 		defer decoder.Close()
 		reader = decoder
 	}
-	return e.readWholeInput(ctx, reader, maximum, resolved.DisplayPath)
+	observation := e.observeFile(resolved, info)
+	defer observation.Close()
+	data, release, err = e.readWholeInput(ctx, observation.WrapCapture(ctx, reader), maximum, resolved.DisplayPath)
+	if err == nil {
+		observation.Commit()
+	}
+	return data, release, err
 }
 
 // BufferedBytes owns one admitted whole operand or staged result. It carries
