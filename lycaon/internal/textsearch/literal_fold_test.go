@@ -2,6 +2,7 @@ package textsearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -133,5 +134,19 @@ func TestFoldedLiteralChecksWorkAndCancellation(t *testing.T) {
 	cancel()
 	if _, _, err := m.Select(ctx, []byte("AAAA")); err != context.Canceled {
 		t.Fatalf("folded cancellation = %v", err)
+	}
+}
+
+func TestFoldedLiteralFailedProofSharesTheVMWorkCeiling(t *testing.T) {
+	m, err := Compile(t.Context(), Spec{Dialect: Basic, Patterns: []string{"K"}, IgnoreCase: true}, catalogLimits(t))
+	testutil.FailErr(t, "compile failed-proof fixture", err)
+	engine := m.engine.(vmEngine)
+	engine.limits.WorkSteps = 50
+	m.engine = engine
+	input := []byte("K" + strings.Repeat("a", 31) + "K")
+	_, _, err = m.Select(t.Context(), input)
+	var budget *BudgetError
+	if !errors.As(err, &budget) || budget.Resource != "regex_work_steps" || budget.Maximum != 50 || budget.Observed != 68 {
+		t.Fatalf("failed literal proof work = %v", err)
 	}
 }

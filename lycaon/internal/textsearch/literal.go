@@ -114,6 +114,13 @@ func (e literalEngine) first(ctx context.Context, record []byte) (Span, bool, er
 				}
 				continue
 			}
+			if len(record) != len(p) {
+				continue
+			}
+			if int64(len(record)) > e.limits.WorkSteps-work {
+				return Span{}, false, &BudgetError{Resource: "regex_work_steps", Maximum: e.limits.WorkSteps, Observed: work + int64(len(record))}
+			}
+			work += int64(len(record))
 			if bytes.Equal(record, p) {
 				return Span{0, len(record)}, true, nil
 			}
@@ -205,13 +212,13 @@ func asciiString(value string) bool {
 	return true
 }
 
-func asciiRecord(ctx context.Context, value []byte) bool {
+func literalRecordProof(ctx context.Context, value []byte, ascii, line bool) (int64, bool) {
 	for i, c := range value {
-		if c >= 128 || i&4095 == 0 && ctx.Err() != nil {
-			return false
+		if ascii && c >= 128 || line && c == '\n' || i&4095 == 0 && ctx.Err() != nil {
+			return int64(i + 1), false
 		}
 	}
-	return true
+	return int64(len(value)), true
 }
 
 func asciiFold(c byte) byte {

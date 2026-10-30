@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -129,5 +130,33 @@ func TestGrepFirstRecordDoesNotWaitForFileCompletion(t *testing.T) {
 		}
 	default:
 		t.Fatal("first output record waited for file completion")
+	}
+}
+
+type reusedGrepOutput struct {
+	mappingBuffer
+	seen   map[*byte]bool
+	writes int
+}
+
+func (o *reusedGrepOutput) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		o.seen[&p[0]] = true
+		o.writes++
+	}
+	return o.mappingBuffer.Write(p)
+}
+
+func TestGrepMappedRecordsReuseBoundedTransportStorage(t *testing.T) {
+	h := newHarness(t, map[string]string{"a": strings.Repeat("needle a\n", 2000), "b": strings.Repeat("needle b\n", 2000)})
+	memory := grepMemory(t, 4<<20)
+	h.owners.Revisions.Memory = memory
+	output := &reusedGrepOutput{seen: map[*byte]bool{}}
+	r := parallelFixture(t, h, t.Context(), output)
+	submitFiles(t, r, 2, "a", "b")
+	maximum := cap(r.files.buffers.available)
+	testutil.FailErr(t, "finish mapped records", r.files.finish(nil))
+	if len(output.mappings) != 4000 || output.writes < 4000 || len(output.seen) > maximum || len(output.seen) >= output.writes || memory.InUse().Working != 0 {
+		t.Fatalf("mapped transport reuse: mappings=%d writes=%d buffers=%d maximum=%d held=%+v", len(output.mappings), output.writes, len(output.seen), maximum, memory.InUse())
 	}
 }
