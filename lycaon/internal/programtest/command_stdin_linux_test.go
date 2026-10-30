@@ -1,6 +1,6 @@
 //go:build linux
 
-package command_test
+package programtest_test
 
 import (
 	"context"
@@ -113,7 +113,8 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 			} else {
 				raw, err = program.Call(t, t.Context(), line+" < "+strconv.Quote(source))
 				testutil.FailErr(t, "execute program byte input", err)
-				result := decodeOutcome(t, raw)
+				var result command.ProgramOutcome
+				testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &result))
 				if result.State != "completed" || result.Status != 0 || !strings.Contains(result.Stdout, "byte-input:ordinary fixture bytes through EOF") {
 					t.Fatalf("program input did not finish with complete bytes: %s", raw)
 				}
