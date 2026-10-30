@@ -52,6 +52,7 @@ type grepRun struct {
 	selected bool
 	stopped  bool
 	operands commandprogram.Fields
+	files    *grepFiles
 }
 
 func runGrep(inv *invocation) error {
@@ -393,7 +394,7 @@ var errQuietMatch = errors.New("quiet match")
 
 // searchOperands visits each operand: "-" (or none, without recursion) is
 // standard input, a directory is walked when recursion is on.
-func (r *grepRun) searchOperands() error {
+func (r *grepRun) searchOperands() (finalErr error) {
 	inv := r.inv
 	r.walker = newWalker(inv)
 	defer r.walker.close()
@@ -409,11 +410,22 @@ func (r *grepRun) searchOperands() error {
 		operands, implicit = commandprogram.Fields{{Value: "."}}, true
 	}
 	multiple := len(operands) > 1
+	if r.mode != modeFileList && (multiple || r.recursive) {
+		var err error
+		r.files, err = newGrepFiles(r, grepWorkerCount())
+		if err != nil {
+			return err
+		}
+		defer func() { finalErr = r.files.finish(finalErr) }()
+	}
 	for _, operand := range operands {
 		if r.stopped {
 			return nil
 		}
 		if operand.Value == "-" {
+			if err := r.flushFiles(); err != nil {
+				return err
+			}
 			if err := r.searchStdin(); err != nil {
 				return err
 			}
@@ -466,6 +478,10 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 	inv := r.inv
 	operand := field.Value
 	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
+		if err := r.flushFiles(); err != nil {
+			_ = reader.Close()
+			return err
+		}
 		if r.mode == modeFileList {
 			_ = reader.Close()
 			return inv.out.text(operand, "\n")
@@ -480,6 +496,9 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 	e, err := r.walker.operand(operand, true)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
+			if err := r.flushFiles(); err != nil {
+				return err
+			}
 			inv.fail(r.quietErrors, "%s: %s", operand, reason)
 			return nil
 		}
@@ -496,6 +515,9 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 		if r.skipDirectories {
 			return nil
 		}
+		if err := r.flushFiles(); err != nil {
+			return err
+		}
 		inv.fail(r.quietErrors, "%s: Is a directory", operand)
 		return nil
 	}
@@ -504,6 +526,9 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 	}
 	if implicit {
 		e.display = ""
+	}
+	if err := r.flushFiles(); err != nil {
+		return err
 	}
 	return r.walk(e, map[[2]uint64]bool{})
 }
@@ -546,6 +571,9 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 		}
 		switch {
 		case child.dir():
+			if err := r.flushFiles(); err != nil {
+				return err
+			}
 			if err := r.walk(child, ancestors); err != nil {
 				return err
 			}
@@ -568,6 +596,13 @@ func displayOr(display string) string {
 // searchFile pins and searches one regular file. rg's recursion skips binary
 // files unless -uuu asks for them.
 func (r *grepRun) searchFile(e entry, names, walked bool) error {
+	if r.files != nil {
+		return r.files.submit(e, names, walked)
+	}
+	return r.searchFileLive(e, names, walked)
+}
+
+func (r *grepRun) searchFileLive(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
