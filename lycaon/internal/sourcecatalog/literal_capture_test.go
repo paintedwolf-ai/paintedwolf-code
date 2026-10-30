@@ -77,3 +77,41 @@ func TestCapturedContentKeepsBinaryAndInvalidUTF8Live(t *testing.T) {
 		}
 	}
 }
+
+func TestCapturedContentCoalescesConcurrentReaders(t *testing.T) {
+	root, entry, index := captureFixture(t, "current content")
+	first := index.BeginRead(root, entry)
+	for range 64 {
+		if duplicate := index.BeginRead(root, entry); duplicate != nil {
+			duplicate.Close()
+			t.Fatal("duplicate content preparation was admitted")
+		}
+	}
+	if len(index.cache.fileReads) != 1 {
+		t.Fatalf("tracked %d captures", len(index.cache.fileReads))
+	}
+	first.Close()
+	next := index.BeginRead(root, entry)
+	if next == nil {
+		t.Fatal("abandoned capture prevented retry")
+	}
+	next.Observe(t.Context(), []byte("current content"))
+	if index.cache.files.count != 1 || len(index.cache.fileReads) != 0 {
+		t.Fatalf("files=%d reads=%d", index.cache.files.count, len(index.cache.fileReads))
+	}
+}
+
+func TestCapturedContentInvalidatesSameMetadataWrites(t *testing.T) {
+	root, entry, index := captureFixture(t, "old token")
+	index.BeginRead(root, entry).Observe(t.Context(), []byte("old token"))
+	writeLiteralFixture(t, root, entry.Path, "new token")
+	testutil.FailErr(t, "restore metadata", os.Chtimes(filepath.Join(root, entry.Path), entry.Modified, entry.Modified))
+	index.cache.invalidate(root, []string{entry.Path})
+	if index.CanPruneBytes(root, litprefilter.AnyOf("new token"), entry) {
+		t.Fatal("known write reused the old proof")
+	}
+	index.BeginRead(root, entry).Observe(t.Context(), []byte("new token"))
+	if index.CanPruneBytes(root, litprefilter.AnyOf("new token"), entry) || !index.CanPruneBytes(root, litprefilter.AnyOf("old token"), entry) {
+		t.Fatal("replacement observation did not describe current bytes")
+	}
+}

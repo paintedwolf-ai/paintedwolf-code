@@ -334,6 +334,7 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 		r.json = &rgJSON{started: time.Now()}
 	}
 	r.index = newGrepContentIndex(r.inv, r.matcher.Requirement(), !r.scan.Invert && r.json == nil && !(r.rg && r.mode == modeFilesWithout))
+	defer r.index.completed(inv)
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
 			return inv.usage(*r.replace, err.Error())
