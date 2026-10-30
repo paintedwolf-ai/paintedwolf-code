@@ -91,7 +91,7 @@ func (b *serveBuilder) wireServer() error {
 		WorkflowRuns: b.workflows.Store, WorkflowComposer: b.workflows.Composer, WorkflowPersister: b.workflows.Persister,
 		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Delegations: b.delegations.Manager, Workers: b.delegations.Queue,
 		WorkerCancel: b.delegations.Cancel, Board: b.boards.Snapshot, RepoSetCache: b.git.repoSets}, Source: api.SourceDependencies{
-		AgentPresence: b.events.Agents, ProjectRules: b.workflows.ProjectRules, HintConfig: b.execution.Hints,
+		AgentPresence: b.events.Agents, ProjectRules: b.workflows.ProjectRules, HintConfig: b.execution.Hints, RepoProvider: b.boards.RepoProvider,
 		FileAgeWarmer: b.execution.Host.Survey.WarmFileAge, VisualStore: b.boards.Visual, ProgressStore: b.boards.Progress,
 		Video: videoDecoder(b)}, Extensions: api.ExtensionsDependencies{
 		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{

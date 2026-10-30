@@ -2,14 +2,15 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/app/security/security.Runtime",
   "kind": "runtime_service",
-  "workstream": "unix-socket-grants",
+  "workstream": "credential-file-evidence",
   "disposition": "retain",
-  "reason": "Security composition binds existing exceptional-capability runtimes to session run completion, child disposal and resource shutdown. Socket grants stay in their runtime; the security owner installs teardown hooks and does not become a second grant store. Freeze this reviewed shape at 432 lines; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
-  "ceiling": 432,
+  "reason": "The security runtime composes one matcher, managed evidence, presence, and project admission. Credential capture and encrypted retention remain with their domain owners; this runtime coordinates provider admission and installs shared screening callbacks. Retain its explicit typed dependencies at the measured ceiling.",
+  "reviewed_commit": "2f0628621b0ec771a5f71424a68ed5dc220326b4",
+  "ceiling": 442,
   "boundaries": {
-    "lycaon/internal/app/security/exceptional_test.go": "2c6dde913657a90a8dae3b9b0807d77941b1f704f0e1829ded1001d3efbc47d8",
-    "lycaon/internal/session/approvalstate/socket_ownership_test.go": "eec9245bb3313966f1cbb81d1c945b8cf4c15b2fbba892bf75cd64b58d9a1597"
+    "lycaon/internal/app/security/file_evidence_test.go": "529665eb708658aa122c43940c55c2ccbcec5a6508578d4c35e2d57d74f71991",
+    "lycaon/internal/toolexecution/credential_admission_test.go": "004c3812d55ea2b54dd5c83e905a04e2b6c4dc7ebc359d0ab3638ada12d4b1cb",
+    "lycaon/internal/tools/credential_files.go": "c58f516e922e40d16e57b99a5e85d6b1b3714430da07598d5a8961a1580e1c59"
   },
-  "reviewed_shape": "958f198dc5f937472ee94cf5f690676141ab8a1751f8aa0e6651e0088cf354bf"
+  "reviewed_shape": "f5bf9e933646019564556b4e9aaf77622025b13381db5532f0187c5fb2c7be7d"
 }

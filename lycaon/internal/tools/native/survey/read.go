@@ -237,7 +237,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", fmt.Errorf("read failed: %w", err)
 	}
 	// A credential file's text reaches no one until its exposure is recorded.
-	if err := tctx.ObserveCredentialRead(ctx, fullPath, path, st.Content); err != nil {
+	if err := tctx.ObserveCredentialDelivery(ctx, fullPath, path, st.Content); err != nil {
 		return "", fmt.Errorf("record credential file read: %w", err)
 	}
 	capture := &readCapture{}

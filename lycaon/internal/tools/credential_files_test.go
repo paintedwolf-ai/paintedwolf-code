@@ -15,6 +15,8 @@ type recordedCredentialFiles struct {
 	authored []AuthoredCredentialValues
 }
 
+func (*recordedCredentialFiles) EnsureProject(context.Context, string) error { return nil }
+
 func (r *recordedCredentialFiles) Delivered(_ context.Context, read CredentialFileRead) error {
 	r.reads = append(r.reads, read)
 	return nil
@@ -76,14 +78,14 @@ func TestRecordModelAuthoredCredentialsIgnoresOrdinaryFiles(t *testing.T) {
 	}
 }
 
-func TestObserveCredentialReadAddressesTheRootFile(t *testing.T) {
+func TestObserveCredentialDeliveryAddressesTheRootFile(t *testing.T) {
 	files := &recordedCredentialFiles{}
 	tc, root := credentialFilesContext(t, files)
-	testutil.FailErr(t, "observe readme", tc.ObserveCredentialRead(context.Background(), filepath.Join(root, "README.md"), "README.md", "KEY=value-value"))
+	testutil.FailErr(t, "observe readme", tc.ObserveCredentialDelivery(context.Background(), filepath.Join(root, "README.md"), "README.md", "KEY=value-value"))
 	if len(files.reads) != 0 {
 		t.Fatalf("an ordinary read reached the evidence base: %+v", files.reads)
 	}
-	testutil.FailErr(t, "observe .env", tc.ObserveCredentialRead(context.Background(), filepath.Join(root, "web", ".env"), "web/.env", "KEY=value-value"))
+	testutil.FailErr(t, "observe .env", tc.ObserveCredentialDelivery(context.Background(), filepath.Join(root, "web", ".env"), "web/.env", "KEY=value-value"))
 	if len(files.reads) != 1 {
 		t.Fatalf("reads = %+v", files.reads)
 	}
@@ -93,3 +95,5 @@ func TestObserveCredentialReadAddressesTheRootFile(t *testing.T) {
 		t.Fatalf("read = %+v", read)
 	}
 }
+
+func (*recordedCredentialFiles) ForgetProject(context.Context, string) error { return nil }
