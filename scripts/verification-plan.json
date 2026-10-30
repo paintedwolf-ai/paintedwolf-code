@@ -219,6 +219,7 @@
         "./internal/exec",
         "./internal/hitl",
         "./internal/mcp",
+        "./internal/programtest",
         "./internal/scan/drivers/bundled",
         "./internal/scan/drivers/external",
         "./internal/scan/installed",
