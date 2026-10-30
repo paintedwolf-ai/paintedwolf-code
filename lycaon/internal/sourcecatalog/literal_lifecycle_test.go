@@ -164,7 +164,7 @@ func TestReportedZeroSizeCannotPublishNonemptyContent(t *testing.T) {
 			t.Fatalf("partial observation became proof: %+v", page)
 		}
 	}
-	if opens.Load() != 1 || c.Literals.cache.files.count != 0 {
+	if opens.Load() != 0 || c.Literals.cache.files.count != 0 {
 		t.Fatalf("opens=%d retained=%d", opens.Load(), c.Literals.cache.files.count)
 	}
 	testutil.FailErr(t, "drain incomplete observation", c.Drain(context.Background()))
@@ -231,5 +231,27 @@ func TestRetainedMetadataCannotRestartPreparationAfterDrain(t *testing.T) {
 	}
 	if opens.Load() != 0 {
 		t.Fatalf("drained catalog opened %d files", opens.Load())
+	}
+}
+
+func TestZeroSizeSourceAlwaysKeepsLiveCandidates(t *testing.T) {
+	c := treeTestCatalog(t)
+	root := Root{ID: "root", Path: t.TempDir()}
+	writeLiteralFixture(t, root.Path, "dynamic.txt", "")
+	reader := readyIndex(t, c, root)
+	entries, err := reader.FilePage(t.Context(), FileScope{Audience: HumanAudience}, "", TreeFilePageLimit)
+	testutil.FailErr(t, "metadata page", err)
+	content := ""
+	var opens atomic.Int32
+	query := LiteralQuery{IncludeKey: "variable-zero-size", Require: litprefilter.AnyOf("needle"), Open: func(Entry) (io.ReadCloser, error) { opens.Add(1); return io.NopCloser(strings.NewReader(content)), nil }}
+	for _, next := range []string{"", "needle", "", "more needle text"} {
+		content = next
+		page := preparedLiteralPage(t, c, reader, query, entries)
+		if page.Warming || len(page.Candidates) != 1 || c.Literals.cache.files.count != 0 {
+			t.Fatalf("zero-size content was excluded: %+v", page)
+		}
+	}
+	if opens.Load() != 0 {
+		t.Fatalf("zero-size preparation opened %d inputs", opens.Load())
 	}
 }

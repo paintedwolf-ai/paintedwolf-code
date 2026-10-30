@@ -24,7 +24,7 @@ type ContentRead struct {
 
 // BeginRead starts before the caller captures bytes through its read authority.
 func (c *LiteralSearch) BeginRead(rootPath string, entry Entry, version fspath.FileObservation) *ContentRead {
-	if c == nil || c.cache == nil || entry.IsDir || entry.IsSymlink || !version.Known || version.Links == 0 {
+	if c == nil || c.cache == nil || entry.IsDir || entry.IsSymlink || !version.Known || version.Size <= 0 || version.Links == 0 {
 		return nil
 	}
 	rootPath = cleanAbs(rootPath)
@@ -77,7 +77,7 @@ func (c *literalIndexCache) storeFile(rootPath string, entry Entry, facts litera
 
 // CanPruneBytes uses the byte representation consumed by command searches.
 func (c *LiteralSearch) CanPruneBytes(rootPath string, req litprefilter.Requirement, entry Entry, version fspath.FileObservation) bool {
-	if c == nil || c.cache == nil || req.Empty() || entry.IsDir || !version.Known || version.Links == 0 {
+	if c == nil || c.cache == nil || req.Empty() || entry.IsDir || !version.Known || version.Size <= 0 || version.Links == 0 {
 		return false
 	}
 	cached, ok := c.cache.cachedVersion(rootPath, entry, version)
@@ -147,7 +147,7 @@ func (c *literalIndexCache) cachedFile(rootPath string, entry Entry) (literalFil
 }
 
 func (c *literalIndexCache) cachedVersion(rootPath string, entry Entry, version fspath.FileObservation) (literalFileCacheEntry, bool) {
-	if !version.Known || version.Links == 0 {
+	if !version.Known || version.Size <= 0 || version.Links == 0 {
 		return literalFileCacheEntry{}, false
 	}
 	c.fileMu.Lock()
