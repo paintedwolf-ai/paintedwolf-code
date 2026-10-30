@@ -2,11 +2,11 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "confinement-platform-root-contracts",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Retain the measured 71-file suite beside its actual confinement owners and existing private probes. Four platform-selected root-set contracts replace an OS-switching test; their shared fixture compares complete authority including package stores, telemetry and explicit grants. Linux preparation and applied launcher tests stay with their real owners and exercise first use, floors, post-verdict symlink replacement, optional-store failures and the private D-Bus control. The native-tag distinction preserves Android and iOS legacy selection without claiming native qualification there. Keeping the native contracts adjacent makes platform policy changes visible without a second test API or a detached mirror of the boundary. Retain this measured member set under the unchanged 100-file hard limit; later landed members require a fresh cohesion decision. The newly landed metadata and standard-stream suites extend the same confinement authority. Preserve the prior ceiling and shape while hosted verification measures this combined membership and exercises both native-root and kernel-boundary contracts; renewal remains open.",
-  "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
-  "ceiling": 71,
+  "reason": "Retain the native cache and socket contracts beside their actual confinement owners and private process fixtures. Exact platform root sets, first-use preparation, protected floors and symlink races cover filesystem authority; retained-object replacement, descriptor reuse and delegated-service refusal cover socket authority. They meet at the real command launch transaction without exposing a second test API or moving tests merely to lower membership. The focused combined Linux contracts passed, including the adapted pure-render fixture. Keep the existing 67-member review ceiling and structural signature: added native cache members remain a visible renewed review obligation, under the unchanged 100-member hard limit. Other changed boundaries remain unrenewed until their corresponding contracts are verified; this records the retention decision without claiming complete native qualification.",
+  "reviewed_commit": "7f9e4806851b1b4aaa28d4664c30101edf6ccec8",
+  "ceiling": 67,
   "boundaries": {
     "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
     "lycaon/internal/confine/boundary_linux_floors_live_test.go": "0c29b563aaa57a854a4027bb66beda1809c5bd6b3cc5be226ce3a9f6bfd95a1f",
@@ -14,15 +14,18 @@
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/socket_reference_darwin_test.go": "f2e56004fff513c948a301181581a0e9dab358b81dba985cfe307d75d326c6ce",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b",
+    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d",
     "lycaon/internal/confine/package_cache_roots_test.go": "048764f12085435079e6e454cd37b0d21ae10816c241807efa53121120fb0e9b",
     "lycaon/internal/confine/package_cache_roots_linux_test.go": "5ad86550466c07f88e47ca5afc9e567c96de5dd34596055b1199362334e3c42a",
     "lycaon/internal/confine/package_cache_roots_darwin_test.go": "77b4ad37e41696374c98d3461e17e076e9052010b571be260e2fe349f06fc540",
     "lycaon/internal/confine/package_cache_roots_windows_test.go": "962938548bf9397cf370daf512ebca7b76d51110dfe5933fd59edd562e845829",
     "lycaon/internal/confine/package_cache_roots_other_test.go": "1b1ec65ce53b822c47ed2f8370a6d9b4f29985754fced7cd4518580baaade8cf",
-    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
-    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef",
-    "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
-    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "f7e2307fcef9b04da7586ab1261a86bbb49c9650f23b6cadd695d9cf5d634595",
+    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef"
   },
-  "reviewed_shape": "50e4a96470c934b277ab641c22481c4dfb4dc431a6e67198b6fe22c2b4fef9a3"
+  "reviewed_shape": "ed6768204ff8ea4ed55849713565f9c38ecb0ca559612584a9a0e9847564cb82"
 }

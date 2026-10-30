@@ -105,6 +105,11 @@ func (o ApprovalOption) validateKind() error {
 }
 
 func (d ApprovalAuthorityDelta) validate() error {
+	for _, target := range d.Sockets {
+		if err := target.Binding.ValidateShape(); err != nil {
+			return err
+		}
+	}
 	if d.Grant != nil {
 		if err := ValidateElevatedEffects(d.Grant.ElevatedEffects); err != nil {
 			return err
@@ -138,7 +143,7 @@ func (d ApprovalAuthorityDelta) validate() error {
 			return fmt.Errorf("socket authority is incomplete")
 		}
 		if d.Kind == AuthoritySocketPermit {
-			if d.hasGrant() || strings.TrimSpace(d.SessionID) == "" || strings.TrimSpace(d.ToolCallID) == "" || d.ChatSessionID != "" || d.DirectIPLease != nil || len(d.WriteRoots) != 0 || d.TTLSeconds != 0 {
+			if d.hasGrant() || strings.TrimSpace(d.SessionID) == "" || strings.TrimSpace(d.ToolCallID) == "" || d.DirectIPLease != nil || len(d.WriteRoots) != 0 || d.TTLSeconds != 0 {
 				return fmt.Errorf("socket permit fields are invalid")
 			}
 		} else if !d.hasGrant() || strings.TrimSpace(d.ChatSession()) == "" || d.SessionID != "" || d.ToolCallID != "" || d.DirectIPLease != nil || len(d.WriteRoots) != 0 {

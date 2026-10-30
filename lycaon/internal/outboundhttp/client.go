@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 const (
@@ -86,8 +87,10 @@ type Request struct {
 	DiscardBody   bool
 	// StreamBody receives a size-limited reader; the receipt records its bytes and digest.
 	StreamBody func(io.Reader) error
-	// UnixSocket dials a local Unix domain socket instead of TCP when set.
+	// UnixSocket names the reviewed local service in receipts.
 	UnixSocket string
+	// SocketBinding is its retained destination, independent of its current name.
+	SocketBinding socketref.Binding
 	// HostHeader overrides the Host header sent on wire.
 	HostHeader string
 	// Resolve maps hostnames to specific target IP and port.
@@ -396,7 +399,7 @@ func (in Request) processRedirect(
 
 func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.Transport, int64, error) {
 	if in.UnixSocket != "" {
-		return egress.UnixSocketTransport(in.UnixSocket), 0, nil
+		return egress.UnixSocketTransport(in.SocketBinding), 0, nil
 	}
 	port, err := EffectivePort(target)
 	if err != nil {

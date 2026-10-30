@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/protectedpath"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // probeTimeout bounds one helper run that establishes availability.
@@ -141,6 +142,9 @@ func helperProbeRunner() func(*exec.Cmd) error {
 
 // renderProfile is the boundary plan the Linux helper applies.
 func renderProfile(c Confinement) (string, error) {
+	if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
+		return "", err
+	}
 	rules, err := filesystemRules(c)
 	if err != nil {
 		return "", err
@@ -182,9 +186,7 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	for _, p := range c.DirectIPPermits {
 		n.DirectIPPermits = append(n.DirectIPPermits, linuxsandbox.DirectIPPermit{Protocol: p.Protocol, Port: p.Port})
 	}
-	for _, g := range c.SocketGrants {
-		n.SocketPaths = append(n.SocketPaths, g.ResolvedPath)
-	}
+	n.SocketGrants = socketPlan(c.SocketGrants)
 	if c.Network == NetworkDirectIP {
 		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
 			n.Resolvers = linuxsandbox.HostResolvers(string(conf))
@@ -202,6 +204,11 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		return err
 	}
 	if !linuxsandbox.Inside(plan) {
+		releaseSockets, err := linuxsandbox.OwnSocketReferences(plan.Network)
+		if err != nil {
+			return err
+		}
+		defer releaseSockets()
 		self, err := os.Executable()
 		if err != nil {
 			return err

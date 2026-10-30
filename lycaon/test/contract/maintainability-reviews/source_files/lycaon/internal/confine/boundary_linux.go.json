@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/confine/boundary_linux.go",
+  "kind": "construction",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The Linux boundary compiles the shared confinement facts into one launch plan. Socket references occupy bounded inherited descriptor slots and are not pathname authority. Keep plan construction beside its platform boundary; mount metadata and syscall execution remain separate existing owners. Freeze this reviewed shape at 389 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
+  "ceiling": 389,
+  "boundaries": {
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/boundary_linux_test.go": "199ef2bc2b369d5e5344001ee58d2650e0a80f4b7a12dad5995829f3458a8411"
+  }
+}

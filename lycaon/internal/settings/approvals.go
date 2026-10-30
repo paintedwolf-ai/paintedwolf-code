@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
@@ -104,10 +105,12 @@ type ApprovalGrant struct {
 	// GrantedPath stores durable filesystem access.
 	GrantedPath *hitl.GrantedPathDelta `yaml:"granted_path,omitempty" json:"granted_path,omitempty"`
 	// ApprovedPath and ResolvedPath are first-class socket_path fields.
-	ApprovedPath     string `yaml:"approved_path,omitempty" json:"approved_path,omitempty"`
-	ResolvedPath     string `yaml:"resolved_path,omitempty" json:"resolved_path,omitempty"`
-	Source           string `yaml:"source,omitempty" json:"source,omitempty"`
-	OwnerOperationID string `yaml:"owner_operation_id,omitempty" json:"-"`
+	ApprovedPath     string            `yaml:"approved_path,omitempty" json:"approved_path,omitempty"`
+	ResolvedPath     string            `yaml:"resolved_path,omitempty" json:"resolved_path,omitempty"`
+	Unavailable      bool              `json:"-" yaml:"-"`
+	Binding          socketref.Binding `json:"socket_binding,omitempty,omitzero" yaml:"socket_binding,omitempty"`
+	Source           string            `yaml:"source,omitempty" json:"source,omitempty"`
+	OwnerOperationID string            `yaml:"owner_operation_id,omitempty" json:"-"`
 	// GrantedByPersonID and GrantedByPolicy name whoever approved the grant;
 	// exactly one is set.
 	GrantedByPersonID string                      `yaml:"granted_by_person_id,omitempty" json:"granted_by_person_id,omitempty"`
@@ -137,11 +140,14 @@ type ApprovalConfig struct {
 // ApprovalStore loads bundled, global, and project approval overlays.
 type ApprovalStore struct {
 	// writeMu serializes global read-modify-write cycles.
-	writeMu    sync.Mutex
-	mu         sync.RWMutex
-	globalPath string
-	bundled    ApprovalConfig
-	global     *ApprovalConfig
+	writeMu      sync.Mutex
+	mu           sync.RWMutex
+	globalPath   string
+	bundled      ApprovalConfig
+	global       *ApprovalConfig
+	socketLeases map[string]socketGrantLease
+	socketTimer  *time.Timer
+	closed       bool
 }
 
 // NewApprovalStoreAt loads the global overlay at globalPath.
@@ -194,6 +200,8 @@ func normalizeApprovalConfig(cfg ApprovalConfig) ApprovalConfig {
 	cfg.Rules = out
 	grants := make([]ApprovalGrant, 0, len(cfg.Grants))
 	for _, grant := range cfg.Grants {
+		grant.ExpiresAt = copySocketExpiry(grant.ExpiresAt)
+		grant.Unavailable = false
 		grant.ID = strings.TrimSpace(grant.ID)
 		grant.Category = ApprovalCategory(strings.TrimSpace(string(grant.Category)))
 		grant.Pattern = strings.TrimSpace(grant.Pattern)
@@ -492,6 +500,21 @@ func (s *ApprovalStore) UpsertGlobalGrant(grant ApprovalGrant) (bool, error) {
 	if !grant.ToDomain().Granted() {
 		return false, fmt.Errorf("durable grant requires the person or policy that approved it")
 	}
+	var socketOwner *socketref.Lease
+	if grant.Category == ApprovalCategorySocketPath {
+		if err := confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding}); err != nil {
+			return false, err
+		}
+	}
+	if grant.Category == ApprovalCategorySocketPath && grant.Binding.Mode() == socketref.RetainedObject {
+		var err error
+		socketOwner, err = grant.Binding.Acquire()
+		if err != nil {
+			return false, err
+		}
+		defer socketOwner.Close()
+	}
+
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	s.mu.RLock()
@@ -526,24 +549,40 @@ func (s *ApprovalStore) UpsertGlobalGrant(grant ApprovalGrant) (bool, error) {
 		Posture:     posture,
 		AIRationale: &ai,
 		NeverAsk:    &neverAsk,
-	})
+	}, socketOwner)
 	return created, err
 }
 
 // GlobalGrants returns active durable grants from the user overlay.
 func (s *ApprovalStore) GlobalGrants() []ApprovalGrant {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.global == nil {
+		s.mu.RUnlock()
 		return nil
 	}
 	now := time.Now().UTC()
+	stale := make(map[string]string)
 	out := make([]ApprovalGrant, 0, len(s.global.Grants))
 	for _, grant := range s.global.Grants {
-		if grant.ExpiresAt == nil || grant.ExpiresAt.After(now) {
-			out = append(out, cloneSecretPermissionGrant(grant))
+		if grant.ExpiresAt != nil && !grant.ExpiresAt.After(now) {
+			continue
 		}
+		cloned := cloneSecretPermissionGrant(grant)
+		cloned.ExpiresAt = copySocketExpiry(grant.ExpiresAt)
+		adapter, mode := socketref.Platform(), cloned.Binding.Mode()
+		cloned.Unavailable = cloned.Category == ApprovalCategorySocketPath && (s.closed || mode == socketref.NoRealization || mode != adapter.Command && mode != adapter.Native)
+		if cloned.Category == ApprovalCategorySocketPath && cloned.Binding.Mode() == socketref.RetainedObject {
+			owner, live := s.socketLeases[cloned.ID]
+			g := confine.SocketGrant{ApprovedPath: cloned.ApprovedPath, ResolvedPath: cloned.ResolvedPath, Binding: cloned.Binding}
+			if s.closed || !live || owner.lease.Binding().Key() != cloned.Binding.Key() || confine.RevalidateSocketGrant(g) != nil {
+				cloned.Unavailable = true
+				stale[cloned.ID] = cloned.Binding.Key()
+			}
+		}
+		out = append(out, cloned)
 	}
+	s.mu.RUnlock()
+	s.retireSocketOwners(stale)
 	return out
 }
 
@@ -584,9 +623,9 @@ func (s *ApprovalStore) SocketPathsForProject(projectID string) []confine.Socket
 		}
 		g := confine.SocketGrant{
 			ApprovedPath: strings.TrimSpace(grant.ApprovedPath),
-			ResolvedPath: strings.TrimSpace(grant.ResolvedPath),
+			ResolvedPath: strings.TrimSpace(grant.ResolvedPath), Binding: grant.Binding,
 		}
-		if g.ApprovedPath == "" || g.ResolvedPath == "" {
+		if grant.Unavailable || g.ApprovedPath == "" || g.ResolvedPath == "" {
 			continue
 		}
 		if err := confine.RevalidateSocketGrant(g); err != nil {
@@ -657,23 +696,36 @@ func (s *ApprovalStore) PutGlobal(cfg ApprovalConfig) error {
 }
 
 // putGlobalLocked is PutGlobal for callers already holding writeMu.
-func (s *ApprovalStore) putGlobalLocked(cfg ApprovalConfig) error {
+func (s *ApprovalStore) putGlobalLocked(cfg ApprovalConfig, incoming ...*socketref.Lease) error {
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+	if closed {
+		return errApprovalStoreClosed
+	}
 	cfg = normalizeApprovalConfig(cfg)
 	if err := validateApprovalConfig(cfg); err != nil {
 		return err
 	}
 	cfg.Grants = pruneExpiredGrants(cfg.Grants, time.Now().UTC())
+	owners := s.prepareSocketOwners(cfg, incoming)
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
+		closeSocketOwners(owners)
 		return err
 	}
 	if err := writeSettingsFile(s.globalPath, data); err != nil {
+		closeSocketOwners(owners)
 		return err
 	}
 	s.mu.Lock()
+	oldOwners := s.socketLeases
+	s.socketLeases = owners
 	n := cloneApprovalConfig(cfg)
 	s.global = &n
+	s.scheduleSocketExpiryLocked()
 	s.mu.Unlock()
+	closeSocketOwners(oldOwners)
 	return nil
 }
 

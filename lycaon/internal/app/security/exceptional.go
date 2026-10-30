@@ -23,6 +23,12 @@ type DirectIPRecorder interface {
 
 func (b *Runtime) BuildExceptional(ctx context.Context, control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(protection.DirectIPReconstructHook)) error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
+	completed := false
+	defer func() {
+		if !completed {
+			socketCapabilityRT.Close()
+		}
+	}()
 	b.Sockets = socketCapabilityRT
 	control.SetSocketCapabilityRuntime(socketCapabilityRT)
 	if approvals != nil {
@@ -101,5 +107,6 @@ func (b *Runtime) BuildExceptional(ctx context.Context, control *toolexecution.C
 			FullBypass:           in.FullBypass,
 		})
 	})
+	completed = true
 	return nil
 }

@@ -8855,7 +8855,7 @@ export interface components {
             id: string;
             scope: components["schemas"]["ApprovalGrantScope"];
             category: components["schemas"]["ApprovalGrantCategory"];
-            /** @description Searchable host label. For socket_path this mirrors approved_path; authority matching uses approved_path and resolved_path. Secret releases expose only a count label; their fingerprints stay host-only. */
+            /** @description Searchable host label. For socket_path this mirrors approved_path; authority matching also checks the host-owned enforcement mode and live socket binding. Secret releases expose only a count label; their fingerprints stay host-only. */
             pattern: string;
             /** @description Host-rendered bounded-lease label. */
             title: string;
@@ -8877,7 +8877,7 @@ export interface components {
             project_id?: string;
             /** @description A folder the lease was granted from, for display only. Absent for a project with no folders attached. */
             project_dir?: string;
-            /** @description True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket. Display and bulk-clear only; never auto-revoked. */
+            /** @description True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket, or whose retained binding is unavailable after replacement or engine restart. Saved intent is preserved until renewed or revoked. */
             unavailable?: boolean;
             /** @description Number of exact actions an action_set lease covers. Exact action identities are host-only opaque digests and never cross the wire. */
             action_count?: number;
@@ -8903,7 +8903,7 @@ export interface components {
             chat_session_id?: string;
             /** @description Chat title on chat-scoped rows, for grouping in Settings. */
             session_title?: string;
-            /** @description Host copy for revoke consequences. Socket grants use "Applies to the next command or terminal. Already-running processes retain access." */
+            /** @description Host copy for revoke consequences. Socket grants use "Applies to the next local-service operation. Already-running processes and admitted requests retain access." */
             revoke_applies_to?: string;
         };
         /** @enum {string} */

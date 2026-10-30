@@ -20,7 +20,7 @@ func socketPermitDelta(
 	targets []hitl.ApprovalSocketTarget,
 ) hitl.ApprovalAuthorityDelta {
 	return hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthoritySocketPermit, SessionID: action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID,
+		Kind: hitl.AuthoritySocketPermit, ChatSessionID: action.ChatSession(), SessionID: action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		ActionDigest: actionDigest, Sockets: targets,
 	}
 }

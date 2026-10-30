@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // helperFlag marks the confined re-exec path.
@@ -287,9 +288,14 @@ func Command(
 	if err != nil {
 		return nil, func() {}, err
 	}
+	socketFiles, closeSockets, err := socketCommandFiles(c.SocketGrants)
+	if err != nil {
+		return nil, func() {}, err
+	}
 	// An inherited pipe keeps the profile outside writable pathnames.
 	pr, pw, err := os.Pipe()
 	if err != nil {
+		closeSockets()
 		return nil, func() {}, err
 	}
 	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
@@ -308,6 +314,14 @@ func Command(
 		extra = append(extra, reports)
 		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
 	}
+	extra, err = appendSocketCommandFiles(extra, socketFiles)
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		closeReports()
+		closeSockets()
+		return nil, func() {}, err
+	}
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
 	cmd.ExtraFiles = extra
@@ -318,6 +332,7 @@ func Command(
 	// Releasing the host's own end lets the marker report end-of-file once the
 	// last descendant exits.
 	cleanup := func() {
+		closeSockets()
 		_ = pr.Close()
 		closeReports()
 		c.lineage.Started()
@@ -325,19 +340,8 @@ func Command(
 	return cmd, cleanup, nil
 }
 
-// BuildProfile renders the boundary the helper applies on this platform: the
-// Seatbelt profile on macOS, the boundary plan on Linux.
-func BuildProfile(c Confinement) (string, error) {
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return "", err
-	}
-	return renderProfile(c)
-}
-
-// BuildSeatbeltProfile renders the macOS profile for c. It is what BuildProfile
-// applies on macOS and renders on every platform, so the policy it expresses
-// can be read anywhere.
+// BuildSeatbeltProfile renders the macOS profile for c on every platform,
+// so the policy it expresses can be inspected anywhere.
 func BuildSeatbeltProfile(c Confinement) (string, error) {
 	c, err := validateProfileInputs(c)
 	if err != nil {
@@ -370,6 +374,9 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
+	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")

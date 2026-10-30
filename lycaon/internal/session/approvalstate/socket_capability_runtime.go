@@ -8,15 +8,18 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // SocketCapabilityRuntime keeps session-tree grants and per-call permits in memory.
 // The shared ask guard owns grant listing and revocation.
 type SocketCapabilityRuntime struct {
 	guard sandboxAskGuard[SocketChatGrant]
-	// mu guards permits only; the guard has its own lock for grants.
+	// mu serializes resource ownership; the guard also protects logical rows.
 	mu      sync.Mutex
 	permits scopedstore.LRU[*socketPermitSlot]
+	expiry  *time.Timer
+	closed  bool
 }
 
 // SocketChatGrant is a chat-scoped AF_UNIX grant recorded after human approval.
@@ -24,6 +27,9 @@ type SocketChatGrant struct {
 	ID           string
 	ApprovedPath string
 	ResolvedPath string
+	Binding      socketref.Binding
+	Unavailable  bool
+	resource     *socketref.Lease
 	CreatedAt    time.Time
 	// ExpiresAt bounds the grant; nil means the chat's lifetime.
 	ExpiresAt          *time.Time
@@ -56,16 +62,20 @@ func (r *SocketCapabilityRuntime) AppliedGrants(rootSessionID string) []confine.
 		return nil
 	}
 	var out []confine.SocketGrant
+	stale := make(map[string]string)
 	now := time.Now().UTC()
 	r.guard.readGrants(rootSessionID, func(grants []SocketChatGrant) {
 		seen := map[string]struct{}{}
 		out = make([]confine.SocketGrant, 0, len(grants))
 		for _, tg := range grants {
-			if tg.expired(now) {
+			if tg.expired(now) || tg.Unavailable {
 				continue
 			}
-			g := confine.SocketGrant{ApprovedPath: tg.ApprovedPath, ResolvedPath: tg.ResolvedPath}
+			g := confine.SocketGrant{ApprovedPath: tg.ApprovedPath, ResolvedPath: tg.ResolvedPath, Binding: tg.Binding}
 			if err := confine.RevalidateSocketGrant(g); err != nil {
+				if tg.Binding.Mode() == socketref.RetainedObject {
+					stale[tg.ID] = tg.Binding.Key()
+				}
 				continue
 			}
 			key := socketGrantPairKey(g)
@@ -76,6 +86,7 @@ func (r *SocketCapabilityRuntime) AppliedGrants(rootSessionID string) []confine.
 			out = append(out, g)
 		}
 	})
+	r.retireSocketOwners(rootSessionID, stale)
 	if len(out) == 0 {
 		return nil
 	}
@@ -94,7 +105,7 @@ func (r *SocketCapabilityRuntime) ListChatGrants(rootSessionID string) []SocketC
 	if len(out) == 0 {
 		return nil
 	}
-	return out
+	return cloneSocketGrants(out)
 }
 
 // ListAllChatGrants groups chat grants by root session.
@@ -102,7 +113,11 @@ func (r *SocketCapabilityRuntime) ListAllChatGrants() map[string][]SocketChatGra
 	if r == nil {
 		return nil
 	}
-	return r.guard.listAllGrants()
+	out := r.guard.listAllGrants()
+	for root, grants := range out {
+		out[root] = cloneSocketGrants(grants)
+	}
+	return out
 }
 
 // GrantChat records a chat-scoped socket grant without replacing live authority.
@@ -115,33 +130,66 @@ func (r *SocketCapabilityRuntime) GrantChat(rootSessionID string, g confine.Sock
 	if g.ApprovedPath == "" || g.ResolvedPath == "" || grantID == "" {
 		return false
 	}
+	if confine.RevalidateSocketGrant(g) != nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return false
+	}
+	var resource *socketref.Lease
+	if g.Binding.Mode() == socketref.RetainedObject {
+		var err error
+		resource, err = g.Binding.Acquire()
+		if err != nil {
+			return false
+		}
+	}
+	var removed []*socketref.Lease
 	key := socketGrantPairKey(g)
 	now := time.Now().UTC()
-	return r.guard.mergeGrants(rootSessionID, func(existing []SocketChatGrant) ([]SocketChatGrant, bool) {
+	created := r.guard.mergeGrants(rootSessionID, func(existing []SocketChatGrant) ([]SocketChatGrant, bool) {
 		next := make([]SocketChatGrant, 0, len(existing)+1)
 		for _, prior := range existing {
 			samePair := socketGrantPairKey(confine.SocketGrant{
-				ApprovedPath: prior.ApprovedPath, ResolvedPath: prior.ResolvedPath,
+				ApprovedPath: prior.ApprovedPath, ResolvedPath: prior.ResolvedPath, Binding: prior.Binding,
 			}) == key
 			if prior.ID != grantID || !samePair {
+				if prior.ApprovedPath == g.ApprovedPath && prior.Binding.Mode() == socketref.RetainedObject && !samePair {
+					removed = append(removed, prior.resource)
+					prior.resource = nil
+					prior.Unavailable = true
+				}
 				next = append(next, prior)
 				continue
 			}
 			// A live grant for the same id and pair already covers this.
-			if !prior.expired(now) {
+			if !prior.expired(now) && !prior.Unavailable {
 				return nil, false
 			}
+			removed = append(removed, prior.resource)
 		}
 		return append(next, SocketChatGrant{
-			ID:                 grantID,
-			ApprovedPath:       g.ApprovedPath,
-			ResolvedPath:       g.ResolvedPath,
+			ID:           grantID,
+			ApprovedPath: g.ApprovedPath,
+			ResolvedPath: g.ResolvedPath,
+			Binding:      g.Binding, resource: resource,
 			CreatedAt:          now,
-			ExpiresAt:          expiresAt,
+			ExpiresAt:          cloneSocketExpiry(expiresAt),
 			SourceCheckpointID: strings.TrimSpace(checkpointID),
 			SourceActionDigest: strings.TrimSpace(actionDigest),
 		}), true
 	})
+	if !created {
+		resource.Close()
+		return false
+	}
+	for _, prior := range removed {
+		prior.Close()
+	}
+	r.scheduleSocketExpiryLocked()
+	return true
 }
 
 // RevokeByID removes the whole chat grant set sharing an opaque approval option
@@ -163,7 +211,21 @@ func (r *SocketCapabilityRuntime) revokeByIDInstalledBy(id, checkpointID string)
 	if r == nil {
 		return SocketChatGrant{}, false
 	}
-	return r.guard.revokeByID(id, checkpointID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	before := r.guard.listAllGrants()
+	removed, ok := r.guard.revokeByID(id, checkpointID)
+	if ok {
+		for _, grants := range before {
+			for _, grant := range grants {
+				if grant.ID == id && (checkpointID == "" || grant.SourceCheckpointID == checkpointID) {
+					grant.resource.Close()
+				}
+			}
+		}
+		r.scheduleSocketExpiryLocked()
+	}
+	return removed, ok
 }
 
 // FindByID locates a chat grant by opaque id.
@@ -171,11 +233,14 @@ func (r *SocketCapabilityRuntime) FindByID(id string) (SocketChatGrant, string, 
 	if r == nil {
 		return SocketChatGrant{}, "", false
 	}
-	return r.guard.findByID(id)
+	grant, root, ok := r.guard.findByID(id)
+	grant.ExpiresAt = cloneSocketExpiry(grant.ExpiresAt)
+	grant.resource = nil
+	return grant, root, ok
 }
 
 // IssuePermit mints an ephemeral current-call permit.
-func (r *SocketCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
+func (r *SocketCapabilityRuntime) IssuePermit(rootSessionID, sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
 	if r == nil {
 		return
 	}
@@ -191,8 +256,21 @@ func (r *SocketCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDiges
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return
+	}
+	var resource *socketref.Lease
+	if g.Binding.Mode() == socketref.RetainedObject {
+		var err error
+		resource, err = g.Binding.Acquire()
+		if err != nil {
+			return
+		}
+	}
 	slotKey := socketPermitKey(sessionID, toolCallID, actionDigest, g)
-	r.permits.Store(slotKey, &socketPermitSlot{grant: g})
+	for _, prior := range r.permits.Store(slotKey, &socketPermitSlot{grant: g, resource: resource, rootSessionID: strings.TrimSpace(rootSessionID), sessionID: sessionID}) {
+		prior.resource.Close()
+	}
 }
 
 // RevokePermit removes an unconsumed permit. It is the rollback path for an
@@ -203,7 +281,9 @@ func (r *SocketCapabilityRuntime) RevokePermit(sessionID, toolCallID, actionDige
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.permits.Delete(socketPermitKey(strings.TrimSpace(sessionID), strings.TrimSpace(toolCallID), strings.TrimSpace(actionDigest), normalizeSocketGrant(g)))
+	if slot, ok := r.permits.LoadAndDelete(socketPermitKey(strings.TrimSpace(sessionID), strings.TrimSpace(toolCallID), strings.TrimSpace(actionDigest), normalizeSocketGrant(g))); ok {
+		slot.resource.Close()
+	}
 }
 
 // ConsumePermit atomically consumes a current-call permit once for the invocation.
@@ -225,6 +305,7 @@ func (r *SocketCapabilityRuntime) ConsumePermit(sessionID, toolCallID, actionDig
 	if !ok {
 		return false, nil
 	}
+	defer slot.resource.Close()
 	if socketGrantPairKey(slot.grant) != socketGrantPairKey(g) {
 		return false, errSocketPermitMismatch
 	}
@@ -261,13 +342,10 @@ func (r *SocketCapabilityRuntime) AuthorizedGrants(rootSessionID, sessionID, too
 
 func (r *SocketCapabilityRuntime) forgetPermitsLocked(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		sessionID = "_"
-	}
-	prefix := sessionID + "\x01"
-	for key := range r.permits.Snapshot() {
-		if strings.HasPrefix(key, prefix) {
+	for key, slot := range r.permits.Snapshot() {
+		if slot.sessionID == sessionID || slot.rootSessionID == sessionID {
 			r.permits.Delete(key)
+			slot.resource.Close()
 		}
 	}
 }
@@ -277,9 +355,9 @@ func (r *SocketCapabilityRuntime) ReleaseRun(rootSessionID string) {
 	if r == nil {
 		return
 	}
-	r.guard.releaseRun(rootSessionID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.guard.releaseRun(rootSessionID)
 	r.forgetPermitsLocked(rootSessionID)
 }
 
@@ -288,26 +366,34 @@ func (r *SocketCapabilityRuntime) ForgetSession(rootSessionID string) {
 	if r == nil {
 		return
 	}
-	r.guard.forgetSession(rootSessionID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	prior := r.guard.listGrants(rootSessionID)
+	r.guard.forgetSession(rootSessionID)
+	for _, grant := range prior {
+		grant.resource.Close()
+	}
+	r.scheduleSocketExpiryLocked()
 	r.forgetPermitsLocked(rootSessionID)
 }
 
 type socketPermitSlot struct {
-	grant confine.SocketGrant
+	grant         confine.SocketGrant
+	resource      *socketref.Lease
+	rootSessionID string
+	sessionID     string
 }
 
 func normalizeSocketGrant(g confine.SocketGrant) confine.SocketGrant {
 	return confine.SocketGrant{
 		ApprovedPath: strings.TrimSpace(g.ApprovedPath),
-		ResolvedPath: strings.TrimSpace(g.ResolvedPath),
+		ResolvedPath: strings.TrimSpace(g.ResolvedPath), Binding: g.Binding,
 	}
 }
 
 func socketGrantPairKey(g confine.SocketGrant) string {
 	g = normalizeSocketGrant(g)
-	return g.ApprovedPath + "\x00" + g.ResolvedPath
+	return g.ApprovedPath + "\x00" + g.ResolvedPath + "\x00" + g.Binding.Key()
 }
 
 func socketPermitKey(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) string {

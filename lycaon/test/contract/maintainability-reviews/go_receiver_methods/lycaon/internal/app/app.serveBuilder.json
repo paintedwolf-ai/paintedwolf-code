@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/app/app.serveBuilder",
+  "kind": "construction",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The builder explicitly wires existing runtime owners and resource phases. Configuration now registers socket-store cleanup at construction; session composition drains checkpoint callbacks before closing socket stores. Retain explicit composition rather than hide shutdown dependencies in a forwarding owner. Freeze this reviewed shape at 30 methods; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 30,
+  "boundaries": {
+    "lycaon/internal/app/configuration/socket_lifetime_test.go": "6e5c6341dd41536cac08103ca93bd7212534f2067cf8175bac53677a3792ba37",
+    "lycaon/internal/app/security/exceptional_test.go": "2c6dde913657a90a8dae3b9b0807d77941b1f704f0e1829ded1001d3efbc47d8"
+  },
+  "reviewed_shape": "54a4dab92411f696d476e758751da212816a34004c09a69e9168960b134ece7f"
+}
