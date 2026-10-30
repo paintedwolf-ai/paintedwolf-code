@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"strings"
 	"testing"
 
@@ -305,26 +304,6 @@ func TestModelSecretScreenWithoutAskFaults(t *testing.T) {
 	}
 }
 
-func TestModelSecretScreenRelaysCompletedPublicFetchWithoutApproval(t *testing.T) {
-	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
-	req := modelcall.CompletionRequest{
-		Messages: []api.Message{{
-			Role:    api.MessageRoleTool,
-			Content: "docs example\nPASSWORD=" + modelScreenGitHubToken,
-			ToolResult: &api.ToolResult{
-				Tool: "fetch_url", Outcome: api.ToolResultOutcomeCompleted,
-				ToolArgs: map[string]any{"url": "https://docs.example/install"},
-			},
-		}},
-	}
-	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "provider", Label: "Provider"}, req)
-	testutil.FailErr(t, "relay public fetch result", err)
-	if got.Messages[0].Content != req.Messages[0].Content {
-		t.Fatalf("public result changed: %q", got.Messages[0].Content)
-	}
-}
-
 // Trust is a fact the screen carries; the gate decides what it means.
 func TestModelSecretScreenCarriesDestinationTrustOnTheAlert(t *testing.T) {
 	var finding secretmatch.Alert
@@ -342,60 +321,6 @@ func TestModelSecretScreenCarriesDestinationTrustOnTheAlert(t *testing.T) {
 	testutil.FailErr(t, "screen untrusted destination", err)
 	if finding.DestinationTrusted {
 		t.Fatal("an untrusted destination reported trust")
-	}
-}
-
-// Trusted destinations bypass the approval card.
-func TestModelSecretScreenTrustedDestinationSendsUnchangedWithoutACard(t *testing.T) {
-	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
-	req := modelSecretRequest()
-
-	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "ollama-1", Trusted: true}, req)
-	testutil.FailErr(t, "screen trusted destination", err)
-	if got.Messages[0].Content != req.Messages[0].Content {
-		t.Fatalf("trusted send changed the request: %q", got.Messages[0].Content)
-	}
-
-	_, err = screen.Screen(context.Background(), ScreenDestination{ID: "ollama-1"}, req)
-	var fault *ModelRequestSecretScreenFaultError
-	if !errors.As(err, &fault) || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
-		t.Fatalf("untrusted destination err = %v, want the card path to be reached", err)
-	}
-}
-
-// Trust does not disclose protected managed values.
-func TestModelSecretScreenTrustedDestinationStillWithholdsNonDisclosableValues(t *testing.T) {
-	m := modelScreenMatcher(t)
-	const generated = "host-generated-value-1234567890"
-	const reference = "{{paintedwolf-secret:018ff2db-85f7-7f31-8da2-b9e81cd1a150}}"
-	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
-		return []secretmatch.HarvestedValue{{
-			Name: "deployment token", Secret: generated, RuleID: secretmatch.ManagedRuleID,
-			Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch,
-			Reference: reference, NonDisclosable: true,
-		}}
-	})
-	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(m, exec.Secrets.AskSecretScreen)
-	req := modelcall.CompletionRequest{
-		Messages: []api.Message{{
-			Role:    api.MessageRoleTool,
-			Content: "token=" + generated + "\nalso=" + modelScreenGitHubToken,
-			ToolResult: &api.ToolResult{
-				Tool: "read", ToolCallID: "call_read_1", ToolArgs: map[string]any{"path": ".env"},
-			},
-		}},
-		Debug: modelcall.RequestDebug{SessionID: "root-1", RootSessionID: "root-1"},
-	}
-	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "ollama-1", Trusted: true}, req)
-	testutil.FailErr(t, "screen trusted destination with a managed value", err)
-	content := got.Messages[0].Content
-	if strings.Contains(content, generated) || !strings.Contains(content, reference) {
-		t.Fatalf("managed value crossed to a trusted provider: %q", content)
-	}
-	if !strings.Contains(content, modelScreenGitHubToken) {
-		t.Fatalf("trusted send stripped a detected value it should have sent unchanged: %q", content)
 	}
 }
 

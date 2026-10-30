@@ -27,10 +27,10 @@ func TestNativeOperationObservationKeepsRealToolAndSelectorConjunction(t *testin
 	if facts["tool"] != "command" || facts["paintedwolf.native_operation"] != "read" || facts["tool_args"].(map[string]any)["command"] != "cat input" {
 		t.Fatalf("presentation data replaced actual call or operation: %+v", facts)
 	}
-	if !selectorMatches(Selector{"tool": {"command"}, "paintedwolf.native_operation": {"read"}}, gc) {
+	if !selectorMatches(Selector{"tool": {"command"}, "paintedwolf.native_operation": {"read"}}, facts) {
 		t.Fatal("explicit command and operation selector did not match")
 	}
-	if selectorMatches(Selector{"tool": {"read"}}, gc) || selectorMatches(Selector{"tool": {"write"}, "paintedwolf.native_operation": {"read"}}, gc) {
+	if selectorMatches(Selector{"tool": {"read"}}, facts) || selectorMatches(Selector{"tool": {"write"}, "paintedwolf.native_operation": {"read"}}, facts) {
 		t.Fatal("native operation impersonated old tool or changed selector AND semantics")
 	}
 	gc.ObserveToolCall("read", map[string]any{"path": "input"})
