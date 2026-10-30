@@ -25,7 +25,7 @@ func TestCoordinatorSynthesisWrapupPromptAssembly(t *testing.T) {
 	for _, want := range []string{
 		"Read-only report",
 		"read-only",
-		"`write`",
+		"command mutations",
 		"`edit`",
 		"`task`",
 		"Do not narrate fixes",
