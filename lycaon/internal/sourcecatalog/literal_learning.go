@@ -13,7 +13,7 @@ func literalLearningCost(entry Entry) int64 {
 
 // beginFileRead shares nonblocking working capacity across every content producer.
 func (c *literalIndexCache) beginFileRead(rootPath string, entry Entry, version fspath.FileObservation) *literalFileRead {
-	if !version.Known || version.Links == 0 {
+	if !version.Known || version.Size <= 0 || version.Links == 0 {
 		return nil
 	}
 	c.fileMu.Lock()
