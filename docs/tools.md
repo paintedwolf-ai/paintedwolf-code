@@ -319,6 +319,8 @@ before `..`, canonicalizes under `-e`, the default or `-m`, and projects
 `--relative-to`/`--relative-base`; an operand that does not resolve is an
 ordinary status-one failure and later operands still run.
 
+Name-only `ls` listings admit directory member names without fetching child metadata. Metadata is read only for selected formatting, sorting, classification or recursion. Hidden-name selection applies before the remaining `traversal_visits` bound, so an oversized listing refuses before allocating its full membership or inspecting its children. Completion logs report listing entries, directories and child metadata reads.
+
 ### Search commands
 
 `grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select

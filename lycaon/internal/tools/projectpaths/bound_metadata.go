@@ -16,13 +16,15 @@ import (
 // BoundDir holds a bound directory and its root descriptor open while listing
 // and inspecting its immediate entries.
 type BoundDir struct {
-	dir      BoundPath
-	root     *fseffect.ReadRoot
-	ownsRoot bool
-	file     *os.File
-	names    []string
-	listed   bool
-	listErr  error
+	dir           BoundPath
+	root          *fseffect.ReadRoot
+	ownsRoot      bool
+	file          *os.File
+	names         []string
+	listed        bool
+	includeHidden bool
+	closed        bool
+	listErr       error
 }
 
 // OpenDir admits and holds a directory without reading its membership.
@@ -83,30 +85,41 @@ func (e *DirectoryEntriesLimitError) Error() string {
 	return "directory membership exceeds entry limit"
 }
 
-// Names reads byte-ordered membership; a positive maximum bounds retained names.
-func (d *BoundDir) Names(maximum int) ([]string, error) {
+// DirectoryNames selects visible membership within a retained-name bound.
+type DirectoryNames struct {
+	Maximum       int
+	IncludeHidden bool
+}
+
+// Names reads byte-ordered membership with one hidden-entry selection.
+func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	if d.listed {
-		if d.listErr == nil && maximum > 0 && len(d.names) > maximum {
-			return nil, &DirectoryEntriesLimitError{Entries: maximum + 1}
+		if d.includeHidden != options.IncludeHidden {
+			return nil, errors.New("directory membership selection changed")
+		}
+		if d.listErr == nil && options.Maximum > 0 && len(d.names) > options.Maximum {
+			return nil, &DirectoryEntriesLimitError{Entries: options.Maximum + 1}
 		}
 		return d.names, d.listErr
 	}
-	d.listed = true
+	d.listed, d.includeHidden = true, options.IncludeHidden
 	var names []string
 	for {
-		quantum := 1024
-		if maximum > 0 {
-			quantum = min(quantum, maximum-len(names)+1)
-		}
-		batch, err := d.file.Readdirnames(quantum)
-		for _, name := range batch {
-			if d.VisibleChild(name) {
-				names = append(names, name)
+		if d.dir.admitRead != nil {
+			if err := d.dir.admitRead(d.file.Name()); err != nil {
+				d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
+				return nil, d.listErr
 			}
 		}
-		if maximum > 0 && len(names) > maximum {
-			d.listErr = &DirectoryEntriesLimitError{Entries: maximum + 1}
-			return nil, d.listErr
+		batch, err := d.file.Readdirnames(1024)
+		for _, name := range batch {
+			if d.VisibleChild(name) && (options.IncludeHidden || !strings.HasPrefix(name, ".")) {
+				names = append(names, name)
+				if options.Maximum > 0 && len(names) > options.Maximum {
+					d.listErr = &DirectoryEntriesLimitError{Entries: options.Maximum + 1}
+					return nil, d.listErr
+				}
+			}
 		}
 		if errors.Is(err, io.EOF) {
 			break
@@ -121,6 +134,31 @@ func (d *BoundDir) Names(maximum int) ([]string, error) {
 	return d.names, nil
 }
 
+// Child admits an immediate name without reading its metadata or link target.
+func (d *BoundDir) Child(name string) (BoundPath, error) {
+	if d.closed {
+		return BoundPath{}, os.ErrClosed
+	}
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsRune(name, 0) {
+		return BoundPath{}, invalidOperand(name, "expected an immediate directory entry")
+	}
+	child := d.dir.Child(name)
+	if !d.VisibleChild(name) {
+		return child, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
+	}
+	if child.admitEntry != nil {
+		dirName := d.file.Name()
+		actual := dirName + string(filepath.Separator) + name
+		if strings.HasSuffix(dirName, string(filepath.Separator)) {
+			actual = filepath.Join(dirName, name)
+		}
+		if err := child.admitEntry(actual); err != nil {
+			return child, PathOperationError(child.Resolved.DisplayPath, err)
+		}
+	}
+	return child, nil
+}
+
 // VisibleChild applies the namespace's recovery exclusions.
 func (d *BoundDir) VisibleChild(name string) bool {
 	if strings.Contains(d.dir.Resolved.Abs, settingsoverlay.DirName()) || name == settingsoverlay.DirName() || name == settingsoverlay.RecoveryDirName {
@@ -132,6 +170,7 @@ func (d *BoundDir) VisibleChild(name string) bool {
 
 // Close releases the held directory and root descriptors.
 func (d *BoundDir) Close() error {
+	d.closed = true
 	if !d.ownsRoot {
 		return d.file.Close()
 	}
@@ -191,7 +230,7 @@ func (p BoundPath) ReadDir() ([]string, error) {
 		return nil, err
 	}
 	defer dir.Close()
-	return dir.Names(0)
+	return dir.Names(DirectoryNames{IncludeHidden: true})
 }
 
 // Child binds one entry beneath a bound directory with the same authority.
@@ -210,7 +249,7 @@ func (p BoundPath) Child(name string) BoundPath {
 		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
 	}
 	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
-	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`) {
+	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && filepath.Base(name) == name {
 		child.Resolved.DisplayPath = child.Resolved.ScopeRel
 	} else {
 		child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))

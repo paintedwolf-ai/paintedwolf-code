@@ -34,6 +34,7 @@ type invocation struct {
 	// publishable.
 	comparison    bool
 	diffVisits    int64
+	directoryWork directoryListingWork
 	releases      []func()
 	currentStream io.Closer
 	pinMu         sync.Mutex
@@ -101,7 +102,7 @@ func (inv *invocation) fail(status int, operand, reason string) {
 	inv.status = max(inv.status, status)
 }
 
-// failureForms are the GNU diagnostics that do not use "NAME: OPERAND: REASON".
+// failureForms are diagnostics that do not use "NAME: OPERAND: REASON".
 var failureForms = map[string]string{
 	"head": "cannot open '%s' for reading: %s",
 	"tail": "cannot open '%s' for reading: %s",
