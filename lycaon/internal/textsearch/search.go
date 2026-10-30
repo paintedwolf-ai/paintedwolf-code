@@ -51,6 +51,7 @@ type Limits struct {
 	WorkSteps    int64
 	MemoryBytes  int64
 	InputBytes   int64
+	Reserve      func(context.Context, int64) (func(), error)
 }
 
 // CatalogLimits reads the frozen language catalog's regex ceilings.

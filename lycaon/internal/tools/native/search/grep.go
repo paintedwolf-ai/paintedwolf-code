@@ -326,7 +326,11 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if err := r.context(); err != nil {
 		return err
 	}
-	if r.matcher, err = textsearch.Compile(inv.ctx, spec, inv.owners.regex); err != nil {
+	limits := inv.owners.regex
+	if memory := inv.owners.Revisions.Memory; memory != nil {
+		limits.Reserve = memory.Reserve
+	}
+	if r.matcher, err = textsearch.Compile(inv.ctx, spec, limits); err != nil {
 		return err
 	}
 	if r.rg && inv.flag("--json") && r.mode == modeLines {
