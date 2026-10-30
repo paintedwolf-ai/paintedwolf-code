@@ -1868,11 +1868,16 @@
       "emit": "guard:host_process",
       "summary": "This host does not support instance-bound process operations."
     },
+    "PROGRESS_DOCUMENT_TOO_LARGE": {
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "The checklist exceeds its document size budget."
+    },
     "PROGRESS_ITEM_NOT_CLOSED": {
-      "branch_instruction": "`update_progress` that records the completed work, then retry `{{ tool }}` on the next call — never resubmit the identical checklist",
+      "branch_instruction": "Acknowledge the listed worker finishes with the current reconciliation_token and expected_revision, then retry the authorized action",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker output completed while {{ paintedwolf.pending }} progress step(s) were open, and you called **`{{ tool }}`** before recording it{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
+      "summary": "Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
     },
     "PROGRESS_MISSING": {
       "branch_instruction": "Call **`update_progress`**, then retry the same rejected call",
@@ -1903,6 +1908,21 @@
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "Pending checklist label \"{{ paintedwolf.label }}\" appears after a `- [\u003e]` optional line."
+    },
+    "PROGRESS_RECONCILIATION_CHANGED": {
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "The pending worker-finish set changed."
+    },
+    "PROGRESS_REVISION_CHANGED": {
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "The checklist changed after the supplied revision."
+    },
+    "PROGRESS_REVISION_REQUIRED": {
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "Replacing an existing checklist requires its current revision."
     },
     "PROGRESS_SYNTHESIS_RECONCILE_ONLY": {
       "branch_instruction": "Reconcile the existing **`## Progress`** in place — close or N/A rows only — then deliver the final report",
