@@ -283,6 +283,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
+	if tc.Effects.ReportProgress != nil {
+		ctx = invocation.WithActivityObserver(ctx, func(ctx context.Context, program string) {
+			if receipt, err := r.Recorder.ActivitySummary(ctx, tc.Identity.SessionID, program); err == nil {
+				tc.Effects.ReportProgress(api.ToolProgress{Phase: "executing", CommandProgram: &receipt})
+			}
+		})
+	}
 	stdout, stderr := r.newProgramStreams(ctx, run)
 	releaseOutputs := release
 	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }

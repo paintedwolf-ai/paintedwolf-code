@@ -117,8 +117,9 @@ A large set of file folds may receive a manifest group. That is presentation ove
 ## Command activities
 
 Command activities describe executed work rather than model-call boundaries. A
-command may contribute several activities; adjacent observations may share an
-activity only when the host supplies the same captured observation identity.
+command may contribute several activities; adjacent reads may share an activity only when the host supplies the same
+reviewed target and execution scope identity. Each captured revision remains
+separate evidence within that activity.
 The command program, dynamic executions and transcript calls retain their own
 identities beneath that presentation.
 
@@ -127,6 +128,9 @@ expanded inputs, parser spans and execution parentage. Context operations and
 stream processing remain attached to the work they support. External programs
 remain processes: their names and output never establish a verification verdict.
 Refusals, approvals, mutations and uncertain effects retain individual outcomes.
+Initial activity identities travel with the command result. Loading detailed
+receipts never changes row membership. Existing rows never merge or reorder;
+later observations may join an established row before their first presentation.
 Missing inputs or receipts use a neutral operation presentation.
 
 Den keeps the existing group, single-line activity and expanded-detail structure.

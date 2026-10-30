@@ -10178,10 +10178,96 @@ export interface components {
          * @enum {string}
          */
         ActivityStatus: "active" | "done";
+        CommandActivitySpan: {
+            source_ref: string;
+            start_byte: number;
+            end_byte: number;
+        };
+        CommandActivity: {
+            id: string;
+            group: string;
+            label: string;
+            subject: string;
+            directory?: string;
+            outcome: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "refused" | "failed" | "interrupted" | "unknown";
+            status_code?: number;
+            /** @description Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate. */
+            merge_key?: string;
+            execution_ids: string[];
+            spans: components["schemas"]["CommandActivitySpan"][];
+        };
+        /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
+        CommandProgramOutputLimit: {
+            /** @enum {string} */
+            code: "COMMAND_LIMIT_EXCEEDED";
+            limit_id: string;
+            /** Format: int64 */
+            maximum: number;
+            /** Format: int64 */
+            observed: number;
+        };
+        CommandProgramOutputWindow: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            ref: string;
+            /** @description Session output address of the retained stream copy. */
+            output_path: string;
+            /**
+             * Format: int64
+             * @description Bytes in the saved stream. For an incomplete stream the final total is unknown.
+             */
+            total_bytes: number;
+            /** @description Lines in the saved stream. For an incomplete stream the final total is unknown. */
+            total_lines: number;
+            complete: boolean;
+            truncated: boolean;
+            /** Format: int64 */
+            head_end_byte: number;
+            head_end_line: number;
+            /** Format: int64 */
+            tail_start_byte: number;
+            tail_start_line: number;
+            /** Format: int64 */
+            omitted_bytes: number;
+            omitted_lines: number;
+            inline_budget_bytes: number;
+            limit?: components["schemas"]["CommandProgramOutputLimit"];
+        };
+        CommandProgramReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_receipt_id: string;
+            language_version: number;
+            catalog_digest: string;
+            source_digest: string;
+            source_ref: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
+            status_code?: number;
+            stop_code?: string;
+            detail_ref: string;
+            /** @enum {string} */
+            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
+            progress_ref?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+            /** @description Initial host activity identities. Details loading must not regroup these rows. */
+            activities?: components["schemas"]["CommandActivity"][];
+            activities_cursor?: string;
+            activities_omitted?: number;
+            /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */
+            outputs?: components["schemas"]["CommandProgramOutputWindow"][];
+        };
         /** @description Measured discovery work. Counts are observations, not a completion estimate. */
         ToolProgress: {
+            command_program?: components["schemas"]["CommandProgramReceipt"];
             /** @enum {string} */
-            phase: "selecting" | "searching";
+            phase: "selecting" | "searching" | "executing";
             files_searched: number;
             files_skipped: number;
             matches: number;
@@ -10578,67 +10664,6 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             settled_at?: string;
-        };
-        /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
-        CommandProgramOutputLimit: {
-            /** @enum {string} */
-            code: "COMMAND_LIMIT_EXCEEDED";
-            limit_id: string;
-            /** Format: int64 */
-            maximum: number;
-            /** Format: int64 */
-            observed: number;
-        };
-        CommandProgramOutputWindow: {
-            /** @enum {string} */
-            stream: "stdout" | "stderr";
-            ref: string;
-            /** @description Session output address of the retained stream copy. */
-            output_path: string;
-            /**
-             * Format: int64
-             * @description Bytes in the saved stream. For an incomplete stream the final total is unknown.
-             */
-            total_bytes: number;
-            /** @description Lines in the saved stream. For an incomplete stream the final total is unknown. */
-            total_lines: number;
-            complete: boolean;
-            truncated: boolean;
-            /** Format: int64 */
-            head_end_byte: number;
-            head_end_line: number;
-            /** Format: int64 */
-            tail_start_byte: number;
-            tail_start_line: number;
-            /** Format: int64 */
-            omitted_bytes: number;
-            omitted_lines: number;
-            inline_budget_bytes: number;
-            limit?: components["schemas"]["CommandProgramOutputLimit"];
-        };
-        CommandProgramReceipt: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            parent_receipt_id: string;
-            language_version: number;
-            catalog_digest: string;
-            source_digest: string;
-            source_ref: string;
-            /** @enum {string} */
-            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
-            status_code?: number;
-            stop_code?: string;
-            detail_ref: string;
-            /** @enum {string} */
-            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
-            progress_ref?: string;
-            /** Format: date-time */
-            started_at: string;
-            /** Format: date-time */
-            settled_at?: string;
-            /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */
-            outputs?: components["schemas"]["CommandProgramOutputWindow"][];
         };
         /** @enum {string} */
         ToolResultOutcome: "completed" | "rejected" | "error";
@@ -11469,6 +11494,8 @@ export interface components {
             executions: components["schemas"]["CommandExecutionReceipt"][];
             /** @description Known static nodes only; never speculative future loop iterations. */
             nodes: components["schemas"]["CommandProgramNode"][];
+            /** @description Host-composed work for this bounded execution page, in first-touch order. Supporting operations retain their execution identities. */
+            activities?: components["schemas"]["CommandActivity"][];
             executions_omitted: number;
             nodes_omitted: number;
             next_cursor?: string;
@@ -30031,6 +30058,11 @@ export type SessionUiState = components["schemas"]["SessionUiState"];
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
 export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
+export type CommandActivitySpan = components["schemas"]["CommandActivitySpan"];
+export type CommandActivity = components["schemas"]["CommandActivity"];
+export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
+export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
+export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolProgress = components["schemas"]["ToolProgress"];
 export type MessageOrigin = components["schemas"]["MessageOrigin"];
 export type ContentAuthority = components["schemas"]["ContentAuthority"];
@@ -30075,9 +30107,6 @@ export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
 export type InvocationIsolation = components["schemas"]["InvocationIsolation"];
 export type InvocationReceipt = components["schemas"]["InvocationReceipt"];
-export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
-export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
-export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolResultOutcome = components["schemas"]["ToolResultOutcome"];
 export type FeedbackSubject = components["schemas"]["FeedbackSubject"];
 export type ToolFeedback = components["schemas"]["ToolFeedback"];

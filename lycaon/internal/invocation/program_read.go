@@ -84,6 +84,10 @@ func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID,
 			return out, err
 		}
 	}
+	out.Activities, err = readProgramActivities(ctx, tx, out.Executions)
+	if err != nil {
+		return out, err
+	}
 	return out, tx.Commit()
 }
 
