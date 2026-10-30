@@ -178,7 +178,8 @@ func (r *findRun) visit(e entry) error {
 		}
 	}
 	if descend {
-		children, err := r.walker.children(e, r.followAll)
+		children, release, err := r.walker.children(e, r.followAll)
+		defer release()
 		if err != nil {
 			reason, ok := ordinary(err)
 			if !ok {

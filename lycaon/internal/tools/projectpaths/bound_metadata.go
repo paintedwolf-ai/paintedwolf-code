@@ -57,25 +57,7 @@ func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error)
 		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	if p.admitRead != nil {
-		if err := p.admitRead(file.Name()); err != nil {
-			_ = file.Close()
-			closeRoot()
-			return nil, PathOperationError(p.Resolved.DisplayPath, err)
-		}
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		closeRoot()
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	if !info.IsDir() {
-		_ = file.Close()
-		closeRoot()
-		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
-	}
-	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file}, nil
+	return bindOpenDirectory(p, root, ownsRoot, file)
 }
 
 // DirectoryEntriesLimitError reports membership beyond a consumer's bound.
@@ -106,7 +88,11 @@ func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	var names []string
 	for {
 		if d.dir.admitRead != nil {
-			if err := d.dir.admitRead(d.file.Name()); err != nil {
+			actual, err := d.currentPath()
+			if err == nil {
+				err = d.dir.admitRead(actual)
+			}
+			if err != nil {
 				d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
 				return nil, d.listErr
 			}
@@ -147,7 +133,10 @@ func (d *BoundDir) Child(name string) (BoundPath, error) {
 		return child, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
 	}
 	if child.admitEntry != nil {
-		dirName := d.file.Name()
+		dirName, err := d.currentPath()
+		if err != nil {
+			return child, PathOperationError(child.Resolved.DisplayPath, err)
+		}
 		actual := dirName + string(filepath.Separator) + name
 		if strings.HasSuffix(dirName, string(filepath.Separator)) {
 			actual = filepath.Join(dirName, name)

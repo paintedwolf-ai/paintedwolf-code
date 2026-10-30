@@ -52,12 +52,15 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 // StatChildAt reports an immediate child's no-follow metadata through a held
 // contained directory descriptor.
 func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(string) error) (EntryStat, error) {
+	dirName, err := r.DirectoryPath(dir)
+	if err != nil {
+		return EntryStat{}, err
+	}
 	var st unix.Stat_t
 	if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return EntryStat{}, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 	}
 	if admit != nil {
-		dirName := dir.Name()
 		actual := dirName + string(filepath.Separator) + name
 		if dirName == "" || name == "" || name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) || strings.HasSuffix(dirName, string(filepath.Separator)) {
 			actual = filepath.Join(dirName, name)
