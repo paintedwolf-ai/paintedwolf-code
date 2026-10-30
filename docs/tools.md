@@ -286,6 +286,11 @@ transformed output share the program account. Simultaneous work can reach that
 aggregate ceiling before a per-file ceiling; it returns a typed resource stop
 and releases all workers rather than waiting on its own leases or retrying reads.
 
+Pure literal searches use exact byte matching for ASCII case-insensitive
+records without creating a regex session for each line. The compiled matcher
+proves literal eligibility once; records outside that proof retain the same
+bounded regex engine, including Unicode case folding and malformed-byte offsets.
+
 ### Stream queries and format-aware edits
 
 `internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
