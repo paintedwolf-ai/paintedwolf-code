@@ -136,6 +136,10 @@ func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.O
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
@@ -186,6 +190,10 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
@@ -211,8 +219,6 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		}
 		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 	case d.builtins[spec.Name] != nil:
-		// Host builtins read the frame's directory from the invocation scope.
-		request.Invocation.Scope.Directory = d.paths.Cwd().DisplayPath
 		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
 	return d.refuseUnimplemented(ctx, spec, request, streams)

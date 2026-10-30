@@ -29,3 +29,17 @@ func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.To
 	}
 	return fmt.Errorf("native policy scope has no catalog effect mode")
 }
+
+func (d *ProgramDispatcher) bindReachedDirectory(request commandprogram.OperationRequest) (commandprogram.OperationRequest, error) {
+	cwd := d.paths.Cwd()
+	request.Invocation.Scope.Directory = cwd.Abs
+	if request.Invocation.Scope.Kind == toolcontract.ProjectOperationScope && !cwd.External && cwd.Root.ID != "" {
+		branch, err := d.run.tc.SourceBranch(cwd.Root.ID)
+		if err != nil {
+			return request, err
+		}
+		request.Invocation.Scope.RootID = cwd.Root.ID
+		request.Invocation.Scope.BranchID = branch.String()
+	}
+	return request, nil
+}
