@@ -19,6 +19,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        toolchain=system
+        if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
+        printf 'prefix=decide-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
         printf 'target=%s/decide\n' "$(python3 scripts/artifact_paths.py compiler-cache "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
         printf 'metal=%s/mlx-metal\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
 
@@ -30,9 +33,9 @@ runs:
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-v3-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/decide-test.sh', 'scripts/toolchain/decide-environment.sh', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/decide-test.sh', 'scripts/toolchain/decide-environment.sh', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
         lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
-        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && format('decide-v3-{0}-{1}-{2}-', runner.os, runner.arch, runner.os == 'macOS' && env.DEVELOPER_DIR || 'system') || '' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && steps.paths.outputs.prefix || '' }}
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
       id: save
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -41,4 +44,4 @@ runs:
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-v3-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/decide-test.sh', 'scripts/toolchain/decide-environment.sh', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/decide-test.sh', 'scripts/toolchain/decide-environment.sh', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}

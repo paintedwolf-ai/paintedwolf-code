@@ -40,7 +40,7 @@ def seal(root, record, environment):
     return {"version": 1, "repository": environment["GITHUB_REPOSITORY"],
             "run_id": int(environment["GITHUB_RUN_ID"]), "run_attempt": int(environment["GITHUB_RUN_ATTEMPT"]),
             "source_sha": source, "source_tree": tree, "lane": name, "shard": record["shard"],
-            "recipe": recipe(name), "runner": lanes()[name].get("runner", "ubuntu-latest"),
+            "recipe": recipe(name), "runner": lanes()[name].get("runner", "ubuntu-24.04"),
             "image": environment.get("ImageVersion", ""), "status": "passed", "scope": "complete",
             "seconds": round(record["finished_at"] - record["started_at"], 1)}
 
