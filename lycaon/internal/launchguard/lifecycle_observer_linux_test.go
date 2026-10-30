@@ -60,11 +60,13 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 	lines := make(chan []byte, 3)
 	done := make(chan struct{})
 	var waitErr error
+	var scanErr error
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			lines <- bytes.Clone(scanner.Bytes())
 		}
+		scanErr = scanner.Err()
 		close(lines)
 		waitErr = cmd.Wait()
 		close(done)
@@ -79,10 +81,10 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 		}
 	})
 	select {
-	case line := <-lines:
-		if string(line) != `{"ready":true}` {
+	case line, ok := <-lines:
+		if !ok || string(line) != `{"ready":true}` {
 			<-done
-			t.Fatalf("lifecycle observation unavailable: %s; %s", line, stderr.String())
+			t.Fatalf("lifecycle observation unavailable: report=%s process=%v reader=%v; %s", line, waitErr, scanErr, stderr.String())
 		}
 	case <-time.After(mountSourceSetupLimit):
 		t.Fatal("owned lifecycle observer did not authenticate before setup deadline")
@@ -91,10 +93,18 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 	finish := func() {
 		if !finalConsumed {
 			select {
-			case line := <-lines:
+			case line, ok := <-lines:
+				if !ok {
+					<-done
+					t.Errorf("lifecycle observer closed before its final report: process=%v reader=%v; %s", waitErr, scanErr, stderr.String())
+					return
+				}
 				var result lifecycleObservation
-				testutil.FailErr(t, "decode exact-role lifecycle observation", json.Unmarshal(line, &result))
-				t.Logf("registered role lifecycle observation: %s", line)
+				if err := json.Unmarshal(line, &result); err != nil {
+					t.Errorf("decode exact-role lifecycle observation %q: %v", line, err)
+				} else {
+					t.Logf("registered role lifecycle observation: %s", line)
+				}
 			case <-time.After(20 * time.Second):
 				t.Error("registered role lifecycle observation did not settle within launch exit bound")
 			}
@@ -102,6 +112,9 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 		<-done
 		for line := range lines {
 			t.Logf("remaining bounded lifecycle observation: %s", line)
+		}
+		if scanErr != nil {
+			t.Errorf("read lifecycle observation: %v", scanErr)
 		}
 		if waitErr != nil {
 			t.Errorf("lifecycle observation unavailable: %v; %s", waitErr, stderr.String())
@@ -179,10 +192,11 @@ func runLifecycleObserver() error {
 			if poll.Fd < 0 {
 				continue
 			}
-			if poll.Revents & ^int16(unix.POLLIN) != 0 {
-				return errors.New("pidfd observation returned an unexpected event")
+			ended, err := lifecyclePIDFDReady(poll.Revents)
+			if err != nil {
+				return fmt.Errorf("registered role %d pidfd observation: %w", index, err)
 			}
-			ready[index] = poll.Revents&unix.POLLIN != 0
+			ready[index] = ended
 			if ready[index] {
 				polls[index].Fd = -1 // Process death is irreversible for this retained pidfd.
 			}
@@ -207,10 +221,10 @@ func runLifecycleObserver() error {
 					return err
 				}
 				check.EndNS = lifecycleMonotonicNS()
-				if desktop[0].Revents & ^int16(unix.POLLIN) != 0 {
-					return errors.New("desktop recheck returned an unexpected pidfd event")
+				check.Ready, err = lifecyclePIDFDReady(desktop[0].Revents)
+				if err != nil {
+					return fmt.Errorf("desktop pidfd recheck: %w", err)
 				}
-				check.Ready = desktop[0].Revents&unix.POLLIN != 0
 				sample.DesktopRecheck = check
 			}
 			result.Samples = append(result.Samples, sample)

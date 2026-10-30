@@ -41,6 +41,7 @@ func TestEarlyBrokerProbeIgnoresUnrelatedRoleArgument(t *testing.T) {
 
 	fixture := installLaunchFixture(t)
 	launch := startLaunch(t, fixture, []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"}, "--broker-probe")
+	pinFixtureProcess(t, launch.facts.DetachedPID, launch.facts.DetachedStart, true)
 	if launch.facts.BrokerError != "" || launch.facts.BrokerExit != 0 {
 		t.Fatalf("actual owned broker did not run: %+v", launch.facts)
 	}
