@@ -1,6 +1,7 @@
 package survey
 
 import (
+	"bytes"
 	"errors"
 	"unicode"
 	"unicode/utf8"
@@ -30,8 +31,26 @@ type TextCounts struct {
 
 var wcDisplayColumns = runewidth.Condition{StrictEmojiNeutral: true}
 
-// Counter accumulates TextCounts over a stream written in any chunking.
+// CountMetrics selects work beyond the byte total, which is always collected.
+type CountMetrics uint8
+
+const (
+	CountLines CountMetrics = 1 << iota
+	CountWords
+	CountChars
+	CountLineLength
+	CountDisplayWidth
+	allCountMetrics = CountLines | CountWords | CountChars | CountLineLength | CountDisplayWidth
+)
+
+// NewCounter collects only the selected metrics; zero selects bytes alone.
+func NewCounter(metrics CountMetrics) Counter {
+	return Counter{metrics: metrics}
+}
+
+// Counter accumulates counts across chunks. Its zero value counts bytes alone.
 type Counter struct {
+	metrics                 CountMetrics
 	counts                  TextCounts
 	inWord                  bool
 	line                    int64
@@ -42,13 +61,28 @@ type Counter struct {
 
 // CountBytes counts one complete captured byte sequence.
 func CountBytes(content []byte) TextCounts {
-	var c Counter
+	c := NewCounter(allCountMetrics)
 	_, _ = c.Write(content)
 	return c.Counts()
 }
 
 func (c *Counter) Write(p []byte) (int, error) {
+	metrics := c.metrics
 	c.counts.Bytes += int64(len(p))
+	if metrics&CountLines != 0 {
+		c.counts.Lines += int64(bytes.Count(p, []byte{'\n'}))
+	}
+	if metrics&CountWords != 0 {
+		c.words(p)
+	}
+	if metrics&(CountChars|CountLineLength|CountDisplayWidth) == 0 {
+		return len(p), nil
+	}
+	c.decode(p, metrics)
+	return len(p), nil
+}
+
+func (c *Counter) words(p []byte) {
 	for _, b := range p {
 		switch b {
 		case ' ', '\t', '\n', '\r', '\v', '\f':
@@ -60,6 +94,9 @@ func (c *Counter) Write(p []byte) (int, error) {
 			c.inWord = true
 		}
 	}
+}
+
+func (c *Counter) decode(p []byte, metrics CountMetrics) {
 	data := p
 	if len(c.pending) > 0 {
 		data = append(c.pending, p...)
@@ -75,13 +112,34 @@ func (c *Counter) Write(p []byte) (int, error) {
 			c.counts.InvalidEncoding = true
 		}
 		data = data[size:]
-		c.scalar(r)
+		c.scalar(r, metrics)
 	}
-	return len(p), nil
 }
 
-func (c *Counter) scalar(r rune) {
-	c.counts.Chars++
+func (c *Counter) scalar(r rune, metrics CountMetrics) {
+	if metrics&CountChars != 0 {
+		c.counts.Chars++
+	}
+	if metrics&CountDisplayWidth != 0 {
+		c.displayScalar(r)
+	}
+	if metrics&CountLineLength == 0 {
+		return
+	}
+	if r == '\n' {
+		length := c.line
+		if c.cr {
+			length--
+		}
+		c.counts.MaxLineLength = max(c.counts.MaxLineLength, length)
+		c.line, c.cr = 0, false
+		return
+	}
+	c.line++
+	c.cr = r == '\r'
+}
+
+func (c *Counter) displayScalar(r rune) {
 	switch r {
 	case '\n', '\r', '\f':
 		c.longestDisplay = max(c.longestDisplay, c.display)
@@ -93,18 +151,6 @@ func (c *Counter) scalar(r rune) {
 			c.display += int64(wcDisplayColumns.RuneWidth(r))
 		}
 	}
-	if r == '\n' {
-		c.counts.Lines++
-		length := c.line
-		if c.cr {
-			length--
-		}
-		c.counts.MaxLineLength = max(c.counts.MaxLineLength, length)
-		c.line, c.cr = 0, false
-		return
-	}
-	c.line++
-	c.cr = r == '\r'
 }
 
 // DisplayWidth returns wc -L's terminal columns, including eight-column tabs.
@@ -120,4 +166,14 @@ func (c *Counter) Counts() TextCounts {
 	}
 	out.MaxLineLength = max(out.MaxLineLength, c.line)
 	return out
+}
+
+func countWcFile(content []byte, includeWords bool) TextCounts {
+	metrics := CountLines
+	if includeWords {
+		metrics |= CountWords
+	}
+	counter := NewCounter(metrics)
+	_, _ = counter.Write(content)
+	return counter.Counts()
 }

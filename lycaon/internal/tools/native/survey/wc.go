@@ -138,7 +138,7 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 	if err != nil {
 		return wcResult{}, fmt.Errorf("wc %s: %w", relSlash, err)
 	}
-	counts := CountBytes(content)
+	counts := countWcFile(content, includeWords)
 	// Editor counts describe the editor text alone; file counts pair the
 	// decoded lines with the file's own bytes, never an editor view with disk.
 	entry := wcResult{Path: relSlash, Bytes: info.Size(), Truncated: bytesTruncated, InEditor: fromEditor}
@@ -302,7 +302,7 @@ func (t *wcDirTotals) add(size int64, content []byte, binary, bytesTruncated, fr
 		t.bytes += size
 		return
 	}
-	counts := CountBytes(content)
+	counts := countWcFile(content, includeWords)
 	if fromEditor {
 		size = counts.Bytes
 	}
