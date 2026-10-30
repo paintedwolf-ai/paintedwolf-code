@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strconv"
+	"strings"
 )
 
 //go:embed source_manifest_layout.go
@@ -23,6 +24,7 @@ const (
 	layoutChunkMinEntries = 128
 	layoutChunkMaxEntries = 4096
 	layoutChunkCutMask    = 511
+	layoutInsertRows      = 64
 )
 
 type layoutEntry struct {
@@ -62,12 +64,17 @@ func migrateManifestLayout(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, string(manifestLayoutSchema)); err != nil {
 		return err
 	}
+	insert, err := prepareLayoutEntryInsert(ctx, tx, layoutInsertRows)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = insert.Close() }()
 	roots, err := legacySnapshotRoots(ctx, tx)
 	if err != nil {
 		return err
 	}
 	for _, root := range roots {
-		manifest, err := convertLegacyRoot(ctx, tx, root.snapshotID, root.path)
+		manifest, err := convertLegacyRoot(ctx, tx, insert, root.snapshotID, root.path)
 		if err != nil {
 			return fmt.Errorf("convert snapshot %s root %s: %w", root.snapshotID, root.path, err)
 		}
@@ -113,7 +120,7 @@ ORDER BY snapshot_id, ordinal`)
 
 // convertLegacyRoot streams one root's retained entries in path order into
 // content-defined chunks and records the manifest that lists them.
-func convertLegacyRoot(ctx context.Context, tx *sql.Tx, snapshotID, rootPath string) (string, error) {
+func convertLegacyRoot(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, snapshotID, rootPath string) (string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
 FROM legacy_source_snapshot_chunks c
 CROSS JOIN legacy_source_manifest_entries e ON e.chunk_id = c.chunk_id
@@ -132,7 +139,7 @@ ORDER BY e.path`, snapshotID, rootPath)
 		}
 		pending = append(pending, entry)
 		if layoutCutAfter(entry.path, len(pending)) {
-			chunk, err := writeLayoutChunk(ctx, tx, pending)
+			chunk, err := writeLayoutChunk(ctx, tx, insert, pending)
 			if err != nil {
 				return "", err
 			}
@@ -143,7 +150,7 @@ ORDER BY e.path`, snapshotID, rootPath)
 		return "", err
 	}
 	if len(pending) > 0 {
-		chunk, err := writeLayoutChunk(ctx, tx, pending)
+		chunk, err := writeLayoutChunk(ctx, tx, insert, pending)
 		if err != nil {
 			return "", err
 		}
@@ -164,7 +171,7 @@ func layoutCutAfter(path string, n int) bool {
 	return h.Sum64()&layoutChunkCutMask == 0
 }
 
-func writeLayoutChunk(ctx context.Context, tx *sql.Tx, entries []layoutEntry) (layoutChunk, error) {
+func writeLayoutChunk(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, entries []layoutEntry) (layoutChunk, error) {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v3\x00"))
 	chunk := layoutChunk{firstPath: entries[0].path, entries: int64(len(entries))}
@@ -191,19 +198,47 @@ VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, chunk.id, chunk.contentID, c
 	if inserted, err := result.RowsAffected(); err != nil || inserted == 0 {
 		return chunk, err
 	}
-	statement, err := tx.PrepareContext(ctx, `INSERT INTO source_manifest_entries
-(chunk_id, path, sha256, git_oid, identity, size, mode, modified_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
+	if err := insertLayoutEntries(ctx, tx, insert, chunk.id, entries); err != nil {
 		return layoutChunk{}, err
 	}
-	defer func() { _ = statement.Close() }()
-	for _, entry := range entries {
-		if _, err := statement.ExecContext(ctx,
-			chunk.id, entry.path, entry.sha256, entry.gitOID, entry.identity, entry.size, entry.mode, entry.modifiedNS); err != nil {
-			return layoutChunk{}, err
+	return chunk, nil
+}
+
+func prepareLayoutEntryInsert(ctx context.Context, tx *sql.Tx, count int) (*sql.Stmt, error) {
+	if count < 1 || count > layoutInsertRows {
+		return nil, fmt.Errorf("manifest insert rows %d outside 1..%d", count, layoutInsertRows)
+	}
+	query := `INSERT INTO source_manifest_entries
+(chunk_id, path, sha256, git_oid, identity, size, mode, modified_ns) VALUES ` + strings.TrimSuffix(strings.Repeat("(?,?,?,?,?,?,?,?),", count), ",")
+	return tx.PrepareContext(ctx, query)
+}
+
+func insertLayoutEntries(ctx context.Context, tx *sql.Tx, full *sql.Stmt, chunkID string, entries []layoutEntry) error {
+	var tail *sql.Stmt
+	if count := len(entries) % layoutInsertRows; count != 0 {
+		var err error
+		tail, err = prepareLayoutEntryInsert(ctx, tx, count)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tail.Close() }()
+	}
+	args := make([]any, 0, layoutInsertRows*8)
+	for start := 0; start < len(entries); start += layoutInsertRows {
+		batch := entries[start:min(start+layoutInsertRows, len(entries))]
+		statement := full
+		if len(batch) < layoutInsertRows {
+			statement = tail
+		}
+		args = args[:0]
+		for _, entry := range batch {
+			args = append(args, chunkID, entry.path, entry.sha256, entry.gitOID, entry.identity, entry.size, entry.mode, entry.modifiedNS)
+		}
+		if _, err := statement.ExecContext(ctx, args...); err != nil {
+			return err
 		}
 	}
-	return chunk, nil
+	return nil
 }
 
 // layoutContentKey is the git id, else the digest, else the stat facts.
