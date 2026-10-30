@@ -1,12 +1,28 @@
 // Package agentpolicy identifies repository guidance delivered to one model request.
 package agentpolicy
 
+// Target is one resolved operation endpoint and its effect direction.
+type Target struct {
+	RootID   string
+	Path     string
+	Mutation bool
+}
+
 // Scope names a resolved path in the invocation's physical workspace.
 type Scope struct {
 	RootID   string
 	RootPath string
 	Path     string
 }
+
+// ScopeError identifies the reached workspace whose guidance could not load.
+type ScopeError struct {
+	Scope Scope
+	Cause error
+}
+
+func (e *ScopeError) Error() string { return e.Cause.Error() }
+func (e *ScopeError) Unwrap() error { return e.Cause }
 
 // Revision identifies the source bytes represented by one policy block.
 type Revision struct {

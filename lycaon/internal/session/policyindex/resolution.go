@@ -2,6 +2,7 @@ package policyindex
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -19,9 +20,11 @@ import (
 type Status string
 
 const (
-	StatusDisabled Status = "disabled"
-	StatusNoPolicy Status = "no_policy"
-	StatusLoaded   Status = "loaded"
+	StatusDisabled    Status = "disabled"
+	StatusNoPolicy    Status = "no_policy"
+	StatusLoaded      Status = "loaded"
+	StatusUnavailable Status = "unavailable"
+	StatusScopeLimit  Status = "scope_limit"
 )
 
 // Delivery is assembled from current sources for one model request.
@@ -39,22 +42,17 @@ func (m *Service) Resolve(ctx context.Context, sess *api.Session, scopes []agent
 	if !m.roots.Applies(ctx, projectcontrib.SurfaceAgentsMD, sess) {
 		return Delivery{Status: StatusDisabled}, nil
 	}
-	roots, err := m.roots.Roots(ctx, sess)
+	roots, err := m.sessionRoots(ctx, sess)
 	if err != nil {
 		return Delivery{}, err
 	}
-	if len(scopes) == 0 {
-		root, rootErr := projectroot.ActiveRoot(roots, sess.WorkspaceRootID)
-		if rootErr != nil {
-			return Delivery{}, rootErr
-		}
-		scopes = []agentpolicy.Scope{{RootID: root.ID, RootPath: root.Path, Path: "."}}
-	}
-	files, err := m.resolveFiles(ctx, roots, scopes)
+	scopes, err = defaultScopes(roots, sess.WorkspaceRootID, scopes)
 	if err != nil {
 		return Delivery{}, err
 	}
+	files, loadErr := m.resolveFiles(ctx, roots, scopes)
 	delivery := Delivery{Status: StatusNoPolicy}
+	var represented [][]agentpolicy.Revision
 	for _, file := range files {
 		if m.renderer == nil {
 			return Delivery{}, fmt.Errorf("policy renderer unavailable")
@@ -71,13 +69,18 @@ func (m *Service) Resolve(ctx context.Context, sess *api.Session, scopes []agent
 		if strings.TrimSpace(block.Content) == "" {
 			return Delivery{}, fmt.Errorf("policy renderer returned an empty block")
 		}
-		delivery.Messages = append(delivery.Messages, m.recordDelivery(scopedMessage(sess, file, block.Content), file.Revision))
+		delivery.Messages = append(delivery.Messages, scopedMessage(sess, file, block.Content))
+		represented = append(represented, []agentpolicy.Revision{file.Revision})
 		delivery.Manifest.Files = append(delivery.Manifest.Files, file.Revision)
 	}
 	if len(files) > 0 {
 		delivery.Status = StatusLoaded
 	}
-	return delivery, nil
+	delivery.Messages = m.recordDeliveries(delivery.Messages, represented)
+	if loadErr != nil {
+		delivery.Status = StatusUnavailable
+	}
+	return delivery, loadErr
 }
 
 // Current reads applicable revisions without rendering model guidance.
@@ -88,14 +91,15 @@ func (m *Service) Current(ctx context.Context, sess *api.Session, scopes []agent
 	if !m.roots.Applies(ctx, projectcontrib.SurfaceAgentsMD, sess) {
 		return agentpolicy.Manifest{}, StatusDisabled, nil
 	}
-	roots, err := m.roots.Roots(ctx, sess)
+	roots, err := m.sessionRoots(ctx, sess)
 	if err != nil {
 		return agentpolicy.Manifest{}, "", err
 	}
-	files, err := m.resolveFiles(ctx, roots, scopes)
+	scopes, err = defaultScopes(roots, sess.WorkspaceRootID, scopes)
 	if err != nil {
 		return agentpolicy.Manifest{}, "", err
 	}
+	files, loadErr := m.resolveFiles(ctx, roots, scopes)
 	manifest := agentpolicy.Manifest{}
 	for _, file := range files {
 		manifest.Files = append(manifest.Files, file.Revision)
@@ -104,28 +108,45 @@ func (m *Service) Current(ctx context.Context, sess *api.Session, scopes []agent
 	if len(files) > 0 {
 		status = StatusLoaded
 	}
-	return manifest, status, nil
+	if loadErr != nil {
+		status = StatusUnavailable
+	}
+	return manifest, status, loadErr
+}
+
+func defaultScopes(roots []projectroot.RootRef, activeRootID string, scopes []agentpolicy.Scope) ([]agentpolicy.Scope, error) {
+	if len(scopes) > 0 || len(roots) == 0 {
+		return scopes, nil
+	}
+	root, err := projectroot.ActiveRoot(roots, activeRootID)
+	if err != nil {
+		return nil, err
+	}
+	return []agentpolicy.Scope{{RootID: root.ID, RootPath: root.Path, Path: "."}}, nil
 }
 
 func (m *Service) resolveFiles(ctx context.Context, roots []projectroot.RootRef, scopes []agentpolicy.Scope) ([]governance.ScopedAgentsMD, error) {
+	var valid []agentpolicy.Scope
+	var failures []error
 	for _, scope := range scopes {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		root, ok := projectroot.RootRefByID(roots, scope.RootID)
 		if !ok {
-			return nil, fmt.Errorf("policy root %q is not attached", scope.RootID)
+			failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: fmt.Errorf("policy root %q is not attached", scope.RootID)})
+			continue
 		}
 		if err := sameWorkspace(root.Path, scope.RootPath); err != nil {
-			return nil, err
+			failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: err})
+			continue
 		}
+		valid = append(valid, scope)
 	}
-	files, err := governance.ResolveScopes(ctx, scopes, m.maxBodyBytes())
-	if err != nil {
-		return nil, err
-	}
+	files, err := governance.ResolveScopes(ctx, valid, m.maxBodyBytes())
+	failures = append(failures, err)
 	sort.SliceStable(files, func(i, j int) bool { return policyBefore(files[i].Revision, files[j].Revision) })
-	return files, nil
+	return files, errors.Join(failures...)
 }
 
 func sameWorkspace(bound, supplied string) error {

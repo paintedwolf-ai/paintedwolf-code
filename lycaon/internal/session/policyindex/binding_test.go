@@ -3,9 +3,11 @@ package policyindex
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -30,7 +32,7 @@ func TestBoundPolicyRequiresTheProposingRequestToCoverReachedPolicy(t *testing.T
 	old, err := m.Bind(t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind baseline policy", err)
 	path := filepath.Join(root.Path, "backend/new.go")
-	policyReject(t, old(t.Context(), root.ID, path, true), "POLICY_CONTEXT_CHANGED")
+	policyReject(t, old(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: path, Mutation: true}}), "POLICY_CONTEXT_CHANGED")
 	next, err := m.ResolveCurrent(t.Context(), sess, history)
 	testutil.FailErr(t, "reached policy delivery", err)
 	if len(next.Manifest.Files) != 2 {
@@ -38,10 +40,10 @@ func TestBoundPolicyRequiresTheProposingRequestToCoverReachedPolicy(t *testing.T
 	}
 	fresh, err := m.Bind(t.Context(), sess, next.Messages)
 	testutil.FailErr(t, "bind reached policy", err)
-	testutil.FailErr(t, "fresh request mutation", fresh(t.Context(), root.ID, path, true))
-	policyReject(t, old(t.Context(), root.ID, path, true), "POLICY_CONTEXT_CHANGED")
+	testutil.FailErr(t, "fresh request mutation", fresh(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: path, Mutation: true}}))
+	policyReject(t, old(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: path, Mutation: true}}), "POLICY_CONTEXT_CHANGED")
 	writePolicy(t, root.Path, "backend/AGENTS.md", "Changed backend policy")
-	policyReject(t, fresh(t.Context(), root.ID, path, true), "POLICY_CONTEXT_CHANGED")
+	policyReject(t, fresh(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: path, Mutation: true}}), "POLICY_CONTEXT_CHANGED")
 }
 
 func TestBoundPolicyChecksBothRootsOfAPathTransfer(t *testing.T) {
@@ -53,14 +55,14 @@ func TestBoundPolicyChecksBothRootsOfAPathTransfer(t *testing.T) {
 	testutil.FailErr(t, "source policy", err)
 	check, err := m.Bind(t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind source policy", err)
-	testutil.FailErr(t, "source path admission", check(t.Context(), first.ID, "from.go", true))
-	policyReject(t, check(t.Context(), second.ID, "to.go", true), "POLICY_CONTEXT_CHANGED")
+	testutil.FailErr(t, "source path admission", check(t.Context(), []agentpolicy.Target{{RootID: first.ID, Path: "from.go", Mutation: true}}))
+	policyReject(t, check(t.Context(), []agentpolicy.Target{{RootID: second.ID, Path: "to.go", Mutation: true}}), "POLICY_CONTEXT_CHANGED")
 	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
 	testutil.FailErr(t, "transfer policy", err)
 	check, err = m.Bind(t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind transfer policy", err)
-	testutil.FailErr(t, "source path admission", check(t.Context(), first.ID, "from.go", true))
-	testutil.FailErr(t, "destination path admission", check(t.Context(), second.ID, "to.go", true))
+	testutil.FailErr(t, "source path admission", check(t.Context(), []agentpolicy.Target{{RootID: first.ID, Path: "from.go", Mutation: true}}))
+	testutil.FailErr(t, "destination path admission", check(t.Context(), []agentpolicy.Target{{RootID: second.ID, Path: "to.go", Mutation: true}}))
 }
 
 func TestBoundPolicyReadsDiscoverScopeWithoutHoldingInvestigation(t *testing.T) {
@@ -72,7 +74,7 @@ func TestBoundPolicyReadsDiscoverScopeWithoutHoldingInvestigation(t *testing.T) 
 	testutil.FailErr(t, "baseline policy", err)
 	check, err := m.Bind(t.Context(), sess, delivery.Messages)
 	testutil.FailErr(t, "bind baseline policy", err)
-	testutil.FailErr(t, "investigative read", check(t.Context(), root.ID, "nested/file.go", false))
+	testutil.FailErr(t, "investigative read", check(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: "nested/file.go", Mutation: false}}))
 	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
 	testutil.FailErr(t, "read scope policy", err)
 	if len(delivery.Manifest.Files) != 2 {
@@ -87,10 +89,27 @@ func TestBoundPolicyTrustAndCancellationRetainTheirMeaning(t *testing.T) {
 	roots.disabled = true
 	check, err := m.Bind(t.Context(), sess, nil)
 	testutil.FailErr(t, "bind disabled surface", err)
-	testutil.FailErr(t, "disabled policy admission", check(t.Context(), root.ID, "file.go", true))
+	testutil.FailErr(t, "disabled policy admission", check(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: "file.go", Mutation: true}}))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := check(ctx, root.ID, "file.go", true); !errors.Is(err, context.Canceled) {
+	if err := check(ctx, []agentpolicy.Target{{RootID: root.ID, Path: "file.go", Mutation: true}}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation became policy recovery: %v", err)
 	}
+}
+
+func TestBoundPolicyRemovalRequiresAFreshRequest(t *testing.T) {
+	m, sess, roots := policyFixture(t)
+	root := roots.roots[0]
+	writePolicy(t, root.Path, "AGENTS.md", "Root policy")
+	delivery, err := m.ResolveCurrent(t.Context(), sess, nil)
+	testutil.FailErr(t, "resolve policy", err)
+	old, err := m.Bind(t.Context(), sess, delivery.Messages)
+	testutil.FailErr(t, "bind original policy", err)
+	testutil.FailErr(t, "remove policy", os.Remove(filepath.Join(root.Path, "AGENTS.md")))
+	policyReject(t, old(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: "file.go", Mutation: true}}), "POLICY_CONTEXT_CHANGED")
+	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
+	testutil.FailErr(t, "resolve absent policy", err)
+	fresh, err := m.Bind(t.Context(), sess, delivery.Messages)
+	testutil.FailErr(t, "bind current policy", err)
+	testutil.FailErr(t, "admit fresh request", fresh(t.Context(), []agentpolicy.Target{{RootID: root.ID, Path: "file.go", Mutation: true}}))
 }

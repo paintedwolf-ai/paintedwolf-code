@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
@@ -49,5 +50,20 @@ func TestResolvedPolicyRejectsUnresolvedOrEscapingScopes(t *testing.T) {
 		if _, err := ResolveScopes(t.Context(), []agentpolicy.Scope{scope}, DefaultAgentsMDInjectMaxBodyBytes); err == nil {
 			t.Fatalf("accepted unresolved policy scope: %+v", scope)
 		}
+	}
+}
+
+func TestResolvedPolicyKeepsExplicitOmissionAndExactRepresentation(t *testing.T) {
+	root := t.TempDir()
+	body := strings.Repeat("Policy text ", 200)
+	testutil.FailErr(t, "write oversized policy", os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(body), 0o600))
+	files, err := ResolveScopes(t.Context(), []agentpolicy.Scope{{RootID: "root", RootPath: root, Path: "."}}, 128)
+	testutil.FailErr(t, "resolve oversized policy", err)
+	if len(files) != 1 || len(files[0].Content) > 128 || !strings.Contains(files[0].Content, AgentsMDBodyTruncatedMarker) {
+		t.Fatal("bounded representation silently concealed omitted policy")
+	}
+	digest := sha256.Sum256([]byte(body))
+	if files[0].Revision.Digest != hex.EncodeToString(digest[:]) {
+		t.Fatal("source revision was confused with the bounded representation")
 	}
 }

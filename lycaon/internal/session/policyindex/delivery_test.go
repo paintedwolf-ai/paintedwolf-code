@@ -1,6 +1,7 @@
 package policyindex
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
@@ -8,6 +9,36 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestDeliveryGroupCannotEvictItsOwnPolicyBlocks(t *testing.T) {
+	m := &Service{}
+	const blocks = 300
+	var messages []api.Message
+	var revisions [][]agentpolicy.Revision
+	manifest := agentpolicy.Manifest{}
+	for i := 0; i < blocks; i++ {
+		file := agentpolicy.Revision{RootID: "root", RootPath: "/workspace", Path: fmt.Sprintf("scope-%d/AGENTS.md", i), Digest: fmt.Sprintf("revision-%d", i)}
+		messages = append(messages, api.Message{
+			Role: api.MessageRoleSystem, Origin: api.MessageOriginProject,
+			Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted,
+			Content: fmt.Sprintf("Policy %d", i),
+		})
+		revisions = append(revisions, []agentpolicy.Revision{file})
+		manifest.Files = append(manifest.Files, file)
+	}
+	messages = m.recordDeliveries(messages, revisions)
+	if got := m.ManifestFor(messages); len(got.Files) != blocks || !got.Covers(manifest) {
+		t.Fatal("one delivery evicted its own policy identity records")
+	}
+	frozen := m.ManifestFor(messages).Clone()
+	for i := 0; i < 300; i++ {
+		other := []api.Message{{Role: api.MessageRoleSystem, Origin: api.MessageOriginProject, Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted, Content: fmt.Sprintf("Later delivery %d", i)}}
+		m.recordDeliveries(other, revisions[:1])
+	}
+	if !frozen.Covers(manifest) {
+		t.Fatal("later delivery eviction changed an already bound manifest")
+	}
+}
 
 func TestManifestContainsOnlyIntactDeliveredPolicyBlocks(t *testing.T) {
 	m, sess, roots := policyFixture(t)

@@ -1826,6 +1826,16 @@
       "emit": "guard:coordinator",
       "summary": "`task()` cannot dispatch workers while ask_user, workflow feedback, or HITL input is still open."
     },
+    "POLICY_CONTEXT_CHANGED": {
+      "category": "recoverable",
+      "emit": "native",
+      "summary": "The reached operation did not run because its applicable project guidance was not included in the proposing model request."
+    },
+    "POLICY_CONTEXT_UNAVAILABLE": {
+      "category": "recoverable",
+      "emit": "native",
+      "summary": "The reached operation did not run because its applicable project guidance could not be resolved."
+    },
     "POLICY_WRITE_REQUIRES_COMMAND": {
       "branch_instruction": "Prepare the instruction change for an ordinary approval.",
       "category": "recoverable",

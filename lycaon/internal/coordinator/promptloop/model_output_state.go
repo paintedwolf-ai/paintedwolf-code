@@ -6,9 +6,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// modelOutputState keeps a response's durable identity, source provenance, and
-// policy refusal together until that response is settled, and counts the
-// consecutive responses whose native call the provider dropped as invalid JSON.
+// modelOutputState freezes a response's identity, policy and observed source.
 type modelOutputState struct {
 	policyCheck           tools.AgentPolicyCheck
 	id                    string

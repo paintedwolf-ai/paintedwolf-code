@@ -23,20 +23,19 @@ type Store interface {
 
 type Roots interface {
 	Applies(context.Context, string, *api.Session) bool
-	ActivePath(context.Context, *api.Session) (string, error)
 	Roots(context.Context, *api.Session) ([]projectroot.RootRef, error)
-	ProjectRoots(context.Context, string) []projectroot.RootRef
 }
 
 type Service struct {
-	store     Store
-	roots     Roots
-	renderer  prompts.PromptTemplateEngine
-	cache     scopedstore.LRU[*governance.AgentsMDSessionState]
-	warm      singleflight.Group
-	listIndex func(string) ([]governance.ResolvedAgentsMD, error)
-	delivered scopedstore.LRU[deliveredPolicy]
-	observed  scopedstore.LRU[*scopeMemory]
+	store          Store
+	roots          Roots
+	renderer       prompts.PromptTemplateEngine
+	cache          scopedstore.LRU[*governance.AgentsMDSessionState]
+	warm           singleflight.Group
+	listIndex      func(string) ([]governance.ResolvedAgentsMD, error)
+	delivered      scopedstore.LRU[deliveredGroup]
+	observed       scopedstore.LRU[*scopeMemory]
+	workspaceRoots func(context.Context, *api.Session) ([]projectroot.RootRef, error)
 }
 
 func New(store Store, roots Roots) *Service {
@@ -111,7 +110,7 @@ func (m *Service) Warm(ctx context.Context, sess *api.Session) {
 	if !m.roots.Applies(ctx, projectcontrib.SurfaceAgentsMD, sess) {
 		return
 	}
-	workspacePath, err := m.roots.ActivePath(ctx, sess)
+	workspacePath, err := m.sessionPath(ctx, sess)
 	if err != nil {
 		return
 	}
@@ -125,7 +124,7 @@ func (m *Service) Index(ctx context.Context, sess *api.Session) (api.Message, bo
 	if !m.roots.Applies(ctx, projectcontrib.SurfaceAgentsMD, sess) {
 		return api.Message{}, false
 	}
-	workspacePath, err := m.roots.ActivePath(ctx, sess)
+	workspacePath, err := m.sessionPath(ctx, sess)
 	if err != nil {
 		return api.Message{}, false
 	}
@@ -199,7 +198,7 @@ func (m *Service) ForPaths(ctx context.Context, sessionID, workspacePath string,
 
 func (m *Service) message(ctx context.Context, sess *api.Session, block governance.AgentsMDInject) api.Message {
 	msg := api.Message{Role: api.MessageRoleSystem, Content: block.Content, Origin: api.MessageOriginProject, Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted}
-	roots, rootsErr := m.roots.Roots(ctx, sess)
+	roots, rootsErr := m.sessionRoots(ctx, sess)
 	if rootsErr != nil {
 		return msg
 	}

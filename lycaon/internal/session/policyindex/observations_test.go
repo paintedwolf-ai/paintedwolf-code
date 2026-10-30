@@ -3,6 +3,7 @@ package policyindex
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -40,7 +41,8 @@ func TestResolveCurrentUsesStructuredObservationsAndReachedScopes(t *testing.T) 
 			t.Fatal("assistant arguments established policy scope")
 		}
 	}
-	testutil.FailErr(t, "remember reached scope", m.Observe(t.Context(), sess.ID, agentpolicy.Scope{RootID: second.ID, RootPath: second.Path, Path: "reached/new.go"}))
+	_, _, err = m.ObserveScopes(t.Context(), sess.ID, []agentpolicy.Scope{{RootID: second.ID, RootPath: second.Path, Path: "reached/new.go"}})
+	testutil.FailErr(t, "remember reached scope", err)
 	delivery, err = m.ResolveCurrent(t.Context(), sess, history)
 	testutil.FailErr(t, "reached operation policy", err)
 	if len(delivery.Manifest.Files) != 3 {
@@ -57,19 +59,23 @@ func TestResolveCurrentUsesStructuredObservationsAndReachedScopes(t *testing.T) 
 func TestObservationScopeIsHostBoundAndBounded(t *testing.T) {
 	m, sess, roots := policyFixture(t)
 	root := roots.roots[0]
-	for i := 0; i < maxObservedScopes+10; i++ {
-		testutil.FailErr(t, "remember scope", m.Observe(t.Context(), sess.ID, agentpolicy.Scope{RootID: root.ID, RootPath: root.Path, Path: fmt.Sprintf("folder-%d/file.go", i)}))
+	writePolicy(t, root.Path, "AGENTS.md", "Shared policy")
+	var scopes []agentpolicy.Scope
+	for i := 0; i < 1000; i++ {
+		scopes = append(scopes, agentpolicy.Scope{RootID: root.ID, RootPath: root.Path, Path: fmt.Sprintf("folder-%d/file.go", i)})
 	}
+	_, _, err := m.ObserveScopes(t.Context(), sess.ID, scopes)
+	testutil.FailErr(t, "remember shared policy jurisdictions", err)
 	state, ok := m.observed.Load(sess.ID)
-	if !ok || len(state.scopes) != maxObservedScopes || state.scopes[0].Path != fmt.Sprintf("folder-%d/file.go", maxObservedScopes+9) {
-		t.Fatal("observed scopes did not retain a bounded recent working set")
+	if !ok || len(state.scopes) != 1 || state.scopes[0].Path != "." {
+		t.Fatal("raw operand count expanded the retained policy working set")
 	}
 	for _, scope := range []agentpolicy.Scope{
 		{RootID: "detached", RootPath: root.Path, Path: "file.go"},
 		{RootID: root.ID, RootPath: t.TempDir(), Path: "file.go"},
 		{RootID: root.ID, RootPath: root.Path, Path: "../escape.go"},
 	} {
-		if err := m.Observe(t.Context(), sess.ID, scope); err == nil {
+		if _, _, err := m.ObserveScopes(t.Context(), sess.ID, []agentpolicy.Scope{scope}); err == nil {
 			t.Fatalf("accepted an unbound policy scope: %+v", scope)
 		}
 	}
@@ -85,8 +91,16 @@ func TestPolicyTrustAndReadFailuresHaveSeparateOutcomes(t *testing.T) {
 		t.Fatal("disabled policy surface read repository files")
 	}
 	roots.disabled = false
-	if _, err := m.ResolveCurrent(t.Context(), sess, nil); !errors.Is(err, roots.err) {
+	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
+	testutil.FailErr(t, "unavailable policy diagnostics", err)
+	if delivery.Status != StatusUnavailable || len(delivery.Messages) != 1 || len(delivery.Messages[0].ContentParts) != 2 {
 		t.Fatal("root failure became an empty policy delivery")
+	}
+	if delivery.Messages[0].ContentParts[1].Authority != api.ContentAuthorityNone {
+		t.Fatal("source failure text acquired instruction authority")
+	}
+	if _, _, err := m.Current(t.Context(), sess, []agentpolicy.Scope{{RootID: roots.roots[0].ID, RootPath: roots.roots[0].Path, Path: "."}}); !errors.Is(err, roots.err) {
+		t.Fatal("mutation admission lost the source failure")
 	}
 	roots.err = nil
 	delivery, err = m.ResolveCurrent(t.Context(), sess, nil)
@@ -94,4 +108,27 @@ func TestPolicyTrustAndReadFailuresHaveSeparateOutcomes(t *testing.T) {
 	if delivery.Status != StatusNoPolicy {
 		t.Fatal("missing policy and disabled trust were conflated")
 	}
+}
+
+func TestUnavailableReadScopePreservesIndependentPolicyAndEffects(t *testing.T) {
+	m, sess, roots := policyFixture(t)
+	first, second := roots.roots[0], roots.roots[1]
+	roots.roots[0].Path = filepath.Join(first.Path, "unavailable")
+	writePolicy(t, second.Path, "AGENTS.md", "Independent policy")
+	history := []api.Message{
+		{ID: "request", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, Content: "Implement"},
+		observedPolicyMessage(sess.ProjectID, second.ID, "file.go"),
+	}
+	delivery, err := m.ResolveCurrent(t.Context(), sess, history)
+	testutil.FailErr(t, "partial policy delivery", err)
+	if delivery.Status != StatusUnavailable || len(delivery.Manifest.Files) != 1 || !strings.Contains(delivery.Messages[0].Content, "Independent policy") {
+		t.Fatal("one unavailable scope discarded independent guidance")
+	}
+	check, err := m.Bind(t.Context(), sess, delivery.Messages)
+	testutil.FailErr(t, "bind independent policy", err)
+	testutil.FailErr(t, "independent mutation alongside unavailable read", check(t.Context(), []agentpolicy.Target{
+		{RootID: first.ID, Path: "file.go"},
+		{RootID: second.ID, Path: "file.go", Mutation: true},
+	}))
+	policyReject(t, check(t.Context(), []agentpolicy.Target{{RootID: first.ID, Path: "file.go", Mutation: true}}), "POLICY_CONTEXT_UNAVAILABLE")
 }

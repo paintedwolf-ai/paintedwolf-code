@@ -112,7 +112,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
-	if err := tc.CheckPathPolicy(ctx, invocation.Scope.Directory, facts.Contract.MutatesWorld()); err != nil {
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, facts.Contract.MutatesWorld()); err != nil {
 		return result, err
 	}
 	values := effect.Arguments
@@ -398,6 +398,9 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 		return err
 	}
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
+		return err
+	}
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, definition.ReadOnlyFacts().Contract.MutatesWorld()); err != nil {
 		return err
 	}
 	return checkLiveProgramProgress(ctx, progressFacts, bound)

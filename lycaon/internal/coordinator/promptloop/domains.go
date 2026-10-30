@@ -35,7 +35,7 @@ type ContextDeps struct {
 	RootSessionID                   func(ctx context.Context, sessionID string) string
 	Policy                          toolpolicy.Engine
 	CommitWorkerContext             func(context.Context, string, string) error
-	BindAgentPolicy                 func(context.Context, *api.Session, []api.Message) (func(context.Context, string, string, bool) error, error)
+	BindAgentPolicy                 func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyCheck, error)
 	BuildMessages                   func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
 	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string

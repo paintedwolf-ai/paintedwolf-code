@@ -75,16 +75,24 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 			Prompts:          pe,
 			WebSearchEnabled: func() bool { return webEnabled },
 			LoadedTools: func(string) map[string]bool {
-				return map[string]bool{"http_request": true, "fetch_url": true}
+				return map[string]bool{"command": true, "fetch_url": true}
 			},
 		})
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{PhaseCoordinatorSurface: "implement_investigate"}}
-		out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+		out, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 			map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 		testutil.FailErr(t, "render loaded tool guidance", err)
-		if !strings.Contains(out, "Use `http_request` for APIs") {
-			t.Fatal("loaded HTTP tool guidance missing")
+		floor, err := prompts.LoadCoordinatorSurfaceFloor(profile.SurfaceID)
+		testutil.FailErr(t, "load actual surface floor", err)
+		loadable, err := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
+		testutil.FailErr(t, "load actual surface candidates", err)
+		offered, err := prompts.OfferedTools(floor, loadable, map[string]bool{"command": true, "fetch_url": true})
+		testutil.FailErr(t, "resolve offered schemas", err)
+		procedures, err := inject.RenderToolProceduresBlock(t.Context(), prompts.NewInjectRenderer(pe), sess.ID, profile.SurfaceID, offered, nil)
+		testutil.FailErr(t, "render actual schema procedures", err)
+		if !strings.Contains(procedures, "native `curl` in `command`") || strings.Contains(procedures, "Use `http_request`") {
+			t.Fatalf("command HTTP procedure missing or retired tool advertised: %s", procedures)
 		}
 		if strings.Contains(out, "Use `fetch_url` for readable web research") != webEnabled {
 			t.Fatalf("fetch guidance does not match web enabled=%v", webEnabled)

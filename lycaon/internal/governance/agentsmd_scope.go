@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -24,34 +25,43 @@ type ScopedAgentsMD struct {
 func ResolveScopes(ctx context.Context, scopes []agentpolicy.Scope, maxBodyBytes int) ([]ScopedAgentsMD, error) {
 	var files []ScopedAgentsMD
 	seen := map[agentpolicy.Revision]bool{}
+	failedReads := map[agentpolicy.Revision]error{}
+	var failures []error
 	for _, scope := range scopes {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return files, err
 		}
 		root, path, err := policyLocation(scope)
 		if err != nil {
-			return nil, err
+			failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: err})
+			continue
 		}
 		chain, err := ResolveChainMetadata(root, path)
 		if err != nil {
-			return nil, err
+			failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: err})
+			continue
 		}
 		for _, file := range chain {
 			revision := agentpolicy.Revision{RootID: scope.RootID, RootPath: root, Path: file.Path}
 			if seen[revision] {
+				if prior := failedReads[revision]; prior != nil {
+					failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: prior})
+				}
 				continue
 			}
 			seen[revision] = true
 			content, readErr := readAgentsMDBody(root, file.Path, maxBodyBytes)
 			if readErr != nil {
-				return nil, readErr
+				failedReads[revision] = readErr
+				failures = append(failures, &agentpolicy.ScopeError{Scope: scope, Cause: readErr})
+				continue
 			}
 			digest := sha256.Sum256([]byte(content))
 			revision.Digest = hex.EncodeToString(digest[:])
 			files = append(files, ScopedAgentsMD{Revision: revision, Content: CapAgentsMDBody(content, normalizeAgentsMDMaxBodyBytes(maxBodyBytes), file.Path)})
 		}
 	}
-	return files, nil
+	return files, errors.Join(failures...)
 }
 
 func policyLocation(scope agentpolicy.Scope) (string, string, error) {

@@ -384,6 +384,15 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		spec = resolved
 	}
+	mode := prepared.Mode
+	if mode == "" {
+		mode = request.EffectMode
+	}
+	mode = selectEffectMode(spec, mode)
+	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
+	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, request, d.paths.Cwd().Abs, prepared.Review); err != nil {
+		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
 	tool := prepared.Tool
 	if tool == "" {
 		tool = operation.Tool
@@ -403,11 +412,6 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	mode := prepared.Mode
-	if mode == "" {
-		mode = request.EffectMode
-	}
-	mode = selectEffectMode(spec, mode)
 	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
@@ -448,6 +452,16 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				}
 				actual.Review.OperationID = operationDef.Facts().Identity
 				actual.Review.PathTargets = absolutePathTargets(frame.Cwd().Abs, admitted.Host.SessionScratchDir, actual.Review.PathTargets)
+			}
+			actualMode := actual.Mode
+			if actualMode == "" {
+				actualMode = mode
+			}
+			if err := d.checkPreparedPolicy(ctx, admitted, spec, actualMode, request, frame.Cwd().Abs, actual.Review); err != nil {
+				if disclosed == nil && actual.Release != nil {
+					actual.Release()
+				}
+				return toolexecution.PreparedNativeEffect{}, err
 			}
 			if prepared.DeferredSource && disclosed == nil && !reflect.DeepEqual(actual.Review.PathTargets, review.PathTargets) {
 				prior := actual.Review
@@ -499,6 +513,9 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				if disclosed == nil && actual.Release != nil {
 					defer actual.Release()
 				}
+				if err := d.checkPreparedPolicy(ctx, tc, spec, actualMode, request, frame.Cwd().Abs, actual.Review); err != nil {
+					return ownerFailure(err), err
+				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					tracker.w = nonNilWriter(streams.Error)
 					streams.Error = tracker
@@ -533,10 +550,13 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 // builtin, on this frame.
 func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	request.OperationID = spec.Name
-	if prepared.Mode != "" && request.EffectMode == "" {
+	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd().Abs, prepared.Review); err != nil {
+			return ownerFailure(err), err
+		}
 		noteJobNative(ctx, request.Argv.Values())
 		return prepared.Invoke(ctx, tc, streams)
 	})

@@ -38,6 +38,7 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 	scanInFlight := func(ctx context.Context, id string) bool {
 		return scanWait.InFlight != nil && scanWait.InFlight(ctx, id)
 	}
+	m.Coordinator.PolicyIndex.SetWorkspaceRoots(m.Workers.Workspaces.BoardRoots)
 	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
 	m.Coordinator.Tools = &promptsource.Tools{
 		Results: &promptsource.ToolResults{Batch: m.Coordinator.Batch, Guards: m.Coordinator.Guards,

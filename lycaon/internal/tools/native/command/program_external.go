@@ -75,6 +75,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
+	if err := tctx.CheckPathPolicy(ctx, cwd, true); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
+	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)

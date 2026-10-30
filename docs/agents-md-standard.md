@@ -64,6 +64,30 @@ At session create, or when a project directory is set, the sidecar warms an `AGE
 2. **Path-scoped turns** — `BuildChainInject` resolves the ancestor chain for the active relative path, root-first and nearest-last, with `<root>/.paintedwolf/AGENTS.md` appended last so the overlay wins. It re-reads and injects the bounded current body for every completion, so a human edit takes effect on the next turn. A worker with no narrower scope receives the root chain.
 3. **Transcript compaction** — AGENTS guidance is assembled outside persisted transcript history and rebuilt from source for every completion. Compaction never summarizes or selectively preserves repository policy.
 
+### Resolved command scopes
+
+Policy delivery uses attached root identity, the current physical workspace, and
+resolved operation or source-observation paths. Raw command text and historical
+`path` arguments do not select a command's policy. Each scoped block identifies
+its root and jurisdiction; shared ancestors appear once, with nested policies
+and the root overlay retaining their precedence. Write workers use their private
+branch roots through the same workspace owner as tool execution.
+
+The final prepared model request determines its immutable policy manifest.
+Reached native mutations check the current applicable revisions before review
+and publication. External launches check their resolved working directory;
+arbitrary external arguments do not establish complete file-level policy coverage.
+New or changed policy returns `POLICY_CONTEXT_CHANGED` before the affected effect.
+The next completion receives the reached scope, and the model chooses a fresh
+operation. Earlier completed effects are retained and must not be replayed.
+Held operations retain their proposing request's manifest.
+
+Unavailable policy is reported separately from disabled trust and absent policy.
+Read-only investigation remains available; affected mutations remain unexecuted
+until current guidance is available and delivered. Policy source errors are host
+data, not instructions. Cancellation retains its ordinary lifecycle meaning.
+
+
 ```mermaid
 flowchart TD
     create["Session create /<br/>project directory set"] --> applies{"agents_md surface applies?<br/>device enable ∧ project enable"}

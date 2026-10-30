@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/governance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // injectRenderer renders against shipped prompts with no host overlay: the
@@ -169,49 +168,6 @@ func TestBuildChainInjectDegradesOversizedHeadedBody(t *testing.T) {
 	}
 	if !strings.Contains(block, "more section(s) not shown") {
 		t.Fatalf("degraded inject missing omission count:\n%s", block)
-	}
-}
-
-func TestExtractPathScopedToolPaths(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-			{Name: "grep", Args: map[string]any{"pattern": "foo"}},
-		}},
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-			{Name: "write", Args: map[string]any{"path": "lycaon/foo.go"}},
-		}},
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-			{Name: "read", Args: map[string]any{"path": "go.mod"}},
-		}},
-	}
-	got := governance.ExtractPathScopedToolPaths(history)
-	want := []string{"go.mod", "lycaon/foo.go"}
-	if len(got) != len(want) {
-		t.Fatalf("paths = %v want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("paths = %v want %v", got, want)
-		}
-	}
-}
-
-func TestExtractPathScopedToolPathsCoversAllNativeFileShapes(t *testing.T) {
-	history := []api.Message{{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-		{Name: "code_rewrite", Args: map[string]any{"paths": []any{"pkg", "cmd/main.go"}}},
-		{Name: "delete", Args: map[string]any{"paths": []any{"docs/old.md"}}},
-		{Name: "copy", Args: map[string]any{"copies": []any{map[string]any{"from": "a.go", "to": "pkg/a.go"}}}},
-		{Name: "move", Args: map[string]any{"moves": []any{map[string]any{"from": "pkg/a.go", "to": "pkg/b.go"}}}},
-	}}}
-	got := governance.ExtractPathScopedToolPaths(history)
-	want := []string{"pkg", "cmd/main.go", "docs/old.md", "a.go", "pkg/a.go", "pkg/b.go"}
-	if len(got) != len(want) {
-		t.Fatalf("paths = %v want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("paths = %v want %v", got, want)
-		}
 	}
 }
 

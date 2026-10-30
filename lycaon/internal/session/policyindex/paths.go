@@ -13,7 +13,7 @@ import (
 )
 
 func (m *Service) forPaths(ctx context.Context, sess *api.Session, paths []string) (api.Message, error) {
-	roots, err := m.roots.Roots(ctx, sess)
+	roots, err := m.sessionRoots(ctx, sess)
 	if err != nil {
 		return api.Message{}, err
 	}
@@ -43,5 +43,5 @@ func (m *Service) forPaths(ctx context.Context, sess *api.Session, paths []strin
 	}
 	message.Content = strings.Join(content, "\n\n")
 	message.SourceContext = sourceref.Merge(sources...)
-	return m.recordDelivery(message, delivery.Manifest.Files...), nil
+	return m.recordDeliveries([]api.Message{message}, [][]agentpolicy.Revision{delivery.Manifest.Files})[0], nil
 }
