@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "command-search-throughput",
   "disposition": "retain",
-  "reason": "Retain the 419-line grep/rg configuration module. It parses the declared utility grammar, validates interacting output modes and compiles one immutable matcher with the invocation resource port. Traversal, worker lifetime, record expansion and output transport have separate owners. The remaining mode decisions are cohesive and smaller than the starting module; focused command differential, ordered-worker and resource contracts support this measured ceiling.",
+  "reason": "Retain the 419-line grep/rg configuration module. It parses the declared utility grammar, validates interacting output modes and compiles one immutable matcher with the invocation resource port. Traversal, worker lifetime, record expansion and output transport have separate owners. The remaining mode decisions are cohesive; focused command differential, ordered-worker and resource contracts support this measured ceiling.",
   "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
   "ceiling": 419,
   "boundaries": {
