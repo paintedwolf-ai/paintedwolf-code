@@ -29,6 +29,15 @@ func runWc(inv *invocation) error {
 	if !selected["-l"] && !selected["-w"] && !selected["-m"] && !selected["-c"] && !selected["-L"] {
 		selected["-l"], selected["-w"], selected["-c"] = true, true, true
 	}
+	var metrics survey.CountMetrics
+	for flag, metric := range map[string]survey.CountMetrics{
+		"-l": survey.CountLines, "-w": survey.CountWords,
+		"-m": survey.CountChars, "-L": survey.CountDisplayWidth,
+	} {
+		if selected[flag] {
+			metrics |= metric
+		}
+	}
 	scalars := selected["-m"] || selected["-L"]
 	named := len(inv.operands()) > 0
 	type wcRow struct {
@@ -45,7 +54,7 @@ func runWc(inv *invocation) error {
 		if in == nil {
 			continue
 		}
-		var counter survey.Counter
+		counter := survey.NewCounter(metrics)
 		if in.stream != nil {
 			if _, err := io.Copy(&counter, in.stream); err != nil {
 				return err
