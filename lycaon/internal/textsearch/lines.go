@@ -62,6 +62,7 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 	if opts.MaxSelected == 0 {
 		return 0, nil
 	}
+	reject := newBufferRejector(sel, opts)
 	trailing := false
 	separator := byte('\n')
 	if opts.NullData {
@@ -81,6 +82,14 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		}
 		if trailing && s.after == 0 {
 			break
+		}
+		if !trailing && reject != nil {
+			skipped, records := reject.skip(ctx, input, separator, int64(start), maxBytes)
+			if skipped > 0 {
+				start += skipped
+				number += records - 1
+				continue
+			}
 		}
 		raw, readErr := input.read(separator, int64(start), maxBytes, onExceed)
 
