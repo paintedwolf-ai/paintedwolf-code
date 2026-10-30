@@ -376,11 +376,10 @@ Unrelated mutations do not erase the repetition history of a progress no-op.
 Only a new user-request boundary resets that history independently of progress.
 
 Successful worker finishes publish a reconciliation token and exact job IDs in
-the current snapshot. A pending deliverable's explicit terminal transition can
-record its result. When the result is already represented or covers only part of
-a deliverable, submit `reconciliation_token` with `expected_revision` to acknowledge
-those finishes without closing unfinished rows or rewriting labels. A stale token
-returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
+the current snapshot. Submit `reconciliation_token` with `expected_revision`
+to acknowledge those finishes without closing unfinished rows or rewriting labels.
+Document transitions never consume worker-finish obligations; only the exact
+current token does. A stale token returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
 If finishes change during the document write, the result preserves the document's
 outcome and returns the new pending reconciliation state. Acknowledgement never
 creates a document revision by itself.

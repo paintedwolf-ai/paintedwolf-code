@@ -7,20 +7,18 @@ requires:
     - tool
   facts:
     - paintedwolf.pending
-    - paintedwolf.progress_closed_beyond_baseline
-    - paintedwolf.progress_reconciled_since_arm
     - paintedwolf.progress_closure_armed
     - paintedwolf.progress_gated_tool
     - paintedwolf.progress_open_items
     - paintedwolf.settled_work
-when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool && paintedwolf.progress_open_items > 0 && !paintedwolf.progress_reconciled_since_arm
+when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool
 effect: block
 copy:
-  what: 'Worker output completed while {{ paintedwolf.pending }} progress step(s) were open, and you called **`{{ tool }}`** before recording it{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
+  what: 'Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
   cause: The worker finishes have not been acknowledged in current progress state.
   why: Completed work that the checklist does not show hides real progress from the user.
   fix: >-
-    Call `update_progress` to record the completed work. Close only deliverables actually finished.
+    Call `update_progress` with the current reconciliation_token and expected_revision to acknowledge the listed worker finishes. Close only deliverables actually finished.
     If it finished only part of a row, revise the plan honestly and copy the current snapshot's
     reconciliation_token and expected_revision to acknowledge its listed worker jobs.
     Keep unfinished rows pending. An unchanged document can acknowledge that token;

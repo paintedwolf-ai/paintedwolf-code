@@ -34,6 +34,9 @@ func (m *Service) progressPrerequisites(ctx context.Context, sess *api.Session) 
 	if m.progress != nil {
 		state.Content = m.progress.Get(ctx, state.RootSessionID)
 	}
+	if m.ProgressClosure != nil {
+		state.Reconciliation = m.ProgressClosure.Reconciliation(state.RootSessionID)
+	}
 	state.ReviewLoopActive = m.workflows != nil && m.workflows.Policy != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
 	return state
 }

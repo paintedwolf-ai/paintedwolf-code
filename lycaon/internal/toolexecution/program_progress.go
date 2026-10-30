@@ -17,15 +17,9 @@ func CheckOperationProgress(definition toolcontract.OperationDefinition, invocat
 		return fmt.Errorf("progress admission requires frozen operation")
 	}
 	facts := definition.Facts()
-	required := false
-	switch facts.ProgressGate {
-	case toolcontract.ProgressRequired:
-		required = true
-	case toolcontract.ProgressNotRequired:
-	case toolcontract.ProgressExistingAdmission:
-		required = progress.IsProgressGatedTool(facts.Identity)
-	default:
-		return fmt.Errorf("unknown operation progress policy")
+	required, err := operationProgressRequired(facts)
+	if err != nil {
+		return err
 	}
 	if !required || !progress.PrerequisiteMissing(content, workerChild, reviewLoopActive) {
 		return nil
@@ -38,6 +32,9 @@ func CheckOperationProgress(definition toolcontract.OperationDefinition, invocat
 func CheckOperationProgressState(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, state progress.PrerequisiteState) error {
 	if state.SessionID != invocation.SessionID || state.RootSessionID == "" {
 		return fmt.Errorf("operation progress state does not match invocation")
+	}
+	if err := checkProgressReconciliation(definition, invocation, state); err != nil {
+		return err
 	}
 	return CheckOperationProgress(definition, invocation, state.Content, state.WorkerChild, state.ReviewLoopActive)
 }
@@ -58,6 +55,9 @@ func checkReachedMutationProgress(ctx context.Context, provider ProgramProgressF
 	}
 	if state.SessionID != invocation.SessionID || state.RootSessionID == "" {
 		return fmt.Errorf("mutation progress state does not match invocation")
+	}
+	if err := checkProgressReconciliation(definition, invocation, state); err != nil {
+		return err
 	}
 	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
 		return nil

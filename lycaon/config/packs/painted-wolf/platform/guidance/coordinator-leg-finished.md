@@ -1,4 +1,4 @@
-Leg finished — review envelope and host digest; chain `task()` per policy.{% if progress_closure_armed %} This finish latched the checklist with **{{ progress_open_items }}** row(s) open: `update_progress` before that `task()`, or it returns `Code: PROGRESS_ITEM_NOT_CLOSED`.{% endif %}
+Leg finished — review envelope and host digest; chain `task()` per policy.{% if progress_closure_armed %} This finish latched the checklist with **{{ progress_open_items }}** row(s) open: `update_progress` with the current snapshot reconciliation token before that `task()`, or it returns `Code: PROGRESS_ITEM_NOT_CLOSED`.{% endif %}
 {% if worker_digest %}
 {{ worker_digest }}
 {% endif %}

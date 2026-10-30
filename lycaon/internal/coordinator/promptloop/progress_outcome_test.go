@@ -33,3 +33,19 @@ func TestNeutralChecklistCannotHideARejectedOperation(t *testing.T) {
 		t.Fatalf("no-op masked rejected work: %+v", result)
 	}
 }
+
+func TestProgressClassificationPreservesDeclaredResultFraming(t *testing.T) {
+	for _, body := range []string{`{"status":"unchanged","state_changed":false}`, `{"status":"updated","state_changed":true}`, `{"status":"unchanged","reconciliation_status":"acknowledged"}`} {
+		for _, decoration := range []struct{ prefix, suffix string }{{"", ""}, {"[progress#1]\n", "\n\n>>> Tool feedback\nRecorded diagnostic"}} {
+			plain := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "update_progress", Content: body, Outcome: api.ToolResultOutcomeCompleted}}}
+			expected := classifyBatchProgress(plain, "assistant")
+			plain[0].ToolResult.Content = decoration.prefix + body + decoration.suffix
+			if actual := classifyBatchProgress(plain, "assistant"); actual != expected {
+				t.Fatalf("declared framing changed outcome: plain=%+v decorated=%+v", expected, actual)
+			}
+			if progressResultAdvanced(decoration.prefix+body+decoration.suffix) != expected.Advanced {
+				t.Fatal("raw and transcript progress outcomes diverged")
+			}
+		}
+	}
+}

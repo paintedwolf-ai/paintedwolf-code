@@ -30,11 +30,8 @@ func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
 func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
-// Arm latches the checklist after a worker settles its
-// deliverable. Only a successful finish arms it: a partial, failed, or held
-// leg has closed nothing, and its resume is the same deliverable continuing.
-// The first baseline holds until the checklist changes; later successes join
-// the list of finishes the reconciliation must account for.
+// Arm records a successful worker finish against the current checklist.
+// Later finishes join the same set until explicit acknowledgement.
 func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if m == nil || m.progress == nil {
 		return
@@ -47,11 +44,10 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	defer m.mu.Unlock()
 	content := m.progress.Get(ctx, rootID)
 	done, pending, na := progress.CloseCounts(content)
-	if pending == 0 {
-		m.baselines.Delete(rootID)
+	baseline, armed := m.baselines.Load(rootID)
+	if pending == 0 && !armed {
 		return
 	}
-	baseline, armed := m.baselines.Load(rootID)
 	if !armed {
 		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content}
 	}
@@ -97,39 +93,4 @@ func (m *Service) Baseline(rootID string) (baseline guard.ProgressClosureBaselin
 		return guard.ProgressClosureBaseline{}, false
 	}
 	return exp, true
-}
-
-func (m *Service) ClearSatisfied(rootID, progressContent string, baseline guard.ProgressClosureBaseline) {
-	if m == nil {
-		return
-	}
-	rootID = strings.TrimSpace(rootID)
-	if rootID == "" {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	current, armed := m.baselines.Load(rootID)
-	if !armed || reconciliation(rootID, current).Token != reconciliation(rootID, baseline).Token {
-		return
-	}
-	if progress.ClassifyTransitions(baseline.Content, progressContent).Closed {
-		m.baselines.Delete(rootID)
-	}
-}
-
-// Unchanged checklist writes keep the reconciliation latch armed.
-func (m *Service) AfterWrite(ctx context.Context, rootID string) {
-	if m == nil || m.progress == nil {
-		return
-	}
-	rootID = strings.TrimSpace(rootID)
-	if rootID == "" {
-		return
-	}
-	baseline, armed := m.Baseline(rootID)
-	if !armed {
-		return
-	}
-	m.ClearSatisfied(rootID, m.progress.Get(ctx, rootID), baseline)
 }

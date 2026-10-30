@@ -37,14 +37,14 @@ func TestObserveProgressItemNotClosedBeforeDispatch_allowsRead(t *testing.T) {
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_allowsAfterClose(t *testing.T) {
+func TestObserveProgressItemNotClosedBeforeDispatch_terminalDocumentStillNeedsAcknowledgement(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	armContent := "## Progress\n- [ ] ship\n- [ ] verify\n"
 	content := "## Progress\n- [x] ship\n- [ ] verify\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 0, Content: armContent}, true, gc)
-	if hasRejectCode(gc, ProgressItemNotClosedCode) {
-		t.Fatal("closed baseline advance must not observe reject")
+	if !hasRejectCode(gc, ProgressItemNotClosedCode) {
+		t.Fatal("document transition bypassed worker acknowledgement")
 	}
 }
 
@@ -54,7 +54,7 @@ func TestObserveProgressItemNotClosedBeforeDispatch_relabelDoesNotAcknowledgeWor
 	current := "- [x] survey with more detail\n- [ ] challenge claims\n- [ ] report"
 	gc := oar.NewGuardContext()
 	ObserveProgressItemNotClosedBeforeDispatch(sess, current, "task", ProgressClosureBaseline{Closed: 1, Content: baseline}, true, gc)
-	if !hasRejectCode(gc, ProgressItemNotClosedCode) || gc.Progress.ProgressReconciledSinceArm {
+	if !hasRejectCode(gc, ProgressItemNotClosedCode) {
 		t.Fatal("label rewrite acknowledged a worker result")
 	}
 }

@@ -16,7 +16,7 @@ import (
 
 type RepositoryChanges interface{ Changed(context.Context, string) }
 
-func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, settled func(context.Context, string), repository RepositoryChanges, invalidateAge func(string), service *llm.Service) func(context.Context) error {
+func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, repository RepositoryChanges, invalidateAge func(string), service *llm.Service) func(context.Context) error {
 	var work workscope.Group
 	if service != nil {
 		service.Lifecycle = utilityLanePublisher{pub: publisher}
@@ -47,7 +47,6 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		publisher.PublishProgress(ctx, ev.SessionID, progress.BumpRevision(ev.SessionID))
 		coalescer.Record(ev.SessionID, ev.Prev, progressStore.Get(ctx, ev.SessionID))
 		emitProgressCompletion(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID)
-		settled(ctx, ev.SessionID)
 	}))
 	return func(ctx context.Context) error {
 		work.Stop()

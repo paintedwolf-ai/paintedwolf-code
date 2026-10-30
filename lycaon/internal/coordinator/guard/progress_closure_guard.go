@@ -11,12 +11,12 @@ import (
 const ProgressItemNotClosedCode = "PROGRESS_ITEM_NOT_CLOSED"
 
 // ProgressClosureBaseline snapshots the checklist when the closure latch arms.
-// Terminal deliverable transitions satisfy the reconciliation latch.
+// Only the reconciliation owner acknowledges finished worker jobs.
 type ProgressClosureBaseline struct {
 	Closed  int    // done + n/a rows at arm time
 	Content string // stored checklist bytes at arm time
-	// Settled names the successful finishes the checklist has not absorbed.
 	JobIDs  []string
+	// Settled names worker finishes for rejection details.
 	Settled []string
 }
 
@@ -42,12 +42,11 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	gc.Progress.ProgressOpenItems = int64(pending)
 	closed := done + na
 	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
-	gc.Progress.ProgressReconciledSinceArm = progress.ClassifyTransitions(baseline.Content, progressContent).Closed
-	if pending > 0 && !gc.Progress.ProgressReconciledSinceArm {
-		gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
-			"tool":         strings.TrimSpace(tool),
-			"pending":      pending,
-			"settled_work": append([]string(nil), baseline.Settled...),
-		})
-	}
+	// Document changes do not consume worker-finish obligations.
+	gc.Progress.ProgressReconciledSinceArm = progressContent != baseline.Content
+	gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
+		"tool":         strings.TrimSpace(tool),
+		"pending":      pending,
+		"settled_work": append([]string(nil), baseline.Settled...),
+	})
 }

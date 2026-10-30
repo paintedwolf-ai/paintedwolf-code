@@ -74,3 +74,21 @@ func TestOperationProgressRejectsCrossSessionState(t *testing.T) {
 		t.Fatal("missing progress root admitted")
 	}
 }
+
+func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.T) {
+	invocation, _ := frameFixture(t)
+	definition := nativeDefinition(t, "write")
+	provider := fixedMutationProgress{progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID, Content: "- [ ] Deliver"}}
+	testutil.FailErr(t, "admit planned operation", CheckOperationProgressState(definition, invocation, provider.state))
+	provider.state.Reconciliation = &progress.Reconciliation{Token: "new-finish", Jobs: []string{"worker-one"}}
+	err := checkReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt")
+	var refused *toolrejection.ToolReject
+	if !errors.As(err, &refused) || refused.Code != "PROGRESS_ITEM_NOT_CLOSED" {
+		t.Fatalf("late finish bypassed write-door refresh: %v", err)
+	}
+	for _, name := range []string{"read", "delete"} {
+		testutil.FailErr(t, "preserve ungated operation", CheckOperationProgressState(nativeDefinition(t, name), invocation, provider.state))
+	}
+	provider.state.Reconciliation = nil
+	testutil.FailErr(t, "admit acknowledged write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt"))
+}

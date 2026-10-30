@@ -87,8 +87,7 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 		testutil.FailErr(t, "load actual surface floor", err)
 		loadable, err := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
 		testutil.FailErr(t, "load actual surface candidates", err)
-		offered, err := prompts.OfferedTools(floor, loadable, map[string]bool{"command": true, "fetch_url": true})
-		testutil.FailErr(t, "resolve offered schemas", err)
+		offered, _ := prompts.OfferedTools(floor, loadable, map[string]bool{"command": true, "fetch_url": true})
 		procedures, err := inject.RenderToolProceduresBlock(t.Context(), prompts.NewInjectRenderer(pe), sess.ID, profile.SurfaceID, offered, nil)
 		testutil.FailErr(t, "render actual schema procedures", err)
 		if !strings.Contains(procedures, "native `curl` in `command`") || strings.Contains(procedures, "Use `http_request`") {

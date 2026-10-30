@@ -83,12 +83,6 @@ func TestDocumentTransitionAndWorkerAcknowledgementRemainDistinct(t *testing.T) 
 	view := owner.Reconciliation("session")
 	before, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read current progress", err)
-	release := progress.RegisterWriteObserver(func(ctx context.Context, event progress.WriteEvent) {
-		if event.SessionID == "session" {
-			owner.AfterWrite(ctx, event.SessionID)
-		}
-	})
-	defer release()
 	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, owner)
 	body, err := handler(t.Context(), map[string]any{"content": "- [x] Deliver\n- [ ] Verify", "expected_revision": before.Revision, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
 	testutil.FailErr(t, "record terminal deliverable and finish", err)
@@ -100,5 +94,74 @@ func TestDocumentTransitionAndWorkerAcknowledgementRemainDistinct(t *testing.T) 
 	testutil.FailErr(t, "decode distinct outcomes", json.Unmarshal([]byte(body), &result))
 	if result.Status != "updated" || !result.Closed || result.Ack != "acknowledged" || owner.Reconciliation("session") != nil {
 		t.Fatalf("transition acknowledgement: %s", body)
+	}
+}
+
+type interleavingProgressStore struct {
+	progress.Store
+	before func()
+}
+
+func (s interleavingProgressStore) Update(ctx context.Context, id string, change func(progress.Snapshot) (string, error)) (progress.Snapshot, error) {
+	s.before()
+	return s.Store.Update(ctx, id, change)
+}
+
+func TestNewWorkerFinishDuringDocumentCommitRemainsUnacknowledged(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed pending work", store.Set("session", "- [ ] Deliver\n- [ ] Verify"))
+	owner := progressclosure.New()
+	owner.SetProgress(store)
+	owner.Arm(t.Context(), "session", "worker-one")
+	observed := owner.Reconciliation("session")
+	before, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "observe progress", err)
+	writer := interleavingProgressStore{Store: store, before: func() { owner.Arm(t.Context(), "session", "worker-two") }}
+	publications := 0
+	release := progress.RegisterWriteObserver(func(_ context.Context, event progress.WriteEvent) {
+		if event.SessionID == "session" {
+			publications++
+		}
+	})
+	defer release()
+	handler := reporting.ProgressHandler(writer, func(_ context.Context, id string) string { return id }, owner)
+	body, err := handler(t.Context(), map[string]any{"content": "- [x] Deliver\n- [ ] Verify", "expected_revision": before.Revision, "reconciliation_token": observed.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "publish document with concurrent finish", err)
+	var result struct {
+		Changed  bool              `json:"document_changed"`
+		Status   string            `json:"reconciliation_status"`
+		Snapshot progress.Snapshot `json:"snapshot"`
+	}
+	testutil.FailErr(t, "decode independent outcomes", json.Unmarshal([]byte(body), &result))
+	if !result.Changed || result.Status != "changed" || publications != 1 || store.Get(t.Context(), "session") != "- [x] Deliver\n- [ ] Verify" {
+		t.Fatalf("document outcome was lost: %s events=%d", body, publications)
+	}
+	pending := owner.Reconciliation("session")
+	if pending == nil || len(pending.Jobs) != 2 || pending.Token == observed.Token || result.Snapshot.Reconciliation == nil || result.Snapshot.Reconciliation.Token != pending.Token {
+		t.Fatalf("new finish was consumed by old token: %s", body)
+	}
+}
+
+func TestFinishAfterCommitSurvivesAnOlderAcknowledgement(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed deliverable", store.Set("session", "- [ ] Deliver"))
+	owner := progressclosure.New()
+	owner.SetProgress(store)
+	owner.Arm(t.Context(), "session", "worker-one")
+	observed := owner.Reconciliation("session")
+	before, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "observe plan", err)
+	release := progress.RegisterWriteObserver(func(ctx context.Context, event progress.WriteEvent) {
+		if event.SessionID == "session" {
+			owner.Arm(ctx, "session", "worker-two")
+		}
+	})
+	defer release()
+	update, err := progress.PrepareAuthorUpdate("- [x] Deliver")
+	testutil.FailErr(t, "prepare terminal document", err)
+	result, err := update.ExpectRevision(before.Revision).ExpectReconciliation(observed.Token).Apply(t.Context(), store, "session", owner)
+	testutil.FailErr(t, "commit document before new finish", err)
+	if !result.Updated || result.ReconciliationStatus != "changed" || result.Snapshot.Reconciliation == nil || len(result.Snapshot.Reconciliation.Jobs) != 2 || !progress.AllTerminal(result.Snapshot.Content) {
+		t.Fatalf("postcommit finish was consumed: %+v", result)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,8 @@ func progressResultAdvanced(output string) bool {
 		StateChanged   bool   `json:"state_changed"`
 		Reconciliation string `json:"reconciliation_status"`
 	}
-	return json.Unmarshal([]byte(output), &result) == nil && (result.StateChanged || result.Reconciliation == "acknowledged")
+	_, body, _, ok := hostmarker.SplitToolJSONBody(output)
+	return ok && json.Unmarshal([]byte(body), &result) == nil && (result.StateChanged || result.Reconciliation == "acknowledged")
 }
 
 type batchProgressOutcome struct{ Advanced, Blocked bool }
