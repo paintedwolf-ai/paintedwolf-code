@@ -4,10 +4,11 @@ package textutil
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"testing"
 )
 
 type observedSedCompiler struct {

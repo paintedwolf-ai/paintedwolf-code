@@ -255,7 +255,7 @@ func partialEffectsDefinition(t *testing.T, schemas *toolschema.Config, name str
 }
 
 // partialEffectsWrite exercises the real effect door and records its actual journal evidence.
-func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string]any, boundary *sandbox.Boundary, database db.ReadHandle, journal *string) toolexecution.NativeEffect {
+func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string]any, boundary *sandbox.Boundary, database db.Handle, journal *string) toolexecution.NativeEffect {
 	effect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: arguments}
 	effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
