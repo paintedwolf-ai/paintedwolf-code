@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
-// AuthorUpdate is the existing progress owner's prepared content. Preparation
-// validates without writing; callers validate their entire envelope before Apply.
-// Its private content prevents changes between validation and application.
+// AuthorUpdate validates a complete replacement before publication.
 type AuthorUpdate struct {
 	content          string
 	expectedRevision string
@@ -22,12 +21,14 @@ type AuthorUpdateRejection struct {
 
 func (e *AuthorUpdateRejection) Error() string { return e.Code }
 
-// PrepareAuthorUpdate applies the same structural policy to both command
-// composition and the retained update_progress interface.
+// PrepareAuthorUpdate validates checklist structure without writing.
 func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return AuthorUpdate{}, fmt.Errorf("content is required")
+	}
+	if utf8.RuneCountInString(content) > ContentMaxChars {
+		return AuthorUpdate{}, &AuthorUpdateRejection{Code: "PROGRESS_DOCUMENT_TOO_LARGE", Data: map[string]any{"max_characters": ContentMaxChars}}
 	}
 	if code, data, ok := validateAuthorProgressStructure(content); !ok {
 		return AuthorUpdate{}, &AuthorUpdateRejection{Code: code, Data: data}
@@ -37,10 +38,10 @@ func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 
 // AuthorUpdateResult is a progress-owner outcome, independent of program success.
 type AuthorUpdateResult struct {
-	Updated      bool     `json:"document_changed"`
-	StateChanged bool     `json:"state_changed"`
-	Reconciled   bool     `json:"reconciled"`
-	Snapshot     Snapshot `json:"snapshot"`
+	Updated           bool     `json:"document_changed"`
+	StateChanged      bool     `json:"state_changed"`
+	DeliverableClosed bool     `json:"deliverable_closed"`
+	Snapshot          Snapshot `json:"snapshot"`
 }
 
 // ExpectRevision binds a prepared replacement to an observed document.
@@ -49,8 +50,7 @@ func (u AuthorUpdate) ExpectRevision(revision string) AuthorUpdate {
 	return u
 }
 
-// Apply uses the already resolved root-session scope. Progress stays committed
-// if later program admission fails; this result supplies no effect authority.
+// Apply checks the observed revision and publishes one atomic replacement.
 func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (AuthorUpdateResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AuthorUpdateResult{}, err
@@ -66,14 +66,14 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 	snapshot, err := store.Update(ctx, root, func(current Snapshot) (string, error) {
 		previous = current.Content
 		if u.expectedRevision != "" && u.expectedRevision != current.Revision {
-			return "", &AuthorUpdateRejection{Code: "PROGRESS_REVISION_CHANGED", Data: map[string]any{"revision": current.Revision, "content": current.Content}}
+			return "", &AuthorUpdateRejection{Code: "PROGRESS_REVISION_CHANGED", Data: map[string]any{"snapshot": current}}
 		}
 		if code, data, ok := ValidateAuthorProgress(current.Content, u.content); !ok {
 			return "", &AuthorUpdateRejection{Code: code, Data: data}
 		}
 		result.Updated = current.Content != u.content
 		result.StateChanged = StateTransitions(current.Content, u.content)
-		result.Reconciled = Reconciles(current.Content, u.content)
+		result.DeliverableClosed = Reconciles(current.Content, u.content)
 		return u.content, nil
 	})
 	result.Snapshot = snapshot

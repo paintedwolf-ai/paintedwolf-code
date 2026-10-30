@@ -169,34 +169,6 @@ func (st *promptLoopTurnState) proseTurn(sess *api.Session, iterIndex, maxIter i
 	return guard.ProseTurn(sess, iterIndex, maxIter, st != nil && st.proseFinish)
 }
 
-// batchMadeProgress reports whether the batch advanced or ended its own cycle.
-func batchMadeProgress(history []api.Message, assistantMessageID string) bool {
-	assistantMessageID = strings.TrimSpace(assistantMessageID)
-	if assistantMessageID == "" {
-		return true
-	}
-	sawToolRow := false
-	for _, msg := range history {
-		if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {
-			continue
-		}
-		if strings.TrimSpace(msg.ToolResult.AssistantMessageID) != assistantMessageID {
-			continue
-		}
-		sawToolRow = true
-		if msg.ToolResult.Tool == "update_progress" && !progressResultAdvanced(msg.ToolResult.Content) {
-			continue
-		}
-		switch msg.ToolResult.Outcome {
-		case api.ToolResultOutcomeRejected, api.ToolResultOutcomeError:
-			continue
-		default:
-			return true
-		}
-	}
-	return !sawToolRow
-}
-
 // batchRejectCode returns the first structured rejection in the batch and the
 // tool it refused.
 func batchRejectCode(history []api.Message, assistantMessageID string) (code, tool string) {
@@ -298,10 +270,11 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if err != nil {
 			return out, err
 		}
-		if batchMadeProgress(st.history, assistantMsg.ID) {
+		batchProgress := classifyBatchProgress(st.history, assistantMsg.ID)
+		if batchProgress.Advanced {
 			st.clearBlockedStreak()
 			st.noteBatchLifecycle(judgeBatch(l.Context.Deps.Tools, st.history, assistantMsg.ID))
-		} else {
+		} else if batchProgress.Blocked {
 			code, tool := batchRejectCode(st.history, assistantMsg.ID)
 			if !schemaRejectExemptFromBlockedLoop(code) && st.noteBlockedBatch(code, tool) {
 				out.breakLoop = true

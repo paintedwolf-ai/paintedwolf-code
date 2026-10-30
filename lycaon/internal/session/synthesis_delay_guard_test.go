@@ -136,7 +136,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }))
+	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }, nil))
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}
 	pending := "## Progress\n- [ ] Build feature"

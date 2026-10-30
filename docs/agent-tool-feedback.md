@@ -359,22 +359,36 @@ Matched results explain how to recover their public records when no body is pres
 
 ### Progress reconciliation
 
-`update_progress` reports `status: updated` or `status: unchanged`; this is a
-checklist write result, not gate admission. An identical write adds no revision
-or progress event and does not reset tool-repetition tracking. Rewording an
-all-terminal checklist retains the same repetition identity until intervening
-work changes the state. Pending rows permit implementation. Each user request
-starts its own checklist; a completed checklist from an earlier request remains in
-the transcript as `progress_complete` and does not cover the follow-up request.
-When the stored document has no checklist rows for the current request,
-`update_progress` requires at least one open `- [ ]` deliverable row before
-progress-gated tools may run. If no work remains for the follow-up turn, the
-coordinator continues without establishing a checklist. A successful worker
-finish can latch reconciliation before further dispatch or editing; an unchanged
-checklist does not clear that latch. Closeout recovery keeps unfinished rows
-pending and directs the coordinator to continue with tools. Completed work is
-recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
-continuing progress updates use `surface_note`.
+`update_progress` returns the current bounded document snapshot, an opaque revision,
+`document_changed`, `state_changed`, `deliverable_closed`, and `reconciliation_status`.
+The revision includes the bound workflow run and persisted last-write identity;
+copy it into `expected_revision` when replacing the document. A stale replacement
+returns `PROGRESS_REVISION_CHANGED` with the current state and writes nothing.
+Document replacement is atomic with its revision check. These are additive
+`agent-public` tool arguments and results; the stored Markdown and database shape
+are unchanged.
+
+Establish a checklist once before the first governed mutation. Pending rows permit
+continued implementation without another progress call. Identical submissions
+create no document revision or progress event and do not count as workflow
+advancement. Rewording labels is a document change, not a deliverable transition.
+Unrelated mutations do not erase the repetition history of a progress no-op.
+Only a new user-request boundary resets that history independently of progress.
+
+Successful worker finishes publish a reconciliation token and exact job IDs in
+the current snapshot. A pending deliverable's explicit terminal transition can
+record its result. When the result is already represented or covers only part of
+a deliverable, submit `reconciliation_token` with `expected_revision` to acknowledge
+those finishes without closing unfinished rows or rewriting labels. A stale token
+returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
+If finishes change during the document write, the result preserves the document's
+outcome and returns the new pending reconciliation state. Acknowledgement never
+creates a document revision by itself.
+
+Each request owns its checklist. Completed progress remains in the transcript as
+`progress_complete` and does not cover a follow-up request. Establishing a new
+checklist requires at least one pending deliverable. A tool-free response ends
+the turn; use `surface_note` for updates while continuing.
 
 ### Rejected source candidates
 

@@ -1,0 +1,24 @@
+oar: '1.0'
+id: PROGRESS_DOCUMENT_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [update_progress]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_DOCUMENT_TOO_LARGE"
+effect: block
+copy:
+  what: The checklist exceeds its document size budget.
+  cause: The proposed progress document contains too many characters.
+  why: The stored and returned checklist must contain the complete submitted document.
+  fix: Keep one concise row per deliverable and shorten the document within the reported character limit.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress document exceeds size budget
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: update_progress
+  expect_contains: ['Code: PROGRESS_DOCUMENT_TOO_LARGE']

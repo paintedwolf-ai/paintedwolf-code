@@ -34,6 +34,10 @@ type ProgressReader interface {
 	Get(context.Context, string) string
 	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
+type ProgressReconciliationReader interface {
+	Reconciliation(string) *progress.Reconciliation
+}
+
 type VerificationFacts interface {
 	WorkflowGateState(context.Context, *api.Session, []api.Message) (bool, bool, bool, bool)
 	SourceVerifyCommand(context.Context, string) string
@@ -47,6 +51,7 @@ type State struct {
 	sessions       SessionMessages
 	workflows      WorkflowVars
 	progress       ProgressReader
+	reconciliation ProgressReconciliationReader
 	verification   VerificationFacts
 	workspace      WorkspacePath
 	overlayChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
@@ -68,6 +73,9 @@ func NewState(ports StatePorts) *State {
 func (m *State) SetWorkers(workers CycleLedger)      { m.workers = workers }
 func (m *State) SetWorkflows(workflows WorkflowVars) { m.workflows = workflows }
 func (m *State) SetProgress(progress ProgressReader) { m.progress = progress }
+func (m *State) SetProgressReconciliation(reader ProgressReconciliationReader) {
+	m.reconciliation = reader
+}
 
 var workerCycleLog = observability.LazyComponent("worker_cycle")
 
@@ -274,6 +282,9 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			if m.progress != nil {
 				snapshot, snapshotErr := m.progress.Snapshot(ctx, sessiontree.RootID(ctx, m.sessions, sess.ID))
 				if snapshotErr == nil {
+					if m.reconciliation != nil {
+						snapshot.Reconciliation = m.reconciliation.Reconciliation(sessiontree.RootID(ctx, m.sessions, sess.ID))
+					}
 					progressContent = snapshot.Content
 					encoded, _ := json.Marshal(snapshot)
 					state.ProgressSnapshot = string(encoded)

@@ -94,7 +94,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
-	}); err != nil {
+	}, nil); err != nil {
 		contractcheck.FailErr(t, "native.RegisterUpdateProgressTool failed", err)
 	}
 	if err := native.RegisterCompleteLegTool(reg, workercompletion.CompleteLegDecoder); err != nil {

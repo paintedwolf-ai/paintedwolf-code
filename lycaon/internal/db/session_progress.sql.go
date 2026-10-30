@@ -76,6 +76,23 @@ func (q *Queries) GetSessionProgressRunID(ctx context.Context, sessionID string)
 	return workflow_run_id, err
 }
 
+const getSessionProgressSnapshot = `-- name: GetSessionProgressSnapshot :one
+SELECT content, workflow_run_id, updated_at FROM session_progress WHERE session_id = ?
+`
+
+type GetSessionProgressSnapshotRow struct {
+	Content       string `json:"content"`
+	WorkflowRunID string `json:"workflow_run_id"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+func (q *Queries) GetSessionProgressSnapshot(ctx context.Context, sessionID string) (GetSessionProgressSnapshotRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionProgressSnapshot, sessionID)
+	var i GetSessionProgressSnapshotRow
+	err := row.Scan(&i.Content, &i.WorkflowRunID, &i.UpdatedAt)
+	return i, err
+}
+
 const upsertSessionProgressContent = `-- name: UpsertSessionProgressContent :exec
 INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
 VALUES (?, ?, ?, ?)

@@ -1,0 +1,24 @@
+oar: '1.0'
+id: PROGRESS_RECONCILIATION_CHANGED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [update_progress]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_RECONCILIATION_CHANGED"
+effect: block
+copy:
+  what: The pending worker-finish set changed.
+  cause: The supplied reconciliation token does not identify the current worker finishes.
+  why: Acknowledgement must identify the finishes the coordinator has reviewed.
+  fix: Review the returned snapshot and worker jobs, then submit the current reconciliation_token and expected_revision. Keep unfinished deliverables pending.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress reconciliation snapshot changed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: update_progress
+  expect_contains: ['Code: PROGRESS_RECONCILIATION_CHANGED']

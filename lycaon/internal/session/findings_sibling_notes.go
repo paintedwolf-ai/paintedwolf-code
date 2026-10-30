@@ -8,7 +8,6 @@ func (m *Host) SetProgressStore(store progress.RunScopedStore) {
 		return
 	}
 	m.RewindRuntime.Progress = store
-	m.RewindRuntime.Progress = store
 	m.Coordinator.Guards.SetProgress(store)
 	m.Runner.PostTurn.SetProgress(store)
 	m.Coordinator.Batch.SetProgress(store)
@@ -16,5 +15,6 @@ func (m *Host) SetProgressStore(store progress.RunScopedStore) {
 	m.Coordinator.ProgressClosure.SetProgress(store)
 	m.Stops.SetProgress(store)
 	m.Workers.State.SetProgress(store)
+	m.Workers.State.SetProgressReconciliation(m.Coordinator.ProgressClosure)
 	m.Runner.Instructions.SetProgress(store)
 }

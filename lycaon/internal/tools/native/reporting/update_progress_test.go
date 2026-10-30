@@ -46,7 +46,7 @@ func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
-	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	store.Set("sess-1", "## Progress\n- [ ] open step\n")
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
@@ -65,7 +65,7 @@ func TestUpdateProgress_acceptsOverlongLabel(t *testing.T) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
-	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	long := strings.Repeat("x", progress.MaxLabelRunes+3)
@@ -84,7 +84,7 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
-	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	content := "## Progress\n- [ ] Ship feature\n"
@@ -110,8 +110,8 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 	testutil.FailErr(t, "update_progress replay", err)
 	var result map[string]any
 	testutil.FailErr(t, "decode replay result", json.Unmarshal([]byte(second), &result))
-	if len(result) != 1 || result["status"] != "unchanged" {
-		t.Fatalf("replay must report only its write status: %v", result)
+	if result["status"] != "unchanged" || result["document_changed"] != false || result["state_changed"] != false {
+		t.Fatalf("replay must retain its no-op outcome: %v", result)
 	}
 	if writes != 1 {
 		t.Fatalf("write notifications = %d want 1", writes)
@@ -128,7 +128,7 @@ func TestUpdateProgress_acceptsValidPlan(t *testing.T) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
-	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	label := strings.Repeat("x", progress.MaxLabelRunes)
@@ -150,7 +150,7 @@ func assertUpdateProgressReject(t *testing.T, code, content string) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
-	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 

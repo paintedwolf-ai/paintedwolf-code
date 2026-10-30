@@ -2,6 +2,7 @@ package progress
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -58,19 +59,19 @@ func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
 		return result
 	}
 	first := apply("- [ ] Write code\n- [ ] Verify code")
-	if !first.Updated || first.StateChanged || first.Reconciled {
+	if !first.Updated || first.StateChanged || first.DeliverableClosed {
 		t.Fatalf("establishment outcome: %+v", first)
 	}
 	noop := apply(first.Snapshot.Content)
-	if noop.Updated || noop.StateChanged || noop.Reconciled || noop.Snapshot.Revision != first.Snapshot.Revision {
+	if noop.Updated || noop.StateChanged || noop.DeliverableClosed || noop.Snapshot.Revision != first.Snapshot.Revision {
 		t.Fatalf("no-op outcome: %+v", noop)
 	}
 	label := apply("- [ ] Implement code\n- [ ] Verify code")
-	if !label.Updated || label.StateChanged || label.Reconciled {
+	if !label.Updated || label.StateChanged || label.DeliverableClosed {
 		t.Fatalf("label change outcome: %+v", label)
 	}
 	closed := apply("- [x] Implement code\n- [ ] Verify code")
-	if !closed.Updated || !closed.StateChanged || !closed.Reconciled {
+	if !closed.Updated || !closed.StateChanged || !closed.DeliverableClosed {
 		t.Fatalf("terminal transition outcome: %+v", closed)
 	}
 }
@@ -83,5 +84,18 @@ func TestSnapshotRevisionIncludesBoundRun(t *testing.T) {
 	}
 	if NewSnapshot(first.RunID, first.Content).Revision != first.Revision {
 		t.Fatal("revision depends on process-local state")
+	}
+}
+
+func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
+	store := NewMemoryStore()
+	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Keep complete"))
+	_, err := PrepareAuthorUpdate("- [ ] " + strings.Repeat("x", ContentMaxChars))
+	var rejected *AuthorUpdateRejection
+	if !errors.As(err, &rejected) || rejected.Code != "PROGRESS_DOCUMENT_TOO_LARGE" {
+		t.Fatalf("oversize outcome: %v", err)
+	}
+	if store.Get(t.Context(), "session") != "- [ ] Keep complete" {
+		t.Fatal("oversized proposal changed stored state")
 	}
 }

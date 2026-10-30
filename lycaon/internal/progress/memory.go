@@ -12,8 +12,9 @@ type MemoryStore struct {
 }
 
 type runRecord struct {
-	runID   string
-	content string
+	runID    string
+	content  string
+	revision uint64
 }
 
 var _ RunScopedStore = (*MemoryStore)(nil)
@@ -35,6 +36,7 @@ func (s *MemoryStore) Set(sessionID, content string) error {
 	defer s.mu.Unlock()
 	rec := s.bySess[key]
 	rec.content = clampContent(content)
+	rec.revision++
 	s.bySess[key] = rec
 	return nil
 }
@@ -87,8 +89,9 @@ func (s *MemoryStore) EnsureRun(sessionID, workflowRunID, goal string) (refreshe
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.bySess[key] = runRecord{
-		runID:   workflowRunID,
-		content: clampContent(formatBootstrapContent(goal)),
+		revision: s.bySess[key].revision + 1,
+		runID:    workflowRunID,
+		content:  clampContent(formatBootstrapContent(goal)),
 	}
 	return true
 }

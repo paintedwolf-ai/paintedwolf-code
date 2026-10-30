@@ -25,3 +25,17 @@ func TestProgressNoOpHistorySurvivesUnrelatedMutations(t *testing.T) {
 		t.Fatal("repetition guard prevented a deliverable transition")
 	}
 }
+
+func TestActualProgressChangeInvalidatesAnOlderNoOpContext(t *testing.T) {
+	guard := NewMemoryDoomLoopGuard()
+	args := map[string]any{"content": "- [ ] Deliver"}
+	for n := 0; n < DoomLoopMaxAttempts; n++ {
+		testutil.FailErr(t, "record no-op", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n), "update_progress", args, nil, false))
+	}
+	testutil.FailErr(t, "record changed progress", guard.RecordAttempt(t.Context(), "session", "changed", "update_progress", map[string]any{"content": "- [x] Deliver"}, nil, true))
+	allowed, _, _, err := guard.Check(t.Context(), "session", "new-context", "update_progress", args, true, nil)
+	testutil.FailErr(t, "check new progress context", err)
+	if !allowed {
+		t.Fatal("changed progress retained an obsolete no-op decision")
+	}
+}

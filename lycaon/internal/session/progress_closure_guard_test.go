@@ -151,20 +151,22 @@ func TestProgressClosureRejectClearsAfterClose(t *testing.T) {
 	}
 }
 
-func TestProgressClosureRejectClearsAfterRevision(t *testing.T) {
-	// No open step can honestly close; a content revision is the reachable exit.
+func TestProgressClosureAcknowledgesAlreadyRepresentedFinish(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] survey\n- [ ] challenge claims\n- [ ] report")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	store.Set("root-1", "## Progress\n- [x] survey — re-run after provider failure\n- [ ] challenge claims\n- [ ] report")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current worker finish was not acknowledged")
+	}
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
-		t.Fatalf("revision must allow; block=%v err=%v", block, err)
+		t.Fatalf("acknowledgement must allow; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear after a checklist revision")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
@@ -263,15 +265,15 @@ func TestProgressClosureClearsOnUpdateProgressWrite(t *testing.T) {
 	}
 }
 
-func TestProgressClosureRevisionWriteClears(t *testing.T) {
+func TestProgressClosureLabelWriteDoesNotClear(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b — waiting on rerun")
 	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("a content revision must disarm the latch")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); !armed {
+		t.Fatal("a label revision acknowledged a worker result")
 	}
 }
 

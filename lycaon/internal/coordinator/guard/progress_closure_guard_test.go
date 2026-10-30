@@ -48,18 +48,14 @@ func TestObserveProgressItemNotClosedBeforeDispatch_allowsAfterClose(t *testing.
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_allowsAfterRevision(t *testing.T) {
-	// No open step can honestly close; a content revision is the reachable exit.
+func TestObserveProgressItemNotClosedBeforeDispatch_relabelDoesNotAcknowledgeWorker(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
-	armContent := "## Progress\n- [x] survey\n- [ ] challenge claims\n- [ ] report\n"
-	content := "## Progress\n- [x] survey — re-running after provider failure\n- [ ] challenge claims\n- [ ] report\n"
+	baseline := "- [x] survey\n- [ ] challenge claims\n- [ ] report"
+	current := "- [x] survey with more detail\n- [ ] challenge claims\n- [ ] report"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 1, Content: armContent}, true, gc)
-	if hasRejectCode(gc, ProgressItemNotClosedCode) {
-		t.Fatal("checklist revision since arm must not observe reject")
-	}
-	if !gc.Progress.ProgressReconciledSinceArm {
-		t.Fatal("expected progress_reconciled_since_arm fact")
+	ObserveProgressItemNotClosedBeforeDispatch(sess, current, "task", ProgressClosureBaseline{Closed: 1, Content: baseline}, true, gc)
+	if !hasRejectCode(gc, ProgressItemNotClosedCode) || gc.Progress.ProgressReconciledSinceArm {
+		t.Fatal("label rewrite acknowledged a worker result")
 	}
 }
 

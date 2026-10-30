@@ -16,6 +16,7 @@ type ProgressClosureBaseline struct {
 	Closed  int    // done + n/a rows at arm time
 	Content string // stored checklist bytes at arm time
 	// Settled names the successful finishes the checklist has not absorbed.
+	JobIDs  []string
 	Settled []string
 }
 
@@ -42,7 +43,7 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	closed := done + na
 	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
 	gc.Progress.ProgressReconciledSinceArm = progress.Reconciles(baseline.Content, progressContent)
-	if pending > 0 && !gc.Progress.ProgressClosedBeyondBaseline && !gc.Progress.ProgressReconciledSinceArm {
+	if pending > 0 && !gc.Progress.ProgressReconciledSinceArm {
 		gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
 			"tool":         strings.TrimSpace(tool),
 			"pending":      pending,

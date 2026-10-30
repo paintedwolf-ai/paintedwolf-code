@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -170,7 +170,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, and explanations need none")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
 			for _, candidate := range gatedAndLifecycle {
@@ -185,7 +185,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	investigateOffered := []string{"read_file", "grep", "glob", "ast_grep", "symbol_outline", "update_progress"}
 	investigateBlock, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-investigate", "coordinator", investigateOffered, nil)
 	testutil.FailErr(t, "render investigate progress procedure", err)
-	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, and explanations need none", "PROGRESS_ITEM_NOT_CLOSED"} {
+	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations", "PROGRESS_ITEM_NOT_CLOSED"} {
 		if !strings.Contains(investigateBlock, required) {
 			t.Fatalf("investigate progress procedure missing %q: %s", required, investigateBlock)
 		}
@@ -198,7 +198,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 
 	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "write", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
 	testutil.FailErr(t, "render lifecycle progress procedure", err)
-	if !strings.Contains(withLifecycle, "Before `write` or `task`, call it") {
+	if !strings.Contains(withLifecycle, "Establish the checklist once before the first `write` or `task`") {
 		t.Fatalf("unexpected gated tool phrasing: %s", withLifecycle)
 	}
 	if !strings.Contains(withLifecycle, "Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, `pack_board`.") {

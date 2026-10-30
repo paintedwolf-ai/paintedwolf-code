@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -18,6 +19,7 @@ type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
 }
 type Service struct {
+	mu        sync.Mutex
 	progress  Progress
 	tasks     Tasks
 	baselines scopedstore.LRU[guard.ProgressClosureBaseline]
@@ -26,7 +28,7 @@ type Service struct {
 func New() *Service                       { return &Service{} }
 func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
-func (m *Service) Forget(id string)       { m.baselines.Delete(id) }
+func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
 // Arm latches the checklist after a worker settles its
 // deliverable. Only a successful finish arms it: a partial, failed, or held
@@ -41,6 +43,8 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if rootID == "" {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	content := m.progress.Get(ctx, rootID)
 	done, pending, na := progress.CloseCounts(content)
 	if pending == 0 {
@@ -53,6 +57,9 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	}
 	if entry := m.settledWorkEntry(jobID); entry != "" && !slices.Contains(baseline.Settled, entry) {
 		baseline.Settled = append(slices.Clone(baseline.Settled), entry)
+	}
+	if jobID != "" && !slices.Contains(baseline.JobIDs, jobID) {
+		baseline.JobIDs = append(slices.Clone(baseline.JobIDs), jobID)
 	}
 	m.baselines.Store(rootID, baseline)
 }
@@ -83,6 +90,8 @@ func (m *Service) Baseline(rootID string) (baseline guard.ProgressClosureBaselin
 	if rootID == "" {
 		return guard.ProgressClosureBaseline{}, false
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	exp, ok := m.baselines.Load(rootID)
 	if !ok {
 		return guard.ProgressClosureBaseline{}, false
@@ -98,8 +107,13 @@ func (m *Service) ClearSatisfied(rootID, progressContent string, baseline guard.
 	if rootID == "" {
 		return
 	}
-	done, pending, na := progress.CloseCounts(progressContent)
-	if pending == 0 && !progress.ProgressMissing(progressContent) || done+na > baseline.Closed || progress.Reconciles(baseline.Content, progressContent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, armed := m.baselines.Load(rootID)
+	if !armed || reconciliation(rootID, current).Token != reconciliation(rootID, baseline).Token {
+		return
+	}
+	if progress.Reconciles(baseline.Content, progressContent) {
 		m.baselines.Delete(rootID)
 	}
 }
