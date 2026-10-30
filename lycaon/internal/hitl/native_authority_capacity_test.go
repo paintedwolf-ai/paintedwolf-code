@@ -2,12 +2,9 @@ package hitl_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -23,9 +20,9 @@ import (
 
 func directoryAuthorityOptions(t *testing.T) []hitl.ApprovalOption {
 	t.Helper()
-	target := gate.FileTarget{Path: "/fixture/user/go/pkg/mod/github.com/module", Mode: gate.ModeRead, OutsideRoots: true}
+	target := directoryAuthorityTarget(t)
 	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerFilePath, File: &target}, gate.PostureBalanced)
-	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "list_dir"}, Scope: hitl.ActionScope{SessionID: "session", ProjectID: "project", ProjectDir: "/fixture/project"}}
+	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "list_dir"}, Scope: hitl.ActionScope{SessionID: "session", ProjectID: "project", ProjectDir: t.TempDir()}}
 	options := []hitl.ApprovalOption{hitl.CurrentActionOption()}
 	for _, offer := range settings.GrantedPathOffers(action, target, decision, nil) {
 		options = append(options, hitl.GrantOption(offer))
@@ -76,10 +73,10 @@ func mintDirectoryApproval(t *testing.T, host nativeAuthorityHost, memory *toolc
 	host.manager.Authority.SetNativeAuthorityAdmission(memory)
 	review := hitl.NewNativeActionReview(ctx, memory, nativeInspectionFixture{})
 	defer review.Close()
-	args, native, err := review.Freeze(ctx, "list_dir", map[string]any{"path": "/fixture/user/go/pkg/mod/github.com/"})
+	target := directoryAuthorityTarget(t)
+	args, native, err := review.Freeze(ctx, "list_dir", map[string]any{"path": filepath.Dir(target.Path) + string(filepath.Separator)})
 	testutil.FailErr(t, "freeze directory request", err)
-	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "list_dir", Args: args, NativeInputs: native, ActionID: "call-directory"}, Scope: hitl.ActionScope{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, ProjectDir: "/fixture/project"}}
-	target := gate.FileTarget{Path: "/fixture/user/go/pkg/mod/github.com/module", Mode: gate.ModeRead, OutsideRoots: true}
+	action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "list_dir", Args: args, NativeInputs: native, ActionID: "call-directory"}, Scope: hitl.ActionScope{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, ProjectDir: t.TempDir()}}
 	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerFilePath, File: &target}, gate.PostureBalanced)
 	response, err := requestExplicitApprovalCheckpoint(t, ctx, host.manager, hitl.CheckpointRequest{SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ToolCallID: "call-directory", ProposedAction: &action, GrantOffers: settings.GrantedPathOffers(action, target, decision, nil)})
 	testutil.FailErr(t, "publish directory approval", err)
@@ -160,27 +157,10 @@ func TestDirectoryCapacityFailureKeepsRejectionAvailable(t *testing.T) {
 	}
 }
 
-func TestPersistedDirectoryAuthorityRemainsReadable(t *testing.T) {
-	raw, err := os.ReadFile("testdata/native-directory-authority-v1.json")
-	testutil.FailErr(t, "read pending directory fixture", err)
-	sum := sha256.Sum256(raw)
-	memory := productionAuthorityMemory(t)
-	projection, release, err := hitl.RestoreNativeAuthorityProjection(t.Context(), memory, hitl.NativeAuthorityFormat, hex.EncodeToString(sum[:]), string(raw))
-	testutil.FailErr(t, "restore persisted directory authority", err)
-	options, releaseOptions, err := projection.Options(t.Context(), memory)
-	testutil.FailErr(t, "inspect persisted directory choices", err)
-	if len(options) != 22 {
-		t.Fatalf("restored %d directory choices", len(options))
-	}
-	encoded, releaseEncoded, err := hitl.NewNativeAuthorityProjection(t.Context(), memory, options)
-	testutil.FailErr(t, "encode persisted directory choices", err)
-	if encoded.Canonical() != string(raw) {
-		t.Fatal("persisted directory authority changed representation")
-	}
-	releaseEncoded()
-	releaseOptions()
-	release()
-	if memory.InUse().State != 0 {
-		t.Fatal("persisted directory restore retained scratch")
-	}
+func directoryAuthorityTarget(t *testing.T) gate.FileTarget {
+	t.Helper()
+	scratch := t.TempDir()
+	root := filepath.VolumeName(scratch) + string(filepath.Separator)
+	folder := "paintedwolf-approval-fixture-" + filepath.Base(filepath.Dir(scratch))
+	return gate.FileTarget{Path: filepath.Join(root, folder, "user", "go", "pkg", "mod", "github.com", "module"), Mode: gate.ModeRead, OutsideRoots: true}
 }

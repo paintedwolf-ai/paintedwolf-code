@@ -50,8 +50,7 @@ func authorityFieldName(field reflect.StructField) (string, error) {
 	return name, nil
 }
 
-// authorityStorageBytes refuses an unrepresentable reflected allocation size
-// before it can enter the signed retained-state admission account.
+// Reflected sizes must fit the signed admission account.
 func authorityStorageBytes(size uintptr) (int64, error) {
 	if size > math.MaxInt64 {
 		return 0, fmt.Errorf("native authority storage size overflow")

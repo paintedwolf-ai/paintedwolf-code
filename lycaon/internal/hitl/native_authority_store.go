@@ -104,10 +104,7 @@ func chatGrantAuthoritySource(chatSessionID, id string) authoritySource {
 	}
 }
 
-// nativeAuthorityReader is the one reader of native authority bodies. It
-// measures a body and reserves aggregate state before Scan copies it, reads
-// the body from that same snapshot only while its identity still matches, and
-// restores it through the strict versioned codec. Nothing falls back to JSON.
+// nativeAuthorityReader admits measured bodies from one consistent snapshot.
 type nativeAuthorityReader struct {
 	db      db.Handle
 	queries *db.Queries
@@ -132,7 +129,24 @@ func (s nativeAuthorityReader) read(ctx context.Context, state toolcontract.Revi
 		return restoredAuthority{}, nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
+	projection, release, err := (authoritySnapshot{queries: s.queries.WithTx(tx)}).read(ctx, state, source)
+	if err != nil {
+		return restoredAuthority{}, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		release()
+		return restoredAuthority{}, nil, err
+	}
+	return projection, release, nil
+}
+
+type authoritySnapshot struct{ queries *db.Queries }
+
+func (s authoritySnapshot) read(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource) (restoredAuthority, func(), error) {
+	if state == nil {
+		return restoredAuthority{}, nil, fmt.Errorf("%s: native authority admission is not configured", source.name)
+	}
+	q := s.queries
 	measured, err := source.measure(ctx, q)
 	if err != nil {
 		return restoredAuthority{}, nil, fmt.Errorf("%s: measure native authority: %w", source.name, err)
@@ -159,10 +173,6 @@ func (s nativeAuthorityReader) read(ctx context.Context, state toolcontract.Revi
 	if err != nil {
 		return restoredAuthority{}, nil, fmt.Errorf("%s: %w", source.name, err)
 	}
-	if err := tx.Commit(); err != nil {
-		release()
-		return restoredAuthority{}, nil, err
-	}
 	return projection, release, nil
 }
 
@@ -183,9 +193,7 @@ func validateNativeAuthorityDisplay(ctx context.Context, state toolcontract.Revi
 	return nil
 }
 
-// approvedOption returns the option to install and its durable record. A
-// structured row's payload plan is its authority. A native row's option comes
-// only from the measured reader, bound to the displayed plan it was shown as.
+// approvedOption binds the selected authority to its displayed plan and deciding person.
 func approvedOption(ctx context.Context, store approvalAuthorityStore, state toolcontract.ReviewStateAdmission, row StoredCheckpoint, plan *ApprovalPlan, display ApprovalOption, resolution Resolution) (ApprovalOption, approvedAuthority, func(), error) {
 	if row.AuthorityFormat == "" {
 		option := display.grantedBy(resolution)
@@ -218,25 +226,6 @@ func approvedOption(ctx context.Context, store approvalAuthorityStore, state too
 	return option, approved, releases.release, nil
 }
 
-// approvedOption restores the single approved option a native
-// operation or chat grant row records, bound to that row's display copy.
-func (s nativeAuthorityReader) approvedOption(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource, display ApprovalOption) (ApprovalOption, func(), error) {
-	projection, releaseProjection, err := s.read(ctx, state, source)
-	if err != nil {
-		return ApprovalOption{}, nil, err
-	}
-	options := projection.options
-	if len(options) != 1 {
-		releaseProjection()
-		return ApprovalOption{}, nil, fmt.Errorf("%s: expected one approved option", source.name)
-	}
-	if err := validateNativeAuthorityDisplay(ctx, state, options, []ApprovalOption{display}); err != nil {
-		releaseProjection()
-		return ApprovalOption{}, nil, fmt.Errorf("%s: %w", source.name, err)
-	}
-	return options[0], releaseProjection, nil
-}
-
 // releaseList releases retained native leases in reverse order.
 type releaseList []func()
 
@@ -244,40 +233,4 @@ func (r releaseList) release() {
 	for n := len(r) - 1; n >= 0; n-- {
 		r[n]()
 	}
-}
-
-// chatGrant restores the one delta of the approved option whose chat
-// lifetime is this row, bound to the row's screened delta copy.
-func (s nativeAuthorityReader) chatGrant(ctx context.Context, state toolcontract.ReviewStateAdmission, chatSessionID, id string, display ApprovalAuthorityDelta) (ApprovalAuthorityDelta, func(), error) {
-	source := chatGrantAuthoritySource(chatSessionID, id)
-	projection, releaseProjection, err := s.read(ctx, state, source)
-	if err != nil {
-		return ApprovalAuthorityDelta{}, nil, err
-	}
-	options := projection.options
-	release := releaseProjection
-	found, matches := -1, 0
-	for n, delta := range options[0].Authority {
-		if chat, grantID, ok := delta.ChatLifetime(); ok && chat == chatSessionID && grantID == id {
-			found, matches = n, matches+1
-		}
-	}
-	if len(options) != 1 || matches != 1 {
-		release()
-		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: native authority does not name exactly this grant", source.name)
-	}
-	derived, releaseDerived, err := nativeAuthorityDisplay(ctx, state, options)
-	if err == nil {
-		var same bool
-		same, err = sameAuthorityDisplay(derived[0].Authority[found], display)
-		releaseDerived()
-		if err == nil && !same {
-			err = fmt.Errorf("native authority does not match its displayed grant")
-		}
-	}
-	if err != nil {
-		release()
-		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
-	}
-	return options[0].Authority[found], release, nil
 }

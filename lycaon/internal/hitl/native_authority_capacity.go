@@ -19,12 +19,13 @@ func admitAuthorityLifecycle(ctx context.Context, projection NativeAuthorityProj
 		return err
 	}
 	// The measured SQL read coexists with the restored authority.
-	releaseMargin, err := memory.ReserveProgramState(ctx, 2048+int64(len(projection.Canonical())))
+	releaseRead, err := memory.ReserveProgramState(ctx, 2048+int64(len(projection.Canonical())))
 	if err != nil {
 		return err
 	}
-	defer releaseMargin()
+	defer releaseRead()
 	restored, release, err := restoreNativeAuthority(ctx, memory, projection.Representation(), projection.Digest(), projection.Canonical())
+	releaseRead()
 	if err != nil {
 		return fmt.Errorf("approval cannot be answered: %w", err)
 	}
@@ -33,6 +34,9 @@ func admitAuthorityLifecycle(ctx context.Context, projection NativeAuthorityProj
 		return err
 	}
 	for n, option := range restored.options {
+		if option.Disabled {
+			continue
+		}
 		_, _, releaseOption, err := prepareNativeOption(ctx, memory, option, display[n], Resolution{PersonID: "00000000-0000-4000-8000-000000000001"})
 		if err != nil {
 			return fmt.Errorf("approval choice cannot be answered: %w", err)
@@ -45,28 +49,36 @@ func admitAuthorityLifecycle(ctx context.Context, projection NativeAuthorityProj
 
 // stampNativeOption admits the copies that carry the deciding person's provenance.
 func stampNativeOption(ctx context.Context, state toolcontract.ReviewStateAdmission, option ApprovalOption, resolution Resolution) (ApprovalOption, func(), error) {
-	binding := &authorityBinding{ctx: ctx, state: state}
-	size, err := authorityStorageBytes(reflect.TypeFor[ApprovalAuthorityDelta]().Size())
+	release, err := reserveAuthorityCopy(ctx, state, option.Authority)
 	if err != nil {
 		return ApprovalOption{}, nil, err
 	}
-	if err := binding.reserve(int64(len(option.Authority)) * size); err != nil {
-		return ApprovalOption{}, nil, err
+	return option.grantedBy(resolution), release, nil
+}
+
+func reserveAuthorityCopy(ctx context.Context, state toolcontract.ReviewStateAdmission, authority []ApprovalAuthorityDelta) (func(), error) {
+	binding := &authorityBinding{ctx: ctx, state: state}
+	size, err := authorityStorageBytes(reflect.TypeFor[ApprovalAuthorityDelta]().Size())
+	if err != nil {
+		return nil, err
+	}
+	if err := binding.reserve(int64(len(authority)) * size); err != nil {
+		return nil, err
 	}
 	grantBytes, err := authorityStorageBytes(reflect.TypeFor[ApprovalGrant]().Size())
 	if err != nil {
 		binding.close()
-		return ApprovalOption{}, nil, err
+		return nil, err
 	}
-	for _, delta := range option.Authority {
+	for _, delta := range authority {
 		if delta.Grant != nil {
 			if err := binding.reserve(grantBytes); err != nil {
 				binding.close()
-				return ApprovalOption{}, nil, err
+				return nil, err
 			}
 		}
 	}
-	return option.grantedBy(resolution), binding.release(), nil
+	return binding.release(), nil
 }
 
 func prepareNativeOption(ctx context.Context, state toolcontract.ReviewStateAdmission, option, display ApprovalOption, resolution Resolution) (ApprovalOption, approvedAuthority, func(), error) {
