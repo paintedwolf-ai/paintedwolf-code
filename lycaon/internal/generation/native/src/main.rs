@@ -16,10 +16,8 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    if let Err(e) = nativegen::service::serve(
-        std::io::stdin().lock(),
-        std::io::stdout().lock(),
-    ) {
+    // Owned handles (not the thread-local std locks) so the reader thread can take stdin.
+    if let Err(e) = nativegen::service::serve(std::io::stdin(), std::io::stdout()) {
         // Stdout is protocol-only after serve starts; the error goes to stderr and exits 1.
         eprintln!("nativegen: {e}");
         std::process::exit(1);
