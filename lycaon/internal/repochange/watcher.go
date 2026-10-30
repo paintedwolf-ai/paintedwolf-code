@@ -28,7 +28,7 @@ type worktreeWatcher struct {
 	// mu guards registration state.
 	mu sync.Mutex
 	// Registered costs prevent double-charging during reseeding.
-	watched         map[string]int
+	watched         map[string]watchRegistration
 	spent           int
 	truncated       int
 	policyUnwatched int
@@ -67,7 +67,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		maxDirs:   maxDirs,
 		recursive: watchfd.Recursive,
 		done:      make(chan struct{}),
-		watched:   map[string]int{},
+		watched:   map[string]watchRegistration{},
 		refs:      refObserver{root: root, physicalRoot: physicalRoot},
 	}
 	if w.addMeasuredDir(root) != addRegistered {
@@ -126,7 +126,7 @@ func (w *worktreeWatcher) addDir(path string, cost int) addOutcome {
 		return addFailed
 	}
 	w.watchLimit = false
-	w.watched[path] = cost
+	w.registerDirectoryLocked(path, cost)
 	w.spent += cost
 	return addRegistered
 }
@@ -161,19 +161,20 @@ func (w *worktreeWatcher) repriceDir(path string, cost int) bool {
 	if !ok {
 		return false
 	}
-	delta := cost - previous
+	delta := cost - previous.cost
 	if cost > watchfd.DirCeiling() || (delta > 0 && !w.budget.Take(delta)) {
 		_ = w.watcher.Remove(path)
-		delete(w.watched, path)
+		w.removeDirectoryLocked(path)
 		w.refs.forget(path)
-		w.spent -= previous
-		w.budget.Give(previous)
+		w.spent -= previous.cost
+		w.budget.Give(previous.cost)
 		return false
 	}
 	if delta < 0 {
 		w.budget.Give(-delta)
 	}
-	w.watched[path] = cost
+	previous.cost = cost
+	w.watched[path] = previous
 	w.spent += delta
 	return true
 }
@@ -189,10 +190,10 @@ func (w *worktreeWatcher) forgetRemovedTree(path string) {
 			continue
 		}
 		_ = w.watcher.Remove(watched)
-		delete(w.watched, watched)
+		w.removeDirectoryLocked(watched)
 		w.refs.forget(watched)
-		w.spent -= cost
-		w.budget.Give(cost)
+		w.spent -= cost.cost
+		w.budget.Give(cost.cost)
 	}
 }
 
@@ -229,21 +230,9 @@ func (w *worktreeWatcher) watchesDir(path string) bool {
 	if w == nil {
 		return false
 	}
-	if w.scope != nil {
-		rel, err := filepath.Rel(w.root, path)
-		if err == nil && w.scope.BoundaryPath(filepath.ToSlash(rel), true) != "" {
-			return false
-		}
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.recursive {
-		if _, ok := w.watched[w.root]; !ok {
-			return false
-		}
-		return w.coveredByRootLocked(path)
-	}
-	_, ok := w.watched[path]
+	_, ok := w.directoryRegistrationLocked(path)
 	return ok
 }
 
@@ -407,7 +396,7 @@ func (w *worktreeWatcher) close() {
 		w.mu.Lock()
 		spent := w.spent
 		w.spent = 0
-		w.watched = map[string]int{}
+		w.watched = map[string]watchRegistration{}
 		w.mu.Unlock()
 		if w.budget != nil {
 			w.budget.Give(spent)

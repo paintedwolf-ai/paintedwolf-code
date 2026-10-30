@@ -424,7 +424,7 @@ func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 	})
 	defer ResetObserversForTest()
 	defer ResetDebouncerForTest(context.Background())
-	watcher := &worktreeWatcher{root: root, watched: make(map[string]int)}
+	watcher := &worktreeWatcher{root: root, watched: make(map[string]watchRegistration)}
 	before := CurrentEpoch(root)
 	for _, count := range []int{4, 9, 0} {
 		watcher.setTruncated(count)

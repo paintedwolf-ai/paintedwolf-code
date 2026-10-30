@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
@@ -71,7 +72,7 @@ type literalIndexRecord struct {
 	cancel   context.CancelFunc
 	waiters  int
 	rootPath string
-	watch    repochange.WatchObservation
+	watch    repochange.WatchScopeObservation
 	done     chan struct{}
 	index    *literalScopeIndex
 	err      error
@@ -85,15 +86,20 @@ type literalIndexCache struct {
 	order   []string
 	bytes   int64
 
-	fileMu    sync.Mutex
-	files     literalFileCache
-	fileReads map[*literalFileRead]struct{}
+	fileMu         sync.Mutex
+	files          literalFileCache
+	fileReads      map[*literalFileRead]struct{}
+	workingBytes   int64
+	watchDirectory func(string, string) repochange.WatchObservation
+	watchScope     func(string) repochange.WatchScopeObservation
 }
 
 type literalFileRead struct {
 	rootPath, path string
 	invalidated    bool
 	watch          repochange.WatchObservation
+	charge         int64
+	version        fspath.FileObservation
 }
 
 type literalProjection struct {
@@ -114,13 +120,16 @@ type literalFileCacheEntry struct {
 	bloom         literalBloom
 	rawBloom      literalBloom
 	rawSearchable bool
+	version       fspath.FileObservation
 	watch         repochange.WatchObservation
 }
 
 func newLiteralIndexCache() *literalIndexCache {
 	return &literalIndexCache{
-		records:   make(map[string]*literalIndexRecord),
-		fileReads: make(map[*literalFileRead]struct{}),
+		records:        make(map[string]*literalIndexRecord),
+		fileReads:      make(map[*literalFileRead]struct{}),
+		watchDirectory: repochange.ObserveWatch,
+		watchScope:     repochange.ObserveWatchScope,
 	}
 }
 
@@ -270,7 +279,7 @@ func (c *LiteralSearch) LiteralCandidates(ctx context.Context, snapshot Snapshot
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if file.unread || !file.watch.Valid() || file.watch != repochange.ObserveWatch(rootPath, path.Dir(file.entry.Path)) || entryUnderAnyBase(file.entry.Path, dirty) || file.bloom.admits(folded) {
+		if file.unread || !file.watch.Valid() || file.watch != c.cache.watchDirectory(rootPath, path.Dir(file.entry.Path)) || entryUnderAnyBase(file.entry.Path, dirty) || file.bloom.admits(folded) {
 			out = append(out, file.entry)
 		}
 	}
@@ -291,7 +300,7 @@ func (c *literalIndexCache) load(
 	key, rootPath string,
 	build func(context.Context) (*literalScopeIndex, error),
 ) (*literalScopeIndex, error) {
-	watch := repochange.ObserveWatch(rootPath, ".")
+	watch := c.watchScope(rootPath)
 	c.mu.Lock()
 	if existing := c.records[key]; existing != nil && existing.watch != watch {
 		c.dropRecordLocked(key)
@@ -414,7 +423,7 @@ func (c *literalIndexCache) buildScope(
 	for i, entry := range entries {
 		result := results[i]
 		if result.err != nil {
-			if os.IsNotExist(result.err) || errors.Is(result.err, os.ErrPermission) {
+			if os.IsNotExist(result.err) || errors.Is(result.err, os.ErrPermission) || errors.Is(result.err, errLiteralReadBusy) {
 				index.files = append(index.files, literalIndexedFile{entry: entry, unread: true})
 				index.bytes += int64(literalEntryStringBytes(entry))
 				continue
@@ -483,19 +492,19 @@ func (c *literalIndexCache) fileBloom(
 	entry Entry,
 	open func(Entry) (io.ReadCloser, error),
 ) (literalBloom, bool, error) {
-	read := &literalFileRead{rootPath: rootPath, path: entry.Path, watch: repochange.ObserveWatch(rootPath, path.Dir(entry.Path))}
-	c.fileMu.Lock()
-	c.fileReads[read] = struct{}{}
-	c.fileMu.Unlock()
-	defer func() { c.fileMu.Lock(); delete(c.fileReads, read); c.fileMu.Unlock() }()
+	read := c.beginFileRead(rootPath, entry, c.watchDirectory(rootPath, path.Dir(entry.Path)), fileVersion(rootPath, entry))
+	if read == nil {
+		return nil, false, errLiteralReadBusy
+	}
+	defer c.closeFileRead(read)
 	facts, err := buildLiteralBloom(ctx, entry, open)
 	if err != nil {
 		return nil, false, err
 	}
-	if read.watch.Valid() && read.watch == repochange.ObserveWatch(rootPath, path.Dir(entry.Path)) && entryStillMatches(rootPath, entry) {
+	if read.watch.Valid() && read.watch == c.watchDirectory(rootPath, path.Dir(entry.Path)) && entryStillMatches(rootPath, entry) && read.version.Known && read.version == fileVersion(rootPath, entry) {
 		c.fileMu.Lock()
 		if !read.invalidated {
-			c.storeFile(rootPath, entry, facts, read.watch)
+			c.storeFile(rootPath, entry, facts, read.watch, read.version)
 		}
 		c.fileMu.Unlock()
 	}

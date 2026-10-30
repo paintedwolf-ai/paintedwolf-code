@@ -3,6 +3,7 @@ package search
 import (
 	"log/slog"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
@@ -30,7 +31,7 @@ func contentEntry(e entry) sourcecatalog.Entry {
 }
 
 func (index grepContentIndex) eligible(e entry) bool {
-	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed {
+	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed || e.followed || e.stat.Links != 1 || !e.stat.POSIX {
 		return false
 	}
 	return true
@@ -42,7 +43,7 @@ func (index *grepContentIndex) canPrune(e entry) bool {
 	if eligible {
 		index.stats.eligible++
 	}
-	pruned := e.depth > 0 && eligible && index.literals.CanPruneBytes(e.bound.Resolved.Root.Path, index.require, contentEntry(e))
+	pruned := e.depth > 0 && eligible && index.literals.CanPruneBytes(e.bound.Resolved.Root.Path, index.require, contentEntry(e), contentVersion(e))
 	if pruned {
 		index.stats.pruned++
 	}
@@ -53,7 +54,7 @@ func (index grepContentIndex) begin(e entry) *sourcecatalog.ContentRead {
 	if !index.eligible(e) {
 		return nil
 	}
-	return index.literals.BeginRead(e.bound.Resolved.Root.Path, contentEntry(e))
+	return index.literals.BeginRead(e.bound.Resolved.Root.Path, contentEntry(e), contentVersion(e))
 }
 
 type contentSearchStats struct {
@@ -75,10 +76,14 @@ func (index *grepContentIndex) completed(inv *invocation) {
 	slog.InfoContext(inv.ctx, "command content search completed",
 		"execution_id", inv.request.Invocation.Identity.ExecutionID,
 		"command", inv.spec.Name,
-		"pruning_available", !index.require.Empty(),
+		"pruning_supported", !index.require.Empty(),
 		"candidate_files", index.stats.candidates,
 		"eligible_files", index.stats.eligible,
 		"captured_files", index.stats.captured,
 		"pruned_files", index.stats.pruned,
 		"learned_files", index.stats.learned)
+}
+
+func contentVersion(e entry) fspath.FileObservation {
+	return fspath.FileObservation{Identity: fspath.AllocationIdentity{Device: e.stat.Device, Inode: e.stat.Inode}, Changed: e.stat.ChangeTime.UnixNano(), Links: e.stat.Links, Known: e.stat.POSIX && !e.stat.ChangeTime.IsZero()}
 }
