@@ -24,13 +24,22 @@ func newLiteralBloomStream(size int64) *literalBloomStream {
 
 func (s *literalBloomStream) Write(raw []byte) (int, error) {
 	n := len(raw)
+	for len(raw) > 0 && !s.invalid {
+		take := min(len(raw), literalReadQuantum)
+		s.writeChunk(raw[:take])
+		raw = raw[take:]
+	}
+	return n, nil
+}
+
+func (s *literalBloomStream) writeChunk(raw []byte) {
 	if s.invalid {
-		return n, nil
+		return
 	}
 	if !s.validator.Add(raw, false) {
 		s.invalid = true
 		s.bloom = nil
-		return n, nil
+		return
 	}
 	if len(s.carry) > 0 {
 		raw = append(s.carry, raw...)
@@ -50,7 +59,7 @@ func (s *literalBloomStream) Write(raw []byte) (int, error) {
 		}
 		s.bloom.add(s.window)
 	}
-	return n, nil
+	return
 }
 
 func (s *literalBloomStream) finish() (literalBloom, bool) {

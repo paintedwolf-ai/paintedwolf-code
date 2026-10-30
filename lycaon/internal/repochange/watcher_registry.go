@@ -340,7 +340,7 @@ func MarkCoverageCompleteForTest(root string) {
 	}
 	w := &worktreeWatcher{
 		root: key, recursive: true, done: make(chan struct{}),
-		watched: map[string]int{key: 1},
+		watched: map[string]watchRegistration{key: newWatchRegistration(1)},
 	}
 	globalWatchers.mu.Lock()
 	if previous := globalWatchers.byDir[key]; previous != nil {

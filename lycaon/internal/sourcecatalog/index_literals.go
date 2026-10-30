@@ -2,6 +2,7 @@ package sourcecatalog
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
@@ -17,7 +18,7 @@ type LiteralSearch struct {
 // contentBuild fills per-file literal filters to reduce content reads.
 type contentBuild struct {
 	revision uint64
-	watch    repochange.WatchObservation
+	watch    repochange.WatchScopeObservation
 	started  time.Time
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -56,7 +57,7 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 
 func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexReader, query LiteralQuery) bool {
 	s := reader.store
-	watch := repochange.ObserveWatch(s.root.Path, ".")
+	watch := c.cache.watchScope(s.root.Path)
 	key := indexLiteralScopeKey(query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -162,6 +163,11 @@ func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, q
 		release()
 		if err != nil {
 			return false
+		}
+		for _, result := range results {
+			if errors.Is(result.err, errLiteralReadBusy) {
+				return false
+			}
 		}
 	}
 	return false

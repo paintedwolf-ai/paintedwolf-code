@@ -28,7 +28,7 @@ func (w *limitTestWatcher) Add(string) error {
 func TestWatcherOverflowResyncsAndKeepsTheStream(t *testing.T) {
 	root := t.TempDir()
 	platform := &errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error, 1), resync: make(chan struct{})}
-	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]int{root: 1}}
+	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]watchRegistration{root: newWatchRegistration(1)}}
 	var resyncs atomic.Int32
 	var incompleteDuringDelivery atomic.Bool
 	unbind := RegisterObserver(func(_ context.Context, event Event) {
@@ -68,7 +68,7 @@ func TestWatcherOverflowResyncsAndKeepsTheStream(t *testing.T) {
 func TestWatcherReportsTheUserWatchLimitUntilRegistrationSucceeds(t *testing.T) {
 	root := t.TempDir()
 	platform := &limitTestWatcher{errorTestWatcher: errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error), resync: make(chan struct{})}}
-	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]int{root: 1}, maxDirs: 16}
+	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]watchRegistration{root: newWatchRegistration(1)}, maxDirs: 16}
 	exhausted := error(syscall.ENOSPC)
 	platform.addErr.Store(&exhausted)
 	if outcome := w.addDir(filepath.Join(root, "first"), 1); outcome != addFailed {

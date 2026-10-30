@@ -32,11 +32,12 @@ func TestCommandsLearnContentWithoutCatalogPreparation(t *testing.T) {
 }
 
 func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
-	files := map[string]string{"src/utf8.txt": "\ufeffNeedleToken\n", "src/utf16.txt": "\xff\xfeN\x00e\x00e\x00d\x00l\x00e\x00\n\x00", "src/invalid.txt": "\xffNeedleToken\n", "src/binary.dat": "\x00NeedleToken\n", "src/unicode.txt": "Kelvin ſource Σigma\n", "src/noise.txt": "different content\n"}
+	files := map[string]string{"src/utf8.txt": "\ufeffNeedleToken\n", "src/utf16.txt": "\xff\xfeN\x00e\x00e\x00d\x00l\x00e\x00\n\x00", "src/invalid.txt": "\xffNeedleToken\n", "src/binary.dat": "\x00NeedleToken\n", "src/unicode.txt": "Kelvin ſource Σigma\n", "src/cross.txt": "ébc\n", "src/noise.txt": "different content\n"}
 	for _, argv := range [][]string{
 		{"grep", "-raF", "\ufeffNeedleToken", "src"},
 		{"grep", "-raF", "N\x00e\x00e", "src"},
 		{"grep", "-raF", "\xffNeedleToken", "src"},
+		{"grep", "-raF", "\xa9bc", "src"},
 		{"grep", "-raiE", "kelvin|source|σigma|needletoken", "src"},
 		{"rg", "-uuu", "-i", "needletoken", "src"},
 	} {

@@ -27,7 +27,7 @@ func (w *errorTestWatcher) ResyncChannel() <-chan struct{}      { return w.resyn
 func TestWatcherErrorInvalidatesRootAndCoverage(t *testing.T) {
 	root := t.TempDir()
 	platform := &errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error, 1), resync: make(chan struct{})}
-	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]int{root: 1}}
+	w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]watchRegistration{root: newWatchRegistration(1)}}
 	var observed atomic.Bool
 	unbind := RegisterObserver(func(_ context.Context, event Event) {
 		if event.ProjectDir == root && event.Kind == WorktreeChanged && len(event.Paths) == 1 && event.Paths[0] == "." {

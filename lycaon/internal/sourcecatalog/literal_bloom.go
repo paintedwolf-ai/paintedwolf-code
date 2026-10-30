@@ -17,6 +17,9 @@ func buildLiteralBloom(
 	entry Entry,
 	open func(Entry) (io.ReadCloser, error),
 ) (literalFileBlooms, error) {
+	if err := ctx.Err(); err != nil {
+		return literalFileBlooms{}, err
+	}
 	f, err := open(entry)
 	if err != nil {
 		return literalFileBlooms{}, err
@@ -107,7 +110,11 @@ func foldRequirement(req litprefilter.Requirement) foldedRequirement {
 	for _, clause := range req.Clauses {
 		folded := make([][]byte, 0, len(clause))
 		for _, lit := range clause {
-			folded = append(folded, litprefilter.AppendCanonicalFold(nil, lit.Bytes))
+			if !utf8.Valid(lit.Bytes) {
+				folded = append(folded, nil)
+			} else {
+				folded = append(folded, litprefilter.AppendCanonicalFold(nil, lit.Bytes))
+			}
 		}
 		out = append(out, folded)
 	}
@@ -130,7 +137,7 @@ func (b literalBloom) admitsRequirement(req litprefilter.Requirement) bool {
 	for _, clause := range req.Clauses {
 		matched := false
 		for _, lit := range clause {
-			if b.mayContain(litprefilter.AppendCanonicalFold(buf[:0], lit.Bytes)) {
+			if !utf8.Valid(lit.Bytes) || b.mayContain(litprefilter.AppendCanonicalFold(buf[:0], lit.Bytes)) {
 				matched = true
 				break
 			}

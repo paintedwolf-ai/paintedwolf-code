@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -171,7 +172,7 @@ func requirement(e engine, patterns []string, spec Spec) litprefilter.Requiremen
 	switch e := e.(type) {
 	case literalEngine:
 		for _, p := range patterns {
-			if p == "" {
+			if p == "" || !utf8.ValidString(p) {
 				return litprefilter.Requirement{}
 			}
 		}
