@@ -41,3 +41,29 @@ func TestDirectoryPathFallbackRequiresCurrentContainedIdentity(t *testing.T) {
 		t.Fatalf("outside fallback=%v", err)
 	}
 }
+
+func TestDirectoryPathNativeSpellingMismatchUsesContainedIdentity(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "create child", os.Mkdir(filepath.Join(root, "child"), 0700))
+	alias := filepath.Join(t.TempDir(), "root-alias")
+	testutil.FailErr(t, "create equivalent root spelling", os.Symlink(root, alias))
+	reader, err := OpenReadRoot(root)
+	testutil.FailErr(t, "open root", err)
+	defer reader.Close()
+	// Model an equivalent root spelling without assuming volume case or Unicode rules.
+	reader.root.path = alias
+	file, err := reader.OpenExact("child")
+	testutil.FailErr(t, "open child from equivalent spelling", err)
+	defer file.Close()
+	actual, err := reader.DirectoryPath(file)
+	testutil.FailErr(t, "validate native spelling mismatch", err)
+	if actual != filepath.Join(alias, "child") {
+		t.Fatalf("admitted address=%q", actual)
+	}
+	moved := filepath.Join(t.TempDir(), "outside")
+	testutil.FailErr(t, "move child outside", os.Rename(filepath.Join(root, "child"), moved))
+	testutil.FailErr(t, "replace old spelling with outward link", os.Symlink(moved, filepath.Join(root, "child")))
+	if _, err := reader.DirectoryPath(file); !errors.Is(err, ErrSymlink) {
+		t.Fatalf("mismatch fallback followed outward replacement: %v", err)
+	}
+}

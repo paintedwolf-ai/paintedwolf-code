@@ -2,13 +2,16 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/fseffect",
   "kind": "module",
-  "workstream": "source-mutations",
+  "workstream": "held-directory-traversal",
   "disposition": "retain",
-  "reason": "Thirty-four immediate source files implement one checked descriptor-relative filesystem effect boundary across platform implementations of the same operations. Replacement owns held staging through one commit/abandon, rather than an alternate write path. The transaction lifecycle contracts support retention of exact current membership; growth requires fresh review. Automated qualification is scoped to the current host.",
-  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
-  "ceiling": 34,
+  "reason": "Retain the exact 43 immediate source members for one descriptor-relative filesystem effect boundary. Current native directory addresses live in platform adapters beside the shared contained reader; held-child opens reuse that authority. Writes retain their transaction lifecycle. Directory identity, rename refusal, successful open accounting, and transaction contracts support the measured membership; added members require review. Automated qualification is limited to the current host.",
+  "reviewed_commit": "463cc15299e34e0b3c60ab01b569484f93487637",
+  "ceiling": 43,
   "boundaries": {
-    "lycaon/internal/fseffect/transaction_test.go": "79f21372451b86f114c6c7c7a7122d45c663facb4493d2e2eb079dfe1cbbc291"
+    "lycaon/internal/fseffect/read_directory_test.go": "8cf4b7c8cadbb4d8ac6872a718e177f8c60b08fdc8e767555ed1ce3f97385a30",
+    "lycaon/internal/fseffect/read_directory_fallback_test.go": "8c3d05f21909fb88ea059246cb6d7af522826bcb54a52adcbf00c6062e548b3c",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "e88a6004d414ac7fdf0d47e8c10b05bdc391539bd195ddaa436662f6a8b581c3",
+    "lycaon/internal/fseffect/transaction_test.go": "af1334ee5f0fa01292adec0a90984fa7506a193ed0a4092acb0acf34bd0f0fd4"
   },
-  "reviewed_shape": "63bed3f09d349e3239c8e19a8eec0b9c92eff20cc095d1f088343788d9aa8dc9"
+  "reviewed_shape": "a792da7860847b28284256c4f6a220ba58253cc00937fd0e9d293b3aa3d591d6"
 }
