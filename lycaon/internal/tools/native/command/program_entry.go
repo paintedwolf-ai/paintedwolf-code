@@ -316,7 +316,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	ports.Waits = park
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
-		run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
+		ctx: ctx, run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
 		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope, documents: documents,
 		paths: paths, verification: verification, release: release, callTC: callTC,
 	})
