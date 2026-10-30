@@ -1,7 +1,6 @@
 package search
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
@@ -65,9 +64,9 @@ type contentSearchStats struct {
 	learned    int
 }
 
-func (index *grepContentIndex) captured(ctx context.Context, read *sourcecatalog.ContentRead, content []byte) {
-	index.stats.captured++
-	if read.Observe(ctx, content) {
+func (index *grepContentIndex) captured(read *sourcecatalog.ContentRead) {
+	defer read.Close()
+	if read.Learned() {
 		index.stats.learned++
 	}
 }

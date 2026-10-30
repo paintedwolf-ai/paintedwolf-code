@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 const (
@@ -55,6 +57,7 @@ type literalIndexedFile struct {
 	// unread marks a file the build could not open (permission denied); it
 	// stays a candidate for every literal so the caller's open reports it.
 	unread bool
+	watch  repochange.WatchObservation
 }
 
 type literalScopeIndex struct {
@@ -68,6 +71,7 @@ type literalIndexRecord struct {
 	cancel   context.CancelFunc
 	waiters  int
 	rootPath string
+	watch    repochange.WatchObservation
 	done     chan struct{}
 	index    *literalScopeIndex
 	err      error
@@ -89,6 +93,7 @@ type literalIndexCache struct {
 type literalFileRead struct {
 	rootPath, path string
 	invalidated    bool
+	watch          repochange.WatchObservation
 }
 
 type literalProjection struct {
@@ -109,6 +114,7 @@ type literalFileCacheEntry struct {
 	bloom         literalBloom
 	rawBloom      literalBloom
 	rawSearchable bool
+	watch         repochange.WatchObservation
 }
 
 func newLiteralIndexCache() *literalIndexCache {
@@ -264,7 +270,7 @@ func (c *LiteralSearch) LiteralCandidates(ctx context.Context, snapshot Snapshot
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if file.unread || entryUnderAnyBase(file.entry.Path, dirty) || file.bloom.admits(folded) {
+		if file.unread || !file.watch.Valid() || file.watch != repochange.ObserveWatch(rootPath, path.Dir(file.entry.Path)) || entryUnderAnyBase(file.entry.Path, dirty) || file.bloom.admits(folded) {
 			out = append(out, file.entry)
 		}
 	}
@@ -285,7 +291,11 @@ func (c *literalIndexCache) load(
 	key, rootPath string,
 	build func(context.Context) (*literalScopeIndex, error),
 ) (*literalScopeIndex, error) {
+	watch := repochange.ObserveWatch(rootPath, ".")
 	c.mu.Lock()
+	if existing := c.records[key]; existing != nil && existing.watch != watch {
+		c.dropRecordLocked(key)
+	}
 	if existing := c.records[key]; existing != nil {
 		existing.waiters++
 		c.mu.Unlock()
@@ -293,7 +303,7 @@ func (c *literalIndexCache) load(
 	}
 
 	buildCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	record := &literalIndexRecord{rootPath: rootPath, done: make(chan struct{}), cancel: cancel, waiters: 1}
+	record := &literalIndexRecord{rootPath: rootPath, watch: watch, done: make(chan struct{}), cancel: cancel, waiters: 1}
 	c.records[key] = record
 	c.mu.Unlock()
 
@@ -416,7 +426,7 @@ func (c *literalIndexCache) buildScope(
 		if !result.searchable {
 			bloom = nil
 		}
-		index.files = append(index.files, literalIndexedFile{entry: entry, bloom: bloom})
+		index.files = append(index.files, literalIndexedFile{entry: entry, bloom: bloom, watch: c.fileWatch(rootPath, entry)})
 		index.bytes += int64(len(bloom)*8 + literalEntryStringBytes(entry))
 	}
 	return index, nil
@@ -458,10 +468,8 @@ func (c *literalIndexCache) readBlooms(
 }
 
 func (c *literalIndexCache) cachedBloom(rootPath string, entry Entry) (literalBloom, bool, bool) {
-	c.fileMu.Lock()
-	defer c.fileMu.Unlock()
-	cached, ok := c.files.lookup(rootPath, entry.Path)
-	if !ok || cached.size != entry.Size || cached.mode != entry.Mode || cached.modifiedNS != entry.Modified.UnixNano() {
+	cached, ok := c.cachedFile(rootPath, entry)
+	if !ok {
 		return nil, false, false
 	}
 	return cached.bloom, cached.searchable, true
@@ -475,7 +483,7 @@ func (c *literalIndexCache) fileBloom(
 	entry Entry,
 	open func(Entry) (io.ReadCloser, error),
 ) (literalBloom, bool, error) {
-	read := &literalFileRead{rootPath: rootPath, path: entry.Path}
+	read := &literalFileRead{rootPath: rootPath, path: entry.Path, watch: repochange.ObserveWatch(rootPath, path.Dir(entry.Path))}
 	c.fileMu.Lock()
 	c.fileReads[read] = struct{}{}
 	c.fileMu.Unlock()
@@ -484,10 +492,10 @@ func (c *literalIndexCache) fileBloom(
 	if err != nil {
 		return nil, false, err
 	}
-	if entryStillMatches(rootPath, entry) {
+	if read.watch.Valid() && read.watch == repochange.ObserveWatch(rootPath, path.Dir(entry.Path)) && entryStillMatches(rootPath, entry) {
 		c.fileMu.Lock()
 		if !read.invalidated {
-			c.storeFile(rootPath, entry, facts)
+			c.storeFile(rootPath, entry, facts, read.watch)
 		}
 		c.fileMu.Unlock()
 	}

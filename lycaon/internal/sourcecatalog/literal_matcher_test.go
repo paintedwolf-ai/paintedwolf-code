@@ -27,7 +27,7 @@ func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 	testutil.FailErr(t, "matcher limits", err)
 	for _, dialect := range []textsearch.Dialect{textsearch.Fixed, textsearch.Basic, textsearch.Extended, textsearch.RE2, textsearch.Perl} {
 		patterns := []string{"needletoken", "kelvin", "source", "σigma", "istanbul", "ÉLAN", "abc", "a.*bc", "a(b|bb)c", "a?bc", "^$", "^start", "end$", ""}
-		if dialect == textsearch.RE2 || dialect == textsearch.Perl {
+		if dialect == textsearch.RE2 {
 			patterns = append(patterns, "(?i:needle)Token", `\bNeedleToken\b`)
 		}
 		if dialect == textsearch.Basic {

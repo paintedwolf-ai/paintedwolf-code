@@ -575,7 +575,7 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 		return r.searchNoMatch(e.display, names)
 	}
 	observation := r.index.begin(e)
-	defer observation.Close()
+	defer r.index.captured(observation)
 	streamed, pin, err := r.inv.openWalkedPinnedStream(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
@@ -584,6 +584,7 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 		}
 		return err
 	}
+	r.index.stats.captured++
 	defer func() { _ = streamed.Reader.Close() }()
 	if checkBinary {
 		if streamed.FirstNullOffset >= 0 {
