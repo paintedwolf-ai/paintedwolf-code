@@ -94,23 +94,16 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 	return bound
 }
 
-type retainedInputsFixture struct{ calls int }
-
-func (r *retainedInputsFixture) RetainReviewedProgramInputs(_ context.Context, _ toolcontract.OperationInvocation, _ toolcontract.ReviewedOperationInputs) (string, error) {
-	r.calls++
-	return "output:screened-review", nil
-}
-
 func (f programReceiptFixture) start(t *testing.T, bound toolcontract.BoundOperation) {
 	t.Helper()
-	inputs := &retainedInputsFixture{}
+	inputs := f.capture(t)
 	review, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze actual lossless reviewed inputs", err)
 	defer release()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, "actual-model-call", review))
-	if inputs.calls != 1 || !observer.OwnerStartRecorded {
-		t.Fatalf("review retention calls=%d", inputs.calls)
+	if !observer.OwnerStartRecorded {
+		t.Fatal("owner start was not acknowledged")
 	}
 }
 

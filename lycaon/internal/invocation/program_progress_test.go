@@ -32,11 +32,6 @@ type progressFacts struct{ store progress.Store }
 func (f progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: f.store.Get(ctx, id)}, nil
 }
-func (r *retainedInputsFixture) RetainReviewedProgressInputs(_ context.Context, _ toolcontract.ProgramProgressIdentity, _ toolcontract.ReviewedOperationInputs) (string, error) {
-	r.calls++
-	return "output:screened-progress-review", nil
-}
-
 func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.T) {
 	for _, mode := range []string{"committed", "closed-plan", "invalid-update"} {
 		t.Run(mode, func(t *testing.T) {
@@ -69,7 +64,7 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			}))
 			executor := toolexecution.NewExecutor(nil, registry, "fixture")
 			owner := progress.NewSQLStore(f.database)
-			inputs := &retainedInputsFixture{}
+			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 			update := &toolexecution.ProgramProgressUpdate{ExecutionID: uuid.NewString(), Arguments: map[string]any{"content": "- [ ] Create fixture"}}
 			if mode == "invalid-update" {
@@ -107,10 +102,10 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			page, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
 			testutil.FailErr(t, "read durable progress attribution", err)
 			if mode == "committed" {
-				if owner.Get(t.Context(), f.session) != "- [ ] Create fixture" || inputs.calls != 1 || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
+				if owner.Get(t.Context(), f.session) != "- [ ] Create fixture" || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
 					t.Fatalf("later refusal erased progress: %+v", page)
 				}
-			} else if owner.Get(t.Context(), f.session) != "" || inputs.calls != 0 || page.Progress != nil {
+			} else if owner.Get(t.Context(), f.session) != "" || page.Progress != nil {
 				t.Fatal("rejected envelope committed progress or receipt")
 			}
 		})

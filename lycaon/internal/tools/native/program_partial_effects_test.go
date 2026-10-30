@@ -37,18 +37,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-type retainedReviewInputs struct{ calls int }
-
-func (r *retainedReviewInputs) RetainReviewedProgramInputs(_ context.Context, in toolcontract.OperationInvocation, _ toolcontract.ReviewedOperationInputs) (string, error) {
-	r.calls++
-	return "output:reviewed-" + in.Identity.ExecutionID, nil
-}
-
-// Q15: a completed write, an HTTP attempt whose outcome is unknown, and a lost
-// supervisor. The write goes through the existing mutation door and source
-// journal, the attempt through the shared outbound HTTP transport, and the loss
-// through the existing interruption owner. Completed, unknown and not-started
-// facts stay separate, the journal still resolves, and nothing is replayed.
 func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
@@ -83,7 +71,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	testutil.FailErr(t, "capture actual profile", err)
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
-	retention := &retainedReviewInputs{}
+	retention := partialEffectsCapture(t, recorder, programID, "s1", "p1")
 	observer := &invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}
 	memory := programDoorMemory(t)
 
@@ -193,8 +181,8 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
 		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
 	}
-	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
-		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
+	if requests.Load() != 1 || memory.InUse().State != 0 {
+		t.Fatalf("replayed or leaked: requests=%d held=%d", requests.Load(), memory.InUse().State)
 	}
 }
 

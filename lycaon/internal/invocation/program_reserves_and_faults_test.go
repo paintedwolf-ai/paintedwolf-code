@@ -65,7 +65,7 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"content": "- [ ] reserve"})
 	testutil.FailErr(t, "freeze progress review", err)
 	defer releaseProgress()
-	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
+	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: f.capture(t)}
 	testutil.FailErr(t, "start live progress", observer.BeforeProgressOwner(t.Context(), progressID, "actual-model-call", progressReview))
 
 	// Active reservations: parent (32/16384) + progress (32/16384) + 2 live children (64/32768) = 128 events, 65536 bytes.

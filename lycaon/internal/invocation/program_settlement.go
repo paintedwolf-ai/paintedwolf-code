@@ -20,10 +20,8 @@ func validDigest(s string) bool {
 	return err == nil
 }
 
-// startNativeOwner records ProgramAdmissionRecorder.BeforeNativeOwner. A committed
-// start marker is a conservative recovery obligation, not proof of an effect.
-// No operation is dispatched if the durable marker cannot be acknowledged.
-func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation string) error {
+// A committed start marker requires recovery if no owner result is recorded.
+func (r *SQLRecorder) startNativeOwner(ctx context.Context, tx *sql.Tx, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation string) error {
 	in := operation.Invocation()
 	if err := in.Validate(); err != nil {
 		return err
@@ -42,11 +40,6 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 	if err != nil {
 		return err
 	}
-	tx, err := r.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	if err = chargeProgramTrace(ctx, tx, in.Identity.ProgramID, 1, int64(len(reviewedArgumentsDigest)+len(reviewedReference)+len(reviewedRepresentation)+len(operation.Command())+len(operation.Mode())+len(classes)), traceChargeNonTerminal); err != nil {
 		return err
 	}
@@ -57,7 +50,7 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 	if err = oneProgramTransition(result); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // WaitChild preserves one execution identity while approval or an owned job waits.
