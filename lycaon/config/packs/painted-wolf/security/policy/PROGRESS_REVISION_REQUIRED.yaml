@@ -14,6 +14,7 @@ copy:
   cause: This replacement omitted expected_revision.
   why: The observed revision binds the replacement to the checklist it was prepared from.
   fix: Use the returned snapshot to prepare the replacement, then submit its revision as expected_revision.
+  instead: Use the current snapshot revision as expected_revision when replacing the checklist.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
 x-paintedwolf-message: Progress snapshot revision required

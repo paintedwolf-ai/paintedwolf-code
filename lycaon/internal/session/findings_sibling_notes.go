@@ -2,7 +2,7 @@ package session
 
 import "github.com/lycaon/lycaon/internal/progress"
 
-// SetProgressStore wires the coordinator progress store for the plan-missing nudge.
+// SetProgressStore connects the session progress owner.
 func (m *Host) SetProgressStore(store progress.RunScopedStore) {
 	if m == nil {
 		return

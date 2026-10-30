@@ -88,8 +88,7 @@ func doomLoopFingerprintArgs(tool string, args map[string]any) map[string]any {
 	}
 }
 
-// doomLoopUpdateProgressArgs groups all-terminal checklists so rewording closed
-// items cannot reset repetition tracking.
+// Progress fingerprints ignore revision bookkeeping and normalize closed labels.
 func doomLoopUpdateProgressArgs(args map[string]any) map[string]any {
 	if args == nil {
 		return map[string]any{}

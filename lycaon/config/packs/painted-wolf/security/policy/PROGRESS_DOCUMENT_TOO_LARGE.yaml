@@ -14,6 +14,7 @@ copy:
   cause: The proposed progress document contains too many characters.
   why: The stored and returned checklist must contain the complete submitted document.
   fix: Keep one concise row per deliverable and shorten the document within the reported character limit.
+  instead: Submit one concise row per deliverable within the reported character limit.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
 x-paintedwolf-message: Progress document exceeds size budget

@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -79,22 +80,26 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 		if code, data, ok := ValidateAuthorProgress(current.Content, u.content); !ok {
 			return "", &AuthorUpdateRejection{Code: code, Data: data}
 		}
-		result.Updated = current.Content != u.content
-		transitions := ClassifyTransitions(current.Content, u.content)
-		result.StateChanged = transitions.Changed
-		result.DeliverableClosed = transitions.Closed
 		return u.content, nil
 	})
-	result.Snapshot = snapshot
 	if err != nil {
-		if reconciler != nil {
-			result.Snapshot.Reconciliation = reconciler.Reconciliation(root)
-		}
-		if rejection, ok := err.(*AuthorUpdateRejection); ok && (rejection.Code == "PROGRESS_REVISION_CHANGED" || rejection.Code == "PROGRESS_REVISION_REQUIRED") {
-			rejection.Data["snapshot"] = result.Snapshot
+		var rejection *AuthorUpdateRejection
+		if errors.As(err, &rejection) {
+			result.Snapshot = snapshot
+			if reconciler != nil {
+				result.Snapshot.Reconciliation = reconciler.Reconciliation(root)
+			}
+			if rejection.Code == "PROGRESS_REVISION_CHANGED" || rejection.Code == "PROGRESS_REVISION_REQUIRED" {
+				rejection.Data["snapshot"] = result.Snapshot
+			}
 		}
 		return result, err
 	}
+	result.Snapshot = snapshot
+	result.Updated = previous != snapshot.Content
+	transitions := ClassifyTransitions(previous, snapshot.Content)
+	result.StateChanged = transitions.Changed
+	result.DeliverableClosed = transitions.Closed
 	if result.Updated {
 		NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Prev: previous})
 	}

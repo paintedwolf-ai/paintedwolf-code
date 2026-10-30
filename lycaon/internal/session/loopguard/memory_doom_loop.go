@@ -171,7 +171,7 @@ func (g *MemoryDoomLoopGuard) supersededLocked(sessionID, key string, st *doomLo
 	return effects.seq > st.seenEffectSeq && effects.key != key
 }
 
-// RecordAttempt updates invocation and rejection counts; mutated marks a committed effect.
+// RecordAttempt tracks responses; mutated marks an effect that renews repetition context.
 func (g *MemoryDoomLoopGuard) RecordAttempt(
 	ctx context.Context,
 	sessionID, responseID, tool string,
