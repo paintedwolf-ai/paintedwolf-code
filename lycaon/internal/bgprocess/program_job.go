@@ -50,7 +50,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		proc.RootSessionID = sessionID
 	}
 	r.jobs.mu.Lock()
-	if r.jobs.closed {
+	if r.jobs.closed || r.jobs.drains[sessionID] != nil {
 		r.jobs.mu.Unlock()
 		cancel()
 		return "", ErrRegistryClosed

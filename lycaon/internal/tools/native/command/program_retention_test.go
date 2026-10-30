@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,5 +123,68 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 	testutil.FailErr(t, "wait newest retained raw handle", err)
 	if result.Status != 42 || len(jobs.results) != 1 {
 		t.Fatalf("bounded retained results=%v latest=%+v", jobs.results, result)
+	}
+}
+
+func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
+	registry := bgprocess.NewRegistry(bgprocess.Config{MaxBackground: 1}, bgprocess.Hooks{})
+	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
+	supervisor := &ProgramSupervisor{Background: registry}
+	jobs := supervisor.Jobs("owned", "project")
+	sibling := supervisor.Jobs("sibling", "project")
+	admitted, err := jobs.BeginProgram(t.Context())
+	testutil.FailErr(t, "admit original session owner", err)
+	started, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	finish := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(finish)
+	root := toolcontract.OperationInvocation{SessionID: "owned", Identity: toolcontract.ExecutionIdentity{ProgramID: "retry-program", ExecutionID: "root"}}
+	_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
+		_, startErr := supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			close(started)
+			<-jobCtx.Done()
+			close(canceled)
+			<-release
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, jobCtx.Err()
+		})
+		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
+	})
+	testutil.FailErr(t, "start actual held program job", err)
+	testutil.Receive(t, "actual job running", started)
+	settled := make(chan bool, 1)
+	supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) { settled <- stopped })
+	short, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := supervisor.DisposeSession(short, "owned"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("initial program disposal = %v", err)
+	}
+	testutil.Receive(t, "held job cancellation", canceled)
+	if _, err := jobs.BeginProgram(t.Context()); !errors.Is(err, ErrProgramStopped) {
+		t.Fatalf("timed-out disposal reopened retained owner: %v", err)
+	}
+	if _, err := sibling.BeginProgram(t.Context()); err != nil {
+		t.Fatalf("owned disposal closed sibling admission: %v", err)
+	}
+	long, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stop()
+	retry := make(chan error, 1)
+	go func() { retry <- supervisor.DisposeSession(long, "owned") }()
+	select {
+	case err := <-retry:
+		t.Fatalf("program disposal retry ignored its live held job: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	select {
+	case <-settled:
+		t.Fatal("program settled before its held job exited")
+	default:
+	}
+	finish()
+	testutil.FailErr(t, "retry retained owner disposal", testutil.Receive(t, "actual retry completion", retry))
+	if !testutil.Receive(t, "stopped program settlement", settled) || registry.HasRunning("owned") {
+		t.Fatal("retry did not join and settle the actual stopped job")
+	}
+	if supervisor.sessions["owned"] != nil || supervisor.sessions["sibling"] != sibling {
+		t.Fatal("retry retained the disposed owner or disturbed sibling state")
 	}
 }
