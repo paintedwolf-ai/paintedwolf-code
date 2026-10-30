@@ -143,7 +143,8 @@ func (r *treeRun) root(operand string) (treeNode, error) {
 
 // list reads one directory's admitted children and, below -L, theirs.
 func (r *treeRun) list(dir entry, display string, depth int) ([]treeNode, bool, error) {
-	children, err := r.walker.children(dir, false)
+	children, release, err := r.walker.children(dir, false)
+	defer release()
 	if err != nil {
 		if _, ok := ordinary(err); ok {
 			return nil, true, nil
