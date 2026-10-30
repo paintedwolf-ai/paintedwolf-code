@@ -45,8 +45,15 @@ def dependent(pull, landed, repository):
     if pull['baseRefName'] == landed['head']['ref']:
         return True
     moved = pull['timelineItems']['nodes']
-    return (pull['baseRefName'] == 'main' and bool(moved) and moved[0]['previousRefName'] == landed['head']['ref']
-            and moved[0]['currentRefName'] == 'main' and moved[0]['createdAt'] >= landed['created_at'])
+    if pull['baseRefName'] != 'main' or not moved:
+        return False
+    change = moved[0]
+    if change['previousRefName'] == landed['head']['ref'] and change['currentRefName'] == 'main':
+        return change['createdAt'] >= landed['created_at']
+    # Silent retargeting leaves the latest explicit move onto the dependency.
+    # That event identifies older PRs even before they inherit its commits.
+    return (change['currentRefName'] == landed['head']['ref']
+            and landed['created_at'] <= change['createdAt'] <= landed['merged_at'])
 
 
 def auto_retarget_candidate(pull, landed, repository):
