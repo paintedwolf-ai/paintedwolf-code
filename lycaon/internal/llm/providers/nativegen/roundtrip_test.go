@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 // The adapter round-trip drives the compiled nativegen binary through the
@@ -27,7 +28,8 @@ func TestAdapterRoundTrip(t *testing.T) {
 	p := New("nativegen-test", Options{BinaryPath: bin, ModelDir: modelDir, Device: "cpu"})
 	// Replace the default start with a capture of the child, so the test can
 	// drive the codec directly against the real binary.
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	if err := p.start(ctx); err != nil {
 		t.Fatalf("start: %v", err)
 	}
