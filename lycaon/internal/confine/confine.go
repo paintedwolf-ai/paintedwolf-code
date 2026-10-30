@@ -458,6 +458,9 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(fsRule{op: opRead, allow: true, everywhere: true})
 	deny := readDenyMatches(c)
 	if len(deny) > 0 {
+		// Denying file-read* blocks metadata probes too; frameworks such as
+		// macOS Security stat a store before opening it and exit without a
+		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
 		// Managed read roots and approved read grants override denied ancestors.
 		allow := SecretReadAllowBackRoots()
