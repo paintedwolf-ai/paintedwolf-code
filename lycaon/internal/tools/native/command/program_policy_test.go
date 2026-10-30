@@ -34,14 +34,14 @@ func TestProgramPolicyAdmissionPreservesEarlierOutputAndSkipsUntakenEffects(t *t
 		}
 		return nil
 	})
-	raw, err := f.call(t, ctx, "echo kept; false && external -- /bin/echo untaken; cd nested; external -- /usr/bin/touch sentinel")
+	raw, err := f.call(t, ctx, "pwd; false && external -- /bin/echo untaken; cd nested; external -- /usr/bin/touch sentinel")
 	testutil.FailErr(t, "settle reached policy barrier", err)
 	var result struct {
 		Stdout string `json:"stdout"`
 		Status int    `json:"status"`
 	}
 	testutil.FailErr(t, "decode program result", json.Unmarshal([]byte(raw), &result))
-	if result.Stdout != "kept\n" || result.Status == 0 {
+	if result.Stdout != f.Dir+"\n" || result.Status == 0 {
 		t.Fatalf("program outcome: %s", raw)
 	}
 	if len(mutationScopes) != 1 || mutationScopes[0] != nested {
