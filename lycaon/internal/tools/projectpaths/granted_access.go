@@ -48,7 +48,7 @@ func SetGrantedAccessSource(fn GrantedAccessSource) func() {
 
 // resolveGranted anchors scope on the approved path.
 func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool) {
-	abs := strings.TrimSpace(modelPath)
+	abs := modelPath
 	if abs == "" || !filepath.IsAbs(abs) {
 		// Grants apply only to absolute paths.
 		return Resolved{}, false
