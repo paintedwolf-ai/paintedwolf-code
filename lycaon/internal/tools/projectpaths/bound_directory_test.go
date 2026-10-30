@@ -67,3 +67,19 @@ func TestHeldDirectoryBoundsOnlyVisibleNames(t *testing.T) {
 		t.Fatalf("partial listing became complete: %v", err)
 	}
 }
+
+func TestClosedDirectoryCannotPublishAnEmptyNamespace(t *testing.T) {
+	tc, _ := readSessionContext(t)
+	paths, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind invocation", err)
+	bound, err := paths.Bind(t.Context(), ".", false)
+	testutil.FailErr(t, "bind directory", err)
+	directory, err := bound.OpenDir()
+	testutil.FailErr(t, "hold directory", err)
+	testutil.FailErr(t, "close directory", directory.Close())
+	for range 2 {
+		if names, err := directory.Names(0); !errors.Is(err, os.ErrClosed) || len(names) != 0 {
+			t.Fatalf("closed namespace=%v error=%v", names, err)
+		}
+	}
+}
