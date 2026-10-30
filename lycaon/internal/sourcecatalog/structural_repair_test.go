@@ -2,54 +2,99 @@ package sourcecatalog
 
 import (
 	"fmt"
+	"path"
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStructuralAncestorRepairDoesNotReadSiblingSubtrees(t *testing.T) {
-	for _, spill := range []bool{false, true} {
-		t.Run(fmt.Sprint(spill), func(t *testing.T) {
-			store := checkpointTestStore(t)
-			builder, err := newStructuralBuilder(store, nil)
-			testutil.FailErr(t, "create repair builder", err)
-			defer builder.close()
-			if spill {
-				builder.directories.memoryLimit = 0
-			}
-			observePublicationFixture(t, builder, store, ".", []string{"changed", "unrelated"}, true)
-			observePublicationFixture(t, builder, store, "changed", []string{"leaf"}, true)
-			observePublicationFixture(t, builder, store, "changed/leaf", []string{"old"}, false)
-			observePublicationFixture(t, builder, store, "unrelated", []string{"retained"}, false)
-			testutil.FailErr(t, "finalize initial tree", builder.finalize(t.Context()))
-			root, _, err := builder.children(t.Context(), ".")
-			testutil.FailErr(t, "read initial root", err)
-			before, _, err := root.LocateItem(t.Context(), DirectoryOrder("unrelated", true))
-			testutil.FailErr(t, "capture sibling summary", err)
-			record, found, err := builder.directories.Get(t.Context(), "unrelated")
-			testutil.FailErr(t, "read sibling metadata", err)
-			if !found {
-				t.Fatal("missing sibling fixture")
-			}
-			record.page = structuralOffsetMask
-			testutil.FailErr(t, "poison unrelated subtree page", builder.directories.Set(t.Context(), "unrelated", record))
-			// Completed repairs must not reopen unrelated subtrees.
-			observePublicationFixture(t, builder, store, "changed/leaf", []string{"new", "second"}, false)
-			testutil.FailErr(t, "repair changed ancestor path", builder.finalize(t.Context()))
-			root, _, err = builder.children(t.Context(), ".")
-			testutil.FailErr(t, "read repaired root", err)
-			after, _, err := root.LocateItem(t.Context(), before.Key)
-			testutil.FailErr(t, "read retained sibling", err)
-			if after != before {
-				t.Fatal("unrelated sibling summary changed")
-			}
-			changed, _, err := root.LocateItem(t.Context(), DirectoryOrder("changed", true))
-			testutil.FailErr(t, "read repaired child", err)
-			if changed.Weight != 5 || changed.Unresolved != 0 {
-				t.Fatalf("changed summary=%+v", changed)
-			}
-		})
+	for _, shape := range []struct{ width, depth int }{{2, 1}, {pagedview.PageFanout + 1, 1}, {2, 8}, {pagedview.PageFanout + 1, 8}} {
+		for _, spill := range []bool{false, true} {
+			t.Run(fmt.Sprintf("width=%d/depth=%d/spill=%v", shape.width, shape.depth, spill), func(t *testing.T) {
+				store := checkpointTestStore(t)
+				b, err := newStructuralBuilder(store, nil)
+				testutil.FailErr(t, "create repair builder", err)
+				defer b.close()
+				if spill {
+					b.directories.memoryLimit = 0
+				}
+				ancestors := make([]string, shape.depth)
+				siblings := map[string][]string{}
+				leaf := "."
+				for level := range shape.depth {
+					ancestors[level] = leaf
+					names := []string{"changed"}
+					for sibling := range shape.width {
+						names = append(names, fmt.Sprintf("side-%03d", sibling))
+					}
+					observePublicationFixture(t, b, store, leaf, names, true)
+					for _, name := range names[1:] {
+						child := path.Join(leaf, name)
+						siblings[leaf] = append(siblings[leaf], child)
+						observePublicationFixture(t, b, store, child, []string{"retained"}, false)
+					}
+					leaf = path.Join(leaf, "changed")
+				}
+				observePublicationFixture(t, b, store, leaf, []string{"old"}, false)
+				testutil.FailErr(t, "finalize initial tree", b.finalize(t.Context()))
+				expected := map[string][]pagedview.RangeItem[TreeItem]{}
+				for _, parent := range ancestors {
+					index, _, err := b.children(t.Context(), parent)
+					testutil.FailErr(t, "read initial ancestor", err)
+					for _, sibling := range siblings[parent] {
+						item, _, err := index.LocateItem(t.Context(), DirectoryOrder(path.Base(sibling), true))
+						testutil.FailErr(t, "capture sibling summary", err)
+						expected[parent] = append(expected[parent], item)
+						record, found, err := b.directories.Get(t.Context(), sibling)
+						testutil.FailErr(t, "read sibling metadata", err)
+						if !found {
+							t.Fatal("missing sibling fixture")
+						}
+						// Every unrelated subtree is opaque: any later page read must fail.
+						record.page = structuralOffsetMask
+						testutil.FailErr(t, "make sibling subtree opaque", b.directories.Set(t.Context(), sibling, record))
+					}
+				}
+				for attempt := 1; attempt <= 4; attempt++ {
+					observePublicationFixture(t, b, store, leaf, []string{fmt.Sprintf("new-%d", attempt)}, false)
+					testutil.FailErr(t, "repair changed ancestor path", b.finalize(t.Context()))
+					for _, parent := range ancestors {
+						index, _, err := b.children(t.Context(), parent)
+						testutil.FailErr(t, "read repaired ancestor", err)
+						for _, before := range expected[parent] {
+							after, _, err := index.LocateItem(t.Context(), before.Key)
+							testutil.FailErr(t, "read retained sibling", err)
+							if after != before {
+								t.Fatal("unrelated sibling summary changed")
+							}
+						}
+					}
+					root, observation, err := b.children(t.Context(), ".")
+					testutil.FailErr(t, "read repaired root", err)
+					extent, err := root.Extent(t.Context())
+					testutil.FailErr(t, "measure repaired root", err)
+					want := int64(shape.depth + 2*shape.depth*shape.width + 1 + attempt)
+					pending, err := directoryUnresolved(t.Context(), root, stateOf(observation))
+					testutil.FailErr(t, "measure repaired coverage", err)
+					if extent != want || pending != 0 {
+						t.Fatalf("attempt %d root extent/coverage=%d/%d, want %d/0", attempt, extent, pending, want)
+					}
+					repairs := 0
+					testutil.FailErr(t, "inspect consumed repair work", b.directories.VisitFlags(t.Context(), directoryRepair|directoryAncestor, false, func(string, uint64) error { repairs++; return nil }))
+					if repairs != 0 {
+						t.Fatalf("attempt %d retained %d pending repairs", attempt, repairs)
+					}
+					bytes := b.writer.TotalBytes()
+					testutil.FailErr(t, "reuse completed repair", b.finalize(t.Context()))
+					if b.writer.TotalBytes() != bytes {
+						t.Fatal("completed repair wrote more pages")
+					}
+				}
+			})
+		}
 	}
 }
 
