@@ -129,14 +129,14 @@ func (r *openedRoot) identityOpened() {
 }
 
 func (r *ReadRoot) validateDirectoryRoot() error {
-	var held, named unix.Stat_t
-	if err := unix.Fstat(r.root.fd, &held); err != nil {
-		return err
+	if r.root.fd < 0 {
+		return os.ErrClosed
 	}
+	var named unix.Stat_t
 	if err := unix.Lstat(r.root.path, &named); err != nil {
 		return err
 	}
-	if named.Mode&unix.S_IFMT != unix.S_IFDIR || named.Dev != held.Dev || named.Ino != held.Ino {
+	if named.Mode&unix.S_IFMT != unix.S_IFDIR || deviceID(&named) != r.root.dev || named.Ino != r.root.ino {
 		return ErrSymlink
 	}
 	return nil
