@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/grep_output.go",
+  "kind": "algorithm",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the 335-line file-search and output-mode boundary. It selects ordinary, count, binary, only-match and context emission around one verified file stream; transformed record storage has its own admitted owner. Separating individual mode callbacks would duplicate stream status and output-limit decisions. Focused exact ordering, source mapping, transformed output and cleanup contracts support this ceiling.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 335,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_parallel_test.go": "ae114897a52072f49f9af01e44d0f6ff7310d69e09dd7c55f739051c0e3a4546",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad"
+  }
+}
