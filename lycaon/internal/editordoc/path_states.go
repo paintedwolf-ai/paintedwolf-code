@@ -27,7 +27,7 @@ func (l *LifecycleService) VisitUnsavedDocuments(ctx context.Context, projectID 
 	}
 	after := ""
 	for {
-		page, err := l.unsavedPathStatesPage(ctx, p.ID, rootID, path, after, descendants)
+		page, err := l.unsavedPathStatesPage(ctx, p.ID, p.BranchForRoot(rootID), rootID, path, after, descendants)
 		if err != nil {
 			return err
 		}
@@ -46,10 +46,9 @@ func (l *LifecycleService) VisitUnsavedDocuments(ctx context.Context, projectID 
 	}
 }
 
-func (l *LifecycleService) unsavedPathStatesPage(ctx context.Context, projectID, rootID, path, after string, descendants bool) ([]DocumentPathState, error) {
-	rows, err := l.s.store.db.QueryContext(ctx, `SELECT id,root_id,path,branch_id,revision,base_sha256,absent,length(CAST(draft AS BLOB)),length(CAST(base_content AS BLOB))
- FROM editor_documents WHERE project_id=? AND (dirty=1 OR diverged=1) AND id>?
- AND (?='' OR root_id=?) AND (?='' OR path=? OR (? AND substr(path,1,length(?)+1)=?||'/')) ORDER BY id LIMIT ?`, projectID, after, rootID, rootID, path, path, descendants, path, path, documentStatusPageSize)
+func (l *LifecycleService) unsavedPathStatesPage(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path, after string, descendants bool) ([]DocumentPathState, error) {
+	query, args := unsavedPathStatesQuery(projectID, branch, rootID, path, after, descendants)
+	rows, err := l.s.store.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -63,4 +62,26 @@ func (l *LifecycleService) unsavedPathStatesPage(ctx context.Context, projectID,
 		page = append(page, state)
 	}
 	return page, rows.Err()
+}
+
+func unsavedPathStatesQuery(projectID string, branch sourcebranch.ID, rootID, path, after string, descendants bool) (string, []any) {
+	query := `SELECT id,root_id,path,branch_id,revision,base_sha256,absent,length(CAST(draft AS BLOB)),length(CAST(base_content AS BLOB))
+ FROM editor_documents WHERE project_id=? AND (dirty=1 OR diverged=1) AND id>?`
+	args := []any{projectID, after}
+	if rootID != "" {
+		query += " AND branch_id=? AND root_id=?"
+		args = append(args, branch.String(), rootID)
+	}
+	if path != "" {
+		if descendants {
+			// '/' and '0' bound the descendants under binary path ordering.
+			query += " AND (path=? OR (path>=? AND path<?))"
+			args = append(args, path, path+"/", path+"0")
+		} else {
+			query += " AND path=?"
+			args = append(args, path)
+		}
+	}
+	query += " ORDER BY id LIMIT ?"
+	return query, append(args, documentStatusPageSize)
 }
