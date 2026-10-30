@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -145,7 +146,8 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	cmd.Stderr = &stderr
 	stopProbe := make(chan struct{})
 	probeErr := make(chan error, 1)
-	go probeEarlyBrokerAgent(stopProbe, probeErr)
+	var bootstrap atomic.Int32
+	go probeEarlyBrokerAgent(&bootstrap, stopProbe, probeErr)
 	// Registered before the wait below so it runs after the bootstrap has
 	// exited and its standard error is complete.
 	t.Cleanup(func() {
@@ -154,6 +156,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 		}
 	})
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
+	bootstrap.Store(int32(cmd.Process.Pid))
 	result := &launchWaitResult{done: make(chan struct{})}
 	go func() { result.err = cmd.Wait(); close(result.done) }()
 	t.Cleanup(func() {
@@ -284,7 +287,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("supervisor %d is %q now and was %q at the desktop's broker probe, with %d broker agents", launch.cmd.Process.Pid, state, facts.SupervisorState, facts.BrokerAgents)
 	}
 	assertBootstrapSupervisorProfile(t, launch.cmd.Process.Pid)
-	agentPID := findBrokerAgentPID(t)
+	agentPID := findBrokerAgentPID(t, launch.cmd.Process.Pid)
 	assertProcessThreadCredentials(t, agentPID, "0", 1)
 	assertBrokerAgentSealed(t, agentPID)
 	assertProcessThreadCredentials(t, facts.PID, "1", 5)
@@ -360,106 +363,6 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	testutil.FailErr(t, "read coverdir", err)
 	if len(entries) != 0 {
 		t.Fatalf("privileged bootstrap wrote to caller GOCOVERDIR: %v", entries)
-	}
-}
-
-// probeEarlyBrokerAgent races /proc from before bootstrap start to verify a
-// same-UID caller can never open /proc/<agent>/fd, /proc/<agent>/mem, or
-// ptrace-attach the broker agent from the first observable window.
-func probeEarlyBrokerAgent(stop <-chan struct{}, result chan<- error) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	for {
-		select {
-		case <-stop:
-			result <- nil
-			return
-		default:
-		}
-		for _, pid := range brokerAgentPIDs() {
-			if err := tryAttackBrokerAgent(pid); err != nil {
-				result <- err
-				return
-			}
-		}
-	}
-}
-
-func brokerAgentPIDs() []int {
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil
-	}
-	var pids []int
-	for _, entry := range entries {
-		pid, err := strconv.Atoi(entry.Name())
-		if err != nil || pid <= 1 {
-			continue
-		}
-		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-		if err != nil || !strings.Contains(string(raw), BrokerAgentArgument) {
-			continue
-		}
-		pids = append(pids, pid)
-	}
-	return pids
-}
-
-func tryAttackBrokerAgent(pid int) error {
-	for _, target := range []string{
-		fmt.Sprintf("/proc/%d/mem", pid),
-		fmt.Sprintf("/proc/%d/fd/4", pid),
-	} {
-		if file, err := os.Open(target); err == nil {
-			_ = file.Close()
-			return fmt.Errorf("same-UID process opened broker agent %s", target)
-		}
-	}
-	if err := syscall.PtraceAttach(pid); err == nil {
-		var status syscall.WaitStatus
-		_, _ = syscall.Wait4(pid, &status, 0, nil)
-		_ = syscall.PtraceDetach(pid)
-		return fmt.Errorf("same-UID process ptrace-attached broker agent %d", pid)
-	}
-	return nil
-}
-
-func findBrokerAgentPID(t *testing.T) int {
-	t.Helper()
-	for _, pid := range brokerAgentPIDs() {
-		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-		if err == nil && strings.Contains(string(raw), "NoNewPrivs:\t0\n") {
-			return pid
-		}
-	}
-	t.Fatal("broker agent process not found in /proc")
-	return 0
-}
-
-func assertBrokerAgentSealed(t *testing.T, pid int) {
-	t.Helper()
-	for _, target := range []string{
-		fmt.Sprintf("/proc/%d/mem", pid),
-		fmt.Sprintf("/proc/%d/fd/4", pid),
-	} {
-		file, err := os.Open(target)
-		if err == nil {
-			_ = file.Close()
-			t.Fatalf("same-UID process opened broker agent %s", target)
-		}
-		if !errors.Is(err, unix.EACCES) {
-			t.Fatalf("open %s: %v, want EACCES", target, err)
-		}
-	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	if err := syscall.PtraceAttach(pid); err == nil {
-		var status syscall.WaitStatus
-		_, _ = syscall.Wait4(pid, &status, 0, nil)
-		_ = syscall.PtraceDetach(pid)
-		t.Fatalf("same-UID process ptrace-attached broker agent %d", pid)
-	} else if !errors.Is(err, unix.EPERM) {
-		t.Fatalf("ptrace broker agent %d: %v, want EPERM", pid, err)
 	}
 }
 
