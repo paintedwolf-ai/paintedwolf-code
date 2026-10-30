@@ -10258,6 +10258,11 @@ export interface components {
             settled_at?: string;
             /** @description Initial host activity identities. Details loading must not regroup these rows. */
             activities?: components["schemas"]["CommandActivity"][];
+            /**
+             * Format: int64
+             * @description Monotonic receipt trace revision for live snapshot reconciliation.
+             */
+            activity_revision?: number;
             activities_cursor?: string;
             activities_omitted?: number;
             /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */

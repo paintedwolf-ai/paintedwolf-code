@@ -1288,7 +1288,7 @@ type CommandActivity struct {
 	StatusCode *int   `json:"status_code,omitempty"`
 	// Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
 	MergeKey     string                `json:"merge_key,omitempty"`
-	ExecutionIds []string              `json:"execution_ids"`
+	ExecutionIDs []string              `json:"execution_ids"`
 	Spans        []CommandActivitySpan `json:"spans"`
 }
 
@@ -1480,9 +1480,11 @@ type CommandProgramReceipt struct {
 	StartedAt       time.Time  `json:"started_at"`
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
 	// Initial host activity identities. Details loading must not regroup these rows.
-	Activities        []CommandActivity `json:"activities,omitempty"`
-	ActivitiesCursor  string            `json:"activities_cursor,omitempty"`
-	ActivitiesOmitted int               `json:"activities_omitted,omitempty"`
+	Activities []CommandActivity `json:"activities,omitempty"`
+	// Monotonic receipt trace revision for live snapshot reconciliation.
+	ActivityRevision  int64  `json:"activity_revision,omitempty"`
+	ActivitiesCursor  string `json:"activities_cursor,omitempty"`
+	ActivitiesOmitted int    `json:"activities_omitted,omitempty"`
 	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
 	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
 }

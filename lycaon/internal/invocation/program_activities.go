@@ -20,10 +20,13 @@ type activityInput struct {
 }
 
 // composeActivities preserves execution identity while folding supporting steps.
-func composeActivities(inputs []activityInput) []api.CommandActivity {
+func composeActivities(inputs []activityInput, settled bool) []api.CommandActivity {
 	activities := make([]api.CommandActivity, 0, len(inputs))
 	owners := make(map[string][]int)
 	for i := range inputs {
+		if inputs[i].receipt.State == "prepared" && !inputs[i].receipt.OwnerStarted {
+			continue
+		}
 		rule := activityPresentation(inputs[i])
 		if rule.role == "primary" || activityNeedsAttention(inputs[i].receipt) {
 			owners[inputs[i].receipt.ParentExecutionID] = append(owners[inputs[i].receipt.ParentExecutionID], i)
@@ -36,7 +39,7 @@ func composeActivities(inputs []activityInput) []api.CommandActivity {
 			continue
 		}
 		rule := activityPresentation(input)
-		if rule.role == "container" {
+		if rule.role == "container" || (rule.role == "context" && !activityNeedsAttention(input.receipt)) {
 			continue
 		}
 		owner := i
@@ -76,7 +79,7 @@ func composeActivities(inputs []activityInput) []api.CommandActivity {
 		}
 	}
 	// A control-only program still has a visible result.
-	if len(activities) == 0 && len(inputs) > 0 && allActivitiesSettled(inputs) {
+	if len(activities) == 0 && len(inputs) > 0 && settled {
 		input := inputs[0]
 		state, outcome := activityOutcome(input.receipt)
 		activities = append(activities, api.CommandActivity{ID: input.receipt.ID, Group: "Running commands", Label: "Run command", Subject: input.receipt.Command, State: state, Outcome: outcome, ExecutionIDs: []string{input.receipt.ID}, Spans: []api.CommandActivitySpan{input.span}})
@@ -120,7 +123,7 @@ func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	}
 }
 
-func readProgramActivities(ctx context.Context, tx *sql.Tx, executions []api.CommandExecutionReceipt) ([]api.CommandActivity, error) {
+func readProgramActivities(ctx context.Context, tx *sql.Tx, executions []api.CommandExecutionReceipt, settled bool) ([]api.CommandActivity, error) {
 	inputs := make([]activityInput, 0, len(executions))
 	for _, receipt := range executions {
 		input, err := readActivityInput(ctx, tx, receipt)
@@ -129,7 +132,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, executions []api.Com
 		}
 		inputs = append(inputs, input)
 	}
-	result := composeActivities(inputs)
+	result := composeActivities(inputs, settled)
 	// First-touch order is independent of result arrival.
 	slices.SortStableFunc(result, func(a, b api.CommandActivity) int {
 		return activityInputOrder(inputs, a.ID) - activityInputOrder(inputs, b.ID)
@@ -169,14 +172,4 @@ func notifyActivity(ctx context.Context, program string) {
 	if observe, ok := ctx.Value(activityObserverKey{}).(func(context.Context, string)); ok {
 		observe(ctx, program)
 	}
-}
-
-func allActivitiesSettled(inputs []activityInput) bool {
-	for _, input := range inputs {
-		switch input.receipt.State {
-		case "prepared", "running", "waiting":
-			return false
-		}
-	}
-	return true
 }
