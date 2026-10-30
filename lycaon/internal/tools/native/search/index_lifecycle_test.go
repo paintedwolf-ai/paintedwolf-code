@@ -36,7 +36,7 @@ func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
 		{"grep", "-raF", "N\x00e\x00e", "src"},
 		{"grep", "-raF", "\xffNeedleToken", "src"},
 		{"grep", "-raiE", "kelvin|source|σigma|needletoken", "src"},
-		{"rg", "--text", "-i", "needletoken", "src"},
+		{"rg", "-uuu", "-i", "needletoken", "src"},
 	} {
 		t.Run(fmt.Sprint(argv), func(t *testing.T) {
 			h := newHarness(t, files)

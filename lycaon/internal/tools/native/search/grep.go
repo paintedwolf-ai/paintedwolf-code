@@ -122,8 +122,7 @@ func runRg(inv *invocation) error {
 	return r.run(spec)
 }
 
-// grepDialect applies GNU's matcher rule: egrep and fgrep imply -E and -F,
-// and two different matchers are a usage error.
+// grepDialect rejects conflicting matcher selections.
 func (r *grepRun) grepDialect() (textsearch.Dialect, error) {
 	chosen := map[textsearch.Dialect]bool{}
 	switch r.inv.word() {
@@ -594,9 +593,7 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	return r.searchStream(e.display, observation.Wrap(r.inv.ctx, streamed.Reader), 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
-// color accepts --color=never and auto (stdout is never a terminal, so both
-// print plain text); always would need escape sequences this frontend does
-// not produce.
+// color permits automatic color only; output has no terminal.
 func (r *grepRun) color() error {
 	option, ok := r.inv.argv.Last("--color")
 	if !ok || len(option.Values) == 0 {
@@ -609,8 +606,7 @@ func (r *grepRun) color() error {
 	return r.inv.usage(option.Values[0].Value, "--color=never or --color=auto")
 }
 
-// bsdModes applies the GNU and BSD spellings that select binary, directory,
-// device and link handling; for each, the last occurrence wins.
+// bsdModes resolves repeated binary, directory, device, and link options.
 func (r *grepRun) bsdModes() error {
 	r.binaryMode = "binary"
 	for _, item := range r.inv.argv.Items {
