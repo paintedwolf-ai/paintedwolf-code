@@ -62,11 +62,15 @@ func sendMountTransfer(socket int, message mountTransfer, tree int) error {
 	if needsFD != (tree >= 0) {
 		return errors.New("mount transfer descriptor count differs")
 	}
-	packet := make([]byte, mountTransferHeader+len(message.path))
+	pathSize := len(message.path)
+	if pathSize > mountTransferPath {
+		return errors.New("invalid mount transfer identity or path")
+	}
+	packet := make([]byte, mountTransferHeader+pathSize)
 	packet[0], packet[1] = 1, message.kind
 	binary.LittleEndian.PutUint64(packet[4:], message.sequence)
 	binary.LittleEndian.PutUint64(packet[12:], message.id)
-	binary.LittleEndian.PutUint32(packet[20:], uint32(len(message.path)))
+	binary.LittleEndian.PutUint32(packet[20:], uint32(pathSize))
 	copy(packet[mountTransferHeader:], message.path)
 	var control []byte
 	if tree >= 0 {
@@ -122,7 +126,7 @@ func receiveMountTransfer(socket int) (message mountTransfer, tree int, err erro
 	if n == 0 {
 		return message, -1, io.EOF
 	}
-	if invalid || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n < mountTransferHeader || packet[0] != 1 || packet[2] != 0 || packet[3] != 0 || binary.LittleEndian.Uint32(packet[20:]) != uint32(n-mountTransferHeader) {
+	if invalid || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n < mountTransferHeader || packet[0] != 1 || packet[2] != 0 || packet[3] != 0 || int64(binary.LittleEndian.Uint32(packet[20:])) != int64(n)-mountTransferHeader {
 		return message, -1, errors.New("invalid mount transfer frame")
 	}
 	message = mountTransfer{kind: packet[1], sequence: binary.LittleEndian.Uint64(packet[4:]), id: binary.LittleEndian.Uint64(packet[12:]), path: string(packet[mountTransferHeader:n])}

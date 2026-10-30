@@ -132,7 +132,7 @@ func checkMountSourcePtrace(sourcePID int) error {
 			_, _ = unix.Wait4(sourcePID, &status, unix.WUNTRACED, nil)
 			_ = unix.PtraceDetach(sourcePID)
 		}
-		return fmt.Errorf("source opener trace result %v, want EPERM", err)
+		return errors.Join(errors.New("source opener trace did not refuse with EPERM"), err)
 	}
 	return nil
 }
@@ -263,7 +263,7 @@ func checkSourceRoleRefuses(frame, origin, entry, topology *os.File) error {
 	}
 	out, runErr := command.CombinedOutput()
 	if ctx.Err() != nil || runErr == nil || command.ProcessState == nil || command.ProcessState.ExitCode() != 1 || len(out) != 0 {
-		return fmt.Errorf("source refusal state=%v deadline=%v output=%q", command.ProcessState, ctx.Err(), out)
+		return errors.Join(fmt.Errorf("source refusal state=%v output=%q", command.ProcessState, out), ctx.Err(), runErr)
 	}
 	return nil
 }
