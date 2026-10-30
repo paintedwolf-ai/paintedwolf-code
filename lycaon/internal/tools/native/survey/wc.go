@@ -36,8 +36,7 @@ type wcResult struct {
 	Files *int   `json:"files,omitempty"`
 	// Truncated limits line and word counts to the scanned prefix.
 	Truncated bool `json:"truncated,omitempty"`
-	// InEditor marks counts taken over the person's unsaved editor text;
-	// Bytes still reports the file on disk.
+	// InEditor marks counts taken from unsaved editor text.
 	InEditor bool `json:"in_editor,omitempty"`
 }
 
@@ -138,7 +137,7 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 	if err != nil {
 		return wcResult{}, fmt.Errorf("wc %s: %w", relSlash, err)
 	}
-	counts := CountBytes(content)
+	counts := countWcFile(content, includeWords)
 	// Editor counts describe the editor text alone; file counts pair the
 	// decoded lines with the file's own bytes, never an editor view with disk.
 	entry := wcResult{Path: relSlash, Bytes: info.Size(), Truncated: bytesTruncated, InEditor: fromEditor}
@@ -302,7 +301,7 @@ func (t *wcDirTotals) add(size int64, content []byte, binary, bytesTruncated, fr
 		t.bytes += size
 		return
 	}
-	counts := CountBytes(content)
+	counts := countWcFile(content, includeWords)
 	if fromEditor {
 		size = counts.Bytes
 	}
