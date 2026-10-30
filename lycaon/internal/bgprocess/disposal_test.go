@@ -24,6 +24,15 @@ type controlledDrainJob struct {
 	release  func()
 }
 
+func awaitDrainSignal(t *testing.T, step string, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s: lifecycle signal did not arrive", step)
+	}
+}
+
 func startControlledDrainJob(t *testing.T, registry *Registry, session string) controlledDrainJob {
 	t.Helper()
 	started, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -41,7 +50,7 @@ func startControlledDrainJob(t *testing.T, registry *Registry, session string) c
 		},
 	})
 	testutil.FailErr(t, "start actual controlled program job", err)
-	testutil.Receive(t, "actual job start", started)
+	awaitDrainSignal(t, "actual job start", started)
 	return controlledDrainJob{handle: handle, canceled: canceled, release: finish}
 }
 
@@ -112,7 +121,7 @@ func TestDisposeSessionRetryWaitsForPhysicalJobs(t *testing.T) {
 	if err := registry.Lifecycle.DisposeSession(short, "owned"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("initial disposal = %v", err)
 	}
-	testutil.Receive(t, "owned cancellation acknowledged", owned.canceled)
+	awaitDrainSignal(t, "owned cancellation acknowledged", owned.canceled)
 	if _, err := registry.CommandLine("owned", owned.handle); !errors.Is(err, ErrProcessNotFound) || len(registry.Output.List(t.Context(), "owned")) != 0 {
 		t.Fatal("disposing handles remained publicly addressable")
 	}
@@ -152,7 +161,7 @@ func TestDisposeSessionRetryWaitsForPhysicalJobs(t *testing.T) {
 	}
 	owned.release()
 	testutil.FailErr(t, "retry actual physical drain", testutil.Receive(t, "retry completion", retry))
-	testutil.Receive(t, "actual job exit callback", onExit)
+	awaitDrainSignal(t, "actual job exit callback", onExit)
 	if capture.Active() || registry.HasRunning("owned") {
 		t.Fatal("completed disposal retained physical resources")
 	}
@@ -181,8 +190,8 @@ func TestCloseRetryJoinsPendingSessionDrains(t *testing.T) {
 	if err := registry.Lifecycle.Close(shortClose); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("initial global close = %v", err)
 	}
-	testutil.Receive(t, "first cancellation", first.canceled)
-	testutil.Receive(t, "second cancellation", second.canceled)
+	awaitDrainSignal(t, "first cancellation", first.canceled)
+	awaitDrainSignal(t, "second cancellation", second.canceled)
 	assertDrainAdmissionSealed(t, registry, "third")
 	long, stop := context.WithTimeout(t.Context(), 5*time.Second)
 	defer stop()

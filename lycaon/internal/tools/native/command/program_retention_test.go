@@ -126,6 +126,15 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 	}
 }
 
+func awaitProgramDrainSignal(t *testing.T, step string, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s: lifecycle signal did not arrive", step)
+	}
+}
+
 func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	registry := bgprocess.NewRegistry(bgprocess.Config{MaxBackground: 1}, bgprocess.Hooks{})
 	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
@@ -150,7 +159,7 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
 	})
 	testutil.FailErr(t, "start actual held program job", err)
-	testutil.Receive(t, "actual job running", started)
+	awaitProgramDrainSignal(t, "actual job running", started)
 	settled := make(chan bool, 1)
 	supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) { settled <- stopped })
 	short, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
@@ -158,7 +167,7 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	if err := supervisor.DisposeSession(short, "owned"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("initial program disposal = %v", err)
 	}
-	testutil.Receive(t, "held job cancellation", canceled)
+	awaitProgramDrainSignal(t, "held job cancellation", canceled)
 	if _, err := jobs.BeginProgram(t.Context()); !errors.Is(err, ErrProgramStopped) {
 		t.Fatalf("timed-out disposal reopened retained owner: %v", err)
 	}
