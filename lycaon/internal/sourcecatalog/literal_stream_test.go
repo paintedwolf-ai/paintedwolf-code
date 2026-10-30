@@ -87,8 +87,8 @@ func TestLiteralStreamBoundsCallerWriteQuanta(t *testing.T) {
 	stream := newLiteralBloomStream(4 << 20)
 	_, err := stream.Write(bytes.Repeat([]byte("é"), 2<<20))
 	testutil.FailErr(t, "write large chunk", err)
-	if cap(stream.folded) > 2*literalReadQuantum || cap(stream.carry) > 2*literalReadQuantum {
-		t.Fatalf("unbounded buffers folded=%d carry=%d", cap(stream.folded), cap(stream.carry))
+	if stream.pendingN != 0 {
+		t.Fatalf("complete text retained %d pending bytes", stream.pendingN)
 	}
 	if _, searchable := stream.finish(); !searchable {
 		t.Fatal("valid large chunk was rejected")

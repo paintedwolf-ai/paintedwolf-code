@@ -54,18 +54,6 @@ func buildLiteralBloom(
 	}
 }
 
-// trimIncompleteUTF8Tail drops up to three trailing bytes of a codepoint cut
-// by a read boundary.
-func trimIncompleteUTF8Tail(raw []byte) []byte {
-	for removed := 0; removed < utf8.UTFMax-1 && len(raw) > 0; removed++ {
-		if r, size := utf8.DecodeLastRune(raw); r != utf8.RuneError || size > 1 {
-			break
-		}
-		raw = raw[:len(raw)-1]
-	}
-	return raw
-}
-
 func literalBloomWords(contentBytes int64) int {
 	words := literalBloomMinWords
 	target := int(contentBytes / 64) // one Bloom bit per content byte
