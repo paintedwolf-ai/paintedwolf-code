@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/grep.go",
+  "kind": "module",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the 419-line grep/rg configuration module. It parses the declared utility grammar, validates interacting output modes and compiles one immutable matcher with the invocation resource port. Traversal, worker lifetime, record expansion and output transport have separate owners. The remaining mode decisions are cohesive and smaller than the starting module; focused command differential, ordered-worker and resource contracts support this measured ceiling.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 419,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_parallel_test.go": "ae114897a52072f49f9af01e44d0f6ff7310d69e09dd7c55f739051c0e3a4546",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad",
+    "lycaon/internal/tools/native/search/grep_test.go": "a97a9a6dab18320401cae596f72d276cf263085e18304800ae14e15682e11fc2"
+  }
+}

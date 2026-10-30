@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/search/search.grepFiles",
+  "kind": "runtime_service",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the 15-field file scheduler as one bounded lifecycle. Its worker count, pending window, channels, cancellation, fixed transport buffers, current reducer position and shared credit must be created and released together. Matching configuration and source authority stay with the run and invocation owners. Deterministic overlap, ordered publication, queued cancellation, transport reuse and complete-release contracts support this shape and ceiling.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_parallel_test.go": "ae114897a52072f49f9af01e44d0f6ff7310d69e09dd7c55f739051c0e3a4546",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad"
+  },
+  "reviewed_shape": "08d781142d5ce4a7a9da6a0ab35260655a506787d8f6d87518f9c4c5d2e09bac"
+}
