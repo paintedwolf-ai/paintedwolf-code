@@ -86,6 +86,9 @@ func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.
 	if !errors.As(err, &refused) || refused.Code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("late finish bypassed write-door refresh: %v", err)
 	}
+	if refused.OwnerRef != "" || refused.Data["root_session_id"] != provider.state.RootSessionID {
+		t.Fatalf("prerequisite category replaced operation resource attribution: %+v", refused)
+	}
 	for _, name := range []string{"read", "delete"} {
 		testutil.FailErr(t, "preserve ungated operation", CheckOperationProgressState(nativeDefinition(t, name), invocation, provider.state))
 	}

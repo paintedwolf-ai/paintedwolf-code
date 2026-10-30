@@ -95,8 +95,8 @@ func checkProgressReconciliation(definition toolcontract.OperationDefinition, in
 	if !required {
 		return nil
 	}
-	return &toolrejection.ToolReject{Code: "PROGRESS_RECONCILIATION_REQUIRED", OwnerRef: "progress", Data: map[string]any{
-		"tool": facts.Identity, "pending": progress.OpenStepCount(state.Content),
+	return &toolrejection.ToolReject{Code: "PROGRESS_RECONCILIATION_REQUIRED", Data: map[string]any{
+		"tool": facts.Identity, "pending": progress.OpenStepCount(state.Content), "root_session_id": state.RootSessionID,
 		"settled_work": state.Reconciliation.Jobs, "reconciliation_token": state.Reconciliation.Token,
 		"source_start_byte": invocation.Span.StartByte, "source_end_byte": invocation.Span.EndByte,
 		"source_line": invocation.Span.Line, "source_column": invocation.Span.Column, "source_unit_id": invocation.SourceUnitID,
