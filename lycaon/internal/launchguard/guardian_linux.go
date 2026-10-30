@@ -57,7 +57,7 @@ func RunGuardian() (int, error) {
 		return 1, err
 	}
 	var subreaper int32
-	// #nosec G103 -- PR_GET_CHILD_SUBREAPER writes one kernel int into this live int32; x/sys has no typed pointer-output owner.
+	// #nosec G103 -- PR_GET_CHILD_SUBREAPER writes one kernel int to this int32; x/sys has no typed pointer output.
 	if err := unix.Prctl(unix.PR_GET_CHILD_SUBREAPER, uintptr(unsafe.Pointer(&subreaper)), 0, 0, 0); err != nil || subreaper != 1 {
 		return 1, errors.New("guardian is not the protected lineage subreaper")
 	}

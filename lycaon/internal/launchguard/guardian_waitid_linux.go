@@ -36,7 +36,7 @@ var (
 
 func observeGuardianExit(pidfd, pid int, uid uint32) *guardianExitFact {
 	var info guardianChildInfo
-	// #nosec G103 -- child siginfo layout is pinned to amd64/arm64 with compile-time size/offset assertions; Waitid writes this exact 128-byte object.
+	// #nosec G103 -- Compile-time amd64/arm64 size and offset checks pin this exact 128-byte Waitid output.
 	if unix.Waitid(unix.P_PIDFD, pidfd, (*unix.Siginfo)(unsafe.Pointer(&info)), unix.WEXITED|unix.WNOHANG|unix.WNOWAIT, nil) != nil ||
 		info.Signo != int32(unix.SIGCHLD) || info.Errno != 0 || int(info.PID) != pid || info.UID != uid {
 		return nil

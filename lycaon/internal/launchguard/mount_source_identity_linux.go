@@ -18,7 +18,7 @@ func mountDescriptorIdentity(fd int) (id, inode uint64, err error) {
 	if fd < 0 {
 		return 0, 0, unix.EBADF
 	}
-	// #nosec G703 -- only a nonnegative decimal descriptor selects fixed proc fdinfo; no caller path or filesystem getattr is used.
+	// #nosec G703 -- A nonnegative decimal fd selects fixed proc fdinfo, without a caller path or filesystem getattr.
 	file, err := os.Open("/proc/thread-self/fdinfo/" + strconv.Itoa(fd))
 	if err != nil {
 		return 0, 0, err
