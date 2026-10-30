@@ -27,6 +27,8 @@ Two disk traps worth knowing:
 
 **Ports.** "Address already in use" means another socket already holds the port, often a server left running by an earlier task. `lsof -iTCP:PORT -sTCP:LISTEN` (or `-iUDP:PORT`) names the holder; report it and let the user decide rather than stopping it.
 
+**Ports.** "Address already in use" means another socket already holds the port, often a server left running by an earlier task. `lsof -iTCP:PORT -sTCP:LISTEN` (or `-iUDP:PORT`) names the holder; report it and let the user decide rather than stopping it.
+
 **Processes and threads.** Fork failures and "resource temporarily unavailable" under a thread or PID limit, common with runaway parallelism in a build.
 
 ## Do not
