@@ -9,8 +9,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type discoveryRecords struct {
@@ -130,4 +132,27 @@ func TestFindChargesEveryNameBeforePredicateElimination(t *testing.T) {
 	h.exec("", "find", ".", "-name", "absent").expect(t, "exact traversal allowance", "", "", 0)
 	h.owners.overrides["traversal_visits"] = 2
 	h.exec("", "find", ".", "-name", "absent").refused(t, "bounded reused discovery", "COMMAND_LIMIT_EXCEEDED")
+}
+
+func TestFindCachedMembershipUsesTheCurrentReadBoundary(t *testing.T) {
+	h := newHarness(t, map[string]string{"src/target.go": "source", "private/target.go": "private"})
+	h.owners.Catalog = discoveryCatalog(t)
+	h.exec("", "find", ".", "-name", "target.go").expect(t, "initial scope", "./private/target.go\n./src/target.go\n", "", 0)
+	h.boundary = sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
+		ID: h.tc.ProfileID(), Tools: map[string]bool{"read": true, "find": true}, ReadGlobs: []string{".", "src", "src/**"},
+	}})
+	h.owners.Revisions.Boundary = h.boundary
+	h.exec("", "find", ".", "-name", "target.go").expect(t, "restricted current scope", "./src/target.go\n", "", 0)
+}
+
+func TestFindCachedMembershipPreservesDeletionAndActionOrder(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/a.tmp": "remove", "tree/b.keep": "keep", "tree/sub/c.tmp": "remove", "tree/sub/d.keep": "keep"})
+	h.owners.Catalog = discoveryCatalog(t)
+	h.exec("", "find", "tree", "-false").expect(t, "prepare memberships", "", "", 0)
+	r := h.exec("", "find", "tree", "-name", "*.tmp", "-delete", "-o", "-print")
+	r.expect(t, "delete action order", "tree/b.keep\ntree/sub/d.keep\ntree/sub\ntree\n", "", 0)
+	if fmt.Sprint(h.removals.removed) != "[tree/a.tmp tree/sub/c.tmp]" || r.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("removed=%v effects=%s", h.removals.removed, r.result.EffectCertainty)
+	}
+	h.exec("", "find", "tree", "-name", "*.tmp").expect(t, "deleted membership refresh", "", "", 0)
 }
