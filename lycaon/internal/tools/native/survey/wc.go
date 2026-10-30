@@ -36,8 +36,7 @@ type wcResult struct {
 	Files *int   `json:"files,omitempty"`
 	// Truncated limits line and word counts to the scanned prefix.
 	Truncated bool `json:"truncated,omitempty"`
-	// InEditor marks counts taken over the person's unsaved editor text;
-	// Bytes still reports the file on disk.
+	// InEditor marks counts taken from unsaved editor text.
 	InEditor bool `json:"in_editor,omitempty"`
 }
 
