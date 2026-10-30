@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	bedrockprovider "github.com/lycaon/lycaon/internal/llm/providers/bedrock"
+	nativegenprovider "github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
@@ -27,6 +28,13 @@ type providerBuild struct {
 // driverFactories selects a constructor by provider kind.
 var driverFactories = catalogruntime.NewFactorySet(
 	map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
+		"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			// BaseURL carries the nativegen binary path; the model directory arrives with the load call.
+			return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
+				BinaryPath: build.entry.BaseURL,
+				Device:     "cpu",
+			}), nil
+		},
 		"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 			return ollamaprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
 		},
