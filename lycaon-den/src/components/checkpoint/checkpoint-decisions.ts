@@ -26,7 +26,7 @@ function reviewRuleMatches(
 }
 
 type Dependencies = {
-  client: LycaonClient;
+  client: Pick<LycaonClient, "resolveCheckpoint" | "getReviewSettings" | "updateReviewSettings">;
   sessionId: () => string;
   projectId: () => string | undefined;
   onStart: (checkpointId: string) => void;
