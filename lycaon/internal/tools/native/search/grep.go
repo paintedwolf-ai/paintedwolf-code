@@ -565,8 +565,7 @@ func displayOr(display string) string {
 	return display
 }
 
-// searchFile pins and searches one regular file. rg's recursion skips binary
-// files unless -uuu asks for them.
+// searchFile pins and searches one regular file, applying recursive binary policy.
 func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
@@ -575,8 +574,6 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.index.canPrune(e) {
 		return r.searchNoMatch(e.display, names)
 	}
-	observation := r.index.begin(e)
-	defer r.index.captured(observation)
 	streamed, pin, err := r.inv.openWalkedPinnedStream(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
@@ -586,13 +583,16 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 		return err
 	}
 	r.index.stats.captured++
+	if streamed.ContentLearned {
+		r.index.stats.learned++
+	}
 	defer func() { _ = streamed.Reader.Close() }()
 	if checkBinary {
 		if streamed.FirstNullOffset >= 0 {
 			return nil
 		}
 	}
-	return r.searchStream(e.display, observation.Wrap(r.inv.ctx, streamed.Reader), 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
+	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
 // color permits automatic color only; output has no terminal.

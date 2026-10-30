@@ -26,6 +26,7 @@ type ExecutionStream struct {
 	Reader          io.ReadCloser
 	Revision        toolcontract.ExecutionRevision
 	FirstNullOffset int
+	ContentLearned  bool
 }
 
 // ExecutionBytes is one pinned literal input: the exact stream bytes a native
@@ -92,14 +93,11 @@ func (e ExecutionRevisions) PinOpened(ctx context.Context, resolved projectpaths
 	if err != nil || !info.Mode().IsRegular() {
 		return toolcontract.ExecutionRevision{}, false, err
 	}
-	captured, err := e.scanSource(ctx, resolved, io.NewSectionReader(file, 0, info.Size()), false)
+	captured, err := e.scanFile(ctx, resolved, file, info, false)
 	if err != nil {
 		return toolcontract.ExecutionRevision{}, false, err
 	}
 	defer captured.Close()
-	if err := captured.checkFile(file, info); err != nil {
-		return toolcontract.ExecutionRevision{}, false, err
-	}
 	return captured.revision, true, nil
 }
 
@@ -162,10 +160,7 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 		_ = file.Close()
 		return ExecutionStream{}, sourceview.AccessRead.SizeReject("read", resolved.DisplayPath, info.Size(), maxBytes)
 	}
-	captured, err := e.scanSource(ctx, resolved, io.NewSectionReader(file, 0, info.Size()), true)
-	if err == nil {
-		err = captured.checkFile(file, info)
-	}
+	captured, err := e.scanFile(ctx, resolved, file, info, true)
 	if err != nil {
 		if captured != nil {
 			captured.Close()
@@ -178,6 +173,7 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 		Reader:          &verifiedSeekReader{verifiedSource: captured, file: file},
 		Revision:        captured.revision,
 		FirstNullOffset: captured.firstNull,
+		ContentLearned:  captured.learned,
 	}, nil
 }
 
