@@ -104,10 +104,10 @@ func TestSocketPermitReplacementAndEvictionCloseOwners(t *testing.T) {
 	grant, initial := capture()
 	runtime.IssuePermit("root", hitl.EffectPermitIdentity{SessionID: "child", ToolCallID: "one"}, "digest", grant)
 	initial.Close()
-	first := runtime.permits.Snapshot()[socketPermitKey("child", "one", "digest", grant)]
+	first := runtime.permits.Snapshot()[socketPermitKey(hitl.EffectPermitIdentity{SessionID: "child", ToolCallID: "one"}, "digest", grant)]
 	runtime.IssuePermit("root", hitl.EffectPermitIdentity{SessionID: "child", ToolCallID: "one"}, "digest", grant)
 	assertClosedSocketLease(t, first.resource)
-	replaced := runtime.permits.Snapshot()[socketPermitKey("child", "one", "digest", grant)]
+	replaced := runtime.permits.Snapshot()[socketPermitKey(hitl.EffectPermitIdentity{SessionID: "child", ToolCallID: "one"}, "digest", grant)]
 	for i := range 2 {
 		runtime.IssuePermit("root", hitl.EffectPermitIdentity{SessionID: "child", ToolCallID: fmt.Sprintf("next-%d", i)}, "digest", grant)
 	}

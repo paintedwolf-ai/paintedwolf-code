@@ -209,7 +209,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: f.capture(t)}
 		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
-		return res, invokeErr, executor, frame, tc, memory
+		return res, executor, frame, tc, memory, invokeErr
 	}
 
 	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *toolcontract.ProgramMemory, state, wantCode string) (*guidance.Refusal, string) {
@@ -289,7 +289,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	}
 	f6 := newProgramReceiptFixture(t)
 	g6 := f6.childFor(t, "grep")
-	_, err6, _, fr6, tc6, mem6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	_, _, fr6, tc6, mem6, err6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("stderr: Code: COMMAND_EFFECT_NOT_ALLOWED")
 	})
 	if prep6, prepErr := toolexecution.PrepareProgramFailure(t.Context(), fr6, f6.recorder, mem6, diagnosticScreen(f6), tc6, g6, err6); prep6 != nil || prepErr != nil {

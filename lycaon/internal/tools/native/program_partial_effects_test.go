@@ -26,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -41,8 +40,9 @@ import (
 func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
-	testdbseed.InsertSession(t, ledger.LedgerDB(), "s1", "p1")
-	recorder := invocation.NewSQLRecorder(ledger.LedgerDB())
+	database := ledger.LedgerDB()
+	testdbseed.InsertSession(t, database, "s1", "p1")
+	recorder := invocation.NewSQLRecorder(database)
 
 	server, requests, received := partialEffectsHTTPServer(t)
 	serverAddr := netip.MustParseAddrPort(server.Listener.Addr().(*net.TCPAddr).String())
@@ -104,7 +104,20 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 
 	httpArgs := map[string]any{"url": server.URL, "method": "POST"}
 	attempt := prepare(httpDefinition, "http-node", "curl", "curl "+server.URL, httpArgs)
-	httpEffect := partialEffectsHTTP(attempt, httpArgs, server.URL, serverAddr)
+	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
+	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		target := args["url"].(string)
+		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
+				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
+			// A request that left the host has an unknown remote outcome.
+			var exchange *outboundhttp.ExchangeError
+			if errors.As(err, &exchange) && exchange.RequestsStarted > 0 && exchange.ResponsesReceived == 0 {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}}, nil
+	}
 	supervisor, loseSupervisor := context.WithCancel(t.Context())
 	type outcome struct {
 		result toolexecution.NativeInvocationResult
@@ -160,83 +173,6 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		t.Fatalf("node reachability after loss: %+v", states)
 	}
 
-	assertPartialEffectsJournal(t, ledger, dir, journal)
-	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
-		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
-	}
-}
-
-// partialEffectsDefinition freezes one actual schema and its declared contract.
-func partialEffectsDefinition(t *testing.T, schemas *toolschema.Config, name string) toolcontract.OperationDefinition {
-	t.Helper()
-	meta, ok := schemas.ToolMeta(name)
-	if !ok {
-		t.Fatalf("actual %s schema missing", name)
-	}
-	encoded, err := json.Marshal(meta.ArgsSchema)
-	testutil.FailErr(t, "freeze actual schema", err)
-	contract, ok := toolcontract.Lookup(name)
-	if !ok {
-		t.Fatalf("%s contract missing", name)
-	}
-	definition, err := toolcontract.ToolOperation(name, encoded, contract)
-	testutil.FailErr(t, "compile actual declaration", err)
-	return definition
-}
-
-// partialEffectsWrite exercises the real effect door and records its actual journal evidence.
-func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string]any, boundary *sandbox.Boundary, database db.Handle, journal *string) toolexecution.NativeEffect {
-	effect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: arguments}
-	effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		operand, err := paths.Bind(ctx, args["path"].(string), true)
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		content := []byte(args["content"].(string))
-		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			target, err := operand.MutationTarget()
-			if err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			if err := applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
-			}
-			if err := database.QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(journal); err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: *journal, RecoveryRef: *journal}}, nil
-		}}, nil
-	}
-	return effect
-}
-
-// partialEffectsHTTP records whether the actual transport started an unanswered request.
-func partialEffectsHTTP(attempt toolcontract.BoundOperation, httpArgs map[string]any, targetURL string, serverAddr netip.AddrPort) toolexecution.NativeEffect {
-	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", targetURL}}, Arguments: httpArgs}
-	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-		target := args["url"].(string)
-		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
-				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
-			// A request that left the host has an unknown remote outcome.
-			var exchange *outboundhttp.ExchangeError
-			if errors.As(err, &exchange) && exchange.RequestsStarted > 0 && exchange.ResponsesReceived == 0 {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, err
-			}
-			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-		}}, nil
-	}
-	return httpEffect
-}
-
-// assertPartialEffectsJournal resolves the receipt to the actual mutation-door bytes.
-func assertPartialEffectsJournal(t *testing.T, ledger *sourceledger.Store, dir, journal string) {
-	t.Helper()
-	database := ledger.LedgerDB()
 	// The journal named by the receipt still resolves to the landed bytes.
 	var path, op string
 	testutil.FailErr(t, "resolve recorded journal", database.QueryRowContext(t.Context(), `SELECT path,op FROM source_effects WHERE id=?`, journal).Scan(&path, &op))

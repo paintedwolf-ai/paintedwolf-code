@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -34,8 +35,8 @@ func TestRecordedProgramRetainsUtilityUntilBackgroundSettlement(t *testing.T) {
 	entered, finish, released := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var releases atomic.Int32
 	original := f.Runtime.Owners
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		owners, err := original(tc, paths)
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := original(tc, paths, memory, admission)
 		owners.Builtins = func(command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
 			return map[string]commandprogram.OperationDispatcher{"cat": heldLifetimeBuiltin{finish: finish, started: entered}}, func() {
 				if releases.Add(1) == 1 {
