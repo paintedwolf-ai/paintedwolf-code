@@ -105,19 +105,21 @@ func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	d.listed, d.includeHidden = true, options.IncludeHidden
 	var names []string
 	for {
-		quantum := 1024
-		if options.Maximum > 0 {
-			quantum = min(quantum, options.Maximum-len(names)+1)
+		if d.dir.admitRead != nil {
+			if err := d.dir.admitRead(d.file.Name()); err != nil {
+				d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
+				return nil, d.listErr
+			}
 		}
-		batch, err := d.file.Readdirnames(quantum)
+		batch, err := d.file.Readdirnames(1024)
 		for _, name := range batch {
 			if d.VisibleChild(name) && (options.IncludeHidden || !strings.HasPrefix(name, ".")) {
 				names = append(names, name)
+				if options.Maximum > 0 && len(names) > options.Maximum {
+					d.listErr = &DirectoryEntriesLimitError{Entries: options.Maximum + 1}
+					return nil, d.listErr
+				}
 			}
-		}
-		if options.Maximum > 0 && len(names) > options.Maximum {
-			d.listErr = &DirectoryEntriesLimitError{Entries: options.Maximum + 1}
-			return nil, d.listErr
 		}
 		if errors.Is(err, io.EOF) {
 			break

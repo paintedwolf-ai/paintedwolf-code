@@ -3,6 +3,7 @@
 package projectpaths_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -77,5 +78,21 @@ func TestHeldNameAdmissionDoesNotReadMetadataOrFollowLinks(t *testing.T) {
 	testutil.FailErr(t, "close listing", dir.Close())
 	if _, err := dir.Child("visible"); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("closed directory admitted child: %v", err)
+	}
+}
+
+func TestCanceledDirectorySelectionStopsBeforeEnumerating(t *testing.T) {
+	tc, _ := readSessionContext(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	paths, err := projectpaths.NewProgramPaths(ctx, nil, tc, "")
+	testutil.FailErr(t, "bind invocation", err)
+	bound, err := paths.Bind(ctx, ".", false)
+	testutil.FailErr(t, "bind listing", err)
+	dir, err := bound.OpenDir()
+	testutil.FailErr(t, "hold listing", err)
+	defer func() { testutil.FailErr(t, "close listing", dir.Close()) }()
+	cancel()
+	if names, err := dir.Names(projectpaths.DirectoryNames{Maximum: 1}); !errors.Is(err, context.Canceled) || len(names) != 0 {
+		t.Fatalf("canceled selection=%v error=%v", names, err)
 	}
 }
