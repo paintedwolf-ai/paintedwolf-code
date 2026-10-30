@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
@@ -28,7 +27,7 @@ func domainHarness(t *testing.T) *harness {
 	sources := sourcecatalog.New()
 	_, err = sources.Snapshot(t.Context(), "", []sourcecatalog.Root{{ID: "r1", Path: h.root}})
 	testutil.FailErr(t, "warm source catalog", err)
-	var boundary *sandbox.Boundary = nativefixture.Boundary(t)
+	boundary := nativefixture.Boundary(t)
 	h.owners.Domain = DomainOwners{
 		Summarize: &survey.SummarizeTool{Boundary: boundary, Caps: caps},
 		Repo:      &reposurvey.RepoTool{Boundary: boundary, BaseCatalog: catalog, Caps: reposurvey.DefaultCaps(), SourceCatalog: sources},

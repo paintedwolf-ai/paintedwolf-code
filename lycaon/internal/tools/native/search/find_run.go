@@ -83,11 +83,11 @@ func runFind(inv *invocation) error {
 		r.expr = expr
 	}
 	if !r.actions {
-		print := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
+		printAction := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
 		if r.expr == nil {
-			r.expr = print
+			r.expr = printAction
 		} else {
-			r.expr = &findNode{op: "and", left: r.expr, right: print}
+			r.expr = &findNode{op: "and", left: r.expr, right: printAction}
 		}
 	}
 	for _, start := range starts {
@@ -295,6 +295,8 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 			err = &toolrejection.ToolReject{Code: result.StopCode, Data: map[string]any{"command": spec.Name}}
 		}
 		return result, err
+	case toolcontract.ProducerCompleted, toolcontract.ProducerFailed:
+		// Ordinary command failure remains a producer result, not a host refusal.
 	}
 	return result, nil
 }

@@ -17,7 +17,7 @@ func TestTypedNullOutputDoesNotAdmitAnOrdinaryPath(t *testing.T) {
 		}
 	}
 	bound := projectpaths.BoundPath{Null: true}
-	if output, err := bound.OpenNullOutput(nil); err == nil || output != nil {
+	if output, err := bound.OpenNullOutput(nil); err == nil || output != nil { //nolint:staticcheck -- SA1012: nil is the deliberately malformed context this admission contract rejects.
 		t.Fatal("nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

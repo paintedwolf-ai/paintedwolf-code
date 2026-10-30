@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -109,22 +110,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "read actual schemas", err)
-	definitionFor := func(name string) toolcontract.OperationDefinition {
-		meta, ok := schemas.ToolMeta(name)
-		if !ok {
-			t.Fatalf("actual %s schema missing", name)
-		}
-		encoded, err := json.Marshal(meta.ArgsSchema)
-		testutil.FailErr(t, "freeze actual schema", err)
-		contract, ok := toolcontract.Lookup(name)
-		if !ok {
-			t.Fatalf("%s contract missing", name)
-		}
-		definition, err := toolcontract.ToolOperation(name, encoded, contract)
-		testutil.FailErr(t, "compile actual declaration", err)
-		return definition
-	}
-	writeDefinition, httpDefinition := definitionFor("write"), definitionFor("http_request")
+	writeDefinition, httpDefinition := partialEffectsDefinition(t, schemas, "write"), partialEffectsDefinition(t, schemas, "http_request")
 	scope := toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"}
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: programID, NodeID: "submitted", ExecutionID: rootID}, ActorID: "fixture-person", SessionID: "s1", Scope: scope, SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 	frameMemory := programDoorMemory(t)
@@ -161,31 +147,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	writeArgs := map[string]any{"path": "new.txt", "content": "created before the loss\n"}
 	write := prepare(writeDefinition, "write-node", "tee", "tee new.txt", writeArgs)
 	var journal string
-	writeEffect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: writeArgs}
-	writeEffect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		operand, err := paths.Bind(ctx, args["path"].(string), true)
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		content := []byte(args["content"].(string))
-		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			target, err := operand.MutationTarget()
-			if err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			if err = applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
-			}
-			if err = ledger.LedgerDB().QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(&journal); err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: journal, RecoveryRef: journal}}, nil
-		}}, nil
-	}
+	writeEffect := partialEffectsWrite(write, writeArgs, boundary, database, &journal)
 	written, err := executor.InvokeNative(t.Context(), frame, surface, memory, programDoorProgress{owner}, observer, writeEffect, tc)
 	testutil.FailErr(t, "invoke actual mutation door", err)
 	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
@@ -272,4 +234,52 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
 		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
 	}
+}
+
+// partialEffectsDefinition freezes one actual schema and its declared contract.
+func partialEffectsDefinition(t *testing.T, schemas *toolschema.Config, name string) toolcontract.OperationDefinition {
+	t.Helper()
+	meta, ok := schemas.ToolMeta(name)
+	if !ok {
+		t.Fatalf("actual %s schema missing", name)
+	}
+	encoded, err := json.Marshal(meta.ArgsSchema)
+	testutil.FailErr(t, "freeze actual schema", err)
+	contract, ok := toolcontract.Lookup(name)
+	if !ok {
+		t.Fatalf("%s contract missing", name)
+	}
+	definition, err := toolcontract.ToolOperation(name, encoded, contract)
+	testutil.FailErr(t, "compile actual declaration", err)
+	return definition
+}
+
+// partialEffectsWrite exercises the real effect door and records its actual journal evidence.
+func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string]any, boundary *sandbox.Boundary, database db.Handle, journal *string) toolexecution.NativeEffect {
+	effect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: arguments}
+	effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
+		if err != nil {
+			return toolexecution.PreparedNativeEffect{}, err
+		}
+		operand, err := paths.Bind(ctx, args["path"].(string), true)
+		if err != nil {
+			return toolexecution.PreparedNativeEffect{}, err
+		}
+		content := []byte(args["content"].(string))
+		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			target, err := operand.MutationTarget()
+			if err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			if err := applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
+			}
+			if err := database.QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(journal); err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: *journal, RecoveryRef: *journal}}, nil
+		}}, nil
+	}
+	return effect
 }

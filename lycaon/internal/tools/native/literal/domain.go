@@ -66,7 +66,7 @@ func runOutline(inv *invocation) error {
 	text, _, err := textfile.Decode(in.data, textfile.LimitsForRaw(max(int64(len(in.data)), 1)))
 	if err != nil {
 		inv.fail(1, operand, "not a text file")
-		return nil
+		return nil //nolint:nilerr -- Invalid text is an ordinary status-1 utility result, not a host failure.
 	}
 	label := in.bound.Resolved.DisplayPath
 	outline, err := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))

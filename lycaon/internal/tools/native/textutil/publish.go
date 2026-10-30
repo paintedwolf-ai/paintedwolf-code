@@ -69,10 +69,10 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 
 // effectMode names the catalog mode of commands with several: sed -i and
 // inline w files, sort -o and uniq OUTPUT write; every other form reads.
-func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
+func (o *Owners) effectMode(ctx context.Context, argv commandprogram.BoundArgv) string {
 	switch argv.Command {
 	case "sed":
-		return o.sedMode(context.Background(), argv)
+		return o.sedMode(ctx, argv)
 	case "sort":
 		if argvFlag(argv, "-o") {
 			return "-o"

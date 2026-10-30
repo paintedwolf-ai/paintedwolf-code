@@ -84,6 +84,8 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 		return err
 	}
 	switch r.mode {
+	case modeLines, modeQuiet, modeFileList:
+		return nil
 	case modeCount:
 		if r.rg && n == 0 {
 			return nil
@@ -234,7 +236,7 @@ func replacementGroup(s string) (int, int, bool) {
 		return -1, 1, false
 	}
 	braced := strings.HasPrefix(s, "{")
-	body := s
+	var body string
 	if braced {
 		end := strings.IndexByte(s, '}')
 		if end < 0 {

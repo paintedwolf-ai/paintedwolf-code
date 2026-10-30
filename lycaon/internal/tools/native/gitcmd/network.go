@@ -85,7 +85,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	if err := authorizeRemote(ctx, p, tc, dir, rawURL, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	destTarget := ""
+	var destTarget string
 	if len(ops) == 2 {
 		destTarget = ops[1]
 	} else {

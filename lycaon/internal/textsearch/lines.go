@@ -41,8 +41,8 @@ type ScanOptions struct {
 	NullData bool
 }
 
-// StopScan ends a scan early without error when a yield returns it.
-var StopScan = errors.New("stop line scan")
+// ErrStopScan ends a scan early without error when a yield returns it.
+var ErrStopScan = errors.New("stop line scan")
 
 // ScanLines selects records of content with sel and yields selected and
 // context lines in order. It returns how many lines were selected. A record
@@ -112,7 +112,7 @@ type lineScan struct {
 }
 
 func (s *lineScan) finish(err error) (int, error) {
-	if errors.Is(err, StopScan) {
+	if errors.Is(err, ErrStopScan) {
 		return s.selected, nil
 	}
 	return s.selected, err

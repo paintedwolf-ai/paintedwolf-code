@@ -2,6 +2,7 @@ package query
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -135,7 +136,8 @@ func TestDifferentialAgainstHostJq(t *testing.T) {
 			cmd.Stderr = &stderr
 			out, err := cmd.Output()
 			status := 0
-			if exit, ok := err.(*exec.ExitError); ok {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
 				status = exit.ExitCode()
 			} else if err != nil {
 				t.Fatal(err)

@@ -280,6 +280,20 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
+	handedOff = true
+	return r.executeRecordedProgram(ctx, run, owners, paths, jobs, snapshot.Plan, release, verification)
+}
+
+// executeRecordedProgram takes custody of a recorded program's plan and frame.
+// Early setup failures release them here; AfterJobs retains them through async settlement.
+func (r *ProgramRuntime) executeRecordedProgram(ctx context.Context, run *programRun, owners ProgramOwners, paths *projectpaths.ProgramPaths, jobs *SessionJobs, plan commandsurface.ProgramSnapshot, release func(), verification func() commandSourceIdentity) (string, error) {
+	tc, memory, root := run.tc, run.memory, run.root
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
 	if listeners == nil {
@@ -326,7 +340,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
 		var err error
-		evaluated, err = r.Evaluate(ctx, snapshot.Plan, ports)
+		evaluated, err = r.Evaluate(ctx, plan, ports)
 		return evaluatedResult(evaluated), err
 	})
 	settled := make(chan error, 1)
@@ -350,7 +364,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
 	}
-	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
+	outcome, err := r.outcome(ctx, run, result, stdout, stderr, run.capture.Scope, run.capture.Screening)
 	if err != nil {
 		return "", errors.Join(feedback, err)
 	}
@@ -358,7 +372,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
 	}
 	if settledNow {
-		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
+		stampProgramRun(tc, run.source, paths.Cwd(), outcome, verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -411,7 +425,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory, //nolint:contextcheck -- The durable blob-retention callback outlives the command and must not capture its canceled context.
 	})
 	if err != nil {
 		return nil, false, err

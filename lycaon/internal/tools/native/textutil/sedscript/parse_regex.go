@@ -91,10 +91,10 @@ func (p *scriptCursor) delimited(delimiter byte) (string, error) {
 			p.pos++
 			return string(out), nil
 		case c == '\\' && p.pos+1 < len(p.src):
-			switch next := p.src[p.pos+1]; {
-			case next == delimiter:
+			switch next := p.src[p.pos+1]; next {
+			case delimiter:
 				out = append(out, delimiter)
-			case next == '\n':
+			case '\n':
 				out = append(out, '\\', 'n')
 			default:
 				out = append(out, c, next)
@@ -237,9 +237,10 @@ func (p *scriptCursor) escape(e byte) []byte {
 		}
 	case 'd', 'o', 'x':
 		base, width := 10, 3
-		if e == 'o' {
+		switch e {
+		case 'o':
 			base = 8
-		} else if e == 'x' {
+		case 'x':
 			base, width = 16, 2
 		}
 		end := p.pos

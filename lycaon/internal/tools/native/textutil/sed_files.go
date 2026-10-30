@@ -110,7 +110,7 @@ func (r *sedRun) inPlace(files commandprogram.Fields, suffix string) error {
 
 func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, stage commandprogram.StagedOutput, suffix string) (bool, error) {
 	inv := r.inv
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	var backup commandprogram.StagedOutput
 	var err error
 	if suffix != "" {

@@ -238,7 +238,7 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.
 // Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
 // job's stop. Acknowledgement is not proof of exit.
 func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error {
-	status := 143
+	var status int
 	switch signal {
 	case "TERM", "15":
 		status = 143

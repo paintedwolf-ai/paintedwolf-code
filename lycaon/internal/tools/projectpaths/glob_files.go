@@ -29,7 +29,7 @@ func (g GlobFiles) ListDir(ctx context.Context, dir string, maximum int) ([]comm
 	if err != nil {
 		return nil, globRefusal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if info, err := file.Stat(); err != nil || !info.IsDir() {
 		return nil, globRefusal(err)
 	}
