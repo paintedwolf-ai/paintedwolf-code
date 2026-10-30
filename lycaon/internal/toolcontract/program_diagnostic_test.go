@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func optionDiagnostic(source, word string) ProgramDiagnostic {
@@ -16,7 +18,7 @@ func TestProgramDiagnosticFeedbackCarriesSpanAndCatalogHelp(t *testing.T) {
 	d := optionDiagnostic("grep --bogus x", "--bogus")
 	facts, err := d.Feedback()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "read structured program diagnostic", err)
 	}
 	options, _ := facts["supported_options"].([]string)
 	if facts["diagnostic_stage"] != "option" || facts["command"] != "grep" || facts["diagnostic_word"] != "--bogus" || facts["source_start_byte"] != 5 || facts["source_end_byte"] != 12 || facts["diagnostic_pre_evaluation"] != false {
@@ -73,7 +75,7 @@ func TestProgramRepairOffersOnlyProvenUniqueOptionCorrections(t *testing.T) {
 			validate := func(program []byte) error { validated = string(program); return tc.validate(program) }
 			repair, err := d.Repair(ProgramRepairRequest{Source: []byte(tc.source), Offered: tc.offered, Validate: validate})
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "repair and validate frozen program source", err)
 			}
 			if tc.text == "" {
 				if repair != nil {

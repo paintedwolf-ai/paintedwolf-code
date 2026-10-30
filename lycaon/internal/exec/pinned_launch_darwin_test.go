@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type pinnedLaunchFixture struct {
@@ -47,7 +48,7 @@ func TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory(t *testing.T) 
 			entry := filepath.Join(directory, "task")
 			script := []byte("#!/bin/sh -e\nprintf '%s\\n' \"$0\" \"$1\"\nprintf 'payload' > result\n")
 			if err := os.WriteFile(entry, script, 0700); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write literal-argument script", err)
 			}
 			paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -56,7 +57,7 @@ func TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory(t *testing.T) 
 			plan := AgentLaunch(LaunchAgentCommand, "synthetic pinned script fixture", confinement).WithPathAuthority(paths)
 			cmd, cleanup, err := PrepareCommand(ctx, "./task", []string{"literal argument"}, ExecOpts{Launch: plan, Dir: directory, Env: []string{"PATH=/usr/bin:/bin"}})
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "prepare pinned script launch", err)
 			}
 			defer cleanup()
 			var stdout, stderr bytes.Buffer
@@ -83,7 +84,7 @@ func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *test
 			entry := filepath.Join(directory, "task")
 			original := []byte("#!/bin/sh\nprintf payload > result\n")
 			if err := os.WriteFile(entry, original, 0700); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write launch-revalidation script", err)
 			}
 			paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -91,17 +92,17 @@ func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *test
 			plan := AgentLaunch(LaunchAgentCommand, "synthetic launch revalidation", &confine.Confinement{HostExecution: true}).WithPathAuthority(paths)
 			cmd, cleanup, err := PrepareCommand(ctx, "./task", nil, ExecOpts{Launch: plan, Dir: directory, Env: []string{"PATH=/usr/bin:/bin"}})
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "prepare launch revalidation", err)
 			}
 			defer cleanup()
 			if revoke {
 				delete(paths.allowed, entry)
 			} else {
 				if err := os.Rename(entry, entry+".held"); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "retain original executable inode", err)
 				}
 				if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf replacement > result\n"), 0700); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "write substituted executable", err)
 				}
 			}
 			err = RunInOwnGroup(cmd)
@@ -123,10 +124,10 @@ func TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand(t *testing.T) {
 	entry := filepath.Join(directory, "task")
 	alias := filepath.Join(directory, "unadmitted")
 	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf payload\n"), 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write admitted hard-link target", err)
 	}
 	if err := os.Link(entry, alias); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create unadmitted executable alias", err)
 	}
 	paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
 	plan := AgentLaunch(LaunchAgentCommand, "synthetic alias admission", &confine.Confinement{HostExecution: true}).WithPathAuthority(paths)
@@ -147,7 +148,7 @@ func TestPinnedHostExecutionPreservesSetuidProcessInspection(t *testing.T) {
 	pid := strconv.Itoa(os.Getpid())
 	cmd, cleanup, err := PrepareCommand(ctx, "/bin/ps", []string{"-p", pid, "-o", "pid="}, ExecOpts{Launch: plan, Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare literal process-status launch", err)
 	}
 	defer cleanup()
 	var output, diagnostic bytes.Buffer

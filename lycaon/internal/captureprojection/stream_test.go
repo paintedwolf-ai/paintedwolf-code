@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type streamMemoryFixture struct {
@@ -63,7 +64,7 @@ func TestScreenStreamExactWholeFieldPolicy(t *testing.T) {
 			raw = append(raw, 0xfe)
 			expected, err := p.Text(t.Context(), Scope{}, "capture.test", string(raw))
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "project whole-field reference output", err)
 			}
 			memory := &streamMemoryFixture{}
 			var out bytes.Buffer
@@ -72,7 +73,7 @@ func TestScreenStreamExactWholeFieldPolicy(t *testing.T) {
 			options.Observe = func(_ context.Context, s secretmatch.StreamSpan) error { spans = append(spans, s); return nil }
 			metadata, err := p.ScreenStream(t.Context(), Scope{}, "capture.test", &fragmentedStream{raw, step}, &out, options)
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "screen fragmented stream", err)
 			}
 			if out.String() != expected.Value || metadata.RawBytes != int64(len(raw)) || metadata.EmittedBytes != int64(out.Len()) || metadata.RawSHA256 != digestFixture(raw) || metadata.EmittedSHA256 != digestFixture(out.Bytes()) || !metadata.Complete || !metadata.Redacted {
 				t.Fatalf("wrong complete projection: metadata=%+v bytes_equal=%v", metadata, out.String() == expected.Value)
@@ -111,13 +112,13 @@ func TestScreenStreamEncodedLongValueAcrossCatalogBoundary(t *testing.T) {
 	raw := []byte(strings.Repeat("safe\n", (1<<20)/5-20000) + " " + encoded + " " + strings.Repeat("after\n", 300000))
 	expected, err := p.Text(t.Context(), Scope{}, "", string(raw))
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "project large-stream reference output", err)
 	}
 	var out bytes.Buffer
 	memory := &streamMemoryFixture{}
 	metadata, err := p.ScreenStream(t.Context(), Scope{}, "", &fragmentedStream{raw, 32749}, &out, streamOptionsFixture(memory))
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "screen large fragmented stream", err)
 	}
 	if !metadata.Complete || !metadata.Redacted || out.String() != expected.Value {
 		t.Fatalf("long spelling escaped or bytes changed: %+v equal=%v", metadata, out.String() == expected.Value)
@@ -134,12 +135,12 @@ func TestScreenStreamOrdinaryOccurrenceCapIsGlobal(t *testing.T) {
 	raw := strings.Repeat(value+" "+strings.Repeat("safe\n", 22000), 24)
 	expected, err := p.Text(t.Context(), Scope{}, "", raw)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "project repeated-field reference output", err)
 	}
 	var out bytes.Buffer
 	metadata, err := p.ScreenStream(t.Context(), Scope{}, "", strings.NewReader(raw), &out, streamOptionsFixture(&streamMemoryFixture{}))
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "screen repeated-field stream", err)
 	}
 	if out.String() != expected.Value || strings.Count(out.String(), secretmatch.RedactedMarker) != 16 || !metadata.Complete {
 		t.Fatalf("ordinary cap changed: %+v markers=%d equal=%v", metadata, strings.Count(out.String(), secretmatch.RedactedMarker), out.String() == expected.Value)
@@ -212,7 +213,7 @@ func TestScreenStreamTerminalControls(t *testing.T) {
 				t.Fatalf("partial write hash/count: %+v", metadata)
 			}
 			if mode == "cancel" && !errors.Is(err, context.Canceled) {
-				t.Fatal(err)
+				t.Fatalf("stream cancellation error = %v, want context.Canceled", err)
 			}
 		})
 	}

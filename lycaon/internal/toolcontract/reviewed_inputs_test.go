@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type reviewMemory struct {
@@ -25,7 +27,7 @@ func TestNativeValueDomainsCannotAcquireOperationMeaning(t *testing.T) {
 	for _, domain := range []NativeValueDomain{OperationArgumentsDomain, ApprovalAuthorityDomain, DiagnosticInspectionDomain} {
 		value, release, err := NewNativeValue(t.Context(), memory, domain, args)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "encode domain-bound native value", err)
 		}
 		if !value.Valid() || seen[value.Digest()] {
 			t.Fatal("native semantic domains aliased")
@@ -81,7 +83,7 @@ func TestReviewedInputsPreserveRawScalarAndKeyIdentity(t *testing.T) {
 		original := map[string]any{value: []any{value, []any{"bytes_base64", "YmFk/w=="}, map[string]any{"utf8": "literal tag"}}, "integer": json.Number("9007199254740993"), "float32": float32(0.1), "bool": true, "null": nil}
 		reviewed, release, err := NewReviewedOperationInputs(t.Context(), memory, original)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "freeze lossless reviewed arguments", err)
 		}
 		if !reviewed.Valid() || reviewed.Representation() != LosslessOperationArgumentsV1 || identities[reviewed.ArgumentsDigest()] {
 			t.Fatal("raw byte identity collided")
@@ -92,7 +94,7 @@ func TestReviewedInputsPreserveRawScalarAndKeyIdentity(t *testing.T) {
 		}
 		decoded, releaseDecoded, err := reviewed.Arguments(t.Context(), memory)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "decode reviewed arguments", err)
 		}
 		values, ok := decoded[value].([]any)
 		if !ok || values[0] != value || !reflect.DeepEqual(values[1], []any{"bytes_base64", "YmFk/w=="}) || decoded["integer"] != json.Number("9007199254740993") {
@@ -100,7 +102,7 @@ func TestReviewedInputsPreserveRawScalarAndKeyIdentity(t *testing.T) {
 		}
 		restored, releaseRestored, err := RestoreReviewedOperationInputs(t.Context(), memory, reviewed.Representation(), reviewed.ArgumentsDigest(), reviewed.CanonicalArguments())
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "restore reviewed argument representation", err)
 		}
 		if restored != reviewed {
 			t.Fatal("persisted review identity changed")
@@ -178,11 +180,11 @@ func TestReviewedInputsAdmitDepthPayloadAndReleaseOnFailure(t *testing.T) {
 	}
 	reviewed, release, err := NewReviewedOperationInputs(t.Context(), memory, map[string]any{"nested": nested})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "freeze nested reviewed input", err)
 	}
 	_, releaseDecoded, err := reviewed.Arguments(t.Context(), memory)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode nested reviewed input", err)
 	}
 	releaseDecoded()
 	release()
