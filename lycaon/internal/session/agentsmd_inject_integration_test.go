@@ -49,6 +49,10 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	fixture := filepath.Join(moduleRoot, "internal", "governance", "testdata", "agentsmd", "monorepo")
 	projectDir := filepath.Join(t.TempDir(), "project")
 	copyDir(t, fixture, projectDir)
+	policyPath := filepath.Join(projectDir, "AGENTS.md")
+	const firstPolicy = "Apply the first scoped guidance marker."
+	const freshPolicy = "Apply the refreshed scoped guidance marker."
+	testutil.FailErr(t, "write initial guidance", os.WriteFile(policyPath, []byte(firstPolicy), 0o644))
 
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
@@ -71,6 +75,8 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
+	firstRequestCount := len(rec.AllRequests())
+	testutil.FailErr(t, "edit guidance between requests", os.WriteFile(policyPath, []byte(freshPolicy), 0o644))
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "second Prompt", err)
 	}
@@ -79,15 +85,41 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		t.Fatal("expected LLM request")
 	}
 	var firstIndex string
+	var firstRevision, freshRevision string
 	for i, req := range reqs {
 		var index string
+		var guidance strings.Builder
 		for _, msg := range req.Messages {
+			if msg.Role == api.MessageRoleSystem {
+				guidance.WriteString(msg.Content)
+			}
 			if strings.Contains(msg.Content, "Available AGENTS.md files") {
 				index = msg.Content
 				if !msg.ContextPinned {
 					t.Fatal("index is not pinned")
 				}
 			}
+		}
+		want, absent := firstPolicy, freshPolicy
+		if i >= firstRequestCount {
+			want, absent = freshPolicy, firstPolicy
+		}
+		if !strings.Contains(guidance.String(), want) || strings.Contains(guidance.String(), absent) {
+			t.Fatalf("request %d did not carry only the current guidance", i)
+		}
+		var revision string
+		for _, file := range mgr.Coordinator.PolicyIndex.ManifestFor(req.Messages).Files {
+			if file.Path == "AGENTS.md" {
+				revision = file.Digest
+			}
+		}
+		if revision == "" {
+			t.Fatalf("request %d lost its delivered policy revision", i)
+		}
+		if i < firstRequestCount {
+			firstRevision = revision
+		} else {
+			freshRevision = revision
 		}
 		if index == "" {
 			t.Fatalf("request %d lost index", i)
@@ -97,6 +129,9 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		} else if index != firstIndex {
 			t.Fatal("index changed across requests")
 		}
+	}
+	if firstRevision == freshRevision || freshRevision == "" {
+		t.Fatal("guidance edit did not produce a new delivered revision")
 	}
 	combined := strings.Builder{}
 	for _, msg := range reqs[0].Messages {
