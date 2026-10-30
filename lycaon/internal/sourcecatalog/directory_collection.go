@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
-func collectDirectoryObservation(ctx context.Context, store *indexStore, dir string, cached DirectoryObservation, held *os.File, demand func() int, consume func(directoryDiscovery) error) (DirectoryObservation, bool, error) {
+func collectDirectoryObservation(ctx context.Context, store *indexStore, dir string, cached DirectoryObservation, held DirectoryReadAdmission, demand func() int, consume func(directoryDiscovery) error) (DirectoryObservation, bool, error) {
 	observation := DirectoryObservation{Path: dir, baseSequence: cached.Sequence, Invalidation: store.observationMark(dir), Epoch: repochange.CurrentEpoch(store.root.Path)}
 	root, release, err := acquireObservationRoot(ctx, store)
 	if err != nil {
@@ -39,6 +39,12 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 			finish()
 			break
 		}
+		if held != nil {
+			if err := held.AdmitDirectoryRead(); err != nil {
+				finish()
+				return observation, false, err
+			}
+		}
 		batch, complete, readErr := reader.read(quantum)
 		var nodes []indexNode
 		if readErr == nil {
@@ -60,7 +66,7 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 	return observation, false, nil
 }
 
-func openObservationDirectory(ctx context.Context, store *indexStore, root *os.Root, dir string, held *os.File) (*observationDirectory, error) {
+func openObservationDirectory(ctx context.Context, store *indexStore, root *os.Root, dir string, held DirectoryReadAdmission) (*observationDirectory, error) {
 	release, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))
 	if err != nil {
 		return nil, err
@@ -69,11 +75,18 @@ func openObservationDirectory(ctx context.Context, store *indexStore, root *os.R
 	if held == nil {
 		return openConfinedDirectory(root, dir)
 	}
-	info, err := held.Stat()
+	if err := held.AdmitDirectoryRead(); err != nil {
+		return nil, err
+	}
+	file := held.DirectoryFile()
+	if file == nil {
+		return nil, os.ErrInvalid
+	}
+	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
-	entries, err := directoryKinds(held)
+	entries, err := directoryKinds(file)
 	if err != nil {
 		return nil, err
 	}

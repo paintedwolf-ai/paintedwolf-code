@@ -14,6 +14,12 @@ import (
 const foregroundDirectoryBatch = 64
 const foregroundEntryBatch = 4096
 
+// DirectoryReadAdmission re-admits a borrowed directory at its current address.
+type DirectoryReadAdmission interface {
+	DirectoryFile() *os.File
+	AdmitDirectoryRead() error
+}
+
 // DirectoryReader consumes fresh observations before publishing their structural
 // projection. Close drains its bounded pending batch; it starts no background work.
 // A reader belongs to one traversal and is not safe for concurrent calls.
@@ -33,9 +39,9 @@ func (c *Directories) NewDirectoryReader(project string, root Root) *DirectoryRe
 	return &DirectoryReader{directories: c, project: project, root: root}
 }
 
-// ReadDirectory borrows a read-admitted descriptor for dir when supplied.
+// ReadDirectory borrows a directory capability for dir when supplied.
 // Rewind its consumed offset before falling back to another listing reader.
-func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum int, held *os.File) (DirectoryListing, error) {
+func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum int, held DirectoryReadAdmission) (DirectoryListing, error) {
 	if r.closed {
 		return DirectoryListing{}, os.ErrClosed
 	}
@@ -107,7 +113,7 @@ func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum
 	}
 	var identity os.FileInfo
 	if held != nil {
-		identity, err = held.Stat()
+		identity, err = held.DirectoryFile().Stat()
 		if err != nil {
 			r.discard()
 			return DirectoryListing{Prepared: true}, err
