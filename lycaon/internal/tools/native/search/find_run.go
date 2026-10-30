@@ -52,6 +52,8 @@ func runFind(inv *invocation) error {
 	inv.failure = 1
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
 	defer r.walker.close()
+	r.walker.lazy = true
+	defer r.walker.report()
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}
@@ -142,6 +144,16 @@ func (r *findRun) visit(e entry) error {
 	}
 	if !r.actions {
 		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
+	}
+	if e.dir() || e.link {
+		var err error
+		e, err = r.walker.inspect(e, r.followAll)
+		if err != nil {
+			if _, ok := ordinary(err); ok {
+				return nil
+			}
 			return err
 		}
 	}

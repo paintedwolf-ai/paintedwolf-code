@@ -21,6 +21,7 @@ type findNode struct {
 	op          string // "and", "or", "not" or "primary"
 	left, right *findNode
 	test        func(*findRun, entry) (bool, error)
+	structural  bool
 }
 
 func (n *findNode) eval(r *findRun, e entry) (bool, error) {
@@ -40,6 +41,16 @@ func (n *findNode) eval(r *findRun, e entry) (bool, error) {
 	case "not":
 		ok, err := n.left.eval(r, e)
 		return !ok, err
+	}
+	if !n.structural {
+		var err error
+		e, err = r.walker.inspect(e, r.followAll)
+		if err != nil {
+			if _, ok := ordinary(err); ok {
+				return false, nil
+			}
+			return false, err
+		}
 	}
 	return n.test(r, e)
 }
@@ -169,7 +180,7 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 		value = option.Values[0].Value
 	}
 	test := func(f func(*findRun, entry) (bool, error)) (*findNode, error) {
-		return &findNode{op: "primary", test: f}, nil
+		return &findNode{op: "primary", test: f, structural: structuralPrimary(option.Key)}, nil
 	}
 	switch option.Key {
 	case "-name", "-iname", "-path", "-ipath":

@@ -1,0 +1,122 @@
+package search
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+type discoveryRecords struct {
+	mu      sync.Mutex
+	records map[string]map[string]int64
+}
+
+func (h *discoveryRecords) Enabled(context.Context, slog.Level) bool { return true }
+func (h *discoveryRecords) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *discoveryRecords) WithGroup(string) slog.Handler            { return h }
+func (h *discoveryRecords) Handle(_ context.Context, record slog.Record) error {
+	if record.Message != "command discovery completed" {
+		return nil
+	}
+	var execution string
+	values := map[string]int64{}
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "execution_id" {
+			execution = attr.Value.String()
+		} else if attr.Value.Kind() == slog.KindInt64 {
+			values[attr.Key] = attr.Value.Int64()
+		}
+		return true
+	})
+	h.mu.Lock()
+	h.records[execution] = values
+	h.mu.Unlock()
+	return nil
+}
+
+func discoveryCapture(t *testing.T) *discoveryRecords {
+	t.Helper()
+	previous := slog.Default()
+	h := &discoveryRecords{records: map[string]map[string]int64{}}
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return h
+}
+
+func discoveryCatalog(t *testing.T) *sourcecatalog.Catalog {
+	t.Helper()
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	c := sourcecatalog.New()
+	t.Cleanup(func() { testutil.FailErr(t, "drain discovery", c.Drain(context.Background())) })
+	return c
+}
+
+func TestFindLearnsAndReusesStructureWithoutStattingNonmatches(t *testing.T) {
+	logs := discoveryCapture(t)
+	files := map[string]string{"src/target.go": "source", ".hidden/target.go": "hidden", ".git/target.go": "metadata"}
+	for i := range 40 {
+		files[fmt.Sprintf("src/noise-%02d.txt", i)] = "noise"
+	}
+	h := newHarness(t, files)
+	h.owners.Catalog = discoveryCatalog(t)
+	for attempt := range 2 {
+		r := h.exec("", "find", ".", "-name", "target.go")
+		r.expect(t, "indexed names", "./.git/target.go\n./.hidden/target.go\n./src/target.go\n", "", 0)
+		work := logs.records[r.execution]
+		if work["entries"] != 47 || work["entry_metadata_reads"] != 7 {
+			t.Fatalf("attempt %d work=%v", attempt, work)
+		}
+		if attempt == 0 && work["directory_reads"] != 4 || attempt == 1 && (work["directory_reuses"] != 4 || work["directory_reads"] != 0) {
+			t.Fatalf("attempt %d membership work=%v", attempt, work)
+		}
+	}
+}
+
+func TestFindIndexedAndLiveExpressionsHaveIdenticalResults(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "a", "Z/target.go": "source", "b/other.txt": "", ".hidden/target.go": "hidden"})
+	symlink(t, "Z", filepath.Join(h.root, "link"))
+	symlink(t, "missing", filepath.Join(h.root, "dangling"))
+	catalog := discoveryCatalog(t)
+	for _, argv := range [][]string{
+		{"find", "."},
+		{"find", ".", "-iname", "*TARGET*"},
+		{"find", ".", "!", "-name", "*.txt", "-type", "f"},
+		{"find", ".", "-path", "*/Z", "-prune", "-o", "-name", "*.go", "-print0"},
+		{"find", ".", "-regex", ".*target[.]go", "-size", "+0c"},
+		{"find", ".", "-mindepth", "1", "-maxdepth", "1", "-printf", "%p %y %s\\n"},
+		{"find", "-d", ".", "-empty"},
+		{"find", "-L", ".", "-name", "*.go"},
+		{"find", "Z", "a.txt", "-print"},
+		{"find", ".", "-name", "target.go", "-exec", "echo", "{}", ";"},
+	} {
+		t.Run(fmt.Sprint(argv), func(t *testing.T) {
+			h.owners.Catalog = nil
+			live := h.exec("", argv...)
+			h.owners.Catalog = catalog
+			indexed := h.exec("", argv...)
+			if live.stdout != indexed.stdout || live.stderr != indexed.stderr || live.result != indexed.result || fmt.Sprint(live.err) != fmt.Sprint(indexed.err) {
+				t.Fatalf("live=%+v indexed=%+v", live, indexed)
+			}
+		})
+	}
+}
+
+func TestFindRefreshesChangedMembershipAndLiveMetadata(t *testing.T) {
+	h := newHarness(t, map[string]string{"src/target.go": "old", "src/other.txt": "source"})
+	h.owners.Catalog = discoveryCatalog(t)
+	h.exec("", "find", "src", "-name", "target.go").expect(t, "initial names", "src/target.go\n", "", 0)
+	testutil.FailErr(t, "rename indexed entry", os.Rename(filepath.Join(h.root, "src/target.go"), filepath.Join(h.root, "src/renamed.go")))
+	testutil.FailErr(t, "replace other entry with directory", os.Remove(filepath.Join(h.root, "src/other.txt")))
+	seed(t, h.root, map[string]string{"src/other.txt/target.go": "replacement"})
+	h.exec("", "find", "src", "-name", "target.go").expect(t, "changed structure", "src/other.txt/target.go\n", "", 0)
+	h.exec("", "find", "src", "-name", "renamed.go", "-size", "3c").expect(t, "initial metadata", "src/renamed.go\n", "", 0)
+	testutil.FailErr(t, "rewrite metadata", os.WriteFile(filepath.Join(h.root, "src/renamed.go"), []byte("longer source"), 0o644))
+	h.exec("", "find", "src", "-name", "renamed.go", "-size", "3c").expect(t, "live metadata", "", "", 0)
+}
