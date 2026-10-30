@@ -1,0 +1,19 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/llm/compaction",
+  "kind": "module",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "Retain this 27-file compaction module. It owns transcript projection, local savings measurements, bounded source pages, and summary parsing; session lifecycle and publication remain in the history module. The new page and measurement files expose algorithm phases without forwarding packages or duplicate owners. Preserve this exact member ceiling and the focused source, savings, and work-budget contracts.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 27,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reduction_page_test.go": "a07033f0e585db2c27dab8528132d95e1ae6e2985e32d5780c0b1ca2bdce853d",
+    "lycaon/internal/llm/compaction/reduction_progress_test.go": "9ca47f808a47ec4344e8e02e8289b5f785c0838768a6d76fdf75fd8d983e0698",
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/llm/compaction/reduction_ranking_test.go": "cd2fb407f9a0ad90c3524c01eee0a9d9c0af7a56a2d7065a90c9c22646d4b91b",
+    "lycaon/internal/llm/compaction/reduction_retry_test.go": "32f6bc4c2f33597f3f1bc130f992a8e0ab484447270ffb5d945cb9311e8dc228",
+    "lycaon/internal/llm/compaction/compaction_savings_test.go": "6e0e08f0886e9fa49d0bebd9663902a9990376b48b2707c79dd69025f79c8a20"
+  },
+  "reviewed_shape": "a064070fd7db873349aab7077cb27fd3d0fbe7f982624f0cbc62f1281bcf38a5"
+}
