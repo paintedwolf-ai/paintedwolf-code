@@ -114,7 +114,21 @@ func TestActivitiesDoNotPublishSuccessfulContextAsAProvisionalRow(t *testing.T) 
 	}
 	tail := activityFixture("tail", "pipeline", "read", "tail", 20)
 	tail.receipt.State = "running"
-	if values := composeActivities([]activityInput{tail}, false); len(values) != 0 {
-		t.Fatalf("supporting filter became a row before its producer: %+v", values)
+	before := composeActivities([]activityInput{tail}, false)
+	producer := activityFixture("producer", "pipeline", "command", "external", 0)
+	after := composeActivities([]activityInput{tail, producer}, false)
+	if len(before) != 1 || len(after) != 2 || before[0].ID != after[0].ID {
+		t.Fatalf("late producer regrouped an existing row: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestActivitiesExposeSupportingFailuresWithoutMovingRows(t *testing.T) {
+	producer := activityFixture("producer", "pipe", "command", "external", 0)
+	filter := activityFixture("filter", "pipe", "read", "head", 20)
+	code := 1
+	filter.receipt.StatusCode = &code
+	values := composeActivities([]activityInput{producer, filter}, true)
+	if len(values) != 1 || values[0].ID != "producer" || values[0].StatusCode == nil || *values[0].StatusCode != 1 || values[0].Outcome != "Exited 1" {
+		t.Fatalf("supporting failure disappeared: %+v", values)
 	}
 }

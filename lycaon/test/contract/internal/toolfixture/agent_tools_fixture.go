@@ -21,6 +21,12 @@ import (
 
 func ContractToolExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
+	return ContractToolRuntime(t).Executor
+}
+
+// ContractToolRuntime composes the actual execution owners and catalog boundary.
+func ContractToolRuntime(t *testing.T) *toolhost.Runtime {
+	t.Helper()
 	root := contractcheck.RepoRoot(t)
 	configRoot := filepath.Join(root, "lycaon")
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
@@ -33,7 +39,7 @@ func ContractToolExecutor(t *testing.T) *toolexecution.Executor {
 	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 	registerCatalogToolsOnto(t, rt.Registry)
-	return rt.Executor
+	return rt
 }
 
 func applyStockToolSchemas(t *testing.T, rt *toolhost.Runtime) {

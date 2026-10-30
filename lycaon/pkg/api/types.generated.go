@@ -1278,10 +1278,12 @@ type CodeScanPage struct {
 
 // CommandActivity
 type CommandActivity struct {
-	ID         string `json:"id"`
-	Group      string `json:"group"`
-	Label      string `json:"label"`
-	Subject    string `json:"subject"`
+	ID      string `json:"id"`
+	Group   string `json:"group"`
+	Label   string `json:"label"`
+	Subject string `json:"subject"`
+	// Registered session-owned background job started by this activity.
+	JobHandle  string `json:"job_handle,omitempty"`
 	Directory  string `json:"directory,omitempty"`
 	Outcome    string `json:"outcome"`
 	State      string `json:"state"`

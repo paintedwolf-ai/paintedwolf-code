@@ -11,8 +11,7 @@ Egress is mediated, so the question is never "is the network up". It is: **which
 
 | You need | Carried by | What you do |
 |----------|-----------|-------------|
-| **One HTTP(S) exchange you make yourself** — an API call, webhook, health check, login session, download, upload | Native `curl` in `command` | Declare the URL, method, headers and body with curl flags. Use `-o` to save output. Loopback needs `capability_request.loopback_connect` on the command call. |
-| The same exchange as a `curl` line in a `command` program — internal CA, client certificate, upload, a local server under its production name | `curl` on the host's HTTP client | `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` to upload, `--resolve host:port:127.0.0.1` or `--connect-to` with `loopback_connect` for the local server, `-v` to see the exchange. Never `external -- curl` |
+| One HTTP(S) exchange — API, webhook, login, download or upload | Native `curl` in `command` | Declare URL, method, headers and body with curl flags; `-o` saves output. Use `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` for upload, and `-v` for diagnostics. Loopback needs `capability_request.loopback_connect`; `--resolve host:port:127.0.0.1` or `--connect-to` retains the production name. Never `external -- curl`. |
 | **Reading a web page or documentation** | `fetch_url` | Pass the URL. The default `mode=text` returns readable markdown and pages long documents with `offset` and `limit`; `curl` returns the response bytes |
 | HTTP(S) from a process that must speak it itself — a package manager, a build, a test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |
 | Any other TCP — Postgres, Redis, Kafka, raw TCP | Mediated SOCKS5 `CONNECT` (`ALL_PROXY`) | Pass `socks_proxy: true` on that `command` / `verify` / `terminal_open` |

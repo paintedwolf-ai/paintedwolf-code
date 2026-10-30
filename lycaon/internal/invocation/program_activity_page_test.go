@@ -31,7 +31,7 @@ func TestProgramActivityObserverSeesCommittedSettlement(t *testing.T) {
 	child := f.child(t)
 	f.start(t, child)
 	observed := 0
-	ctx := invocation.WithActivityObserver(t.Context(), func(ctx context.Context, program string) {
+	ctx := invocation.WithActivityObserver(t.Context(), func(ctx context.Context, program, _ string) {
 		page, err := f.recorder.ReadProgramPage(ctx, f.session, program, "", 10)
 		testutil.FailErr(t, "read committed activity update", err)
 		if page.Activities[0].Outcome != "Exited 0" {

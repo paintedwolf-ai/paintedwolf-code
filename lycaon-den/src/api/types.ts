@@ -10188,6 +10188,8 @@ export interface components {
             group: string;
             label: string;
             subject: string;
+            /** @description Registered session-owned background job started by this activity. */
+            job_handle?: string;
             directory?: string;
             outcome: string;
             /** @enum {string} */

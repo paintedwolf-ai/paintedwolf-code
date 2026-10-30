@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,39 +15,27 @@ import (
 // I11 — worker multi-root + no-folder coherence (parallel to I10).
 
 func TestWorkerMultiRootDiscoveryUnionFind(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	tctx := fix.tctx("worker-2")
-	// ToolContext.Agent carries the resolved sandbox profile, not the agent role.
-	tctx.Identity.Agent = "explore_readonly"
-	out, err := reg.Run(ctx, "find", map[string]any{
-		"path":      ".",
-		"name_glob": "*-sentinel.txt",
-	}, tctx)
-	contractcheck.FailErr(t, "find union worker", err)
-	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, "@lycaon-den") {
-		t.Fatalf("find union output = %q", out)
+	tc := fix.tctx("worker-2")
+	tc.Identity.Agent = "explore_readonly"
+	out := assertRootProgramSuccess(t, rootProgram(t, "find . @lycaon-den -name '*-sentinel.txt'", tc))
+	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, filepath.Join(fix.secondaryDir, "secondary-sentinel.txt")) {
+		t.Fatalf("worker root discovery=%q", out)
 	}
 }
 
 func TestWorkerZeroRootsStructuredReject(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
-	ctx := context.Background()
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "explore_readonly",
-			SessionID:   "w0",
-			WorkerJobID: "job"},
-	}
-	for _, name := range []string{"read", "find", "grep", "list_dir", "command"} {
-		t.Run(name, func(t *testing.T) {
-			args := multiRootExerciseArgs(name, "x.go", true)
-			_, err := reg.Run(ctx, name, args, tctx)
-			if err == nil {
-				t.Fatal("expected error at 0 roots")
+	f := toolfixture.NewProgramFixture(t)
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "explore_readonly", WorkerJobID: "job"}}
+	for _, source := range []string{"cat x.go", "find .", "rg pattern .", "ls .", "pwd"} {
+		t.Run(source, func(t *testing.T) {
+			out, err := f.Invoke(t, source, tc)
+			code := toolRejectCode(err)
+			if out.Refusal != nil {
+				code = out.Refusal.Code
 			}
-			if code := toolRejectCode(err); code != "PROJECT_HAS_NO_ROOTS" {
-				t.Fatalf("code = %q want PROJECT_HAS_NO_ROOTS", code)
+			if code != "PROJECT_HAS_NO_ROOTS" {
+				t.Fatalf("no-root worker program: code=%s outcome=%+v error=%v", code, out, err)
 			}
 		})
 	}

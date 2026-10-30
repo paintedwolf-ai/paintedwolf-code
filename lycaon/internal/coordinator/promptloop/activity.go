@@ -54,8 +54,9 @@ func (a *activityLease) report(progress api.ToolProgress) {
 		return
 	}
 	phaseChanged := a.event.Progress == nil || a.event.Progress.Phase != progress.Phase
+	commandChanged := commandActivityEdge(a.event.Progress, &progress)
 	a.event.Progress = &progress
-	if phaseChanged || progress.CommandProgram != nil || time.Since(a.lastProgress) >= time.Second {
+	if phaseChanged || commandChanged || time.Since(a.lastProgress) >= time.Second {
 		a.lastProgress = time.Now()
 		a.publish(a.event)
 	}

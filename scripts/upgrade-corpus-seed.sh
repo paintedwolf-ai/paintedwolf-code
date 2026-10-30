@@ -101,7 +101,7 @@ mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 
 printf 'overlay_format: 1\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
-# Target for the locked mock tool call (pattern "corpus seed" → read README.md).
+# Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
 printf '# corpus seed\n' >"${SEED_PROJECT_ROOT}/README.md"
 
 PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
