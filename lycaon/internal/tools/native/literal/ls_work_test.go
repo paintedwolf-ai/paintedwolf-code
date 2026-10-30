@@ -101,3 +101,21 @@ func TestListingNameSelectionPreservesLinkAndParentAuthority(t *testing.T) {
 	r := h.exec("", "ls", "-a", "list")
 	r.expect(t, "admitted parent name", ".\n..\nfile\nlink\nnested\n", "", 0)
 }
+
+func TestListingWorkCountsFollowedLinkMetadata(t *testing.T) {
+	logs := listingLogs(t)
+	h := newHarness(t, map[string]string{"list/file": "data"})
+	symlink(t, "file", h.root+"/list/link")
+	for _, tc := range []struct {
+		args  []string
+		reads int64
+	}{{[]string{"ls", "list"}, 0}, {[]string{"ls", "-l", "list"}, 2}, {[]string{"ls", "-lL", "list"}, 3}} {
+		result := h.exec("", tc.args...)
+		if result.err != nil || result.result.Status != 0 {
+			t.Fatalf("%v result=%+v error=%v", tc.args, result.result, result.err)
+		}
+		if work := logs.records[result.execution]; work["entry_metadata_reads"] != tc.reads {
+			t.Fatalf("%v work=%v want reads=%d", tc.args, work, tc.reads)
+		}
+	}
+}

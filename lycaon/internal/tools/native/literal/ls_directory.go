@@ -95,6 +95,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 			inv.directoryWork.metadata++
 			child, st, err = opened.StatChild(name)
 			if err == nil && opts.deref && typeLetter(st.Mode) == 'l' {
+				inv.directoryWork.metadata++
 				if target, targetErr := opened.StatChildFollowed(child); targetErr == nil {
 					st = target
 				}
