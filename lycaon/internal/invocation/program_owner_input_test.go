@@ -30,6 +30,10 @@ func (h *countedOwnerTransactions) BeginTx(ctx context.Context, options *sql.TxO
 	return tx, err
 }
 
+func (h *countedOwnerTransactions) BeginReadTx(ctx context.Context) (*sql.Tx, error) {
+	return h.Handle.(db.ReadHandle).BeginReadTx(ctx)
+}
+
 func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 	for _, progress := range []bool{false, true} {
 		for _, size := range []int{16, 17 << 10} {

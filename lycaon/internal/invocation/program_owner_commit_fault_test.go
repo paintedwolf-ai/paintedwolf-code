@@ -57,6 +57,10 @@ func (h lostCommitHandle) BeginTx(ctx context.Context, options *sql.TxOptions) (
 	return h.writer.BeginTx(ctx, options)
 }
 
+func (h lostCommitHandle) BeginReadTx(ctx context.Context) (*sql.Tx, error) {
+	return h.Handle.(db.ReadHandle).BeginReadTx(ctx)
+}
+
 func TestReviewedOwnerStartRetainsCommittedBytesAfterLostAcknowledgement(t *testing.T) {
 	for _, progress := range []bool{false, true} {
 		for _, size := range []int{16, 17 << 10} {
@@ -95,7 +99,8 @@ func TestReviewedOwnerStartRetainsCommittedBytesAfterLostAcknowledgement(t *test
 				if state != "running" || reference == "" {
 					t.Fatalf("fixture did not commit owner marker: state=%s ref=%q", state, reference)
 				}
-				testutil.FailErr(t, "reconcile ambiguous attachment", capture.Outputs.Collect(t.Context()))
+				testutil.FailErr(t, "preserve attached claims during collection", capture.Outputs.Collect(t.Context()))
+				testutil.FailErr(t, "reconcile durable ambiguous attachment", capture.Outputs.Restore(t.Context()))
 				reader, err := capture.Outputs.Open(t.Context(), f.session, f.program, reference)
 				testutil.FailErr(t, "open committed input after failed acknowledgement", err)
 				body, err := io.ReadAll(reader.Reader)
