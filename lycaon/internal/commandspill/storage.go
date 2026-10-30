@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,11 +114,15 @@ func (r *fileRunReader) Next() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size > uint64(r.maximum) {
-		return nil, &RecordLimitError{Maximum: r.maximum, Observed: int64(min(size, 1<<62))}
+	if size > math.MaxInt64 {
+		return nil, &RecordLimitError{Maximum: r.maximum, Observed: 1 << 62}
+	}
+	recordSize := int64(size)
+	if recordSize > r.maximum {
+		return nil, &RecordLimitError{Maximum: r.maximum, Observed: min(recordSize, 1<<62)}
 	}
 	if uint64(cap(r.record)) < size {
-		if err := r.grow(int64(size)); err != nil {
+		if err := r.grow(recordSize); err != nil {
 			return nil, err
 		}
 		r.record = make([]byte, size)

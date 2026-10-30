@@ -1,8 +1,12 @@
 package commandspill
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
+	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,5 +37,34 @@ func TestRunFramingAndRecordAdmission(t *testing.T) {
 	}
 	if _, err := reader.Next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("expected terminal EOF, got %v", err)
+	}
+}
+
+func TestRunFrameLengthCannotWrapOrAllocateBeforeAdmission(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		size              uint64
+		maximum, observed int64
+	}{
+		{"unsigned overflow", math.MaxUint64, 3, 1 << 62},
+		{"signed boundary", math.MaxInt64, 3, 1 << 62},
+		{"negative maximum", 0, -1, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var frame [binary.MaxVarintLen64]byte
+			n := binary.PutUvarint(frame[:], tc.size)
+			path := filepath.Join(t.TempDir(), "oversized-run")
+			testutil.FailErr(t, "seed oversized frame", os.WriteFile(path, frame[:n], 0600))
+			var growth []int64
+			run := &fileRun{path: path}
+			reader, err := run.Open(tc.maximum, func(n int64) error { growth = append(growth, n); return nil })
+			testutil.FailErr(t, "open framed input", err)
+			defer func() { testutil.FailErr(t, "close framed input", reader.Close()) }()
+			_, err = reader.Next()
+			var limit *RecordLimitError
+			if !errors.As(err, &limit) || limit.Maximum != tc.maximum || limit.Observed != tc.observed || len(growth) != 1 || growth[0] != 64<<10 {
+				t.Fatalf("unsafe record frame reached allocation or lost its limit: error=%v growth=%v", err, growth)
+			}
+		})
 	}
 }
