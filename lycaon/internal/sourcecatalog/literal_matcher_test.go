@@ -1,0 +1,48 @@
+package sourcecatalog
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textsearch"
+)
+
+func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
+	root := t.TempDir()
+	index := New().Literals
+	contents := []string{"NeedleToken", "Kelvin ſource Σigma", "İstanbul ıSTANBUL", "ÉLAN élan", "abc abbc abcd", "start\nend", "", "\xffNeedleToken", "\ufeffNeedleToken", "\x00NeedleToken", "\xff\xfeN\x00e\x00e\x00d\x00l\x00e\x00"}
+	entries := make([]Entry, len(contents))
+	for i, content := range contents {
+		rel := fmt.Sprintf("file-%02d", i)
+		writeLiteralFixture(t, root, rel, content)
+		info, err := os.Stat(filepath.Join(root, rel))
+		testutil.FailErr(t, "stat content", err)
+		entries[i] = Entry{Path: rel, Size: info.Size(), Mode: uint32(info.Mode()), Modified: info.ModTime()}
+		index.BeginRead(root, entries[i]).Observe(t.Context(), []byte(content))
+	}
+	limits, err := textsearch.CatalogLimits()
+	testutil.FailErr(t, "matcher limits", err)
+	for _, dialect := range []textsearch.Dialect{textsearch.Fixed, textsearch.Basic, textsearch.Extended, textsearch.RE2, textsearch.Perl} {
+		for _, pattern := range []string{"needletoken", "kelvin", "source", "σigma", "istanbul", "ÉLAN", "abc", "a.*bc", "a(b|bb)c", "a?bc", "^$", "^start", "end$", "(?i:needle)Token", "\\bNeedleToken\\b", "(abc)\\1", ""} {
+			for _, fold := range []bool{false, true} {
+				for _, word := range []bool{false, true} {
+					spec := textsearch.Spec{Dialect: dialect, Patterns: []string{pattern}, IgnoreCase: fold, Word: word}
+					matcher, compileErr := textsearch.Compile(t.Context(), spec, limits)
+					if compileErr != nil {
+						continue
+					}
+					for i, content := range contents {
+						_, matched, matchErr := matcher.Select(t.Context(), []byte(content))
+						testutil.FailErr(t, "match corpus", matchErr)
+						if matched && index.CanPruneBytes(root, matcher.Requirement(), entries[i]) {
+							t.Fatalf("filter excluded dialect=%v pattern=%q fold=%v word=%v content=%q", dialect, pattern, fold, word, content)
+						}
+					}
+				}
+			}
+		}
+	}
+}

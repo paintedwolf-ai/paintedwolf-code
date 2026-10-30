@@ -3,8 +3,9 @@ package sourcecatalog
 import (
 	"bytes"
 	"context"
-	"github.com/lycaon/lycaon/internal/litprefilter"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/litprefilter"
 )
 
 // ContentRead fences one live capture against source invalidation.
@@ -29,6 +30,12 @@ func (c *LiteralSearch) BeginRead(rootPath string, entry Entry) *ContentRead {
 		c.cache.fileMu.Unlock()
 		return nil
 	}
+	for active := range c.cache.fileReads {
+		if active.rootPath == rootPath && active.path == entry.Path && !active.invalidated {
+			c.cache.fileMu.Unlock()
+			return nil
+		}
+	}
 	c.cache.fileReads[read] = struct{}{}
 	c.cache.fileMu.Unlock()
 	return &ContentRead{cache: c.cache, read: read, entry: entry}
@@ -45,21 +52,25 @@ func (r *ContentRead) Close() {
 }
 
 // Observe retains bounded filters without reopening the captured file.
-func (r *ContentRead) Observe(ctx context.Context, content []byte) {
-	if r == nil || int64(len(content)) != r.entry.Size {
-		return
+func (r *ContentRead) Observe(ctx context.Context, content []byte) bool {
+	if r == nil {
+		return false
 	}
 	defer r.Close()
+	if int64(len(content)) != r.entry.Size {
+		return false
+	}
 	facts, err := buildLiteralBloom(ctx, r.entry, func(Entry) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(content)), nil })
 	if err != nil || ctx.Err() != nil || !entryStillMatches(r.read.rootPath, r.entry) {
-		return
+		return false
 	}
 	r.cache.fileMu.Lock()
 	defer r.cache.fileMu.Unlock()
 	if _, active := r.cache.fileReads[r.read]; !active || r.read.invalidated {
-		return
+		return false
 	}
 	r.cache.storeFile(r.read.rootPath, r.entry, facts)
+	return true
 }
 
 // storeFile requires fileMu and charges both representations to one cache entry.
