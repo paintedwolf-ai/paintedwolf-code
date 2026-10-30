@@ -1,13 +1,7 @@
-//! The generation service loop: read frames, run generations, write events.
-//!
-//! A reader thread owns stdin and stays live while generation runs, so a cancel
-//! frame interrupts the active request. Cancellation binds to the request id; a
-//! cancel for any other id is ignored. One writer mutex serializes stdout. A
-//! generation stages all KV appends and folds them into the cache only at terminal
-//! state, so cancel, failure and rollback leave committed state as the request
-//! found it.
+//! Generation service loop over length-prefixed stdio frames.
 
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +13,6 @@ use crate::error::{Error, Result};
 use crate::protocol::{self, Event, GenerateRequest, Request, StopReason};
 use crate::sampler::{self, Rng};
 
-/// Shared outbound side: writer + the cancel state of the active request.
 struct Outbound<W: Write + Send + 'static> {
     writer: Mutex<BufWriter<W>>,
     active: Mutex<Option<(String, Arc<AtomicU64>)>>,
@@ -27,37 +20,71 @@ struct Outbound<W: Write + Send + 'static> {
 
 impl<W: Write + Send + 'static> Outbound<W> {
     fn push<T: Serialize>(&self, e: &T) -> Result<()> {
-        let body = serde_json::to_vec(e).map_err(|err| Error::Protocol(format!("serialize: {err}")))?;
-        let mut w = self.writer.lock().map_err(|_| Error::Device("writer poisoned".into()))?;
+        let body =
+            serde_json::to_vec(e).map_err(|err| Error::Protocol(format!("serialize: {err}")))?;
+        let mut w = self
+            .writer
+            .lock()
+            .map_err(|_| Error::Device("writer poisoned".into()))?;
         protocol::write_frame(&mut *w, &body)
     }
 }
 
-/// A running service bound to one loaded decoder.
 pub struct Service {
     decoder: Decoder,
+    tokenizer: Option<tokenizers::Tokenizer>,
     cache: Mutex<Cache>,
     generation: u64,
 }
 
 impl Service {
     pub fn new(decoder: Decoder, generation: u64) -> Self {
-        let cache = Cache::new(decoder.cfg.source_layers, decoder.cfg.head_dim);
-        Self { decoder, cache: Mutex::new(cache), generation }
+        Self::with_tokenizer(decoder, None, generation)
     }
 
-    /// Run one generation to completion, emitting events through `out`.
-    ///
-    /// The cache lock is held for the whole request: one active generation at a
-    /// time. All appends stay staged until the loop's terminal state; rollback and
-    /// error paths drop them, leaving committed state as the request found it.
-    fn run(&self, req: &GenerateRequest, out: &Outbound<impl Write + Send>, cancel: &Arc<AtomicU64>) -> Result<()> {
-        let canceled = || cancel.load(Ordering::SeqCst) == 0;
-        let mut cache = self.cache.lock().map_err(|_| Error::Device("cache poisoned".into()))?;
+    pub fn with_tokenizer(
+        decoder: Decoder,
+        tokenizer: Option<tokenizers::Tokenizer>,
+        generation: u64,
+    ) -> Self {
+        let slot_widths: Vec<usize> = (0..decoder.cfg.source_layers)
+            .map(|s| decoder.cfg.kv_width(s))
+            .collect();
+        let cache = Cache::with_slot_widths(slot_widths);
+        Self {
+            decoder,
+            tokenizer,
+            cache: Mutex::new(cache),
+            generation,
+        }
+    }
 
-        // A handle resolves only when its retained token state is still committed
-        // and matches a prefix of this prompt. Any miss rebuilds from scratch.
-        let reuse = cache.reuse(&req.cache_handle, &req.prompt_tokens).unwrap_or(0);
+    pub fn tokenize(&self, text: &str) -> Result<Vec<u32>> {
+        if let Some(tok) = &self.tokenizer {
+            let enc = tok
+                .encode(text, false)
+                .map_err(|e| Error::Tokenizer(e.to_string()))?;
+            return Ok(enc.get_ids().to_vec());
+        }
+        let vocab = self.decoder.cfg.vocab.max(1) as u32;
+        Ok(text.bytes().map(|b| (b as u32) % vocab).collect())
+    }
+
+    fn run(
+        &self,
+        req: &GenerateRequest,
+        out: &Outbound<impl Write + Send>,
+        cancel: &Arc<AtomicU64>,
+    ) -> Result<()> {
+        let canceled = || cancel.load(Ordering::SeqCst) == 0;
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| Error::Device("cache poisoned".into()))?;
+
+        let reuse = cache
+            .reuse(&req.cache_handle, &req.prompt_tokens)
+            .unwrap_or(0);
         if req.cache_handle.is_none() || reuse == 0 {
             cache.clear_committed();
         }
@@ -69,29 +96,35 @@ impl Service {
         let mut rng = Rng::new(req.seed);
         let mut seq: u64 = 0;
         let mut generated: u32 = 0;
-        let eos = self.decoder.cfg.vocab.saturating_sub(1);
+        let eos_set: std::collections::HashSet<u32> =
+            self.decoder.cfg.eos_tokens.iter().copied().collect();
         let stop: std::collections::HashSet<u32> = req.stop_tokens.iter().copied().collect();
         let gen_mark = self.generation;
 
-        // A fully cached prompt has nothing left to prefill; resume from retained logits.
         let fully_cached = tokens.is_empty();
         let mut emitted: Vec<u32> = Vec::new();
-        let mut final_logits: Option<Vec<f32>> = None;
+        let mut latest_logits: Vec<f32> = Vec::new();
+
+        out.push(&Event::Accepted {
+            request_id: req.request_id.clone(),
+            generation: gen_mark,
+        })?;
 
         let outcome = (|| -> Result<StopReason> {
-            // Positions advance through provisional state (committed plus staged), so
-            // every step starts where the previous one ended. A fully cached prompt
-            // resumes from the logits retained at its last commit.
             let mut logits: Vec<f32> = if fully_cached {
-                cache.retained_logits().ok_or_else(|| {
-                    Error::Capacity("handle matched a prompt with no retained logits".into())
-                })?.to_vec()
+                cache
+                    .retained_logits()
+                    .ok_or_else(|| {
+                        Error::Capacity("handle matched a prompt with no retained logits".into())
+                    })?
+                    .to_vec()
             } else {
                 let next_pos = cache.provisional_len();
                 let (l, staged_kv) = self.decoder.step(&tokens, &cache, next_pos)?;
                 cache.stage(&staged_kv)?;
                 l
             };
+            latest_logits.clone_from(&logits);
             if canceled() {
                 return Ok(StopReason::Canceled);
             }
@@ -104,35 +137,40 @@ impl Service {
                     return Ok(StopReason::MaxTokens);
                 }
                 let token = sampler::sample(&logits, req.temperature, req.top_p, &mut rng)?;
-                if token as usize == eos {
+                if eos_set.contains(&token) {
                     return Ok(StopReason::Eos);
                 }
                 if stop.contains(&token) {
                     return Ok(StopReason::StopToken);
                 }
-                out.push(&Event::Token { request_id: req.request_id.clone(), seq, token })?;
+                out.push(&Event::Token {
+                    request_id: req.request_id.clone(),
+                    seq,
+                    token,
+                })?;
                 seq += 1;
                 generated += 1;
                 emitted.push(token);
 
                 let (next, kv) = self.decoder.step(&[token], &cache, cache.provisional_len())?;
-                logits = next.clone();
-                final_logits = Some(next);
+                logits = next;
+                latest_logits.clone_from(&logits);
                 cache.stage(&kv)?;
             }
         })();
 
         match outcome {
-            // Terminal success: fold staged appends and publish the exact token state
-            // the KV now represents — prompt plus generated tokens.
             Ok(reason) => {
                 if reason == StopReason::Canceled {
                     cache.rollback();
                 } else {
                     let mut state = req.prompt_tokens.clone();
                     state.extend(emitted.iter().copied());
-                    cache.commit(final_logits.unwrap_or_default());
-                    if matches!(reason, StopReason::Eos | StopReason::StopToken | StopReason::MaxTokens) {
+                    cache.commit(latest_logits);
+                    if matches!(
+                        reason,
+                        StopReason::Eos | StopReason::StopToken | StopReason::MaxTokens
+                    ) {
                         cache.publish(&format!("{}/{}", req.request_id, gen_mark), state);
                     }
                 }
@@ -142,25 +180,19 @@ impl Service {
                     generated_tokens: generated as u64,
                     reused_prefix: reuse as u64,
                 })?;
-                out.push(&Event::Done { request_id: req.request_id.clone(), stop_reason: reason })?;
+                out.push(&Event::Done {
+                    request_id: req.request_id.clone(),
+                    stop_reason: reason,
+                })?;
                 Ok(())
             }
-            // Any failure or cancel: drop staged appends; committed state untouched.
             Err(e) => {
                 cache.rollback();
-                out.push(&Event::Failed { request_id: req.request_id.clone(), error: e.to_string() })?;
+                out.push(&Event::Failed {
+                    request_id: req.request_id.clone(),
+                    error: e.to_string(),
+                })?;
                 Err(e)
-            }
-        }
-    }
-
-    fn cancel(&self, out: &Outbound<impl Write + Send>, request_id: &str) {
-        // Cancellation applies only when the named request is the active one.
-        if let Ok(active) = out.active.lock() {
-            if let Some((id, mark)) = active.as_ref() {
-                if id == request_id {
-                    mark.store(self.generation, Ordering::SeqCst);
-                }
             }
         }
     }
@@ -173,13 +205,10 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
         active: Mutex::new(None),
     });
     let service: Arc<Mutex<Option<Arc<Service>>>> = Arc::new(Mutex::new(None));
+    let mut next_generation: u64 = 1;
 
-    // Reader thread: stdin stays live during generation. Requests it reads while a
-    // generation runs queue behind the cache lock; cancel applies by id.
     let reader_outbound = Arc::clone(&outbound);
     let (tx, rx) = std::sync::mpsc::channel::<(u64, Request)>();
-    // The reader applies cancel directly: the main loop is inside a running
-    // generation and could not drain a queued cancel until it finished.
     std::thread::spawn(move || {
         let mut reader = BufReader::new(reader);
         loop {
@@ -202,7 +231,10 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
                 },
                 Ok(None) => return,
                 Err(e) => {
-                    let _ = reader_outbound.push(&Event::Failed { request_id: String::new(), error: e.to_string() });
+                    let _ = reader_outbound.push(&Event::Failed {
+                        request_id: String::new(),
+                        error: e.to_string(),
+                    });
                     return;
                 }
             }
@@ -210,40 +242,93 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
     });
 
     for (frame_id, req) in rx {
-        // Every reply echoes the request's frame id; streamed events correlate by
-        // their own request_id.
         match req {
             Request::Hello => outbound.push(&serde_json::json!({
                 "id": frame_id,
                 "service": "nativegen",
                 "protocol": 1,
             }))?,
-            Request::Load { manifest: _, weights, device, .. } => {
-                match crate::checkpoint::load_decoder(&weights, &device) {
-                    Ok(dec) => {
-                        *service.lock().map_err(|_| Error::Device("service poisoned".into()))? =
-                            Some(Arc::new(Service::new(dec, 0)));
-                        outbound.push(&serde_json::json!({"id": frame_id, "loaded": true}))?;
-                    }
+            Request::Load {
+                manifest: _,
+                weights,
+                device,
+                ..
+            } => match crate::checkpoint::load_decoder(&weights, &device) {
+                Ok(dec) => {
+                    let tok_path = Path::new(&weights).join("tokenizer.json");
+                    let tok = if tok_path.is_file() {
+                        Some(
+                            tokenizers::Tokenizer::from_file(&tok_path)
+                                .map_err(|e| Error::Tokenizer(e.to_string()))?,
+                        )
+                    } else {
+                        None
+                    };
+                    let generation = next_generation;
+                    next_generation += 1;
+                    *service
+                        .lock()
+                        .map_err(|_| Error::Device("service poisoned".into()))? =
+                        Some(Arc::new(Service::with_tokenizer(dec, tok, generation)));
+                    outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "loaded": true,
+                        "generation": generation
+                    }))?;
+                }
+                Err(e) => outbound.push(&serde_json::json!({
+                    "id": frame_id,
+                    "loaded": false,
+                    "error": e.to_string()
+                }))?,
+            },
+            Request::Tokenize { text } => {
+                let svc = service
+                    .lock()
+                    .map_err(|_| Error::Device("service poisoned".into()))?
+                    .clone();
+                let Some(svc) = svc else {
+                    outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "error": "not loaded"
+                    }))?;
+                    continue;
+                };
+                match svc.tokenize(&text) {
+                    Ok(tokens) => outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "tokens": tokens,
+                        "count": tokens.len()
+                    }))?,
                     Err(e) => outbound.push(&serde_json::json!({
-                        "id": frame_id, "loaded": false, "error": e.to_string()
+                        "id": frame_id,
+                        "error": e.to_string()
                     }))?,
                 }
             }
             Request::Generate(g) => {
-                let svc = service.lock().map_err(|_| Error::Device("service poisoned".into()))?.clone();
+                let svc = service
+                    .lock()
+                    .map_err(|_| Error::Device("service poisoned".into()))?
+                    .clone();
                 let Some(svc) = svc else {
-                    outbound.push(&Event::Failed { request_id: g.request_id.clone(), error: "not loaded".into() })?;
+                    outbound.push(&Event::Failed {
+                        request_id: g.request_id.clone(),
+                        error: "not loaded".into(),
+                    })?;
                     continue;
                 };
                 let cancel_mark = Arc::new(AtomicU64::new(u64::MAX));
-                *outbound.active.lock().map_err(|_| Error::Device("active poisoned".into()))? =
+                *outbound
+                    .active
+                    .lock()
+                    .map_err(|_| Error::Device("active poisoned".into()))? =
                     Some((g.request_id.clone(), Arc::clone(&cancel_mark)));
-                let result = svc.run(&g, &outbound, &cancel_mark);
-                *outbound.active.lock().map_err(|_| Error::Device("active poisoned".into()))? = None;
-                if let Err(e) = result {
-                    outbound.push(&Event::Failed { request_id: g.request_id.clone(), error: e.to_string() })?;
-                }
+                let _ = svc.run(&g, &outbound, &cancel_mark);
+                *outbound
+                    .active
+                    .lock()
+                    .map_err(|_| Error::Device("active poisoned".into()))? = None;
             }
             Request::Cancel { request_id } => apply_cancel(&outbound, &request_id),
             Request::Shutdown => return Ok(()),
@@ -252,28 +337,128 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
     Ok(())
 }
 
-/// Cancel the named request if it is the active one. Safe from any thread.
 fn apply_cancel<W: Write + Send + 'static>(outbound: &Outbound<W>, request_id: &str) {
-    if let Ok(active) = outbound.active.lock() {
-        if let Some((id, mark)) = active.as_ref() {
-            if id == request_id {
-                mark.store(0, Ordering::SeqCst);
-            }
-        }
+    if let Ok(active) = outbound.active.lock()
+        && let Some((id, mark)) = active.as_ref()
+        && id == request_id
+    {
+        mark.store(0, Ordering::SeqCst);
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::decoder::{Config, Decoder, Weights};
+    use std::collections::HashMap;
+    use std::io::Cursor;
+
+    fn tiny_service() -> Service {
+        let cfg = Config {
+            hidden: 4,
+            heads: 2,
+            kv_heads: 1,
+            head_dim: 2,
+            full_head_dim: 2,
+            source_layers: 1,
+            total_layers: 1,
+            rope_theta: 10_000.0,
+            full_rope_theta: 10_000.0,
+            partial_rotary_factor: 1.0,
+            vocab: 5,
+            eps: 1e-5,
+            sliding_window: 8,
+            full_layers_skip_rope: true,
+            attention_scale: 1.0,
+            normalize_v: true,
+            ple_layers: 0,
+            eos_tokens: vec![4],
+        };
+        let mut tensors = HashMap::new();
+        tensors.insert("model.embed_tokens.weight".into(), vec![0.1; 5 * 4]);
+        tensors.insert("model.norm.weight".into(), vec![1.0; 4]);
+        let p = "model.layers.0";
+        tensors.insert(format!("{p}.input_layernorm.weight"), vec![1.0; 4]);
+        tensors.insert(format!("{p}.self_attn.q_proj.weight"), vec![0.1; 4 * 4]);
+        tensors.insert(format!("{p}.self_attn.k_proj.weight"), vec![0.1; 2 * 4]);
+        tensors.insert(format!("{p}.self_attn.v_proj.weight"), vec![0.1; 2 * 4]);
+        tensors.insert(format!("{p}.self_attn.o_proj.weight"), vec![0.1; 4 * 4]);
+        tensors.insert(format!("{p}.self_attn.q_norm.weight"), vec![1.0; 2]);
+        tensors.insert(format!("{p}.self_attn.k_norm.weight"), vec![1.0; 2]);
+        tensors.insert(format!("{p}.pre_feedforward_layernorm.weight"), vec![1.0; 4]);
+        tensors.insert(format!("{p}.mlp.gate_proj.weight"), vec![0.1; 8 * 4]);
+        tensors.insert(format!("{p}.mlp.up_proj.weight"), vec![0.1; 8 * 4]);
+        tensors.insert(format!("{p}.mlp.down_proj.weight"), vec![0.1; 4 * 8]);
+        let dec = Decoder::load(cfg, Weights { tensors }).unwrap();
+        Service::new(dec, 1)
+    }
 
     #[test]
     fn cancel_flag_respects_generation_mark() {
-        // A cancel mark set for generation N must not affect generation N+1.
         let mark = Arc::new(AtomicU64::new(u64::MAX));
-        assert_ne!(mark.load(Ordering::SeqCst), 0, "fresh mark never matches generation 0");
+        assert_ne!(mark.load(Ordering::SeqCst), 0);
         mark.store(0, Ordering::SeqCst);
         assert_eq!(mark.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn run_generates_commits_and_reuses_exact_prefix() {
+        let svc = tiny_service();
+        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+        struct SharedVec(Arc<Mutex<Vec<u8>>>);
+        impl Write for SharedVec {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let out = Outbound {
+            writer: Mutex::new(BufWriter::new(SharedVec(Arc::clone(&buf)))),
+            active: Mutex::new(None),
+        };
+        let cancel = Arc::new(AtomicU64::new(u64::MAX));
+        let req1 = GenerateRequest {
+            request_id: "r1".into(),
+            prompt_tokens: vec![1, 2],
+            max_new_tokens: 2,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: None,
+        };
+        svc.run(&req1, &out, &cancel).unwrap();
+
+        let req2 = GenerateRequest {
+            request_id: "r2".into(),
+            prompt_tokens: vec![1, 2, 0, 0, 3],
+            max_new_tokens: 1,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: Some("r1/1".into()),
+        };
+        svc.run(&req2, &out, &cancel).unwrap();
+
+        let raw = buf.lock().unwrap().clone();
+        let mut cursor = Cursor::new(raw);
+        let mut usages = Vec::new();
+        while let Some(frame) = protocol::read_frame(&mut cursor).unwrap() {
+            let ev: Event = serde_json::from_slice(&frame).unwrap();
+            if let Event::Usage {
+                request_id,
+                reused_prefix,
+                ..
+            } = ev
+            {
+                usages.push((request_id, reused_prefix));
+            }
+        }
+        assert_eq!(usages, vec![("r1".into(), 0), ("r2".into(), 4)]);
     }
 }

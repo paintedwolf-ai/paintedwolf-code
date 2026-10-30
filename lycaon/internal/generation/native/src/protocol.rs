@@ -1,14 +1,10 @@
-//! Stdio protocol: length-prefixed UTF-8 JSON frames over inherited pipes.
-//!
-//! A frame is a four-byte unsigned little-endian length followed by that many bytes
-//! of UTF-8 JSON. Oversized frames are rejected before allocation. Stdout carries
-//! protocol frames only; diagnostics go to stderr.
+//! Length-prefixed UTF-8 JSON protocol frames over stdio pipes.
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-/// Largest inbound frame the host may send: a full 16K-token batch of ids plus overhead.
+/// Maximum inbound frame size (8 MiB, sufficient for a 64K-token prompt plus metadata).
 pub const MAX_FRAME_BYTES: u32 = 8 << 20;
 
 pub fn write_frame<W: std::io::Write>(w: &mut W, payload: &[u8]) -> Result<()> {
@@ -33,27 +29,34 @@ pub fn read_frame<R: std::io::Read>(r: &mut R) -> Result<Option<Vec<u8>>> {
     Ok(Some(buf))
 }
 
-/// A request frame's body. Every request carries a host-generated `id`; every
-/// reply echoes it, so the adapter can correlate across concurrent calls.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum Request {
     Hello,
-    Load { manifest: String, weights: String, device: String, dtype: Option<String> },
+    Load {
+        manifest: String,
+        weights: String,
+        device: String,
+        dtype: Option<String>,
+    },
+    Tokenize {
+        text: String,
+    },
     Generate(GenerateRequest),
-    Cancel { request_id: String },
+    Cancel {
+        request_id: String,
+    },
     Shutdown,
 }
 
-/// One inbound frame: the correlation id plus its body.
 #[derive(Debug, Deserialize)]
 pub struct Inbound {
+    #[serde(default)]
     pub id: u64,
     #[serde(flatten)]
     pub body: Request,
 }
 
-/// One generation request. The host owns identity; the service never trusts it as authorization.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateRequest {
     pub request_id: String,
@@ -62,21 +65,36 @@ pub struct GenerateRequest {
     pub seed: u64,
     pub temperature: f32,
     pub top_p: f32,
-    /// Stop sequences as token ids; the service emits tokens and the host decodes text.
     pub stop_tokens: Vec<u32>,
-    /// Requested KV cache reuse handle from a previous generation, if any.
     pub cache_handle: Option<String>,
 }
 
-/// A streamed event. Sequence numbers are monotonic per request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
-    Accepted { request_id: String, generation: u64 },
-    Token { request_id: String, seq: u64, token: u32 },
-    Usage { request_id: String, prompt_tokens: u64, generated_tokens: u64, reused_prefix: u64 },
-    Done { request_id: String, stop_reason: StopReason },
-    Failed { request_id: String, error: String },
+    Accepted {
+        request_id: String,
+        generation: u64,
+    },
+    Token {
+        request_id: String,
+        seq: u64,
+        token: u32,
+    },
+    Usage {
+        request_id: String,
+        prompt_tokens: u64,
+        generated_tokens: u64,
+        reused_prefix: u64,
+    },
+    Done {
+        request_id: String,
+        stop_reason: StopReason,
+    },
+    Failed {
+        request_id: String,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

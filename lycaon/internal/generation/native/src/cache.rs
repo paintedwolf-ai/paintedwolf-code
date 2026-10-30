@@ -1,17 +1,9 @@
-//! Transactional KV cache: staged appends, commit/rollback, and prefix handles bound
-//! to retained token state.
-//!
-//! Slots hold committed KV; a generation stages appends and folds them in only at
-//! terminal state, so an interrupted run leaves committed state exactly as it found
-//! it. Attention reads the *provisional* view — committed plus staged — so a request
-//! always sees its own history. Prefix handles name an exact restorable token state;
-//! a handle never outlives the state it names, and a miss always rebuilds.
+//! Transactional KV cache with staged appends, commit/rollback, and prefix handles.
 
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
 
-/// One slot's keys and values for each cached position.
 #[derive(Clone)]
 struct LayerKv {
     k: Vec<f32>,
@@ -20,32 +12,35 @@ struct LayerKv {
 
 impl LayerKv {
     fn new() -> Self {
-        Self { k: Vec::new(), v: Vec::new() }
+        Self {
+            k: Vec::new(),
+            v: Vec::new(),
+        }
     }
 }
 
-/// Committed cache state plus one in-flight generation's staging area.
-///
-/// The cache stores raw slices per slot; the decoder's config owns the topology
-/// (which layer reads which slot) and the KV width (`kv_heads * head_dim`). Token
-/// counts always divide the full KV width, never one head's width.
+/// Committed KV state plus one active generation's staged appends.
+/// Each slot has its own full KV width (`kv_heads * head_dim_for(slot)`), supporting
+/// hybrid sliding and full-attention head dimensions.
 pub struct Cache {
     layers: Vec<LayerKv>,
-    kv_width: usize,
+    slot_widths: Vec<usize>,
     committed_len: usize,
     staged: Vec<LayerKv>,
-    /// Handle -> the exact token sequence whose KV is committed.
     handles: HashMap<String, Vec<u32>>,
-    /// Logits after the last committed token, so a fully cached prompt resumes
-    /// without replaying a step.
     last_logits: Option<Vec<f32>>,
 }
 
 impl Cache {
     pub fn new(slots: usize, kv_width: usize) -> Self {
+        Self::with_slot_widths(vec![kv_width; slots])
+    }
+
+    pub fn with_slot_widths(slot_widths: Vec<usize>) -> Self {
+        let slots = slot_widths.len();
         Self {
             layers: vec![LayerKv::new(); slots],
-            kv_width,
+            slot_widths,
             committed_len: 0,
             staged: Vec::new(),
             handles: HashMap::new(),
@@ -53,29 +48,37 @@ impl Cache {
         }
     }
 
-    /// Tokens represented by committed state (full KV width per token).
     pub fn committed_len(&self) -> usize {
         self.committed_len
     }
 
-    /// Tokens represented by committed plus staged state — the position the next
-    /// decode step starts at.
     pub fn provisional_len(&self) -> usize {
-        let staged = self.staged.first().map(|l| l.k.len() / self.kv_width).unwrap_or(0);
+        let staged = match (self.staged.first(), self.slot_widths.first()) {
+            (Some(l), Some(&w)) if w > 0 => l.k.len() / w,
+            _ => 0,
+        };
         self.committed_len + staged
     }
 
-    /// Stage one batch of kv for the named slots.
+    pub fn slot_width(&self, slot: usize) -> usize {
+        self.slot_widths.get(slot).copied().unwrap_or(0)
+    }
+
     pub fn stage(&mut self, per_layer: &[(usize, Vec<f32>, Vec<f32>)]) -> Result<()> {
         if self.staged.is_empty() {
             self.staged = vec![LayerKv::new(); self.layers.len()];
         }
         for (layer, k, v) in per_layer {
-            if k.len() != v.len() || k.len() % self.kv_width != 0 || *layer >= self.layers.len() {
+            let Some(&width) = self.slot_widths.get(*layer) else {
                 return Err(Error::Capacity(format!(
-                    "layer {layer}: kv of {} dims does not fit kv_width {}",
-                    k.len(),
-                    self.kv_width
+                    "layer {layer} exceeds {} cache slots",
+                    self.layers.len()
+                )));
+            };
+            if width == 0 || k.len() != v.len() || k.len() % width != 0 {
+                return Err(Error::Capacity(format!(
+                    "layer {layer}: kv of {} dims does not fit slot width {width}",
+                    k.len()
                 )));
             }
             self.staged[*layer].k.extend_from_slice(k);
@@ -84,14 +87,16 @@ impl Cache {
         Ok(())
     }
 
-    /// Fold staged appends into the committed state. Call only on a successful
-    /// terminal state; cancels and errors roll back instead.
     pub fn commit(&mut self, logits: Vec<f32>) {
         if self.staged.is_empty() {
             self.last_logits = Some(logits);
             return;
         }
-        self.committed_len += self.staged[0].k.len() / self.kv_width;
+        if let Some(&w) = self.slot_widths.first()
+            && w > 0
+        {
+            self.committed_len += self.staged[0].k.len() / w;
+        }
         let staged = std::mem::take(&mut self.staged);
         for (slot, mut kv) in staged.into_iter().enumerate() {
             self.layers[slot].k.append(&mut kv.k);
@@ -100,23 +105,18 @@ impl Cache {
         self.last_logits = Some(logits);
     }
 
-    /// Drop staged appends and any retained logits; committed KV is untouched.
     pub fn rollback(&mut self) {
         self.staged.clear();
         self.last_logits = None;
     }
 
-    /// Register the committed token state under a handle. The handle is reusable
-    /// only while that exact token sequence is still what the KV represents.
     pub fn publish(&mut self, handle: &str, tokens: Vec<u32>) {
         if tokens.len() != self.committed_len {
-            return; // never publish a handle naming state the KV does not hold
+            return;
         }
         self.handles.insert(handle.to_string(), tokens);
     }
 
-    /// Resolve a handle to a reusable prefix length: only when the retained token
-    /// state is still committed and matches a prefix of the request's prompt.
     pub fn reuse(&self, handle: &Option<String>, prompt: &[u32]) -> Option<usize> {
         let retained = self.handles.get(handle.as_ref()?)?;
         if retained.is_empty() || retained.len() > prompt.len() {
@@ -129,12 +129,10 @@ impl Cache {
         }
     }
 
-    /// Logits retained from the last commit, for resuming a fully cached prompt.
     pub fn retained_logits(&self) -> Option<&[f32]> {
         self.last_logits.as_deref()
     }
 
-    /// Drop committed state and every handle: nothing survives a full clear.
     pub fn clear_committed(&mut self) {
         self.layers = vec![LayerKv::new(); self.layers.len()];
         self.committed_len = 0;
@@ -143,13 +141,10 @@ impl Cache {
         self.last_logits = None;
     }
 
-    /// Committed KV slices for one slot. Positions index tokens; each token spans
-    /// the full KV width and a head reads its `g * head_dim` offset within it.
     pub fn committed_kv(&self, slot: usize) -> (&[f32], &[f32]) {
         (&self.layers[slot].k, &self.layers[slot].v)
     }
 
-    /// Staged KV slices for one slot: the in-flight generation's own tokens.
     pub fn staged_kv(&self, slot: usize) -> (&[f32], &[f32]) {
         match self.staged.get(slot) {
             Some(l) => (&l.k, &l.v),
@@ -198,20 +193,29 @@ mod tests {
     }
 
     #[test]
+    fn hybrid_slot_widths_validate_per_layer() {
+        let mut c = Cache::with_slot_widths(vec![4, 8]);
+        c.stage(&[
+            (0, vec![1.0; 4], vec![2.0; 4]),
+            (1, vec![3.0; 8], vec![4.0; 8]),
+        ])
+        .unwrap();
+        c.commit(vec![0.0; 2]);
+        assert_eq!(c.committed_len(), 1);
+        assert!(c.stage(&[(1, vec![1.0; 4], vec![2.0; 4])]).is_err());
+    }
+
+    #[test]
     fn handles_bind_to_token_state() {
         let mut c = Cache::new(4, 2);
-        c.stage(&[(0, vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0], vec![3.0, 4.0, 3.0, 4.0, 3.0, 4.0])]).unwrap();
+        c.stage(&[(0, vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0], vec![3.0, 4.0, 3.0, 4.0, 3.0, 4.0])])
+            .unwrap();
         c.commit(vec![0.0; 3]);
         c.publish("h", vec![1, 2, 3]);
-        // Same tokens: reusable.
         assert_eq!(c.reuse(&Some("h".into()), &[1, 2, 3, 9]), Some(3));
-        // A prompt exactly matching the retained state: reusable at full length.
         assert_eq!(c.reuse(&Some("h".into()), &[1, 2, 3]), Some(3));
-        // Different prompt: a miss, never a silent reuse.
         assert_eq!(c.reuse(&Some("h".into()), &[7, 8, 9, 9]), None);
-        // Unknown handle: a miss.
         assert_eq!(c.reuse(&Some("nope".into()), &[1, 2, 3]), None);
-        // No handle: a miss.
         assert_eq!(c.reuse(&None, &[1, 2, 3]), None);
     }
 

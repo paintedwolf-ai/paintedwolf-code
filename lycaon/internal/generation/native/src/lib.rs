@@ -1,9 +1,4 @@
-//! Native local generation for Gemma 4 E4B on the host's behalf.
-//!
-//! The crate owns the stdio protocol, the transactional KV cache, the reference
-//! CPU decoder, sampling, and the service loop. Accelerated backends (MLX on
-//! Apple silicon) plug in beside the CPU reference through the same decoder
-//! interface.
+//! Native local generation service for Gemma 4 E4B.
 
 pub mod cache;
 pub mod checkpoint;

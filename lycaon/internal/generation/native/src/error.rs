@@ -1,6 +1,5 @@
-//! Error type for the generation service.
+//! Error types for the generation service.
 
-/// Errors from loading, protocol handling or generation.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("checkpoint: {0}")]
