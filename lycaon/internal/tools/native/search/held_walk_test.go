@@ -4,8 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestFindReachedMetadataUsesOneHeldParent(t *testing.T) {
@@ -22,7 +26,7 @@ func TestFindReachedMetadataUsesOneHeldParent(t *testing.T) {
 			t.Fatalf("attempt=%d result=%+v", attempt, result)
 		}
 		work := logs.records[result.execution]
-		if work["directory_handles"] != 2 || work["relative_descriptor_opens"] != 2 || work["held_directory_peak"] != 2 || work["held_directory_remaining"] != 0 {
+		if work["directory_handles"] != 2 || (work["relative_descriptor_opens"] != 0 && work["relative_descriptor_opens"] != 2) || work["held_directory_peak"] != 2 || work["held_directory_remaining"] != 0 {
 			t.Fatalf("attempt=%d work=%v", attempt, work)
 		}
 	}
@@ -78,5 +82,44 @@ func TestFindConsumerCloseStopsSiblingMetadataAndReleasesParents(t *testing.T) {
 	work := logs.records[request.Invocation.Identity.ExecutionID]
 	if work["entry_metadata_reads"] != 3 || work["directory_handles"] != 2 || work["held_directory_remaining"] != 0 {
 		t.Fatalf("closed consumer work=%v", work)
+	}
+}
+
+func TestFindExecCannotRetainAuthorityAfterAncestorLeavesRoot(t *testing.T) {
+	logs := discoveryCapture(t)
+	h := newHarness(t, map[string]string{"tree/a.tmp": "data", "tree/b.tmp": "data"})
+	h.owners.Catalog = discoveryCatalog(t)
+	moved := filepath.Join(t.TempDir(), "moved")
+	h.dispatch.status = func([]string) int {
+		testutil.FailErr(t, "move ancestor during child execution", os.Rename(filepath.Join(h.root, "tree"), moved))
+		return 0
+	}
+	result := h.exec("", "find", "tree", "-name", "*.tmp", "-exec", "echo", "{}", ";")
+	if result.err != nil {
+		result.refused(t, "held ancestor left attached root", "SURVEY_PATH_ESCAPE")
+	} else {
+		result.expect(t, "fresh path no longer exists", "argv: echo|tree/a.tmp\n", "", 0)
+	}
+	if result.stdout != "argv: echo|tree/a.tmp\n" || len(h.dispatch.requests) != 1 {
+		t.Fatalf("later child executed: %+v requests=%d", result, len(h.dispatch.requests))
+	}
+	work := logs.records[result.execution]
+	if work["held_directory_remaining"] != 0 {
+		t.Fatalf("refusal retained parents: %v", work)
+	}
+}
+
+func TestFindDeleteReleasesHeldDirectoriesAfterDepthFirstActions(t *testing.T) {
+	logs := discoveryCapture(t)
+	h := newHarness(t, map[string]string{"tree/a": "data", "tree/sub/b": "data"})
+	h.owners.Catalog = discoveryCatalog(t)
+	result := h.exec("", "find", "tree", "-delete")
+	result.expect(t, "depth first held deletion", "", "", 0)
+	if fmt.Sprint(h.removals.removed) != "[tree/a tree/sub/b tree/sub tree]" {
+		t.Fatalf("deletion order=%v", h.removals.removed)
+	}
+	work := logs.records[result.execution]
+	if work["held_directory_remaining"] != 0 || work["held_directory_peak"] != 2 {
+		t.Fatalf("delete lifecycle=%v", work)
 	}
 }

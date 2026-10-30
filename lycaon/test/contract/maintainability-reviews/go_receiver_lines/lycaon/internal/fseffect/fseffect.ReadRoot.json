@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/fseffect/fseffect.ReadRoot",
+  "kind": "runtime_service",
+  "workstream": "held-directory-traversal",
+  "disposition": "retain",
+  "reason": "Retain the measured read-root boundary at 420 receiver lines. One held root owns confined native-component resolution, symlink bounds, metadata admission, and current-directory identity. Parent-relative directory opens and uncached identity fallback belong to that same authority; splitting another resolver would duplicate containment and lifetime rules. Successful read opens are observed in this owner. Focused rename, outward-link, fallback identity, and bounded traversal contracts support retention; further growth requires review.",
+  "reviewed_commit": "463cc15299e34e0b3c60ab01b569484f93487637",
+  "ceiling": 420,
+  "boundaries": {
+    "lycaon/internal/fseffect/read_directory_test.go": "8cf4b7c8cadbb4d8ac6872a718e177f8c60b08fdc8e767555ed1ce3f97385a30",
+    "lycaon/internal/fseffect/read_directory_fallback_test.go": "8c3d05f21909fb88ea059246cb6d7af522826bcb54a52adcbf00c6062e548b3c",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "e88a6004d414ac7fdf0d47e8c10b05bdc391539bd195ddaa436662f6a8b581c3"
+  },
+  "reviewed_shape": "27febe17c7604dd6210487df8854ce942899b30294151418f86febf4dc71744f"
+}

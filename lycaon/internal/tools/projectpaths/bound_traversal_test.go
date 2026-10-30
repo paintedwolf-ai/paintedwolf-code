@@ -46,6 +46,7 @@ func TestHeldChildDirectoryPreservesParentAndAdmitsRenamedPath(t *testing.T) {
 func TestHeldDirectoryCanResetBorrowedMembershipObservation(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "seed entry", os.WriteFile(filepath.Join(root, "entry"), nil, 0600))
+	testutil.FailErr(t, "seed remaining entry", os.WriteFile(filepath.Join(root, "second"), nil, 0600))
 	reader, err := fseffect.OpenReadRoot(root)
 	testutil.FailErr(t, "open root", err)
 	defer reader.Close()
@@ -58,7 +59,7 @@ func TestHeldDirectoryCanResetBorrowedMembershipObservation(t *testing.T) {
 	testutil.FailErr(t, "reset borrowed observation", dir.ResetListing())
 	names, err := dir.Names(DirectoryNames{IncludeHidden: true})
 	testutil.FailErr(t, "read reset membership", err)
-	if len(names) != 1 || names[0] != "entry" {
+	if len(names) != 2 || names[0] != "entry" || names[1] != "second" {
 		t.Fatalf("reset membership=%v", names)
 	}
 	testutil.FailErr(t, "close directory", dir.Close())

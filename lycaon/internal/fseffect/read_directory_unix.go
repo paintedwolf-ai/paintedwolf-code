@@ -19,6 +19,9 @@ func (r *ReadRoot) DirectoryPath(dir *os.File) (string, error) {
 		return r.directoryPathFromName(dir)
 	}
 	if _, ok := lexicalRelUnder(r.root.path, path); !ok {
+		if exact, err := r.directoryPathFromName(dir); err == nil {
+			return exact, nil
+		}
 		return "", fmt.Errorf("%w: held directory moved outside root", ErrSymlink)
 	}
 	return path, nil
