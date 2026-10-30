@@ -1,6 +1,7 @@
 package progress_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -40,5 +41,48 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	testutil.FailErr(t, "read unchanged checklist", err)
 	if current != after {
 		t.Fatal("stale update changed progress")
+	}
+}
+
+func TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T) {
+	for _, name := range []string{"memory", "sql"} {
+		t.Run(name, func(t *testing.T) {
+			var store progress.Store = progress.NewMemoryStore()
+			if name == "sql" {
+				database := testdbfixture.Open(t, "progress-owner-atomic")
+				testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
+				store = progress.NewSQLStore(database)
+			}
+			empty, err := store.Snapshot(t.Context(), "session")
+			testutil.FailErr(t, "read empty progress", err)
+			if empty.Content != "" || empty.Revision == "" {
+				t.Fatalf("empty snapshot: %+v", empty)
+			}
+			testutil.FailErr(t, "seed complete progress", store.Set("session", "- [ ] Preserve"))
+			before, err := store.Snapshot(t.Context(), "session")
+			testutil.FailErr(t, "read progress", err)
+			refusal := errors.New("replacement refused")
+			_, err = store.Update(t.Context(), "session", func(progress.Snapshot) (string, error) { return "- [x] Preserve", refusal })
+			if !errors.Is(err, refusal) {
+				t.Fatalf("replacement rejection: %v", err)
+			}
+			after, err := store.Snapshot(t.Context(), "session")
+			testutil.FailErr(t, "read rejected replacement", err)
+			if before != after {
+				t.Fatal("rejected replacement changed snapshot")
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if _, err = store.Snapshot(ctx, "session"); !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled snapshot: %v", err)
+			}
+			_, err = store.Update(ctx, "session", func(progress.Snapshot) (string, error) {
+				t.Error("canceled update entered publication")
+				return "", nil
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled update: %v", err)
+			}
+		})
 	}
 }

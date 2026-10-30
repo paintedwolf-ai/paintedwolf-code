@@ -21,42 +21,38 @@ func NewSnapshot(runID, content string) Snapshot {
 	return Snapshot{Content: content, Revision: hex.EncodeToString(sum[:]), RunID: runID}
 }
 
-// StateTransitions requires an exact deliverable label and a changed state.
-func StateTransitions(previous, current string) bool {
-	before := map[string][]string{}
-	for _, item := range ChecklistItems(previous) {
-		before[item.Label] = append(before[item.Label], item.State)
-	}
-	for _, item := range ChecklistItems(current) {
-		states := before[item.Label]
-		if len(states) == 0 {
-			continue
+// Transitions distinguish deliverable state changes from document edits.
+type Transitions struct{ Changed, Closed bool }
+
+// ClassifyTransitions compares exact-label state multisets, independent of row order.
+func ClassifyTransitions(previous, current string) Transitions {
+	before, after := checklistStates(previous), checklistStates(current)
+	result := Transitions{}
+	for label, oldStates := range before {
+		newStates := after[label]
+		oldUnmatched, newUnmatched := 0, 0
+		for state, count := range oldStates {
+			oldUnmatched += max(0, count-newStates[state])
 		}
-		before[item.Label] = states[1:]
-		if states[0] != item.State {
-			return true
+		for state, count := range newStates {
+			newUnmatched += max(0, count-oldStates[state])
 		}
+		result.Changed = result.Changed || oldUnmatched > 0 && newUnmatched > 0
+		closed := max(0, newStates[ProgressStateDone]-oldStates[ProgressStateDone]) + max(0, newStates[ProgressStateNA]-oldStates[ProgressStateNA])
+		result.Closed = result.Closed || oldStates[ProgressStatePending] > newStates[ProgressStatePending] && closed > 0
 	}
-	return false
+	return result
 }
 
-// Reconciles records a pending deliverable's explicit terminal transition.
-func Reconciles(previous, current string) bool {
-	before := map[string][]string{}
-	for _, item := range ChecklistItems(previous) {
-		before[item.Label] = append(before[item.Label], item.State)
-	}
-	for _, item := range ChecklistItems(current) {
-		states := before[item.Label]
-		if len(states) == 0 {
-			continue
+func checklistStates(content string) map[string]map[string]int {
+	states := map[string]map[string]int{}
+	for _, item := range ChecklistItems(content) {
+		if states[item.Label] == nil {
+			states[item.Label] = map[string]int{}
 		}
-		before[item.Label] = states[1:]
-		if states[0] == ProgressStatePending && (item.State == ProgressStateDone || item.State == ProgressStateNA) {
-			return true
-		}
+		states[item.Label][item.State]++
 	}
-	return false
+	return states
 }
 
 // Reconciliation identifies the worker finishes awaiting acknowledgement.

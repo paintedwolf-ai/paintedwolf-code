@@ -99,3 +99,20 @@ func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
 		t.Fatal("oversized proposal changed stored state")
 	}
 }
+
+func TestDeliverableTransitionsAreInvariantUnderRowPermutation(t *testing.T) {
+	initial := "- [ ] Same label\n- [x] Same label\n- [ ] Other"
+	permuted := "- [ ] Other\n- [x] Same label\n- [ ] Same label"
+	if result := ClassifyTransitions(initial, permuted); result.Changed || result.Closed {
+		t.Fatalf("permutation invented a transition: %+v", result)
+	}
+	for _, extra := range []string{"- [ ] Same label", "- [x] Same label", "- [ ] New scope"} {
+		if result := ClassifyTransitions(initial, permuted+"\n"+extra); result.Changed || result.Closed {
+			t.Fatalf("new row invented a transition: %+v", result)
+		}
+	}
+	completed := "- [x] Same label\n- [ ] Other\n- [x] Same label"
+	if result := ClassifyTransitions(initial, completed); !result.Changed || !result.Closed {
+		t.Fatalf("terminal transition lost: %+v", result)
+	}
+}

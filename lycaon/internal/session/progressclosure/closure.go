@@ -113,7 +113,7 @@ func (m *Service) ClearSatisfied(rootID, progressContent string, baseline guard.
 	if !armed || reconciliation(rootID, current).Token != reconciliation(rootID, baseline).Token {
 		return
 	}
-	if progress.Reconciles(baseline.Content, progressContent) {
+	if progress.ClassifyTransitions(baseline.Content, progressContent).Closed {
 		m.baselines.Delete(rootID)
 	}
 }

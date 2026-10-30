@@ -42,7 +42,7 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	gc.Progress.ProgressOpenItems = int64(pending)
 	closed := done + na
 	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
-	gc.Progress.ProgressReconciledSinceArm = progress.Reconciles(baseline.Content, progressContent)
+	gc.Progress.ProgressReconciledSinceArm = progress.ClassifyTransitions(baseline.Content, progressContent).Closed
 	if pending > 0 && !gc.Progress.ProgressReconciledSinceArm {
 		gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
 			"tool":         strings.TrimSpace(tool),

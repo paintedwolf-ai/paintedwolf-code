@@ -72,8 +72,9 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 			return "", &AuthorUpdateRejection{Code: code, Data: data}
 		}
 		result.Updated = current.Content != u.content
-		result.StateChanged = StateTransitions(current.Content, u.content)
-		result.DeliverableClosed = Reconciles(current.Content, u.content)
+		transitions := ClassifyTransitions(current.Content, u.content)
+		result.StateChanged = transitions.Changed
+		result.DeliverableClosed = transitions.Closed
 		return u.content, nil
 	})
 	result.Snapshot = snapshot
