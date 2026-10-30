@@ -18,16 +18,11 @@ func (e literalEngine) foldedCandidate(ctx context.Context, record []byte, first
 		}
 		next := min(end, from+4096)
 		chunk := record[from:next]
-		at := bytes.IndexByte(chunk, lower)
+		var at int
 		if lower >= 'a' && lower <= 'z' {
-			prefix := chunk
-			if at >= 0 {
-				prefix = chunk[:at]
-			}
-			upper := bytes.IndexByte(prefix, lower-('a'-'A'))
-			if upper >= 0 && (at < 0 || upper < at) {
-				at = upper
-			}
+			at = bytes.IndexAny(chunk, string([]byte{lower, lower - ('a' - 'A')}))
+		} else {
+			at = bytes.IndexByte(chunk, lower)
 		}
 		skipped := len(chunk)
 		if at >= 0 {
