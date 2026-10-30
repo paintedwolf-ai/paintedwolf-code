@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/sourcecatalog",
+  "kind": "test_suite",
+  "workstream": "command-content-filters",
+  "disposition": "retain",
+  "reason": "The 68 test files cover the catalog owner\u2019s metadata generations, tree lifetimes, paged preparation and per-file content proofs. Scope reuse, matcher equivalence and chunked projection contracts need package-private lifecycle access. Keep those contracts with the shared owner rather than duplicate fixtures or expose cache internals across packages. No new production files or runtime authority boundaries are added.",
+  "reviewed_commit": "21a010fe54d8d755515ac6259ee62953bf62edec",
+  "ceiling": 68,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/literal_scope_reuse_test.go": "5719daa39b1ca436c7af38b2fc5cf35ddd79d31902864c7c2b5077f58dca73d0",
+    "lycaon/internal/sourcecatalog/literal_matcher_test.go": "a8f2c1b6981ba0d9c0321431431f9c943fc14940e58f77dc19c7d45d9fcbc973",
+    "lycaon/internal/sourcecatalog/literal_stream_test.go": "e0a5966cf00795d2e4090125da4c4d032ad2549f2478d9e5bc27161f13336e32"
+  },
+  "reviewed_shape": "73b235a21c15483a62bdb2b2243002eef937b3176d8b3fd41344475e23fd5fdd"
+}
