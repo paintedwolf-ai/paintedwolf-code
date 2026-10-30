@@ -50,13 +50,27 @@ func New(id string, opts Options) *Provider {
 func (p *Provider) ID() string                       { return p.id }
 func (p *Provider) Profile() providerprofile.Profile { return p.profile }
 
-// frame is one length-prefixed JSON message in either direction.
+// frame is one length-prefixed JSON message in either direction. Requests are
+// flat bodies (method + fields), matching the service's serde representation;
+// the id field is an adapter addition so replies can demultiplex.
 type frame struct {
-	ID     uint64          `json:"id,omitempty"`
+	// Request side.
 	Method string          `json:"method,omitempty"`
-	Params json.RawMessage `json:"params,omitempty"`
-	Result json.RawMessage `json:"result,omitempty"`
-	Error  string          `json:"error,omitempty"`
+	ID     uint64          `json:"id,omitempty"`
+	// Load fields.
+	Manifest string          `json:"manifest,omitempty"`
+	Weights  string          `json:"weights,omitempty"`
+	Device   string          `json:"device,omitempty"`
+	// Event side (service frames have no id; the reader tags them by arrival).
+	Kind        string          `json:"kind,omitempty"`
+	RequestID   string          `json:"request_id,omitempty"`
+	Seq         uint64          `json:"seq,omitempty"`
+	Token       uint32          `json:"token,omitempty"`
+	StopReason  string          `json:"stop_reason,omitempty"`
+	Err         string          `json:"error,omitempty"`
+	// hello / load replies.
+	Service string `json:"service,omitempty"`
+	Loaded  *bool  `json:"loaded,omitempty"`
 }
 
 // start launches the service and begins reading replies.
@@ -108,7 +122,7 @@ func (p *Provider) failAll(err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for id, ch := range p.pending {
-		ch <- frame{ID: id, Error: err.Error()}
+		ch <- frame{ID: id, Err: err.Error()}
 		delete(p.pending, id)
 	}
 }
@@ -138,42 +152,62 @@ func readU32(r *bufio.Reader) (uint32, error) {
 	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24, nil
 }
 
-// call sends one request frame and waits for its reply.
-func (p *Provider) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+// call sends one flat request frame and waits for its reply.
+func (p *Provider) call(ctx context.Context, f frame) (frame, error) {
 	if err := p.start(ctx); err != nil {
-		return nil, err
-	}
-	var raw json.RawMessage
-	if params != nil {
-		var err error
-		raw, err = json.Marshal(params)
-		if err != nil {
-			return nil, err
-		}
+		return frame{}, err
 	}
 	p.mu.Lock()
 	p.nextID++
 	id := p.nextID
+	f.ID = id
 	ch := make(chan frame, 1)
 	p.pending[id] = ch
 	p.mu.Unlock()
 
-	payload, _ := json.Marshal(frame{ID: id, Method: method, Params: raw})
+	payload, err := json.Marshal(f)
+	if err != nil {
+		return frame{}, err
+	}
 	if err := writeFrame(p.stdin, payload); err != nil {
-		return nil, fmt.Errorf("nativegen write: %w", err)
+		return frame{}, fmt.Errorf("nativegen write: %w", err)
 	}
 	select {
-	case f := <-ch:
-		if f.Error != "" {
-			return nil, fmt.Errorf("nativegen: %s", f.Error)
+	case r := <-ch:
+		if r.Err != "" {
+			return r, fmt.Errorf("nativegen: %s", r.Err)
 		}
-		return f.Result, nil
+		return r, nil
 	case <-ctx.Done():
 		p.mu.Lock()
 		delete(p.pending, id)
 		p.mu.Unlock()
-		return nil, ctx.Err()
+		return frame{}, ctx.Err()
 	}
+}
+
+// hello probes the service and checks its protocol version.
+func (p *Provider) hello(ctx context.Context) error {
+	f, err := p.call(ctx, frame{Method: "hello"})
+	if err != nil {
+		return err
+	}
+	if f.Service != "nativegen" {
+		return fmt.Errorf("nativegen: unexpected service %q", f.Service)
+	}
+	return nil
+}
+
+// load pushes the checkpoint to the service.
+func (p *Provider) load(ctx context.Context) error {
+	f, err := p.call(ctx, frame{Method: "load", Manifest: "", Weights: p.opts.ModelDir, Device: p.opts.Device})
+	if err != nil {
+		return err
+	}
+	if f.Loaded == nil || !*f.Loaded {
+		return fmt.Errorf("nativegen: load did not confirm")
+	}
+	return nil
 }
 
 func writeFrame(w io.Writer, payload []byte) error {
@@ -187,11 +221,15 @@ func writeFrame(w io.Writer, payload []byte) error {
 }
 
 // Complete runs one non-streaming completion against the local service.
+//
+// The chat-template projection (turning messages and tools into prompt token
+// ids) is the next integration seam; until it lands, Complete and Stream
+// return an explanatory error rather than approximating it.
 func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	return nil, fmt.Errorf("nativegen: Complete requires a tokenized prompt; use the session's chat-template projection (pending L05 integration)")
+	return nil, fmt.Errorf("nativegen: Complete requires the chat-template projection (prompt tokens), not yet integrated")
 }
 
 // Stream runs one streaming completion against the local service.
 func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	return nil, fmt.Errorf("nativegen: Stream requires a tokenized prompt; use the session's chat-template projection (pending L05 integration)")
+	return nil, fmt.Errorf("nativegen: Stream requires the chat-template projection (prompt tokens), not yet integrated")
 }
