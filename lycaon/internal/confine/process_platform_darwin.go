@@ -3,9 +3,10 @@
 package confine
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 func nativeFileChange(info os.FileInfo) (fileChange, error) {
@@ -26,4 +27,9 @@ func openNativeLaunchMetadata(path string, directory bool) (*os.File, error) {
 		return nil, err
 	}
 	return os.NewFile(uintptr(fd), path), nil
+}
+
+func nativeArgumentBudget() (int, error) {
+	maximum, err := unix.SysctlUint32("kern.argmax")
+	return int(maximum), err
 }

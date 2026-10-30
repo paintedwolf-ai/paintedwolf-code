@@ -4,7 +4,7 @@
   "kind": "test_suite",
   "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Retain exactly 67 immediate test files. Shared admission, typed action and native-input contracts stay beside actual kernel, filesystem, socket and helper-boundary fixtures. Main file-mask, private shared-memory and future-path floor cases remain intact alongside portable capture and current-authority cases. Keeping private boundary fixtures here preserves direct control of their real inputs and cleanup without a public test API. Focused admission, vectors and native browser posture checks pass on Darwin; Linux kernel and privileged runtime qualification remains required. Additional membership requires renewed review. Current main metadata mount and standard-stream authority contracts remain in the same confinement boundary. Preserve the prior ceiling and reviewed shape; combined source membership and focused contract evidence require renewed review rather than an automatic ceiling or fingerprint increase.",
+  "reason": "Retain the shared confinement authority with typed action admission, current native process inputs and native cache conventions beside existing platform adapters. Native process metadata identity, descriptor open modes and argument bounds now share one compile-selected file per platform, preserving their complete function bodies and platform availability. The launch transaction validates inputs, prepares only authorized native cache stores and renders the profile before process transport. Host execution retains the protected helper and bound-input handoff. No new resolver or independent authority owner is added. Preserve the existing review ceiling and structural signature; combined membership and unverified boundary changes remain visible renewed review obligations under unchanged hard limits. Focused native input and cache contracts qualify the composition separately from hosted final-head verification.",
   "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
   "ceiling": 67,
   "boundaries": {
@@ -20,7 +20,14 @@
     "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
     "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
     "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
-    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d",
+    "lycaon/internal/confine/package_cache_roots_test.go": "048764f12085435079e6e454cd37b0d21ae10816c241807efa53121120fb0e9b",
+    "lycaon/internal/confine/package_cache_roots_linux_test.go": "5ad86550466c07f88e47ca5afc9e567c96de5dd34596055b1199362334e3c42a",
+    "lycaon/internal/confine/package_cache_roots_darwin_test.go": "77b4ad37e41696374c98d3461e17e076e9052010b571be260e2fe349f06fc540",
+    "lycaon/internal/confine/package_cache_roots_windows_test.go": "962938548bf9397cf370daf512ebca7b76d51110dfe5933fd59edd562e845829",
+    "lycaon/internal/confine/package_cache_roots_other_test.go": "1b1ec65ce53b822c47ed2f8370a6d9b4f29985754fced7cd4518580baaade8cf",
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
+    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef"
   },
   "reviewed_shape": "dbe6f07ec5acff52a46d70831f7b0d8b68b97931153bb2168834fba72a58ed9d"
 }

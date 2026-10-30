@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // Command builds the process for the selected confinement boundary.
@@ -21,7 +23,14 @@ func Command(
 	var profile string
 	var err error
 	if !c.HostExecution {
-		profile, err = BuildProfile(c)
+		c, err = validateProfileInputs(c)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
+			return nil, func() {}, err
+		}
+		profile, err = renderProfile(c)
 		if err != nil {
 			return nil, func() {}, err
 		}

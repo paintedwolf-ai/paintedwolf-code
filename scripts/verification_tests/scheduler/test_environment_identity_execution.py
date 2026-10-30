@@ -1,6 +1,10 @@
 """The declared environment must describe the checkout, not the call."""
 
+import shutil
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import verification_plan as planning
 from verification_reuse import environment_identity
@@ -11,6 +15,7 @@ from verification_reuse import environment_identity
 # every request a different compatibility digest, which ends batch sharing and
 # result reuse without any visible failure.
 PER_INVOCATION = {
+    "PW_TEST_COMPLETION_FD": ("204", "211"),
     "HTTP_PROXY": ("http://127.0.0.1:51526", "http://127.0.0.1:51845"),
     "HTTPS_PROXY": ("http://127.0.0.1:51526", "http://127.0.0.1:51845"),
     "http_proxy": ("http://127.0.0.1:51526", "http://127.0.0.1:51845"),
@@ -53,6 +58,28 @@ class EnvironmentIdentityTests(unittest.TestCase):
             "a per-invocation value reached it",
         )
         self.assertEqual(environment_identity(first_declared), environment_identity(second_declared))
+
+    def test_each_private_lifecycle_owner_participates_in_batch_source_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            source = Path(planning.__file__).parent
+            shutil.copytree(source / "verification_lifecycle", scripts / "verification_lifecycle",
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            for name in ("verification-plan.json", "verification_plan.py", "test-execution.py"):
+                shutil.copy2(source / name, scripts / name)
+            with patch.object(planning, "CATALOG", scripts / "verification-plan.json"), \
+                    patch.object(planning, "__file__", str(scripts / "verification_plan.py")):
+                before = planning.compatibility(root, root / "task", CHECKOUT_ENV)
+                for name in ("custody.py", "completion.py", "terminal.py"):
+                    with self.subTest(owner=name):
+                        owner = scripts / "verification_lifecycle" / name
+                        original = owner.read_text()
+                        owner.write_text(original + "\n# changed exact owner source\n")
+                        self.assertNotEqual(planning.compatibility(root, root / "task", CHECKOUT_ENV), before)
+                        owner.write_text(original)
+                        self.assertEqual(planning.compatibility(root, root / "task", CHECKOUT_ENV), before)
 
     def test_declared_environment_keeps_the_checkout_inputs(self):
         declared = planning.execution_environment(dict(CHECKOUT_ENV))

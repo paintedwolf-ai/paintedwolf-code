@@ -3,8 +3,9 @@
 package confine
 
 import (
-	"github.com/lycaon/lycaon/internal/osprocess"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 func nativeFileChange(os.FileInfo) (fileChange, error) {
@@ -14,3 +15,5 @@ func nativeFileChange(os.FileInfo) (fileChange, error) {
 func openNativeLaunchMetadata(string, bool) (*os.File, error) {
 	return nil, osprocess.ErrExecutableObservationUnavailable
 }
+
+func nativeArgumentBudget() (int, error) { return 0, osprocess.ErrExecutableObservationUnavailable }
