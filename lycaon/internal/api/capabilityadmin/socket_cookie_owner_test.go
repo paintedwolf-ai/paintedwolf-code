@@ -80,10 +80,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	}()
 	checkpoints.Authority.SetApprovalAuthorityInstaller(&Installation{Gate: authority, Sockets: runtime, authorityMu: &sync.Mutex{}})
 	review := &socketOwnerReview{Checkpoints: checkpoints, decisionContext: ctx}
-	wire := func() *toolexecution.Executor {
-		return newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
-	}
-	executor := wire()
+	executor := newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
 	defer confine.SetEgressResolver(nil)
 	args := map[string]any{"url": "http://127.0.0.1/private/info", "unix_socket": path, "cookie_jar": "service-cookies"}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "issue", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: workspace, IsPrimary: true}}, ActiveRootID: "root"}}
@@ -175,7 +172,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
 	checkpoints.Authority.SetApprovalAuthorityInstaller(&Installation{Gate: authority, Sockets: runtime, authorityMu: &sync.Mutex{}})
 	review = &socketOwnerReview{Checkpoints: checkpoints, decisionContext: ctx}
-	executor = wire()
+	executor = newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
 	persisted, err := service.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "reopen protected cookie after engine restart", err)
 	if !reflect.DeepEqual(persisted.Store.Snapshot(), after) {
