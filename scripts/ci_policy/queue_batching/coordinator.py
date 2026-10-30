@@ -140,6 +140,7 @@ def build(repository, rows, entries):
 
 def run(repository, policy):
     from ci_policy.queue_dispatch import recover
+    github.withdraw_drafts(repository)
     recover(repository)
     policy = {**policy, 'preserve_front': max(policy['preserve_front'], github.build_window(repository))}
     github.enforce_holds(repository)
