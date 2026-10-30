@@ -4,14 +4,17 @@
   "kind": "test_suite",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured 78 operation-adjacent native test members. Shared capture fixtures prove exact binary identity, actual 100 MB reader retention, per-block refusal after same-inode rewrites with restored metadata, seeks, partial blocks, capacity admission and cleanup. Existing source-write and editor-owner tests remain beside the same publication owner. These tests exercise bytes, effects and authority rather than prompt wording. Keeping them with the host-coupled owner preserves one contract suite; further growth or changed membership requires review.",
-  "reviewed_commit": "cd89253086b6716de34843ecd06c1a3d516b24e3",
-  "ceiling": 78,
+  "reason": "Retain the measured 82 immediate native test members beside the host-coupled operations they exercise. Capture contracts cover exact representations, block replay, admission, cancellation, physical cleanup and concurrent source changes. The added observation suite proves complete capture learning before replay, credential and symlink exclusion, unchanged-metadata rewrites and metadata-conflict release. Source-write contracts preserve the publication boundary. Further membership or measured growth requires renewed review.",
+  "reviewed_commit": "f44bfb1c8e0f605e75d1a8cac3271ce078174f83",
+  "ceiling": 82,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
+    "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
     "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
     "lycaon/internal/tools/native/execution_capture_test.go": "23b52f46b43df239ad7a25bfbf52920ef5d9517b0ec9ef22411eb26a21e7d2b9",
-    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1"
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1",
+    "lycaon/internal/tools/native/execution_observation_test.go": "e0df4da09e4fe9ae54c570fd43bff82137cc276e2280c58923b0b4d3929a9e45",
+    "lycaon/internal/sourcecatalog/literal_capture_commit_test.go": "2d300d11dd039ba173a239d4445d6f8eae6ba3f403c1c5201389ed8ed54acc00",
+    "lycaon/internal/tools/native/search/index_capture_test.go": "c0e5a9176a9a8ce2debc9087fc219f20a9db9874be547ce3139c732ca81db349"
   },
-  "reviewed_shape": "37b5c79f08b86b47f0d66fab0117dc87f77fe47fbf90a2f5150baa56055474b5"
+  "reviewed_shape": "370386fb225b3386881bce100fb04e915a0ef8b88c93f341d09fa96e13f66209"
 }
