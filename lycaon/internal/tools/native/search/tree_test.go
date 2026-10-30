@@ -129,15 +129,17 @@ func TestTreeMarksUnreadableDirectories(t *testing.T) {
 }
 
 // TestTreeDifferentialAgainstInstalledTree compares the forms above with an
-// installed reference in a UTF-8 locale, where one is present.
+// tree 2.3.2 reference in a UTF-8 locale, where one is present.
+// Older 2.x releases differ in operand counts, byte ordering and JSON layout;
+// the fixed behavior fixtures above run independently of an installed reference.
 func TestTreeDifferentialAgainstInstalledTree(t *testing.T) {
 	binary, err := exec.LookPath("tree")
 	if err != nil {
 		t.Log("no installed tree to compare")
 		return
 	}
-	if version, _ := exec.Command(binary, "--version").Output(); !bytes.HasPrefix(version, []byte("tree v2.")) {
-		t.Logf("installed tree is %q, not tree 2.x", version)
+	if version, _ := exec.Command(binary, "--version").Output(); !bytes.HasPrefix(version, []byte("tree v2.3.2 ")) {
+		t.Logf("installed tree is %q, not the tree 2.3.2 reference", version)
 		return
 	}
 	h := treeHarness(t)
