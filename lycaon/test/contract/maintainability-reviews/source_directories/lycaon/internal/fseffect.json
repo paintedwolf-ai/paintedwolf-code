@@ -11,7 +11,7 @@
     "lycaon/internal/fseffect/read_directory_test.go": "e4b52d55670d07c7dc11a43d5bcc2b3548e84a252c6975346adfc2f61ad701be",
     "lycaon/internal/fseffect/read_directory_fallback_test.go": "76883075bdf70ffb122b22aeefc65ba34847954ed59d16a03ed99b3b056892f1",
     "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "a437c18f5cb946bfba0b5c672081b56040d2e0cad910d59d1913d772533b07cf",
-    "lycaon/internal/tools/native/search/held_walk_test.go": "ce890f0d75a8cc6ee27c002f4477570c8b73adfdfbbd265b83699cfe1ae54505",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "ffffda3be9e83b7b901f9b2d3d2e681d6b7bf41bf3b78a5eaabc454d5fd8f2de",
     "lycaon/internal/fseffect/transaction_test.go": "af1334ee5f0fa01292adec0a90984fa7506a193ed0a4092acb0acf34bd0f0fd4"
   },
   "reviewed_shape": "a792da7860847b28284256c4f6a220ba58253cc00937fd0e9d293b3aa3d591d6"

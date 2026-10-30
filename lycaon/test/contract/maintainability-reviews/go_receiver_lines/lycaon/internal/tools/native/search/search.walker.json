@@ -8,7 +8,7 @@
   "reviewed_commit": "e25e60380643ade0100d500a04e2c253feee052f",
   "ceiling": 305,
   "boundaries": {
-    "lycaon/internal/tools/native/search/held_walk_test.go": "ce890f0d75a8cc6ee27c002f4477570c8b73adfdfbbd265b83699cfe1ae54505",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "ffffda3be9e83b7b901f9b2d3d2e681d6b7bf41bf3b78a5eaabc454d5fd8f2de",
     "lycaon/internal/tools/native/search/discovery_test.go": "94fdf89e35d935d69b2731f8770c24884c759557f29caf8af3f7e2c7639781fc",
     "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "a437c18f5cb946bfba0b5c672081b56040d2e0cad910d59d1913d772533b07cf"
   },

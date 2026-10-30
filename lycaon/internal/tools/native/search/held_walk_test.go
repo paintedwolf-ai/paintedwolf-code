@@ -64,11 +64,51 @@ func (w *closedAfterLine) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, io.ErrClosedPipe
 	}
-	w.output += string(p)
-	if len(p) > 0 {
+	if end := strings.IndexByte(string(p), '\n'); end >= 0 {
+		count := end + 1
+		w.output += string(p[:count])
 		w.closed = true
+		if count < len(p) {
+			return count, io.ErrClosedPipe
+		}
+		return count, nil
 	}
+	w.output += string(p)
 	return len(p), nil
+}
+
+func TestOneLineConsumerHandlesArbitraryWriteBoundaries(t *testing.T) {
+	for _, fixture := range []struct {
+		name   string
+		chunks []string
+	}{
+		{name: "split", chunks: []string{"first", "\n"}},
+		{name: "combined", chunks: []string{"first\nlater\n"}},
+		{name: "exact", chunks: []string{"first\n"}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			writer := &closedAfterLine{}
+			accepted := 0
+			for _, chunk := range fixture.chunks {
+				n, err := writer.Write([]byte(chunk))
+				accepted += n
+				if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+					t.Fatalf("consumer write=%v", err)
+				}
+				if n < len(chunk) && !errors.Is(err, io.ErrClosedPipe) {
+					t.Fatalf("short write without consumer close: %d %q %v", n, chunk, err)
+				}
+			}
+			if writer.output != "first\n" || accepted != 6 {
+				t.Fatalf("output=%q accepted=%d", writer.output, accepted)
+			}
+			for _, chunk := range [][]byte{nil, []byte("later\n")} {
+				if n, err := writer.Write(chunk); n != 0 || !errors.Is(err, io.ErrClosedPipe) {
+					t.Fatalf("closed consumer accepted %q: %d %v", chunk, n, err)
+				}
+			}
+		})
+	}
 }
 
 func TestFindConsumerCloseStopsSiblingMetadataAndReleasesParents(t *testing.T) {
