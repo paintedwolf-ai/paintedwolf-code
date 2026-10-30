@@ -53,6 +53,7 @@ func (m *Service) Resolve(ctx context.Context, sess *api.Session, scopes []agent
 	files, loadErr := m.resolveFiles(ctx, roots, scopes)
 	delivery := Delivery{Status: StatusNoPolicy}
 	var represented [][]agentpolicy.Revision
+	var priorities []int
 	for _, file := range files {
 		if m.renderer == nil {
 			return Delivery{}, fmt.Errorf("policy renderer unavailable")
@@ -71,12 +72,20 @@ func (m *Service) Resolve(ctx context.Context, sess *api.Session, scopes []agent
 		}
 		delivery.Messages = append(delivery.Messages, scopedMessage(sess, file, block.Content))
 		represented = append(represented, []agentpolicy.Revision{file.Revision})
+		priority := len(scopes)
+		for index, scope := range scopes {
+			if scope.RootID == file.Revision.RootID && policyPathApplies(file.Revision.Path, filepath.ToSlash(scope.Path)) {
+				priority = index
+				break
+			}
+		}
+		priorities = append(priorities, priority)
 		delivery.Manifest.Files = append(delivery.Manifest.Files, file.Revision)
 	}
 	if len(files) > 0 {
 		delivery.Status = StatusLoaded
 	}
-	delivery.Messages = m.recordDeliveries(delivery.Messages, represented)
+	delivery.Messages = m.recordDeliveries(delivery.Messages, represented, priorities)
 	if loadErr != nil {
 		delivery.Status = StatusUnavailable
 	}

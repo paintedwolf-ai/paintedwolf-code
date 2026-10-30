@@ -103,7 +103,7 @@ func (m *Service) ResolveCurrent(ctx context.Context, sess *api.Session, history
 	if err != nil {
 		return m.unavailable(ctx, sess, err)
 	}
-	scopes := []agentpolicy.Scope{{RootID: active.ID, RootPath: active.Path, Path: "."}}
+	var scopes []agentpolicy.Scope
 	state, _ := m.observed.LoadOrStore(sess.ID, &scopeMemory{})
 	intent, _ := api.LastUserIntentMessage(history)
 	state.mu.Lock()
@@ -115,6 +115,7 @@ func (m *Service) ResolveCurrent(ctx context.Context, sess *api.Session, history
 	limit := state.limit
 	state.mu.Unlock()
 	scopes = append(scopes, observedScopes(sess.ProjectID, roots, history)...)
+	scopes = append(scopes, agentpolicy.Scope{RootID: active.ID, RootPath: active.Path, Path: "."})
 	delivery, err := m.Resolve(ctx, sess, uniqueScopes(scopes))
 	if err != nil {
 		unavailable, diagnosticErr := m.unavailable(ctx, sess, err)

@@ -73,6 +73,13 @@ its root and jurisdiction; shared ancestors appear once, with nested policies
 and the root overlay retaining their precedence. Write workers use their private
 branch roots through the same workspace registry as tool execution.
 
+When current guidance exceeds the receiving model's available context, request
+fitting defers whole authenticated policy chains and supplies an explicit notice.
+Freshly reached scopes take priority; ancestor and root-overlay precedence stays
+unchanged. Deferred guidance grants no mutation coverage. A narrower held
+operation promotes its chain on the next completion without a new human request.
+Other live control facts and the current human instruction remain protected.
+
 The final prepared model request determines its immutable policy manifest.
 Reached native mutations check the current applicable revisions before review
 and publication. External launches check their resolved working directory;

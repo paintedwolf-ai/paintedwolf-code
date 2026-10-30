@@ -49,7 +49,7 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 	}
 	m.Coordinator.Control = &promptsource.Control{Batch: m.Coordinator.Batch, GracefulCancel: m.Workers.Cancel, Approvals: nil, Obligations: nil, Processes: m.Processes, Runtime: nil, Workflow: nil}
 	m.Coordinator.Inbox = &promptsource.Inbox{Guidance: m.Coordinator.Guidance, Submissions: m.Submissions}
-	m.Coordinator.Model = &promptsource.Model{Cost: tracker, History: m.Runner.History, LLM: client, LLMService: svc, Limits: m.Limits, Workspace: m.Workspace}
+	m.Coordinator.Model = &promptsource.Model{PolicyIndex: m.Coordinator.PolicyIndex, Cost: tracker, History: m.Runner.History, LLM: client, LLMService: svc, Limits: m.Limits, Workspace: m.Workspace}
 	m.Coordinator.Projection = &promptsource.Projection{Events: nil, Rejections: m.Workers.Rejections, Sessions: store, Stash: stash, Transcript: m.Runner.Transcript, Workflow: nil}
 	m.Coordinator.Nudging = &promptsource.Nudges{DoomLoop: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Spend: m.Runner.Spend, Workers: nil}
 	m.Coordinator.Completion = &promptsource.Closeout{Batch: m.Coordinator.Batch, Closeout: m.Coordinator.Closeout, Closeouts: m.Runner.Closeouts, Evidence: m.Verification.Evidence, Guards: m.Coordinator.Guards, Hints: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Rejects: nil, RenderKick: m.Workers.RenderKick, Reports: nil}

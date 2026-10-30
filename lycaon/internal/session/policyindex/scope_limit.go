@@ -24,3 +24,13 @@ func (m *Service) scopeLimit(ctx context.Context, sess *api.Session, limit scope
 	}
 	return api.Message{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Content: instructions + "\n\n" + string(facts), ContentParts: parts}, nil
 }
+
+// PolicyContextNotice explains whole guidance blocks deferred by request fitting.
+func (m *Service) PolicyContextNotice(ctx context.Context, sess *api.Session) (api.Message, error) {
+	instructions, err := anchor.RenderInform(ctx, anchor.InjectAgentsMD, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, prompts.NewInjectRenderer(m.renderer), map[string]any{"mode": "context_limit"})
+	if err != nil {
+		return api.Message{}, err
+	}
+	return api.Message{ID: "host-agent-policy-context-limit", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost,
+		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Content: instructions}, nil
+}

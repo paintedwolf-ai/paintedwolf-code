@@ -26,14 +26,14 @@ func TestDeliveryGroupCannotEvictItsOwnPolicyBlocks(t *testing.T) {
 		revisions = append(revisions, []agentpolicy.Revision{file})
 		manifest.Files = append(manifest.Files, file)
 	}
-	messages = m.recordDeliveries(messages, revisions)
+	messages = m.recordDeliveries(messages, revisions, nil)
 	if got := m.ManifestFor(messages); len(got.Files) != blocks || !got.Covers(manifest) {
 		t.Fatal("one delivery evicted its own policy identity records")
 	}
 	frozen := m.ManifestFor(messages).Clone()
 	for i := 0; i < 300; i++ {
 		other := []api.Message{{Role: api.MessageRoleSystem, Origin: api.MessageOriginProject, Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted, Content: fmt.Sprintf("Later delivery %d", i)}}
-		m.recordDeliveries(other, revisions[:1])
+		m.recordDeliveries(other, revisions[:1], nil)
 	}
 	if !frozen.Covers(manifest) {
 		t.Fatal("later delivery eviction changed an already bound manifest")

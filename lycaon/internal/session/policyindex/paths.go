@@ -43,5 +43,5 @@ func (m *Service) forPaths(ctx context.Context, sess *api.Session, paths []strin
 	}
 	message.Content = strings.Join(content, "\n\n")
 	message.SourceContext = sourceref.Merge(sources...)
-	return m.recordDeliveries([]api.Message{message}, [][]agentpolicy.Revision{delivery.Manifest.Files})[0], nil
+	return m.recordDeliveries([]api.Message{message}, [][]agentpolicy.Revision{delivery.Manifest.Files}, nil)[0], nil
 }
