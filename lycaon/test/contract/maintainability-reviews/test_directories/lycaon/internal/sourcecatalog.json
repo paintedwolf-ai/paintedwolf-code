@@ -4,7 +4,7 @@
   "kind": "test_suite",
   "workstream": "command-content-filters",
   "disposition": "retain",
-  "reason": "The 70 measured catalog test members combine the published filter-bit equivalence, scope reuse and capture transaction contracts. Keep them beside the private catalog lifetime owner: complete capture acceptance, fixed-storage folding, invalidation and concurrency share these fixtures. The combined suite adds no index fields, cache capacity or production authority; the retained ceiling reflects the union of the independently reviewed suites.",
+  "reason": "The 71 measured catalog test members combine the published filter-bit equivalence, scope reuse and capture transaction contracts. Keep them beside the private catalog lifetime owner: complete capture acceptance, fixed-storage folding, invalidation and concurrency share these fixtures. The combined suite adds no index fields, cache capacity or production authority; the retained ceiling reflects the union of the independently reviewed suites.",
   "reviewed_commit": "78d197750fcd15f5cd3cfc790775fdabff2b5001",
   "ceiling": 71,
   "boundaries": {
