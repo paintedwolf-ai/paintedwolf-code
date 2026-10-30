@@ -31,7 +31,7 @@ func contentEntry(e entry) sourcecatalog.Entry {
 }
 
 func (index grepContentIndex) eligible(e entry) bool {
-	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed || e.stat.Links == 0 || !e.stat.POSIX {
+	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed || e.stat.Links == 0 || e.stat.Size <= 0 || !e.stat.POSIX {
 		return false
 	}
 	return true

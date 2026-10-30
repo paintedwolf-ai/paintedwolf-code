@@ -108,3 +108,15 @@ func TestContentProofsTrackLiveVersionsAcrossAliases(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandZeroSizeInputsStayLive(t *testing.T) {
+	h := newHarness(t, map[string]string{"empty.txt": ""})
+	h.owners.Catalog = sourcecatalog.New()
+	for range 2 {
+		result := h.exec("", "grep", "-r", "needle", ".")
+		result.expect(t, "empty input", "", "", 1)
+		if len(h.pins.paths(result.execution)) != 1 {
+			t.Fatal("zero-size input was excluded without a live capture")
+		}
+	}
+}
