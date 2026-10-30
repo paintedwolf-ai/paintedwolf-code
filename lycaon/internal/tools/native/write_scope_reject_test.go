@@ -1,19 +1,15 @@
 package native_test
 
 import (
-	"context"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -31,15 +27,6 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	boundary := testBoundary(t)
 	writeTool := &native.WriteTool{Boundary: boundary}
 	editTool := &native.EditTool{Boundary: boundary}
-	policy := toolprofiles.NewProfilePolicyEngine(boundary)
-	reg := tools.NewDefaultRegistry()
-	_ = reg.Register("write", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		return writeTool.Run(ctx, args, tctx)
-	})
-	_ = reg.Register("edit", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		return editTool.Run(ctx, args, tctx)
-	})
-	exec := toolexecution.NewExecutor(policy, reg, toolprofiles.DefaultToolProfileID)
 
 	tmpDir := t.TempDir()
 	blueprintsDir := filepath.Join(tmpDir, filepath.FromSlash(settingsoverlay.Rel("blueprints")))
@@ -52,39 +39,49 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: "plan_write_only"},
 	}
 
-	_, err := exec.Invoke(context.Background(), "write", map[string]any{
-		"path":    settingsoverlay.Rel("blueprints/plan.md"),
-		"content": "# Plan\n",
+	blueprint := settingsoverlay.Rel("blueprints/plan.md")
+	_, err := writeTool.Run(t.Context(), map[string]any{
+		"path": blueprint, "content": "# Plan\n",
 	}, tctx)
 	testutil.FailErr(t, "allowed blueprint write", err)
-
-	_, err = exec.Invoke(context.Background(), "write", map[string]any{
-		"path":    "src/main.py",
-		"content": "print('nope')\n",
-	}, tctx)
-	if err == nil {
-		t.Fatal("expected product path write to be denied")
-	}
-	if !strings.Contains(err.Error(), "WRITE_SCOPE_DENIED") {
-		t.Fatalf("write err = %v want WRITE_SCOPE_DENIED", err)
+	body, err := os.ReadFile(filepath.Join(tmpDir, filepath.FromSlash(blueprint)))
+	testutil.FailErr(t, "read blueprint write", err)
+	if string(body) != "# Plan\n" {
+		t.Fatalf("blueprint bytes = %q", body)
 	}
 
-	_, err = exec.Invoke(context.Background(), "edit", map[string]any{
-		"path":       "src/main.py",
-		"old_string": "x",
-		"new_string": "y",
-	}, tctx)
-	if err == nil {
-		t.Fatal("expected product path edit to be denied")
-	}
-	if !strings.Contains(err.Error(), "WRITE_SCOPE_DENIED") {
-		t.Fatalf("edit err = %v want WRITE_SCOPE_DENIED", err)
-	}
-	tr := toolrejection.AsToolReject(err)
-	if tr == nil {
-		t.Fatalf("edit reject should be ToolReject: %v", err)
-	}
-	if tool, _ := tr.Data["tool"].(string); tool != "edit" {
-		t.Fatalf("edit reject Data.tool = %v want edit", tr.Data["tool"])
+	product := filepath.Join(tmpDir, "src", "main.py")
+	testutil.FailErr(t, "create product directory", os.MkdirAll(filepath.Dir(product), 0o755))
+	const original = "print('unchanged')\n"
+	testutil.FailErr(t, "seed product file", os.WriteFile(product, []byte(original), 0o644))
+	for _, tc := range []struct {
+		tool string
+		run  func() (string, error)
+	}{
+		{"write", func() (string, error) {
+			return writeTool.Run(t.Context(), map[string]any{"path": "src/main.py", "content": "print('nope')\n"}, tctx)
+		}},
+		{"edit", func() (string, error) {
+			return editTool.Run(t.Context(), map[string]any{"path": "src/main.py", "old_string": "unchanged", "new_string": "changed"}, tctx)
+		}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			out, err := tc.run()
+			reject := toolrejection.AsToolReject(err)
+			if reject == nil || reject.Code != "WRITE_SCOPE_DENIED" {
+				t.Fatalf("product mutation: result %q error %v, want WRITE_SCOPE_DENIED", out, err)
+			}
+			if reject.Data["tool"] != tc.tool || reject.Data["profile"] != "plan_write_only" || reject.Data["path"] != "src/main.py" {
+				t.Fatalf("scope rejection facts = %+v", reject.Data)
+			}
+			if out != "" {
+				t.Fatalf("denied mutation returned success output: %q", out)
+			}
+			body, err := os.ReadFile(product)
+			testutil.FailErr(t, "read denied product path", err)
+			if string(body) != original {
+				t.Fatalf("denied mutation changed product bytes to %q", body)
+			}
+		})
 	}
 }
