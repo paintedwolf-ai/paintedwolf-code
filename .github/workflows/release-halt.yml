@@ -33,11 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-publication
     timeout-minutes: 75
+    outputs:
+      barrier: ${{ steps.halt_barrier.outcome }}
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
       DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
       HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -68,10 +69,8 @@ jobs:
         working-directory: lycaon-den
       - name: Install feed and repository verification tools
         run: sudo apt-get update && sudo apt-get install -y minisign gnupg rpm apt-utils createrepo-c libarchive-tools zstd
-      - name: Prove all retained feed signing credentials
-        run: python3 scripts/feed_signing.py --check-credentials
-      - name: Prepare and validate every affected updater feed
-        id: feed_plan
+      - name: Select the shared per-channel halt plan
+        id: halt_selection
         env:
           BAD_VERSION: ${{ inputs.bad_version }}
           LAST_GOOD_VERSION: ${{ inputs.last_good_version }}
@@ -85,40 +84,51 @@ jobs:
             args=(--bad "${BAD_VERSION}")
             [[ -z "${LAST_GOOD_VERSION}" ]] || args+=(--last-good "${LAST_GOOD_VERSION}")
           fi
-          python3 scripts/release-halt-plan.py "${args[@]}" --dry-run \
+          python3 scripts/release-halt-plan.py "${args[@]}" --select-only \
             --write-plan "${RUNNER_TEMP}/halt-plan.json" \
-            --prepare-output "${RUNNER_TEMP}/prepared-halt" \
-            --distribution-output "${RUNNER_TEMP}/halt-distribution.json"
-      - name: Prepare package and website withdrawal
-        id: distribution_plan
-        run: |
-          python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
-            --output "${RUNNER_TEMP}/withdrawal.json"
+            --distribution-output "${RUNNER_TEMP}/halt-distribution.json" 2> >(tee "${RUNNER_TEMP}/halt-selection-refusal.log" >&2)
       - name: Prepare Linux repository withdrawal
         id: linux_plan
-        env:
-          BAD_VERSION: ${{ inputs.bad_version }}
-          LAST_GOOD_VERSION: ${{ inputs.last_good_version }}
+        if: ${{ !cancelled() && steps.halt_selection.outcome == 'success' }}
         run: |
           PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal prepare \
-            --file "${RUNNER_TEMP}/linux-withdrawal.json" --bad "${BAD_VERSION}" \
-            --last-good "${LAST_GOOD_VERSION}" --base-url "${DOWNLOAD_BASE_URL}"
-      - name: Halt all affected updater feeds
-        if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
-        run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"
-      - name: Restore the retained Linux repository generations
-        if: ${{ !cancelled() && !inputs.dry_run && steps.linux_plan.outcome == 'success' }}
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" \
+            --distribution-plan "${RUNNER_TEMP}/halt-distribution.json" --base-url "${DOWNLOAD_BASE_URL}" 2> >(tee "${RUNNER_TEMP}/halt-native-refusal.log" >&2)
+      - name: Prepare the negative release ledger
+        id: ledger_plan
+        if: ${{ !cancelled() && steps.halt_selection.outcome == 'success' }}
         run: |
-          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal apply \
-            --file "${RUNNER_TEMP}/linux-withdrawal.json" --base-url "${DOWNLOAD_BASE_URL}"
-      - name: Withdraw the Nix cache availability record
-        if: ${{ !cancelled() && !inputs.dry_run }}
+          python3 scripts/release_distribution.py prepare-withdrawals --file "${RUNNER_TEMP}/halt-distribution.json" \
+            --output "${RUNNER_TEMP}/halt-ledger.json" 2> >(tee "${RUNNER_TEMP}/halt-ledger-refusal.log" >&2)
+      - name: Prepare and validate every affected updater feed
+        id: feed_plan
+        if: ${{ !cancelled() && steps.halt_selection.outcome == 'success' && steps.ledger_plan.outcome == 'success' }}
         env:
-          BAD_VERSION: ${{ inputs.bad_version }}
-        run: PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane withdraw --bad "${BAD_VERSION}"
-      - name: Withdraw package and website discovery
-        if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
-        run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+        run: |
+          python3 scripts/release-halt-plan.py --plan "${RUNNER_TEMP}/halt-plan.json" --dry-run \
+            --ledger-plan "${RUNNER_TEMP}/halt-ledger.json" --prepare-output "${RUNNER_TEMP}/prepared-halt" 2> >(tee "${RUNNER_TEMP}/halt-feeds-refusal.log" >&2)
+      - name: Prepare Nix cache availability withdrawal
+        id: nix_plan
+        if: ${{ !cancelled() && steps.halt_selection.outcome == 'success' }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane prepare-withdrawal \
+            --distribution-plan "${RUNNER_TEMP}/halt-distribution.json" --output "${RUNNER_TEMP}/nix-withdrawal.json" 2> >(tee "${RUNNER_TEMP}/halt-nix-refusal.log" >&2)
+      - name: Prepare package and website withdrawal
+        id: distribution_plan
+        if: ${{ !cancelled() && steps.halt_selection.outcome == 'success' }}
+        run: |
+          python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
+            --output "${RUNNER_TEMP}/withdrawal.json" 2> >(tee "${RUNNER_TEMP}/halt-distribution-refusal.log" >&2)
+      - name: Admit the complete halt effect barrier and retain every action
+        id: halt_barrier
+        if: ${{ !cancelled() }}
+        env:
+          HALT_PREPARATION_OUTCOMES: >-
+            {"selection":"${{ steps.halt_selection.outcome }}","native":"${{ steps.linux_plan.outcome }}",
+            "ledger":"${{ steps.ledger_plan.outcome }}","feeds":"${{ steps.feed_plan.outcome }}",
+            "nix":"${{ steps.nix_plan.outcome }}","distribution":"${{ steps.distribution_plan.outcome }}"}
+        run: PYTHONPATH=scripts python3 -m scripts.release_distribution_contract.halt_effects --directory "${RUNNER_TEMP}"
       - name: Retain withdrawal evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -129,6 +139,116 @@ jobs:
             ${{ runner.temp }}/halt-distribution.json
             ${{ runner.temp }}/withdrawal.json
             ${{ runner.temp }}/linux-withdrawal.json
+            ${{ runner.temp }}/nix-withdrawal.json
+            ${{ runner.temp }}/halt-ledger.json
+            ${{ runner.temp }}/halt-effects.json
+            ${{ runner.temp }}/halt-*-refusal.log
             ${{ runner.temp }}/prepared-halt/
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # apt keeps an index cached from a later Release, so each prepared apt restore gets a fresh
+  # Release, dated after the halted one, under the same package key as release-time signing.
+  sign-native-restore:
+    needs: halt
+    if: ${{ !cancelled() && !inputs.dry_run && needs.halt.outputs.barrier == 'success' }}
+    runs-on: ubuntu-latest
+    environment: release-signing
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install apt repository signing tools
+        run: sudo apt-get update && sudo apt-get install -y gnupg apt-utils
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-withdrawal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+      - name: Sign fresh Release files for restored apt generations
+        env:
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal resign \
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" --signed "${RUNNER_TEMP}/native-restore" --base-url "${DOWNLOAD_BASE_URL}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-native-restore-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-restore/
+          retention-days: 90
+          if-no-files-found: error
+
+  # Effects apply only after every owner prepared, the barrier admitted, and apt restores were signed.
+  apply-halt:
+    needs: [halt, sign-native-restore]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.halt.outputs.barrier == 'success' && needs.sign-native-restore.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 75
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      WWW_DISPATCH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require the current main branch
+        env:
+          REQUESTED_REF: ${{ github.ref }}
+        run: |
+          [[ "${REQUESTED_REF}" == refs/heads/main ]] || {
+            echo "error: run release halt from main so it uses the current recovery configuration" >&2
+            exit 1
+          }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned Tauri CLI for pointer signing
+        run: bun install --frozen-lockfile
+        working-directory: lycaon-den
+      - name: Install feed and repository verification tools
+        run: sudo apt-get update && sudo apt-get install -y minisign gnupg rpm apt-utils createrepo-c libarchive-tools zstd
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-withdrawal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-native-restore-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-restore
+      - name: Halt all affected updater feeds and record the negative release ledger
+        if: ${{ !cancelled() }}
+        run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"
+      - name: Restore the retained Linux repository generations
+        if: ${{ !cancelled() }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal apply \
+            --file "${RUNNER_TEMP}/native-restore/linux-withdrawal.json" --signed "${RUNNER_TEMP}/native-restore" \
+            --base-url "${DOWNLOAD_BASE_URL}"
+      - name: Withdraw the Nix cache availability record
+        if: ${{ !cancelled() }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.nix_cache.release_lane withdraw --file "${RUNNER_TEMP}/nix-withdrawal.json"
+      - name: Withdraw package and website discovery
+        if: ${{ !cancelled() }}
+        run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
+      - name: Retain halt application evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-withdrawal-applied-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prepared-halt/application.json
           retention-days: 90
           if-no-files-found: ignore

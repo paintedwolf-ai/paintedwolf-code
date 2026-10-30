@@ -1,0 +1,17 @@
+{
+  "notes": "Fourth release candidate for 1.0.2, published on the preview channel for upgrade\ntesting. Replaces 1.0.2-rc1 and 1.0.2-rc3 on preview.\n\n### Fixed\n\n- macOS in-app update verification passes its code-signing requirement as an\n  inline `codesign` expression rather than a file path, so staged updates verify\n  and install cleanly. Existing 1.0.2-rc1 and 1.0.2-rc3 preview installations\n  must upgrade once via the disk image or Homebrew cask.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQTJXeVhvKzljQ2h5a3NneVo5Z2I4cE82ZkRaVEZBY0lZNHFsR2NkQ1pwSE5ySHJXUTJIclAzZWsxMVExeEwrTFhUL0pNMnByMUZRcVJLOUtqVGMydGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzEwNjk0CWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjNAo3UU5UT2lWYWRnUHpqOW5mK2oySVZLUllqZ05KLzhvWDNPMnFqdk5tMi9sb2tYaFQ1WFV1MlRrWUJIWTNyaTVlRHpiSzNJT2psWFdtVGtsa0M2cTVCZz09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc4/painted-wolf-code_v1.0.2-rc4_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-18T05:01:51Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc4"
+}

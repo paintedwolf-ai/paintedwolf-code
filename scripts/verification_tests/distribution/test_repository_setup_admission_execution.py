@@ -140,6 +140,10 @@ class RepositorySetupTests(unittest.TestCase):
             receipt = assemble(family, manifest(family, TESTDATA / "inputs"), TESTDATA / "inputs", directory,
                                "preview", cls.catalog, cls.private, True, PACKAGE)
             cls.generations[family] = receipt, directory
+        prerelease = root / "rpm-prerelease"
+        cls.generations["rpm-prerelease"] = assemble(
+            "rpm", manifest("rpm", TESTDATA / "inputs", version="0.0.2-rc1"), TESTDATA / "inputs", prerelease,
+            "preview", cls.catalog, cls.private, True, PACKAGE), prerelease
 
     @classmethod
     def tearDownClass(cls):
@@ -171,6 +175,16 @@ class RepositorySetupTests(unittest.TestCase):
                 self.assertEqual(sorted(path.name for path in output.iterdir()),
                                  sorted([receipt["package"]["file"], "SHA256SUMS", "SHA256SUMS.asc",
                                          "package-key.asc", "setup.json"]))
+
+    def test_prerelease_setup_rpm_admits_only_its_tilde_ordering_requirement(self):
+        receipt, output = self.build("rpm-prerelease")
+        self.assertEqual(receipt["package"]["file"], "painted-wolf-code-repo-0.0.2~rc1-1.preview.noarch.rpm")
+        self.assertEqual(self.admit(receipt, output)["package"], receipt["package"])
+        requirements = command(["rpm", "-qp", "--qf", "[%{REQUIRENAME}\n]", str(output / receipt["package"]["file"])])
+        self.assertIn("rpmlib(TildeInVersions)", requirements.decode().splitlines())
+        stable, stable_output = self.build("rpm")
+        requirements = command(["rpm", "-qp", "--qf", "[%{REQUIRENAME}\n]", str(stable_output / stable["package"]["file"])])
+        self.assertNotIn("rpmlib(TildeInVersions)", requirements.decode().splitlines())
 
     def test_setup_build_refuses_unsafe_origins_mutable_destinations_and_production_trust(self):
         receipt, directory = self.generations["deb"]
