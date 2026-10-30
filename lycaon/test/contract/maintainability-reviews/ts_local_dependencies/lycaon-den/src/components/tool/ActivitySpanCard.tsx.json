@@ -1,0 +1,15 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/tool/ActivitySpanCard.tsx",
+  "kind": "module",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 18 explicit dependencies within 20. Disclosure, accordion, Find and virtualized rows share one group lifecycle; command composition remains outside the shell.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 20,
+  "boundaries": {
+    "lycaon-den/src/components/tool/ActivitySpanCard.test.tsx": "bfbf70a792708f79e328c8f9aa4495a883d1ffbaf10618a5bbad9d22f2707dc6",
+    "lycaon-den/src/components/tool/CommandActivitySpan.test.tsx": "3d0c121cd99b526cfd41087f3ccaf54f872d93a074a0e404e35c8912c35e726f"
+  },
+  "reviewed_shape": "a96a0e915a4ae7099c41e3fd3bf38af9ff404b3c2bb054937befe14e35787909"
+}

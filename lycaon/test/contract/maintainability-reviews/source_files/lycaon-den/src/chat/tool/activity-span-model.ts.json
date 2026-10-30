@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/chat/tool/activity-span-model.ts",
+  "kind": "algorithm",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 423-line transcript grouping algorithm within 440 lines. User boundaries, workflow scope and file-edit anchors govern one ordered projection. Consecutive command calls extend that projection without changing mutation or user boundaries. Activity row composition remains separate.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 440,
+  "boundaries": {
+    "lycaon-den/src/chat/tool/activity-span-model.test.ts": "0db81b300e71d29c2dfef06a1829e5ec2d52f0d761ff4686f9299c68984d5eff",
+    "lycaon-den/src/components/tool/CommandActivitySpan.test.tsx": "3d0c121cd99b526cfd41087f3ccaf54f872d93a074a0e404e35c8912c35e726f"
+  }
+}

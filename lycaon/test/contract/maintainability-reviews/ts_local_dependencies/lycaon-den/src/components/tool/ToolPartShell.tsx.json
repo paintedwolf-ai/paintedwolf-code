@@ -1,0 +1,15 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/tool/ToolPartShell.tsx",
+  "kind": "module",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 19 explicit dependencies within 21. The shared tool disclosure owns process observation, content access and Find registration cleanup. Folded-call Find reuses that lifecycle without another state owner.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon-den/src/components/tool/ToolPartShell.test.tsx": "51e6cf44826e316167a90b8e1aa2e9c7af24dc0eb1bd7e8980271d268bc6ada8",
+    "lycaon-den/src/components/tool/CommandActivityCard.test.tsx": "2ec4d52aaeb9484eba20582888cb82eddfc2ff228a8e6ff283913652f2c40c3f"
+  },
+  "reviewed_shape": "d5e43442a49f5d6b246ab6ed012f6db52f2ba15f84c4f078c1a951f846d1c798"
+}

@@ -1,0 +1,15 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/transcript/WorkerTranscriptRows.tsx",
+  "kind": "module",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 18 explicit dependencies within 20. This component composes worker transcript entries and routes activity groups through their shared presentation boundary.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 20,
+  "boundaries": {
+    "lycaon-den/src/components/tool/CommandActivitySpan.test.tsx": "3d0c121cd99b526cfd41087f3ccaf54f872d93a074a0e404e35c8912c35e726f",
+    "lycaon-den/e2e/tool-path-navigation.spec.ts": "a9b960e29555b4861a450c6c6384258bef6a119876158f2930fb08e19b8e8d5e"
+  },
+  "reviewed_shape": "df8ae92db969f4380784abf5785830536a8b1aeeece0310199d74406e9112294"
+}

@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/chat/session/thinking-activity-label.ts",
+  "kind": "projection",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 634-line activity label projection within 650 lines. It ranks existing host activities for the composer. Execution progress bypasses discovery counters and uses the ordinary tool label path; command row composition stays outside this formatter.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 650,
+  "boundaries": {
+    "lycaon-den/src/chat/session/thinking-activity-label.test.ts": "01d07c3bda58a86a081fa7d4dbb1bc2b70377c3cb6d78f95cc4036675ee884c7",
+    "lycaon-den/src/chat/tool/command-activity-live.test.ts": "67d8940482303efa2479e5fa51f9caa3223c63840780f7f84e635473616d3a33"
+  }
+}
