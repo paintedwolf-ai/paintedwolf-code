@@ -2,14 +2,15 @@ package textutil
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"io"
 	"io/fs"
 	"strings"
 	"syscall"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // source is one input: standard input or a PATH operand opened through the

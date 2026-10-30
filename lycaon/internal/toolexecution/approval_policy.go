@@ -2,8 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -13,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -239,14 +239,15 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:      eval.NativeInputs,
-			Tool:              eval.ToolName,
-			BoundStages:       toolcontract.CloneExecutionStages(eval.BoundStages),
-			Args:              eval.ToolArgs,
-			Files:             append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-			ResolvedFiles:     append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-			NativePathTargets: append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
-			ActionID:          eval.ActionID,
+			NativeInputs:       eval.NativeInputs,
+			Tool:               eval.ToolName,
+			BoundStages:        toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:               eval.ToolArgs,
+			Files:              append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:      append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets:  append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
+			ActionID:           eval.ActionID,
 		},
 		Resources: hitl.ActionResources{
 			ApprovalCategory:     eval.ApprovalCategory,

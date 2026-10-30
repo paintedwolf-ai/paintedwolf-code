@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/isolation"
-
 	"github.com/lycaon/lycaon/pkg/pathglob"
 )
 

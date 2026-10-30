@@ -11,11 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mikefarah/yq/v4/pkg/yqlib"
-
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -79,7 +78,7 @@ func runYq(inv *invocation) error {
 }
 
 // newYqRun applies yq's argument rules: an optional eval/eval-all word, then
-// the expression unless the first word is "-" or an existing file.
+// the expression unless the first word is "-" or is classified as a file.
 func newYqRun(inv *invocation) (*yqRun, error) {
 	operands := inv.argv.Operands()
 	run := &yqRun{inv: inv, sources: map[commandprogram.Field]*source{}}

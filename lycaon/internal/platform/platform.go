@@ -22,8 +22,9 @@ type PolicyContext struct {
 	ToolName        string
 	ToolArgs        map[string]any
 	// ResolvedFiles holds physical path identities for the invocation.
-	ResolvedFiles     []string
-	NativePathTargets []hitl.NativePathTarget
+	ResolvedFiles      []string
+	NativePathTargets  []hitl.NativePathTarget
+	ApprovedFileAccess []hitl.GrantedPathDelta
 	// Dynamic tool identities come from the host registry.
 	ApprovalCategory string
 	ApprovalSubject  string

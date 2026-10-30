@@ -45,10 +45,11 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 		}
 		action := hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
-				NativeInputs: tc.Invocation.NativeInputs,
-				Tool:         tool,
-				Args:         args,
-				ActionID:     tc.EffectActionID(),
+				NativeInputs:       tc.Invocation.NativeInputs,
+				Tool:               tool,
+				Args:               args,
+				ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
+				ActionID:           tc.EffectActionID(),
 			},
 			Scope: hitl.ActionScope{
 				ProjectID:          tc.Identity.ProjectID,
@@ -69,6 +70,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 				if path != "" && !files[path] {
 					files[path] = true
 					action.Invocation.Files = append(action.Invocation.Files, path)
+					action.Invocation.NativePathTargets = append(action.Invocation.NativePathTargets, hitl.NativePathTarget{Path: path, Write: true})
 					action.Invocation.ResolvedFiles = append(action.Invocation.ResolvedFiles, fspath.CanonicalPath(path))
 				}
 				if change.Preview.Target == "index" || policies[path] {

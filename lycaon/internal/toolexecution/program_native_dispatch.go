@@ -237,6 +237,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 			return result, fmt.Errorf("disclosed native inputs changed after approval boundary")
 		}
 		canonical = nextReviewedArguments.values
+		reviewed = nextReviewed
 		tc.Invocation.ArgsDigest = nextReviewed.ArgumentsDigest()
 		ctx, resolved, err = e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
 		if err != nil {

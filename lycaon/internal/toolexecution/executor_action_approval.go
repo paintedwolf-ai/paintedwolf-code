@@ -1,16 +1,15 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolapproval"
-
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolapproval"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (e *Approvals) awaitApproval(
@@ -26,13 +25,14 @@ func (e *Approvals) awaitApproval(
 			AgentPolicy: policyWriteTargets(confReq, tc.ActiveRootPath()),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:      tc.Invocation.NativeInputs,
-			Tool:              tool,
-			Args:              args,
-			Files:             append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
-			ResolvedFiles:     append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-			NativePathTargets: nativePathTargetsFromArgs(args),
-			ActionID:          tc.EffectActionID(),
+			NativeInputs:       tc.Invocation.NativeInputs,
+			Tool:               tool,
+			Args:               args,
+			Files:              append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
+			ResolvedFiles:      append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
+			NativePathTargets:  nativePathTargetsFromArgs(args),
+			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
+			ActionID:           tc.EffectActionID(),
 		},
 		Resources: hitl.ActionResources{
 			HostResources:        append([]string(nil), tc.Host.HostResources...),

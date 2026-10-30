@@ -162,7 +162,12 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 					Mode: prepared.Mode, Review: prepared.Review, Release: prepared.Close, DeferredSource: prepared.DeferredSource,
 					RecordSourceRead: prepared.RecordSourceRead,
 					Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+						admittedPaths, err := frame.Rebind(ctx, admitted)
+						if err != nil {
+							return toolcontract.ProducerResult{}, err
+						}
 						currentTC = admitted
+						publication.Program.Paths = admittedPaths
 						publication.Tools = admitted
 						ports.ToolContext = admitted
 						return prepared.InvokeOwner(ctx, ports, streams)

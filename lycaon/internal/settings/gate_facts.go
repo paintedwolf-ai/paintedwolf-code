@@ -103,7 +103,7 @@ func (g *RuleApprovalGate) factsForAction(
 	facts.Leased = actionLeased && hostCovered
 	facts.LeasedExact = g.actionExactLeaseCovers(cfg, action)
 	facts.LeasedPackage = g.actionPackageLeaseCovers(cfg, action)
-	facts.FileLeased = grantedPathGrantCovers(g, cfg.Grants, action)
+	facts.FileLeased = g.fileAccessCoversTargets(cfg.Grants, action)
 	facts.AgentPolicyLeased = agentPolicyGrantCovers(g, action, cfg.Posture)
 	var matchedRules []ApprovalRule
 	for _, rules := range [][]ApprovalRule{layers.Device, layers.Project} {
@@ -199,7 +199,7 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 	}
 	pool := make([]*gate.FileTarget, 0, len(targets))
 	for _, target := range targets {
-		if !grantedPathCoversTarget(g, cfg.Grants, action, target) {
+		if !currentActionCoversTarget(action, target) && !grantedPathCoversTarget(g, cfg.Grants, action, target) {
 			pool = append(pool, target)
 		}
 	}

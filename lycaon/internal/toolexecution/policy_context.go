@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -20,6 +21,7 @@ func (e *Boundary) preInvokePolicyContext(
 		ToolArgs:                args,
 		ResolvedFiles:           ResolvedApprovalFiles(tool, args, tc),
 		NativePathTargets:       nativePathTargetsFromArgs(args),
+		ApprovedFileAccess:      append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
 		HostResources:           append([]string(nil), tc.Host.HostResources...),
 		HostResourceFamilies:    append([]string(nil), tc.Host.HostResourceFamilies...),
 		ProjectID:               tc.Identity.ProjectID,
