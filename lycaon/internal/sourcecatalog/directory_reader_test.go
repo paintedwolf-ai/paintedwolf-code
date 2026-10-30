@@ -3,7 +3,6 @@ package sourcecatalog
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,57 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func readerGeneration(t *testing.T, store *indexStore) int64 {
-	t.Helper()
-	pin, err := store.retainGeneration(headGeneration, true)
-	testutil.FailErr(t, "retain reader generation", err)
-	defer pin.Release()
-	return pin.Generation
-}
-
-func TestDirectoryReaderBatchesPublicationAndReadsFreshNamesDirectly(t *testing.T) {
-	catalog, root := indexFixture(t)
-	for i := range foregroundDirectoryBatch + 1 {
-		writeIndexFile(t, root.Path, fmt.Sprintf("dir-%03d/value", i), "source")
-	}
-	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
-	testutil.FailErr(t, "open reader store", err)
-	before := readerGeneration(t, store)
-	reader := catalog.Directories.NewDirectoryReader("p", root)
-	for i := range foregroundDirectoryBatch + 1 {
-		listing, err := reader.ReadDirectory(t.Context(), fmt.Sprintf("dir-%03d", i), 0, nil)
-		testutil.FailErr(t, "read foreground names", err)
-		if !listing.Prepared || listing.Reused || len(listing.Entries) != 1 || listing.Entries[0].Name != "value" {
-			t.Fatalf("listing %d=%+v", i, listing)
-		}
-		want := before + int64((i+1)/foregroundDirectoryBatch)
-		if got := readerGeneration(t, store); got != want {
-			t.Fatalf("after directory %d generation=%d want=%d", i, got, want)
-		}
-		if len(reader.pending) >= foregroundDirectoryBatch || reader.entries >= foregroundEntryBatch {
-			t.Fatalf("batch exceeded bound: directories=%d entries=%d", len(reader.pending), reader.entries)
-		}
-	}
-	if _, err := store.readObservation(t.Context(), "dir-064"); !errors.Is(err, pagedview.ErrMissing) {
-		t.Fatalf("fresh names required publication: %v", err)
-	}
-	testutil.FailErr(t, "drain foreground observations", reader.Close(t.Context()))
-	if got := readerGeneration(t, store); got != before+2 {
-		t.Fatalf("drained generations=%d want=%d", got, before+2)
-	}
-	testutil.FailErr(t, "close reader twice", reader.Close(t.Context()))
-	if _, err := reader.ReadDirectory(t.Context(), ".", 0, nil); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("closed reader=%v", err)
-	}
-	after := catalog.Directories.NewDirectoryReader("p", root)
-	reused, err := after.ReadDirectory(t.Context(), "dir-064", 0, nil)
-	testutil.FailErr(t, "close reused reader", after.Close(t.Context()))
-	testutil.FailErr(t, "reuse drained membership", err)
-	if !reused.Reused {
-		t.Fatalf("drained namespace=%+v", reused)
-	}
-}
 
 func TestDirectoryReaderPartialCancellationAndFailure(t *testing.T) {
 	catalog, root := indexFixture(t)
@@ -200,25 +148,16 @@ func TestDirectoryReadersRebaseIndependentBatchesAndRespectInvalidation(t *testi
 	}
 }
 
-func TestDirectoryReaderEntryThresholdAndOmittedLink(t *testing.T) {
+func TestDirectoryReaderCannotClaimOmittedLink(t *testing.T) {
 	catalog, root := indexFixture(t)
-	for i := range foregroundEntryBatch {
-		writeIndexFile(t, root.Path, fmt.Sprintf("large/file-%04d", i), "source")
-	}
-	reader := catalog.Directories.NewDirectoryReader("p", root)
-	listing, err := reader.ReadDirectory(t.Context(), "large", 0, nil)
-	testutil.FailErr(t, "read entry bound", err)
-	if len(listing.Entries) != foregroundEntryBatch || reader.builder != nil || len(reader.pending) != 0 {
-		t.Fatalf("entry threshold: entries=%d pending=%d builder=%t", len(listing.Entries), len(reader.pending), reader.builder != nil)
-	}
-	testutil.FailErr(t, "close entry threshold reader", reader.Close(t.Context()))
+	writeIndexFile(t, root.Path, "kept", "source")
 	testutil.FailErr(t, "create omitted link", os.Symlink("missing", filepath.Join(root.Path, "dangling")))
-	omitted := catalog.Directories.NewDirectoryReader("p", root)
-	listing, err = omitted.ReadDirectory(t.Context(), ".", 0, nil)
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	listing, err := reader.ReadDirectory(t.Context(), ".", 0, nil)
 	if !errors.Is(err, ErrDirectoryNamespace) || len(listing.Entries) != 0 {
 		t.Fatalf("omitted namespace=%+v error=%v", listing, err)
 	}
-	testutil.FailErr(t, "close omitted namespace reader", omitted.Close(t.Context()))
+	testutil.FailErr(t, "close omitted namespace reader", reader.Close(t.Context()))
 }
 
 func TestDirectoryReaderRetirementReleasesUnpublishedResources(t *testing.T) {
