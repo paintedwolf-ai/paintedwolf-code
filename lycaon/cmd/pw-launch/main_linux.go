@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/lycaon/lycaon/internal/launchguard"
 )
 
 func init() {
+	runtime.LockOSThread()
 	launchguard.ScrubBootstrapEnvironment()
 }
 

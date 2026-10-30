@@ -12,13 +12,18 @@ import (
 
 // VerifyOwnedPayload binds every object to the caller's independently selected
 // trusted owner as well as its complete content seal. Bootstrap callers use UID0.
-func (m *Manifest) VerifyOwnedPayload(root *os.Root, owner uint32) error {
+// excluded names top-level directories that belong to the installer, not the
+// payload; see VerifyPayload.
+func (m *Manifest) VerifyOwnedPayload(root *os.Root, owner uint32, excluded ...string) error {
 	if root == nil {
 		return errors.New("native manifest: missing retained payload root")
 	}
 	if err := fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if skip, err := excludedDirectory(name, entry, excluded); skip || err != nil {
+			return err
 		}
 		info, err := entry.Info()
 		if err != nil {
@@ -32,5 +37,5 @@ func (m *Manifest) VerifyOwnedPayload(root *os.Root, owner uint32) error {
 	}); err != nil {
 		return err
 	}
-	return m.VerifyPayload(root)
+	return m.VerifyPayload(root, excluded...)
 }

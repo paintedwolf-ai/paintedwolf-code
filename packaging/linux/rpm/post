@@ -1,5 +1,8 @@
 # Register the package-authored units and refresh desktop caches; nothing else.
 # $1 is 1 on first install and 2 or more on upgrade.
+PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations
+# Select this payload for new launches; running launches keep their generation.
+"$PW_GENERATIONS" install --family rpm || exit 1
 SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
 if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then

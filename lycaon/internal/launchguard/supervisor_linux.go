@@ -14,33 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
-// superviseLaunch holds the generation's lifetime lock until the protected
-// entry and the broker agent have exited. It returns the launch's exit status.
-func superviseLaunch(lifetime *os.File) int {
-	defer func() { _ = lifetime.Close() }()
-	status := 0
-	for {
-		var wait unix.WaitStatus
-		_, err := unix.Wait4(-1, &wait, 0, nil)
-		switch {
-		case errors.Is(err, unix.EINTR):
-			continue
-		case errors.Is(err, unix.ECHILD):
-			return status
-		case err != nil:
-			return 1
-		}
-		switch {
-		case wait.Exited():
-			if code := wait.ExitStatus(); code != 0 || status == 0 {
-				status = code
-			}
-		case wait.Signaled():
-			status = 128 + int(wait.Signal())
-		}
-	}
-}
-
 // brokerAgent starts brokered programs and is their parent: one reaper
 // collects them and reports each exit on its call channel.
 type brokerAgent struct {

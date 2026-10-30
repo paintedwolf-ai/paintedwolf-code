@@ -60,6 +60,15 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 	if err := unix.MountSetattr(unix.AT_FDCWD, policy.LogicalInstallRoot, unix.AT_RECURSIVE, &attributes); err != nil {
 		return nil, fmt.Errorf("seal generation mount: %w", err)
 	}
+	boundRoot, err := openRootControlled(policy.LogicalInstallRoot, true)
+	if err != nil {
+		return nil, err
+	}
+	err = sameObject(generation, boundRoot)
+	_ = boundRoot.Close()
+	if err != nil {
+		return nil, fmt.Errorf("bound generation root differs from retained selection: %w", err)
+	}
 	var previous unix.Stat_t
 	if err := unix.Fstat(int(desktop.Fd()), &previous); err != nil {
 		return nil, err

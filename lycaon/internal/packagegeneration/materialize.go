@@ -81,7 +81,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err != nil || present && damage == nil {
 		return selected, err
 	}
-	if err := manifest.VerifyOwnedPayload(staging, owner); err != nil {
+	if err := manifest.VerifyOwnedPayload(staging, owner, l.stagedExclusions()...); err != nil {
 		return Generation{}, err
 	}
 	sourceManifest, err := readSeal(staging, len(raw), owner)

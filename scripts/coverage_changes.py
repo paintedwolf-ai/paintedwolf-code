@@ -186,7 +186,7 @@ def measure_go(name, coverpkg, tested, module):
     shutil.rmtree(children, ignore_errors=True)
     children.mkdir()
     code = subprocess.call(["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--name", "coverage:changes", "--",
-                            "-count=1", f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}",
+                            "-count=1", "-covermode=atomic", f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}",
                             *sorted(tested)],
                            cwd=GO_DIR, env={**os.environ, "PW_GO_CHILD_COVERDIR": str(children)})
     if code != 0 or not profile.exists():
@@ -203,7 +203,11 @@ def children_profile(directory, out):
     out.unlink(missing_ok=True)
     converted = subprocess.run(["go", "tool", "covdata", "textfmt", f"-i={directory}", f"-o={out}"],
                                cwd=GO_DIR, capture_output=True, text=True)
-    return out if converted.returncode == 0 and out.exists() else None
+    if converted.returncode != 0:
+        raise RuntimeError(f"child Go coverage conversion failed ({converted.returncode}): {converted.stderr.strip()}")
+    if not out.is_file():
+        raise RuntimeError("child Go coverage conversion produced no profile")
+    return out
 
 
 def go_units(touched, blocks, lines, module):

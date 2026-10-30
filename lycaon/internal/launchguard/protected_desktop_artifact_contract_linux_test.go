@@ -52,7 +52,7 @@ func artifactEvidenceFixture(t *testing.T) (desktopArtifact, string) {
 	job, jobHash := write("job.json", map[string]any{"job_id": "own-build", "arguments": []string{"den:bundle"}})
 	result, resultHash := write("result.json", map[string]any{"job_id": "own-build", "state": "completed", "exit_code": 0})
 	tree := strings.Repeat("a", 40)
-	return desktopArtifact{Version: 1, Root: root, SourceCommit: strings.Repeat("b", 40), SourceTree: tree, BeforeTree: tree, AfterTree: tree, ManifestSHA256: manifestHash, PreparationJob: job, PreparationJobSHA256: jobHash, PreparationResult: result, PreparationResultSHA256: resultHash}, filepath.Join(dir, "artifact.json")
+	return desktopArtifact{LibraryRoots: []string{"/usr/lib"}, Version: 1, Root: root, SourceCommit: strings.Repeat("b", 40), SourceTree: tree, BeforeTree: tree, AfterTree: tree, ManifestSHA256: manifestHash, PreparationJob: job, PreparationJobSHA256: jobHash, PreparationResult: result, PreparationResultSHA256: resultHash}, filepath.Join(dir, "artifact.json")
 }
 
 func TestDesktopArtifactRequiresCompleteSameSourceSuccessfulPreparation(t *testing.T) {
@@ -67,6 +67,12 @@ func TestDesktopArtifactRequiresCompleteSameSourceSuccessfulPreparation(t *testi
 		t.Fatalf("valid inventory/provenance fixture refused: %v", err)
 	}
 	for _, mutate := range []func(*desktopArtifact){
+		func(a *desktopArtifact) { a.LibraryRoots = nil },
+		func(a *desktopArtifact) { a.LibraryRoots = []string{"/"} },
+		func(a *desktopArtifact) { a.LibraryRoots = []string{"relative"} },
+		func(a *desktopArtifact) { a.LibraryRoots = []string{"/usr/lib/../lib"} },
+		func(a *desktopArtifact) { a.LibraryRoots = []string{"/usr/lib", "/usr/lib"} },
+		func(a *desktopArtifact) { a.LibraryRoots = make([]string, 33) },
 		func(a *desktopArtifact) { a.Version = 2 }, func(a *desktopArtifact) { a.SourceTree = strings.Repeat("c", 40) },
 		func(a *desktopArtifact) { a.BeforeTree = strings.Repeat("c", 40) }, func(a *desktopArtifact) { a.AfterTree = strings.Repeat("c", 40) },
 		func(a *desktopArtifact) { a.PreparationResultSHA256 = strings.Repeat("0", 64) }, func(a *desktopArtifact) { a.PreparationJobSHA256 = strings.Repeat("0", 64) },

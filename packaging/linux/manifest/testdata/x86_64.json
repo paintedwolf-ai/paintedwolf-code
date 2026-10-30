@@ -31,7 +31,22 @@
       "size": 64
     },
     {
+      "path": "/opt/painted-wolf-code/bin/pw-generations",
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-launch-entry",
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64
+    },
+    {
       "path": "/opt/painted-wolf-code/bin/pw-logs",
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-mount-intake-transition",
       "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
       "size": 64
     },
@@ -49,6 +64,11 @@
       "path": "/usr/bin/pw-logs",
       "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
       "size": 17
+    },
+    {
+      "path": "/usr/libexec/painted-wolf-code/pw-launch",
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64
     }
   ],
   "payload": [
@@ -109,7 +129,31 @@
       "target": null
     },
     {
+      "path": "bin/pw-generations",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-launch-entry",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64,
+      "target": null
+    },
+    {
       "path": "bin/pw-logs",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-mount-intake-transition",
       "kind": "file",
       "mode": 493,
       "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
@@ -154,6 +198,14 @@
       "mode": 420,
       "sha256": "218589323cbe80b7ed077e3ee36f1663e7cb5f8f4e4ad02c938ad8a5c2c5a6b9",
       "size": 17,
+      "target": null
+    },
+    {
+      "path": "protected-launch.json",
+      "kind": "file",
+      "mode": 420,
+      "sha256": "5360caa4c4d155cbfb43727cf7231598117d61c274efa3047710a906175a5bc1",
+      "size": 995,
       "target": null
     },
     {

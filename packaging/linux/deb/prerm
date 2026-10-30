@@ -3,6 +3,12 @@ set -e
 # Stop the vault identity units on removal; upgrades keep the socket listening.
 SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
+PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations
+case "$1" in
+  remove)
+    "$PW_GENERATIONS" remove || echo "painted-wolf-code: generations still in use remain until purge or reinstall" >&2
+    ;;
+esac
 case "$1" in
   remove|deconfigure)
     if [ -d /run/systemd/system ] && [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ]; then
