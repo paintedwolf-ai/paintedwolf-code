@@ -33,7 +33,8 @@ func (c *Directories) NewDirectoryReader(project string, root Root) *DirectoryRe
 	return &DirectoryReader{directories: c, project: project, root: root}
 }
 
-// ReadDirectory borrows held when supplied. Its directory offset is consumed;
+// ReadDirectory borrows a read-admitted descriptor for dir when supplied.
+// Its directory offset is consumed;
 // callers falling back to another reader must rewind it first.
 func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum int, held *os.File) (DirectoryListing, error) {
 	if r.closed {
@@ -63,18 +64,24 @@ func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum
 		return DirectoryListing{}, err
 	}
 	// Watched freshness needs no live scan. Unwatched directories are checked
-	// against the supplied descriptor's stamp by collectObservation.
-	if r.store.policy.boundaryPath(dir, true) == "" && r.store.observationFresh(cached) {
+	// against the supplied descriptor's stamp by the observation collector.
+	if held == nil && r.store.policy.boundaryPath(dir, true) == "" && r.store.observationFresh(cached) {
 		return readDirectoryNamespace(ctx, r.store, dir, cached, maximum, true)
 	}
 	limit := 0
 	if maximum > 0 {
 		limit = maximum + 1
 	}
+	if r.pin == nil {
+		r.pin, err = r.store.retainGeneration(headGeneration, true)
+		if err != nil {
+			return DirectoryListing{}, err
+		}
+	}
 	listing := DirectoryListing{Prepared: true}
 	release := r.store.observationInterests.join(dir, backgroundwork.PriorityInteractive)
 	defer release()
-	observation, reused, err := r.directories.collectObservation(ctx, r.store, dir, cached, held, func() int { return limit }, func(discovery directoryDiscovery) error {
+	observation, reused, err := collectDirectoryObservation(ctx, r.store, dir, cached, held, func() int { return limit }, func(discovery directoryDiscovery) error {
 		if err := r.begin(ctx); err != nil {
 			return err
 		}
@@ -94,12 +101,16 @@ func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum
 		return DirectoryListing{Prepared: true}, err
 	}
 	if reused {
+		if r.builder == nil {
+			r.discard()
+		}
 		return readDirectoryNamespace(ctx, r.store, dir, observation, maximum, true)
 	}
 	var identity os.FileInfo
 	if held != nil {
 		identity, err = held.Stat()
 		if err != nil {
+			r.discard()
 			return DirectoryListing{Prepared: true}, err
 		}
 	}
@@ -122,22 +133,18 @@ func (r *DirectoryReader) begin(ctx context.Context) error {
 	if r.builder != nil {
 		return nil
 	}
-	pin, err := r.store.retainGeneration(headGeneration, true)
+	builder, err := newStructuralBuilder(r.store, r.pin.value)
 	if err != nil {
 		return err
 	}
-	builder, err := newStructuralBuilder(r.store, pin.value)
-	if err != nil {
-		pin.Release()
-		return err
-	}
-	r.pin, r.builder = pin, builder
+	r.builder = builder
 	r.pending = make(map[string]os.FileInfo)
 	return nil
 }
 
 func (r *DirectoryReader) flush(ctx context.Context) error {
 	if r.builder == nil {
+		r.discard()
 		return nil
 	}
 	defer r.discard()
