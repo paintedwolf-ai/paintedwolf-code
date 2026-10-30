@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,7 +50,7 @@ func TestNativeActionGrantIdentityAndInspectionPreserveRawBytes(t *testing.T) {
 	for _, path := range []string{"fixture\xff", "fixture\xfe", "fixture\ufffd"} {
 		args, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": path, path: "raw key"})
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "freeze lossless native read input", err)
 		}
 		action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "read", Args: args, NativeInputs: input, Files: []string{path}}}
 		key := hitl.GrantKey(action)
@@ -59,7 +60,7 @@ func TestNativeActionGrantIdentityAndInspectionPreserveRawBytes(t *testing.T) {
 		keys[key] = true
 		inspected, err := input.Inspection()
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "inspect frozen read input", err)
 		}
 		if inspected["representation"] != toolcontract.LosslessOperationArgumentsV1 || !strings.Contains(inspected["canonical_arguments"].(string), "raw key") {
 			t.Fatal("inspection lost explicit native representation")
@@ -70,7 +71,7 @@ func TestNativeActionGrantIdentityAndInspectionPreserveRawBytes(t *testing.T) {
 		}
 		plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{SessionID: "session", Kind: api.CheckpointKindToolApproval, ProposedAction: &action, Decision: decision})
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "compile exact input approval plan", err)
 		}
 		if plan.ActionDigest != key || plan.Subject.Targets[0].Details["args"].(map[string]any)["representation"] != toolcontract.LosslessOperationArgumentsV1 {
 			t.Fatal("approval plan changed reviewed identity or displayed owner arguments")
@@ -89,7 +90,7 @@ func TestNativeActionReviewScreensOriginalValuesBeforeEncoding(t *testing.T) {
 	defer review.Close()
 	_, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": "sensitive\xff", "password": "hidden\xfe"})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "freeze redacted inspection input", err)
 	}
 	// Catalog changes before presentation still screen the original raw scalar,
 	// not its later base64 text. Named sensitive fields retain the existing floor.
@@ -97,7 +98,7 @@ func TestNativeActionReviewScreensOriginalValuesBeforeEncoding(t *testing.T) {
 	defer releaseRedactor()
 	inspected, err := input.Inspection()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "inspect redacted native input", err)
 	}
 	canonical := inspected["canonical_arguments"].(string)
 	if !strings.Contains(canonical, "catalog-screened") || strings.Contains(canonical, base64.StdEncoding.EncodeToString([]byte("hidden\xfe"))) || strings.Contains(canonical, base64.StdEncoding.EncodeToString([]byte("sensitive\xff"))) {
@@ -105,7 +106,7 @@ func TestNativeActionReviewScreensOriginalValuesBeforeEncoding(t *testing.T) {
 	}
 	original, err := input.Reviewed()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "recover original reviewed input", err)
 	}
 	if inspected["reviewed_arguments_digest"] != original.ArgumentsDigest() || inspected["arguments_digest"] == original.ArgumentsDigest() {
 		t.Fatal("screened view mislabeled original review digest")
@@ -120,11 +121,11 @@ func TestNativeActionReviewRetainsExistingSemanticGrantRules(t *testing.T) {
 	for _, limit := range []int{10, 20} {
 		args, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": "same\xff", "limit": limit})
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "freeze bounded read input", err)
 		}
 		reviewed, err := input.Reviewed()
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "recover bounded reviewed input", err)
 		}
 		full = append(full, reviewed.ArgumentsDigest())
 		actions = append(actions, hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "read", Args: args, NativeInputs: input}})
@@ -160,13 +161,13 @@ func TestNativeActionCheckpointPersistsExplicitInspectionAndDistinctIdentity(t *
 	for _, path := range []string{"fixture\xff", "fixture\xfe", "fixture\ufffd"} {
 		args, input, err := review.Freeze(ctx, "read", map[string]any{"path": path})
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "freeze checkpoint action input", err)
 		}
 		action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "read", Args: args, Files: []string{path}, NativeInputs: input}, Scope: hitl.ActionScope{SessionID: sessionID}}
 		key := hitl.GrantKey(action)
 		response, err := requestExplicitApprovalCheckpoint(t, ctx, manager, hitl.CheckpointRequest{SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ToolCallID: "actual-model-call", ProposedAction: &action, CoalesceChat: sessionID, CoalesceGrantKey: key})
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "request explicit action approval", err)
 		}
 		if ids[response.CheckpointID] || keys[key] || key == "" {
 			t.Fatal("distinct native byte operands shared a checkpoint identity")
@@ -175,7 +176,7 @@ func TestNativeActionCheckpointPersistsExplicitInspectionAndDistinctIdentity(t *
 		keys[key] = true
 		var rawArgs, rawPayload string
 		if err := database.QueryRowContext(ctx, "SELECT args_json,payload_json FROM checkpoints WHERE id=?", response.CheckpointID).Scan(&rawArgs, &rawPayload); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "read persisted checkpoint authority", err)
 		}
 		if !strings.Contains(rawArgs, "operation_arguments_v1") || !strings.Contains(rawPayload, "native_arguments_representation") || !strings.Contains(rawPayload, key) {
 			t.Fatal("checkpoint omitted explicit native inspection/correlation format")
@@ -188,7 +189,7 @@ func TestNativeActionInspectionRefusesMissingBoundedProducer(t *testing.T) {
 	review := hitl.NewNativeActionReview(t.Context(), memory, nil)
 	_, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": "fixture"})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "freeze canceled review input", err)
 	}
 	if _, err := input.Inspection(); err == nil {
 		t.Fatal("native inspection fell back to legacy unbounded screening")
@@ -223,7 +224,7 @@ func TestNativeApprovalProjectsDisplayFieldsWithoutChangingAuthority(t *testing.
 	defer review.Close()
 	args, input, err := review.Freeze(t.Context(), "write", map[string]any{"path": "fixture\xff", "content": "original bytes"})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "freeze original write input", err)
 	}
 	action := hitl.ProposedAction{
 		Invocation:   hitl.ActionInvocation{Tool: "write", Args: args, NativeInputs: input, Files: []string{"fixture\xff"}},
@@ -242,7 +243,7 @@ func TestNativeApprovalProjectsDisplayFieldsWithoutChangingAuthority(t *testing.
 	defer releaseRedactor()
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{ProposedAction: &action, Decision: decision})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "compile projected write approval", err)
 	}
 	if projection.calls != 2 || legacyRawCalls != 0 || plan.Presentation.Command != "screened command" || plan.Presentation.FileChanges[0].Before != "screened preview" {
 		t.Fatal("native display bypassed the bounded raw-value projections")

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestOwnedSocketFixtureChild(t *testing.T) {
@@ -22,7 +23,7 @@ func TestOwnedSocketFixtureChild(t *testing.T) {
 	listener, err := net.FileListener(original)
 	_ = original.Close()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "recover inherited listener", err)
 	}
 	fmt.Println("ready")
 	scanner := bufio.NewScanner(os.Stdin)
@@ -30,7 +31,7 @@ func TestOwnedSocketFixtureChild(t *testing.T) {
 		switch scanner.Text() {
 		case "close":
 			if err := listener.Close(); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "close owned child listener", err)
 			}
 			fmt.Println("closed")
 		case "exit":
@@ -45,18 +46,18 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 	}
 	l, err := lineage.Open("synthetic-action", "synthetic-session")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "open owned lineage fixture", err)
 	}
 	defer l.Close()
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "listen on owned loopback socket", err)
 	}
 	defer listener.Close()
 	endpoint := listener.Addr().(*net.TCPAddr).AddrPort()
 	inherited, err := listener.File()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "duplicate owned listener descriptor", err)
 	}
 	defer inherited.Close()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestOwnedSocketFixtureChild$")
@@ -64,15 +65,15 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 	cmd.ExtraFiles = []*os.File{l.ChildFile(), inherited}
 	input, err := cmd.StdinPipe()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "open child control input", err)
 	}
 	output, err := cmd.StdoutPipe()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "open child readiness output", err)
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "start owned listener child", err)
 	}
 	defer func() { _ = input.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 	l.Started()
@@ -84,7 +85,7 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 	_ = inherited.Close()
 	sockets, err := lineage.OwnedSockets(context.Background(), l.ID())
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "observe native owned socket holders", err)
 	}
 	seen := false
 	for _, socket := range sockets {
@@ -102,19 +103,19 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 		t.Fatalf("complete native all-holder observation did not identify owned listener: paired=%v, err=%v", paired, err)
 	}
 	if _, err := fmt.Fprintln(input, "close"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "request owned listener closure", err)
 	}
 	if !scanner.Scan() || scanner.Text() != "closed" {
 		t.Fatal("child did not close listener")
 	}
 	foreign, err := net.ListenTCP("tcp4", net.TCPAddrFromAddrPort(endpoint))
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "bind foreign replacement listener", err)
 	}
 	defer foreign.Close()
 	sockets, err = lineage.OwnedSockets(context.Background(), l.ID())
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "observe sockets after foreign replacement", err)
 	}
 	for _, socket := range sockets {
 		if socket.Listening && socket.Local == endpoint {

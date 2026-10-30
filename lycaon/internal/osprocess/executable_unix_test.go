@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing.T) {
@@ -21,31 +22,31 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 	}
 	path, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "locate test executable", err)
 	}
 	held, err := os.Open(path)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "hold exact selected executable", err)
 	}
 	defer held.Close()
 	other, err := os.Open("/bin/echo")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "hold different executable identity", err)
 	}
 	defer other.Close()
 	child := exec.Command(path, "-test.run=^TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable$")
 	child.Env = []string{"SYNTHETIC_FIXTURE=value", "SYNTHETIC_LAUNCH_CHILD=1"}
 	cwd, err := os.Open(".")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "hold selected working directory", err)
 	}
 	defer cwd.Close()
 	if err := child.Start(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "start observed launch child", err)
 	}
 	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
 	if err := child.Process.Signal(syscall.SIGSTOP); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stop exact child before observation", err)
 	}
 	var status syscall.WaitStatus
 	// WUNTRACED without WCONTINUED admits only a stop or exit. Go
@@ -56,7 +57,7 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 	}
 	observation, err := osprocess.ObserveStoppedLaunch(t.Context(), child.Process.Pid, held, cwd, 1<<20)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "observe stopped held launch", err)
 	}
 	if !observation.ExecutableMatches || !observation.DirectoryMatches || !slices.Equal(observation.Arguments, child.Args) || !observation.EnvironmentObserved || !slices.Equal(observation.Environment, child.Env) {
 		t.Fatalf("stopped launch fact mismatch: image=%v cwd=%v argv=%v environment_observed=%v environment=%v", observation.ExecutableMatches, observation.DirectoryMatches, slices.Equal(observation.Arguments, child.Args), observation.EnvironmentObserved, slices.Equal(observation.Environment, child.Env))
@@ -76,7 +77,7 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 		t.Fatal("missing held identity was accepted")
 	}
 	if err := child.Process.Signal(syscall.SIGCONT); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "resume owned launch child", err)
 	}
 	if matched, err := osprocess.MatchStoppedExecutable(child.Process.Pid, held); matched || !errors.Is(err, osprocess.ErrExecutableObservationUnavailable) {
 		t.Fatal("running process treated as a stopped image")
