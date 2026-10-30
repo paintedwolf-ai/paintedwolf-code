@@ -84,7 +84,7 @@ func (c *LiteralSearch) CanPruneBytes(rootPath string, req litprefilter.Requirem
 	if !ok || !cached.rawSearchable {
 		return false
 	}
-	return !cached.rawBloom.admits(foldRequirement(req))
+	return !cached.rawBloom.admitsRequirement(req)
 }
 
 // Wrap observes only bytes the consumer actually reads from a pinned stream.
