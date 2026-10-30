@@ -172,7 +172,7 @@ func warmSurveyContent(t *testing.T, catalog *sourcecatalog.Catalog, root string
 		info, err := file.Stat()
 		testutil.FailErr(t, "stat fixture content", err)
 		version := fspath.ObserveFile(info)
-		observable = observable && version.Known && version.Links == 1
+		observable = observable && version.Known && version.Links > 0
 		observation := catalog.Literals.BeginRead(root, entry, version)
 		_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
 		testutil.FailErr(t, "observe fixture stream", err)

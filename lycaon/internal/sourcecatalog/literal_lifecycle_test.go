@@ -212,3 +212,24 @@ func TestChangedProofBecomesUnprovableWithoutRepeatedPreparation(t *testing.T) {
 		t.Fatalf("proof did not recover: opens=%d page=%+v", opens.Load(), page)
 	}
 }
+
+func TestRetainedMetadataCannotRestartPreparationAfterDrain(t *testing.T) {
+	c := treeTestCatalog(t)
+	root := Root{ID: "root", Path: t.TempDir()}
+	writeLiteralFixture(t, root.Path, "a.txt", "content")
+	reader := readyIndex(t, c, root)
+	entries, err := reader.FilePage(t.Context(), FileScope{Audience: HumanAudience}, "", TreeFilePageLimit)
+	testutil.FailErr(t, "metadata page", err)
+	var opens atomic.Int32
+	query := LiteralQuery{IncludeKey: "drained", Require: litprefilter.AnyOf("needle"), Open: func(entry Entry) (io.ReadCloser, error) { opens.Add(1); return literalTestOpener(root.Path)(entry) }}
+	testutil.FailErr(t, "drain catalog", c.Drain(t.Context()))
+	for range 5 {
+		page := c.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries)
+		if page.Warming {
+			t.Fatal("drained metadata restarted content preparation")
+		}
+	}
+	if opens.Load() != 0 {
+		t.Fatalf("drained catalog opened %d files", opens.Load())
+	}
+}

@@ -282,3 +282,25 @@ func TestZeroLengthObservationWaitsForEndOfInput(t *testing.T) {
 		t.Fatal("reported zero size proved nonempty content")
 	}
 }
+
+func TestCatalogDrainSealsAndJoinsForegroundObservations(t *testing.T) {
+	root, entry, index := captureFixture(t, "content")
+	catalog := New()
+	catalog.Literals = index
+	read := index.BeginRead(root, entry, index.cache.versionOf(root, entry))
+	index.cache.fileMu.Lock()
+	sealed := index.cache.available
+	index.cache.fileMu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- catalog.Drain(t.Context()) }()
+	<-sealed
+	if next := index.BeginRead(root, entry, index.cache.versionOf(root, entry)); next != nil {
+		next.Close()
+		t.Fatal("drained catalog admitted learning")
+	}
+	read.Close()
+	testutil.FailErr(t, "join foreground observation", <-done)
+	if index.cache.workingBytes != 0 || len(index.cache.fileReads) != 0 {
+		t.Fatal("drain retained foreground resources")
+	}
+}

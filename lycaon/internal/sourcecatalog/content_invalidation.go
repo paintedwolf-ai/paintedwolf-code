@@ -12,7 +12,13 @@ func (c *TreeStores) invalidateContent(rootPath string) {
 	c.mu.Unlock()
 	for _, store := range stores {
 		store.mu.Lock()
-		store.contentRevision++
+		store.invalidateContentLocked()
 		store.mu.Unlock()
+	}
+}
+
+func (s *indexStore) invalidateContentLocked() {
+	for _, build := range s.content {
+		build.invalidated = true
 	}
 }

@@ -457,7 +457,7 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(entry.Path)))
 		testutil.FailErr(t, "inspect content observation capability", err)
 		version := fspath.ObserveFile(info)
-		observable = observable && version.Known && version.Links == 1
+		observable = observable && version.Known && version.Links > 0
 	}
 	query := sourcecatalog.LiteralQuery{FileScope: sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience}, IncludeKey: "code-pruning-fixture", Require: litprefilter.AnyOf("unique_needle_token"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(root, filepath.FromSlash(entry.Path)))
