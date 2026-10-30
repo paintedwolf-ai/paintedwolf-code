@@ -82,6 +82,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 		baselineInfo.Attempts = nil
 		summarized, sessionReport, cerr := baseline.Compact(ctx, baselineInfo, working, maxTokens)
 		report.Reason = sessionReport.Reason
+		report.TargetTokens = sessionReport.TargetTokens
 		if cerr != nil {
 			slog.WarnContext(ctx, "background session compaction failed",
 				"session_id", sessionID, "error", cerr)

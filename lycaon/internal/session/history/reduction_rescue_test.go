@@ -14,7 +14,7 @@ import (
 
 func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	cfg.TargetTokens, cfg.KeepRecentMessages, cfg.SessionMinSavingsTokens = 1, 1, 1
+	cfg.TargetTokens, cfg.KeepRecentMessages, cfg.SessionMinSavingsTokens = 10000, 1, 1
 	cfg.ChunkTokenThreshold = 1_000_000
 	svc, mem := newCompactionManager(t, cfg)
 	defer func() {
@@ -38,7 +38,7 @@ func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 	info := compaction.SessionInfo{ID: sess.ID, PriorContinuation: prior, Attempts: mem, LatestUserRequestID: "request"}
 	prepared := compaction.ContextMessagesFromAPI(rows)
 	sc := svc.Compactor.(*compaction.SimpleCompactor)
-	_, baseline, err := sc.Baseline().Compact(t.Context(), info, prepared, cfg.TargetTokens)
+	_, baseline, err := sc.Baseline().Compact(t.Context(), info, prepared, 1)
 	testutil.FailErr(t, "evaluate deterministic baseline", err)
 	if baseline.SessionCompacted || baseline.Reason != "insufficient_savings" {
 		t.Fatalf("fixture must require synthesis: %+v", baseline)

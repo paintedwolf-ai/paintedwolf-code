@@ -13,12 +13,12 @@ func (m *Service) scheduleProjectionSynthesis(ctx context.Context, sc *compactio
 	if report.SessionCompacted {
 		m.scheduleSynthesis(ctx, sc, info, compaction.ContextMessagesToAPI(report.SynthesisSources, originals), snapshot)
 	} else if report.Reason == "insufficient_savings" {
-		m.scheduleReductionSynthesis(ctx, sc, info, originals, prepared, snapshot)
+		m.scheduleReductionSynthesis(ctx, sc, info, originals, prepared, snapshot, report.TargetTokens)
 	}
 }
 
 // scheduleReductionSynthesis prepares a useful page without requiring a published baseline.
-func (m *Service) scheduleReductionSynthesis(ctx context.Context, sc *compaction.SimpleCompactor, info compaction.SessionInfo, originals []api.Message, prepared []compaction.ContextMessage, snapshot store.CompactionView) {
+func (m *Service) scheduleReductionSynthesis(ctx context.Context, sc *compaction.SimpleCompactor, info compaction.SessionInfo, originals []api.Message, prepared []compaction.ContextMessage, snapshot store.CompactionView, target int) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -31,7 +31,7 @@ func (m *Service) scheduleReductionSynthesis(ctx context.Context, sc *compaction
 			return lifecycle.ErrStopping
 		}
 		m.Runner.Synthesis.Start(ctx, info.ID, func(workCtx context.Context) {
-			candidate, report, err := sc.Compact(workCtx, info, prepared, sc.Config().TargetTokens)
+			candidate, report, err := sc.Compact(workCtx, info, prepared, target)
 			if err != nil || workCtx.Err() != nil || !report.SessionCompacted {
 				return
 			}
