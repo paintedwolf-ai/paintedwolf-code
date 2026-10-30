@@ -149,14 +149,11 @@ func (r *DirectoryReader) flush(ctx context.Context) error {
 	defer r.discard()
 	// A descriptor can outlive its path after rename. Such an observation remains
 	// useful to the foreground caller but cannot describe the current catalog path.
-	root, release, err := r.store.navigation.Acquire(ctx, r.root.Path)
+	root, release, err := acquireObservationRoot(ctx, r.store)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := validateObservationRoot(root, r.root.Path); err != nil {
-		return err
-	}
 	for dir, info := range r.pending {
 		if info == nil {
 			continue
