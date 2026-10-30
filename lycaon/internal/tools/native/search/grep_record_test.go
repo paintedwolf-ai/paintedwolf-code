@@ -93,17 +93,17 @@ func TestGrepTransformedOutputSharesProgramAdmission(t *testing.T) {
 
 func TestGrepWorkerCountAdaptsBeforeReads(t *testing.T) {
 	h := newHarness(t, nil)
-	memory := grepMemory(t, 2*grepWorkerCredit)
+	memory := grepMemory(t, 2*(grepWorkerCredit+grepOutputChunk))
 	h.owners.Revisions.Memory = memory
 	r := parallelFixture(t, h, t.Context(), &bytes.Buffer{})
 	var err error
 	r.files, err = newGrepFiles(r, grepWorkerMaximum)
 	testutil.FailErr(t, "adapt worker capacity", err)
-	if r.files.window != 2 || memory.InUse().Working != grepWorkerCredit {
+	if r.files.window != 2 || memory.InUse().Working != grepWorkerCredit+grepOutputChunk {
 		t.Fatalf("worker capacity: window=%d memory=%+v", r.files.window, memory.InUse())
 	}
 	testutil.FailErr(t, "finish adapted workers", r.files.finish(nil))
-	if memory.AvailableWorking() != 2*grepWorkerCredit {
+	if memory.AvailableWorking() != 2*(grepWorkerCredit+grepOutputChunk) {
 		t.Fatalf("available memory after release = %d", memory.AvailableWorking())
 	}
 }

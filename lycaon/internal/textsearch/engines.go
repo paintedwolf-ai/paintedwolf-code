@@ -1,7 +1,6 @@
 package textsearch
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"regexp/syntax"
@@ -217,24 +216,23 @@ type vmEngine struct {
 	groupCount int
 	required   litprefilter.Requirement
 	literal    *literalEngine
+	proofWork  int64
 }
 
-func (e vmEngine) canUseLiteral(ctx context.Context, b []byte) (literalEngine, bool) {
+func (e vmEngine) canUseLiteral(ctx context.Context, b []byte) (literalEngine, bool, int64) {
 	if e.literal == nil || int64(len(b)) > e.limits.WorkSteps || int64(len(b))*12+8 > e.limits.MemoryBytes {
-		return literalEngine{}, false
+		return literalEngine{}, false, 0
 	}
 	lit := *e.literal
 	lit.limits = e.limits
-	if lit.line && bytes.IndexByte(b, '\n') >= 0 {
-		return literalEngine{}, false
-	}
-	if lit.fold {
-		if !asciiRecord(ctx, b) {
-			return literalEngine{}, false
+	if lit.fold || lit.line {
+		work, eligible := literalRecordProof(ctx, b, lit.fold, lit.line)
+		if !eligible {
+			return literalEngine{}, false, work
 		}
-		lit.proofWork = int64(len(b))
+		lit.proofWork = work
 	}
-	return lit, true
+	return lit, true, lit.proofWork
 }
 
 // record is one search input as scalars with the byte offset of each.
@@ -267,7 +265,7 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 		return budgetError(err)
 	}
 	defer session.Close()
-	if err := session.Charge(int64(len(b))); err != nil {
+	if err := session.Charge(e.proofWork + int64(len(b))); err != nil {
 		return budgetError(err)
 	}
 	if err := session.ReserveMemory(int64(len(b))*12 + 8); err != nil {
@@ -306,9 +304,11 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 }
 
 func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
-	if lit, ok := e.canUseLiteral(ctx, b); ok {
+	lit, ok, proof := e.canUseLiteral(ctx, b)
+	if ok {
 		return lit.first(ctx, b)
 	}
+	e.proofWork = proof
 	var span Span
 	found := false
 	err := e.search(ctx, b, false, func(g []int) error {
@@ -319,16 +319,20 @@ func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
 }
 
 func (e vmEngine) each(ctx context.Context, b []byte, yield func(Span) error) error {
-	if lit, ok := e.canUseLiteral(ctx, b); ok {
+	lit, ok, proof := e.canUseLiteral(ctx, b)
+	if ok {
 		return lit.each(ctx, b, yield)
 	}
+	e.proofWork = proof
 	return e.search(ctx, b, true, func(g []int) error { return yield(Span{g[0], g[1]}) })
 }
 
 func (e vmEngine) groups(ctx context.Context, b []byte, yield func([]int) error) error {
-	if lit, ok := e.canUseLiteral(ctx, b); ok {
+	lit, ok, proof := e.canUseLiteral(ctx, b)
+	if ok {
 		return lit.groups(ctx, b, yield)
 	}
+	e.proofWork = proof
 	return e.search(ctx, b, true, func(g []int) error {
 		if e.groupCount == 0 {
 			g = g[:2]
