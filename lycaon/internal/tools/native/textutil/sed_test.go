@@ -169,6 +169,14 @@ func TestSedReadsPinnedFilesAsOneStream(t *testing.T) {
 	}
 }
 
+// Ambiguous captures follow the portable POSIX engine's subexpression
+// ordering. Host sed implementations disagree on this case.
+func TestSedAmbiguousCapturesUsePortablePOSIXOrdering(t *testing.T) {
+	h := sedHarness(t)
+	h.run(`sed -E 's/(a|al)(l|lpha)(.*)/[\1|\2|\3]/'`, "alpha\n").expectOutput(t, "longest second capture", "[a|lpha|]\n", 0)
+	h.run(`sed -E 's/(a|ab)(c|bcd)(d*)/[\1|\2|\3]/'`, "abcd\n").expectOutput(t, "earlier capture wins", "[ab|c|d]\n", 0)
+}
+
 // GNU and BSD sed agree on these forms under LC_ALL=C.
 func TestSedDifferentialAgainstHost(t *testing.T) {
 	h := sedHarness(t)
@@ -189,7 +197,6 @@ func TestSedDifferentialAgainstHost(t *testing.T) {
 		{"sed '$!d'", []string{"$!d"}},
 		{"sed -n '/beta/{p;p;}'", []string{"-n", "/beta/{p;p;}"}},
 		{"sed -e s/a/b/ -e s/b/c/", []string{"-e", "s/a/b/", "-e", "s/b/c/"}},
-		{`sed -E 's/(a|al)(l|lpha)(.*)/[\1|\2|\3]/'`, []string{"-E", `s/(a|al)(l|lpha)(.*)/[\1|\2|\3]/`}},
 		{`sed 's/\(a\)\(.*\)\1/<\2>/'`, []string{`s/\(a\)\(.*\)\1/<\2>/`}},
 		{"sed '1!G;h;$!d'", []string{"1!G;h;$!d"}},
 	} {

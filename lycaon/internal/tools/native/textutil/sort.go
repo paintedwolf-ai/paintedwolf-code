@@ -8,6 +8,7 @@ import (
 	"io"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/commandspill"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
@@ -90,8 +91,8 @@ type sorter struct {
 	chunk      [][]byte
 	chunkBytes int64
 	releases   []func()
-	runs       []SpillRun
-	held       map[SpillRun][]func()
+	runs       []commandspill.SpillRun
+	held       map[commandspill.SpillRun][]func()
 	spilled    int64
 }
 
@@ -169,7 +170,7 @@ func (s *sorter) spill() error {
 	return nil
 }
 
-func (s *sorter) newRun() (SpillRun, error) {
+func (s *sorter) newRun() (commandspill.SpillRun, error) {
 	run, err := s.inv.ports.Spills.Create(s.inv.ctx)
 	if err != nil {
 		return nil, err
@@ -180,7 +181,7 @@ func (s *sorter) newRun() (SpillRun, error) {
 
 // writeRun admits the framed record against spill_bytes and the program's
 // spill quota before writing it.
-func (s *sorter) writeRun(run SpillRun, record []byte) error {
+func (s *sorter) writeRun(run commandspill.SpillRun, record []byte) error {
 	size := int64(len(record)) + binary.MaxVarintLen64
 	if limit := s.inv.limit("spill_bytes"); s.spilled+size > limit {
 		return nativeutility.LimitExceeded("spill_bytes", limit, s.spilled+size)
@@ -190,7 +191,7 @@ func (s *sorter) writeRun(run SpillRun, record []byte) error {
 		return err
 	}
 	if s.held == nil {
-		s.held = map[SpillRun][]func(){}
+		s.held = map[commandspill.SpillRun][]func(){}
 	}
 	s.held[run] = append(s.held[run], release)
 	s.spilled += size
@@ -202,7 +203,7 @@ func (s *sorter) writeRun(run SpillRun, record []byte) error {
 func (s *sorter) merge() error {
 	fanIn := int(s.inv.limit("sort_merge_fan_in"))
 	for len(s.runs) > fanIn {
-		var next []SpillRun
+		var next []commandspill.SpillRun
 		for start := 0; start < len(s.runs); start += fanIn {
 			group := s.runs[start:min(start+fanIn, len(s.runs))]
 			if len(group) == 1 {
@@ -240,9 +241,9 @@ func (s *sorter) merge() error {
 	})
 }
 
-func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
+func (s *sorter) mergeRuns(runs []commandspill.SpillRun, visit func([]byte) error) error {
 	h := &mergeHeap{order: s.order}
-	readers := make([]RunReader, 0, len(runs))
+	readers := make([]commandspill.RunReader, 0, len(runs))
 	defer func() {
 		for i := len(readers) - 1; i >= 0; i-- {
 			_ = readers[i].Close()
@@ -283,7 +284,7 @@ func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
 }
 
 // remove deletes a run and returns its spill admission.
-func (s *sorter) remove(run SpillRun) {
+func (s *sorter) remove(run commandspill.SpillRun) {
 	_ = run.Remove()
 	for _, release := range s.held[run] {
 		release()

@@ -14,15 +14,20 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"golang.org/x/sys/unix"
 )
 
@@ -51,7 +56,16 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	if !caps.Available() {
 		t.Fatalf("required Linux confinement unavailable: %+v", caps)
 	}
-	root, readRoot := t.TempDir(), t.TempDir()
+	program := programtest.New(t, programtest.Options{})
+
+	program.Runtime.Owners = func(tc tools.ToolContext, frame *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		owners := &mutation.Owners{Revisions: native.ExecutionRevisions{Boundary: program.Runtime.Boundary}, Pins: program.Recorder}
+		input := &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: frame}, Tools: tc}
+		return command.ProgramOwners{Input: input, Redirections: func(paths *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+			return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc}, nil
+		}}, nil
+	}
+	root, readRoot := program.Dir, t.TempDir()
 	source := filepath.Join(readRoot, "input")
 	testutil.FailErr(t, "seed owned input", os.WriteFile(source, []byte("ordinary fixture bytes through EOF"), 0o644))
 	testutil.FailErr(t, "seed owned input attribute", unix.Setxattr(source, "user.stream-fixture", []byte("original"), 0))
@@ -69,28 +83,40 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate byte input process", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"read": true, "command": true}}})
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"read": true, "verify": true}}})
 	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "close owned fixture registry", registry.Lifecycle.Close(context.Background()))
 	})
-	tool := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: registry}
+	tool := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: registry}
+	program.Configure = func(tc *tools.ToolContext) {
+		tc.Files.ReadRoots = []string{readRoot}
+		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(source)}}
+	}
 	for _, kind := range []string{"stdin_from", "stage input"} {
 		t.Run(kind, func(t *testing.T) {
 			tctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "implement", SessionID: "stream-fixture-" + kind}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}}, Files: tools.InvocationFiles{ReadRoots: []string{readRoot}, ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(source)}}}}
 			line := strconv.Quote(self) + " -test.run=TestNativeCommandByteInputProcess -- byte-input-probe"
-			args := map[string]any{"command": line, "wait_ms": float64(10000)}
+			var raw string
 			if kind == "stdin_from" {
-				args["stdin_from"] = source
+				raw, err = tool.Run(t.Context(), map[string]any{"command": line, "stdin_from": source, "wait_ms": float64(10000)}, tctx)
+				testutil.FailErr(t, "verify native byte input", err)
+				var result struct {
+					Outcome  string `json:"outcome"`
+					ExitCode int    `json:"exit_code"`
+					Tail     string `json:"tail"`
+				}
+				testutil.FailErr(t, "decode verification result", json.Unmarshal([]byte(raw), &result))
+				if result.Outcome != "passed" || result.ExitCode != 0 || !strings.Contains(result.Tail, "byte-input:ordinary fixture bytes through EOF") {
+					t.Fatalf("verification input did not finish with complete bytes: %s", raw)
+				}
 			} else {
-				args["command"] = line + " < " + strconv.Quote(source)
-			}
-			raw, err := tool.Run(context.Background(), args, tctx)
-			testutil.FailErr(t, "execute native byte input", err)
-			var result hostcmd.Result
-			testutil.FailErr(t, "decode native byte input result", json.Unmarshal([]byte(raw), &result))
-			if !result.OK || result.ExitCode != 0 || !strings.Contains(result.Tail, "byte-input:ordinary fixture bytes through EOF") {
-				t.Fatalf("native input did not finish with its complete bytes: %s", raw)
+				raw, err = program.Call(t, t.Context(), line+" < "+strconv.Quote(source))
+				testutil.FailErr(t, "execute program byte input", err)
+				result := decodeOutcome(t, raw)
+				if result.State != "completed" || result.Status != 0 || !strings.Contains(result.Stdout, "byte-input:ordinary fixture bytes through EOF") {
+					t.Fatalf("program input did not finish with complete bytes: %s", raw)
+				}
 			}
 			var after unix.Stat_t
 			testutil.FailErr(t, "inspect source after", unix.Stat(source, &after))

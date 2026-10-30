@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandspill"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -90,8 +91,8 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			Sources:     &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
-				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
+				spills, err := commandspill.NewSessionSpills(ports.ToolContext.Host.SessionScratchDir, ports.ProgramID)
+				if err != nil && !errors.Is(err, commandspill.ErrScratchUnavailable) {
 					return nil, nil, err
 				}
 				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}

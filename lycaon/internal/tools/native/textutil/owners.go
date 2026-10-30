@@ -14,6 +14,7 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandspill"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -111,7 +112,7 @@ func (o *Owners) Commands() []string {
 type Ports struct {
 	ToolContext tools.ToolContext
 	Memory      *toolcontract.ProgramMemory
-	Spills      SpillStorage
+	Spills      commandspill.SpillStorage
 	Admission   tooloutput.SpillAdmission
 	Nested      commandprogram.NestedCommand
 	// Publication is the program's redirect owner (mutation.Publication); sed

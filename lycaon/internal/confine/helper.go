@@ -114,6 +114,13 @@ func runHelper(args []string) error {
 			i = len(args)
 		}
 	}
+	// These inputs travel only through explicit handoffs. Auxiliary helpers
+	// must not inherit a launch pipe or retained authority across exec.
+	for _, fd := range []int{helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedReleaseFDArg, helperPinnedExecutableFDArg} {
+		if fd >= 0 {
+			syscall.CloseOnExec(fd)
+		}
+	}
 	if helperPinnedFinal {
 		if helperPinnedEntryArg == "" || helperPinnedHostExecution || helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 || helperPinnedReleaseFDArg < 0 || len(target) == 0 {
 			return fmt.Errorf("invalid inherited final launch descriptors")

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandspill"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -154,7 +155,7 @@ func (h *harness) seed(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: commandspill.DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
 }
 
 func (h *harness) read(name string) string {

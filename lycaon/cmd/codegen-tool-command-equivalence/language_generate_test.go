@@ -15,7 +15,7 @@ func TestLanguageCatalogClosesOverFormsAndStockTools(t *testing.T) {
 	root := filepath.Join("..", "..")
 	catalog, err := loadLanguageCatalog(root)
 	testutil.FailErr(t, "load catalog", err)
-	if len(catalog.Tools) != 119 || len(catalog.Commands) != 128 {
+	if len(catalog.Tools) != 119 || len(catalog.Commands) != 133 {
 		t.Fatalf("catalog scope: %d tools, %d commands", len(catalog.Tools), len(catalog.Commands))
 	}
 	if len(catalog.Fixtures) < 700 {

@@ -41,7 +41,7 @@ func (p *Provider) probeShell(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, probe.Timeout)
 	defer cancel()
 
-	cmd, cleanup, err := execpkg.PrepareCommand(ctx, shell, args, execpkg.ExecOpts{
+	cmd, cleanup, err := p.prepare(ctx, shell, args, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("user_path_probe"), Env: p.probeEnv(shell),
 	})
 	if err != nil {
