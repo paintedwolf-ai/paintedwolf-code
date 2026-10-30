@@ -2,21 +2,19 @@ package sourcecatalog
 
 import (
 	"io"
-	"slices"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
-	"github.com/lycaon/lycaon/internal/textfile"
 )
 
-// literalBloomStream retains only a filter and a split rune between writes.
+// literalBloomStream folds complete runes directly into the trigram window.
 type literalBloomStream struct {
-	bloom     literalBloom
-	validator textfile.UTF8Validator
-	window    [3]byte
-	filled    int
-	carry     []byte
-	folded    []byte
-	invalid   bool
+	bloom    literalBloom
+	window   [3]byte
+	filled   int
+	pending  [utf8.UTFMax]byte
+	pendingN int
+	invalid  bool
 }
 
 func newLiteralBloomStream(size int64) *literalBloomStream {
@@ -34,38 +32,72 @@ func (s *literalBloomStream) Write(raw []byte) (int, error) {
 }
 
 func (s *literalBloomStream) writeChunk(raw []byte) {
-	if s.invalid {
-		return
-	}
-	if !s.validator.Add(raw, false) {
-		s.invalid = true
-		s.bloom = nil
-		return
-	}
-	if len(s.carry) > 0 {
-		raw = append(s.carry, raw...)
-	}
-	complete := trimIncompleteUTF8Tail(raw)
-	s.folded = slices.Grow(s.folded[:0], len(complete))
-	s.folded = litprefilter.AppendCanonicalFold(s.folded, complete)
-	s.carry = append(s.carry[:0], raw[len(complete):]...)
-	for _, b := range s.folded {
-		if s.filled < len(s.window) {
-			s.window[s.filled] = b
-			s.filled++
-			if s.filled < len(s.window) {
-				continue
-			}
-		} else {
-			s.window[0], s.window[1], s.window[2] = s.window[1], s.window[2], b
+	if s.pendingN > 0 {
+		for !utf8.FullRune(s.pending[:s.pendingN]) && len(raw) > 0 {
+			s.pending[s.pendingN] = raw[0]
+			s.pendingN++
+			raw = raw[1:]
 		}
-		s.bloom.add(s.window)
+		if !utf8.FullRune(s.pending[:s.pendingN]) {
+			return
+		}
+		s.addEncodedRune(s.pending[:s.pendingN])
+		s.pendingN = 0
 	}
-	return
+	for len(raw) > 0 && !s.invalid {
+		if raw[0] < utf8.RuneSelf {
+			c := raw[0]
+			if c == 0 {
+				s.invalidate()
+				return
+			}
+			if 'a' <= c && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			s.addByte(c)
+			raw = raw[1:]
+			continue
+		}
+		if !utf8.FullRune(raw) {
+			s.pendingN = copy(s.pending[:], raw)
+			return
+		}
+		raw = raw[s.addEncodedRune(raw):]
+	}
+}
+
+func (s *literalBloomStream) addEncodedRune(raw []byte) int {
+	r, size := utf8.DecodeRune(raw)
+	if r == utf8.RuneError && size == 1 {
+		s.invalidate()
+		return size
+	}
+	var encoded [utf8.UTFMax]byte
+	for _, b := range utf8.AppendRune(encoded[:0], litprefilter.CanonicalFold(r)) {
+		s.addByte(b)
+	}
+	return size
+}
+
+func (s *literalBloomStream) addByte(b byte) {
+	if s.filled < len(s.window) {
+		s.window[s.filled] = b
+		s.filled++
+		if s.filled < len(s.window) {
+			return
+		}
+	} else {
+		s.window[0], s.window[1], s.window[2] = s.window[1], s.window[2], b
+	}
+	s.bloom.add(s.window)
+}
+
+func (s *literalBloomStream) invalidate() {
+	s.invalid, s.bloom = true, nil
 }
 
 func (s *literalBloomStream) finish() (literalBloom, bool) {
-	if s.invalid || !s.validator.Add(nil, true) || len(s.carry) > 0 {
+	if s.invalid || s.pendingN > 0 {
 		return nil, false
 	}
 	return s.bloom, true
