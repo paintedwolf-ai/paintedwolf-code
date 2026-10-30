@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/messageview"
 )
@@ -68,4 +69,12 @@ func (c *SimpleCompactor) usefulReduction(info SessionInfo, page reductionPage, 
 	}
 	measured, err := measureCompactionPair(info, all, candidate)
 	return err == nil && EstimateMessagesTokens(candidate) < EstimateMessagesTokens(all) && measured.After < measured.Before, err
+}
+
+func reportReductionPage(ctx context.Context, info SessionInfo, page reductionPage, accepted bool) {
+	source, replacement := EstimateMessagesTokens(page.source), EstimateMessagesTokens(page.replacement)
+	slog.DebugContext(ctx, "session reduction page evaluated", "session_id", info.ID,
+		"source_rows", len(page.source), "source_tokens", source,
+		"replacement_tokens", replacement, "net_savings_tokens", source-replacement,
+		"accepted", accepted)
 }

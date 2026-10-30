@@ -41,8 +41,9 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 		Messages                                                       []ContextMessage
 		Policy                                                         CompactionConfig
 		Info                                                           SessionInfo
+		Synthesis                                                      bool
 		Prompt, Record, SummaryModel, Input, Encoding, AuthorityNotice string
-	}{compactionRevision, messages, c.cfg, info, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice()})
+	}{compactionRevision, messages, c.cfg, info, c.summary != nil, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice()})
 }
 
 // RevisionDigest hashes the JSON form of a revision identity.

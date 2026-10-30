@@ -53,6 +53,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	page.replacement = compactionReplacement(info, page.source, nil, summary, text)
 	candidate := append(append([]ContextMessage(nil), page.replacement...), page.retained...)
 	useful, err := c.usefulReduction(info, page, messages, candidate)
+	reportReductionPage(ctx, info, page, useful && err == nil)
 	if err != nil {
 		return nil, nil, "failed", false, err
 	}

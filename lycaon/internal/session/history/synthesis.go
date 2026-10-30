@@ -76,7 +76,14 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	if accepted.SummaryThroughOrd < accepted.ThroughOrd {
 		accepted.Reason = "references_only"
 	}
-	text, err := compaction.RenderContinuation(ctx, &accepted, info.RecallAvailable, 0)
+	budget := 0
+	for _, row := range view.Messages {
+		if len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary" {
+			budget = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{row}))
+			break
+		}
+	}
+	text, err := compaction.RenderContinuation(ctx, &accepted, info.RecallAvailable, max(1, budget))
 	if err != nil {
 		return err
 	}
@@ -94,6 +101,10 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	}
 	if !replaced {
 		return nil
+	}
+	fits, err := compaction.ProjectionDoesNotGrow(info, view.Messages, messages)
+	if err != nil || !fits {
+		return err
 	}
 	view.Messages = messages
 	view.Continuation = &accepted
