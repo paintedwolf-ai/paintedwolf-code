@@ -28,6 +28,13 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	for _, change := range changes {
+		for _, path := range []string{change.Path, change.FromPath} {
+			if err := tc.CheckPathPolicy(ctx, path, true); err != nil {
+				return err
+			}
+		}
+	}
 	if tc.Files.FileChangeReview != nil {
 		if err := tc.Files.FileChangeReview(ctx, changes); err != nil {
 			return err

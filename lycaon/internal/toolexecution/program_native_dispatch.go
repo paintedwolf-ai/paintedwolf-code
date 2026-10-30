@@ -112,6 +112,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
+	if err := tc.CheckPathPolicy(ctx, invocation.Scope.Directory, facts.Contract.MutatesWorld()); err != nil {
+		return result, err
+	}
 	values := effect.Arguments
 	if effect.Argv != nil {
 		argv := effect.Argv.Arguments()

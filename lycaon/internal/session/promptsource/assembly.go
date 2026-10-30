@@ -108,9 +108,12 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
 		SessionView:             m.Catalog.ViewForSession,
 		AgentsMDIndex:           m.PolicyIndex.Index,
-		AgentsMDChain:           m.PolicyIndex.Chain,
-		WebSearchEnabled:        m.WebSearchEnabled,
-		SynthesisEvidence:       m.Closeout,
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
+			return delivery.Messages, err
+		},
+		WebSearchEnabled:  m.WebSearchEnabled,
+		SynthesisEvidence: m.Closeout,
 		CommandJobs: func(sessionID string) []bgprocess.JobSnapshot {
 			if m == nil || m.Processes.Background == nil {
 				return nil

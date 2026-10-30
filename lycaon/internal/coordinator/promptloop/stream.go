@@ -573,6 +573,14 @@ func (l *modelTurn) buildTurnRequest(
 			return coordinatorTurnRequest{}, err
 		}
 	}
+	st.output.policyCheck = nil
+	if l.Context.Deps.BindAgentPolicy != nil {
+		check, bindErr := l.Context.Deps.BindAgentPolicy(ctx, sess, req.Messages)
+		if bindErr != nil {
+			return coordinatorTurnRequest{}, bindErr
+		}
+		st.output.policyCheck = tools.AgentPolicyCheck(check)
+	}
 	st.stampOfferedToolNames(callable)
 	return coordinatorTurnRequest{
 		Req:                req,

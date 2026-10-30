@@ -1,0 +1,24 @@
+oar: '1.0'
+id: POLICY_CONTEXT_CHANGED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "POLICY_CONTEXT_CHANGED"
+effect: block
+copy:
+  what: 'The reached operation did not run because its applicable project guidance was not included in the proposing model request.'
+  cause: 'The operation entered a new policy scope or its guidance changed.'
+  why: 'Applicable guidance must reach the model before it chooses this effect.'
+  fix: 'Read the current scoped guidance supplied on the next request, reconsider the operation, and issue a fresh call. Earlier completed program effects remain completed; do not replay them.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: native
+x-paintedwolf-message: Project guidance prerequisite
+x-paintedwolf-scenarios:
+  - id: reached_operation
+    vars:
+      tool: command
+    expect_contains:
+      - 'Code: POLICY_CONTEXT_CHANGED'
+      - 'did not run'

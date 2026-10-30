@@ -22,6 +22,11 @@ import (
 )
 
 func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, target, from fseffect.Location, metadata bool) (sourceeffect.Pending, error) {
+	for _, path := range []string{mutation.AbsPath, mutation.FromAbsPath} {
+		if err := tctx.CheckPathPolicy(ctx, path, true); err != nil {
+			return nil, err
+		}
+	}
 	if tctx.Source.SourceMutations == nil {
 		return nil, nil
 	}

@@ -43,6 +43,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if cwd == "" {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
 	}
+	if err := tctx.CheckPathPolicy(ctx, cwd, true); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
+	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)

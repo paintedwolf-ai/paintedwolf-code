@@ -1,0 +1,24 @@
+oar: '1.0'
+id: POLICY_CONTEXT_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "POLICY_CONTEXT_UNAVAILABLE"
+effect: block
+copy:
+  what: 'The reached operation did not run because its applicable project guidance could not be resolved.'
+  cause: 'The addressed workspace or a policy source is unavailable.'
+  why: 'Applicable guidance must reach the model before it chooses this effect.'
+  fix: 'Investigate the reported workspace and policy sources with read-only tools. Retry the operation after the applicable guidance is available and delivered.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: native
+x-paintedwolf-message: Project guidance prerequisite
+x-paintedwolf-scenarios:
+  - id: reached_operation
+    vars:
+      tool: command
+    expect_contains:
+      - 'Code: POLICY_CONTEXT_UNAVAILABLE'
+      - 'did not run'
