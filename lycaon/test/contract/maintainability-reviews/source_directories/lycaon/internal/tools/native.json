@@ -4,9 +4,9 @@
   "kind": "module",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured 67 immediate native source members. Files divide host-coupled capture, representation, revision, publication and recovery phases while the existing native read boundary and single source write door retain authority. The capture-observation seam feeds the existing bounded literal service during required reads; it adds no reader, cache, index or quota owner. Focused capture, block-proof, observation settlement, source-write and early-search contracts support this membership. Further membership or measured growth requires renewed review.",
-  "reviewed_commit": "f44bfb1c8e0f605e75d1a8cac3271ce078174f83",
-  "ceiling": 67,
+  "reason": "Retain the measured 68 source members that combine the published operation, capture, representation and recovery phases. Source observation feeds the existing literal service during required reads; the original read boundary and write door retain authority. The complete native package and capture contracts passed for this composition. This review joins published members without adding a new subsystem.",
+  "reviewed_commit": "8ad6ab3a9c9025a1713cc0a2d352c205df23ba65",
+  "ceiling": 68,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
     "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
@@ -16,5 +16,5 @@
     "lycaon/internal/sourcecatalog/literal_capture_commit_test.go": "2d300d11dd039ba173a239d4445d6f8eae6ba3f403c1c5201389ed8ed54acc00",
     "lycaon/internal/tools/native/search/index_capture_test.go": "c0e5a9176a9a8ce2debc9087fc219f20a9db9874be547ce3139c732ca81db349"
   },
-  "reviewed_shape": "2e5c555c0606dba3a83386ddb22737d4ec6a8b06e7e8501a61307e455871d1cb"
+  "reviewed_shape": "9d8405fec4dff0fdf11988045b16b84ff277cd2609dd7d613d886497b90b70b8"
 }
