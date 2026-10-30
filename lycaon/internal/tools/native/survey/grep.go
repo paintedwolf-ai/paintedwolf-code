@@ -279,6 +279,9 @@ func (t *GrepTool) finalizeGrepResponse(ctx context.Context, root string, search
 	for _, hit := range resp.Highlights {
 		search.tctx.RecordSourcePath(hit.Path, api.NavigationEntryKindFile)
 	}
+	if err := deliverGrepCredentials(ctx, search, resp); err != nil {
+		return "", err
+	}
 	recordGrepMatches(ctx, t.Boundary, search.tctx, search.re, search.structural, resp.Matches)
 	return t.encodeGrepResponse(root, resp)
 }

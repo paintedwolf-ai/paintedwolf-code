@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
@@ -62,6 +63,11 @@ func gitDiffHandler(m git.GitManager) tools.ToolHandler {
 		if err == nil {
 			for _, file := range resp.Files {
 				tctx.RecordSourcePath(file.Path, api.NavigationEntryKindFile)
+				if file.Diff != "" {
+					if deliveryErr := tctx.ObserveCredentialDelivery(ctx, filepath.Join(cwd, file.Path), file.Path, file.Diff); deliveryErr != nil {
+						return "", deliveryErr
+					}
+				}
 			}
 		}
 		return git.MarshalDiffToolResponse(resp, err)

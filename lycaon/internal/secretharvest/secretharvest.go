@@ -2,13 +2,9 @@
 package secretharvest
 
 import (
-	"encoding/json"
-	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
@@ -31,7 +27,7 @@ type Value struct {
 	Source secretmatch.RedactionSource
 	// Reference is the managed capability that can replace the raw value.
 	Reference string
-	// Retired marks managed bytes whose capability no longer resolves.
+	// Retired marks bytes no longer held by their active source.
 	Retired bool
 	// NonDisclosable prevents this exact value from crossing the model boundary.
 	NonDisclosable bool
@@ -41,11 +37,14 @@ type Value struct {
 // Secret returns the raw value for exact matching.
 func (v Value) Secret() string { return v.secret }
 
-// Runtime holds harvested values per session tree.
+// Runtime holds session evidence and retained project file bindings.
 type Runtime struct {
 	mu sync.RWMutex
 	// Eviction would remove active screening evidence.
-	bySession map[string]map[string]Value // root session → secret → Value
+	fileStore    fileValueStore
+	byFile       map[fileIdentity]map[string]Value
+	retiredFiles map[string]map[string]Value
+	bySession    map[string]map[string]Value // root session → secret → Value
 	// projects caches each session tree's project; a tree never changes project.
 	projects  map[string]string
 	projectOf func(rootSessionID string) string
@@ -58,10 +57,12 @@ type Runtime struct {
 // NewRuntime returns an empty harvest store.
 func NewRuntime(fp *secretmatch.Fingerprinter) *Runtime {
 	return &Runtime{
-		bySession:  map[string]map[string]Value{},
-		projects:   map[string]string{},
-		generation: map[string]uint64{},
-		fp:         fp,
+		byFile:       map[fileIdentity]map[string]Value{},
+		retiredFiles: map[string]map[string]Value{},
+		bySession:    map[string]map[string]Value{},
+		projects:     map[string]string{},
+		generation:   map[string]uint64{},
+		fp:           fp,
 	}
 }
 
@@ -122,7 +123,7 @@ func (r *Runtime) Harvest(read ContainerRead) []Value {
 	if len(pairs) == 0 {
 		return nil
 	}
-	r.bindProject(read.RootSessionID, read.ProjectID)
+	r.BindSessionProject(read.RootSessionID, read.ProjectID)
 	values := make([]Value, 0, len(pairs))
 	for _, p := range pairs {
 		if read.Held != nil && r.fp != nil && read.Held(r.fp.Fingerprint(p.Value)) {
@@ -140,8 +141,9 @@ func (r *Runtime) Harvest(read ContainerRead) []Value {
 	return r.add(read.RootSessionID, values)
 }
 
-func (r *Runtime) bindProject(rootSessionID, projectID string) {
-	if strings.TrimSpace(projectID) == "" {
+// BindSessionProject scopes file evidence and later transcript sweeps to this chat.
+func (r *Runtime) BindSessionProject(rootSessionID, projectID string) {
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(rootSessionID) == "" {
 		return
 	}
 	r.mu.Lock()
@@ -294,7 +296,7 @@ func (r *Runtime) ValuesForProject(projectID string) []Value {
 	for root, project := range resolved {
 		r.projects[root] = project
 	}
-	var out []Value
+	out := r.fileValuesLocked(projectID)
 	for root, sess := range r.bySession {
 		if r.projects[root] != projectID {
 			continue
@@ -313,7 +315,7 @@ func (r *Runtime) AllValues() []Value {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var out []Value
+	out := r.fileValuesLocked("")
 	for _, sess := range r.bySession {
 		for _, v := range sess {
 			out = append(out, v)
@@ -331,125 +333,4 @@ func (r *Runtime) Forget(rootSessionID string) {
 	defer r.mu.Unlock()
 	delete(r.bySession, rootSessionID)
 	delete(r.projects, rootSessionID)
-}
-
-// Pair is one parsed name/value binding.
-type Pair struct {
-	Name  string
-	Value string
-}
-
-// ParseContainer extracts bounded JSON, YAML, and key-value bindings.
-func ParseContainer(container string, content []byte) []Pair {
-	text := string(content)
-	var pairs []Pair
-	switch {
-	case json.Valid(content):
-		var doc any
-		if err := json.Unmarshal(content, &doc); err == nil {
-			pairs = walkDoc("", doc)
-			break
-		}
-		pairs = parseLines(text)
-	case looksYAML(container):
-		var doc any
-		if err := yaml.Unmarshal(content, &doc); err == nil {
-			pairs = walkDoc("", doc)
-			break
-		}
-		pairs = parseLines(text)
-	default:
-		pairs = parseLines(text)
-	}
-	out := pairs[:0]
-	for _, p := range pairs {
-		if harvestable(p.Value) {
-			out = append(out, p)
-		}
-		if len(out) >= MaxValuesPerContainer {
-			break
-		}
-	}
-	return out
-}
-
-func looksYAML(container string) bool {
-	lower := strings.ToLower(container)
-	return strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml")
-}
-
-// parseLines reads KEY=VALUE bindings: dotenv, ini, and properties shapes.
-func parseLines(text string) []Pair {
-	var out []Pair
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "[") {
-			continue
-		}
-		line = strings.TrimPrefix(line, "export ")
-		eq := strings.IndexAny(line, "=:")
-		if eq <= 0 {
-			continue
-		}
-		name := strings.TrimSpace(line[:eq])
-		value := strings.TrimSpace(line[eq+1:])
-		value = strings.Trim(value, `"'`)
-		if name == "" || value == "" {
-			continue
-		}
-		out = append(out, Pair{Name: name, Value: value})
-	}
-	return out
-}
-
-func walkDoc(prefix string, doc any) []Pair {
-	var out []Pair
-	switch node := doc.(type) {
-	case map[string]any:
-		for key, child := range node {
-			out = append(out, walkDoc(joinPath(prefix, key), child)...)
-		}
-	case map[any]any:
-		for key, child := range node {
-			out = append(out, walkDoc(joinPath(prefix, toKey(key)), child)...)
-		}
-	case []any:
-		for i, child := range node {
-			out = append(out, walkDoc(joinPath(prefix, strconv.Itoa(i)), child)...)
-		}
-	case string:
-		if prefix != "" {
-			out = append(out, Pair{Name: prefix, Value: node})
-		}
-	}
-	return out
-}
-
-func joinPath(prefix, key string) string {
-	if prefix == "" {
-		return key
-	}
-	return prefix + "." + key
-}
-
-func toKey(key any) string {
-	if s, ok := key.(string); ok {
-		return s
-	}
-	return ""
-}
-
-// Container bindings use the stricter harvested floor.
-func harvestable(value string) bool {
-	if utf8.RuneCountInString(value) < secretmatch.MinNeedleRunes(false) {
-		return false
-	}
-	lower := strings.ToLower(value)
-	if lower == "true" || lower == "false" {
-		return false
-	}
-	if _, err := strconv.ParseFloat(value, 64); err == nil {
-		return false
-	}
-	return true
 }

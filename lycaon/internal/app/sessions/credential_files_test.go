@@ -23,7 +23,7 @@ func credentialFilesFixture(t *testing.T, managed ...string) *credentialFiles {
 	testutil.FailErr(t, "seed project", err)
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x3c}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
-	return &credentialFiles{
+	files := &credentialFiles{
 		harvest: secretharvest.NewRuntime(fp), fp: fp, queries: db.New(sqlDB),
 		managed: func(string) []secretmatch.Remembered {
 			out := make([]secretmatch.Remembered, 0, len(managed))
@@ -34,6 +34,8 @@ func credentialFilesFixture(t *testing.T, managed ...string) *credentialFiles {
 		},
 		exposure: func(context.Context, string, string) error { return nil },
 	}
+	files.index = newCredentialIndex(files)
+	return files
 }
 
 func harvestedSecrets(files *credentialFiles, root string) map[string]bool {

@@ -63,6 +63,13 @@ func (t *DiffTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		diffText, truncated = sourceview.TruncateDiffOutput(diffText, hostDiffMaxOutputBytes)
 		bannerParts = append(bannerParts, fmt.Sprintf("diff output capped at %d bytes", hostDiffMaxOutputBytes))
 	}
+	reads := projectpaths.NewReadSession(t.Boundary, tctx)
+	defer reads.Close()
+	for _, path := range []string{relA, relB} {
+		if err := deliverCredentialText(ctx, reads, tctx, path, diffText); err != nil {
+			return "", err
+		}
+	}
 	bannerParts = toolkit.AppendClampBanner(bannerParts, "context_lines", contextArg)
 
 	resp := diffResponse{

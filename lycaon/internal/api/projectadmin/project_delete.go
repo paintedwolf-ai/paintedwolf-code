@@ -77,6 +77,11 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 		return err
 	}
 	deleted = true
+	if files := s.Sessions.ToolContext.CredentialFiles; files != nil {
+		if err := files.ForgetProject(context.WithoutCancel(ctx), id); err != nil {
+			slog.WarnContext(ctx, "remove credential-file evidence after project delete", "project_id", id, "error", err)
+		}
+	}
 	if removeSecretValues != nil {
 		if err := removeSecretValues(); err != nil {
 			slog.WarnContext(ctx, "remove managed secrets after project delete", "project_id", id, "err", err)

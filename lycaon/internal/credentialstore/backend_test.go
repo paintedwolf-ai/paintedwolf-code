@@ -159,3 +159,23 @@ func TestDescribeNamesEncryptedVault(t *testing.T) {
 		t.Fatalf("description = %q", description)
 	}
 }
+
+func TestVaultRefusesGrowthBeyondReadableLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credential-vault.age")
+	slot := Slot{Path: path, Namespace: NamespaceCredentialFiles, Context: "evidence"}
+	store := NewEmpty(slot, nil)
+	testutil.FailErr(t, "seed vault", store.Set("project", "retained"))
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "capture vault", err)
+	if err := store.Set("project", strings.Repeat("x", MaxPlaintextBytes)); err == nil {
+		t.Fatal("unreadable vault size was committed")
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read preserved vault", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("size refusal mutated vault")
+	}
+	if value, _ := store.Get("project"); value.Value() != "retained" {
+		t.Fatal("size refusal changed memory")
+	}
+}
