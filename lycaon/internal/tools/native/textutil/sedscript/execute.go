@@ -208,8 +208,6 @@ func (c *command) selects(m *Machine) (selected, ends bool, err error) {
 		// The parser excludes these as second addresses.
 	case addrMultiple:
 		closes = closes || second.step <= 0 || m.stream.line%second.step == 0
-	case addrLast, addrStep, addrZero:
-		// These kinds add no early endpoint beyond the last-line boundary.
 	}
 	c.span.active = !closes
 	return !c.negate, closes, nil
@@ -233,8 +231,6 @@ func (c *command) startRange(m *Machine) (bool, bool, error) {
 		active = second.line > 0
 	case addrMultiple:
 		active = second.step > 0 && m.stream.line%second.step != 0
-	case addrLast, addrRegex, addrStep, addrZero:
-		// Regex endpoints start testing on the next cycle, not this start line.
 	}
 	c.span.active = active && !m.stream.lastLine()
 	return !c.negate, !c.span.active, nil
@@ -261,8 +257,6 @@ func (a *address) matches(m *Machine) (bool, error) {
 		}
 		match, err := regex.Find(m.ctx, m.space.pattern, 0)
 		return match != nil, err
-	case addrZero, addrRelative, addrMultiple:
-		return false, nil
 	}
 	return false, nil
 }

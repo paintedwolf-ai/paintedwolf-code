@@ -3,7 +3,9 @@
 package textutil
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
@@ -78,5 +80,24 @@ func TestSpillRecordLimitKeepsTypedCommandRefusal(t *testing.T) {
 	reject := toolrejection.AsToolReject(err)
 	if ok || reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "record_bytes" || reject.Data["maximum"] != int64(1) || reject.Data["observed"] != int64(2) {
 		t.Fatalf("spill frame lost its command refusal: ok=%v error=%v", ok, err)
+	}
+}
+
+// Corrupt frame lengths must refuse before allocation or admission callbacks.
+func TestSpillFramesRejectUnsignedOverflowAndNegativeBounds(t *testing.T) {
+	for _, fixture := range []struct {
+		size    uint64
+		maximum int64
+	}{
+		{^uint64(0), 1 << 62}, {1, -1},
+	} {
+		var header [binary.MaxVarintLen64]byte
+		n := binary.PutUvarint(header[:], fixture.size)
+		reader := &fileRunReader{reader: bufio.NewReader(bytes.NewReader(header[:n])), maximum: fixture.maximum, grow: func(int64) error { t.Error("invalid frame reached allocation admission"); return nil }}
+		_, err := reader.Next()
+		refusal := toolrejection.AsToolReject(err)
+		if refusal == nil || refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
+			t.Fatalf("invalid frame lost typed refusal: %v", err)
+		}
 	}
 }

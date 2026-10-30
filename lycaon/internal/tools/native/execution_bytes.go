@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -184,10 +183,6 @@ func (e ExecutionRevisions) captureStream(ctx context.Context, tctx tools.ToolCo
 	}
 	if err != nil {
 		return ExecutionStream{}, err
-	}
-	if err := tctx.ObserveCredentialRead(ctx, resolved.Abs, resolved.DisplayPath, string(content)); err != nil {
-		release()
-		return ExecutionStream{}, fmt.Errorf("record credential file read: %w", err)
 	}
 	return ExecutionStream{
 		Path:            resolved.DisplayPath,

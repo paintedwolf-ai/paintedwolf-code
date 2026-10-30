@@ -28,6 +28,7 @@ func TestTokenRecipientOverridesRequireReview(t *testing.T) {
 		"matching Host":      {requestSpec{target: target, hostHeader: "ISSUER.example:443"}, false},
 		"different Host":     {requestSpec{target: target, hostHeader: "other.example"}, true},
 		"applicable mapping": {requestSpec{target: target, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Address: netip.MustParseAddr("192.0.2.2")}}}, true},
+		"mapped hostname":    {requestSpec{target: target, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", TargetHost: "recipient.example", TargetPort: 8443}}}, true},
 		"other host mapping": {requestSpec{target: target, resolve: []outboundhttp.ResolveMapping{{Host: "other.example", Address: netip.MustParseAddr("192.0.2.2")}}}, false},
 		"other port mapping": {requestSpec{target: target, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Port: 8443, Address: netip.MustParseAddr("192.0.2.2")}}}, false},
 	} {

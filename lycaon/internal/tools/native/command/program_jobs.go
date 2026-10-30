@@ -126,6 +126,8 @@ func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error)
 	for handle := range j.results {
 		if _, err := j.Registry.CommandLine(j.SessionID, handle); err != nil {
 			delete(j.results, handle)
+			delete(j.processes, handle)
+			delete(j.publicIDs, handle)
 		}
 	}
 	for handle := range j.signals {
@@ -139,8 +141,6 @@ func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error)
 			kept = append(kept, handle)
 		} else {
 			delete(j.numbers, handle)
-			delete(j.processes, handle)
-			delete(j.publicIDs, handle)
 		}
 	}
 	j.order = kept

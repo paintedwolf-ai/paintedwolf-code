@@ -65,7 +65,7 @@ time.sleep(60)
 func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 	other, otherCleanup, otherPath := supervisedDaemonCommand(t)
 	defer otherCleanup()
-	testutil.FailErr(t, "start unrelated command", StartPreparedWith(other, other.Start, TrackProcessGroup))
+	testutil.FailErr(t, "start unrelated command", StartPreparedWith(t.Context(), other, other.Start, TrackProcessGroup))
 	otherPID := waitForPIDFile(t, otherPath)
 	_, otherStart, ok := procStat(otherPID)
 	if !ok {

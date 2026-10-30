@@ -29,13 +29,16 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
 		retained = runCtx
 		var startErr error
-		handle, startErr = supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		handle, startErr = supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			noteJobNative(jobCtx, []string{"controlled native fixture"})
 			<-jobCtx.Done()
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, jobCtx.Err()
 		})
 		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
 	})
 	testutil.FailErr(t, "register actual held job", err)
+	handle, err = jobs.Resolve(handle)
+	testutil.FailErr(t, "resolve held job public identity", err)
 	// A new foreground keeps active jobs, while completed prior-program payloads
 	// and signals follow the same pruning boundary as their handle order.
 	jobs.mu.Lock()
@@ -54,7 +57,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	if !testutil.Receive(t, "stopped program settlement", settled) || registry.HasRunning("owned") {
 		t.Fatal("disposal did not drain and settle the held job")
 	}
-	if _, err := supervisor.StartJob(retained, root, func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if _, err := supervisor.StartJob(retained, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		t.Error("retained child reached its owner after disposal")
 		return toolcontract.ProducerResult{}, nil
 	}); !errors.Is(err, ErrProgramStopped) {
@@ -93,12 +96,14 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 		var handle string
 		_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
 			var startErr error
-			handle, startErr = supervisor.StartJob(runCtx, root, func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			handle, startErr = supervisor.StartJob(runCtx, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted}, nil
 			})
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
 		})
 		testutil.FailErr(t, "start real completed job", err)
+		handle, err = jobs.Resolve(handle)
+		testutil.FailErr(t, "resolve completed job public identity", err)
 		supervisor.AfterJobs(id, func(bool) {})
 		if _, _, err := registry.Lifecycle.Wait(ctx, "session", handle); err != nil {
 			t.Fatalf("await real job: %v", err)
@@ -108,7 +113,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 	first := start("first", 23)
 	_, err := jobs.BeginProgram(ctx)
 	testutil.FailErr(t, "begin foreground after job exit", err)
-	result, err := jobs.Wait(ctx, first)
+	result, err := jobs.Wait(ctx, first, nil, "wait")
 	testutil.FailErr(t, "wait completed raw handle across programs", err)
 	if result.Status != 23 || len(jobs.order) != 0 {
 		t.Fatalf("raw-handle result=%+v live order=%v", result, jobs.order)
@@ -119,7 +124,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 	if _, err := jobs.Resolve(first); err == nil {
 		t.Fatal("evicted registry handle retained outcome authority")
 	}
-	result, err = jobs.Wait(ctx, second)
+	result, err = jobs.Wait(ctx, second, nil, "wait")
 	testutil.FailErr(t, "wait newest retained raw handle", err)
 	if result.Status != 42 || len(jobs.results) != 1 {
 		t.Fatalf("bounded retained results=%v latest=%+v", jobs.results, result)
@@ -149,7 +154,8 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	t.Cleanup(finish)
 	root := toolcontract.OperationInvocation{SessionID: "owned", Identity: toolcontract.ExecutionIdentity{ProgramID: "retry-program", ExecutionID: "root"}}
 	_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
-		_, startErr := supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		_, startErr := supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			noteJobNative(jobCtx, []string{"controlled native fixture"})
 			close(started)
 			<-jobCtx.Done()
 			close(canceled)

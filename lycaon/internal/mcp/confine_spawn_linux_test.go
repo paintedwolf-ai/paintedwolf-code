@@ -53,7 +53,7 @@ else:
 	defer spawn.releaseEgress()
 	var output bytes.Buffer
 	spawn.cmd.Stdout, spawn.cmd.Stderr = &output, &output
-	if err := execpkg.RunPrepared(spawn.cmd); err != nil {
+	if err := execpkg.RunPrepared(t.Context(), spawn.cmd); err != nil {
 		t.Fatalf("applied MCP fixture: %v: %s", err, output.String())
 	}
 	data, err := os.ReadFile(guard)

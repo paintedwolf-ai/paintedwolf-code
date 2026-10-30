@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpaction"

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )

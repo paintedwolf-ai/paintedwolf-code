@@ -3,6 +3,8 @@ package native
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/secretcap"

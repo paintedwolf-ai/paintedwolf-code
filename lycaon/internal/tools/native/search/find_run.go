@@ -312,8 +312,6 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 			err = &toolrejection.ToolReject{Code: result.StopCode, Data: map[string]any{"command": spec.Name}}
 		}
 		return result, err
-	case toolcontract.ProducerCompleted, toolcontract.ProducerFailed:
-		// Ordinary command failure remains a producer result, not a host refusal.
 	}
 	return result, nil
 }

@@ -39,8 +39,12 @@ func (spec requestSpec) recipientOverrides() []string {
 	if spec.socket == "" && spec.unixSocket == "" {
 		port, err := outboundhttp.EffectivePort(spec.target)
 		if err == nil {
-			if address, targetPort, applies := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); applies {
-				facts = append(facts, "dial: "+address.String()+":"+strconv.Itoa(int(targetPort)))
+			if dial, applies := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); applies {
+				destination := strings.ToLower(dial.Host)
+				if dial.Address.IsValid() {
+					destination = dial.Address.String()
+				}
+				facts = append(facts, "dial: "+destination+":"+strconv.Itoa(int(dial.Port)))
 			}
 		}
 	}

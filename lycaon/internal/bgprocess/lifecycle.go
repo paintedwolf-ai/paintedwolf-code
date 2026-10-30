@@ -179,9 +179,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	}
 	r.jobs.mu.Lock()
 	if proc.discarded {
-		owned := proc.resources.take()
+		// The retained physical drain owns release and closes only after it
+		// finishes; terminal publication must not take that custody away.
 		r.jobs.mu.Unlock()
-		owned.release()
 		return
 	}
 	if proc.silent || !proc.hasExit || proc.terminalPublished {

@@ -96,7 +96,7 @@ func TestHostExecutionRunsSetuidProcessInspection(t *testing.T) {
 	var output bytes.Buffer
 	command.Stdout = &output
 	command.Stderr = &output
-	testutil.FailErr(t, "run setuid inspection", pwexec.RunPrepared(command))
+	testutil.FailErr(t, "run setuid inspection", pwexec.RunPrepared(t.Context(), command))
 	if strings.TrimSpace(output.String()) != strconv.Itoa(os.Getpid()) {
 		t.Fatalf("unexpected process inspection: %q", output.String())
 	}
