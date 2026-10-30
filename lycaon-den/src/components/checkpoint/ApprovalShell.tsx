@@ -5,8 +5,6 @@ import { ApprovalContentLink, ApprovalContentProvider } from "./ApprovalContentL
 import {
   For,
   Show,
-  createEffect,
-  createSignal,
   type JSX,
 } from "solid-js";
 import type {
@@ -21,9 +19,6 @@ import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { RandomLetterReveal } from "../primitives/RandomLetterReveal.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
-import {
-  focusWithoutScroll,
-} from "../../platform/interaction/focus.ts";
 import {
   createDockCollapse,
   DockCollapseBody,
