@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -9,15 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ReviewedProgressInputRetention captures the structured envelope owner's
-// reviewed input. Progress has no fabricated source node or command spelling.
-type ReviewedProgressInputRetention interface {
-	RetainReviewedProgressInputs(context.Context, toolcontract.ProgramProgressIdentity, toolcontract.ReviewedOperationInputs) (string, error)
-}
-
 func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, identity toolcontract.ProgramProgressIdentity, modelCallID string, inputs toolcontract.ReviewedOperationInputs) error {
-	retainer, ok := r.Inputs.(ReviewedProgressInputRetention)
-	if r.Recorder == nil || r.Recorder.database == nil || !ok || identity.ProgramID == "" || identity.ExecutionID == "" || identity.ActorID == "" || identity.SessionID == "" || identity.RootSessionID == "" || modelCallID == "" {
+	if r.Recorder == nil || r.Recorder.database == nil || r.Inputs.Outputs == nil || identity.ProgramID == "" || identity.ExecutionID == "" || identity.ActorID == "" || identity.SessionID == "" || identity.RootSessionID == "" || modelCallID == "" {
 		return fmt.Errorf("progress start requires actual envelope, owner scope and reviewed retention")
 	}
 	if err := identity.Scope.Validate(); err != nil {
@@ -26,24 +20,21 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if err := validateReviewedInputs(inputs); err != nil {
 		return err
 	}
-	reference, err := retainer.RetainReviewedProgressInputs(ctx, identity, inputs)
-	if err != nil {
-		return err
+	if identity.ProgramID != r.Inputs.ProgramID || identity.SessionID != r.Inputs.Scope.SessionID || identity.RootSessionID != r.Inputs.Scope.RootSessionID || identity.Scope.ProjectID != r.Inputs.Scope.ProjectID {
+		return fmt.Errorf("reviewed input capture does not match actual progress scope")
 	}
-	if reference == "" {
-		return fmt.Errorf("progress retention returned no reference")
+	start := reviewedOwnerStart{programID: identity.ProgramID, executionID: identity.ExecutionID, progress: true}
+	start.record = func(ctx context.Context, tx *sql.Tx, reference string) error {
+		return r.Recorder.startProgressOwner(ctx, tx, identity, modelCallID, inputs, reference)
 	}
+	return r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs)
+}
+
+func (r *SQLRecorder) startProgressOwner(ctx context.Context, tx *sql.Tx, identity toolcontract.ProgramProgressIdentity, modelCallID string, inputs toolcontract.ReviewedOperationInputs, reference string) error {
 	scope, err := json.Marshal(identity.Scope)
 	if err != nil {
 		return err
 	}
-	tx, err := r.Recorder.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	// Current root scope is read from P09's progress owner immediately before
-	// this marker. The model parent and addressed program must still be running.
 	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
 		return err
 	}
@@ -58,7 +49,7 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // ProgressSettlement is the actual AuthorUpdate owner's outcome. Updated content

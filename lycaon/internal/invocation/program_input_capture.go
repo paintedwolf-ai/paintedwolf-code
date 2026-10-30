@@ -59,33 +59,14 @@ func (p ProgramInputCapture) project(ctx context.Context, state toolcontract.Rev
 	return result, metadata, release, nil
 }
 
-func (p ProgramInputCapture) RetainReviewedProgramInputs(ctx context.Context, in toolcontract.OperationInvocation, review toolcontract.ReviewedOperationInputs) (string, error) {
+func (p ProgramInputCapture) validateNativeScope(in toolcontract.OperationInvocation) error {
 	if err := in.Validate(); err != nil {
-		return "", err
+		return err
 	}
 	if in.Kind != toolcontract.ProgramChildInvocation || in.Identity.ProgramID != p.ProgramID || in.SessionID != p.Scope.SessionID || in.Scope.ProjectID != p.Scope.ProjectID {
-		return "", fmt.Errorf("reviewed input capture does not match actual child scope")
+		return fmt.Errorf("reviewed input capture does not match actual child scope")
 	}
-	return p.retain(ctx, in.Identity.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
-		body, _, err := p.Outputs.recorder.AttachProgramOutput(ctx, p.ProgramID, RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}, spill, p.Outputs.resources)
-		return body, err
-	}, func(reference string, body []byte, redacted bool) error {
-		return p.Outputs.attachInlineInput(ctx, p.ProgramID, in.Identity.ExecutionID, in.Identity.ExecutionID, reference, body, redacted)
-	})
-}
-
-func (p ProgramInputCapture) RetainReviewedProgressInputs(ctx context.Context, in toolcontract.ProgramProgressIdentity, review toolcontract.ReviewedOperationInputs) (string, error) {
-	if err := in.Scope.Validate(); err != nil {
-		return "", err
-	}
-	if in.ExecutionID == "" || in.ActorID == "" || in.ProgramID != p.ProgramID || in.SessionID != p.Scope.SessionID || in.RootSessionID != p.Scope.RootSessionID || in.Scope.ProjectID != p.Scope.ProjectID {
-		return "", fmt.Errorf("reviewed input capture does not match actual progress scope")
-	}
-	return p.retain(ctx, in.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
-		return p.Outputs.recorder.attachProgressInput(ctx, in, reference, spill, redacted)
-	}, func(reference string, body []byte, redacted bool) error {
-		return p.Outputs.attachInlineInput(ctx, p.ProgramID, "", in.ExecutionID, reference, body, redacted)
-	})
+	return nil
 }
 
 func (p ProgramInputCapture) retain(ctx context.Context, execution string, review toolcontract.ReviewedOperationInputs, attach func(string, *tooloutput.StreamSpill, bool) (*tooloutput.RetainedStreamBody, error), inline func(string, []byte, bool) error) (string, error) {
@@ -168,9 +149,6 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 	entry.body = body
 	return nil
 }
-
-var _ ReviewedProgramInputRetention = ProgramInputCapture{}
-var _ ReviewedProgressInputRetention = ProgramInputCapture{}
 
 // PrepareChild atomically attaches the actual screened expanded-input body and
 // the new dynamic receipt. The caller supplies no placeholder body reference.

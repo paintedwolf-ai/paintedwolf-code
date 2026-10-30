@@ -2,43 +2,34 @@ package invocation
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ReviewedProgramInputRetention screens and retains final opaque-reference inputs
-// outside the SQL transaction. Resolved secret values never cross this port.
-type ReviewedProgramInputRetention interface {
-	RetainReviewedProgramInputs(context.Context, toolcontract.OperationInvocation, toolcontract.ReviewedOperationInputs) (string, error)
-}
-
-// ProgramAdmissionRecorder connects the existing admission start port to durable
-// invocation facts. Capture and screening finish before its writer transaction.
+// ProgramAdmissionRecorder commits screened inputs before owner dispatch.
 type ProgramAdmissionRecorder struct {
 	Recorder           *SQLRecorder
-	Inputs             ReviewedProgramInputRetention
+	Inputs             ProgramInputCapture
 	OwnerStartRecorded bool
 }
 
 func (r *ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound toolcontract.BoundOperation, modelCallID string, inputs toolcontract.ReviewedOperationInputs) error {
-	if r.Recorder == nil || r.Inputs == nil || !validDigest(inputs.ArgumentsDigest()) {
+	if r.Recorder == nil || r.Inputs.Outputs == nil || !validDigest(inputs.ArgumentsDigest()) {
 		return fmt.Errorf("program start requires screened reviewed-input retention")
 	}
 	if err := validateReviewedInputs(inputs); err != nil {
 		return err
 	}
-	var err error
-	if err := bound.Invocation().Validate(); err != nil {
+	in := bound.Invocation()
+	if err := r.Inputs.validateNativeScope(in); err != nil {
 		return err
 	}
-	reference, err := r.Inputs.RetainReviewedProgramInputs(ctx, bound.Invocation(), inputs)
-	if err != nil {
-		return err
+	start := reviewedOwnerStart{programID: in.Identity.ProgramID, executionID: in.Identity.ExecutionID}
+	start.record = func(ctx context.Context, tx *sql.Tx, reference string) error {
+		return r.Recorder.startNativeOwner(ctx, tx, bound, modelCallID, inputs.ArgumentsDigest(), reference, inputs.Representation())
 	}
-	if reference == "" {
-		return fmt.Errorf("reviewed input retention returned no reference")
-	}
-	if err := r.Recorder.startNativeOwner(ctx, bound, modelCallID, inputs.ArgumentsDigest(), reference, inputs.Representation()); err != nil {
+	if err := r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs); err != nil {
 		return err
 	}
 	r.OwnerStartRecorded = true
