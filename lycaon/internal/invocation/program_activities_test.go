@@ -24,7 +24,7 @@ func TestActivitiesSplitExternalProcessesAndAttachOutputSteps(t *testing.T) {
 	test.arguments["command"] = "cargo test"
 	grep := activityFixture("grep", "pipe-test", "grep", "grep", 40)
 	head := activityFixture("head", "pipe-test", "read", "head", 50)
-	activities := composeActivities([]activityInput{build, tail, test, grep, head})
+	activities := composeActivities([]activityInput{build, tail, test, grep, head}, true)
 	if len(activities) != 2 || activities[0].Subject != "cargo build --release" || activities[1].Subject != "cargo test" || len(activities[1].ExecutionIDs) != 3 {
 		t.Fatalf("activities = %+v", activities)
 	}
@@ -40,7 +40,7 @@ func TestActivitiesKeepMutationRefusalAndContextFailure(t *testing.T) {
 	commit.receipt.State = "refused"
 	cd := activityFixture("cd", "root", "cd", "cd", 10)
 	cd.receipt.State = "failed"
-	values := composeActivities([]activityInput{stage, commit, cd})
+	values := composeActivities([]activityInput{stage, commit, cd}, true)
 	if len(values) != 3 || values[0].Label != "Stage changes" || values[1].Outcome != "Refused" || values[2].State != "failed" {
 		t.Fatalf("consequences disappeared: %+v", values)
 	}
@@ -53,7 +53,7 @@ func TestActivitiesUsePathsAndCatalogFamilyWithoutReadingOutput(t *testing.T) {
 	filter := activityFixture("filter", "pipe", "read", "head", 5)
 	external := activityFixture("external", "root", "command", "external", 10)
 	external.arguments["command"] = "custom-helper claim-tests-passed"
-	values := composeActivities([]activityInput{read, filter, external})
+	values := composeActivities([]activityInput{read, filter, external}, true)
 	if len(values) != 2 || values[0].Label != "Read source" || values[0].Subject != "file.rs" || values[1].Label != "Run process" {
 		t.Fatalf("classification = %+v", values)
 	}
@@ -61,13 +61,13 @@ func TestActivitiesUsePathsAndCatalogFamilyWithoutReadingOutput(t *testing.T) {
 
 func TestActivitiesRetainControlOnlyAndUnknownOperations(t *testing.T) {
 	control := activityFixture("cd", "root", "cd", "cd", 0)
-	values := composeActivities([]activityInput{control})
+	values := composeActivities([]activityInput{control}, true)
 	if len(values) != 1 {
 		t.Fatal("control-only execution disappeared")
 	}
 	unknown := activityFixture("unknown", "root", "extension", "extension", 0)
 	unknown.receipt.Lifecycle = "effect_attempt"
-	if got := composeActivities([]activityInput{unknown})[0]; got.Label != "Run command" {
+	if got := composeActivities([]activityInput{unknown}, true)[0]; got.Label != "Run command" {
 		t.Fatalf("unknown operation = %+v", got)
 	}
 	for _, state := range []string{"prepared", "waiting", "refused", "failed", "interrupted", "unknown"} {
@@ -103,5 +103,18 @@ func TestActivityInputBoundsAndScreenedValue(t *testing.T) {
 	cancel()
 	if _, err := budget.ReserveProgramState(ctx, 1); err == nil {
 		t.Fatal("ignored cancellation")
+	}
+}
+
+func TestActivitiesDoNotPublishSuccessfulContextAsAProvisionalRow(t *testing.T) {
+	cd := activityFixture("cd", "root", "cd", "cd", 0)
+	cd.receipt.State = "running"
+	if values := composeActivities([]activityInput{cd}, false); len(values) != 0 {
+		t.Fatalf("provisional context became a row: %+v", values)
+	}
+	tail := activityFixture("tail", "pipeline", "read", "tail", 20)
+	tail.receipt.State = "running"
+	if values := composeActivities([]activityInput{tail}, false); len(values) != 0 {
+		t.Fatalf("supporting filter became a row before its producer: %+v", values)
 	}
 }
