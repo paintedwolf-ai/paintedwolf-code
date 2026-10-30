@@ -244,13 +244,24 @@ listed name counts against `traversal_visits`, and every file read is pinned
 through execution revisions before it is searched. grep recursion visits
 hidden entries and applies no ignore file. rg skips hidden entries and applies
 the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
-every entry and never follows a link. All of them skip entries the read
+every entry and follows links only when `-H` or `-L` requests it. All of them skip entries the read
 boundary protects. A file holding NUL bytes prints GNU's
 `grep: PATH: binary file matches` once on stderr. A complete search without
 matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
 typed stop, never a no-match. `find -exec` dispatches each child through the
 evaluator frame as an ordinary program child. `find -delete` removes entries
 only through the recoverable removal owner.
+
+Directory membership comes from the shared source catalog after current read
+admission. Cold directories prepare bounded observations; repeated commands
+reuse complete membership after watcher or directory-stamp validation. Hidden,
+ignored, and VCS entries remain eligible. An incomplete namespace, a followed
+link, or an external root uses live listing. Each listed name still charges the
+command's traversal budget. Native find evaluates name and path predicates
+before requesting live metadata; reached metadata predicates, actions, and
+printed matches validate the current entry through its held root. Discovery
+completion logs distinguish entry metadata reads, directory preparations,
+membership reuse, and live listings.
 
 ### Stream queries and format-aware edits
 
