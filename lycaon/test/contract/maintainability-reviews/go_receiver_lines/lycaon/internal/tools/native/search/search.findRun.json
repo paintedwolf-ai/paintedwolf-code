@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/search/search.findRun",
+  "kind": "algorithm",
+  "workstream": "indexed-command-discovery",
+  "disposition": "retain",
+  "reason": "findRun owns one expression traversal, including boolean short circuiting, pruning, depth, child dispatch, and recoverable deletion. Shared discovery and metadata fetching live on walker. Retain this operation algorithm below 550 receiver lines, 16 methods, and 17 state fields so action ordering and traversal authority stay together. Indexed/live parity, current authorization, deletion order, and traversal accounting support this shape.",
+  "reviewed_commit": "8efed260ad1d42cbc47a22c680bdd81c484ae354",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/discovery_test.go": "94fdf89e35d935d69b2731f8770c24884c759557f29caf8af3f7e2c7639781fc",
+    "lycaon/internal/tools/native/search/find_test.go": "a43f9faef0e322e864e264850611a66588a046143cd74955fb1e9e02ab57d8b7"
+  },
+  "reviewed_shape": "0029d15b9e134435c87451878d98839749b224c50db9009083fac4adecd9fc49"
+}

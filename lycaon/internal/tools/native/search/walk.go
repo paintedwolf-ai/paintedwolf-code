@@ -150,6 +150,13 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		if err := w.visit(); err != nil {
 			return nil, err
 		}
+		rel := name
+		if parent := dir.bound.Resolved.ScopeRel; parent != "" && parent != "." {
+			rel = parent + "/" + name
+		}
+		if !entryMayBeRead(filter, rel) {
+			continue
+		}
 		w.work.metadata++
 		w.work.relative++
 		child, st, err := opened.StatChild(name)
