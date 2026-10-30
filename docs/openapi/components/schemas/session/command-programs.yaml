@@ -20,6 +20,13 @@ components:
         progress_ref: {type: string}
         started_at: {type: string, format: date-time}
         settled_at: {type: string, format: date-time, x-go-pointer: true}
+        activities:
+          type: array
+          description: Initial host activity identities. Details loading must not regroup these rows.
+          items:
+            $ref: '#/components/schemas/CommandActivity'
+        activities_cursor: {type: string}
+        activities_omitted: {type: integer}
         outputs:
           type: array
           maxItems: 2
@@ -176,6 +183,11 @@ components:
           description: Known static nodes only; never speculative future loop iterations.
           items:
             $ref: '#/components/schemas/CommandProgramNode'
+        activities:
+          type: array
+          description: Host-composed work for this bounded execution page, in first-touch order. Supporting operations retain their execution identities.
+          items:
+            $ref: '#/components/schemas/CommandActivity'
         executions_omitted: {type: integer}
         nodes_omitted: {type: integer}
         next_cursor: {type: string}
@@ -196,3 +208,34 @@ components:
         arguments_digest: {type: string}
         arguments_ref: {type: string}
         detail_ref: {type: string}
+    CommandActivity:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, group, label, subject, outcome, state, execution_ids, spans]
+      properties:
+        id: {type: string}
+        group: {type: string}
+        label: {type: string}
+        subject: {type: string}
+        directory: {type: string}
+        outcome: {type: string}
+        state: {type: string, enum: [running, waiting, completed, refused, failed, interrupted, unknown]}
+        status_code: {type: integer, x-go-pointer: true}
+        merge_key: {type: string, description: Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.}
+        execution_ids:
+          type: array
+          items: {type: string}
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandActivitySpan'
+    CommandActivitySpan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [source_ref, start_byte, end_byte]
+      properties:
+        source_ref: {type: string}
+        start_byte: {type: integer}
+        end_byte: {type: integer}

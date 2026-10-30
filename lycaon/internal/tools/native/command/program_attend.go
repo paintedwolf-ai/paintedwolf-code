@@ -130,8 +130,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
-		if projection, err := r.Recorder.ProjectProgram(callCtx, run.tc.Identity.SessionID, programID, 1); err == nil {
-			receipt := projection.Program
+		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
 			out.CommandProgram = &receipt
 		}
 	}

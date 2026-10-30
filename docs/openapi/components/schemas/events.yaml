@@ -451,9 +451,12 @@ components:
       required: [phase, files_searched, files_skipped, matches]
       description: Measured discovery work. Counts are observations, not a completion estimate.
       properties:
+        command_program:
+          x-go-pointer: true
+          $ref: session/command-programs.yaml#/components/schemas/CommandProgramReceipt
         phase:
           type: string
-          enum: [selecting, searching]
+          enum: [selecting, searching, executing]
         files_searched:
           type: integer
           minimum: 0

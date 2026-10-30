@@ -26372,6 +26372,246 @@ components:
       enum:
         - active
         - done
+    CommandActivitySpan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - source_ref
+        - start_byte
+        - end_byte
+      properties:
+        source_ref:
+          type: string
+        start_byte:
+          type: integer
+        end_byte:
+          type: integer
+    CommandActivity:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - group
+        - label
+        - subject
+        - outcome
+        - state
+        - execution_ids
+        - spans
+      properties:
+        id:
+          type: string
+        group:
+          type: string
+        label:
+          type: string
+        subject:
+          type: string
+        directory:
+          type: string
+        outcome:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - refused
+            - failed
+            - interrupted
+            - unknown
+        status_code:
+          type: integer
+          x-go-pointer: true
+        merge_key:
+          type: string
+          description: Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
+        execution_ids:
+          type: array
+          items:
+            type: string
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandActivitySpan'
+    CommandProgramOutputLimit:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
+      required:
+        - code
+        - limit_id
+        - maximum
+        - observed
+      properties:
+        code:
+          type: string
+          enum:
+            - COMMAND_LIMIT_EXCEEDED
+        limit_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+        maximum:
+          type: integer
+          format: int64
+          minimum: 1
+        observed:
+          type: integer
+          format: int64
+          minimum: 1
+    CommandProgramOutputWindow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - stream
+        - ref
+        - output_path
+        - total_bytes
+        - total_lines
+        - complete
+        - truncated
+        - head_end_byte
+        - head_end_line
+        - tail_start_byte
+        - tail_start_line
+        - omitted_bytes
+        - omitted_lines
+        - inline_budget_bytes
+      properties:
+        stream:
+          type: string
+          enum:
+            - stdout
+            - stderr
+        ref:
+          type: string
+        output_path:
+          type: string
+          description: Session output address of the retained stream copy.
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Bytes in the saved stream. For an incomplete stream the final total is unknown.
+        total_lines:
+          type: integer
+          minimum: 0
+          description: Lines in the saved stream. For an incomplete stream the final total is unknown.
+        complete:
+          type: boolean
+        truncated:
+          type: boolean
+        head_end_byte:
+          type: integer
+          format: int64
+          minimum: 0
+        head_end_line:
+          type: integer
+          minimum: 0
+        tail_start_byte:
+          type: integer
+          format: int64
+          minimum: 0
+        tail_start_line:
+          type: integer
+          minimum: 0
+        omitted_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        omitted_lines:
+          type: integer
+          minimum: 0
+        inline_budget_bytes:
+          type: integer
+          minimum: 1
+        limit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramOutputLimit'
+    CommandProgramReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - parent_receipt_id
+        - language_version
+        - catalog_digest
+        - source_digest
+        - source_ref
+        - state
+        - progress_state
+        - detail_ref
+        - started_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_receipt_id:
+          type: string
+          format: uuid
+        language_version:
+          type: integer
+        catalog_digest:
+          type: string
+        source_digest:
+          type: string
+        source_ref:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - rejected
+            - failed
+            - interrupted
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        detail_ref:
+          type: string
+        progress_state:
+          type: string
+          enum:
+            - unchanged
+            - committed
+            - rejected
+            - unknown
+        progress_ref:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        settled_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+        activities:
+          type: array
+          description: Initial host activity identities. Details loading must not regroup these rows.
+          items:
+            $ref: '#/components/schemas/CommandActivity'
+        activities_cursor:
+          type: string
+        activities_omitted:
+          type: integer
+        outputs:
+          type: array
+          maxItems: 2
+          description: Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
+          items:
+            $ref: '#/components/schemas/CommandProgramOutputWindow'
     ToolProgress:
       x-go-generate: true
       type: object
@@ -26383,11 +26623,15 @@ components:
         - matches
       description: Measured discovery work. Counts are observations, not a completion estimate.
       properties:
+        command_program:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramReceipt'
         phase:
           type: string
           enum:
             - selecting
             - searching
+            - executing
         files_searched:
           type: integer
           minimum: 0
@@ -27317,172 +27561,6 @@ components:
           x-go-pointer: true
           type: string
           format: date-time
-    CommandProgramOutputLimit:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      description: Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
-      required:
-        - code
-        - limit_id
-        - maximum
-        - observed
-      properties:
-        code:
-          type: string
-          enum:
-            - COMMAND_LIMIT_EXCEEDED
-        limit_id:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-        maximum:
-          type: integer
-          format: int64
-          minimum: 1
-        observed:
-          type: integer
-          format: int64
-          minimum: 1
-    CommandProgramOutputWindow:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - stream
-        - ref
-        - output_path
-        - total_bytes
-        - total_lines
-        - complete
-        - truncated
-        - head_end_byte
-        - head_end_line
-        - tail_start_byte
-        - tail_start_line
-        - omitted_bytes
-        - omitted_lines
-        - inline_budget_bytes
-      properties:
-        stream:
-          type: string
-          enum:
-            - stdout
-            - stderr
-        ref:
-          type: string
-        output_path:
-          type: string
-          description: Session output address of the retained stream copy.
-        total_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Bytes in the saved stream. For an incomplete stream the final total is unknown.
-        total_lines:
-          type: integer
-          minimum: 0
-          description: Lines in the saved stream. For an incomplete stream the final total is unknown.
-        complete:
-          type: boolean
-        truncated:
-          type: boolean
-        head_end_byte:
-          type: integer
-          format: int64
-          minimum: 0
-        head_end_line:
-          type: integer
-          minimum: 0
-        tail_start_byte:
-          type: integer
-          format: int64
-          minimum: 0
-        tail_start_line:
-          type: integer
-          minimum: 0
-        omitted_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-        omitted_lines:
-          type: integer
-          minimum: 0
-        inline_budget_bytes:
-          type: integer
-          minimum: 1
-        limit:
-          x-go-pointer: true
-          $ref: '#/components/schemas/CommandProgramOutputLimit'
-    CommandProgramReceipt:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - parent_receipt_id
-        - language_version
-        - catalog_digest
-        - source_digest
-        - source_ref
-        - state
-        - progress_state
-        - detail_ref
-        - started_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        parent_receipt_id:
-          type: string
-          format: uuid
-        language_version:
-          type: integer
-        catalog_digest:
-          type: string
-        source_digest:
-          type: string
-        source_ref:
-          type: string
-        state:
-          type: string
-          enum:
-            - running
-            - waiting
-            - completed
-            - rejected
-            - failed
-            - interrupted
-        status_code:
-          type: integer
-          minimum: 0
-          maximum: 255
-          x-go-pointer: true
-        stop_code:
-          type: string
-        detail_ref:
-          type: string
-        progress_state:
-          type: string
-          enum:
-            - unchanged
-            - committed
-            - rejected
-            - unknown
-        progress_ref:
-          type: string
-        started_at:
-          type: string
-          format: date-time
-        settled_at:
-          type: string
-          format: date-time
-          x-go-pointer: true
-        outputs:
-          type: array
-          maxItems: 2
-          description: Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
-          items:
-            $ref: '#/components/schemas/CommandProgramOutputWindow'
     ToolResultOutcome:
       type: string
       enum:
@@ -29504,6 +29582,11 @@ components:
           description: Known static nodes only; never speculative future loop iterations.
           items:
             $ref: '#/components/schemas/CommandProgramNode'
+        activities:
+          type: array
+          description: Host-composed work for this bounded execution page, in first-touch order. Supporting operations retain their execution identities.
+          items:
+            $ref: '#/components/schemas/CommandActivity'
         executions_omitted:
           type: integer
         nodes_omitted:

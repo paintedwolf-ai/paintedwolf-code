@@ -96,7 +96,11 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 	if err := oneProgramTransition(transition); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	notifyActivity(ctx, programID)
+	return nil
 }
 
 func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in toolcontract.ProgramSettlement) error {
