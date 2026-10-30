@@ -54,7 +54,8 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 			}
 			testutil.FailErr(t, "publish newer baseline", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 				Generation: 1, CoveredThroughOrd: rows[1].Ord, CoveredThroughID: rows[1].ID, SourceSeq: rows[1].Seq, Continuation: record,
-				Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, ContentParts: []api.MessageContentPart{{Source: "compaction_summary"}}}},
+				Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier continuation. ", 100),
+					ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: strings.Repeat("Earlier continuation. ", 100)}}}},
 			}))
 			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
 				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}

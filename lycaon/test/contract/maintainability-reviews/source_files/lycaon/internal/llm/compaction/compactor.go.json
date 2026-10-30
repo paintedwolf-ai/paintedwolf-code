@@ -1,0 +1,18 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/llm/compaction/compactor.go",
+  "kind": "algorithm",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "Retain this 354-line compaction entry point. It binds immutable session inputs, result measurements, chunk reduction, and provenance-preserving replacement. Page selection, revision identity, text measurement, and asynchronous history publication already have domain files. The selected-source capture adds no runtime dependency or durable state; focused reduction and trust contracts support the bounded entry point.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 354,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reduction_page_test.go": "a07033f0e585db2c27dab8528132d95e1ae6e2985e32d5780c0b1ca2bdce853d",
+    "lycaon/internal/llm/compaction/reduction_progress_test.go": "9ca47f808a47ec4344e8e02e8289b5f785c0838768a6d76fdf75fd8d983e0698",
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/llm/compaction/reduction_ranking_test.go": "cd2fb407f9a0ad90c3524c01eee0a9d9c0af7a56a2d7065a90c9c22646d4b91b",
+    "lycaon/internal/llm/compaction/reduction_retry_test.go": "32f6bc4c2f33597f3f1bc130f992a8e0ab484447270ffb5d945cb9311e8dc228",
+    "lycaon/internal/llm/compaction/compaction_trust_floor_test.go": "531298568075ae1276f4d10503f58f00c595f57a4041fc8d540f2986d5f7177c"
+  }
+}

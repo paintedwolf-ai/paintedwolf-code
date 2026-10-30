@@ -1,0 +1,19 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/llm/compaction",
+  "kind": "test_suite",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "Retain this 31-file compaction suite beside the algorithm it exercises. Separate source-coverage, reduction, retry, and ranking contracts test independent systemic invariants through shared fixtures and real compactor entry points. They enforce deterministic work and size proxies without machine-dependent timing gates. This exact member ceiling keeps the white-box contracts together without mirroring the runtime in another test API.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 31,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reduction_page_test.go": "a07033f0e585db2c27dab8528132d95e1ae6e2985e32d5780c0b1ca2bdce853d",
+    "lycaon/internal/llm/compaction/reduction_progress_test.go": "9ca47f808a47ec4344e8e02e8289b5f785c0838768a6d76fdf75fd8d983e0698",
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/llm/compaction/reduction_ranking_test.go": "cd2fb407f9a0ad90c3524c01eee0a9d9c0af7a56a2d7065a90c9c22646d4b91b",
+    "lycaon/internal/llm/compaction/reduction_retry_test.go": "32f6bc4c2f33597f3f1bc130f992a8e0ab484447270ffb5d945cb9311e8dc228",
+    "lycaon/internal/llm/compaction/compaction_savings_test.go": "6e0e08f0886e9fa49d0bebd9663902a9990376b48b2707c79dd69025f79c8a20"
+  },
+  "reviewed_shape": "4cbd88552f26bd2bc3a4f25948cd5affc46c587d0b8e3bc8303472d5bc2f61cf"
+}
