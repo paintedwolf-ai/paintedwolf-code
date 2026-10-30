@@ -145,7 +145,7 @@ func (r *findRun) visit(e entry) error {
 	}
 	if e.dir() || e.link {
 		var err error
-		e, err = r.walker.inspect(e, r.followAll)
+		e, err = r.walker.inspect(e)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
 				return nil
