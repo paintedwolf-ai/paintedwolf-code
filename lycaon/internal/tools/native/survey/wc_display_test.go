@@ -18,7 +18,7 @@ func TestCounterDisplayColumnsAreIndependentOfScalarLengthAndChunking(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, step := range []int{1, len(tc.input) + 1} {
-				var counter Counter
+				counter := NewCounter(allCountMetrics)
 				for start := 0; start < len(tc.input); start += step {
 					_, _ = counter.Write([]byte(tc.input[start:min(start+step, len(tc.input))]))
 				}

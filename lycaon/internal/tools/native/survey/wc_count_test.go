@@ -31,7 +31,7 @@ func TestCountBytesCountsOneCapturedRepresentation(t *testing.T) {
 		if got := CountBytes([]byte(c.in)); got != c.want {
 			t.Errorf("%s: CountBytes = %+v, want %+v", name, got, c.want)
 		}
-		var chunked Counter
+		chunked := NewCounter(allCountMetrics)
 		for i := 0; i < len(c.in); i++ {
 			_, _ = chunked.Write([]byte{c.in[i]})
 		}
