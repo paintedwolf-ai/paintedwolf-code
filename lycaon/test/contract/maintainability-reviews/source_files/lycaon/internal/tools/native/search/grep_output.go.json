@@ -4,7 +4,7 @@
   "kind": "algorithm",
   "workstream": "command-search-throughput",
   "disposition": "retain",
-  "reason": "Retain the 335-line file-search and output-mode boundary. It selects ordinary, count, binary, only-match and context emission around one verified file stream; transformed record storage has its own admitted owner. Separating individual mode callbacks would duplicate stream status and output-limit decisions. Focused exact ordering, source mapping, transformed output and cleanup contracts support this ceiling.",
+  "reason": "Retain the 335-line record-selection and output-mode boundary. It selects ordinary, count, binary, only-match and context emission around one input stream; transformed record storage has its own admitted owner. Separating individual mode callbacks would duplicate stream status and output-limit decisions. Focused exact ordering, source mapping, transformed output and cleanup contracts support this ceiling.",
   "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
   "ceiling": 335,
   "boundaries": {
