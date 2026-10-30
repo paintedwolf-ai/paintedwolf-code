@@ -4,7 +4,7 @@
   "kind": "test_suite",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. One live test file adds the delegated-service refusal through a real confined process, beside the shared probe and greeter fixtures it uses. Freeze this reviewed shape at 67 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available.",
+  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Membership grew by the key-material floor contract landed on main; the retained socket contracts are unchanged. One live test file adds the delegated-service refusal through a real confined process, beside the shared probe and greeter fixtures it uses. Freeze this reviewed shape at 67 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available. The main refresh composes native cache-root selection and descriptor-relative first-use preparation before profile rendering with retained socket duplication and rollback cleanup after rendering. These steps remain ordered in the existing command launch transaction; native cache adapters do not gain socket authority, and socket grants do not widen filesystem roots. Keep the prior ceiling, shape and existing fingerprints pending focused verification of this combined source; warning renewal remains visible.",
   "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
   "ceiling": 67,
   "boundaries": {
@@ -18,7 +18,14 @@
     "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
     "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b",
     "lycaon/internal/confine/boundary_linux_metadata_live_test.go": "5d1ce8c43986de57235e6c244e869a7ad157ee81ebae13d5405cca7c7814f20f",
-    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d"
+    "lycaon/internal/confine/boundary_linux_stdio_live_test.go": "02544fd27dddcc324f823e8c7a56d198f46ae510d873c30faff7ef11a600bd7d",
+    "lycaon/internal/confine/package_cache_roots_test.go": "048764f12085435079e6e454cd37b0d21ae10816c241807efa53121120fb0e9b",
+    "lycaon/internal/confine/package_cache_roots_linux_test.go": "5ad86550466c07f88e47ca5afc9e567c96de5dd34596055b1199362334e3c42a",
+    "lycaon/internal/confine/package_cache_roots_darwin_test.go": "77b4ad37e41696374c98d3461e17e076e9052010b571be260e2fe349f06fc540",
+    "lycaon/internal/confine/package_cache_roots_windows_test.go": "962938548bf9397cf370daf512ebca7b76d51110dfe5933fd59edd562e845829",
+    "lycaon/internal/confine/package_cache_roots_other_test.go": "1b1ec65ce53b822c47ed2f8370a6d9b4f29985754fced7cd4518580baaade8cf",
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
+    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef"
   },
   "reviewed_shape": "ed6768204ff8ea4ed55849713565f9c38ecb0ca559612584a9a0e9847564cb82"
 }

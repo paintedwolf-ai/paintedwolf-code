@@ -456,6 +456,7 @@
     "seatbelt:scanstress"
   ],
   "selection": {
+    "test:runner": "unittest",
     "test:digest": "go",
     "test:oar": "go",
     "test:short": "go",

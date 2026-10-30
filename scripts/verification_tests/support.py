@@ -33,6 +33,8 @@ class BatchFixture(unittest.TestCase):
         self.scripts.mkdir()
         for path in SCRIPT.parent.glob("verification_*.py"):
             shutil.copy2(path, self.scripts / path.name)
+        shutil.copytree(SCRIPT.parent / "verification_lifecycle", self.scripts / "verification_lifecycle",
+                        ignore=shutil.ignore_patterns("__pycache__"))
         for name in ["test-execution.py", "test-source-snapshot.sh", "test-run-isolation.sh", "test-run-lease.py",
                      "digest-run-lock.sh", "repo-snapshot-lock.sh", "snapshot-publish.sh",
                      "artifact-paths.sh", "artifact_paths.py", "checkout-cache-dir.sh", "sha256.sh"]:
