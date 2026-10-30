@@ -10,6 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/litprefilter"
 )
 
+var errLiteralReadIncomplete = errors.New("content observation was incomplete")
+
 type literalBloom []uint64
 
 func buildLiteralBloom(
@@ -26,43 +28,28 @@ func buildLiteralBloom(
 	}
 	defer func() { _ = f.Close() }()
 	builder := newLiteralContent(entry.Size)
+	var total int64
 	buf := make([]byte, 64*1024)
 	for {
 		if err := ctx.Err(); err != nil {
 			return literalFileBlooms{}, err
 		}
 		n, err := f.Read(buf)
+		total += int64(n)
+		if total > entry.Size {
+			return literalFileBlooms{}, errLiteralReadIncomplete
+		}
 		if _, buildErr := builder.Write(buf[:n]); buildErr != nil {
 			return literalFileBlooms{}, buildErr
 		}
 		if errors.Is(err, io.EOF) {
+			if total != entry.Size {
+				return literalFileBlooms{}, errLiteralReadIncomplete
+			}
 			return builder.finish()
 		}
 		if err != nil {
 			return literalFileBlooms{}, err
-		}
-	}
-}
-
-// buildLiteralBloomReader carries split UTF-8 runes across chunks before folding.
-func buildLiteralBloomReader(ctx context.Context, reader io.Reader, contentBytes int64) (literalBloom, bool, error) {
-	stream := newLiteralBloomStream(contentBytes)
-	buf := make([]byte, 64*1024)
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, false, err
-		}
-		n, err := reader.Read(buf)
-		_, _ = stream.Write(buf[:n])
-		if stream.invalid {
-			return nil, false, nil
-		}
-		if errors.Is(err, io.EOF) {
-			bloom, searchable := stream.finish()
-			return bloom, searchable, nil
-		}
-		if err != nil {
-			return nil, false, err
 		}
 	}
 }

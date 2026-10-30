@@ -31,7 +31,7 @@ func contentEntry(e entry) sourcecatalog.Entry {
 }
 
 func (index grepContentIndex) eligible(e entry) bool {
-	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed || e.followed || e.stat.Links != 1 || !e.stat.POSIX {
+	if index.literals == nil || e.link || e.bound.Resolved.External || e.bound.Resolved.Compressed || e.stat.Links == 0 || !e.stat.POSIX {
 		return false
 	}
 	return true
@@ -85,5 +85,5 @@ func (index *grepContentIndex) completed(inv *invocation) {
 }
 
 func contentVersion(e entry) fspath.FileObservation {
-	return fspath.FileObservation{Identity: fspath.AllocationIdentity{Device: e.stat.Device, Inode: e.stat.Inode}, Changed: e.stat.ChangeTime.UnixNano(), Links: e.stat.Links, Known: e.stat.POSIX && !e.stat.ChangeTime.IsZero()}
+	return fspath.FileObservation{Identity: fspath.AllocationIdentity{Device: e.stat.Device, Inode: e.stat.Inode}, Changed: e.stat.ChangeTime.UnixNano(), Links: e.stat.Links, Size: e.stat.Size, Known: e.stat.POSIX && !e.stat.ChangeTime.IsZero()}
 }

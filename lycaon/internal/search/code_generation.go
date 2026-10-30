@@ -179,7 +179,7 @@ func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scop
 	if spec.prefilter.active() && !gen.ephemeral {
 		started := time.Now()
 		query := sourcecatalog.LiteralQuery{
-			FileScope: scope, RootID: gen.rootID, Require: litprefilter.AllOf(spec.prefilter.literalStrings()...),
+			FileScope: scope, Require: litprefilter.AllOf(spec.prefilter.literalStrings()...),
 			IncludeKey: codeIndexIncludeKey(spec.lineExcludes, spec.maxBytes),
 			Include: func(entry sourcecatalog.Entry) bool {
 				return !underDependencyDir(entry.Path, spec.lineExcludes) && entry.Size <= spec.maxBytes

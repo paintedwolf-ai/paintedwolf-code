@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -443,12 +444,27 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 	testutil.FailErr(t, "write miss", os.WriteFile(filepath.Join(root, "miss.txt"), []byte("nothing interesting\n"), 0o644))
 	catalog := sourcecatalog.Process()
 	testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), catalog, "p1", sourcecatalog.Root{ID: "root", Path: root}))
-	snapshot, err := catalog.Snapshot(t.Context(), "p1", []sourcecatalog.Root{{ID: "root", Path: root}})
-	testutil.FailErr(t, "prepare metadata", err)
-	_, err = catalog.Literals.LiteralCandidates(t.Context(), snapshot, sourcecatalog.LiteralQuery{RootID: "root", IncludeKey: "test-warm", Require: litprefilter.AnyOf("unique_target"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, entry.Path))
-	}})
-	testutil.FailErr(t, "prepare shared file observations", err)
+	reader, status, err := catalog.Trees.OpenIndex(t.Context(), "p1", sourcecatalog.Root{ID: "root", Path: root}, 0)
+	testutil.FailErr(t, "open metadata generation", err)
+	if reader == nil || !status.Complete {
+		t.Fatal("prepared metadata generation was unavailable")
+	}
+	defer func() { testutil.FailErr(t, "close metadata generation", reader.Close()) }()
+	entries, err := reader.FilePage(t.Context(), sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience}, "", sourcecatalog.TreeFilePageLimit)
+	testutil.FailErr(t, "read metadata page", err)
+	observable := true
+	for _, entry := range entries {
+		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(entry.Path)))
+		testutil.FailErr(t, "inspect content observation capability", err)
+		version := fspath.ObserveFile(info)
+		observable = observable && version.Known && version.Links == 1
+	}
+	query := sourcecatalog.LiteralQuery{FileScope: sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience}, IncludeKey: "code-pruning-fixture", Require: litprefilter.AnyOf("unique_needle_token"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
+		return os.Open(filepath.Join(root, filepath.FromSlash(entry.Path)))
+	}}
+	testutil.WaitFor(t, func() bool {
+		return !catalog.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries).Warming
+	})
 	report, err := NewCodeExecutor(decide.Reranker{}).Run(context.Background(), PlanLeg{Code: &CodePlanLeg{
 		Query:     TextExpr{Text: "unique_needle_token"},
 		PathRoots: []CodeRoot{{ProjectID: "p1", RootID: "root", Path: root}},
@@ -460,8 +476,12 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 		t.Fatalf("hits = %+v; executor report = %+v", hits, report)
 	}
 	code := report.Code
-	if !code.IndexUsed || code.FilesListed != 2 || code.ContentCandidates != 1 || code.FilesOpened != 1 {
-		t.Fatalf("code leg report = %+v, want one indexed candidate opened of two listed", code)
+	expectedCandidates := 2
+	if observable {
+		expectedCandidates = 1
+	}
+	if code.IndexUsed != observable || code.FilesListed != 2 || code.ContentCandidates != expectedCandidates || code.FilesOpened != expectedCandidates {
+		t.Fatalf("code leg report = %+v, want %d candidates opened of two listed", code, expectedCandidates)
 	}
 }
 

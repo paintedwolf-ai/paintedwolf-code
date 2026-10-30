@@ -1,17 +1,14 @@
 package sourcecatalog
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
-	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 // ContentRead fences one live capture against source invalidation.
@@ -27,18 +24,14 @@ type ContentRead struct {
 
 // BeginRead starts before the caller captures bytes through its read authority.
 func (c *LiteralSearch) BeginRead(rootPath string, entry Entry, version fspath.FileObservation) *ContentRead {
-	if c == nil || c.cache == nil || entry.IsDir || entry.IsSymlink || !version.Known || version.Links != 1 {
+	if c == nil || c.cache == nil || entry.IsDir || entry.IsSymlink || !version.Known || version.Links == 0 {
 		return nil
 	}
 	rootPath = cleanAbs(rootPath)
 	if rootPath == "" || entry.Path == "" {
 		return nil
 	}
-	watch := c.cache.watchDirectory(rootPath, path.Dir(entry.Path))
-	if !watch.Valid() {
-		return nil
-	}
-	read := c.cache.beginFileRead(rootPath, entry, watch, version)
+	read := c.cache.beginFileRead(rootPath, entry, version)
 	if read == nil {
 		return nil
 	}
@@ -61,32 +54,10 @@ func (r *ContentRead) closeLocked() {
 		r.stream.finished = true
 	}
 	r.cache.closeFileRead(r.read)
-
-}
-
-// Observe retains bounded filters without reopening the captured file.
-func (r *ContentRead) Observe(ctx context.Context, content []byte) bool {
-	if r == nil {
-		return false
-	}
-	r.stateMu.Lock()
-	defer r.stateMu.Unlock()
-	if !r.claim() {
-		return false
-	}
-	defer r.closeLocked()
-	if int64(len(content)) != r.entry.Size {
-		return false
-	}
-	facts, err := buildLiteralBloom(ctx, r.entry, func(Entry) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(content)), nil })
-	if err != nil {
-		return false
-	}
-	return r.publish(ctx, facts)
 }
 
 func (r *ContentRead) publish(ctx context.Context, facts literalFileBlooms) bool {
-	if ctx.Err() != nil || !r.read.watch.Valid() || r.read.watch != r.cache.watchDirectory(r.read.rootPath, path.Dir(r.entry.Path)) || !entryStillMatches(r.read.rootPath, r.entry) || r.read.version != fileVersion(r.read.rootPath, r.entry) {
+	if ctx.Err() != nil || r.read.version != r.cache.versionOf(r.read.rootPath, r.entry) {
 		return false
 	}
 	r.cache.fileMu.Lock()
@@ -94,20 +65,19 @@ func (r *ContentRead) publish(ctx context.Context, facts literalFileBlooms) bool
 	if _, active := r.cache.fileReads[r.read]; !active || r.read.invalidated {
 		return false
 	}
-	r.cache.storeFile(r.read.rootPath, r.entry, facts, r.read.watch, r.read.version)
+	r.cache.storeFile(r.read.rootPath, r.entry, facts, r.read.version)
 	r.learned = true
 	return true
-
 }
 
 // storeFile requires fileMu and charges both representations to one cache entry.
-func (c *literalIndexCache) storeFile(rootPath string, entry Entry, facts literalFileBlooms, watch repochange.WatchObservation, version fspath.FileObservation) {
-	c.files.store(rootPath, entry.Path, literalFileCacheEntry{size: entry.Size, mode: entry.Mode, modifiedNS: entry.Modified.UnixNano(), searchable: facts.decoded.searchable, bloom: facts.decoded.bloom, rawBloom: facts.raw.bloom, rawSearchable: facts.raw.searchable, watch: watch, version: version})
+func (c *literalIndexCache) storeFile(rootPath string, entry Entry, facts literalFileBlooms, version fspath.FileObservation) {
+	c.files.store(rootPath, entry.Path, literalFileCacheEntry{searchable: facts.decoded.searchable, bloom: facts.decoded.bloom, rawBloom: facts.raw.bloom, rawSearchable: facts.raw.searchable, version: version, shared: facts.shared})
 }
 
 // CanPruneBytes uses the byte representation consumed by command searches.
 func (c *LiteralSearch) CanPruneBytes(rootPath string, req litprefilter.Requirement, entry Entry, version fspath.FileObservation) bool {
-	if c == nil || c.cache == nil || req.Empty() || entry.IsDir || !version.Known || version.Links != 1 {
+	if c == nil || c.cache == nil || req.Empty() || entry.IsDir || !version.Known || version.Links == 0 {
 		return false
 	}
 	cached, ok := c.cache.cachedVersion(rootPath, entry, version)
@@ -127,7 +97,7 @@ func (r *ContentRead) Wrap(ctx context.Context, reader io.Reader) io.Reader {
 	if !r.claim() {
 		return reader
 	}
-	r.stream = &contentReadStream{read: r, ctx: ctx, reader: reader, builder: newLiteralContent(r.entry.Size)}
+	r.stream = &contentReadStream{read: r, ctx: ctx, reader: reader, builder: newLiteralContent(r.read.version.Size)}
 	return r.stream
 }
 
@@ -157,11 +127,11 @@ func (s *contentReadStream) Read(p []byte) (int, error) {
 	if !s.finished {
 		s.bytes += int64(n)
 		_, buildErr := s.builder.Write(p[:n])
-		if buildErr != nil || s.bytes > s.read.entry.Size || err != nil && (err != io.EOF || s.bytes != s.read.entry.Size) {
+		if buildErr != nil || s.bytes > s.read.read.version.Size || err != nil && (err != io.EOF || s.bytes != s.read.read.version.Size) {
 			s.finished = true
 			s.read.closeLocked()
 		}
-		if !s.finished && s.bytes == s.read.entry.Size {
+		if !s.finished && err == io.EOF && s.bytes == s.read.read.version.Size {
 			s.finished = true
 			if facts, finishErr := s.builder.finish(); finishErr == nil {
 				s.read.publish(s.ctx, facts)
@@ -173,36 +143,24 @@ func (s *contentReadStream) Read(p []byte) (int, error) {
 }
 
 func (c *literalIndexCache) cachedFile(rootPath string, entry Entry) (literalFileCacheEntry, bool) {
-	return c.cachedVersion(rootPath, entry, fileVersion(rootPath, entry))
+	return c.cachedVersion(rootPath, entry, c.versionOf(rootPath, entry))
 }
 
 func (c *literalIndexCache) cachedVersion(rootPath string, entry Entry, version fspath.FileObservation) (literalFileCacheEntry, bool) {
-	if !version.Known || version.Links != 1 {
-		return literalFileCacheEntry{}, false
-	}
-	watch := c.watchDirectory(rootPath, path.Dir(entry.Path))
-	if !watch.Valid() {
+	if !version.Known || version.Links == 0 {
 		return literalFileCacheEntry{}, false
 	}
 	c.fileMu.Lock()
 	cached, ok := c.files.lookup(rootPath, entry.Path)
 	c.fileMu.Unlock()
-	return cached, ok && cached.size == entry.Size && cached.mode == entry.Mode && cached.modifiedNS == entry.Modified.UnixNano() && cached.watch == watch && cached.version == version
-}
-
-func (c *literalIndexCache) fileWatch(rootPath string, entry Entry) repochange.WatchObservation {
-	cached, ok := c.cachedFile(rootPath, entry)
-	if !ok {
-		return repochange.WatchObservation{}
-	}
-	return cached.watch
+	return cached, ok && cached.version == version
 }
 
 func (r *ContentRead) claim() bool {
 	r.cache.fileMu.Lock()
 	defer r.cache.fileMu.Unlock()
 	_, active := r.cache.fileReads[r.read]
-	if !active || r.started {
+	if !active || r.started || r.read.invalidated {
 		return false
 	}
 	r.started = true

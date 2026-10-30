@@ -83,6 +83,7 @@ func (c *literalContent) finish() (literalFileBlooms, error) {
 	bloom, searchable := c.raw.finish()
 	facts := literalFileBlooms{raw: literalProjection{bloom: bloom, searchable: searchable}}
 	facts.decoded = facts.raw
+	facts.shared = c.decoded == nil
 	if c.decoded != nil {
 		facts.decoded.bloom, facts.decoded.searchable = c.decoded.finish()
 	}

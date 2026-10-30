@@ -2,11 +2,9 @@ package sourcecatalog
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
-	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 // LiteralSearch owns content bloom preparation and its retained candidate cache.
@@ -17,13 +15,13 @@ type LiteralSearch struct {
 
 // contentBuild fills per-file literal filters to reduce content reads.
 type contentBuild struct {
-	revision uint64
-	watch    repochange.WatchScopeObservation
-	started  time.Time
-	cancel   context.CancelFunc
-	done     chan struct{}
-	complete bool
-	finished time.Time
+	revision        uint64
+	contentRevision uint64
+	started         time.Time
+	cancel          context.CancelFunc
+	done            chan struct{}
+	complete        bool
+	finished        time.Time
 }
 
 type LiteralPage struct {
@@ -40,11 +38,12 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 		result.Candidates = entries
 		return result
 	}
-	result.Warming = c.prepareIndexLiterals(ctx, reader, query)
 	folded := foldRequirement(query.Require)
 
+	stale := false
 	for _, entry := range entries {
-		bloom, searchable, cached := c.cache.cachedBloom(reader.store.root.Path, entry)
+		bloom, searchable, cached, changed := c.cache.probeBloom(reader.store.root.Path, entry)
+		stale = stale || changed
 		if cached {
 			result.CachedFiles++
 		}
@@ -52,16 +51,21 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 			result.Candidates = append(result.Candidates, entry)
 		}
 	}
+	if stale {
+		reader.store.mu.Lock()
+		reader.store.contentRevision++
+		reader.store.mu.Unlock()
+	}
+	result.Warming = c.prepareIndexLiterals(ctx, reader, query)
 	return result
 }
 
 func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexReader, query LiteralQuery) bool {
 	s := reader.store
-	watch := c.cache.watchScope(s.root.Path)
 	key := indexLiteralScopeKey(query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.retired {
+	if s.retired || s.pins.drained {
 		return false
 	}
 	if s.content == nil {
@@ -70,7 +74,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	if build := s.content[key]; build != nil {
 		select {
 		case <-build.done:
-			if build.revision == reader.Status.Revision && build.complete && build.watch == watch {
+			if build.revision == reader.Status.Revision && build.complete && build.contentRevision == s.contentRevision {
 				return false
 			}
 			if !build.complete && time.Since(build.finished) < 5*time.Second {
@@ -80,7 +84,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 			return true
 		}
 	}
-	if len(s.content) >= literalIndexCacheCap {
+	if len(s.content) >= literalPreparationScopeCap {
 		var oldest string
 		for key, build := range s.content {
 			select {
@@ -100,7 +104,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	// Preparation outlives the search that started it; retirement and drain
 	// cancel it.
 	buildCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	build := &contentBuild{revision: reader.Status.Revision, watch: watch, started: time.Now(), cancel: cancel, done: make(chan struct{})}
+	build := &contentBuild{revision: reader.Status.Revision, contentRevision: s.contentRevision, started: time.Now(), cancel: cancel, done: make(chan struct{})}
 	s.content[key] = build
 	go func() {
 		defer cancel()
@@ -154,21 +158,12 @@ func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, q
 		if err != nil {
 			return false
 		}
-		indices := make([]int, len(misses))
-		for i := range indices {
-			indices[i] = i
-		}
-		results := make([]literalFileResult, len(misses))
-		err = c.cache.readBlooms(ctx, s.root.Path, misses, indices, results, query.Open)
+		err = c.cache.readBlooms(ctx, s.root.Path, misses, query.Open)
 		release()
 		if err != nil {
 			return false
 		}
-		for _, result := range results {
-			if errors.Is(result.err, errLiteralReadBusy) {
-				return false
-			}
-		}
+
 	}
 	return false
 }

@@ -79,7 +79,7 @@ func (c *literalFileCache) store(root, rel string, entry literalFileCacheEntry) 
 	}
 	c.seq++
 	node.cached, node.entry, node.seq = true, entry, c.seq
-	node.cost = literalFileCost(len(root)+1+len(rel), entry)
+	node.cost = literalFileCost(len(root)+1+len(rel), strings.Count(rel, "/")+1, entry)
 	c.bytes += node.cost
 	c.order = append(c.order, literalFileRef{root: root, path: rel, seq: c.seq})
 	for c.bytes > literalFileByteCap && len(c.order) > 0 {

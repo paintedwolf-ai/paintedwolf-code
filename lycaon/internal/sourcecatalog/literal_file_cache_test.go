@@ -1,13 +1,16 @@
 package sourcecatalog
 
-import "testing"
+import (
+	"github.com/lycaon/lycaon/internal/fspath"
+	"testing"
+)
 
 func TestLiteralFileCacheDropsOnlyTheChangedSubtree(t *testing.T) {
 	var cache literalFileCache
 	for _, rel := range []string{"a/b.go", "a/c/d.go", "ab.go", "a.go"} {
-		cache.store("/root", rel, literalFileCacheEntry{size: 1})
+		cache.store("/root", rel, literalFileCacheEntry{version: fspath.FileObservation{Size: 1}})
 	}
-	cache.store("/other", "a/b.go", literalFileCacheEntry{size: 1})
+	cache.store("/other", "a/b.go", literalFileCacheEntry{version: fspath.FileObservation{Size: 1}})
 	total := cache.bytes
 
 	cache.drop("/root", "a")
@@ -40,11 +43,11 @@ func TestLiteralFileCacheDropsOnlyTheChangedSubtree(t *testing.T) {
 
 func TestLiteralFileCacheEvictionSkipsReplacedObservations(t *testing.T) {
 	var cache literalFileCache
-	cache.store("/root", "a.go", literalFileCacheEntry{size: 1})
+	cache.store("/root", "a.go", literalFileCacheEntry{version: fspath.FileObservation{Size: 1}})
 	first := cache.order[0]
-	cache.store("/root", "a.go", literalFileCacheEntry{size: 2})
+	cache.store("/root", "a.go", literalFileCacheEntry{version: fspath.FileObservation{Size: 2}})
 	cache.evict(first)
-	if entry, ok := cache.lookup("/root", "a.go"); !ok || entry.size != 2 {
+	if entry, ok := cache.lookup("/root", "a.go"); !ok || entry.version.Size != 2 {
 		t.Fatalf("stale ref evicted the replacement: %+v %v", entry, ok)
 	}
 	cache.compact()

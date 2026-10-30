@@ -2,11 +2,13 @@ package sourcecatalog
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -58,27 +60,35 @@ func TestLiveWatcherRefreshesCatalogForExternalFileLifecycle(t *testing.T) {
 	assertPaths([]string{".gitignore", ".hidden", "ignored.log"})
 }
 
-func TestLiveWatcherInvalidatesModelLiteralCandidatesWithUnchangedMetadata(t *testing.T) {
+func TestLiveCatalogKeepsChangedContentAsCandidateWithUnchangedMetadata(t *testing.T) {
 	root := t.TempDir()
 	writeLiteralFixture(t, root, "source.txt", "AlphaNeedle")
 	info, err := os.Stat(filepath.Join(root, "source.txt"))
 	testutil.FailErr(t, "stat initial file", err)
 	catalog := liveTestCatalog(t, root)
-	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("OmegaNeedle"), Open: literalTestOpener(root)}
 	snapshot, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 	testutil.FailErr(t, "initial catalog", err)
-	candidates, err := catalog.Literals.LiteralCandidates(t.Context(), snapshot, query)
-	testutil.FailErr(t, "warm literal cache", err)
-	if len(candidates) != 0 {
-		t.Fatal("unwritten literal matched the initial file")
+	if len(snapshot.Entries) != 1 {
+		t.Fatalf("initial entries=%v", snapshot.Entries)
+	}
+	entry := snapshot.Entries[0]
+	version := fspath.ObserveFile(info)
+	observation := catalog.Literals.BeginRead(root, entry, version)
+	file, err := os.Open(filepath.Join(root, entry.Path))
+	testutil.FailErr(t, "open initial stream", err)
+	_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
+	testutil.FailErr(t, "observe initial stream", err)
+	testutil.FailErr(t, "close initial stream", file.Close())
+	observation.Close()
+	require := litprefilter.AnyOf("OmegaNeedle")
+	if pruned := catalog.Literals.CanPrune(root, require, entry); pruned != (version.Known && version.Links == 1) {
+		t.Fatalf("initial pruning=%t for version=%+v", pruned, version)
 	}
 	writeLiteralFixture(t, root, "source.txt", "OmegaNeedle")
 	testutil.FailErr(t, "preserve external timestamp", os.Chtimes(filepath.Join(root, "source.txt"), info.ModTime(), info.ModTime()))
 	testutil.WaitFor(t, func() bool {
 		current, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 		testutil.FailErr(t, "refresh catalog", err)
-		candidates, err := catalog.Literals.LiteralCandidates(t.Context(), current, query)
-		testutil.FailErr(t, "query changed literal", err)
-		return slices.Equal(literalCandidatePaths(candidates), []string{"source.txt"})
+		return len(current.Entries) == 1 && !catalog.Literals.CanPrune(root, require, current.Entries[0])
 	})
 }

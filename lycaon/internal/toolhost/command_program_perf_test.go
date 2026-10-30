@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -285,19 +285,29 @@ func BenchmarkCommandSearch(b *testing.B) {
 	})
 }
 
-// warmCatalog observes dir and builds every file's Bloom filter, as the
-// host's index warm-up does.
-func warmCatalog(tb testing.TB, catalog *sourcecatalog.Catalog, dir string) {
+// warmCatalog primes captured content before command execution.
+func warmCatalog(tb testing.TB, catalog *sourcecatalog.Catalog, dir string) bool {
 	tb.Helper()
-	snapshot, err := catalog.Observe(context.Background(), "project", []sourcecatalog.Root{{ID: "r1", Path: dir}})
-	testutil.FailErr(tb, "observe", err)
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("warm-up"),
-		Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-			return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
-		},
-	})
-	testutil.FailErr(tb, "build blooms", err)
+	snapshot, err := catalog.Observe(tb.Context(), "project", []sourcecatalog.Root{{ID: "r1", Path: dir}})
+	testutil.FailErr(tb, "observe fixture", err)
+	observable := true
+	for _, entry := range snapshot.Entries {
+		if entry.IsDir || entry.IsSymlink {
+			continue
+		}
+		file, err := os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
+		testutil.FailErr(tb, "open fixture content", err)
+		info, err := file.Stat()
+		testutil.FailErr(tb, "stat fixture content", err)
+		version := fspath.ObserveFile(info)
+		observable = observable && version.Known && version.Links == 1
+		observation := catalog.Literals.BeginRead(dir, entry, version)
+		_, err = io.Copy(io.Discard, observation.Wrap(tb.Context(), file))
+		testutil.FailErr(tb, "observe fixture stream", err)
+		testutil.FailErr(tb, "close fixture stream", file.Close())
+		observation.Close()
+	}
+	return observable
 }
 
 // structuredWc runs the structured wc tool in the fixture's root.
@@ -515,7 +525,7 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 		indexedFix := newPerfFixture(t, catalog)
 		sourceTree(t, liveFix.Dir)
 		sourceTree(t, indexedFix.Dir)
-		warmCatalog(t, catalog, indexedFix.Dir)
+		observable := warmCatalog(t, catalog, indexedFix.Dir)
 
 		var liveOutcome, indexedOutcome command.ProgramOutcome
 		testutil.FailErr(t, "unmarshal live grep", json.Unmarshal([]byte(liveFix.run(t, "grep -rl NeedleToken src")), &liveOutcome))
@@ -525,13 +535,15 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 		}
 		liveReceipts := liveFix.receiptCounts(t, liveOutcome.ProgramID)
 		indexedReceipts := indexedFix.receiptCounts(t, indexedOutcome.ProgramID)
-		// Every unpruned file walked by grep is read and pinned in invocation_program_revision_pins.
-		// Live grep must read and pin all 10,000 files; indexed grep must prune at least 99% (>= 100x fewer).
+		// Observable filters must eliminate at least 99% of captures.
 		if liveReceipts.pinCount != 10_000 {
 			t.Fatalf("live grep pinned files = %d, want 10000", liveReceipts.pinCount)
 		}
-		if indexedReceipts.pinCount < 1 || liveReceipts.pinCount < 100*indexedReceipts.pinCount {
+		if observable && (indexedReceipts.pinCount < 1 || liveReceipts.pinCount < 100*indexedReceipts.pinCount) {
 			t.Fatalf("indexed grep pinned %d files vs %d live; want >= 100x fewer", indexedReceipts.pinCount, liveReceipts.pinCount)
+		}
+		if !observable && indexedReceipts.pinCount != liveReceipts.pinCount {
+			t.Fatal("unobservable content changed the live capture count")
 		}
 		t.Logf("grep-r-10k-indexed-vs-live: live_pinned_files=%d indexed_pinned_files=%d reduction_factor=%.1fx",
 			liveReceipts.pinCount, indexedReceipts.pinCount, float64(liveReceipts.pinCount)/float64(indexedReceipts.pinCount))
