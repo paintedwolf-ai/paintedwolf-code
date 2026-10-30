@@ -232,7 +232,7 @@ func (b *structuralBuilder) item(ctx context.Context, node indexNode) (pagedview
 	baseline := TreeRowFingerprint(node.path, kind, node.isSymlink, boundary, "")
 	item := pagedview.RangeItem[TreeItem]{Key: DirectoryOrder(node.name, node.isDir), Value: TreeItem{Path: node.path, Symlink: node.isSymlink},
 		Weight: 1, Fingerprint: baseline, BaselineFingerprint: baseline}
-	if !node.isDir || node.isSymlink || b.policy.boundaryDir(node.path) != "" {
+	if !node.isDir || node.isSymlink || boundary {
 		return item, nil
 	}
 	index, observation, err := b.children(ctx, node.path)
