@@ -2,7 +2,6 @@ package textsearch
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -68,12 +67,14 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 	if opts.NullData {
 		separator = 0
 	}
-	br := scanReaderPool.Get().(*bufio.Reader)
-	br.Reset(r)
-	defer func() {
-		br.Reset(nil)
-		scanReaderPool.Put(br)
-	}()
+	input, err := newScanRecordReader(ctx, r, sel, opts)
+	if err != nil {
+		return 0, err
+	}
+	defer input.close()
+	s.pending = contextLines{memory: input.memory, maximum: opts.Before}
+	defer s.pending.close()
+
 	for start, number := 0, 1; ; number++ {
 		if err := ctx.Err(); err != nil {
 			return s.selected, err
@@ -81,29 +82,8 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		if trailing && s.after == 0 {
 			break
 		}
-		chunk, readErr := br.ReadSlice(separator)
-		raw := chunk
-		if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
-			return s.selected, onExceed(maxBytes, int64(start+len(raw)))
-		}
-		if errors.Is(readErr, bufio.ErrBufferFull) {
-			raw = append([]byte(nil), chunk...)
-			for {
-				if err := ctx.Err(); err != nil {
-					return s.selected, err
-				}
-				chunk, err := br.ReadSlice(separator)
-				raw = append(raw, chunk...)
-				if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
-					return s.selected, onExceed(maxBytes, int64(start+len(raw)))
-				}
-				if errors.Is(err, bufio.ErrBufferFull) {
-					continue
-				}
-				readErr = err
-				break
-			}
-		}
+		raw, readErr := input.read(separator, int64(start), maxBytes, onExceed)
+
 		if len(raw) == 0 && errors.Is(readErr, io.EOF) {
 			break
 		}
@@ -118,6 +98,10 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		if opts.TrimCR && !opts.NullData && len(text) > 0 && text[len(text)-1] == '\r' {
 			text = text[:len(text)-1]
 		}
+		if input.inputLimit > 0 && int64(len(text)) > input.inputLimit {
+			return s.selected, &BudgetError{Resource: "regex_input_bytes", Maximum: input.inputLimit, Observed: int64(len(text))}
+		}
+
 		line := Line{Number: number, Start: start, End: start + len(text), Text: text}
 		start = next
 		if trailing {
@@ -162,7 +146,7 @@ type lineScan struct {
 	selected int
 	last     int
 	after    int
-	pending  []Line
+	pending  contextLines
 }
 
 func (s *lineScan) finish(err error) (int, error) {
@@ -188,24 +172,19 @@ func (s *lineScan) unselected(line Line) error {
 	if s.after > 0 {
 		return s.context(line)
 	}
-	if s.opts.Before > 0 {
-		line.Kind = ContextLine
-		line.Text = bytes.Clone(line.Text)
-		s.pending = append(s.pending, line)
-		if len(s.pending) > s.opts.Before {
-			s.pending = s.pending[1:]
-		}
-	}
-	return nil
+	line.Kind = ContextLine
+	return s.pending.push(line)
 }
 
 func (s *lineScan) selectedLine(line Line) error {
-	for _, before := range s.pending {
-		if err := s.emit(before); err != nil {
+	for s.pending.count > 0 {
+		before, release := s.pending.pop()
+		err := s.emit(before)
+		release()
+		if err != nil {
 			return err
 		}
 	}
-	s.pending = s.pending[:0]
 	line.Kind = SelectedLine
 	s.selected++
 	s.after = s.opts.After

@@ -13,6 +13,7 @@ const (
 	grepWorkerMaximum = 8
 	grepOutputChunk   = 64 << 10
 	grepEventWindow   = 2
+	grepWorkerCredit  = (2*grepEventWindow+1)*grepOutputChunk + 2*4096
 )
 
 func grepWorkerCount() int { return min(max(runtime.GOMAXPROCS(0), 1), grepWorkerMaximum) }
@@ -55,6 +56,9 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 		return nil, err
 	}
 	workers = min(max(workers, 1), grepWorkerMaximum)
+	if memory := r.inv.owners.Revisions.Memory; memory != nil {
+		workers = min(workers, max(1, int(memory.AvailableWorking()/(2*grepWorkerCredit))))
+	}
 	ctx, cancel := context.WithCancel(r.inv.ctx)
 	p := &grepFiles{run: r, template: *r, invocation: *r.inv, maximum: r.inv.out.maximum, mapped: r.inv.out.mappings != nil, ctx: ctx, cancel: cancel, jobs: make(chan *grepFileJob, workers), window: workers * 2}
 	p.invocation.out, p.invocation.stderr, p.invocation.releases, p.invocation.pins = nil, nil, nil, nil
