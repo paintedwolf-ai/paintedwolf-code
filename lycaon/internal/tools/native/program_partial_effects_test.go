@@ -154,7 +154,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 
 	httpArgs := map[string]any{"url": server.URL, "method": "POST"}
 	attempt := prepare(httpDefinition, "http-node", "curl", "curl "+server.URL, httpArgs)
-	httpEffect := partialEffectsHTTP(attempt, httpArgs, serverAddr)
+	httpEffect := partialEffectsHTTP(attempt, httpArgs, server.URL, serverAddr)
 	supervisor, loseSupervisor := context.WithCancel(t.Context())
 	type outcome struct {
 		result toolexecution.NativeInvocationResult
@@ -272,8 +272,8 @@ func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string
 }
 
 // partialEffectsHTTP records whether the actual transport started an unanswered request.
-func partialEffectsHTTP(attempt toolcontract.BoundOperation, httpArgs map[string]any, serverAddr netip.AddrPort) toolexecution.NativeEffect {
-	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
+func partialEffectsHTTP(attempt toolcontract.BoundOperation, httpArgs map[string]any, targetURL string, serverAddr netip.AddrPort) toolexecution.NativeEffect {
+	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", targetURL}}, Arguments: httpArgs}
 	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		target := args["url"].(string)
 		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
