@@ -137,7 +137,7 @@ func (d *BoundDir) Child(name string) (BoundPath, error) {
 	if d.closed {
 		return BoundPath{}, os.ErrClosed
 	}
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || strings.ContainsRune(name, 0) {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsRune(name, 0) {
 		return BoundPath{}, invalidOperand(name, "expected an immediate directory entry")
 	}
 	child := d.dir.Child(name)
@@ -145,7 +145,11 @@ func (d *BoundDir) Child(name string) (BoundPath, error) {
 		return child, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
 	}
 	if child.admitEntry != nil {
-		actual := d.file.Name() + string(filepath.Separator) + name
+		dirName := d.file.Name()
+		actual := dirName + string(filepath.Separator) + name
+		if strings.HasSuffix(dirName, string(filepath.Separator)) {
+			actual = filepath.Join(dirName, name)
+		}
 		if err := child.admitEntry(actual); err != nil {
 			return child, PathOperationError(child.Resolved.DisplayPath, err)
 		}
@@ -243,7 +247,7 @@ func (p BoundPath) Child(name string) BoundPath {
 		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
 	}
 	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
-	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`) {
+	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && filepath.Base(name) == name {
 		child.Resolved.DisplayPath = child.Resolved.ScopeRel
 	} else {
 		child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
