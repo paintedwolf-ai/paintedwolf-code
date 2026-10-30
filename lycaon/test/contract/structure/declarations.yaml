@@ -57,3 +57,8 @@ internal/projectsource:
     kind: container
     description: Filesystem observation, navigation, search, and durable file
         operations over project sources.
+
+internal/testutil:
+    kind: container
+    description: Shared test helpers and hermetic fixtures for tests and
+        test-fixture packages; each helper family is governed individually.
