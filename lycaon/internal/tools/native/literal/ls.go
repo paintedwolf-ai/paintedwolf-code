@@ -21,7 +21,7 @@ type lsOptions struct {
 	slash, inode, blocks, deref, unsorted, changeTime, accessTime, groupDirs          bool
 	// numeric is -n: owner and group stay decimal instead of account names.
 	numeric bool
-	// noGroup is GNU -G: long listings omit the group column.
+	// noGroup omits the group column in long listings.
 	noGroup bool
 	// noOwner is -g; commas is -m; followArgs is -H (command-line links);
 	// physical is -P (never follow links, even command-line directory links).
@@ -39,7 +39,7 @@ func (o lsOptions) time(st fseffect.EntryStat) time.Time {
 	return st.ModTime
 }
 
-// sortsByTime is -t, or -c/-u without -l, as GNU ls defines them.
+// sortsByTime selects -t, or -c/-u without -l.
 func (o lsOptions) sortsByTime() bool {
 	return !o.unsorted && (o.byTime || (o.changeTime || o.accessTime) && !o.long)
 }
@@ -86,7 +86,7 @@ func runLs(inv *invocation) error {
 	}
 	opts.deref, opts.followArgs, opts.physical = lastLinkSelection(inv)
 	// -o and -g are long listings without the group or the owner; -f is
-	// -aU without long format, as GNU and BSD define them.
+	// -aU without long format.
 	opts.long = opts.long || inv.flag("-o") || inv.flag("-g")
 	if inv.flag("-f") {
 		opts.all, opts.unsorted, opts.long = true, true, false
@@ -304,7 +304,7 @@ func (o lsOptions) allocated(st fseffect.EntryStat) string {
 }
 
 // prefixes are the -i and -s columns, right-aligned across one listing
-// except in comma-separated (-m) listings, where GNU prints no padding.
+// except in comma-separated (-m) listings, which have no padding.
 func (o lsOptions) prefixes(entries []lsEntry) []string {
 	if !o.inode && !o.blocks {
 		return make([]string, len(entries))
@@ -342,7 +342,7 @@ func (o lsOptions) total(entries []lsEntry) string {
 }
 
 // listEntries prints one listing; a directory's long listing starts with
-// GNU's total of allocated space (1 KiB units, or -h IEC size).
+// allocated space (1 KiB units, or -h IEC size).
 func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool) error {
 	if (opts.inode || opts.blocks) && slices.ContainsFunc(entries, func(e lsEntry) bool { return !e.stat.POSIX }) {
 		return platformUnavailable("ls", "POSIX inode and allocation metadata")
@@ -410,7 +410,7 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 	return nil
 }
 
-// humanSize is GNU ls -h: powers of 1024, one decimal below ten, rounded up.
+// humanSize uses powers of 1024, one decimal below ten, rounded up.
 func humanSize(size int64) string {
 	if size < 1024 {
 		return strconv.FormatInt(size, 10)
@@ -442,7 +442,7 @@ func humanSize(size int64) string {
 	return fmt.Sprintf("%d%c", whole, units[unit])
 }
 
-// accounts names owners and groups as GNU ls does, through the platform's
+// accounts resolves owner and group names through the platform's
 // account database, falling back to the decimal id when it has no name.
 // Lookups are cached for the life of the owners.
 type accounts struct {
@@ -493,7 +493,7 @@ func (a *accounts) name(cache *map[uint32]string, id uint32, numeric bool, looku
 }
 
 // commaList is -m: names separated by ", " and wrapped before column 80,
-// GNU's width when output is not a terminal.
+// the width used for non-terminal output.
 func (inv *invocation) commaList(entries []lsEntry, prefixes []string, opts lsOptions) error {
 	const width = 80
 	var b strings.Builder
