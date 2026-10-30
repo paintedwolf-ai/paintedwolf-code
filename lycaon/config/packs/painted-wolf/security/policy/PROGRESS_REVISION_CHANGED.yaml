@@ -22,4 +22,8 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: update_progress
-  expect_contains: ['Code: PROGRESS_REVISION_CHANGED']
+    profile: coordinator
+  expect_contains:
+  - 'Code: PROGRESS_REVISION_CHANGED'
+  - 'current content and revision'
+  - 'reconcile the proposed changes'

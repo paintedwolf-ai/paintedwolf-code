@@ -22,4 +22,9 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: update_progress
-  expect_contains: ['Code: PROGRESS_DOCUMENT_TOO_LARGE']
+    profile: coordinator
+    max_characters: 8000
+  expect_contains:
+  - 'Code: PROGRESS_DOCUMENT_TOO_LARGE'
+  - 'one concise row per deliverable'
+  - 'reported character limit'
