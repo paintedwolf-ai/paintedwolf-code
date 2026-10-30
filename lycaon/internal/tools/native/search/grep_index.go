@@ -1,6 +1,9 @@
 package search
 
 import (
+	"context"
+	"log/slog"
+
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -11,6 +14,7 @@ type grepContentIndex struct {
 	literals *sourcecatalog.LiteralSearch
 	require  litprefilter.Requirement
 	drafts   sourceview.DraftOverlay
+	stats    contentSearchStats
 }
 
 func newGrepContentIndex(inv *invocation, require litprefilter.Requirement, prune bool) grepContentIndex {
@@ -36,8 +40,17 @@ func (index grepContentIndex) eligible(e entry) bool {
 	return !draft
 }
 
-func (index grepContentIndex) canPrune(e entry) bool {
-	return e.depth > 0 && index.eligible(e) && index.literals.CanPruneBytes(e.bound.Resolved.Root.Path, index.require, contentEntry(e))
+func (index *grepContentIndex) canPrune(e entry) bool {
+	index.stats.candidates++
+	eligible := index.eligible(e)
+	if eligible {
+		index.stats.eligible++
+	}
+	pruned := e.depth > 0 && eligible && index.literals.CanPruneBytes(e.bound.Resolved.Root.Path, index.require, contentEntry(e))
+	if pruned {
+		index.stats.pruned++
+	}
+	return pruned
 }
 
 func (index grepContentIndex) begin(e entry) *sourcecatalog.ContentRead {
@@ -45,4 +58,31 @@ func (index grepContentIndex) begin(e entry) *sourcecatalog.ContentRead {
 		return nil
 	}
 	return index.literals.BeginRead(e.bound.Resolved.Root.Path, contentEntry(e))
+}
+
+type contentSearchStats struct {
+	candidates int
+	eligible   int
+	captured   int
+	pruned     int
+	learned    int
+}
+
+func (index *grepContentIndex) captured(ctx context.Context, read *sourcecatalog.ContentRead, content []byte) {
+	index.stats.captured++
+	if read.Observe(ctx, content) {
+		index.stats.learned++
+	}
+}
+
+func (index *grepContentIndex) completed(inv *invocation) {
+	slog.InfoContext(inv.ctx, "command content search completed",
+		"execution_id", inv.request.Invocation.Identity.ExecutionID,
+		"command", inv.spec.Name,
+		"pruning_available", !index.require.Empty(),
+		"candidate_files", index.stats.candidates,
+		"eligible_files", index.stats.eligible,
+		"captured_files", index.stats.captured,
+		"pruned_files", index.stats.pruned,
+		"learned_files", index.stats.learned)
 }

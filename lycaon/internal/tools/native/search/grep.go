@@ -333,6 +333,7 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 		r.json = &rgJSON{started: time.Now()}
 	}
 	r.index = newGrepContentIndex(r.inv, r.matcher.Requirement(), !r.scan.Invert && r.json == nil && !(r.rg && r.mode == modeFilesWithout))
+	defer r.index.completed(inv)
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
 			return inv.usage(*r.replace, err.Error())
@@ -564,7 +565,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		}
 		return err
 	}
-	observation.Observe(r.inv.ctx, content)
+	r.index.captured(r.inv.ctx, observation, content)
 	if r.rg && e.depth > 0 && !r.searchBinary && bytes.IndexByte(content, 0) >= 0 {
 		return nil
 	}
