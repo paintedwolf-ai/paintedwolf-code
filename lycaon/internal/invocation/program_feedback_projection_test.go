@@ -253,12 +253,12 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	}
 	releaseExact()
 	prepared.Close()
-	if memory.InUse().State != 0 || memory.InUse().State != 0 {
+	if memory.InUse().State != 0 || memory.InUse().Working != 0 {
 		t.Fatal("diagnostic snapshot leaked state")
 	}
 	limited := feedbackMemory(t, 1<<20)
 	cause.Data["details"] = map[string]any{"oversized": strings.Repeat("x", 2<<20)}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 || limited.InUse().State != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 || limited.InUse().Working != 0 {
 		t.Fatal("oversized nested diagnostic escaped admission or leaked partial snapshot")
 	}
 	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.InUse().State != 0 {

@@ -78,7 +78,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	if err != nil {
 		return out, err
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
 		return out, err
 	}
 	var reached, unsettled int
@@ -108,7 +108,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	out.OmittedEffects = out.CompletedEffects - len(out.Effects)
 	out.OmittedUnknown = out.UncertainEffects - len(out.Unknown)
 	var exact bool
-	if err = tx.QueryRowContext(ctx, `SELECT source_exact FROM invocation_programs WHERE id=?`, programID).Scan(&exact); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT source_exact FROM invocation_programs WHERE id=?`, programID).Scan(&exact); err != nil {
 		return out, err
 	}
 	switch {
@@ -131,10 +131,12 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	if err != nil {
 		return nil, err
 	}
+	// #nosec G202 -- condition is a closed host-owned selector; program and limit are bound values.
 	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+condition+` ORDER BY e.ordinal DESC LIMIT ?`, program, maximum)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	type selected struct {
 		ordinal    int64
 		projection ExecutionProjection

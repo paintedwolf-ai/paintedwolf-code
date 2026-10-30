@@ -116,7 +116,7 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 	}
 	defer func() { _ = tx.Rollback() }()
 	var program, state string
-	if err = tx.QueryRowContext(ctx, `SELECT program_id,state FROM invocation_program_executions WHERE id=?`, executionID).Scan(&program, &state); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT program_id,state FROM invocation_program_executions WHERE id=?`, executionID).Scan(&program, &state); err != nil {
 		return err
 	}
 	if state != "prepared" && state != "waiting" && state != "running" {
@@ -139,8 +139,9 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		if err != nil {
 			return err
 		}
-		for i, pin := range existing {
-			if pin != pins[i] {
+		// The reader requires exactly overlap pins; bound both slices explicitly.
+		for i := 0; i < len(existing) && i < len(pins); i++ {
+			if existing[i] != pins[i] {
 				return fmt.Errorf("revision pin %d conflicts with the recorded capture", first+i)
 			}
 		}
@@ -176,7 +177,7 @@ func (r *SQLRecorder) RevisionPins(ctx context.Context, sessionID, executionID s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var count int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE e.id=? AND r.session_id=?`, executionID, sessionID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE e.id=? AND r.session_id=?`, executionID, sessionID).Scan(&count); err != nil {
 		return nil, err
 	}
 	if count != 1 {
@@ -191,7 +192,7 @@ func (r *SQLRecorder) RevisionPins(ctx context.Context, sessionID, executionID s
 
 // revisionPinCounts reports the sealed segment prefix and the rows after it.
 func revisionPinCounts(ctx context.Context, tx *sql.Tx, executionID string) (sealed, unsealed int, err error) {
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(first_ordinal+pin_count),0) FROM invocation_program_revision_pin_segments WHERE execution_id=?`, executionID).Scan(&sealed); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(first_ordinal+pin_count),0) FROM invocation_program_revision_pin_segments WHERE execution_id=?`, executionID).Scan(&sealed); err != nil {
 		return 0, 0, err
 	}
 	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id=?`, executionID).Scan(&unsealed)
@@ -211,6 +212,7 @@ func readRevisionPinRange(ctx context.Context, tx *sql.Tx, executionID string, f
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = segments.Close() }()
 	var found []pinSegment
 	for segments.Next() {
 		var s pinSegment
@@ -219,6 +221,9 @@ func readRevisionPinRange(ctx context.Context, tx *sql.Tx, executionID string, f
 			return nil, err
 		}
 		found = append(found, s)
+	}
+	if err := segments.Err(); err != nil {
+		return nil, err
 	}
 	if err := segments.Close(); err != nil {
 		return nil, err
@@ -261,6 +266,7 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	pins := make([]storedPin, 0, revisionPinSegment)
 	for rows.Next() {
 		var p storedPin
@@ -269,6 +275,9 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 			return err
 		}
 		pins = append(pins, p)
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	if err := rows.Close(); err != nil {
 		return err

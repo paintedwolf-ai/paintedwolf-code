@@ -105,7 +105,7 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		return "", err
 	}
 	defer releaseEncoding()
-	if err = validateReviewedInputs(screened); err != nil {
+	if err := validateReviewedInputs(screened); err != nil {
 		return "", err
 	}
 	reference := "output:operation-input:" + uuid.NewString()

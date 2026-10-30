@@ -118,10 +118,10 @@ func (r *SQLRecorder) ReadProgramFeedback(ctx context.Context, session, program,
 	if execution == "" && (out.Projection.Program.State != "rejected" || out.Projection.Program.ProgressState != "rejected" || out.Projection.Program.StopCode == "") {
 		return nil, fmt.Errorf("program feedback without execution requires rejected progress envelope")
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	accepted = true
@@ -166,7 +166,7 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 			return 0, err
 		}
 		query := `SELECT COALESCE(sum(bytes),0) FROM (SELECT ` + sqlByteSum(columns) + ` AS bytes FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND ` + condition + ` ORDER BY e.ordinal DESC LIMIT ?)`
-		if err = add(query, program, limit); err != nil {
+		if err := add(query, program, limit); err != nil {
 			return 0, err
 		}
 	}

@@ -35,7 +35,7 @@ func (r *SQLRecorder) attachProgressInput(ctx context.Context, identity toolcont
 		if err != nil {
 			return err
 		}
-		if err = oneProgramTransition(result); err != nil {
+		if err := oneProgramTransition(result); err != nil {
 			return err
 		}
 		return tx.Commit()

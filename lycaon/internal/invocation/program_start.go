@@ -82,7 +82,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramS
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgram(ctx, tx, in); err != nil {
+	if err := insertProgram(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -168,7 +168,7 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in toolcontract.ProgramC
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgramChild(ctx, tx, in); err != nil {
+	if err := insertProgramChild(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -179,7 +179,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		return err
 	}
 	var err error
-	if err = validateChildParent(ctx, tx, in); err != nil {
+	if err := validateChildParent(ctx, tx, in); err != nil {
 		return err
 	}
 	facts := in.Definition.Facts()
@@ -197,7 +197,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		gap = string(encoded)
 	}
 	var definitionPresent int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
 		return err
 	}
 	events := int64(2)
@@ -206,7 +206,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		events++
 		bytes += int64(len(in.Definition.Serialized()))
 	}
-	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
+	if err := chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_definitions (program_id,definition_digest,operation_id,owner,lifecycle,definition_json) VALUES (?,?,?,?,?,?) ON CONFLICT (program_id,definition_digest) DO NOTHING`, identity.ProgramID, in.Definition.Digest(), facts.Identity, facts.Contract.Owner, facts.Contract.Lifecycle.String(), in.Definition.Serialized())

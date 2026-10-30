@@ -118,7 +118,7 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 	defer func() { _ = tx.Rollback() }()
 	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?`
 	var size, count int64
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(sum(length(CAST(o.id AS BLOB))+length(CAST(o.mappings_json AS BLOB))),0),count(*)`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&size, &count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(sum(length(CAST(o.id AS BLOB))+length(CAST(o.mappings_json AS BLOB))),0),count(*)`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&size, &count); err != nil {
 		return "", none, nil, err
 	}
 	limits, err := receiptLimits()
@@ -143,7 +143,7 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 	}()
 	var output, encoded string
 	var bytes int64
-	if err = tx.QueryRowContext(ctx, `SELECT o.id,o.mappings_json,json_extract(o.blob_json,'$.Size')`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&output, &encoded, &bytes); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT o.id,o.mappings_json,json_extract(o.blob_json,'$.Size')`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&output, &encoded, &bytes); err != nil {
 		return "", none, nil, err
 	}
 	if in.OutputEndByte > bytes {
@@ -152,11 +152,11 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 	var candidates []toolcontract.StreamSourceMapping
 	decoder := json.NewDecoder(strings.NewReader(encoded))
 	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&candidates); err != nil {
+	if err := decoder.Decode(&candidates); err != nil {
 		return "", none, nil, err
 	}
 	var trailer any
-	if err = decoder.Decode(&trailer); err != io.EOF {
+	if err := decoder.Decode(&trailer); !errors.Is(err, io.EOF) {
 		return "", none, nil, fmt.Errorf("stored output mappings have trailing data")
 	}
 	// Record() is already admitted by the caller; this second detached copy is
@@ -191,7 +191,7 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 		exact.SourceEndByte = fact.SourceEndByte
 		exact.OutputStartByte = start
 		exact.OutputEndByte = end
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return "", none, nil, err
 		}
 		accepted = true

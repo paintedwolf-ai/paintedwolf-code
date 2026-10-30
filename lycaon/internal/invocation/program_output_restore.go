@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -59,23 +60,23 @@ func (r *ProgramOutputRetention) Restore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var claim, initiating, encoded string
-		if err = rows.Scan(&claim, &initiating, &encoded); err != nil {
+		if err := rows.Scan(&claim, &initiating, &encoded); err != nil {
 			return err
 		}
-		if err = r.restoreBody(ctx, claim, initiating, encoded); err != nil {
+		if err := r.restoreBody(ctx, claim, initiating, encoded); err != nil {
 			return err
 		}
 	}
-	if err = rows.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return err
 	}
-	if err = rows.Close(); err != nil {
+	if err := rows.Close(); err != nil {
 		return err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	r.ready = true
@@ -106,11 +107,11 @@ func (r *ProgramOutputRetention) restoreBody(ctx context.Context, claim, initiat
 	var blob blobstore.Blob
 	decoder := json.NewDecoder(strings.NewReader(encoded))
 	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&blob); err != nil {
+	if err := decoder.Decode(&blob); err != nil {
 		return err
 	}
 	var extra any
-	if err = decoder.Decode(&extra); err != io.EOF {
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("retained output blob has trailing data")
 	}
 	reference := tooloutput.RetainedStreamReference{Blob: blob, RetentionClaimID: strings.Clone(claim), InitiatingClaimID: strings.Clone(initiating)}
