@@ -83,7 +83,7 @@ function CommandActivityDetails(props: Props) {
           <button type="button" class="den-chat-content-link" disabled={receiptCursors().length === 0} onClick={() => setReceiptCursors(value => value.slice(0,-1))}>Previous operations</button>
           <button type="button" class="den-chat-content-link" disabled={!loaded()[0]?.executions_omitted} onClick={() => { const next = loaded()[0]?.next_cursor; if (next) setReceiptCursors(value => [...value,next]); }}>Next operations</button>
         </div></Show>
-        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts" content={{ kind: "inline", text: JSON.stringify({ program: loaded()[0]?.program, activities: activity().members, facts: facts(), executions: executions(), nodes: loaded().flatMap(page => page.nodes), feedback: props.part.feedback }, null, 2) }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts" content={{ kind: "inline", text: JSON.stringify({ activities: activity().members, facts: facts(), receipts: loaded(), feedback: props.part.feedback }, null, 2) }} projectId={props.projectId} />
       </section>
     </Show>
     <Show when={previews().length > 0}>

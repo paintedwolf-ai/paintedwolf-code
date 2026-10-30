@@ -124,3 +124,20 @@ it("reveals a folded call on a later detail page through Find", async () => {
  expect(opened.document.toolCallId).toBe("source-4");
  expect(opened.document.pane).toContain("input");
 });
+
+it("retains each program's receipt scope when read activities combine calls", async () => {
+ const { registerOpenFilesSurfaceSink,resetOpenFilesSurfaceForTests }=await import("../../platform/navigation/open-files-surface.ts");
+ const { onTestFinished }=await import("vitest");
+ onTestFinished(resetOpenFilesSurfaceForTests);
+ const sink=vi.fn();registerOpenFilesSurfaceSink(sink);
+ const value=part();const original=value.commandActivity!.calls[0]!;
+ value.commandActivity!.calls.push({...original,id:"other-call",toolCallId:"other-call",commandProgram:{...program,id:"other-program"}});
+ const get=vi.fn(async (_session:string,programId:string)=>({program:{...program,id:programId},executions:[{...receipt(),id:`${programId}:execution`,program_id:programId}],nodes:[],executions_omitted:0,nodes_omitted:0}));
+ value.commandActivity!.members=[{...fact,execution_ids:["program:execution","other-program:execution"]}];
+ const view=render(()=><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({getCommandProgramReceipt:get})}/>);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(()=>expect(view.container.textContent).toContain("test output"));
+ fireEvent.click(view.getByRole("button",{name:/Execution receipts/}));
+ const content=JSON.parse(sink.mock.calls.at(-1)?.[0].document.content.text);
+ expect(content.receipts.map((page:{program:CommandProgramReceipt})=>page.program.id)).toEqual(["program","other-program"]);
+});
