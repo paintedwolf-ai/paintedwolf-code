@@ -15,45 +15,15 @@ import { focusWithoutScroll } from "../../platform/interaction/focus.ts";
 import { ApprovalCard } from "./ApprovalCard.tsx";
 import { effectiveConsequence, isHighRiskBand } from "./approval-consequence.ts";
 import { setDockVisibleCheckpointId } from "../../chat/checkpoint/redirect-target.ts";
+import { createCheckpointDecisions } from "./checkpoint-decisions.ts";
 import { projectMatchesDir } from "../../api/project-path.ts";
 import type { LycaonClient } from "../../api/client.ts";
-import type { ContentReviewRule } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 import { pendingCheckpointsForSession } from "../../chat/actions/chat-actions.ts";
-import {
-  resolveContentApply,
-  resolveToolApproval,
-} from "../../chat/checkpoint/checkpoint-actions.ts";
-import {
-  composerDraftForSession,
-  flushComposerDraftsToDisk,
-} from "../../chat/composer/composer-drafts.ts";
-import { pendingAttachmentsForSession } from "../../chat/composer/composer-attachment-store.ts";
-import { promptPartsFromPendingAttachments } from "../../chat/composer/prompt-parts.ts";
-import {
-  removeComposerDocumentAttachment,
-  replaceComposerDocumentDraft,
-} from "../../chat/composer/composer-document-store.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
 import { createResolvedFocusReturn } from "./resolved-focus-return.ts";
-
-/** Review rules match an exact path or a directory subtree. */
-function reviewRuleMatches(
-  rule: ContentReviewRule,
-  tool: string,
-  path: string,
-): boolean {
-  if (rule.tool && rule.tool !== tool) return false;
-  const p = rule.path.trim();
-  if (p === "" || p === "*" || p === "**") return true;
-  if (p.endsWith("/**")) {
-    const prefix = p.slice(0, -3);
-    return path === prefix || path.startsWith(prefix + "/");
-  }
-  return p === path;
-}
 
 type ProjectsStore = ReturnType<typeof createProjectsStore>;
 
@@ -77,7 +47,6 @@ function checkpointHighRisk(checkpoint: PendingCheckpoint): boolean {
 }
 
 export function CheckpointCards(props: Props) {
-  const [resolving, setResolving] = createSignal<string | null>(null);
   const [requestedId, setRequestedId] = createSignal<string | null>(null);
   const [minimized, setMinimized] = createSignal(false);
   let seenIds = new Set<string>();
@@ -141,8 +110,7 @@ export function CheckpointCards(props: Props) {
     ),
   );
 
-  // The dock slot measures its exit after the last checkpoint leaves the store, so the
-  // resolved card stays rendered, inert, until the slot unmounts it.
+  // The inert card remains mounted while the dock measures its exit.
   const shown = createMemo<PendingCheckpoint | undefined>((held) => expanded() ?? held);
   const retired = () => expanded() === undefined;
 
@@ -165,145 +133,21 @@ export function CheckpointCards(props: Props) {
   });
   onCleanup(() => setDockVisibleCheckpointId(null));
 
-  const notices = useNotices();
-
-  const handleError = (err: unknown) => {
-    notices.reportError(err);
-  };
-
-  const skipReviewPath = async (
-    checkpoint: PendingCheckpoint,
-    mode: "day" | "always",
-  ) => {
-    const path = checkpoint.content_apply?.path?.trim();
-    const tool = checkpoint.content_apply?.tool?.trim() || "write";
-    if (!path) return;
-    const project = props.projects.state.projects.find((p) =>
-      projectMatchesDir(p, props.projectDir),
-    );
-    const projectId = project?.id;
-    if (!projectId) return;
-    focusReturn.note(checkpoint.checkpointId);
-    setResolving(checkpoint.checkpointId);
-    try {
-      const current = await props.client.getReviewSettings(projectId);
-      const rules = current.review_paths ?? [];
-      const review_paths =
-        mode === "always"
-          ? rules.filter((r) => !reviewRuleMatches(r, tool, path))
-          : rules.map((r) =>
-              reviewRuleMatches(r, tool, path)
-                ? {
-                    ...r,
-                    disabled_until: new Date(
-                      Date.now() + 24 * 60 * 60 * 1000,
-                    ).toISOString(),
-                  }
-                : r,
-            );
-      await props.client.updateReviewSettings({ review_paths }, projectId);
-      await resolveContentApply(props.client, checkpoint, "approve");
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setResolving(null);
-    }
-  };
-
-  // Only an explicit No attaches composer guidance.
-  const captureGuidance = (withGuidance?: boolean) => {
-    if (!withGuidance) return { draft: "", secrets: [], secretAttachmentIds: [] };
-    const secretAttachments = pendingAttachmentsForSession(props.sessionId).filter(
-      (attachment) => attachment.kind === "secret",
-    );
-    return {
-      draft: composerDraftForSession(props.sessionId),
-      secrets: promptPartsFromPendingAttachments(secretAttachments).secrets,
-      secretAttachmentIds: secretAttachments.map((attachment) => attachment.id),
-    };
-  };
-
-  const onToolApproval = async (
-    checkpoint: PendingCheckpoint,
-    action: "approve" | "reject",
-    options?: { optionId?: string; withGuidance?: boolean },
-  ) => {
-    const captured = action === "reject" ? captureGuidance(options?.withGuidance) : captureGuidance();
-    const guidance = captured.draft.trim();
-    focusReturn.note(checkpoint.checkpointId);
-    setResolving(checkpoint.checkpointId);
-    try {
-      await resolveToolApproval(
-        props.client,
-        checkpoint,
-        action,
-        {
-          optionId: options?.optionId,
-          guidance: guidance || undefined,
-          secrets: captured.secrets,
-        },
-      );
-      await consumeAttachedGuidance(captured);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setResolving(null);
-    }
-  };
-
-  const consumeAttachedGuidance = async (captured: ReturnType<typeof captureGuidance>) => {
-    if (!captured.draft.trim() && captured.secretAttachmentIds.length === 0) return;
-    if (composerDraftForSession(props.sessionId) !== captured.draft) return;
-    const destinationProjectId = projectId();
-    if (!destinationProjectId) return;
-    await replaceComposerDocumentDraft(
-      { projectId: destinationProjectId, sessionId: props.sessionId },
-      "",
-    );
-    for (const attachmentId of captured.secretAttachmentIds) {
-      await removeComposerDocumentAttachment(
-        { projectId: destinationProjectId, sessionId: props.sessionId },
-        attachmentId,
-      );
-    }
-    await flushComposerDraftsToDisk();
-  };
-
-  const onContentApply = async (
-    checkpoint: PendingCheckpoint,
-    body: {
-      decision: "approve" | "reject" | "approve_partial";
-      approvedHunks?: string[];
-      withGuidance?: boolean;
-    },
-  ) => {
-    const captured = body.decision === "reject" ? captureGuidance(body.withGuidance) : captureGuidance();
-    const guidance = captured.draft.trim();
-    focusReturn.note(checkpoint.checkpointId);
-    setResolving(checkpoint.checkpointId);
-    try {
-      await resolveContentApply(
-        props.client,
-        checkpoint,
-        body.decision,
-        {
-          approvedHunks: body.approvedHunks,
-          guidance: guidance || undefined,
-          secrets: captured.secrets,
-        },
-      );
-      await consumeAttachedGuidance(captured);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setResolving(null);
-    }
-  };
-
   const projectId = () =>
     props.projects.state.projects.find((p) =>
       projectMatchesDir(p, props.projectDir),
     )?.id;
+
+  const notices = useNotices();
+
+  const decisions = createCheckpointDecisions({
+    client: props.client,
+    sessionId: props.sessionId,
+    projectId,
+    onStart: (id) => focusReturn.note(id),
+    reportError: (error) => notices.reportError(error),
+  });
+  createEffect(() => decisions.retain(rows().map((checkpoint) => checkpoint.checkpointId)));
 
   return (
     <>
@@ -358,15 +202,16 @@ export function CheckpointCards(props: Props) {
             checkpoint={checkpoint()}
             sessionId={props.sessionId}
             projectId={projectId()}
-            resolving={retired() || resolving() === checkpoint().checkpointId}
+            resolving={retired() || decisions.pending(checkpoint().checkpointId)}
             inert={retired()}
+            decisionNotice={retired() ? undefined : decisions.notice(checkpoint().checkpointId)}
             onToolApproval={(action, options) =>
-              void onToolApproval(checkpoint(), action, options)
+              void decisions.onToolApproval(checkpoint(), action, options)
             }
-            onContentApply={(body) => void onContentApply(checkpoint(), body)}
+            onContentApply={(body) => void decisions.onContentApply(checkpoint(), body)}
             onSkipReviewPath={
               checkpoint().kind === "content_apply"
-                ? (mode) => void skipReviewPath(checkpoint(), mode)
+                ? (mode) => void decisions.skipReviewPath(checkpoint(), mode)
                 : undefined
             }
             minimized={minimized()}

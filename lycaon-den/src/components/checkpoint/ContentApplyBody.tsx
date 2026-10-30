@@ -72,6 +72,7 @@ export function ContentApplyBody(props: ApprovalCardProps) {
       projectId={props.projectId}
       sessionId={props.sessionId ?? props.checkpoint.sessionId}
       inert={props.inert}
+      decisionNotice={props.decisionNotice}
       collapse={collapse}
       peek={checkpointRowLabel(props.checkpoint)}
       header={

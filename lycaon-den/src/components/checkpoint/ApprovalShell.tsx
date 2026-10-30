@@ -1,3 +1,5 @@
+import { InlineNotice } from "../../notices/InlineNotice.tsx";
+import type { AppNotice } from "../../notices/notice-model.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { ApprovalContentLink, ApprovalContentProvider } from "./ApprovalContentLink.tsx";
 import {
@@ -62,6 +64,7 @@ export function ShellCard(p: {
   highRisk?: boolean;
   elevatedTip?: string;
   describedBy?: string;
+  decisionNotice?: AppNotice;
   /** The card is leaving with the dock and takes no input. */
   inert?: boolean;
   collapse: DockCollapse;
@@ -113,7 +116,10 @@ export function ShellCard(p: {
         expandTestid="approval-card-expand"
         minimizeTestid="approval-card-minimize"
       />
-      <DockCollapseBody>{p.children}</DockCollapseBody>
+      <DockCollapseBody>
+        <InlineNotice notice={p.decisionNotice} testId="approval-decision-error" />
+        {p.children}
+      </DockCollapseBody>
     </article>
     </ApprovalContentProvider>
   );

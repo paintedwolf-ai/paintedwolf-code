@@ -228,6 +228,7 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
       elevatedTip={elevatedTip()}
       describedBy={describedBy()}
       inert={props.inert}
+      decisionNotice={props.decisionNotice}
       collapse={collapse}
       peek={checkpointRowLabel(props.checkpoint)}
       header={
