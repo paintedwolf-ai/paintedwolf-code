@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.structuralBuilder",
+  "kind": "algorithm",
+  "workstream": "structural-ancestor-repair",
+  "disposition": "retain",
+  "reason": "The builder owns one mutable structural generation from observation through child summaries, pruning, coverage, revalidation, rebase and sealing. Repair is a separate algorithm phase in structural_repair.go, with one edge propagated from each affected descendant into its immediate parent. Keep the shared builder at the measured 670 receiver lines, 25 methods and 13 fields: splitting mutable generation authority would introduce competing repair or publication state. Memory and spill tests prove unrelated sibling subtrees are not read, partial/failure/pruned aggregates equal a full bottom-up refresh, repair work is consumed, and concurrent publication rebases preserve foreground facts. No field or persisted index format was added.",
+  "reviewed_commit": "d67aeb3130265d6bc76baa01461ea541af9bc2da",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/structural_repair_test.go": "b955ed15cbb9839d612a2456771eff94231e607e49ffcbc8c6188f986a5b2a60",
+    "lycaon/internal/sourcecatalog/structural_publication_test.go": "dcde54786e3a5cb20e2d567fceb99cef2c7f907620bd9b2b704e50dc58a4ace9",
+    "lycaon/internal/sourcecatalog/structural_directory_work_test.go": "1a358d376e15be5ad87e7462ba9d39253afb37120a8258d8a505697fbb6ae0c8"
+  },
+  "reviewed_shape": "be42f2abb7cebd1c529f3d12db3d117c48b9acf69e054d304016ee11f5732289"
+}
