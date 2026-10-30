@@ -31,7 +31,7 @@ inputs:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
   repository-tools:
-    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+    description: Install native package and signature tools used by repository and script-coverage fixtures
     default: 'false'
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
@@ -286,7 +286,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg pacman-package-manager rpm
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
 
     - name: Provision pinned browser
       if: inputs.lookup-only != 'true' && (inputs.browser == 'true')

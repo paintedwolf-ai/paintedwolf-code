@@ -48,6 +48,11 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
+	if tc.Effects.CredentialFiles != nil {
+		if err := tc.Effects.CredentialFiles.EnsureProject(ctx, tc.Identity.ProjectID); err != nil {
+			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, &toolrejection.ToolReject{Code: toolrejection.OutboundSecretScreenFailedCode, Data: map[string]any{"surface": qualifiedName, "fault_stage": secretmatch.FaultStageManagedSecretStore, "reason": err.Error()}})
+		}
+	}
 	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
 	if parseErr != nil {
 		var reject *toolrejection.ToolReject

@@ -40,7 +40,7 @@ func (s holdingScreen) Screen(ctx context.Context, _ ScreenDestination, req mode
 func TestCallBudgetStartsAfterScreening(t *testing.T) {
 	const budget = 200 * time.Millisecond
 	probe := &deadlineProbeProvider{namedStubProvider: namedStubProvider{id: "lite", content: "ok"}}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "Register", reg.Register(probe))
 	budgeted := NewCallBudget(budget)
 	var screened bool
@@ -79,7 +79,7 @@ func TestCallBudgetStartsAfterScreening(t *testing.T) {
 // An unbudgeted caller is unbounded: the registry adds no deadline of its own.
 func TestCallWithoutBudgetCarriesNoDeadline(t *testing.T) {
 	probe := &deadlineProbeProvider{namedStubProvider: namedStubProvider{id: "lite", content: "ok"}}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "Register", reg.Register(probe))
 
 	p, err := reg.Get("lite")
@@ -96,7 +96,7 @@ func TestCallWithoutBudgetCarriesNoDeadline(t *testing.T) {
 // from the caller giving up.
 func TestCallBudgetExpiryIsReported(t *testing.T) {
 	slow := &budgetHoldProvider{id: "lite"}
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "Register", reg.Register(slow))
 
 	p, err := reg.Get("lite")

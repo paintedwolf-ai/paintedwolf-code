@@ -113,6 +113,11 @@ func (s *Roots) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Request
 
 func (s *Roots) afterRootAttached(ctx context.Context, projectID, workspacePath string) {
 	s.ScanCadence.RootAttached(workspacePath)
+	if files := s.Sessions.ToolContext.CredentialFiles; files != nil {
+		if err := files.EnsureProject(ctx, projectID); err != nil {
+			slog.WarnContext(ctx, "credential-file index unavailable", "project_id", projectID, "err", err)
+		}
+	}
 	var overlayPaths []string
 	var p *project.Project
 	if loaded, err := s.Registry.Get(ctx, projectID); err == nil && loaded != nil {

@@ -50,3 +50,20 @@ def generation(testdata: Path, name: str, work: Path) -> tuple:
     directory = work / name
     shutil.copytree(testdata / name, directory)
     return json.loads((directory / "generation.json").read_text()), directory
+
+
+def halt_distribution(bad, good, channels=("stable", "preview")):
+    from scripts.release_distribution_contract.halt_plan import validate
+    from scripts.release_distribution_contract.public_history import load
+    baseline = load()['releases']
+    facts = {'last_good_legacy': good in baseline, 'bad_legacy': bad in baseline,
+             'last_good_manifest_sha256': baseline[good]['updater_manifest_sha256'] if good in baseline else 'a' * 64 if good else None,
+             'last_good_dmg_sha256': baseline[good]['dmg_sha256'] if good in baseline else None,
+             'distribution_sha256': None if good is None or good in baseline else 'c' * 64}
+    return validate({"bad_versions": [bad], "channels": [
+        {"channel": channel, "bad": bad, "last_good": good, **facts} for channel in channels]})
+
+
+def generation_prefixes(objects):
+    return sorted({key.removesuffix("generation.json") for key in objects
+                   if key.startswith("linux/generations/") and key.endswith("/generation.json")})

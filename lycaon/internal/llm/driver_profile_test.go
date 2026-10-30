@@ -52,6 +52,9 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 				mustTestProviderCatalog(t, entry),
 				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 			)
+			if err == nil {
+				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+			}
 			if err != nil {
 				t.Fatalf("NewRegistry: %v", err)
 			}

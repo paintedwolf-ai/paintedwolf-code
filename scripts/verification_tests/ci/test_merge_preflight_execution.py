@@ -107,27 +107,33 @@ class MergePreflightTests(unittest.TestCase):
         repeated = [{'stage': 'budgets', 'status': 'failed'}] * 2
         self.assertEqual(preflight.failed_target(self.history_archive(failures=repeated), run, ['budgets']), 'budgets')
 
-    def test_ready_history_preserves_prerequisites_and_stops_on_repeat_failure(self):
+    def test_ready_history_checks_repeat_failure_before_native_compilation(self):
         from ci_policy import hosted_execution as execution
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
         targets = hosted_plan.lanes()['ready']['targets']
         for early, hosted, verdict in [('budgets', 'true', 1), ('budgets', 'true', 0),
-                                      ('', 'true', 0), ('unknown', 'true', 0), ('budgets', 'false', 0)]:
-            active = early == 'budgets' and hosted == 'true'
+                                      ('comments:check', 'true', 1), ('comments:check', 'true', 0),
+                                      ('budgets', 'true', 2), ('budgets', 'true', -15), ('', 'true', 0), ('unknown', 'true', 0), ('budgets', 'false', 0)]:
+            active = early in targets and hosted == 'true'
             with self.subTest(early=early, hosted=hosted, verdict=verdict), tempfile.TemporaryDirectory() as directory, \
                     patch.object(execution, 'artifact_root', return_value=Path(directory)), \
                     patch('ci_policy.impact.change', return_value=scope), \
                     patch('ci_policy.native_admission.commands', return_value=[['./task', 'decide:test', '--', '--compile-only']]), \
                     patch.dict(os.environ, GITHUB_ACTIONS=hosted, PW_CI_EARLY_TARGET=early), \
-                    patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: verdict if cmd == ['./task', 'budgets'] else 0) as call:
+                    patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: verdict if cmd == ['./task', early] else 0) as call:
                 self.assertEqual(execution.run_lane('ready'), verdict)
                 commands = [entry.args[0] for entry in call.call_args_list]
-                self.assertEqual(commands[:2], [['./task', *hosted_plan.lanes()['ready']['preflight']],
-                                               ['./task', 'decide:test', '--', '--compile-only']])
-                expected = [['./task', 'budgets']] if active else [['./task', *targets]]
-                if active and not verdict:
-                    expected += [['./task', *[target for target in targets if target != 'budgets']]]
-                self.assertEqual(commands[2:], expected)
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']]]
+                compile_native = ['./task', 'decide:test', '--', '--compile-only']
+                if active:
+                    expected += [['./task', early]]
+                    if not verdict:
+                        expected += [compile_native, ['./task', *[target for target in targets if target != early]]]
+                else:
+                    expected += [compile_native, ['./task', *targets]]
+                self.assertEqual(commands, expected)
+                record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                self.assertEqual([phase['command'] for phase in record['phases']], expected[1:])
 
     def test_fixed_platform_arguments_survive_merge_preflight(self):
         for arguments in (["launch"], ["nix"]):

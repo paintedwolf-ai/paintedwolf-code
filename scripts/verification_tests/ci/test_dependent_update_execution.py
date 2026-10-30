@@ -149,6 +149,17 @@ class DependentSelectionTests(unittest.TestCase):
                    node(11, mergeQueueEntry={'id': 'queued'})]
         self.assertEqual([p['number'] for p in chosen + refused if d.dependent(p, event, REPO)], [2, 3])
 
+    def test_silent_retarget_uses_the_latest_explicit_dependency_event(self):
+        event = landed()['pull_request']
+        older = node(2, base='main', createdAt='2026-10-19T00:00:00Z',
+                     moved=moved(previous='main', current='feat/parent'))
+        self.assertTrue(d.dependent(older, event, REPO))
+        for change in [moved(previous='main', current='feat/other'),
+                       moved(previous='main', current='feat/parent', at='2026-10-19T00:00:00Z'),
+                       moved(previous='main', current='feat/parent', at='2026-10-27T00:00:00Z')]:
+            with self.subTest(change=change):
+                self.assertFalse(d.dependent(node(3, base='main', moved=change), event, REPO))
+
     def test_auto_retarget_candidate_requires_recent_same_repository_main_target(self):
         event = landed()['pull_request']
         recent = node(2, base='main', updatedAt='2026-10-26T22:52:06Z')
@@ -180,6 +191,16 @@ class LandedTests(unittest.TestCase):
             github = GitHub(node(2))
             self.assertEqual(github.run(landed(**change))[0], {'state': 'not_applicable'})
             self.assertEqual(github.calls, [])
+
+    def test_older_pr_silently_retargeted_from_a_new_dependency_gets_main_and_checks(self):
+        github = GitHub(node(2, base='main', createdAt='2026-10-19T00:00:00Z',
+                             moved=moved(previous='main', current='feat/parent')))
+        record, _ = github.run(landed())
+        self.assertEqual(record['outcomes'], {'2': 'updated_and_checked'})
+        self.assertEqual(github.writes('pulls/2/update-branch'), [
+            (f'repos/{REPO}/pulls/2/update-branch', {'expected_head_sha': node(2)['headRefOid']})])
+        self.assertEqual(len(github.writes('dispatches')), 2)
+        self.assertFalse(any('?per_page=1' in path for _, path, _ in github.calls))
 
     def test_auto_retarget_without_timeline_event_updates_only_inherited_history(self):
         github = GitHub(node(2, base='main', isDraft=True, updatedAt='2026-10-26T22:52:06Z'),

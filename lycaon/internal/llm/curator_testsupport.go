@@ -29,6 +29,7 @@ func NewTestRegistrySummarizer(provider modelcall.Provider) (*RegistrySummarizer
 		return nil, err
 	}
 	reg := newEmptyRegistry()
+	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	if err := reg.Register(provider); err != nil {
 		return nil, err
 	}
