@@ -1,6 +1,6 @@
 ---
 name: investigate-code-history
-description: Trace code changes across live source history and Git commits, including authorship and line history.
+description: Explain how and why code reached its current form from live edit history, git blame, and commit logs, including who changed which lines.
 optional_tools:
   - command
   - source_history

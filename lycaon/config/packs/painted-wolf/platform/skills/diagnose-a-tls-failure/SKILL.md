@@ -25,17 +25,7 @@ Use this workflow when a connection fails on certificate verification. Several d
 | **TLS-inspecting proxy** | Issuer is your employer or a security vendor rather than a public CA | The connection is intercepted and re-signed. Use the CA bundle the organisation provides, scoped with `--cacert` — and report that interception is happening. |
 | **Protocol or cipher mismatch** | The handshake fails before any certificate appears | An old client against a server that dropped TLS 1.0/1.1, or the reverse. Nothing here is a certificate problem. |
 
-## Scoped trust with `curl`
-
-`curl` in a program runs on the host's HTTP client, so scoped trust needs no `external --`:
-
-- `curl -v https://host/` shows the TLS summary and the server certificate's subject, issuer and expiry on stderr; exit 60 means the peer was not verified.
-- `curl --cacert internal-ca.pem https://host/` or `--capath certs/` adds that bundle for this one request. Verification stays on, and `-k` is still refused beside it.
-- A service that wants a client certificate takes `--cert client.pem --key client.key`; give an encrypted key's passphrase with `--pass` as a managed secret reference. Exit 56 with a TLS alert usually means the server refused the client certificate.
-
-## Inside this sandbox
-
-The in-app proxy tunnels TLS bytes without replacing the origin certificate. An independent corporate proxy may inspect TLS. Check the presented chain and structured network observations before assigning a cause; use `reach-a-network-service` for routing failures.
+Proxies, internal CAs, and per-client trust settings: [scoped trust](references/scoped-trust.md).
 
 ## Do not
 
