@@ -7,6 +7,9 @@ import re
 
 from release_semver import parse
 
+ORIGIN = "https://downloads.paintedwolf.dev"
+LEGACY_PLATFORMS = Path(__file__).resolve().parents[2] / "packaging/distribution-legacy-platforms.json"
+
 
 def load_platforms(path: Path) -> dict[str, dict]:
     return parse_platforms(path.read_bytes())
@@ -89,10 +92,10 @@ def public_updaters(platforms: dict[str, dict]) -> dict[str, dict]:
             if row["publication"] == "public" and row["updater_extension"] is not None}
 
 
-def package_urls(version: str, catalog: Path) -> list[str]:
+def package_urls(version: str, catalog: Path, *, origin: str = ORIGIN) -> list[str]:
     parse(version)
     return sorted(
-        f"https://downloads.paintedwolf.dev/releases/v{version}/painted-wolf-code_v{version}_{key}.{extension}"
+        f"{origin}/releases/v{version}/painted-wolf-code_v{version}_{key}.{extension}"
         for key, row in load_platforms(catalog).items() if row["publication"] == "public"
         for extension in row["package_extensions"]
     )

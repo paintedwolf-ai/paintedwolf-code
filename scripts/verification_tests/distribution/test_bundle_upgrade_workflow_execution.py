@@ -43,8 +43,8 @@ class WorkflowTests(unittest.TestCase):
     def test_signing_and_native_execution_have_separate_jobs_and_publication_depends_on_them(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         prepare = workflow.split("  prepare-bundle-upgrade:\n", 1)[1].split("  bundle-upgrade:\n", 1)[0]
-        execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-immutable:\n", 1)[0]
-        publication = workflow.split("  publish-immutable:\n", 1)[1].split("    steps:", 1)[0]
+        execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-artifacts:\n", 1)[0]
+        publication = workflow.split("  publish-artifacts:\n", 1)[1].split("    steps:", 1)[0]
         self.assertIn("needs: [classify, ship-gates, aggregate-release, publication-credentials]", prepare)
         self.assertIn("fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}", prepare)
         self.assertIn("name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}", execution)
@@ -95,7 +95,7 @@ class ReplayTests(unittest.TestCase):
         replay = workflow.split("  replay-bundle-upgrade:\n", 1)[1].split("  classify:\n", 1)[0]
         self.assertIn("inputs.rehearsal_run_id != ''", replay)
         self.assertIn("if: ${{ inputs.rehearsal_run_id == '' }}", workflow)
-        self.assertIn("needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]", replay)
+        self.assertIn("needs: [ship-gates, bundle-upgrade, publish-github-release]", replay)
         self.assertIn("!cancelled()", replay)
         self.assertIn("actions: read", replay)
         self.assertNotIn("secrets.", replay)

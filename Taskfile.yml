@@ -1805,7 +1805,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
   release:halt:
-    desc: 'Stop discovery on one release channel by restoring its last-good pointer. Pass --channel stable|preview --bad VERSION --last-good VERSION after --'
+    desc: 'Signed-feed and negative-ledger halt primitive; use the protected release-halt workflow for complete multi-surface withdrawal'
     preconditions:
       - sh: command -v curl && command -v jq && command -v python3
         msg: curl, jq, and python3 required for release:halt

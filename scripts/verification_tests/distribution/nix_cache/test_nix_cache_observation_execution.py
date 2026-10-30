@@ -6,7 +6,9 @@ import unittest
 from unittest.mock import patch
 
 from scripts.nix_cache import observation
-from scripts.nix_cache.publication import encoded, record_name
+from scripts.nix_cache.publication import availability, encoded, record_name
+from scripts.nix_cache.release_lane import request, trust_policy
+from scripts.verification_tests.distribution.distribution_document_fixtures import cache_receipt
 
 
 class ReadOnlyBackend:
@@ -15,8 +17,7 @@ class ReadOnlyBackend:
     def __init__(self, report):
         self.report = report
         self.name = record_name(report['request'])
-        self.receipt = {key: report[key] for key in ('request', 'closure_sha256', 'closure', 'objects', 'public_keys')}
-        self.receipt['schema_version'] = 1
+        self.receipt = availability(report)
         self.records = {self.name: encoded(self.receipt)}
         self.checked = []
         self.fail = None
@@ -35,13 +36,10 @@ class ReadOnlyBackend:
 
 class PublicObservationTests(unittest.TestCase):
     def setUp(self):
-        self.report = {'schema_version': 1, 'status': 'passed',
-            'request': {'mode': 'production', 'cache_prefix': 'nix-cache', 'version': '1.2.3',
-                        'system': 'x86_64-linux'},
-            'closure_sha256': 'c' * 64, 'closure': {'actual-store-path': {}},
-            'objects': [{'name': 'nar/actual.nar.xz', 'phase': 'nar', 'bytes': 10, 'sha256': 'a' * 64},
-                        {'name': 'actual.narinfo', 'phase': 'narinfo', 'bytes': 20, 'sha256': 'b' * 64}],
-            'public_keys': ['protected-key']}
+        root = Path(__file__).resolve().parents[4]
+        selected = request('a' * 40, '1.2.3', 'x86_64-linux',
+            ['/nix/store/' + 'a' * 32 + '-painted-wolf-code'], root / 'flake.lock')
+        self.report = {**cache_receipt(selected, trust_policy()['public_keys']), 'status': 'passed'}
         self.backend = ReadOnlyBackend(self.report)
         self.local = patch.object(observation, 'verified_report', side_effect=lambda cache, report: report)
         self.admission = patch.object(observation, 'authorize', return_value=True)
@@ -57,7 +55,7 @@ class PublicObservationTests(unittest.TestCase):
     def test_every_object_and_exact_record_observed_without_write_capability(self):
         result = self.observe()
         self.assertEqual([name for name, row in self.backend.checked],
-                         ['nar/actual.nar.xz', 'actual.narinfo', self.backend.name])
+                         [row['name'] for row in self.report['objects']] + [self.backend.name])
         record = self.backend.checked[-1][1]
         self.assertEqual(record['sha256'], hashlib.sha256(self.backend.records[self.backend.name]).hexdigest())
         self.assertEqual(result['admission_sha256'], hashlib.sha256(encoded(result['facts'])).hexdigest())
@@ -92,7 +90,7 @@ class PublicObservationTests(unittest.TestCase):
         self.assertEqual(self.backend.checked, [])
 
     def test_stale_public_object_and_mid_observation_withdrawal_refuse(self):
-        self.backend.fail = 'actual.narinfo'
+        self.backend.fail = 'a' * 32 + '.narinfo'
         with self.assertRaises(ValueError):
             self.observe()
         self.backend.fail = None
