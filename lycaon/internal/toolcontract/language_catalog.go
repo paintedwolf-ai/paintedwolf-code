@@ -185,6 +185,21 @@ func (c LanguageCatalog) CommandHelp(name string) (string, bool) {
 	return "", false
 }
 
+// DispositionReplaceRoutineSchema marks a tool whose routine use is a command form.
+const DispositionReplaceRoutineSchema = "replace-routine-schema"
+
+// ReplacedRoutineSchemas maps each tool whose routine schema the language
+// replaces to the command form that replaces it.
+func (c LanguageCatalog) ReplacedRoutineSchemas() map[string]string {
+	out := map[string]string{}
+	for _, tool := range c.Tools {
+		if tool.Disposition == DispositionReplaceRoutineSchema {
+			out[tool.Tool] = tool.Command
+		}
+	}
+	return out
+}
+
 // DecodeLanguageJSON refuses unknown fields and trailing payloads in typed contracts.
 func DecodeLanguageJSON(data []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))

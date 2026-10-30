@@ -24,6 +24,28 @@ func TestLanguageV1SnapshotsAreDetached(t *testing.T) {
 	}
 }
 
+func TestReplacedRoutineSchemasSelectsOnlyReplacedTools(t *testing.T) {
+	c := toolcontract.LanguageCatalog{Tools: []toolcontract.ToolDisposition{
+		{Tool: "read", Disposition: toolcontract.DispositionReplaceRoutineSchema, Command: "cat/head/tail"},
+		{Tool: "edit", Disposition: "retain-structured-and-command", Command: "edit"},
+		{Tool: "verify", Disposition: "retain-domain-structured"},
+	}}
+	got := c.ReplacedRoutineSchemas()
+	if len(got) != 1 || got["read"] != "cat/head/tail" {
+		t.Fatalf("replaced schemas = %v", got)
+	}
+
+	stock, err := toolcontract.LanguageV1()
+	testutil.FailErr(t, "catalog", err)
+	replaced := stock.ReplacedRoutineSchemas()
+	if replaced["grep"] == "" || replaced["write"] == "" {
+		t.Fatalf("stock catalog lost routine replacements: %v", replaced)
+	}
+	if _, ok := replaced["command"]; ok {
+		t.Fatal("the primary command surface cannot replace itself")
+	}
+}
+
 func TestLanguageV1PreservesDialectAndPublicationChoices(t *testing.T) {
 	c, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "catalog", err)
