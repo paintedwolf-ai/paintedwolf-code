@@ -21,10 +21,14 @@ func sealGuardianTransition(roles [guardianTransitionRoles]*os.File, caller Iden
 	if err := initialUserNamespace(); err != nil {
 		return nil, err
 	}
-	if os.Getuid() != 0 || os.Geteuid() != 0 || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) || len(caller.Groups) > 65536 {
+	if os.Getuid() != 0 || os.Geteuid() != 0 || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
 		return nil, errors.New("invalid guardian transition identity")
 	}
-	raw := make([]byte, guardianTransitionHeader+4*len(caller.Groups))
+	groupCount := len(caller.Groups)
+	if groupCount > 65536 {
+		return nil, errors.New("invalid guardian transition identity")
+	}
+	raw := make([]byte, guardianTransitionHeader+4*groupCount)
 	copy(raw, "PWGUARD1")
 	binary.LittleEndian.PutUint32(raw[8:], 1)
 	binary.LittleEndian.PutUint32(raw[12:], guardianTransitionRoles)
@@ -51,7 +55,7 @@ func sealGuardianTransition(roles [guardianTransitionRoles]*os.File, caller Iden
 	credentials := raw[16+guardianTransitionRoles*24:]
 	binary.LittleEndian.PutUint32(credentials, caller.UID)
 	binary.LittleEndian.PutUint32(credentials[4:], caller.GID)
-	binary.LittleEndian.PutUint32(credentials[8:], uint32(len(caller.Groups)))
+	binary.LittleEndian.PutUint32(credentials[8:], uint32(groupCount))
 	for index, group := range caller.Groups {
 		if group == ^uint32(0) {
 			return nil, errors.New("invalid guardian supplementary group")

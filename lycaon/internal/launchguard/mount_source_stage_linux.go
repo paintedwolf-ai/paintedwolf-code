@@ -85,6 +85,9 @@ func startMountSource(frame, origin, entry *os.File, topology []byte) (_ *mountS
 }
 
 func (opener *mountSourceOpener) open(entry mountEntry) (int, error) {
+	if entry.id <= 0 {
+		return -1, errors.New("invalid selected mount identity")
+	}
 	if err := opener.boundIO(); err != nil {
 		return -1, err
 	}

@@ -30,7 +30,9 @@ type initialMountLease struct {
 }
 
 func encodeModuleViewPlan(plan moduleViewPlan) ([]byte, error) {
-	if !moduleViewPlanWithinBounds(plan) {
+	sourceSize, stagingSize := len(plan.source), len(plan.staging)
+	structuralCount, initialCount := len(plan.structural), len(plan.initial)
+	if sourceSize == 0 || sourceSize > maxMountTopologyBytes || stagingSize == 0 || stagingSize > maxMountTopologyBytes || structuralCount == 0 || structuralCount > maxMountTopologyEntries || initialCount > maxMountTopologyEntries {
 		return nil, errors.New("module-view plan exceeds topology bounds")
 	}
 	plan.structural = slices.Clone(plan.structural)
@@ -38,14 +40,14 @@ func encodeModuleViewPlan(plan moduleViewPlan) ([]byte, error) {
 	if err := validateModuleViewPlan(plan); err != nil {
 		return nil, err
 	}
-	size := mountPlanHeaderBytes + len(plan.source) + len(plan.staging) + 8*len(plan.structural) + 24*len(plan.initial)
+	size := mountPlanHeaderBytes + sourceSize + stagingSize + 8*structuralCount + 24*initialCount
 	raw := make([]byte, size)
 	copy(raw, "PWVIEW01")
 	binary.LittleEndian.PutUint32(raw[8:], 1)
-	binary.LittleEndian.PutUint32(raw[16:], uint32(len(plan.source)))
-	binary.LittleEndian.PutUint32(raw[20:], uint32(len(plan.staging)))
-	binary.LittleEndian.PutUint32(raw[24:], uint32(len(plan.structural)))
-	binary.LittleEndian.PutUint32(raw[28:], uint32(len(plan.initial)))
+	binary.LittleEndian.PutUint32(raw[16:], uint32(sourceSize))
+	binary.LittleEndian.PutUint32(raw[20:], uint32(stagingSize))
+	binary.LittleEndian.PutUint32(raw[24:], uint32(structuralCount))
+	binary.LittleEndian.PutUint32(raw[28:], uint32(initialCount))
 	cursor := mountPlanHeaderBytes
 	cursor += copy(raw[cursor:], plan.source)
 	cursor += copy(raw[cursor:], plan.staging)

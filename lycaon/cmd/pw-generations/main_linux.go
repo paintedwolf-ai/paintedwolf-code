@@ -40,13 +40,14 @@ func runCommand(args []string, output io.Writer, policyPath string,
 	remove func(func() error, func() (string, error)) error,
 ) error {
 	if len(args) == 3 {
-		if args[0] != "install" || args[1] != "--family" || (args[2] != "deb" && args[2] != "rpm" && args[2] != "pacman") {
+		command := [3]string(args)
+		if command[0] != "install" || command[1] != "--family" || (command[2] != "deb" && command[2] != "rpm" && command[2] != "pacman") {
 			return errors.New("usage: pw-generations install --family deb|rpm|pacman | remove")
 		}
 		if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil { // #nosec G301 -- root-owned public launch policy must be readable by unprivileged validators
 			return err
 		}
-		generation, err := install(args[2], writePolicy, selection)
+		generation, err := install(command[2], writePolicy, selection)
 		if err != nil {
 			return fmt.Errorf("could not install the protected launch generation: %w", err)
 		}

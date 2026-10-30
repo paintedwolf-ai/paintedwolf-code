@@ -161,6 +161,10 @@ func (writer *moduleMountWriter) close() error {
 	}
 	var failures []error
 	for _, entry := range volumeDetachOrder(entries, nil) {
+		if entry.id <= 0 {
+			failures = append(failures, errors.New("invalid mounted volume identity"))
+			continue
+		}
 		if volume := byMount[uint64(entry.id)]; volume != nil {
 			if err := volume.detach(); err != nil {
 				failures = append(failures, err)

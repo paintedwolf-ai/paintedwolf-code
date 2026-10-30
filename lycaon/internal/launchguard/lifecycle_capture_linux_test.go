@@ -124,7 +124,7 @@ func captureFixtureLifecyclePins() (_ *fixtureLifecyclePins, err error) {
 			}
 			matched, matchErr := matchFixtureMountRole(directory, guardian.PID, role, generation.Entry)
 			if matchErr != nil || !matched {
-				verifyErr = fmt.Errorf("registered %s image/role differs: %v", name, matchErr)
+				verifyErr = errors.Join(fmt.Errorf("registered %s image/role differs", name), matchErr)
 			}
 		}
 		_ = unix.Close(directory)

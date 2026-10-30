@@ -182,3 +182,13 @@ func TestMountSourceRefusesInvalidSelectedIdentityAndPollWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestMountSourceInvalidSelectionDoesNotAdvanceTransport(t *testing.T) {
+	opener := mountSourceOpener{sequence: 7}
+	for _, id := range []int{0, -1} {
+		fd, err := opener.open(mountEntry{id: id, mountPoint: "/"})
+		if fd != -1 || err == nil || opener.sequence != 7 {
+			t.Fatalf("invalid mount selection entered source transport: id=%d fd=%d sequence=%d err=%v", id, fd, opener.sequence, err)
+		}
+	}
+}

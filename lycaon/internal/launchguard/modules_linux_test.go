@@ -161,7 +161,7 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 
 func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string, mountedAt time.Time) error {
 	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
-		return fmt.Errorf("existing module mapped executable: %v", err)
+		return errors.Join(errors.New("existing module mapped executable"), err)
 	}
 	// Temporary absence is allowed until mediation completes. The setup lifetime
 	// bounds the event wait; the first visible mount must already be safe.
@@ -188,7 +188,7 @@ func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string, mo
 			statErr := unix.Statfs(lateDir, &stat)
 			const flags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
 			if !errors.Is(mapErr, unix.EPERM) || statErr != nil || stat.Flags&flags != flags {
-				return fmt.Errorf("visible volume was not already safe: map=%v stat=%v flags=%#x", mapErr, statErr, stat.Flags)
+				return errors.Join(fmt.Errorf("visible volume was not already safe: flags=%#x", stat.Flags), mapErr, statErr)
 			}
 			fmt.Printf("PW_MOUNT_VISIBILITY01 {\"observed_latency_ns\":%d,\"flags\":%d,\"executable_mapping_denied\":true}\n", time.Since(mountedAt).Nanoseconds(), stat.Flags)
 			return nil

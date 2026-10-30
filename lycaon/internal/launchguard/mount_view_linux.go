@@ -92,6 +92,14 @@ func runPrivateMountView(plan moduleViewPlan, stage, intake, lifetime int) (err 
 		return err
 	}
 	defer func() { err = errors.Join(err, writer.close()) }()
+	intakePoll, err := guardianPollDescriptor(uintptr(intake))
+	if err != nil {
+		return err
+	}
+	lifetimePoll, err := guardianPollDescriptor(uintptr(lifetime))
+	if err != nil {
+		return err
+	}
 	// The first stage readiness only permits establishing the fixed intake.
 	// Desktop readiness follows complete source reconciliation below.
 	stageSequence := uint64(len(plan.initial)) + 1
@@ -101,7 +109,7 @@ func runPrivateMountView(plan moduleViewPlan, stage, intake, lifetime int) (err 
 	lastIntake := time.Now()
 	for {
 		watchdog.Reset(mountSourceSetupLimit)
-		fds := []unix.PollFd{{Fd: int32(intake), Events: unix.POLLIN}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}}
+		fds := []unix.PollFd{{Fd: intakePoll, Events: unix.POLLIN}, {Fd: lifetimePoll, Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}}
 		if _, err := unix.Poll(fds, 1000); err != nil {
 			if errors.Is(err, unix.EINTR) {
 				continue
