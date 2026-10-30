@@ -26,14 +26,19 @@ func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 	limits, err := textsearch.CatalogLimits()
 	testutil.FailErr(t, "matcher limits", err)
 	for _, dialect := range []textsearch.Dialect{textsearch.Fixed, textsearch.Basic, textsearch.Extended, textsearch.RE2, textsearch.Perl} {
-		for _, pattern := range []string{"needletoken", "kelvin", "source", "σigma", "istanbul", "ÉLAN", "abc", "a.*bc", "a(b|bb)c", "a?bc", "^$", "^start", "end$", "(?i:needle)Token", "\\bNeedleToken\\b", "(abc)\\1", ""} {
+		patterns := []string{"needletoken", "kelvin", "source", "σigma", "istanbul", "ÉLAN", "abc", "a.*bc", "a(b|bb)c", "a?bc", "^$", "^start", "end$", ""}
+		if dialect == textsearch.RE2 || dialect == textsearch.Perl {
+			patterns = append(patterns, "(?i:needle)Token", `\bNeedleToken\b`)
+		}
+		if dialect == textsearch.Basic {
+			patterns = append(patterns, `\(abc\)\1`, `a\(b\|bb\)c`)
+		}
+		for _, pattern := range patterns {
 			for _, fold := range []bool{false, true} {
 				for _, word := range []bool{false, true} {
 					spec := textsearch.Spec{Dialect: dialect, Patterns: []string{pattern}, IgnoreCase: fold, Word: word}
 					matcher, compileErr := textsearch.Compile(t.Context(), spec, limits)
-					if compileErr != nil {
-						continue
-					}
+					testutil.FailErr(t, fmt.Sprintf("compile dialect=%v pattern=%q fold=%v word=%v", dialect, pattern, fold, word), compileErr)
 					for i, content := range contents {
 						_, matched, matchErr := matcher.Select(t.Context(), []byte(content))
 						testutil.FailErr(t, "match corpus", matchErr)
