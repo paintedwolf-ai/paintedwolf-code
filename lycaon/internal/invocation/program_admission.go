@@ -2,7 +2,6 @@ package invocation
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -26,10 +25,11 @@ func (r *ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound 
 	if err := r.Inputs.validateNativeScope(in); err != nil {
 		return err
 	}
-	start := reviewedOwnerStart{programID: in.Identity.ProgramID, executionID: in.Identity.ExecutionID}
-	start.record = func(ctx context.Context, tx *sql.Tx, reference string) error {
-		return r.Recorder.startNativeOwner(ctx, tx, bound, modelCallID, inputs.ArgumentsDigest(), reference, inputs.Representation())
+	prepared, err := prepareNativeStart(bound, modelCallID, inputs)
+	if err != nil {
+		return err
 	}
+	start := reviewedOwnerStart{programID: in.Identity.ProgramID, executionID: in.Identity.ExecutionID, record: prepared.record}
 	if err := r.Inputs.startReviewedOwner(ctx, r.Recorder, start, inputs); err != nil {
 		return err
 	}
