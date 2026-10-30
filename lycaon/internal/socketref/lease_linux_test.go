@@ -10,37 +10,29 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLeaseTransferAndReleaseAreDeterministic(t *testing.T) {
 	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "listen on fixture Unix socket", err)
 	defer listener.Close()
 	for range 128 {
 		original, err := Capture(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "capture socket reference", err)
 		binding := original.Binding()
 		encoded, err := json.Marshal(binding)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "encode retained binding", err)
 		var restored Binding
 		if err := json.Unmarshal(encoded, &restored); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unmarshal JSON document", err)
 		}
 		accepted, err := restored.Acquire()
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "acquire restored binding", err)
 		file, err := accepted.Duplicate()
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "duplicate accepted lease", err)
 		original.Close()
 		original.Close()
 		if _, err := original.Duplicate(); !errors.Is(err, ErrUnbound) {
@@ -66,7 +58,7 @@ func TestLeaseTransferAndReleaseAreDeterministic(t *testing.T) {
 			t.Fatalf("execution duplicate closed with grant: %v", err)
 		}
 		if err := file.Close(); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "close execution duplicate", err)
 		}
 		bindings.Lock()
 		remaining := len(bindings.refs)
@@ -80,32 +72,22 @@ func TestLeaseTransferAndReleaseAreDeterministic(t *testing.T) {
 func TestLastAuthorityReleaseCannotBeResurrectedDuringConnect(t *testing.T) {
 	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "listen on fixture Unix socket", err)
 	defer listener.Close()
 	lease, err := Capture(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "capture socket reference", err)
 	binding := lease.Binding()
 	ref, finish, err := lease.operation()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "admit lease operation", err)
 	lease.Close()
 	if _, err := binding.Acquire(); !errors.Is(err, ErrUnbound) {
 		t.Fatalf("retired binding reacquired: %v", err)
 	}
 	client, err := ref.DialContext(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "dial retained socket", err)
 	defer client.Close()
 	accepted, err := listener.AcceptUnix()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "accept fixture Unix connection", err)
 	_ = accepted.Close()
 	finish()
 	if _, err := ref.Duplicate(); !errors.Is(err, ErrUnbound) {

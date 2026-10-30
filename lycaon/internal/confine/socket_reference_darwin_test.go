@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
@@ -24,14 +25,10 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 			t.Setenv("LYCAON_CONFIG_DIR", state)
 			path := filepath.Join(broad, "service.sock")
 			listener, err := net.Listen("unix", path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "listen on fixture socket", err)
 			defer listener.Close()
 			lease, err := socketref.Capture(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "capture socket reference", err)
 			defer lease.Close()
 			aliases, err := filepath.Glob(filepath.Join(state, "socket-references", "service-*", "socket"))
 			if err != nil || len(aliases) != 1 {
@@ -58,7 +55,7 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 			}
 			project := filepath.Join(broad, "project")
 			if err := os.Mkdir(project, 0700); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "create fixture directory", err)
 			}
 			c := confine.Confinement{Roots: []string{project}, Network: confine.NetworkDeny}
 			var code int
@@ -83,9 +80,7 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 			}
 			defer client.Close()
 			accepted, err := listener.Accept()
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "accept fixture socket connection", err)
 			_ = accepted.Close()
 		})
 	}

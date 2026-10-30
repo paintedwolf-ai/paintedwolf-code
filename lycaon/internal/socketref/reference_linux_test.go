@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
@@ -20,19 +22,15 @@ func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 			root := shortSocketRoot(t)
 			dir := filepath.Join(root, "service")
 			if err := os.Mkdir(dir, 0700); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "create fixture directory", err)
 			}
 			path := filepath.Join(dir, "socket")
 			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "listen on fixture Unix socket", err)
 			listener.SetUnlinkOnClose(false)
 			t.Cleanup(func() { _ = listener.Close() })
 			lease, err := Capture(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "capture socket reference", err)
 			t.Cleanup(lease.Close)
 			switch mutation {
 			case "rename":
@@ -51,36 +49,28 @@ func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 			var decoy *net.UnixListener
 			if mutation == "replace" || mutation == "ancestor" {
 				decoy, err = net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "listen on fixture Unix socket", err)
 				t.Cleanup(func() { _ = decoy.Close() })
 			}
 			client, err := lease.DialContext(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "dial retained socket", err)
 			defer client.Close()
 			accepted, err := listener.AcceptUnix()
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "accept fixture Unix connection", err)
 			defer accepted.Close()
 			if _, err := client.Write([]byte("approved")); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write through retained socket", err)
 			}
 			data := make([]byte, 8)
 			if _, err := accepted.Read(data); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "read approved socket payload", err)
 			}
 			if string(data) != "approved" {
 				t.Fatalf("received %q", data)
 			}
 			if decoy != nil {
 				raw, err := decoy.SyscallConn()
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "inspect decoy listener", err)
 				var ready int
 				var pollErr error
 				if err := raw.Control(func(fd uintptr) {
@@ -99,7 +89,7 @@ func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 func TestUnboundBindingDoesNotReopenExistingPath(t *testing.T) {
 	var binding Binding
 	if err := json.Unmarshal([]byte(`{"id":"prior-engine-reference"}`), &binding); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	if _, err := binding.Acquire(); !errors.Is(err, ErrUnbound) {
 		t.Fatalf("reference error = %v", err)
@@ -112,35 +102,25 @@ func TestUnboundBindingDoesNotReopenExistingPath(t *testing.T) {
 func TestDuplicateOutlivesClosedOwner(t *testing.T) {
 	path := filepath.Join(shortSocketRoot(t), "socket")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "listen on fixture Unix socket", err)
 	defer listener.Close()
 	ref, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open retained socket", err)
 	file, err := ref.Duplicate()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "duplicate retained reference", err)
 	defer file.Close()
 	if err := ref.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close retained reference", err)
 	}
 	if _, err := ref.Duplicate(); !errors.Is(err, ErrUnbound) {
 		t.Fatalf("closed duplicate error = %v", err)
 	}
 	var dialer net.Dialer
 	client, err := dialer.DialContext(t.Context(), "unix", descriptorPath(file))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "dial retained descriptor path", err)
 	defer client.Close()
 	accepted, err := listener.AcceptUnix()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "accept fixture Unix connection", err)
 	_ = accepted.Close()
 }
 

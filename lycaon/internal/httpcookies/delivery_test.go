@@ -6,14 +6,14 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCookieDeliveryWithholdingPreservesProtectedIssuerAndAttributes(t *testing.T) {
 	target, _ := url.Parse("http://service.invalid/private")
 	legacy, err := Decode([]byte(`{"cookies":[{"name":"session","value":"x","domain":"service.invalid","host_only":true,"path":"/","http_only":true,"same_site":"lax","created":"2026-01-01T00:00:00Z"}]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "decode cookie state", err)
 	for _, issuer := range []string{"", "retained_object:original"} {
 		t.Run(issuer, func(t *testing.T) {
 			legacy[0].NativeIssuer = issuer
@@ -30,13 +30,9 @@ func TestCookieDeliveryWithholdingPreservesProtectedIssuerAndAttributes(t *testi
 				t.Fatal("delivery changed protected cookie state")
 			}
 			raw, err := store.Encode()
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "encode cookie state", err)
 			restored, err := Decode(raw)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "decode cookie state", err)
 			if !reflect.DeepEqual(restored, before) {
 				t.Fatal("issuer did not survive encode/decode")
 			}

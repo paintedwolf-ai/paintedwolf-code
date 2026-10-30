@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
@@ -27,18 +29,12 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	defer os.RemoveAll(root)
 	path := filepath.Join(root, "socket")
 	listener, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "listen on fixture socket", err)
 	defer listener.Close()
 	relative, err := filepath.Rel(cwd, path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compute relative socket path", err)
 	want, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "resolve socket symlinks", err)
 	resolved, ok := resolveSocketPath(relative, &targetProcess{pid: os.Getpid()})
 	if !ok || resolved != want {
 		t.Fatalf("relative path: got %q %v, want %q", resolved, ok, want)
