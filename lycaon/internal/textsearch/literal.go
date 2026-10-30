@@ -238,11 +238,11 @@ func (e literalEngine) foldedIndex(ctx context.Context, record, pattern []byte, 
 		return from, ctx.Err()
 	}
 	for at := from; at <= len(record)-len(pattern); at++ {
-		if at&4095 == 0 {
-			if err := ctx.Err(); err != nil {
-				return -1, err
-			}
+		candidate, err := e.foldedCandidate(ctx, record, pattern[0], at, len(record)-len(pattern)+1, work)
+		if err != nil || candidate < 0 {
+			return -1, err
 		}
+		at = candidate
 		matched := true
 		for offset, want := range pattern {
 			if *work >= e.limits.WorkSteps {
