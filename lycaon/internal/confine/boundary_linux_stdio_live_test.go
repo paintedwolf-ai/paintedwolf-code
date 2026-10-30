@@ -162,10 +162,18 @@ func TestLinuxByteInputEarlyExitAndCancellationSettleDescendants(t *testing.T) {
 			if offset >= 64<<20 {
 				t.Fatal("early exit/cancellation consumed the whole input")
 			}
-			survivors, err := lease.Survivors()
-			testutil.FailErr(t, "inspect stream descendants after settlement", err)
-			if len(survivors) != 0 {
-				t.Fatalf("stream descendants survived: %+v", survivors)
+			// Wait joins the outer helper; its PID namespace may still be exiting.
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				survivors, err := lease.Survivors()
+				testutil.FailErr(t, "inspect stream descendants after settlement", err)
+				if len(survivors) == 0 {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("stream descendants survived: %+v", survivors)
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
 		})
 	}
