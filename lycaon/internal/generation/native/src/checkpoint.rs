@@ -16,10 +16,11 @@ use crate::error::{Error, Result};
 const MAX_TENSOR_BYTES: u64 = 4 << 30;
 
 /// Device names this service accepts, and whether the host can serve them.
+/// `mlx` stays unsupported until the MLX decoder lands; reporting it as
+/// available while every request runs on CPU would lie to the host.
 pub fn device_supported(device: &str) -> bool {
     match device {
         "cpu" => true,
-        "mlx" => cfg!(all(target_os = "macos", target_arch = "aarch64")),
         _ => false,
     }
 }

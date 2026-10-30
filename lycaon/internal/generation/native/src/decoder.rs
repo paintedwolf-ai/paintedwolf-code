@@ -248,15 +248,15 @@ impl Decoder {
         let mut x: Vec<Vec<f32>> = tokens.iter().map(|&t| self.embed_one(t)).collect::<Result<_>>()?;
 
         // PLE adds a learned per-position vector to the token embedding, layer-scoped.
-        for row in x.iter_mut() {
-            for (li, ple) in self.ple.iter().enumerate() {
-                if next_pos < ple.len() / c.hidden {
-                    let off = next_pos * c.hidden;
+        for (s, row) in x.iter_mut().enumerate() {
+            let pos = next_pos + s;
+            for ple in &self.ple {
+                if pos < ple.len() / c.hidden {
+                    let off = pos * c.hidden;
                     for (r, p) in row.iter_mut().zip(&ple[off..off + c.hidden]) {
                         *r += p;
                     }
                 }
-                let _ = li;
             }
         }
 
