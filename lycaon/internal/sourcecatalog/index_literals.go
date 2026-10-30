@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 // LiteralSearch owns content bloom preparation and its retained candidate cache.
@@ -16,6 +17,7 @@ type LiteralSearch struct {
 // contentBuild fills per-file literal filters to reduce content reads.
 type contentBuild struct {
 	revision uint64
+	watch    repochange.WatchObservation
 	started  time.Time
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -54,6 +56,7 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 
 func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexReader, query LiteralQuery) bool {
 	s := reader.store
+	watch := repochange.ObserveWatch(s.root.Path, ".")
 	key := indexLiteralScopeKey(query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -66,7 +69,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	if build := s.content[key]; build != nil {
 		select {
 		case <-build.done:
-			if build.revision == reader.Status.Revision && build.complete {
+			if build.revision == reader.Status.Revision && build.complete && build.watch == watch {
 				return false
 			}
 			if !build.complete && time.Since(build.finished) < 5*time.Second {
@@ -96,7 +99,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	// Preparation outlives the search that started it; retirement and drain
 	// cancel it.
 	buildCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	build := &contentBuild{revision: reader.Status.Revision, started: time.Now(), cancel: cancel, done: make(chan struct{})}
+	build := &contentBuild{revision: reader.Status.Revision, watch: watch, started: time.Now(), cancel: cancel, done: make(chan struct{})}
 	s.content[key] = build
 	go func() {
 		defer cancel()

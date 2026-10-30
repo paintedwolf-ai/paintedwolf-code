@@ -1,7 +1,6 @@
 package sourcecatalog
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -9,8 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
-	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/transform"
 )
 
 type literalBloom []uint64
@@ -33,22 +30,24 @@ func buildLiteralBloom(
 		projection := literalProjection{bloom: bloom, searchable: searchable}
 		return literalFileBlooms{decoded: projection, raw: projection}, err
 	}
-	raw := newLiteralBloomStream(entry.Size)
-	reader = bufio.NewReaderSize(io.TeeReader(reader, raw), 64*1024)
-	var decoded io.Reader = reader
-	if len(prefix) >= 2 && prefix[0] == 0xff && prefix[1] == 0xfe {
-		decoded = transform.NewReader(reader, unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder())
-	} else if len(prefix) >= 2 && prefix[0] == 0xfe && prefix[1] == 0xff {
-		decoded = transform.NewReader(reader, unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder())
-	} else if len(prefix) >= 3 && prefix[0] == 0xef && prefix[1] == 0xbb && prefix[2] == 0xbf {
-		_, _ = reader.Discard(3)
+	builder := newLiteralContent(entry.Size)
+	buf := make([]byte, 64*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return literalFileBlooms{}, err
+		}
+		n, err := f.Read(buf)
+		if _, buildErr := builder.Write(buf[:n]); buildErr != nil {
+			return literalFileBlooms{}, buildErr
+		}
+		if errors.Is(err, io.EOF) {
+			return builder.finish()
+		}
+		if err != nil {
+			return literalFileBlooms{}, err
+		}
 	}
-	bloom, searchable, err := buildLiteralBloomReader(ctx, decoded, entry.Size)
-	if err != nil {
-		return literalFileBlooms{}, err
-	}
-	rawBloom, rawSearchable := raw.finish()
-	return literalFileBlooms{decoded: literalProjection{bloom: bloom, searchable: searchable}, raw: literalProjection{bloom: rawBloom, searchable: rawSearchable}}, nil
+
 }
 
 // buildLiteralBloomReader carries split UTF-8 runes across chunks before folding.
