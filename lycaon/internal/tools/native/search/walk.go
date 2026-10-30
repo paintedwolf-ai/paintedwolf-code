@@ -43,6 +43,7 @@ func newWalker(inv *invocation) *walker {
 }
 
 func (w *walker) close() {
+	w.report()
 	for k, r := range w.roots {
 		_ = r.Close()
 		delete(w.roots, k)
@@ -68,6 +69,7 @@ func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	if err != nil {
 		return nil
 	}
+	w.work.roots++
 	w.roots[path] = r
 	return r
 }
@@ -112,15 +114,19 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 // follow reports the target metadata of contained links; a link whose
 // target cannot be reached stays a link.
 func (w *walker) children(dir entry, follow bool) ([]entry, error) {
-	if entries, indexed, err := w.indexedChildren(dir, follow); indexed || err != nil {
-		return entries, err
-	}
 	opened, err := dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
 	if err != nil {
 		return nil, err
 	}
+	w.work.handles++
 	defer opened.Close()
-	names := opened.Names()
+	if entries, indexed, err := w.indexedChildren(dir, follow, opened); indexed || err != nil {
+		return entries, err
+	}
+	names, err := opened.Names()
+	if err != nil {
+		return nil, err
+	}
 	w.work.listed++
 	filter, err := w.filter(dir.bound)
 	if err != nil {
@@ -135,6 +141,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 			return nil, err
 		}
 		w.work.metadata++
+		w.work.relative++
 		child, st, err := opened.StatChild(name)
 		if err != nil {
 			if _, ok := ordinary(err); ok {

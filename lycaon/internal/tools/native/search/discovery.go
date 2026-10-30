@@ -7,10 +7,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 type discoveryWork struct {
 	metadata, listed, reused, prepared int64
+	roots, handles, relative           int64
 }
 
 func structuralPrimary(key string) bool {
@@ -27,13 +29,15 @@ func (w *walker) report() {
 		"execution_id", w.inv.request.Invocation.Identity.ExecutionID,
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
-		"directory_preparations", w.work.prepared)
+		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
+		"directory_handles", w.work.handles, "relative_child_stats", w.work.relative)
 }
 
 type entryMetadata struct {
-	known bool
-	stat  fseffect.EntryStat
-	err   error
+	known  bool
+	stat   fseffect.EntryStat
+	err    error
+	parent *projectpaths.BoundPath
 }
 
 // Metadata is fetched only after a reached primary needs it.
@@ -44,7 +48,18 @@ func (w *walker) inspect(e entry, follow bool) (entry, error) {
 	m := e.metadata
 	if !m.known {
 		w.work.metadata++
-		m.stat, m.err = e.bound.Stat(false)
+		if m.parent == nil {
+			m.stat, m.err = e.bound.Stat(false)
+		} else {
+			opened, err := m.parent.OpenDirWithRoot(w.readRoot(*m.parent))
+			m.err = err
+			if err == nil {
+				w.work.handles++
+				w.work.relative++
+				_, m.stat, m.err = opened.StatChild(e.name)
+				_ = opened.Close()
+			}
+		}
 		m.known = true
 	}
 	if m.err != nil {
@@ -61,19 +76,11 @@ func (w *walker) inspect(e entry, follow bool) (entry, error) {
 	return e, nil
 }
 
-func (w *walker) indexedChildren(dir entry, follow bool) ([]entry, bool, error) {
+func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.BoundDir) ([]entry, bool, error) {
 	catalog := w.inv.owners.Catalog
 	if follow || dir.followed || dir.bound.Resolved.External || catalog == nil || catalog.Directories == nil {
 		return nil, false, nil
 	}
-	if err := dir.bound.Validate(); err != nil {
-		return nil, true, err
-	}
-	file, err := dir.bound.Open()
-	if err != nil {
-		return nil, true, err
-	}
-	_ = file.Close()
 	root := dir.bound.Resolved.Root
 	maximum := 0
 	if w.maximum > 0 {
@@ -113,15 +120,24 @@ func (w *walker) indexedChildren(dir entry, follow bool) ([]entry, bool, error) 
 		}
 		e := entry{display: joinDisplay(dir.display, item.Name), name: item.Name, bound: child,
 			stat: fseffect.EntryStat{Mode: mode}, depth: dir.depth + 1, start: dir.start,
-			link: item.IsSymlink, metadata: &entryMetadata{}}
-		if !w.lazy {
-			e, err = w.inspect(e, false)
+			link: item.IsSymlink, metadata: &entryMetadata{parent: &dir.bound}}
+		if !w.lazy || item.IsDir || item.IsSymlink {
+			w.work.metadata++
+			w.work.relative++
+			var stat fseffect.EntryStat
+			child, stat, err = opened.StatChild(item.Name)
 			if err != nil {
 				if _, ok := ordinary(err); ok {
 					continue
 				}
 				return nil, true, err
 			}
+			e.bound, e.stat, e.metadata = child, stat, nil
+			e.link = stat.Mode&fs.ModeSymlink != 0
+		}
+		e.display = child.Resolved.DisplayPath
+		if dir.display == "." || dir.display != dir.bound.Resolved.DisplayPath {
+			e.display = joinDisplay(dir.display, item.Name)
 		}
 		if filter != nil && !filter(child.Resolved.ScopeRel, e.dir()) {
 			continue
