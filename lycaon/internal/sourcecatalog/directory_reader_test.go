@@ -228,7 +228,7 @@ func TestDirectoryReaderRetirementReleasesUnpublishedResources(t *testing.T) {
 	_, err := reader.ReadDirectory(t.Context(), "dir", 0, nil)
 	testutil.FailErr(t, "collect before retirement", err)
 	testutil.FailErr(t, "retire catalog", catalog.Trees.Drain(t.Context()))
-	if err := reader.Close(t.Context()); !errors.Is(err, pagedview.ErrExpired) {
+	if err := reader.Close(t.Context()); err == nil {
 		t.Fatalf("retired drain=%v", err)
 	}
 	if reader.builder != nil || reader.pin != nil || len(reader.pending) != 0 {

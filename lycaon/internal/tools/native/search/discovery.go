@@ -13,7 +13,8 @@ import (
 type discoveryWork struct {
 	metadata, listed, reused, prepared int64
 	roots, handles, relative           int64
-	readers                            map[string]*sourcecatalog.DirectoryReader
+	reader                             *sourcecatalog.DirectoryReader
+	readerRoot                         string
 }
 
 // Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
@@ -31,10 +32,8 @@ func structuralPrimary(key string) bool {
 }
 
 func (w *walker) report() {
-	for _, reader := range w.work.readers {
-		if err := reader.Close(w.inv.ctx); err != nil {
-			slog.DebugContext(w.inv.ctx, "command catalog observation drain", "error", err)
-		}
+	if w.work.reader != nil {
+		w.closeDirectoryReader()
 	}
 
 	slog.InfoContext(w.inv.ctx, "command discovery completed",
@@ -43,6 +42,16 @@ func (w *walker) report() {
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
 		"directory_handles", w.work.handles, "relative_child_stats", w.work.relative)
+}
+
+func (w *walker) closeDirectoryReader() {
+	if w.work.reader == nil {
+		return
+	}
+	if err := w.work.reader.Close(w.inv.ctx); err != nil {
+		slog.DebugContext(w.inv.ctx, "command catalog observation drain", "error", err)
+	}
+	w.work.reader = nil
 }
 
 type entryMetadata struct {
@@ -88,14 +97,13 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	if w.maximum > 0 {
 		maximum = int(max(1, w.maximum-w.visited))
 	}
-	if w.work.readers == nil {
-		w.work.readers = make(map[string]*sourcecatalog.DirectoryReader)
+	if w.work.reader == nil || w.work.readerRoot != root.Path {
+		w.closeDirectoryReader()
+		w.work.reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
+		w.work.readerRoot = root.Path
 	}
-	reader := w.work.readers[root.Path]
-	if reader == nil {
-		reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
-		w.work.readers[root.Path] = reader
-	}
+	reader := w.work.reader
+
 	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, nil)
 	if listing.Prepared {
 		w.work.prepared++
