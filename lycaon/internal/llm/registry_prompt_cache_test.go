@@ -21,6 +21,9 @@ func TestProviderFeaturesMetaPromptCache(t *testing.T) {
 		),
 		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 	)
+	if err == nil {
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -47,6 +50,9 @@ func TestRegistryListCachedReusesSnapshot(t *testing.T) {
 		),
 		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 	)
+	if err == nil {
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -67,6 +73,9 @@ func TestRegistryListCachedEmptyStaysArray(t *testing.T) {
 		mustTestProviderCatalog(t),
 		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 	)
+	if err == nil {
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -93,6 +102,9 @@ func TestRegistryListCachedServesStaleWhileRefreshing(t *testing.T) {
 		),
 		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 	)
+	if err == nil {
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}

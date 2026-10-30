@@ -81,6 +81,9 @@ func TestAnthropicRegistryConfiguredWithKey(t *testing.T) {
 		contractcheck.FailErr(t, "creds.Set failed", err)
 	}
 	registry, err := llm.NewRegistry(t.Context(), catalog, creds)
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 	if !registry.IsConfigured("anthropic") {
 		t.Fatal("expected anthropic configured with stored credential")
@@ -101,6 +104,9 @@ func TestAnthropicRegistryUnconfiguredWithoutKey(t *testing.T) {
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 	if registry.IsConfigured("anthropic") {
 		t.Fatal("expected anthropic unconfigured without stored credential (env ignored)")

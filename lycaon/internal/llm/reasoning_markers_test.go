@@ -207,7 +207,7 @@ func TestRegistryChainSeparatesDeclaredReasoningMarkers(t *testing.T) {
 		{Content: "Answer", Usage: modelcall.TokenUsage{Present: true, PromptTokens: 3, CompletionTokens: 2}, Done: true},
 	}}
 	snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{Providers: map[string]modelcall.Provider{"p": scripted}})
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	reg.snapshot.Store(snapshot)
 	provider := reg.decorateProvider(snapshot, scripted)
 	req := modelcall.CompletionRequest{Model: "Qwen/Qwen3.8-Flash", Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}}

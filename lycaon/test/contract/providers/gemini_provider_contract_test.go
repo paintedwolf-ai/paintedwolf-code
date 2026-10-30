@@ -56,6 +56,9 @@ func TestGeminiRegistryUnconfiguredWithoutKey(t *testing.T) {
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 	if registry.IsConfigured("gemini") {
 		t.Fatal("expected gemini unconfigured without stored credential (env ignored)")

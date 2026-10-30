@@ -39,6 +39,9 @@ func trustTestRegistry(t *testing.T) (*ProviderCatalog, *Registry, *destinationC
 	t.Helper()
 	catalog := mustCatalogCloneShipToLocal(t, trustTestShipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry", err)
 	screen := &destinationCapturingScreen{}
 	registry.SetOutboundSecretScreen(screen)

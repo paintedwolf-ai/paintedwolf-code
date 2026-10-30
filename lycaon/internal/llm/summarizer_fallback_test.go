@@ -54,7 +54,7 @@ func newFallbackTestSummarizer(t *testing.T, lite, coord modelcall.Provider) *Re
 		Lite:        ModelRef{ProviderID: lite.ID(), Model: lite.ID() + "-model"},
 	})
 
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "Register lite", reg.Register(lite))
 	if coord.ID() != lite.ID() {
 		testutil.FailErr(t, "Register coord", reg.Register(coord))

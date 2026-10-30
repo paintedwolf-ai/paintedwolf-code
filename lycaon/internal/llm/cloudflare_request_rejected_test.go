@@ -28,7 +28,7 @@ func TestCloudflarePaidPlanRejectionCompleteAndStream(t *testing.T) {
 	snapshot := newProviderRegistrySnapshot(providerRegistrySnapshotInput{
 		Entries: map[string]CatalogEntry{entry.ID: entry}, Providers: map[string]modelcall.Provider{entry.ID: inner},
 	})
-	provider := (&Registry{}).decorateProvider(snapshot, inner)
+	provider := (&Registry{outboundSecretScreen: NewModelSecretScreen(nil, nil)}).decorateProvider(snapshot, inner)
 	request := modelcall.CompletionRequest{
 		Model:    "@cf/zai-org/glm-5.3-flash",
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},

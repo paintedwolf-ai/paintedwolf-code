@@ -57,6 +57,12 @@ providers:
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
 	reg, err := NewRegistry(t.Context(), cat, creds)
+
+	if err == nil {
+
+		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+
+	}
 	testutil.FailErr(t, "registry", err)
 	reg.discoveryClient = srv.Client()
 

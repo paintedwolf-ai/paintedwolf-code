@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -223,7 +224,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	screen := r.outboundSecretScreen
 	r.screenMu.RUnlock()
 	if screen == nil {
-		return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}}
+		screen = unwiredSecretScreen{}
 	}
 	destination := ScreenDestination{ID: p.ID()}
 	if hasEntry {
@@ -302,3 +303,9 @@ func (r *Registry) StreamWithSelection(ctx context.Context, sel *ModelSelection,
 }
 
 var _ modelcall.ProviderRegistry = (*Registry)(nil)
+
+type unwiredSecretScreen struct{}
+
+func (unwiredSecretScreen) Screen(context.Context, ScreenDestination, modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+	return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageScreenUnwired}
+}

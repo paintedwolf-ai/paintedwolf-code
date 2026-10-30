@@ -39,6 +39,9 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 
 	catalog := liveCatalogForShipIDs(t, "omlx")
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 
 	if !registry.IsConfigured("omlx") {
@@ -97,6 +100,9 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 		}
 	}
 	regLinux, err := llm.NewRegistry(t.Context(), catalogLinux, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		regLinux.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "linux registry", err)
 	for _, p := range regLinux.List(t.Context()) {
 		if p.ID == "omlx" {

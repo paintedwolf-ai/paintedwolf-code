@@ -44,6 +44,9 @@ func TestBundledOpenAICompatibleRegistry(t *testing.T) {
 
 			catalog := liveCatalogForShipIDs(t, tc.id)
 			registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+			if err == nil {
+				registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+			}
 			contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 			if got := registry.IsConfigured(tc.id); got != tc.wantConfigured {
 				t.Fatalf("IsConfigured = %v, want %v", got, tc.wantConfigured)

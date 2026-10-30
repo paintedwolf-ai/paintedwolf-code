@@ -49,6 +49,9 @@ func TestCloudflareWorkersAIRegistryUnconfiguredWithoutKey(t *testing.T) {
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 	if registry.IsConfigured("cloudflare-workers-ai") {
 		t.Fatal("expected cloudflare-workers-ai unconfigured without API key or stored credential")
@@ -59,6 +62,9 @@ func TestCloudflareWorkersAIReportsToolCallCapability(t *testing.T) {
 	t.Parallel()
 	catalog := liveCatalogForShipIDs(t, "cloudflare-workers-ai")
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 
 	var toolCalls bool

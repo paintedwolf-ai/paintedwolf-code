@@ -74,6 +74,9 @@ func TestRoutingClientRegistryUnconfiguredProvider(t *testing.T) {
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 
 	mock := NewMockProvider(mockConfigForTest(t))
@@ -174,6 +177,9 @@ func TestConfiguredProviderEmptyResponseFails(t *testing.T) {
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
 	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	if err == nil {
+		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 
 	fallback := NewMockProvider(mockConfigForTest(t))
