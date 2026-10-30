@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 var errFixtureMountVisibilityDeadline = errors.New("safe volume did not become visible")
@@ -232,37 +234,31 @@ func TestMountTimeoutSnapshotFixture(t *testing.T) {
 		t.Fatal("mount snapshot fixture requires initial root")
 	}
 	if err := unix.Unshare(unix.CLONE_FS | unix.CLONE_NEWNS); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "isolate mount snapshot namespace", err)
 	}
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "make fixture root mounts private", err)
 	}
 	root := t.TempDir()
 	target := filepath.Join(root, "owned-volume")
 	if err := os.Mkdir(target, 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create owned mount target", err)
 	}
 	if err := unix.Mount("none", target, "tmpfs", unix.MS_NODEV|unix.MS_NOSUID|unix.MS_NOEXEC, "size=1m"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "mount owned timeout snapshot volume", err)
 	}
 	defer unix.Unmount(target, unix.MNT_DETACH)
 	file := filepath.Join(target, "late.so")
 	if err := os.WriteFile(file, []byte("owned"), 0600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write owned late module fixture", err)
 	}
 	ns, err := os.Open("/proc/thread-self/ns/mnt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open owned mount namespace", err)
 	defer ns.Close()
 	present, err := observeTimeoutMountNamespace("owned", ns, target, file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "observe present owned timeout mount", err)
 	fd, err := openMountPoint(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open owned timeout mount descriptor", err)
 	id, inode, err := mountDescriptorIdentity(fd)
 	_ = unix.Close(fd)
 	if err != nil {
@@ -273,19 +269,15 @@ func TestMountTimeoutSnapshotFixture(t *testing.T) {
 		t.Fatalf("snapshot lost actual owned namespace/mount/file facts: %+v", present)
 	}
 	if err := unix.Unmount(target, 0); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "remove owned timeout mount", err)
 	}
 	absent, err := observeTimeoutMountNamespace("underlying", ns, target, file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "observe underlying mount after removal", err)
 	if absent.MountID == present.MountID || absent.LateFileErrno != int(unix.ENOENT) || absent.LateFileType != 0 {
 		t.Fatalf("snapshot confused disappeared source and underlying mount: %+v", absent)
 	}
 	raw, err := json.Marshal([]timeoutMountNamespace{present, absent})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "encode owned timeout snapshot facts", err)
 	fmt.Printf("PW_OWNED_TIMEOUT_SNAPSHOT01 %s\n", raw)
 }
 

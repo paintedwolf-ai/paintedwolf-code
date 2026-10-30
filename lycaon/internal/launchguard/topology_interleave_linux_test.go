@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type topologyInterleaveFacts struct {
@@ -54,7 +56,7 @@ func TestTopologySplitReadAcrossOwnedMountReplacement(t *testing.T) {
 	}
 	var facts topologyInterleaveFacts
 	if err := json.Unmarshal(out, &facts); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode split-read mount replacement facts", err)
 	}
 	if !facts.PrivateNamespace || !facts.FreshValid || facts.OldID == 0 || facts.NewID == 0 ||
 		facts.PrefixBytes <= 0 || facts.Replacements < 1 || facts.Replacements > 8 || facts.Predicate < -1 || facts.Predicate > int(topologyCycle) {

@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type topologyChurnFacts struct {
@@ -52,7 +54,7 @@ func TestTopologyCaptureDuringOwnedPrivateMountChurn(t *testing.T) {
 	}
 	var facts topologyChurnFacts
 	if err := json.Unmarshal(out, &facts); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode private mount churn facts", err)
 	}
 	if !facts.PrivateNamespace || !facts.FreshValid || facts.Iterations < 1 || facts.Iterations > 1024 {
 		t.Fatalf("fixture lost owned isolation, bounded capture or valid settled topology: %+v", facts)

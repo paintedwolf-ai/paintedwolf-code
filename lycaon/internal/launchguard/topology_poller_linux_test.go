@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type topologyPollerFacts struct {
@@ -54,7 +56,7 @@ func TestTopologyOwnedReaderHasExclusiveEpochNotifications(t *testing.T) {
 	}
 	var facts topologyPollerFacts
 	if err := json.Unmarshal(out, &facts); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode exclusive mount notification facts", err)
 	}
 	if !facts.PrivateNamespace || !facts.FreshValid || facts.RawMemberships != 0 || facts.Attempts < 1 || facts.Attempts > 8 || facts.GoMemberships < 0 || facts.EventPolls < facts.GoMemberships {
 		t.Fatalf("poll experiment lost bounded isolation/descriptor facts: %+v", facts)

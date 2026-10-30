@@ -9,15 +9,15 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestIntakeStableEpochStillRefusesMalformedTopology(t *testing.T) {
 	// A regular read-only descriptor has no mount notification; the reader seam
 	// supplies exact grammar counterexamples without changing the parser.
 	file, err := os.CreateTemp(t.TempDir(), "stable-epoch")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create stable mount epoch fixture", err)
 	defer file.Close()
 	root := "20 1 8:1 / / rw - ext4 root rw\n"
 	for _, raw := range []string{"", "invalid\n", root + root} {
@@ -35,9 +35,7 @@ func TestIntakeStableEpochStillRefusesMalformedTopology(t *testing.T) {
 
 func TestIntakeCaptureDescriptorAndReadErrorsRemainFatal(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "epoch-errors")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create mount epoch error fixture", err)
 	fd := int(file.Fd())
 	_, changed, err := readIntakeMountTopology(fd, func(int, []byte) ([]byte, error) { return nil, unix.EIO })
 	if changed || !errors.Is(err, unix.EIO) || MountIntakeExitStatus(err) != 82 {
@@ -45,7 +43,7 @@ func TestIntakeCaptureDescriptorAndReadErrorsRemainFatal(t *testing.T) {
 	}
 	_, changed, err = readIntakeMountTopology(fd, func(int, []byte) ([]byte, error) {
 		if err := file.Close(); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "close topology descriptor during read", err)
 		}
 		return []byte("invalid\n"), nil
 	})
@@ -61,12 +59,10 @@ func TestIntakeCaptureDescriptorAndReadErrorsRemainFatal(t *testing.T) {
 		t.Fatalf("negative descriptor accepted: %v %v", changed, err)
 	}
 	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create mount epoch HUP fixture", err)
 	defer reader.Close()
 	if err := writer.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close pipe writer to signal HUP", err)
 	}
 	if changed, err := mountInfoEpochChanged(int(reader.Fd())); changed || err == nil {
 		t.Fatalf("HUP became mount epoch change: %v %v", changed, err)
