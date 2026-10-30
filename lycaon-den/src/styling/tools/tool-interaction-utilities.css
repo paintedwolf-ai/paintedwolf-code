@@ -323,3 +323,64 @@
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 
+
+/* Activity headers reserve outcome and disclosure space at every width. */
+.den-tool-part:has(.den-command-activity-details) .den-tool-part-chicklet-main {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.den-tool-part:has(.den-command-activity-details) .den-tool-part-title,
+.den-tool-part[data-expanded="true"]:has(.den-command-activity-details) .den-tool-part-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.den-command-activity-outcome {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.den-command-activity-details,
+.den-command-activity-source {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.den-command-activity-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-width: 0;
+  padding: 4px 0;
+}
+.den-command-activity-step code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.den-command-activity-step span {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+.den-command-activity-command {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.den-command-activity-command mark {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+}
+.den-command-activity-details .den-tool-part-card-facts > div {
+  flex-wrap: wrap;
+}
+.den-command-activity-details .den-tool-part-card-facts dd {
+  overflow-wrap: anywhere;
+  margin-left: auto;
+}

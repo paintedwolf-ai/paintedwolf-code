@@ -1,3 +1,4 @@
+import type { CommandActivityView } from "./command-activity-model.ts";
 import type {
   Message,
   ChatContentReference,
@@ -103,6 +104,7 @@ export interface ToolPartView {
   invocation?: InvocationReceipt | null;
   /** Host program receipt; present only for portable command programs. */
   commandProgram?: CommandProgramReceipt | null;
+  commandActivity?: CommandActivityView;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */

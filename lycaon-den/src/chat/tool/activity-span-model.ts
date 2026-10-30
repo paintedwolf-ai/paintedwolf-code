@@ -62,7 +62,7 @@ function entryCommandLabel(entry: ActivitySpanEntry): string {
   if (entry.kind === "index_warming") return "index warming";
   if (entry.kind === "turn_load") return LOCAL_AI_LABEL;
   if (isSkillToolPart(entry.part)) return SKILL_CHICKLET_NAME;
-  return entry.part.tool.trim().toLowerCase() || "tool activity";
+  return entry.part.commandActivity?.fact.label ?? (entry.part.tool.trim().toLowerCase() || "tool activity");
 }
 
 /** Adjacent calls join when the host scoped them together: one run, one worker loop, or one assistant row. */

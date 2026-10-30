@@ -79,16 +79,17 @@ export function ToolPartShell(props: Props) {
   );
   const summary = () => {
     processRevision();
-    return toolSummaryFields(props.part, props.sessionId);
+    const activity = props.part.commandActivity;
+    return activity ? { status: props.part.status, title: activity.fact.subject + (activity.members.length > 1 ? ` · ${activity.members.length} reads` : "") } : toolSummaryFields(props.part, props.sessionId);
   };
-  const toolName = () => props.name?.trim() || props.part.tool;
+  const toolName = () => props.name?.trim() || props.part.commandActivity?.fact.label || props.part.tool;
   const toolLabel = () => formatToolLabel(toolName());
   const accessibleSummary = () => {
     const title = summary().title;
     const target = title !== toolName() && title !== toolLabel() ? title : "";
     return [toolLabel(), target, statusDot(summary().status)].filter(Boolean).join(", ");
   };
-  const completion = () => toolCompletionLabel(props.part);
+  const completion = () => props.part.commandActivity?.fact.outcome ?? toolCompletionLabel(props.part);
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   const [summaryEl, setSummaryEl] = createSignal<HTMLElement | null>(null);
   const findId = () =>
@@ -208,10 +209,10 @@ export function ToolPartShell(props: Props) {
             summary().title !== toolLabel()
           }
         >
-          <span class="den-tool-part-title">{summary().title}</span>
+          <span class="den-tool-part-title" data-tooltip={summary().title}>{summary().title}</span>
         </Show>
         <Show when={completion()}>
-          {(label) => <span class="den-tool-part-title">{label()}</span>}
+          {(label) => <span class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel

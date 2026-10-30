@@ -1,3 +1,4 @@
+import { CommandActivityCard } from "./CommandActivityCard.tsx";
 import type { WorkerTask } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
@@ -28,6 +29,7 @@ type Props = {
 
 /** Route tool parts to specialized or generic cards. */
 export function ToolPartCard(props: Props) {
+  if (props.part.commandActivity) return <CommandActivityCard {...props} />;
   if (isTaskToolPart(props.part)) {
     return (
       <TaskCard
