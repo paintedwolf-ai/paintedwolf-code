@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -70,5 +71,32 @@ func TestPolicyReviewCoversBothTransferEndpointsBeforeApproval(t *testing.T) {
 	err := tc.ReviewFileChanges(ctx, FileChange{Path: to, FromPath: from})
 	if !errors.Is(err, denied) || approved || len(paths) != 2 {
 		t.Fatalf("transfer admission: error=%v approved=%v paths=%v", err, approved, paths)
+	}
+}
+
+func TestPolicyTargetsShareOneCheckAndPreserveAccessDirections(t *testing.T) {
+	root := t.TempDir()
+	tc := ToolContext{Source: InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}}}
+	var targets []agentpolicy.Target
+	for i := 0; i < 1000; i++ {
+		targets = append(targets, agentpolicy.Target{Path: filepath.Join(root, fmt.Sprintf("file-%d.go", i)), Mutation: i%2 == 0})
+	}
+	targets = append(targets, targets...)
+	checks := 0
+	ctx := WithAgentPolicy(t.Context(), func(_ context.Context, batch []agentpolicy.Target) error {
+		checks++
+		if len(batch) != 1000 {
+			t.Fatalf("resolved target count = %d", len(batch))
+		}
+		for i, target := range batch {
+			if target.RootID != "root" || target.Mutation != (i%2 == 0) {
+				t.Fatalf("resolved target = %+v", target)
+			}
+		}
+		return nil
+	})
+	testutil.FailErr(t, "batch policy check", tc.CheckPolicyTargets(ctx, targets))
+	if checks != 1 {
+		t.Fatalf("one operation requested %d checks", checks)
 	}
 }

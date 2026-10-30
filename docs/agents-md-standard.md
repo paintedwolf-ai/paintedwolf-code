@@ -61,7 +61,7 @@ Human AGENTS.md edits are not gated by the surface enable: the Files editor trea
 At session create, or when a project directory is set, the sidecar warms an `AGENTS.md` index via `governance.ListIndex` (`WarmAgentsMD`). Coordinator and worker turn assembly then prepend applicable guidance:
 
 1. **Session start** — `BuildIndexInject` names the discovered regular `AGENTS.md` files under the active workspace root without opening their bodies. The walk prunes engine/VCS dirs (`.git`, the project overlay), dot-prefixed directories, and index-only omits (`testdata`, `node_modules`; `ListIndexOmitDir`). Index omit is not the survey walk prune set: a file inside an omitted or hidden tree is still applied by chain resolution when work goes there.
-2. **Path-scoped turns** — `BuildChainInject` resolves the ancestor chain for the active relative path, root-first and nearest-last, with `<root>/.paintedwolf/AGENTS.md` appended last so the overlay wins. It re-reads and injects the bounded current body for every completion, so a human edit takes effect on the next turn. A worker with no narrower scope receives the root chain.
+2. **Working scopes** — resolved source observations and reached operations select their attached physical workspaces. `BuildScopedInject` supplies current policy bodies with explicit jurisdiction, ancestors first and the applicable root overlay last. Shared policy files appear once. Human edits take effect on the next completion; reached mutations also check freshness before their effect. A worker with no narrower scope receives its actual workspace root chain.
 3. **Transcript compaction** — AGENTS guidance is assembled outside persisted transcript history and rebuilt from source for every completion. Compaction never summarizes or selectively preserves repository policy.
 
 ### Resolved command scopes
@@ -94,7 +94,7 @@ flowchart TD
     applies -->|"no"| skip["No inject"]
     applies -->|"yes"| warm["governance.ListIndex<br/>warm AGENTS.md index"]
     warm --> index["BuildIndexInject<br/>session start: discovered paths, no body reads"]
-    index --> chain["BuildChainInject<br/>path-scoped turn: ancestor chain root-first,<br/>.paintedwolf/AGENTS.md appended last"]
+    index --> chain["Resolved working scopes<br/>deduplicated ancestor policies root-first,<br/>root overlays appended last"]
     chain --> sanitize["Strip invisible formatting codepoints"]
     sanitize --> valve{"Over the 65536-byte<br/>safety valve?"}
     valve -->|"no"| inject["System-message inject<br/>(current body for every completion)"]
