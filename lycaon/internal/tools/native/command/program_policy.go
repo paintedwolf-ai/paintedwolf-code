@@ -9,9 +9,10 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.ToolContext, spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest, cwd string, review commandprogram.ArgvReview) error {
+func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.ToolContext, spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest, cwd projectpaths.Resolved, review commandprogram.ArgvReview) error {
 	for _, requirement := range spec.Effects {
 		if requirement.Mode != selectEffectMode(spec, mode) {
 			continue
@@ -21,7 +22,11 @@ func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.To
 			return err
 		}
 		mutation := slices.Contains(effects.Classes(), toolcontract.CommandMutation) || slices.Contains(effects.Classes(), toolcontract.CommandExternalExec)
-		targets := []agentpolicy.Target{{Path: cwd, Mutation: mutation}}
+		rootID := cwd.Root.ID
+		if cwd.External {
+			rootID = ""
+		}
+		targets := []agentpolicy.Target{{RootID: rootID, Path: cwd.Abs, Mutation: mutation}}
 		for _, target := range review.PathTargets {
 			targets = append(targets, agentpolicy.Target{Path: target.Path, Mutation: target.Write})
 		}

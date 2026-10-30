@@ -285,7 +285,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
-	cwd, display := d.paths.Cwd().Abs, d.paths.Cwd().DisplayPath
+	cwd, display := d.paths.Cwd(), d.paths.Cwd().DisplayPath
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
@@ -320,7 +320,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Dir: cwd, BaseEnvironment: d.run.baseEnv}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv}.Launch(ctx, request, streams)
 				})
 			}}, nil
 		},
@@ -396,7 +396,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	mode = selectEffectMode(spec, mode)
 	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
-	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, request, d.paths.Cwd().Abs, prepared.Review); err != nil {
+	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, request, d.paths.Cwd(), prepared.Review); err != nil {
 		return d.refuseArgv(ctx, spec, request, err, streams)
 	}
 	tool := prepared.Tool
@@ -463,7 +463,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 			if actualMode == "" {
 				actualMode = mode
 			}
-			if err := d.checkPreparedPolicy(ctx, admitted, spec, actualMode, request, frame.Cwd().Abs, actual.Review); err != nil {
+			if err := d.checkPreparedPolicy(ctx, admitted, spec, actualMode, request, frame.Cwd(), actual.Review); err != nil {
 				if disclosed == nil && actual.Release != nil {
 					actual.Release()
 				}
@@ -519,7 +519,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				if disclosed == nil && actual.Release != nil {
 					defer actual.Release()
 				}
-				if err := d.checkPreparedPolicy(ctx, tc, spec, actualMode, request, frame.Cwd().Abs, actual.Review); err != nil {
+				if err := d.checkPreparedPolicy(ctx, tc, spec, actualMode, request, frame.Cwd(), actual.Review); err != nil {
 					return ownerFailure(err), err
 				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -560,7 +560,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		request.EffectMode = prepared.Mode
 	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd().Abs, prepared.Review); err != nil {
+		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
 		noteJobNative(ctx, request.Argv.Values())

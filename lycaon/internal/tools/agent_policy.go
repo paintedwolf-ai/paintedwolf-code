@@ -74,13 +74,28 @@ func policyPathWithinRoot(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// CheckScopePolicy resolves a reached operation's catalog scope before admission.
+// CheckScopePolicy preserves resolved root identity and resolves declared relative scopes.
 func (tc ToolContext) CheckScopePolicy(ctx context.Context, rootID, path string, mutation bool) error {
 	if check, _ := ctx.Value(agentPolicyKey{}).(AgentPolicyCheck); check == nil {
 		return nil
 	}
 	if path == "" {
 		path = "."
+	}
+	if filepath.IsAbs(path) {
+		if rootID != "" {
+			if _, ok := projectroot.RootRefByID(tc.Source.Roots, rootID); !ok {
+				return fmt.Errorf("policy root %q: %w", rootID, projectroot.ErrUnknownRootLabel)
+			}
+		}
+		attached := false
+		for _, root := range tc.Source.Roots {
+			attached = attached || policyPathWithinRoot(root.Path, path)
+		}
+		if !attached {
+			return tc.CheckPathPolicy(ctx, path, mutation)
+		}
+		return tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{RootID: rootID, Path: path, Mutation: mutation}})
 	}
 	abs, root, err := projectroot.ResolveAbs(tc.Source.Roots, rootID, path)
 	if err != nil {

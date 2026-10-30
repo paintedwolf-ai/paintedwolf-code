@@ -27,7 +27,7 @@ func TestPolicyScopeRetainsTheExplicitlyResolvedRoot(t *testing.T) {
 		{name: "relative root path", path: "nested/file.go", want: "outer"},
 		{name: "qualified root path", path: "@outer/nested/file.go", want: "outer"},
 		{name: "qualified other root", path: "@inner/file.go", want: "inner"},
-		{name: "unqualified absolute path", path: file, want: "inner"},
+		{name: "resolved absolute scope", path: file, want: "outer"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var observed []agentpolicy.Target
@@ -41,6 +41,13 @@ func TestPolicyScopeRetainsTheExplicitlyResolvedRoot(t *testing.T) {
 			}
 		})
 	}
+	physical := WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
+		if len(targets) != 1 || targets[0].RootID != "inner" {
+			t.Fatalf("unqualified physical path lost its most specific root: %+v", targets)
+		}
+		return nil
+	})
+	testutil.FailErr(t, "unqualified physical policy", tc.CheckPathPolicy(physical, file, true))
 	called := false
 	ctx := WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
 		called = true
@@ -76,5 +83,18 @@ func TestExplicitPolicyRootCannotFallBackToAnotherAttachment(t *testing.T) {
 	}
 	if called {
 		t.Fatal("invalid root reached policy admission")
+	}
+}
+
+func TestPolicyScopeDoesNotAssignProjectGuidanceToUnattachedLocations(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	tc := ToolContext{Source: InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root}}}}
+	ctx := WithAgentPolicy(t.Context(), func(context.Context, []agentpolicy.Target) error {
+		t.Fatal("unattached location inherited project policy")
+		return nil
+	})
+	testutil.FailErr(t, "unattached project-scoped directory", tc.CheckScopePolicy(ctx, "root", outside, true))
+	if err := tc.CheckScopePolicy(ctx, "unknown", outside, true); !errors.Is(err, projectroot.ErrUnknownRootLabel) {
+		t.Fatalf("unknown declared root was ignored: %v", err)
 	}
 }
