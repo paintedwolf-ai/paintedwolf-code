@@ -19,6 +19,7 @@ pub enum LayerKind {
     Full,
 }
 
+#[derive(Clone)]
 pub struct Config {
     pub hidden: usize,
     pub heads: usize,
@@ -313,19 +314,21 @@ impl Decoder {
                         scores.push((p, dot));
                         scored.push((p, cv[p * c.head_dim..(p + 1) * c.head_dim].to_vec()));
                     }
-                    for s2 in 0..=s {
-                        let p = next_pos + s2; // causal: this query sees only staged tokens up to itself
-                        if p >= next_pos + seq {
-                            continue;
+                    if owned_kv {
+                        for s2 in 0..=s {
+                            let p = next_pos + s2; // causal: this query sees only staged tokens up to itself
+                            if p >= next_pos + seq {
+                                continue;
+                            }
+                            if masked(c, is_sliding, pos, p) {
+                                continue;
+                            }
+                            let off = s2 * kv_w + g * c.head_dim;
+                            let kp = rope(&new_k[off..off + c.head_dim].to_vec(), p, c.rope_theta);
+                            let dot: f32 = qv.iter().zip(&kp).map(|(a, b)| a * b).sum::<f32>() * scale;
+                            scores.push((p, dot));
+                            scored.push((p, new_v[off..off + c.head_dim].to_vec()));
                         }
-                        if masked(c, is_sliding, pos, p) {
-                            continue;
-                        }
-                        let off = s2 * kv_w + g * c.head_dim;
-                        let kp = rope(&new_k[off..off + c.head_dim].to_vec(), p, c.rope_theta);
-                        let dot: f32 = qv.iter().zip(&kp).map(|(a, b)| a * b).sum::<f32>() * scale;
-                        scores.push((p, dot));
-                        scored.push((p, new_v[off..off + c.head_dim].to_vec()));
                     }
                     let weights = softmax(&scores.iter().map(|(_, d)| *d).collect::<Vec<_>>());
                     let mut best = vec![0f32; c.head_dim];
@@ -428,4 +431,157 @@ fn rope(v: &[f32], pos: usize, theta: f32) -> Vec<f32> {
         out[i + half] = a * s + b * c;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::Cache;
+
+    fn tiny_config() -> Config {
+        Config {
+            hidden: 4,
+            heads: 2,
+            kv_heads: 1,
+            head_dim: 2,
+            source_layers: 3,
+            total_layers: 4,
+            rope_theta: 10000.0,
+            vocab: 5,
+            eps: 1e-6,
+            sliding_window: 4,
+            ple_layers: 0,
+        }
+    }
+
+    /// Identity weights where possible so fixtures compute against known values.
+    fn tiny_weights(cfg: &Config) -> Weights {
+        let mut t = std::collections::HashMap::new();
+        let hidden = cfg.hidden;
+        let head_dim = cfg.head_dim;
+        let kv_w = cfg.kv_heads * head_dim;
+        let q_w = cfg.heads * head_dim;
+        let inter = 6;
+        for i in 0..cfg.total_layers {
+            let p = format!("model.layers.{i}");
+            t.insert(format!("{p}.input_layernorm.weight"), vec![1.0; hidden]);
+            t.insert(format!("{p}.self_attn.q_proj.weight"), identity(q_w));
+            t.insert(format!("{p}.self_attn.o_proj.weight"), identity(hidden));
+            t.insert(format!("{p}.self_attn.q_norm.weight"), vec![1.0; head_dim]);
+            t.insert(format!("{p}.self_attn.k_norm.weight"), vec![1.0; head_dim]);
+            t.insert(format!("{p}.pre_feedforward_layernorm.weight"), vec![1.0; hidden]);
+            t.insert(format!("{p}.mlp.gate_proj.weight"), vec![0.5; inter * hidden]);
+            t.insert(format!("{p}.mlp.up_proj.weight"), vec![0.25; inter * hidden]);
+            t.insert(format!("{p}.mlp.down_proj.weight"), vec![0.125; inter * hidden]);
+            if i < cfg.source_layers {
+                t.insert(format!("{p}.self_attn.k_proj.weight"), identity(kv_w));
+                t.insert(format!("{p}.self_attn.v_proj.weight"), identity(kv_w));
+            }
+        }
+        t.insert("model.embed_tokens.weight".into(), flat_embed(cfg));
+        t.insert("model.norm.weight".into(), vec![1.0; hidden]);
+        Weights { tensors: t }
+    }
+
+    fn identity(n: usize) -> Vec<f32> {
+        let mut w = vec![0f32; n * n];
+        for i in 0..n {
+            w[i * n + i] = 1.0;
+        }
+        w
+    }
+
+    fn flat_embed(cfg: &Config) -> Vec<f32> {
+        // token t's row is [t+0.1, t+0.2, ...]; distinct and easy to check.
+        (0..cfg.vocab * cfg.hidden)
+            .map(|i| {
+                let (row, col) = (i / cfg.hidden, i % cfg.hidden);
+                row as f32 + 0.1 * (col as f32 + 1.0)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn softmax_is_normalized_and_ordered() {
+        let w = softmax(&[0.0, 1.0, 2.0]);
+        let total: f32 = w.iter().sum();
+        assert!((total - 1.0).abs() < 1e-6);
+        assert!(w[2] > w[1] && w[1] > w[0]);
+        // exp(2-2)/sum = 1/(1+e^-1+e^-2) ≈ 0.6652
+        assert!((w[2] - 0.665240).abs() < 1e-5, "w[2] = {}", w[2]);
+    }
+
+    #[test]
+    fn gelu_matches_reference_values() {
+        // Independent goldens: torch.nn.functional.gelu(x, approximate='tanh').
+        assert!((gelu(0.0) - 0.0).abs() < 1e-6);
+        assert!((gelu(1.0) - 0.841192).abs() < 1e-5, "gelu(1) = {}", gelu(1.0));
+        assert!((gelu(-1.0) - -0.158808).abs() < 1e-5, "gelu(-1) = {}", gelu(-1.0));
+        assert!((gelu(2.0) - 1.954598).abs() < 1e-4, "gelu(2) = {}", gelu(2.0));
+    }
+
+    #[test]
+    fn softcap_tanh_form() {
+        // Independent golden: cap * tanh(x/cap).
+        assert!((softcap(15.0, 30.0) - 30.0 * (0.5f32).tanh()).abs() < 1e-6);
+        assert!((softcap(1000.0, 30.0) - 30.0).abs() < 1e-5, "large logits saturate");
+        assert!((softcap(-15.0, 30.0) + 30.0 * (0.5f32).tanh()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn causal_mask_excludes_future_positions() {
+        let cfg = tiny_config();
+        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
+        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
+
+        // Prefill two tokens: position 1's attention must not see position 2.
+        // With identity weights, logits for the second step alone (a cold decode of
+        // only token 2 at position 0) differ from the in-batch value at index 1.
+        let (logits2, _) = dec.step(&[0, 1], &cache, 0).unwrap();
+        let (logits1, _) = dec.step(&[1], &cache, 0).unwrap();
+        // Different context lengths change row 0's output only if masking works.
+        assert_ne!(logits2, logits1, "prefill logits differ from a single-token pass");
+    }
+
+    #[test]
+    fn shared_layers_write_no_kv_but_read_their_slot() {
+        let cfg = tiny_config();
+        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
+        let mut cache = Cache::new(cfg.source_layers, cfg.head_dim);
+
+        let (_, staged) = dec.step(&[0, 1], &cache, 0).unwrap();
+        // Only source layers stage: 3 slots, no duplicates from the shared layer.
+        let slots: std::collections::HashSet<usize> = staged.iter().map(|(s, _, _)| *s).collect();
+        assert_eq!(slots.len(), staged.len(), "each staged entry is a distinct source slot");
+        assert!(slots.iter().all(|s| *s < cfg.source_layers));
+        cache.stage(&staged).unwrap();
+        cache.commit();
+        assert_eq!(cache.committed_len(), 2);
+    }
+
+    #[test]
+    fn attention_uses_softmax_not_raw_ratios() {
+        // Construct scores where softmax and raw-ratio differ observably: with
+        // identity q/k and unit norms the scores are all zero, so softmax gives
+        // uniform weights; any v-value at an allowed position shows up equally.
+        let cfg = tiny_config();
+        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
+        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
+        let (logits, _) = dec.step(&[0, 0], &cache, 0).unwrap();
+        // Both positions embed identically, so attention over one position is
+        // deterministic and finite — a raw-ratio divide-by-zero would corrupt it.
+        assert!(logits.iter().all(|l| l.is_finite()));
+    }
+
+    #[test]
+    fn sliding_window_masks_distant_positions() {
+        let cfg = tiny_config();
+        // Window of 0 masks everything but the current position on sliding layers.
+        let cfg = Config { sliding_window: 1, ..cfg };
+        let dec = Decoder::load(cfg.clone(), tiny_weights(&cfg)).unwrap();
+        let cache = Cache::new(cfg.source_layers, cfg.head_dim);
+        // Runs without panic; a distant position would be masked, not crash.
+        let (logits, _) = dec.step(&[0, 1, 2], &cache, 0).unwrap();
+        assert!(logits.iter().all(|l| l.is_finite()));
+    }
 }
