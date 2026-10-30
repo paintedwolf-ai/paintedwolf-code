@@ -280,6 +280,11 @@ two-event queue per file, charged to the program's aggregate memory admission.
 The first output record is released promptly. Quiet matches, closed downstream
 pipes and cancellation stop pending workers and release their held roots and
 memory. Stdin and process substitutions retain sequential stream consumption.
+Worker count shrinks when available working capacity cannot fund the transport
+window. Reader scratch, record growth, retained context, regex sessions and
+transformed output share the program account. Simultaneous work can reach that
+aggregate ceiling before a per-file ceiling; it returns a typed resource stop
+and releases all workers rather than waiting on its own leases or retrying reads.
 
 ### Stream queries and format-aware edits
 

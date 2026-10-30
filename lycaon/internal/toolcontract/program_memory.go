@@ -106,6 +106,13 @@ func (m *ProgramMemory) InUse() ProgramMemoryUsage {
 	return ProgramMemoryUsage{Working: m.working, State: m.state}
 }
 
+// AvailableWorking reports capacity not held by current working leases.
+func (m *ProgramMemory) AvailableWorking() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return max(m.limits.Working-m.working, 0)
+}
+
 // Reservations counts admitted reservations, including released ones.
 func (m *ProgramMemory) Reservations() int64 {
 	m.mu.Lock()

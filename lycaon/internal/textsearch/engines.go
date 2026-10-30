@@ -20,7 +20,7 @@ type engine interface {
 }
 
 func (l Limits) syntaxBudget() regexp2.SyntaxBudget {
-	return regexp2.SyntaxBudget{MaxBytes: l.MemoryBytes, MaxSteps: l.WorkSteps}
+	return regexp2.SyntaxBudget{MaxBytes: l.MemoryBytes, MaxSteps: l.WorkSteps, Reserve: l.Reserve}
 }
 
 // budgetError maps the bounded engine's stop onto the catalog limit names.
