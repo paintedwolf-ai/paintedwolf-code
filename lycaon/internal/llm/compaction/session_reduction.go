@@ -15,11 +15,18 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	if len(removed) == 0 {
 		return nil, nil, "protected_history", false, nil
 	}
-	possible, err := c.usefulCompaction(info, messages, compactionReplacement(info, messages, retained, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
+	page, err := c.reductionPage(ctx, info, messages, removed)
+	if err != nil {
+		return nil, nil, "failed", false, err
+	}
+	if len(page.source) == 0 {
+		return nil, nil, "page_budget", false, nil
+	}
+	possible, err := c.usefulCompaction(info, page.source, compactionReplacement(info, page.source, nil, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
 	if err != nil || !possible {
 		return nil, nil, "insufficient_reclaimable_space", false, err
 	}
-	revision, err := c.sessionRevision(ctx, info, messages, target)
+	revision, err := c.sessionRevision(ctx, info, page.source)
 	if err != nil {
 		return nil, nil, "failed", false, err
 	}
@@ -32,23 +39,20 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 			return nil, nil, prior.Reason, true, nil
 		}
 	}
-	prefix := oldestCompactionPrefix(removed, c.cfg.MessageSlice)
-	keptIDs := retainedMessageIDs(prefix)
-	// Restore canonical ordering when pins precede the unprocessed suffix.
-	retained = remainingCompactionRows(messages, keptIDs)
-	summary, sources, summaryErr := c.summarizePrefix(ctx, info, prefix)
+	summary, sources, summaryErr := c.summarizePrefix(ctx, info, page.source)
 	if ctx.Err() != nil {
 		return nil, nil, "failed", false, ctx.Err()
 	}
-	record := continuationFor(info, prefix, summary, sources, summaryErr)
+	record := continuationFor(info, page.source, summary, sources, summaryErr)
 	record.Window = c.cfg.ModelContextWindow
 	c.rankContinuation(ctx, info, record)
 	text, err := RenderContinuation(ctx, record, info.RecallAvailable, 0)
 	if err != nil {
 		return nil, nil, "failed", false, err
 	}
-	candidate := compactionReplacement(info, messages, retained, summary, text)
-	useful, err := c.usefulCompaction(info, messages, candidate, c.cfg.SessionMinSavingsTokens)
+	page.replacement = compactionReplacement(info, page.source, nil, summary, text)
+	candidate := append(append([]ContextMessage(nil), page.replacement...), page.retained...)
+	useful, err := c.usefulReduction(info, page, messages, candidate)
 	if err != nil {
 		return nil, nil, "failed", false, err
 	}
