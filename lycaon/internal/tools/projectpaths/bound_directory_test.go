@@ -77,9 +77,15 @@ func TestClosedDirectoryCannotPublishAnEmptyNamespace(t *testing.T) {
 	directory, err := bound.OpenDir()
 	testutil.FailErr(t, "hold directory", err)
 	testutil.FailErr(t, "close directory", directory.Close())
+	var first error
 	for range 2 {
-		if names, err := directory.Names(0); !errors.Is(err, os.ErrClosed) || len(names) != 0 {
+		names, err := directory.Names(0)
+		if err == nil || len(names) != 0 {
 			t.Fatalf("closed namespace=%v error=%v", names, err)
 		}
+		if first != nil && err != first {
+			t.Fatal("closed directory discarded its failed observation")
+		}
+		first = err
 	}
 }

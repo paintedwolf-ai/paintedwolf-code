@@ -83,13 +83,14 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	}
 	listing, err := catalog.Directories.ReadDirectory(w.inv.ctx, w.inv.tc.Identity.ProjectID,
 		sourcecatalog.Root{ID: root.ID, Path: root.Path}, dir.bound.Resolved.ScopeRel, maximum)
-	if listing.Reused {
-		w.work.reused++
-	} else if listing.Prepared {
+	if listing.Prepared {
 		w.work.prepared++
 	}
 	if err != nil {
 		return nil, false, w.inv.ctx.Err()
+	}
+	if listing.Reused {
+		w.work.reused++
 	}
 	filter, err := w.filter(dir.bound)
 	if err != nil {
