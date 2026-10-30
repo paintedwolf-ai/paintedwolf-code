@@ -5,7 +5,7 @@
   "workstream": "portable-command-capture-observation",
   "disposition": "retain",
   "reason": "Retain the measured 67 catalog-adjacent test members. The added capture transaction suite exercises the existing literal owner, admission, invalidation and byte representations through the production Wrap and Commit lifecycle. It removes a test-only automatic publication path rather than adding a second cache or reader owner. Keeping fixtures and concurrency contracts beside the source catalog preserves the lifetime boundary. Focused captured-byte, literal-stream, shared representation, invalidation and concurrent settlement contracts support this bounded membership. Further growth or membership changes require renewed review.",
-  "reviewed_commit": "e6baccb787",
+  "reviewed_commit": "e6baccb78786c27519f7f9d26dcd355e9233d890",
   "ceiling": 67,
   "boundaries": {
     "lycaon/internal/sourcecatalog/literal_capture_test.go": "decb619f05e92be736423cf5e7dcc63cf7da54af4baa727c0bb6d29fa0466c3a",
