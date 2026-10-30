@@ -135,6 +135,7 @@ func TestFindChargesEveryNameBeforePredicateElimination(t *testing.T) {
 }
 
 func TestFindCachedMembershipUsesTheCurrentReadBoundary(t *testing.T) {
+	logs := discoveryCapture(t)
 	h := newHarness(t, map[string]string{"src/target.go": "source", "private/target.go": "private"})
 	h.owners.Catalog = discoveryCatalog(t)
 	h.exec("", "find", ".", "-name", "target.go").expect(t, "initial scope", "./private/target.go\n./src/target.go\n", "", 0)
@@ -144,9 +145,17 @@ func TestFindCachedMembershipUsesTheCurrentReadBoundary(t *testing.T) {
 	h.owners.Revisions.Boundary = h.boundary
 	catalog := h.owners.Catalog
 	h.owners.Catalog = nil
-	h.exec("", "find", ".", "-name", "target.go").expect(t, "restricted live scope", "./src/target.go\n", "", 0)
+	live := h.exec("", "find", ".", "-name", "target.go")
+	live.expect(t, "restricted live scope", "./src/target.go\n", "", 0)
 	h.owners.Catalog = catalog
-	h.exec("", "find", ".", "-name", "target.go").expect(t, "restricted current scope", "./src/target.go\n", "", 0)
+	indexed := h.exec("", "find", ".", "-name", "target.go")
+	indexed.expect(t, "restricted current scope", "./src/target.go\n", "", 0)
+	for _, result := range []run{live, indexed} {
+		work := logs.records[result.execution]
+		if work["entry_metadata_reads"] != 3 || work["entries"] != 4 {
+			t.Fatalf("excluded namespace consumed metadata or escaped accounting: %v", work)
+		}
+	}
 }
 
 func TestFindCachedMembershipPreservesDeletionAndActionOrder(t *testing.T) {
