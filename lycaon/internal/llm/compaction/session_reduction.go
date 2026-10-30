@@ -58,7 +58,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 		return nil, nil, "failed", false, err
 	}
 	if !useful {
-		if info.Attempts != nil {
+		if info.Attempts != nil && (summaryErr == nil || c.summary == nil) {
 			if err := info.Attempts.PutCompactionAttempt(ctx, info.ID, messageview.CompactionAttempt{Revision: revision, Reason: "insufficient_savings"}); err != nil {
 				return nil, nil, "failed", false, err
 			}
