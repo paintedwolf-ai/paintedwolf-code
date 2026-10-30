@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
@@ -26,7 +27,7 @@ func TestProgramPolicyAdmissionPreservesEarlierOutputAndSkipsUntakenEffects(t *t
 	ctx := tools.WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
 		for _, endpoint := range targets {
 			path, mutation := endpoint.Path, endpoint.Mutation
-			if !mutation {
+			if !mutation || path == f.Dir {
 				continue
 			}
 			mutationScopes = append(mutationScopes, path)
@@ -46,6 +47,9 @@ func TestProgramPolicyAdmissionPreservesEarlierOutputAndSkipsUntakenEffects(t *t
 	}
 	if len(mutationScopes) != 1 || mutationScopes[0] != nested {
 		t.Fatalf("reached mutation scopes = %v", mutationScopes)
+	}
+	if executions := f.executions(t); strings.Count(executions["external"], ";") != 1 {
+		t.Fatalf("untaken external branch received an execution: %v", executions)
 	}
 	if _, err := os.Stat(filepath.Join(nested, "sentinel")); !os.IsNotExist(err) {
 		t.Fatalf("refused external effect reached the filesystem: %v", err)
