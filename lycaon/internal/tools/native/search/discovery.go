@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"io/fs"
 	"log/slog"
 
@@ -9,7 +10,7 @@ import (
 )
 
 type discoveryWork struct {
-	metadata, listed, reused int64
+	metadata, listed, reused, prepared int64
 }
 
 func structuralPrimary(key string) bool {
@@ -25,7 +26,8 @@ func (w *walker) report() {
 	slog.InfoContext(w.inv.ctx, "command discovery completed",
 		"execution_id", w.inv.request.Invocation.Identity.ExecutionID,
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
-		"directory_reads", w.work.listed, "directory_reuses", w.work.reused)
+		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
+		"directory_preparations", w.work.prepared)
 }
 
 type entryMetadata struct {
@@ -73,19 +75,28 @@ func (w *walker) indexedChildren(dir entry, follow bool) ([]entry, bool, error) 
 	}
 	_ = file.Close()
 	root := dir.bound.Resolved.Root
+	maximum := 0
+	if w.maximum > 0 {
+		maximum = int(max(1, w.maximum-w.visited))
+	}
 	listing, err := catalog.Directories.ReadDirectory(w.inv.ctx, w.inv.tc.Identity.ProjectID,
-		sourcecatalog.Root{ID: root.ID, Path: root.Path}, dir.bound.Resolved.ScopeRel)
+		sourcecatalog.Root{ID: root.ID, Path: root.Path}, dir.bound.Resolved.ScopeRel, maximum)
+	if listing.Reused {
+		w.work.reused++
+	} else if listing.Prepared {
+		w.work.prepared++
+	}
 	if err != nil {
+		var exceeded *sourcecatalog.DirectoryLimitError
+		if errors.As(err, &exceeded) {
+			w.visited = w.maximum
+			return nil, true, w.visit()
+		}
 		return nil, false, w.inv.ctx.Err()
 	}
 	filter, err := w.filter(dir.bound)
 	if err != nil {
 		return nil, true, err
-	}
-	if listing.Reused {
-		w.work.reused++
-	} else {
-		w.work.listed++
 	}
 	out := make([]entry, 0, len(listing.Entries))
 	for _, item := range listing.Entries {
