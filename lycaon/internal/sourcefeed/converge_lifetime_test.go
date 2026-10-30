@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func firePending(t *testing.T, c *changeConverger) <-chan struct{} {
@@ -63,18 +65,14 @@ func TestChangeConvergerWaitIncludesQueuedAndOverlappingPublication(t *testing.T
 	requireConvergerBusy(t, c)
 	releaseSecond()
 	<-secondDone
-	if err := c.wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "wait for overlapping publications", c.wait(t.Context()))
 	c.queue(t.Context(), root, "third")
 	requireConvergerBusy(t, c)
 	<-firePending(t, c)
 	if path := <-entered; path != "third" {
 		t.Fatal(path)
 	}
-	if err := c.wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "wait for reused converger", c.wait(t.Context()))
 }
 
 func TestChangeConvergerCloseJoinsPendingPublication(t *testing.T) {
@@ -89,13 +87,9 @@ func TestChangeConvergerCloseJoinsPendingPublication(t *testing.T) {
 	requireConvergerBusy(t, c)
 	finish()
 	<-closed
-	if err := c.wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "wait for close publication", c.wait(t.Context()))
 	c.queueResync(t.Context())
-	if err := c.wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "wait after closed admission", c.wait(t.Context()))
 }
 
 func TestWatchLifetimeWaitIncludesQueuedBatch(t *testing.T) {
@@ -113,9 +107,7 @@ func TestWatchLifetimeWaitIncludesQueuedBatch(t *testing.T) {
 		t.Fatalf("queued lifetime wait = %v", err)
 	}
 	<-firePending(t, c)
-	if err := lifetime.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "drain queued watch lifetime", lifetime.Wait(t.Context()))
 }
 
 func TestWatchLifetimeStopJoinsConvergerPublication(t *testing.T) {
@@ -140,10 +132,6 @@ func TestWatchLifetimeStopJoinsConvergerPublication(t *testing.T) {
 	}
 	finish()
 	<-done
-	if err := lifetime.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "drain stopped watch lifetime", lifetime.Wait(t.Context()))
+	testutil.FailErr(t, "drain stopped converger", c.wait(t.Context()))
 }
