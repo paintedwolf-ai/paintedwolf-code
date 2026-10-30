@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/fseffect/fseffect.ReadRoot",
+  "kind": "runtime_service",
+  "workstream": "held-directory-traversal",
+  "disposition": "retain",
+  "reason": "Retain this read-root authority at 17 measured methods. One held root owns native-component resolution, symlink bounds, metadata access, current-directory identity, and successful descriptor observations. Canonical identity fallback closes each previous component before advancing, refuses replaced roots and links, and releases all scratch descriptors. Splitting another resolver would duplicate containment and lifecycle rules. Current physical read admission, cold/warm sibling-count proxies, the 240-level chain, concurrent aggregate accounting, actions, and consumer-close contracts support this shape; further growth requires review.",
+  "reviewed_commit": "e2ea8b83b8bca20ad8807ed1a1a2ad0588e24e2c",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/internal/fseffect/read_directory_test.go": "e4b52d55670d07c7dc11a43d5bcc2b3548e84a252c6975346adfc2f61ad701be",
+    "lycaon/internal/fseffect/read_directory_fallback_test.go": "4c3cc22c02ae594e3e1f383384cd756ebabb3da4220509c82b16d32db74e48a5",
+    "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "3fd4382211449f44052a0b3dc8c17948dd8ef6494325a3ea7169e7cb7ff9051f",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "ae2706993b630f3758cde7fc421318713290003fc730953f35c5300e34116ce1"
+  },
+  "reviewed_shape": "8be6e349522d188870528710c55b0524fc9b3baca8293b06380426d2e62c24ac"
+}

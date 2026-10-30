@@ -4,13 +4,14 @@
   "kind": "module",
   "workstream": "held-directory-traversal",
   "disposition": "retain",
-  "reason": "Retain the exact 43 immediate source members for one descriptor-relative filesystem effect boundary. Current native directory addresses live in platform adapters beside the shared contained reader; held-child opens reuse that authority. Writes retain their transaction lifecycle. Directory identity, rename refusal, successful open accounting, and transaction contracts support the measured membership; added members require review. Automated qualification is limited to the current host.",
-  "reviewed_commit": "463cc15299e34e0b3c60ab01b569484f93487637",
+  "reason": "Retain the exact 43 immediate source members for one descriptor-relative filesystem effect boundary. Native directory addresses remain in platform adapters; bounded identity validation and held-child opens reuse the same root authority. Writes retain their transaction lifecycle. Current path admission, replaced-root refusal, descriptor work and cleanup, and transaction contracts support the measured membership; added members require review. Automated qualification is limited to the current host.",
+  "reviewed_commit": "e2ea8b83b8bca20ad8807ed1a1a2ad0588e24e2c",
   "ceiling": 43,
   "boundaries": {
-    "lycaon/internal/fseffect/read_directory_test.go": "8cf4b7c8cadbb4d8ac6872a718e177f8c60b08fdc8e767555ed1ce3f97385a30",
-    "lycaon/internal/fseffect/read_directory_fallback_test.go": "8c3d05f21909fb88ea059246cb6d7af522826bcb54a52adcbf00c6062e548b3c",
-    "lycaon/internal/tools/native/search/held_walk_test.go": "e88a6004d414ac7fdf0d47e8c10b05bdc391539bd195ddaa436662f6a8b581c3",
+    "lycaon/internal/fseffect/read_directory_test.go": "e4b52d55670d07c7dc11a43d5bcc2b3548e84a252c6975346adfc2f61ad701be",
+    "lycaon/internal/fseffect/read_directory_fallback_test.go": "4c3cc22c02ae594e3e1f383384cd756ebabb3da4220509c82b16d32db74e48a5",
+    "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "3fd4382211449f44052a0b3dc8c17948dd8ef6494325a3ea7169e7cb7ff9051f",
+    "lycaon/internal/tools/native/search/held_walk_test.go": "ae2706993b630f3758cde7fc421318713290003fc730953f35c5300e34116ce1",
     "lycaon/internal/fseffect/transaction_test.go": "af1334ee5f0fa01292adec0a90984fa7506a193ed0a4092acb0acf34bd0f0fd4"
   },
   "reviewed_shape": "a792da7860847b28284256c4f6a220ba58253cc00937fd0e9d293b3aa3d591d6"
