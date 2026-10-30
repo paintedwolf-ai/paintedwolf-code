@@ -51,14 +51,19 @@ type grepFiles struct {
 }
 
 func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
+	if err := r.inv.ctx.Err(); err != nil {
+		return nil, err
+	}
 	workers = min(max(workers, 1), grepWorkerMaximum)
 	ctx, cancel := context.WithCancel(r.inv.ctx)
 	p := &grepFiles{run: r, template: *r, invocation: *r.inv, maximum: r.inv.out.maximum, mapped: r.inv.out.mappings != nil, ctx: ctx, cancel: cancel, jobs: make(chan *grepFileJob, workers), window: workers * 2}
+	p.invocation.out, p.invocation.stderr, p.invocation.releases, p.invocation.pins = nil, nil, nil, nil
+	p.template.inv, p.template.walker, p.template.files = nil, nil, nil
 	if r.json != nil {
 		p.template.json = &rgJSON{started: r.json.started}
 	}
 	if memory := r.inv.owners.Revisions.Memory; memory != nil {
-		release, err := memory.Reserve(ctx, int64((p.window*grepEventWindow+workers)*grepOutputChunk))
+		release, err := memory.Reserve(ctx, int64((p.window*grepEventWindow+workers)*grepOutputChunk+p.window*4096))
 		if err != nil {
 			cancel()
 			return nil, err
@@ -73,6 +78,9 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 }
 
 func (p *grepFiles) submit(e entry, names, walked bool) error {
+	if err := p.ctx.Err(); err != nil {
+		return err
+	}
 	job := &grepFileJob{entry: e, names: names, walked: walked, events: make(chan grepFileEvent, grepEventWindow)}
 	select {
 	case <-p.ctx.Done():
@@ -103,16 +111,23 @@ func (p *grepFiles) next() (finalErr error) {
 	if err := p.run.inv.out.flush(); err != nil {
 		return err
 	}
-	for event := range job.events {
-		if err := p.apply(event, base); err != nil {
-			return err
+	for {
+		select {
+		case <-p.ctx.Done():
+			return p.ctx.Err()
+		case event, ok := <-job.events:
+			if !ok {
+				finished = true
+				p.run.selected = p.run.selected || job.result.selected
+				p.run.inv.status = max(p.run.inv.status, job.result.status)
+				p.addStats(job.result)
+				return job.result.err
+			}
+			if err := p.apply(event, base); err != nil {
+				return err
+			}
 		}
 	}
-	finished = true
-	p.run.selected = p.run.selected || job.result.selected
-	p.run.inv.status = max(p.run.inv.status, job.result.status)
-	p.addStats(job.result)
-	return job.result.err
 }
 
 func (p *grepFiles) addStats(result grepFileResult) {
@@ -146,6 +161,9 @@ func (p *grepFiles) finish(err error) error {
 	if drainErr := p.run.flushFiles(); drainErr != nil {
 		err = drainErr
 	}
+	if err == nil {
+		err = p.ctx.Err()
+	}
 	p.cancel()
 	close(p.jobs)
 	p.workers.Wait()
@@ -170,6 +188,9 @@ func (p *grepFiles) worker() {
 	walker := newWalker(&inv)
 	defer walker.close()
 	for {
+		if p.ctx.Err() != nil {
+			return
+		}
 		select {
 		case <-p.ctx.Done():
 			return
@@ -187,7 +208,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	inv := p.invocation
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
 	inv.status = 0
-	writer := &grepFileWriter{ctx: p.ctx, events: job.events}
+	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events}}
 	inv.stderr = writer.errorWriter()
 	inv.out = newOutput(p.ctx, writer, p.maximum)
 	if !p.mapped {
@@ -206,6 +227,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	}
 	local := p.template
 	local.inv, local.walker, local.files = &inv, walker, nil
+	local.selection.inv = &inv
 	local.selected, local.stopped = false, false
 	local.index.stats = contentSearchStats{}
 	if local.json != nil {
@@ -213,6 +235,9 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	}
 	err := local.searchFileLive(job.entry, job.names, job.walked)
 	if flushErr := inv.out.flush(); err == nil {
+		err = flushErr
+	}
+	if flushErr := writer.flush(); err == nil {
 		err = flushErr
 	}
 	if pinErr := inv.out.beforeWrite(); err == nil {

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -14,36 +15,76 @@ type grepFileEvent struct {
 	pins    []toolcontract.ExecutionRevision
 }
 
+type grepEventSink struct {
+	ctx     context.Context
+	events  chan<- grepFileEvent
+	buffer  []byte
+	stderr  bool
+	started bool
+}
+
 type grepFileWriter struct {
-	ctx    context.Context
-	events chan<- grepFileEvent
+	sink   *grepEventSink
 	stderr bool
 }
 
 func (w *grepFileWriter) errorWriter() *grepFileWriter {
-	return &grepFileWriter{ctx: w.ctx, events: w.events, stderr: true}
+	return &grepFileWriter{sink: w.sink, stderr: true}
 }
 
 func (w *grepFileWriter) send(event grepFileEvent) error {
+	if err := w.flush(); err != nil {
+		return err
+	}
+	return w.sink.publish(event)
+}
+
+func (s *grepEventSink) publish(event grepFileEvent) error {
 	select {
-	case <-w.ctx.Done():
-		return w.ctx.Err()
-	case w.events <- event:
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.events <- event:
 		return nil
 	}
 }
 
+func (w *grepFileWriter) flush() error {
+	if len(w.sink.buffer) == 0 {
+		return w.sink.ctx.Err()
+	}
+	event := grepFileEvent{bytes: w.sink.buffer, stderr: w.sink.stderr}
+	w.sink.buffer = nil
+	if !event.stderr {
+		w.sink.started = true
+	}
+	return w.sink.publish(event)
+}
+
 func (w *grepFileWriter) Write(raw []byte) (int, error) {
+	if err := w.sink.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if w.stderr != w.sink.stderr {
+		if err := w.flush(); err != nil {
+			return 0, err
+		}
+		w.sink.stderr = w.stderr
+	}
 	written := 0
 	for len(raw) > 0 {
-		n := min(len(raw), grepOutputChunk)
-		part := append([]byte(nil), raw[:n]...)
-		if err := w.send(grepFileEvent{bytes: part, stderr: w.stderr}); err != nil {
-			return written, err
+		if w.sink.buffer == nil {
+			w.sink.buffer = make([]byte, 0, grepOutputChunk)
 		}
+		n := min(len(raw), grepOutputChunk-len(w.sink.buffer))
+		w.sink.buffer = append(w.sink.buffer, raw[:n]...)
 		raw, written = raw[n:], written+n
+		if len(w.sink.buffer) == grepOutputChunk || (!w.sink.started || w.stderr) && bytes.IndexAny(w.sink.buffer, "\n\x00") >= 0 {
+			if err := w.flush(); err != nil {
+				return written, err
+			}
+		}
 	}
-	return written, w.ctx.Err()
+	return written, nil
 }
 
 func (w *grepFileWriter) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
