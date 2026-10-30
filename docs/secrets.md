@@ -25,7 +25,7 @@ No pattern catalog recognizes every credential. Exact managed-secret evidence is
 
 ## Credential vault
 
-All credential families share one `{configdir}/credential-vault.age` document: a versioned JSON map partitioned into provider, web-research, MCP OAuth, secret-fingerprint, and managed-secret namespaces. An age X25519 identity encrypts it; every mutation decrypts the latest document under an interprocess lock and writes a fresh ciphertext through the atomic filesystem transaction boundary. The vault and any file-backed identity are owner-only (`0600`) under an owner-only config directory (`0700`); both the engine and the desktop shell tighten that directory whenever they touch it, because either may create it first. Windows has no POSIX mode and inherits the profile access rules. Credential files are excluded from backups, restores, diagnostics bundles, and agent-readable host-data paths.
+All credential families share one `{configdir}/credential-vault.age` document: a versioned JSON map partitioned into provider, web-research, MCP OAuth, secret-fingerprint, managed-secret, and credential-file-evidence namespaces. An age X25519 identity encrypts it; every mutation decrypts the latest document under an interprocess lock and writes a fresh ciphertext through the atomic filesystem transaction boundary. The vault and any file-backed identity are owner-only (`0600`) under an owner-only config directory (`0700`); both the engine and the desktop shell tighten that directory whenever they touch it, because either may create it first. Windows has no POSIX mode and inherits the profile access rules. Credential files are excluded from backups, restores, diagnostics bundles, and agent-readable host-data paths.
 
 | Runtime | Identity protection | Unlock behavior |
 |---------|---------------------|-----------------|
@@ -215,7 +215,11 @@ The bounded use history records resolution attempts, including refusals, with th
 
 ## Credential files
 
-A credential file (the `protectedpath` classes: `.env`, `.env.*`, keys, cloud and registry configuration) is presumed to hold secrets a person put there. When the agent reads one, the read tool first records the chat's secret exposure, and returns nothing if it cannot; it then hands the exact text it delivered, including an open editor draft, to the evidence base, which admits each `KEY=value` or structured binding as harvested exact-match evidence for the session tree. From then on those bytes are screened like any other credential, and the read result itself is screened before it is stored.
+A credential file (the `protectedpath` classes: `.env`, `.env.*`, keys, cloud and registry configuration) is presumed to hold secrets a person put there. The host parses attached roots at startup and attachment, then refreshes changed credential paths during watcher notifications. Bindings become exact-match evidence keyed by project, root, and path, independent of which tool later carries their bytes. Removed bindings leave the active path set and remain retired project evidence; other projects cannot use them. A root refresh stages parsed bindings, persists the encrypted projection once, and publishes evidence only after that write succeeds. The encrypted vault retains admitted bindings across restarts, separately from file discovery. Discovery restores current standing; explicit project deletion removes retained file evidence.
+
+Every tool invocation waits for the index to admit newly attached roots and reconcile missed watcher generations. Roots with incomplete watcher coverage are revalidated at the shared coverage interval. Discovery streams directories and seeds the shared watcher without following symlinks or entering private host trees. Credential files are bounded to 16 MiB for parsing; a failed capture prevents agent invocation in that project until it can be reconciled. The host and human Files editor remain available for repair.
+
+A shared delivery hook records the chat's exposure before `read`, `grep`, `diff`, `summarize`, or Git content reaches its result. It also contributes unsaved drafts, historical revisions, and external-file bindings to that chat's evidence. Command and terminal output use the project file evidence because their text has no reliable file attribution. Durable and provider copies are screened before they leave their respective boundaries.
 
 The harvest admits only bytes no stronger fact already accounts for:
 
@@ -454,7 +458,7 @@ New credentials should come from `secret_generate`; existing credentials should 
 - File-writing tools materialize a reference only at the screened save; internal-state tools never do. Every record of that write (review, receipt, recorded edit) names the value by its reference.
 - One byte string has one evidence identity, the strongest that holds it: a managed capability names its bytes wherever they appear, weaker evidence never replaces it, and no path mints a second capability for bytes a managed secret already protects.
 - A credential-file value a model wrote from its own arguments is not harvested back from that file: the model already holds it.
-- Harvested evidence belongs to its session tree; a project-attributed screen reads only that project's trees.
+- Credential-file evidence belongs to its project; delivery-specific and minted evidence belongs to its session tree. Project-attributed screens cannot read another project's evidence.
 - A reference token is never evidence: no detector, exact-match lens, or project scan reports one, and no redaction rewrites one. A tool that resolves references refuses a damaged token rather than passing it on as literal text.
 - A reference the host writes into a model or transcript copy is a recorded replacement, and a request carrying one says that the source still holds the value.
 - Durable redaction precedes truncation and every general persistence fan-out. The transcript store is that boundary: every insert and update screens there.
