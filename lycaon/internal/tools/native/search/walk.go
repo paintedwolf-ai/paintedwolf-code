@@ -128,7 +128,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 	if w.maximum > 0 {
 		maximum = int(max(1, w.maximum-w.visited))
 	}
-	names, err := opened.Names(maximum)
+	names, err := opened.Names(projectpaths.DirectoryNames{Maximum: maximum, IncludeHidden: true})
 	if err != nil {
 		var exceeded *projectpaths.DirectoryEntriesLimitError
 		if errors.As(err, &exceeded) {
