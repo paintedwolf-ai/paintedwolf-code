@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestWaitIncludesAnalysisAndSettledCallback(t *testing.T) {
@@ -95,9 +97,7 @@ func TestStopCancelsAnalysisAndClosesAdmission(t *testing.T) {
 	p.Warm(root)
 	<-entered
 	p.Stop()
-	if err := p.Wait(t.Context()); err != nil {
-		t.Fatalf("join canceled analysis: %v", err)
-	}
+	testutil.FailErr(t, "join canceled analysis", p.Wait(t.Context()))
 	select {
 	case <-canceled:
 	default:
@@ -126,7 +126,5 @@ func TestStopPreservesSettledCallbackJoin(t *testing.T) {
 		t.Fatalf("stopped provider omitted callback join: %v", err)
 	}
 	finish()
-	if err := p.Close(); err != nil {
-		t.Fatalf("close stopped provider: %v", err)
-	}
+	testutil.FailErr(t, "close stopped provider", p.Close())
 }

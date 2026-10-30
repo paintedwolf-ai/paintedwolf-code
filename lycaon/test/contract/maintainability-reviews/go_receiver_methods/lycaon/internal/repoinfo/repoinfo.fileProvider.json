@@ -4,15 +4,15 @@
   "kind": "runtime_service",
   "workstream": "source-observations",
   "disposition": "retain",
-  "reason": "The repository provider owns one analysis/refinement lifetime, singleflight, measurement pacing, classification reuse and cached presentation. Wait and Close share its busy-interval owner and join synchronous settled callbacks before board publication can escape the host drain. Splitting that lifecycle would add a second coordinator. Retain the measured 21 methods, 366 receiver lines and 13 fields; persistence remains subordinate. Focused contracts cover cancellation, callback completion, repeated admission and API drain wiring.",
-  "reviewed_commit": "a35f3c5d6f582d5c0af2fec8a05a1e15200b941a",
-  "ceiling": 21,
+  "reason": "The repository provider owns one analysis/refinement lifetime, singleflight, measurement pacing, classification reuse and cached presentation. Stop closes admission and cancels that lifetime before the API shutdown join; Wait and Close still physically join synchronous settled callbacks, and Close releases classifications even after Stop. Separating this owner would add coordination and recreate the cancellation-order gap. Retain the measured 22 methods, 365 receiver lines and 13 fields; persistence remains subordinate. Focused contracts prove cancellation before drain, no readmission, held-callback completion, repeated admission intervals and actual API StopBackground wiring.",
+  "reviewed_commit": "391c819c124139f86922126500e146c7d55cfebc",
+  "ceiling": 22,
   "boundaries": {
-    "lycaon/internal/repoinfo/progressive_test.go": "e6314adef115e809edf333ebdadbbc7865ab8b9c31843faddaa8184007aca43a",
-    "lycaon/internal/repoinfo/warm_test.go": "a728a4cd861fb926ae69e00448f31b9040346d90f17a22ffd3ff2f3e86e98d6e",
+    "lycaon/internal/repoinfo/progressive_test.go": "a86544c1baa29f5cd2a1b71aa94996bb5e66b19ebbd782788d7a2c0adb410bb5",
+    "lycaon/internal/repoinfo/warm_test.go": "7ca8182809bb684f271e6ff66092475cc6d4dbb9e36caa66af688c72267612aa",
     "lycaon/internal/repoinfo/persistence_test.go": "787b703cafb327523485de7360cd2622e85809c4305751ed450285d42919ab0d",
-    "lycaon/internal/repoinfo/lifetime_test.go": "f15595c47a850ae48751cb311d8d8f68749538b50c7774acff6bcaa3e72d9c0b",
-    "lycaon/internal/api/background_repository_test.go": "e39b3538d4f1e37e5af39970d0cba7923f5e940914ca67fc9ff50f19e1b50755"
+    "lycaon/internal/repoinfo/lifetime_test.go": "edb37d61a3689c0f2fcc7cc7119b9820eae2986a889132f206e7f38d7e8715b4",
+    "lycaon/internal/api/background_repository_test.go": "b2e85bdbc8204dd0e060b6f3ec0f5794f293122688e7e9090230d0af041302c4"
   },
-  "reviewed_shape": "ef2f64a62cf2c30c0735315ed07bc429416018e93ef62c7cb12622a3e95057c8"
+  "reviewed_shape": "65e5dbffc8b1f5d4a4c64a849dcb7929821eb3857808d4a23d9e3312055212b1"
 }
