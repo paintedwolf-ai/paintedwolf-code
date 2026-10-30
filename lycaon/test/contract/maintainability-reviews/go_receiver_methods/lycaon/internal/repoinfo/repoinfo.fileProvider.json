@@ -4,14 +4,14 @@
   "kind": "runtime_service",
   "workstream": "source-observations",
   "disposition": "retain",
-  "reason": "The repository provider owns one analysis/refinement lifetime, singleflight, measurement pacing, classification reuse and cached presentation. Stop closes admission and cancels that lifetime before the API shutdown join; Wait and Close still physically join synchronous settled callbacks, and Close releases classifications even after Stop. Separating this owner would add coordination and recreate the cancellation-order gap. Retain the measured 22 methods, 365 receiver lines and 13 fields; persistence remains subordinate. Focused contracts prove cancellation before drain, no readmission, held-callback completion, repeated admission intervals and actual API StopBackground wiring.",
-  "reviewed_commit": "391c819c124139f86922126500e146c7d55cfebc",
+  "reason": "The repository provider owns one analysis/refinement lifetime, singleflight, measurement pacing, classification reuse and cached presentation. Stop seals admission before cancellation; Wait and Close physically join synchronous settled callbacks. Initial discovery receives one final measurement when its newer generation becomes complete, so drain does not wait through the ordinary refresh refractory. Settled-root refresh admission and cost-scaled pacing remain unchanged. Retain 22 methods and 13 fields within the existing limits; splitting this lifecycle would add coordination. All 55 provider contracts passed, including a regression that failed before the repair and proves final-generation settlement, exactly two measurements and no Warm readmission, plus existing pacing, cancellation and callback joins.",
+  "reviewed_commit": "38d0204d1f9b2feccbe1ee5662be48919a7eada8",
   "ceiling": 22,
   "boundaries": {
     "lycaon/internal/repoinfo/progressive_test.go": "a86544c1baa29f5cd2a1b71aa94996bb5e66b19ebbd782788d7a2c0adb410bb5",
     "lycaon/internal/repoinfo/warm_test.go": "7ca8182809bb684f271e6ff66092475cc6d4dbb9e36caa66af688c72267612aa",
     "lycaon/internal/repoinfo/persistence_test.go": "787b703cafb327523485de7360cd2622e85809c4305751ed450285d42919ab0d",
-    "lycaon/internal/repoinfo/lifetime_test.go": "edb37d61a3689c0f2fcc7cc7119b9820eae2986a889132f206e7f38d7e8715b4",
+    "lycaon/internal/repoinfo/lifetime_test.go": "73bbf6ec12ad85dadd6ddc1f05aab48cfac35aa3934c989e571af9ddd2ca0926",
     "lycaon/internal/api/background_repository_test.go": "b2e85bdbc8204dd0e060b6f3ec0f5794f293122688e7e9090230d0af041302c4"
   },
   "reviewed_shape": "65e5dbffc8b1f5d4a4c64a849dcb7929821eb3857808d4a23d9e3312055212b1"
