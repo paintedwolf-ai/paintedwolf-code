@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -23,6 +24,8 @@ const networkEgressTool = "network"
 
 // Invoke runs policy checks then delegates to the tool registry.
 func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[string]any, tc tools.ToolContext) (out string, err error) {
+	ctx, socketScope := socketref.WithScope(ctx)
+	defer socketScope.Close()
 	tc.BeginInvocation()
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	// Exits render their own rejects; this is the backstop for one that does not.

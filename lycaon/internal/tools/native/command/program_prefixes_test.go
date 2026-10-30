@@ -28,14 +28,14 @@ func firstStatement(t *testing.T, source string) commandsurface.Statement {
 
 func TestNohupOutputRedirectFindsOnlyLiteralNohupOut(t *testing.T) {
 	for source, refused := range map[string]bool{
-		"nohup ./server > nohup.out":        true,
+		"nohup ./server > nohup.out":         true,
 		"nohup ./server >> ./logs/nohup.out": true,
-		"nohup ./server 2> nohup.out":       true,
-		"nohup ./server &> nohup.out":       true,
-		"nohup ./server > server.log":       false,
-		`nohup ./server > "$out"`:           false,
-		"nohup ./server < nohup.out":        false,
-		"nohup ./server":                    false,
+		"nohup ./server 2> nohup.out":        true,
+		"nohup ./server &> nohup.out":        true,
+		"nohup ./server > server.log":        false,
+		`nohup ./server > "$out"`:            false,
+		"nohup ./server < nohup.out":         false,
+		"nohup ./server":                     false,
 	} {
 		redirect, got := nohupOutputRedirect(firstStatement(t, source))
 		if got != refused {

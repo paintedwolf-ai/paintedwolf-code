@@ -1,13 +1,16 @@
 package toolexecution
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -24,7 +27,7 @@ func (r *memorySocketRuntime) AppliedGrants(string) []confine.SocketGrant {
 func (r *memorySocketRuntime) AuthorizedGrants(_ string, identity hitl.EffectPermitIdentity, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant {
 	out := make([]confine.SocketGrant, 0, len(requested))
 	for _, g := range requested {
-		key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+		key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 		if r.used[key] {
 			continue
 		}
@@ -32,7 +35,7 @@ func (r *memorySocketRuntime) AuthorizedGrants(_ string, identity hitl.EffectPer
 			out = append(out, g)
 		}
 		for _, tg := range r.task {
-			if tg.ApprovedPath == g.ApprovedPath && tg.ResolvedPath == g.ResolvedPath {
+			if tg.ApprovedPath == g.ApprovedPath && tg.ResolvedPath == g.ResolvedPath && tg.Binding.Key() == g.Binding.Key() {
 				out = append(out, g)
 			}
 		}
@@ -45,16 +48,16 @@ func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _
 	return true
 }
 
-func (r *memorySocketRuntime) IssuePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) {
+func (r *memorySocketRuntime) IssuePermit(_ string, identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) {
 	if r.permits == nil {
 		r.permits = map[string]confine.SocketGrant{}
 	}
-	key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+	key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 	r.permits[key] = g
 }
 
 func (r *memorySocketRuntime) ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) (bool, error) {
-	key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+	key := identity.Key() + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 	if r.used == nil {
 		r.used = map[string]bool{}
 	}
@@ -86,4 +89,24 @@ func listenUnixSocket(t *testing.T, path string) net.Listener {
 		_ = os.Remove(path)
 	})
 	return ln
+}
+
+func socketInvocationContext(t *testing.T) context.Context {
+	t.Helper()
+	state, err := os.MkdirTemp("/tmp", "ss-") //nolint:usetesting // Kernel socket addresses are bounded.
+	testutil.FailErr(t, "socket reference state", err)
+	t.Cleanup(func() { _ = os.RemoveAll(state) })
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(state, "state"))
+	ctx, scope := socketref.WithScope(t.Context())
+	t.Cleanup(scope.Close)
+	return ctx
+}
+
+func retainedTestSocket(t *testing.T, grant confine.SocketGrant) confine.SocketGrant {
+	t.Helper()
+	lease, err := socketref.Capture(grant.ApprovedPath)
+	testutil.FailErr(t, "retain fixture socket", err)
+	t.Cleanup(lease.Close)
+	grant.Binding = lease.Binding()
+	return grant
 }

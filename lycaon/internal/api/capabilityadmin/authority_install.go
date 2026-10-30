@@ -77,19 +77,23 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 		}
 		requested := make([]confine.SocketGrant, 0, len(delta.Sockets))
 		for _, target := range delta.Sockets {
-			requested = append(requested, confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
+			grant := confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}
+			if err := confine.RevalidateSocketGrant(grant); err != nil {
+				return nil, err
+			}
+			requested = append(requested, grant)
 		}
 		already := s.Sockets.AuthorizedGrants("", delta.PermitIdentity(), delta.ActionDigest, requested)
 		covered := make(map[string]struct{}, len(already))
 		for _, grant := range already {
-			covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath] = struct{}{}
+			covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key()] = struct{}{}
 		}
 		created := make([]confine.SocketGrant, 0, len(requested))
 		for _, grant := range requested {
-			if _, ok := covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath]; ok {
+			if _, ok := covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key()]; ok {
 				continue
 			}
-			s.Sockets.IssuePermit(delta.PermitIdentity(), delta.ActionDigest, grant)
+			s.Sockets.IssuePermit(firstSocketChat(delta), delta.PermitIdentity(), delta.ActionDigest, grant)
 			created = append(created, grant)
 		}
 		return func() {
@@ -183,7 +187,7 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 			if s.Sockets != nil {
 				for _, target := range delta.Sockets {
 					s.Sockets.RevokePermit(delta.PermitIdentity(), delta.ActionDigest,
-						confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
+						confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding})
 				}
 			}
 		case hitl.AuthoritySocketChat:
@@ -233,4 +237,11 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 		}
 	}
 	return nil
+}
+
+func firstSocketChat(delta hitl.ApprovalAuthorityDelta) string {
+	if delta.ChatSession() != "" {
+		return delta.ChatSession()
+	}
+	return delta.SessionID
 }

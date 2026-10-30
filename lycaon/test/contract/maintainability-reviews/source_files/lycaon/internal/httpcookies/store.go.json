@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/httpcookies/store.go",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "store.go keeps RFC 6265 selection, issuance and persisted equality together; the native issuer receipt is one protected field written only by accepted responses. The invocation delivery view lives in delivery.go and change merging in changes.go. Freeze this reviewed shape at 345 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 345,
+  "boundaries": {
+    "lycaon/internal/httpcookies/delivery_test.go": "66465366a6600eb6c46c470acd5841acb401da79774b877c08dac7549269c3bf",
+    "lycaon/internal/api/capabilityadmin/socket_cookie_owner_test.go": "96f91959a93fb4bdaf095e3101e17dddd3e65e3f0c9e48126e04da51c981f19f"
+  }
+}

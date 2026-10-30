@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/session/approvalstate/socket_capability_runtime.go",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Chat authority, current-call permits and their deterministic leases share one session lifecycle. The existing guard and LRU remain logical owners; the focused lifetime helper closes replacement, eviction, expiry, run-end and root/child teardown shares while preserving unavailable intent. Extraction into a second authority owner would split permit transfer from revocation. Freeze this reviewed shape at 350 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 350,
+  "boundaries": {
+    "lycaon/internal/session/approvalstate/socket_ownership_test.go": "eec9245bb3313966f1cbb81d1c945b8cf4c15b2fbba892bf75cd64b58d9a1597",
+    "lycaon/internal/session/approvalstate/socket_pathname_darwin_test.go": "c328de08e1bddce21294b4876ed1c42f782c5e1bba95753351d8c33f1308e6b1",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60"
+  }
+}

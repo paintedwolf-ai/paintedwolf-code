@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/hitl/hitl.ApprovalAuthority",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "ApprovalAuthority owns authenticated decision, installation, sealing and restart replay. Lost retained bindings use the existing terminal recovery transition and unavailable-intent installer; they never recapture a name. Keep replay and rollback under the same authority mutation lock. Freeze this reviewed shape at 323 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 323,
+  "boundaries": {
+    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c"
+  },
+  "reviewed_shape": "60bec6f207cf2a767080c834d68e51319a53131402e0a72e18ac5c81dd0173b0"
+}

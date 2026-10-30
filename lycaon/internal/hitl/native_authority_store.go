@@ -68,8 +68,10 @@ type authoritySource struct {
 
 func checkpointAuthoritySource(id string) authoritySource {
 	return authoritySource{
-		name:    "checkpoint " + id,
-		measure: func(ctx context.Context, q *db.Queries) (db.MeasureCheckpointAuthorityRow, error) { return q.MeasureCheckpointAuthority(ctx, id) },
+		name: "checkpoint " + id,
+		measure: func(ctx context.Context, q *db.Queries) (db.MeasureCheckpointAuthorityRow, error) {
+			return q.MeasureCheckpointAuthority(ctx, id)
+		},
 		read: func(ctx context.Context, q *db.Queries, m db.MeasureCheckpointAuthorityRow) (string, error) {
 			return q.ReadCheckpointAuthority(ctx, db.ReadCheckpointAuthorityParams{ID: id, Format: m.AuthorityFormat, Digest: m.AuthorityDigest, BodyBytes: m.BodyBytes})
 		},

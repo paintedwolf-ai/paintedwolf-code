@@ -169,6 +169,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		if err := deps.Security.BuildExceptional(ctx, deps.Execution.Host.Executor.Capabilities, deps.SettingsService.Approvals, deps.Execution.Host.Authority.ApprovalsDisabled, r.Manager.Resources, deps.Security.Authority.Recorder, r.Manager.Chats.Protection.SetDirectIPReconstructHook); err != nil {
 			return err
 		}
+		sockets := deps.Security.Sockets
+		deps.Resources.Track("socket-capability-references", 26, func(context.Context) error { sockets.Close(); return nil })
 	}
 	if err := wireToolApprovalCheckpointHooks(ctx, checkpointMgr, toolApprovalRT); err != nil {
 		return err

@@ -12,7 +12,7 @@ type SocketCapabilityRuntime interface {
 	AppliedGrants(rootSessionID string) []confine.SocketGrant
 	AuthorizedGrants(rootSessionID string, identity hitl.EffectPermitIdentity, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant
 	GrantChat(rootSessionID string, g confine.SocketGrant, grantID, checkpointID, actionDigest string, expiresAt *time.Time) bool
-	IssuePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant)
+	IssuePermit(rootSessionID string, identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant)
 	ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) (bool, error)
 }
 

@@ -287,11 +287,11 @@ func socketApprovalOptions(req CheckpointRequest, action ProposedAction) []Appro
 	for _, target := range req.SocketCapability.Targets {
 		targets = append(targets, ApprovalSocketTarget{
 			ApprovedPath: target.ApprovedPath,
-			ResolvedPath: target.ResolvedPath,
+			ResolvedPath: target.ResolvedPath, Binding: target.Binding,
 		})
 	}
 	permit := ApprovalAuthorityDelta{
-		Kind: AuthoritySocketPermit, SessionID: req.SessionID, ToolCallID: req.ToolCallID,
+		Kind: AuthoritySocketPermit, ChatSessionID: action.ChatSession(), SessionID: req.SessionID, ToolCallID: req.ToolCallID,
 		ActionDigest: GrantKey(action), Sockets: targets,
 	}
 	once := ApprovalOption{

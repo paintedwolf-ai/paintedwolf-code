@@ -137,7 +137,7 @@ func NewUnlockPlan(action ProposedAction, held HeldRelease, screen *SecretScreen
 		Action: TitleUnlockForThisChat, Tool: action.Invocation.Tool, Impact: unlockImpact,
 		Gate: api.GateSecretOutbound, ConsequenceBand: string(api.ConsequenceBandHighRisk),
 		ConsequenceCode: string(api.ConsequenceCodeSecret),
-		Cited: []PresentedFact{{Gate: api.GateSecretOutbound, Key: "secret.custody", Value: "a value you stored", Source: "managed_secret"}},
+		Cited:           []PresentedFact{{Gate: api.GateSecretOutbound, Key: "secret.custody", Value: "a value you stored", Source: "managed_secret"}},
 	}
 	unlock := SendUnchangedOption()
 	unlock.ID, unlock.Title = unlockOptionID, TitleUnlockForThisChat

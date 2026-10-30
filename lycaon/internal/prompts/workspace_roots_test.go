@@ -295,8 +295,8 @@ func TestCommandSurfaceProjectCoverageAndPostureCopy(t *testing.T) {
 		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
 	}
 	const (
-		coverage   = "These folders are the project; search indexing, history and undo cover only them."
-		strictLn   = "Other paths, including temporary folders, ask the person first."
+		coverage    = "These folders are the project; search indexing, history and undo cover only them."
+		strictLn    = "Other paths, including temporary folders, ask the person first."
 		nonStrictLn = "Other paths ask the person first, except temporary and cache folders."
 	)
 	for _, tc := range []struct {

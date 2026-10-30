@@ -30,6 +30,10 @@ func (m *ApprovalAuthority) SetNativeAuthorityAdmission(state toolcontract.Revie
 	}
 }
 
+type unavailableSocketIntentRestorer interface {
+	RestoreUnavailableSocketIntent(context.Context, ChatGrant) error
+}
+
 // SetApprovalAuthorityInstaller wires the one authority mutation boundary.
 func (m *ApprovalAuthority) SetApprovalAuthorityInstaller(installer ApprovalAuthorityInstaller) {
 	if m != nil {
@@ -122,6 +126,7 @@ func (m *ApprovalAuthority) ResolveApprovalOptionBy(ctx context.Context, session
 func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
 	releaseAuthority := m.LockApprovalAuthority()
 	defer releaseAuthority()
+
 	unlock := m.checkpoints.LockResolution(checkpointID)
 	defer unlock()
 
@@ -153,6 +158,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if display.Disabled {
 		return nil, ErrApprovalOptionUnavailable
 	}
+
 	if m.authorityInstaller == nil {
 		return nil, fmt.Errorf("approval authority installer is not configured")
 	}
@@ -165,6 +171,13 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 		return nil, err
 	}
 	defer releaseAuthority()
+	// Restored approval history cannot reconstruct a lost live capability.
+	owners, err := acquireApprovalSocketOwners(&ApprovalPlan{Options: []ApprovalOption{option}})
+	if err != nil {
+		return nil, err
+	}
+	defer closeApprovalSocketOwners(owners)
+
 	now := time.Now().UTC()
 	var opened *presence.Unlock
 	if plan.releasesHeld(option) {

@@ -30,11 +30,11 @@ func TestRetainedStorageAdmissionRequiresReviewedAndMeasuredRoute(t *testing.T) 
 
 func TestRetainedStorageFallsBackForChangedRoute(t *testing.T) {
 	changes := map[string]func(*Plan){
-		"future step": func(p *Plan) { p.steps = append(p.steps, Step{ID: "future-migration"}) },
-		"missing step": func(p *Plan) { p.steps = p.steps[:len(p.steps)-1] },
-		"reordered steps": func(p *Plan) { p.steps[1], p.steps[2] = p.steps[2], p.steps[1] },
+		"future step":      func(p *Plan) { p.steps = append(p.steps, Step{ID: "future-migration"}) },
+		"missing step":     func(p *Plan) { p.steps = p.steps[:len(p.steps)-1] },
+		"reordered steps":  func(p *Plan) { p.steps[1], p.steps[2] = p.steps[2], p.steps[1] },
 		"different source": func(p *Plan) { p.Source.Shape = strings.Repeat("0", 64) },
-		"future revision": func(p *Plan) { p.Target.Revision++ },
+		"future revision":  func(p *Plan) { p.Target.Revision++ },
 		"different target": func(p *Plan) { p.Target.Shape = strings.Repeat("0", 64) },
 		"no retained copy": func(p *Plan) { p.steps[0].RetainedCopy = nil },
 	}

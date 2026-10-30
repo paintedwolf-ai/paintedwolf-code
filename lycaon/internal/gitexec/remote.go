@@ -156,7 +156,6 @@ func ListRemotes(ctx context.Context, repoDir string) ([]RemoteEntry, bool) {
 	return remotes, true
 }
 
-
 // RemoteURLFor names the remote a network argv contacts: an explicit URL,
 // the named remote's URL, or the current branch's upstream remote.
 func RemoteURLFor(ctx context.Context, repoDir string, args []string) string {

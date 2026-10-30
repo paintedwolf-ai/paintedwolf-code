@@ -1,6 +1,8 @@
 package toolexecution_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -19,4 +21,12 @@ func fixtureSandboxConfig() sandbox.Config {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}
+}
+
+func setSocketReferenceState(t *testing.T) {
+	t.Helper()
+	root, err := os.MkdirTemp("/tmp", "ns-") //nolint:usetesting // Native Unix reference addresses have a kernel length limit.
+	testutil.FailErr(t, "native socket reference state", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
 }

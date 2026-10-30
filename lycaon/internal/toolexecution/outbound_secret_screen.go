@@ -76,7 +76,7 @@ func (e *Secrets) AskSecretScreen(ctx context.Context, finding secretmatch.Alert
 	if !contested && secretInvocationCovered(secretcap.ResolutionFrom(ctx), finding.Fingerprints, recipients) {
 		return e.ensureHeldUnlocked(ctx, finding, custody, recipients)
 	}
-	if !contested && e != nil && e.Approvals.approvalGate != nil && e.secretRecipientsCovered(finding, recipients, fingerprintValues) {
+	if !finding.IssuerUnverified && !contested && e != nil && e.Approvals.approvalGate != nil && e.secretRecipientsCovered(finding, recipients, fingerprintValues) {
 		e.recordSecretLedger(ctx, finding, authzledger.ActionSecretPermissionUsed, authzledger.ResolvedByHuman, authzledger.AuthorizationSourceLease)
 		allowSecretInvocation(ctx, finding, recipients)
 		return e.ensureHeldUnlocked(ctx, finding, custody, recipients)
@@ -95,20 +95,20 @@ func (e *Secrets) AskSecretScreen(ctx context.Context, finding secretmatch.Alert
 	defer releaseReview()
 	args := secretScreenArgs(payload)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: payload.Surface,
-Args: args,
-},
-Presentation: hitl.ActionPresentation{
-EstimatedImpact: secretEstimatedImpact(payload),
-},
-Scope: hitl.ActionScope{
-SessionID: finding.SessionID,
-RootSessionID: finding.RootSessionID,
-ProjectID: finding.ProjectID,
-ProjectDir: finding.ProjectDir,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: payload.Surface,
+			Args: args,
+		},
+		Presentation: hitl.ActionPresentation{
+			EstimatedImpact: secretEstimatedImpact(payload),
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     finding.SessionID,
+			RootSessionID: finding.RootSessionID,
+			ProjectID:     finding.ProjectID,
+			ProjectDir:    finding.ProjectDir,
+		},
+	}
 	grantOffers := []hitl.ApprovalGrantOffer(nil)
 	if decision != nil && decision.Reuse().Offered() {
 		grantOffers = secretReleaseLadder(action.Scope.ChatSession(), finding.ProjectID, finding.ProjectDir,
@@ -128,6 +128,9 @@ ProjectDir: finding.ProjectDir,
 		return secretmatch.Resolution{}, fmt.Errorf("secret approval action identity cannot be encoded")
 	}
 	coalesceKey := actionKey + "\x00" + secretmatch.RecipientDigest(recipients)
+	if finding.IssuerUnverified {
+		coalesceKey += "\x00invocation:" + finding.ToolCallID
+	}
 	switch {
 	case len(finding.Fingerprints) > 0:
 		coalesceKey += "\x00secret:" + secretmatch.FingerprintDigest(finding.Fingerprints)
@@ -338,11 +341,11 @@ func (e *Secrets) explainSecretScreen(args map[string]any, screen *hitl.SecretSc
 	explanation := &hitl.ApprovalExplanation{}
 	if e.Approvals.approvalExplainer != nil {
 		copy := e.Approvals.approvalExplainer.ExplainApproval(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: toolsecrets.OutboundSecretExplainTool,
-Args: args,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: toolsecrets.OutboundSecretExplainTool,
+				Args: args,
+			},
+		})
 		explanation.What = copy.What
 		explanation.Who = copy.Who
 		explanation.IfWrong = copy.IfWrong
@@ -376,6 +379,7 @@ func evaluateSecretScreen(finding secretmatch.Alert, custody secretcap.CustodySu
 // values its invocation resolved.
 func secretHit(finding secretmatch.Alert, custody secretcap.CustodySummary) *gate.SecretHit {
 	return &gate.SecretHit{
+		IssuerUnverified:   finding.IssuerUnverified,
 		Surface:            string(finding.Surface),
 		RuleID:             finding.RuleID,
 		RuleTitle:          finding.RuleTitle,

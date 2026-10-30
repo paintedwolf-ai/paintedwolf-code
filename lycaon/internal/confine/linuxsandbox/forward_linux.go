@@ -116,14 +116,15 @@ func sendHandoff(h handoff, fd int) error {
 // inner helper hands it from the host's network namespace and decides the
 // sandbox's socket calls.
 type supervisor struct {
-	control *os.File
-	network Network
-	factory *socketFactory
-	relays  *datagramRelays
-	host    *hostSockets
-	wg      sync.WaitGroup
-	mu      sync.Mutex
-	closers []io.Closer
+	control    *os.File
+	network    Network
+	socketRefs *socketReferences
+	factory    *socketFactory
+	relays     *datagramRelays
+	host       *hostSockets
+	wg         sync.WaitGroup
+	mu         sync.Mutex
+	closers    []io.Closer
 	// setupDone is set once the seccomp listener arrives, the last thing the
 	// inner helper hands over before the target can run. Later handoffs are
 	// refused: only a process that took over the inner helper could send one.
@@ -137,13 +138,18 @@ type supervisor struct {
 	targets *targetHandles
 }
 
-func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
+func newSupervisor(control *os.File, network Network, refusals io.Writer) (*supervisor, error) {
+	refs, err := retainSocketReferences(network)
+	if err != nil {
+		return nil, err
+	}
 	factory := newSocketFactory(control)
 	return &supervisor{
-		control: control, network: network, factory: factory,
+		socketRefs: refs,
+		control:    control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
 		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(),
-	}
+	}, nil
 }
 
 // serve reads handoffs until the inner helper closes its end.
@@ -283,6 +289,7 @@ func (s *supervisor) track(c io.Closer) {
 
 // close ends every listener; connections in flight end with the process.
 func (s *supervisor) close() {
+	s.socketRefs.close()
 	s.mu.Lock()
 	closers := s.closers
 	s.closers = nil

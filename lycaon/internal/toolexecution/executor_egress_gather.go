@@ -246,10 +246,10 @@ func (e *Network) raiseEgressSetCard(ctx context.Context, members []egressRaise)
 	noun := strconv.Itoa(count) + " hosts"
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: networkEgressTool,
-Args: map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
-},
+		Invocation: hitl.ActionInvocation{
+			Tool: networkEgressTool,
+			Args: map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
+		},
 		Presentation: hitl.ActionPresentation{
 			PresentationTool: lead.action.Presentation.PresentationTool,
 			Command:          lead.action.Presentation.Command,

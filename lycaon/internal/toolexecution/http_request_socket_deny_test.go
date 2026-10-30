@@ -87,7 +87,7 @@ func (r *recordingSocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _
 	return true
 }
 
-func (r *recordingSocketRuntime) IssuePermit(_ hitl.EffectPermitIdentity, _ string, g confine.SocketGrant) {
+func (r *recordingSocketRuntime) IssuePermit(_ string, _ hitl.EffectPermitIdentity, _ string, g confine.SocketGrant) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.permits = append(r.permits, g)
@@ -100,6 +100,7 @@ func (r *recordingSocketRuntime) ConsumePermit(hitl.EffectPermitIdentity, string
 // A denied http_request socket card installs no authority: the handler never
 // runs, nothing is granted or saved, and the retry asks again.
 func TestHTTPRequestUnixSocketDenialRecordsNoGrantAndRetryAsksAgain(t *testing.T) {
+	setSocketReferenceState(t)
 	dir, err := os.MkdirTemp("/tmp", "lyc-deny-") //nolint:usetesting // Socket paths must stay short.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })

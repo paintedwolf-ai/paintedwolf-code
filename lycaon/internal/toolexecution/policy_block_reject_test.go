@@ -178,4 +178,3 @@ func TestExecutorCapabilityParseRejectIncludesContractFields(t *testing.T) {
 		t.Fatalf("capability_request_fields = %#v, want command contract fields", reject.Data["capability_request_fields"])
 	}
 }
-

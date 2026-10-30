@@ -150,7 +150,7 @@ func TestNetworkPlanMirrorsBoundaryDerivations(t *testing.T) {
 	}
 	deny := networkPlan(Confinement{Network: NetworkDeny, LocalListen: true, LocalListenPorts: []uint16{8080},
 		SocketGrants: []SocketGrant{{ApprovedPath: "/run/a", ResolvedPath: "/run/a"}}})
-	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketPaths, []string{"/run/a"}) {
+	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketGrants, []linuxsandbox.SocketGrant{{Path: "/run/a", FD: linuxsandbox.SocketReferenceFD}}) {
 		t.Fatalf("deny plan: %+v", deny)
 	}
 }
@@ -188,4 +188,13 @@ func TestLinuxDraftFileKeepsOrdinaryWriteRoot(t *testing.T) {
 	if !found {
 		t.Fatalf("project write root lost: %+v", plan)
 	}
+}
+
+// UseDelegatedEndpointsForTest stands a fixture socket in for a delegated
+// service endpoint, which tests cannot create at its operating-system path.
+func UseDelegatedEndpointsForTest(t *testing.T, endpoints []linuxsandbox.DelegatedEndpoint) {
+	t.Helper()
+	previous := delegatedEndpoints
+	delegatedEndpoints = endpoints
+	t.Cleanup(func() { delegatedEndpoints = previous })
 }

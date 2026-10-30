@@ -23,15 +23,15 @@ type Projects interface {
 
 // Service compiles profile-specific skills and observed machine resources.
 type Service struct {
-	workflowToolAccess WorkflowToolAccessView
-	postures           *PostureRegistry
-	postureOverlay     scopedstore.LRU[*PostureRegistry]
-	trustSurfaces      *settings.TrustSurfacesStore
-	store              SessionReader
-	catalog            *catalog.Service
-	workspace          *sessionscope.Service
-	projects           Projects
-	Agents             AgentProfileResolver
+	workflowToolAccess    WorkflowToolAccessView
+	postures              *PostureRegistry
+	postureOverlay        scopedstore.LRU[*PostureRegistry]
+	trustSurfaces         *settings.TrustSurfacesStore
+	store                 SessionReader
+	catalog               *catalog.Service
+	workspace             *sessionscope.Service
+	projects              Projects
+	Agents                AgentProfileResolver
 	skillsGate            *settings.ProjectSurfaceGate
 	skillsCache           skills.ProjectCache
 	hostResources         *hostresources.Service

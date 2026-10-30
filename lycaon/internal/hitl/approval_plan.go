@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -171,8 +172,9 @@ type TrustDestinationDelta struct {
 
 // ApprovalSocketTarget is the canonical approved/resolved socket pair.
 type ApprovalSocketTarget struct {
-	ApprovedPath string `json:"approved_path"`
-	ResolvedPath string `json:"resolved_path"`
+	Binding      socketref.Binding `json:"binding,omitempty,omitzero"`
+	ApprovedPath string            `json:"approved_path"`
+	ResolvedPath string            `json:"resolved_path"`
 }
 
 // ApprovalAuthorityDelta is authority installed before action release.

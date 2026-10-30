@@ -114,7 +114,7 @@ func Stricter(a, b Posture) Posture {
 
 // ReleasesChatSecretLocally reports whether the secret gate stays silent for hit.
 func (p Posture) ReleasesChatSecretLocally(hit *SecretHit) bool {
-	return hit != nil && !hit.Held && hit.ChatGenerated && hit.RecipientsLocal && p.rule().releasesChatSecrets
+	return hit != nil && !hit.Held && !hit.IssuerUnverified && hit.ChatGenerated && hit.RecipientsLocal && p.rule().releasesChatSecrets
 }
 
 // QuietsPublicRegistry reports whether the destination is a public package

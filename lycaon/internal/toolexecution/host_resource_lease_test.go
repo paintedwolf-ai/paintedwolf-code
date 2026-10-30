@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostresources"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 func TestSocketMatchesRealization(t *testing.T) {
@@ -58,18 +59,18 @@ func TestPermitCoveredHostResourceSocketsIssuesRealizationOnly(t *testing.T) {
 		e.Approvals.approvalGate = coveringHostResourceGate{}
 		return e
 	}()
-	docker := confine.SocketGrant{ApprovedPath: sock, ResolvedPath: sock}
-	other := confine.SocketGrant{ApprovedPath: extra, ResolvedPath: extra}
+	docker := confine.SocketGrant{ApprovedPath: sock, ResolvedPath: sock, Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
+	other := confine.SocketGrant{ApprovedPath: extra, ResolvedPath: extra, Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
 	covered, extras := exec.Capabilities.permitCoveredHostResourceSockets(
 		context.Background(),
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Resources: hitl.ActionResources{
-HostResources: []string{"docker"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Resources: hitl.ActionResources{
+				HostResources: []string{"docker"},
+			},
+		},
 		"digest-1",
 		[]confine.SocketGrant{docker, other},
 		tools.ToolContext{

@@ -14,7 +14,7 @@ func TestNativeChildOncePermitNeverCoversSiblingOrStructuredCall(t *testing.T) {
 	legacy.ExecutionID = ""
 	sockets := NewSocketCapabilityRuntime()
 	grant := confine.SocketGrant{ApprovedPath: "/fixture/service.sock", ResolvedPath: "/fixture/service.sock"}
-	sockets.IssuePermit(first, "same-semantic-action", grant)
+	sockets.IssuePermit((first).SessionID, first, "same-semantic-action", grant)
 	direct := NewDirectIPCapabilityRuntime()
 	direct.IssuePermit(first, "same-semantic-action", "request", "confinement")
 	for _, other := range []hitl.EffectPermitIdentity{sibling, legacy} {
@@ -31,7 +31,7 @@ func TestNativeChildOncePermitNeverCoversSiblingOrStructuredCall(t *testing.T) {
 	if ok, err := direct.ConsumePermit(first, "same-semantic-action", "request", "confinement"); err != nil || !ok {
 		t.Fatalf("actual direct child lost permit: %v", err)
 	}
-	sockets.IssuePermit(legacy, "same-semantic-action", grant)
+	sockets.IssuePermit((legacy).SessionID, legacy, "same-semantic-action", grant)
 	direct.IssuePermit(legacy, "same-semantic-action", "request", "confinement")
 	if ok, _ := sockets.ConsumePermit(first, "same-semantic-action", grant); ok || direct.Authorized(first, "same-semantic-action") {
 		t.Fatal("retained structured authority granted native child")

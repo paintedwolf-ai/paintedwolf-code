@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/hitl/hitl.ApprovalGrant",
+  "kind": "data_record",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The grant record carries scope, provenance, matching identity and recovery intent together. The additive binding distinguishes retained-object authority from kernel pathname authority; unavailable is a projection, not a second permission switch. Splitting these fields into a context bag would obscure the durable identity and authorization transaction. Freeze this reviewed shape at 29 fields; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 29,
+  "boundaries": {
+    "lycaon/internal/hitl/grant_socket_binding_identity_test.go": "d3c76c978a9025cede822d1322158da1a000f6f64ae042e6e8b222b78dbec831",
+    "lycaon/internal/settings/socket_grant_ownership_test.go": "b35151153c449b1e0eff5e19651fb5e6eea613bbc2df0ba8382c2e4e6d0e7e14",
+    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac"
+  },
+  "reviewed_shape": "d6a496e5e4417554146c8323077a5a41afad62939b2dce877b6a9c05d9d89c33"
+}

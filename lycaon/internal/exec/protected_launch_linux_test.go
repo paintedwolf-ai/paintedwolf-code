@@ -262,7 +262,7 @@ func TestPreparedInputsSurviveBrokerAndSupervisorPrefixes(t *testing.T) {
 	prefix := slices.Clone(cmd.ExtraFiles)
 	state := protectedLaunch{protected: true, broker: broker}
 	testutil.FailErr(t, "relay prepared input", relayThrough(cmd, state))
-	testutil.FailErr(t, "validate relayed input", confine.ValidateProcessInputs(cmd))
+	testutil.FailErr(t, "validate relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
 	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
 	testutil.FailErr(t, "supervise relayed input", err)
 	defer cleanup()
@@ -274,7 +274,7 @@ func TestPreparedInputsSurviveBrokerAndSupervisorPrefixes(t *testing.T) {
 	if !relayedCommand(cmd) || !commandSupervisor(cmd) || len(cmd.ExtraFiles) != len(prefix)+3 || !slices.Equal(cmd.ExtraFiles[:len(prefix)], prefix) || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != supervisorBroker {
 		t.Fatalf("supervisor relay changed descriptor prefix: args=%q files=%d", cmd.Args, len(cmd.ExtraFiles))
 	}
-	testutil.FailErr(t, "validate supervised relayed input", confine.ValidateProcessInputs(cmd))
+	testutil.FailErr(t, "validate supervised relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
 }
 
 // Inside the module view the caller's programs are not executable by the

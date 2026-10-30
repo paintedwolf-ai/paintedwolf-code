@@ -39,9 +39,14 @@ func Command(
 			return nil, func() {}, err
 		}
 	}
+	socketFiles, closeSockets, err := socketCommandFiles(c.SocketGrants)
+	if err != nil {
+		return nil, func() {}, err
+	}
 	// An inherited pipe keeps the profile outside writable pathnames.
 	pr, pw, err := os.Pipe()
 	if err != nil {
+		closeSockets()
 		return nil, func() {}, err
 	}
 	helperArgs := append([]string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}, extra...)
@@ -63,6 +68,14 @@ func Command(
 		files = append(files, reports)
 		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
 	}
+	files, err = appendSocketCommandFiles(files, socketFiles)
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		closeReports()
+		closeSockets()
+		return nil, func() {}, err
+	}
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
 	cmd.ExtraFiles = files
@@ -73,6 +86,7 @@ func Command(
 	// Releasing the host's own end lets the marker report end-of-file once the
 	// last descendant exits.
 	cleanup := func() {
+		closeSockets()
 		_ = pr.Close()
 		closeReports()
 		c.lineage.Started()

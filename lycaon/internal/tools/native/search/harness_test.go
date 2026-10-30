@@ -170,8 +170,8 @@ type harness struct {
 	dispatch *childDispatch
 	cwd      string
 	// env is the program frame's exported environment beyond LANG=C.
-	env []string
-	runs     int
+	env  []string
+	runs int
 }
 
 type run struct {

@@ -144,7 +144,7 @@ type RecordInput struct {
 	CaptureQuality string `json:",omitempty"`
 	ActorLabel     string `json:",omitempty"`
 	// Reconciliation binds these effects to the observed ref transition.
-	GitTransitionID string    `json:",omitempty"`
+	GitTransitionID string `json:",omitempty"`
 	// Reconciliation attributes effects to the active command window.
 	CommandWindowID string    `json:",omitempty"`
 	TS              time.Time `json:",omitempty"`

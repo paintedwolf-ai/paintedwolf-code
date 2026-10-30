@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -43,6 +44,8 @@ func TestBuildProfileExactSocketLiterals(t *testing.T) {
 	dir := shortTempDir(t)
 	sock := socketGrant(t, filepath.Join(dir, "svc.sock"))
 	wild := socketGrant(t, filepath.Join(dir, "star*.sock"))
+	sock.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+	wild.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
 
 	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots:        []string{dir},
@@ -176,7 +179,11 @@ func socketGrant(t *testing.T, path string) confine.SocketGrant {
 	listenUnix(t, path)
 	resolved, err := filepath.EvalSymlinks(path)
 	testutil.FailErr(t, "EvalSymlinks", err)
-	return confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved}
+	ctx, scope := socketref.WithScope(t.Context())
+	t.Cleanup(scope.Close)
+	grant, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved})
+	testutil.FailErr(t, "capture reviewed command socket", err)
+	return grant
 }
 
 func listenUnix(t *testing.T, path string) net.Listener {

@@ -277,7 +277,7 @@ func bisectLines(ctx context.Context, dir string, args []string, yield func(stri
 }
 
 // bisectPathspec decodes the single-quoted words BISECT_NAMES records, where
-// a quote inside a word is written as '\''.
+// a quote inside a word is written as '\”.
 func bisectPathspec(names string) []string {
 	var words []string
 	var word strings.Builder

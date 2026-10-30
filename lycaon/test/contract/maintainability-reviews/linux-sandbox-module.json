@@ -2,16 +2,18 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/confine/linuxsandbox",
   "kind": "module",
-  "workstream": "linux-confinement",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Retain the measured 38-file Linux enforcement module. Capability facts, namespace setup, mount rendering, Landlock, seccomp, descriptor transport, the confined performer and mediated network effects compose one helper boundary. The filesystem phase now owns ordered mount masks and cwd re-entry; the launch owns its standard-stream byte bridges and their joined retirement. These are real kernel resource lifetimes inside the same boundary, not additional permission owners. Moving the new phases into unrelated packages would expose plan internals and split pre-target authority from its attestation. The focused mount, descriptor, socket policy and byte-stream contracts support this bounded member set.",
-  "reviewed_commit": "59f995f13a90ddb8cadba90503f3ced7f982c1f9",
-  "ceiling": 38,
-  "reviewed_shape": "cbd4401dedef664f145b55dbfe2248de873d857a9abf0b37a80ac59950f90c42",
+  "reason": "The Linux sandbox package owns one command boundary across namespace, seccomp, notification and descriptor mediation. Focused reference retirement and performed connects share the supervisor lifetime; no second policy owner or native relay subsystem is added. Freeze this reviewed shape at 37 files; further growth requires renewed architectural review. Main now also supplies metadata mount enforcement and byte-only standard-stream contracts. The combined membership and focused socket, filesystem and stream contracts require renewed review; the prior ceiling and shape are deliberately preserved until that verification is available.",
+  "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
+  "ceiling": 37,
   "boundaries": {
     "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "60da39c003d211d5be4b674fa95dcc64fc96e19b65c5c64c791bbec5a2b437f9",
-    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "a8ed4a436b1554875bb9468d0e9312eb75296ac0045fc33de3bf2d714782936c",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/linuxsandbox/socket_reference_linux_test.go": "ed52e4f0723a36228dbe8200552b7ac94c5e8180c3a2fcf8256b575bba55fa47",
     "lycaon/internal/confine/linuxsandbox/filesystem_linux_test.go": "874bffc1a06789ffa96e0fb59effa0db9c45faef9128e141ae01abd30e9e4734",
     "lycaon/internal/confine/linuxsandbox/stdio_linux_test.go": "ddb67b150ef43f534191aa65d359dc3ebc4d69c884ae2178aae3a18100e81c19"
-  }
+  },
+  "reviewed_shape": "c4881f5e29a08ac2ec74dfd0f61a704fb8d59af31d7eac85100a17a4a23b299c"
 }

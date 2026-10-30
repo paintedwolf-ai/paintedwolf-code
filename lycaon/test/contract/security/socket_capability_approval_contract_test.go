@@ -22,15 +22,15 @@ import (
 func assertNoStandingSocketGrant(t *testing.T) {
 	t.Helper()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "sess",
-ProjectID: "proj",
-ProjectDir: "/tmp/proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess",
+			ProjectID:  "proj",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) == 0 {

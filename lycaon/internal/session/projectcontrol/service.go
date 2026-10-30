@@ -52,19 +52,19 @@ type OverlayPromoter interface {
 	RejectOverlay(context.Context, string, string, string) (api.OverlayRejectOutcome, error)
 }
 type Service struct {
-	store                   Sessions
-	projects                Projects
-	workers                 Workers
-	workerAbort             WorkerAbort
-	stops                   Stops
-	status                  Status
-	admission               Admission
-	batch                   Batch
-	instructions            Instructions
-	transcript              Transcript
-	anchors                 Anchors
-	overlayPromoter         OverlayPromoter
-	rootHistory             *projectroot.History
+	store                     Sessions
+	projects                  Projects
+	workers                   Workers
+	workerAbort               WorkerAbort
+	stops                     Stops
+	status                    Status
+	admission                 Admission
+	batch                     Batch
+	instructions              Instructions
+	transcript                Transcript
+	anchors                   Anchors
+	overlayPromoter           OverlayPromoter
+	rootHistory               *projectroot.History
 	pendingRootBaselines      sync.Map
 	lastSessionPosture        sync.Map
 	pendingPostureBaselines   sync.Map

@@ -3,6 +3,8 @@ package capabilityadmin
 import (
 	"errors"
 	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"net/http"
 	"strings"
 
@@ -152,7 +154,10 @@ func (s *CheckpointActions) writeCheckpointResolveError(w http.ResponseWriter, r
 	if secretview.WritePresenceError(s.responses, w, err) {
 		return
 	}
+	var socketError *confine.SocketResolveError
 	switch {
+	case errors.Is(err, socketref.ErrUnbound) || errors.As(err, &socketError):
+		s.responses.FailDetails(w, confine.SocketResolveChanged, map[string]any{"field": "option_id", "recovery": "request_fresh_approval"}, "The local service needs a fresh approval after the service or engine restarts.")
 	case errors.Is(err, hitl.ErrPresenceRequired):
 		s.responses.Fail(w, wire.ApiErrorCodePresenceRequired, "this option sends a value you stored while the chat is locked; confirm it in the desktop app")
 	case errors.Is(err, hitl.ErrPresenceNotRequired):

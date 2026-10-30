@@ -57,9 +57,9 @@ type AgentHostResourceView struct {
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
 	// Skills supply availability and named reference checks; they are not listed.
-	Skills               []AgentSkillView
-	HostResources        []AgentHostResourceView
-	HostResourcesOmitted int // rows the ambient budget dropped
+	Skills                []AgentSkillView
+	HostResources         []AgentHostResourceView
+	HostResourcesOmitted  int // rows the ambient budget dropped
 	Fingerprint           string
 	SessionScratchDir     string
 	Posture               gate.Posture

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // helperFlag marks the confined re-exec path.
@@ -294,6 +295,9 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
+	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")
