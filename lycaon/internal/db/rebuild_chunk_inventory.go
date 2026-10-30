@@ -3,17 +3,20 @@ package db
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
 )
 
+//go:embed rebuild_chunk_inventory.sql
+var rebuildChunkInventorySQL string
+
 // The private main database owns this inventory, so SQLite's admitted page
 // limit covers deduplication as well as retained rows and indexes. DISTINCT
 // and IN subqueries would put an independent B-tree on the temp volume.
 func prepareRebuildChunkInventory(ctx context.Context, tx *sql.Tx, selection *migrations.RetainedCopy) (*migrations.RetainedCopy, error) {
-	_, err := tx.ExecContext(ctx, `CREATE TABLE _upgrade_retained_chunks(id TEXT PRIMARY KEY) STRICT,WITHOUT ROWID;
- INSERT OR IGNORE INTO _upgrade_retained_chunks SELECT chunk_id FROM original.source_snapshot_chunks NOT INDEXED`)
+	_, err := tx.ExecContext(ctx, rebuildChunkInventorySQL)
 	if err != nil {
 		return nil, err
 	}
