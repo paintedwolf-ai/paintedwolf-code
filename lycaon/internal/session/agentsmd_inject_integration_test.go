@@ -130,7 +130,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 			t.Fatal("index changed across requests")
 		}
 	}
-	if firstRevision == freshRevision || freshRevision == "" {
+	if firstRevision == "" || freshRevision == "" || firstRevision == freshRevision {
 		t.Fatal("guidance edit did not produce a new delivered revision")
 	}
 	combined := strings.Builder{}
