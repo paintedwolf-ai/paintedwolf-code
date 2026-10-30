@@ -242,12 +242,18 @@ func (s *sorter) merge() error {
 
 func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
 	h := &mergeHeap{order: s.order}
+	readers := make([]RunReader, 0, len(runs))
+	defer func() {
+		for i := len(readers) - 1; i >= 0; i-- {
+			_ = readers[i].Close()
+		}
+	}()
 	for index, run := range runs {
 		reader, err := run.Open(s.inv.limit("record_bytes"), s.inv.reserve)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = reader.Close() }()
+		readers = append(readers, reader)
 		cursor := &mergeCursor{reader: reader, index: index}
 		if ok, err := cursor.advance(); err != nil {
 			return err

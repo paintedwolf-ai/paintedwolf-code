@@ -227,7 +227,7 @@ func (h *harness) execWithEnv(env []string, words ...string) run {
 
 func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (sockPath, argvLog, envLog string) {
 	t.Helper()
-	sockDir, err := os.MkdirTemp(os.TempDir(), "pws-") //nolint:usetesting -- SSH_AUTH_SOCK needs a short Unix socket path; the registered cleanup removes this owned directory.
+	sockDir, err := os.MkdirTemp(os.TempDir(), "pws-") //nolint:usetesting // SSH_AUTH_SOCK needs a short Unix socket path; the registered cleanup removes this owned directory.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
 	sockPath = filepath.Join(sockDir, "agent.sock")

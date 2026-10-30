@@ -110,8 +110,8 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		// Duplicate or missing dynamic IDs are invalid settlement, independently of
 		// coincident static nodes or equal ordinary statuses.
 		identityValid := stage.ExecutionID != ""
-		for j := 0; j < i; j++ {
-			if stages[j].ExecutionID == stage.ExecutionID {
+		for _, previous := range stages[:i] {
+			if previous.ExecutionID == stage.ExecutionID {
 				identityValid = false
 			}
 		}

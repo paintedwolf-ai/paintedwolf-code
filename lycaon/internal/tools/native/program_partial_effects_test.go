@@ -154,20 +154,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 
 	httpArgs := map[string]any{"url": server.URL, "method": "POST"}
 	attempt := prepare(httpDefinition, "http-node", "curl", "curl "+server.URL, httpArgs)
-	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
-	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-		target := args["url"].(string)
-		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
-				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
-			// A request that left the host has an unknown remote outcome.
-			var exchange *outboundhttp.ExchangeError
-			if errors.As(err, &exchange) && exchange.RequestsStarted > 0 && exchange.ResponsesReceived == 0 {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, err
-			}
-			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-		}}, nil
-	}
+	httpEffect := partialEffectsHTTP(attempt, httpArgs, serverAddr)
 	supervisor, loseSupervisor := context.WithCancel(t.Context())
 	type outcome struct {
 		result toolexecution.NativeInvocationResult
@@ -282,4 +269,23 @@ func partialEffectsWrite(write toolcontract.BoundOperation, arguments map[string
 		}}, nil
 	}
 	return effect
+}
+
+// partialEffectsHTTP records whether the actual transport started an unanswered request.
+func partialEffectsHTTP(attempt toolcontract.BoundOperation, httpArgs map[string]any, serverAddr netip.AddrPort) toolexecution.NativeEffect {
+	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
+	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		target := args["url"].(string)
+		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
+				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
+			// A request that left the host has an unknown remote outcome.
+			var exchange *outboundhttp.ExchangeError
+			if errors.As(err, &exchange) && exchange.RequestsStarted > 0 && exchange.ResponsesReceived == 0 {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}}, nil
+	}
+	return httpEffect
 }

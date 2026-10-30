@@ -58,7 +58,7 @@ func decodeBase64(inv *invocation, data []byte) error {
 	decoded, err := base64.StdEncoding.Strict().DecodeString(string(compact))
 	if err != nil {
 		inv.fail(1, "", "invalid input")
-		return nil //nolint:nilerr -- Invalid base64 settles the ordinary status-1 result without emitting a partial decode.
+		return nil //nolint:nilerr // Invalid base64 settles the ordinary status-1 result without emitting a partial decode.
 	}
 	_, err = inv.out.Write(decoded)
 	return err

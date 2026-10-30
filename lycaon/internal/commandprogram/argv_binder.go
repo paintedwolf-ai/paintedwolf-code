@@ -454,15 +454,15 @@ func (b *argvBinding) shorthandValue(form toolcontract.OptionForm, word Field, v
 // consume takes the form's values. attached reports an inline value: the
 // remaining short-cluster suffix or a long option's "=value".
 func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
-	switch {
-	case form.Arity == 0:
+	switch form.Arity {
+	case 0:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "no value for "+spelling)
 		}
 		b.record(form, spelling, word, nil, "")
-	case form.Arity == -1:
+	case -1:
 		return b.optional(form, spelling, word, value, attached)
-	case form.Arity == -2:
+	case -2:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "separate words for "+spelling)
 		}

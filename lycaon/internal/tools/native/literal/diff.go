@@ -120,7 +120,7 @@ func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
 		return side, false, err
 	case errors.Is(err, fs.ErrNotExist) || toolrejection.AsToolReject(err) != nil:
 		// Capture decides: an open unsaved document has no file to stat.
-		return side, true, nil //nolint:nilerr -- Missing metadata still requires pinned source capture, which admits accepted unsaved documents.
+		return side, true, nil //nolint:nilerr // Missing metadata still requires pinned source capture, which admits accepted unsaved documents.
 	}
 	inv.fail(2, operand, reason)
 	return side, false, nil
