@@ -23,6 +23,7 @@ type entry struct {
 	// link reports that the entry itself is a symbolic link; followed that
 	// it was one whose target now describes it.
 	link, followed bool
+	metadata       *entryMetadata
 }
 
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
@@ -38,6 +39,8 @@ type walker struct {
 	maximum int64
 	filters map[string]sandbox.ReadFilter
 	roots   map[string]*fseffect.ReadRoot
+	lazy    bool
+	work    discoveryWork
 }
 
 func newWalker(inv *invocation) *walker {
@@ -95,12 +98,14 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	if bound.Null {
 		return entry{}, w.inv.usage(spelling, "a directory entry, not the null device")
 	}
+	w.work.metadata++
 	st, err := bound.Stat(false)
 	if err != nil {
 		return entry{}, err
 	}
 	e := entry{display: spelling, name: baseName(spelling), bound: bound, stat: st, start: spelling, link: st.Mode&fs.ModeSymlink != 0}
 	if e.link && follow {
+		w.work.metadata++
 		if target, err := bound.Stat(true); err == nil {
 			e.stat, e.link, e.followed = target, false, true
 		}
@@ -112,12 +117,16 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 // follow reports the target metadata of contained links; a link whose
 // target cannot be reached stays a link.
 func (w *walker) children(dir entry, follow bool) ([]entry, error) {
+	if entries, indexed, err := w.indexedChildren(dir, follow); indexed || err != nil {
+		return entries, err
+	}
 	opened, err := dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
 	if err != nil {
 		return nil, err
 	}
 	defer opened.Close()
 	names := opened.Names()
+	w.work.listed++
 	filter, err := w.filter(dir.bound)
 	if err != nil {
 		return nil, err
@@ -130,6 +139,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		if err := w.visit(); err != nil {
 			return nil, err
 		}
+		w.work.metadata++
 		child, st, err := opened.StatChild(name)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
@@ -143,6 +153,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		}
 		e := entry{display: display, name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
+			w.work.metadata++
 			if target, err := opened.StatChildFollowed(child); err == nil {
 				e.stat, e.link, e.followed = target, false, true
 			}
