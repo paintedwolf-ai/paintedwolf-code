@@ -15,6 +15,9 @@ func TestCanonicalFoldIsInvariantUnderEveryCaseRelation(t *testing.T) {
 			continue
 		}
 		want := CanonicalFold(r)
+		if utf8.RuneLen(want) > utf8.RuneLen(r) {
+			t.Fatalf("CanonicalFold(%U) = %U expands its UTF-8 encoding", r, want)
+		}
 		for _, related := range [...]rune{unicode.SimpleFold(r), unicode.ToLower(r), unicode.ToUpper(r), unicode.ToTitle(r)} {
 			if got := CanonicalFold(related); got != want {
 				t.Fatalf("CanonicalFold(%U) = %U but CanonicalFold(%U) = %U", related, got, r, want)
