@@ -1,21 +1,6 @@
-// Package textsearch is the shared typed line-search operation behind the
-// structured grep tool and the grep/rg/find command frontends. It owns the
-// pattern dialects, their bounded engines and the line scan; callers own
-// traversal, reads and presentation.
-//
-// Dialects and engines:
-//   - Fixed: exact bytes, leftmost then longest across patterns.
-//   - Basic and Extended: GNU BRE and ERE with POSIX leftmost-longest
-//     matching on the bounded VM, including back references and GNU word
-//     assertions, exploring every path per start.
-//   - Perl: the bounded pcre-common-v1 grammar on the bounded backtracking
-//     engine with leftmost-first matching. It is never RE2.
-//   - RE2: Go RE2 syntax and leftmost-first semantics (rg's default).
-//
-// Character policy: patterns and records are UTF-8 scalars (an invalid byte
-// is one U+FFFD scalar); \w, \s, \b and GNU \< \> use fixed ASCII classes;
-// -i is Unicode simple case folding. Every record search is metered against
-// the catalog's regex_work_steps and allocation limits, with caller cancellation.
+// Package textsearch owns bounded pattern matching and byte-addressed line scans.
+// Fixed patterns match literal bytes; regular expressions match UTF-8 scalars.
+// Invalid bytes remain distinct input positions, and case folding is Unicode simple folding.
 package textsearch
 
 import (
@@ -23,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -164,18 +150,14 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 }
 
 // Requirement is what a record must contain to hold any match, for index
-// pruning; empty when the spec cannot state one exactly (case folding,
-// assertions and references, the PCRE grammar, an empty pattern).
+// pruning; empty when the compiled engine cannot prove a required literal.
 func (m *Matcher) Requirement() litprefilter.Requirement { return m.require }
 
 func requirement(e engine, patterns []string, spec Spec) litprefilter.Requirement {
-	if spec.IgnoreCase {
-		return litprefilter.Requirement{}
-	}
 	switch e := e.(type) {
 	case literalEngine:
 		for _, p := range patterns {
-			if p == "" {
+			if p == "" || !utf8.ValidString(p) {
 				return litprefilter.Requirement{}
 			}
 		}
