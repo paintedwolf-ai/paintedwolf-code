@@ -172,8 +172,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		t.Fatal("HTTP attempt never reached the remote side")
 	}
 
-	// The supervisor is lost while the attempt is outstanding. Recovery settles
-	// the ledger without the live owner and without retrying anything.
+	// Recover the outstanding attempt without its live owner or any retry.
 	count, err := recorder.InterruptPrograms(t.Context(), "s1", "output:supervisor-loss")
 	testutil.FailErr(t, "reconcile lost supervisor", err)
 	if count != 1 {
