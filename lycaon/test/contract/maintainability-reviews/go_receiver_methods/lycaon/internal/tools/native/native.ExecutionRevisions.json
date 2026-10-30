@@ -4,14 +4,17 @@
   "kind": "runtime_service",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured 559 receiver lines and 22 methods as one native capture/revision owner over its existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming block proofs, verification and publication pins share exact identities and admission lifetimes. Physical whole-input close failure releases the captured body before returning the error; a successful close preserves the original cause. Pure captured-byte lease release remains separate from physical stream I/O. Splitting a reader or accountant would divide this contract. Actual 100 MB streaming proof storage, restored-metadata mutation and tail seeks, cancellation/refusal/release, encoded identity, capacity growth and source-write contracts support this bounded concentration. Further dependency, signature or measured growth requires renewed review.",
-  "reviewed_commit": "cd89253086b6716de34843ecd06c1a3d516b24e3",
-  "ceiling": 22,
+  "reason": "Retain the measured 604 receiver lines and 26 methods as one native capture and revision owner. Path authority, published byte identity, working and retained admission, block proofs, replay conflicts and publication pins share this owner. Existing bounded literal observations now consume the required capture stream and commit only after acceptance; the source catalog retains filter lifetime and invalidation authority. Extracting another reader or accountant would divide descriptor and lease lifetimes. Focused capture, restored-metadata mutation, early search exit, concurrent observation settlement, credential and alias exclusion, memory release and source-write contracts support this bounded concentration. Further dependency, signature or measured growth requires renewed review.",
+  "reviewed_commit": "f44bfb1c8e0f605e75d1a8cac3271ce078174f83",
+  "ceiling": 26,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
+    "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
     "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
     "lycaon/internal/tools/native/execution_capture_test.go": "23b52f46b43df239ad7a25bfbf52920ef5d9517b0ec9ef22411eb26a21e7d2b9",
-    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1"
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1",
+    "lycaon/internal/tools/native/execution_observation_test.go": "e0df4da09e4fe9ae54c570fd43bff82137cc276e2280c58923b0b4d3929a9e45",
+    "lycaon/internal/sourcecatalog/literal_capture_commit_test.go": "2d300d11dd039ba173a239d4445d6f8eae6ba3f403c1c5201389ed8ed54acc00",
+    "lycaon/internal/tools/native/search/index_capture_test.go": "c0e5a9176a9a8ce2debc9087fc219f20a9db9874be547ce3139c732ca81db349"
   },
-  "reviewed_shape": "90d8fd2e78cd6866068ae2cc23f058fd5054bdeec0a8f987e1927b85c95d7f03"
+  "reviewed_shape": "3e67a6b6ca25a6476f29bdc5e263e05f5205db2486492178d08634bbdde2fcad"
 }
