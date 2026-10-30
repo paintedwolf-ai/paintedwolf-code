@@ -162,7 +162,7 @@ func (c *literalIndexCache) probeBloom(rootPath string, entry Entry) (literalBlo
 	}
 	c.fileMu.Unlock()
 
-	if !version.Known || version.Links == 0 || !found || changed || cached.unavailable {
+	if !version.Known || version.Size <= 0 || version.Links == 0 || !found || changed || cached.unavailable {
 		return nil, false, false, changed
 	}
 	return cached.bloom, cached.searchable, true, false
@@ -175,7 +175,7 @@ func (c *literalIndexCache) fileBloom(ctx context.Context, rootPath string, entr
 			return err
 		}
 		version := c.versionOf(rootPath, entry)
-		if !version.Known || version.Links == 0 {
+		if !version.Known || version.Size <= 0 || version.Links == 0 {
 			return nil
 		}
 		c.fileMu.Lock()
