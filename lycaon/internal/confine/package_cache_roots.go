@@ -3,7 +3,6 @@ package confine
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -29,33 +28,27 @@ func toolchainStateRoots() []string {
 	return []string{filepath.Join(dir, "go", "telemetry")}
 }
 
-// standardCacheDataRoots returns conventional cache and data directories.
+// standardCacheDataRoots composes platform conventions and shared write authority.
 func standardCacheDataRoots() []string {
-	roots := []string{}
 	home, _ := os.UserHomeDir()
-	join := func(base, rel string) string {
-		if base == "" {
-			return ""
-		}
-		return filepath.Join(base, rel)
-	}
-	candidates := []string{
-		os.Getenv("XDG_CACHE_HOME"), join(home, ".cache"),
-		os.Getenv("XDG_DATA_HOME"), join(home, ".local/share"),
-		os.Getenv("XDG_STATE_HOME"), join(home, ".local/state"),
-	}
-	if runtime.GOOS == "darwin" {
-		candidates = append(candidates, join(home, "Library/Caches"))
-	}
+	candidates := platformCacheDataRoots(home)
 	for _, rel := range packageCacheHomeRelRoots {
-		candidates = append(candidates, join(home, rel))
+		candidates = append(candidates, packageCacheHomePath(home, rel))
 	}
 	candidates = append(candidates, toolchainStateRoots()...)
 	candidates = append(candidates, environmentWriteRoots()...)
-	for _, c := range candidates {
-		if strings.TrimSpace(c) != "" {
-			roots = append(roots, c)
+	roots := []string{}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) != "" {
+			roots = append(roots, candidate)
 		}
 	}
 	return roots
+}
+
+func packageCacheHomePath(home, relative string) string {
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, relative)
 }
