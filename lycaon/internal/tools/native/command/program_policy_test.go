@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
@@ -48,7 +47,7 @@ func TestProgramPolicyAdmissionPreservesEarlierOutputAndSkipsUntakenEffects(t *t
 	if len(mutationScopes) != 1 || mutationScopes[0] != nested {
 		t.Fatalf("reached mutation scopes = %v", mutationScopes)
 	}
-	if executions := f.executions(t); strings.Count(executions["external"], ";") != 1 {
+	if executions := f.executions(t); executions["command"] != "refused;" {
 		t.Fatalf("untaken external branch received an execution: %v", executions)
 	}
 	if _, err := os.Stat(filepath.Join(nested, "sentinel")); !os.IsNotExist(err) {
