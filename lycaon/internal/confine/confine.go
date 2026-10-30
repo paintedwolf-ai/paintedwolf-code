@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -275,7 +276,14 @@ func Command(
 	if c.HostExecution {
 		return exec.CommandContext(ctx, name, args...), func() {}, nil
 	}
-	profile, err := BuildProfile(c)
+	c, err := validateProfileInputs(c)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
+		return nil, func() {}, err
+	}
+	profile, err := renderProfile(c)
 	if err != nil {
 		return nil, func() {}, err
 	}

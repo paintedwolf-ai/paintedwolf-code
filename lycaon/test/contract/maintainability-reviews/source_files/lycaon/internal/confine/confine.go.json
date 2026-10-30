@@ -4,12 +4,19 @@
   "kind": "module",
   "workstream": "required-confinement-admission",
   "disposition": "retain",
-  "reason": "Admission policy switches and required versus applied state now live in admission.go. The remaining shared boundary declarations, request construction, launch construction and profile rendering continue to compose the same confinement input; retain that bounded core while the focused request and admission contracts protect its authority. No Confinement fields or dependency authority changed.",
-  "reviewed_commit": "1cd785fe9899dfdee9a950ea7ab845027c627227",
-  "ceiling": 500,
+  "reason": "Retain the unchanged 506-line launch and profile owner. Command still validates inputs, prepares the platform-selected package directories and renders the final profile through the same call site; the native root convention split changes no launch lifecycle or policy authority. The Linux cache owner keeps the actual verdict and descriptor-relative creator together, and non-Linux adapters declare no preparation. Admission and request contracts remain beside pure inspection, exact per-platform root sets, floors, symlink replacement, optional-store failures and the applied activation control. A forwarding launch layer would hide that composition without reducing its dependencies.",
+  "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
+  "ceiling": 506,
   "boundaries": {
     "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
     "lycaon/internal/confine/admission_linux_test.go": "b55f2b5f1756e1982590809c9774ef382300ecd5bd3ed55ee0204cd670f34a49",
-    "lycaon/internal/confine/request_test.go": "0755e0f537c5662ef0531eefc47054559528290a7f435e844b591821f52d857e"
+    "lycaon/internal/confine/request_test.go": "0755e0f537c5662ef0531eefc47054559528290a7f435e844b591821f52d857e",
+    "lycaon/internal/confine/package_cache_roots_test.go": "048764f12085435079e6e454cd37b0d21ae10816c241807efa53121120fb0e9b",
+    "lycaon/internal/confine/package_cache_roots_linux_test.go": "5ad86550466c07f88e47ca5afc9e567c96de5dd34596055b1199362334e3c42a",
+    "lycaon/internal/confine/package_cache_roots_darwin_test.go": "77b4ad37e41696374c98d3461e17e076e9052010b571be260e2fe349f06fc540",
+    "lycaon/internal/confine/package_cache_roots_windows_test.go": "962938548bf9397cf370daf512ebca7b76d51110dfe5933fd59edd562e845829",
+    "lycaon/internal/confine/package_cache_roots_other_test.go": "1b1ec65ce53b822c47ed2f8370a6d9b4f29985754fced7cd4518580baaade8cf",
+    "lycaon/internal/confine/package_cache_preparation_linux_test.go": "91c57140957b25ceb0ebaccf0b7d472feccfa71d6ae49649df6d5bd1ba193bfa",
+    "lycaon/internal/confine/boundary_linux_data_activation_live_test.go": "dd9a65f5f7bbcb98b603782f8705703989c61d29a4aa57d16f0c5a4951bf69ef"
   }
 }
