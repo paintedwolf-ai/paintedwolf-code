@@ -80,6 +80,7 @@ func TestGrepTransformedOutputSharesProgramAdmission(t *testing.T) {
 			h := newHarness(t, map[string]string{"input": strings.Repeat("a", 50000) + "\n"})
 			memory := grepMemory(t, 2<<20)
 			h.owners.Revisions.Memory = memory
+			// Isolate memory growth from the regex work limit.
 			h.owners.regex.WorkSteps = 1 << 40
 			r := h.exec("", argv...)
 			reject := toolrejection.AsToolReject(r.err)
@@ -122,4 +123,17 @@ func TestGrepReplacementGrammarNeverIndexesMalformedGroups(t *testing.T) {
 			t.Fatalf("invalid numbered group %q: result=%+v err=%v stdout=%q stderr=%q", replacement, r.result, r.err, r.stdout, r.stderr)
 		}
 	}
+}
+
+func TestGrepRecordRefusesOutputCapacityBeforeAllocation(t *testing.T) {
+	h := newHarness(t, nil)
+	memory := grepMemory(t, 1<<20)
+	h.owners.Revisions.Memory, h.owners.StreamBytes = memory, 10
+	r := parallelFixture(t, h, t.Context(), &bytes.Buffer{})
+	buffer := &grepRecord{inv: r.inv}
+	err := buffer.text("elevenbytes")
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || cap(buffer.bytes) != 0 || memory.InUse().Working != 0 {
+		t.Fatalf("record capacity: err=%v capacity=%d held=%+v", err, cap(buffer.bytes), memory.InUse())
+	}
+	buffer.close()
 }

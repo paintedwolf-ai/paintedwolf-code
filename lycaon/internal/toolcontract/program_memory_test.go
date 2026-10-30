@@ -27,13 +27,13 @@ func TestProgramMemoryRefusesWithoutWaitingAndReleasesOnce(t *testing.T) {
 	if _, err := memory.ReserveProgramState(t.Context(), 1); !errors.As(err, &limit) || limit.Account != "state" {
 		t.Fatalf("state overflow %v", err)
 	}
-	if got := memory.InUse(); got != (ProgramMemoryUsage{Working: 60, State: 10}) {
+	if got := memory.InUse(); got != (ProgramMemoryUsage{Working: 60, State: 10}) || memory.AvailableWorking() != 40 {
 		t.Fatalf("in use %+v", got)
 	}
 	first()
 	first()
 	state()
-	if got := memory.InUse(); got != (ProgramMemoryUsage{}) {
+	if got := memory.InUse(); got != (ProgramMemoryUsage{}) || memory.AvailableWorking() != 100 {
 		t.Fatalf("double release changed accounting %+v", got)
 	}
 	if got := memory.Peak(); got != (ProgramMemoryUsage{Working: 60, State: 10}) || memory.Reservations() != 2 {
@@ -42,6 +42,9 @@ func TestProgramMemoryRefusesWithoutWaitingAndReleasesOnce(t *testing.T) {
 	again, err := memory.Reserve(t.Context(), 100)
 	if err != nil {
 		t.Fatalf("released capacity not reusable: %v", err)
+	}
+	if memory.AvailableWorking() != 0 {
+		t.Fatalf("full account available capacity = %d", memory.AvailableWorking())
 	}
 	again()
 }

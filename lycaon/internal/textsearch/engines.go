@@ -44,141 +44,6 @@ func parseError(pattern string, err error) error {
 	return budgetError(err)
 }
 
-// --- fixed strings ---------------------------------------------------------
-
-type literalEngine struct {
-	patterns [][]byte
-	line     bool
-	limits   Limits
-}
-
-func compileFixed(ctx context.Context, patterns []string, spec Spec, limits Limits) (engine, error) {
-	if !spec.IgnoreCase && !spec.Word {
-		e := literalEngine{line: spec.Line, limits: limits}
-		for _, p := range patterns {
-			e.patterns = append(e.patterns, []byte(p))
-		}
-		return e, nil
-	}
-	quoted := make([]string, len(patterns))
-	for i, p := range patterns {
-		if !utf8.ValidString(p) {
-			return nil, &PatternError{Code: CodeRegexUnsupported, Pattern: p, Detail: "case-folded or word fixed strings must be UTF-8"}
-		}
-		var b strings.Builder
-		for _, r := range p {
-			if regexp2.IsMarker(r) {
-				return nil, &PatternError{Code: CodeRegexUnsupported, Pattern: p, Detail: "private-use scalar reserved for host assertions"}
-			}
-			if r < utf8.RuneSelf && strings.ContainsRune(`\.+*?()|[]{}^$`, r) {
-				b.WriteByte('\\')
-			}
-			b.WriteRune(r)
-		}
-		quoted[i] = b.String()
-	}
-	if err := checkPatternBytes(patterns, limits); err != nil {
-		return nil, err
-	}
-	return compileTranslated(ctx, patterns, quotedPOSIX(quoted), spec, limits)
-}
-
-func quotedPOSIX(texts []string) []posixPattern {
-	out := make([]posixPattern, len(texts))
-	for i, text := range texts {
-		out[i] = posixPattern{text: text}
-	}
-	return out
-}
-
-// leftmost finds the leftmost occurrence at or after from, preferring the
-// longest pattern at that offset.
-func (e literalEngine) leftmost(ctx context.Context, record []byte, from int, work *int64) (Span, bool, error) {
-	best := Span{-1, -1}
-	for _, p := range e.patterns {
-		if err := ctx.Err(); err != nil {
-			return Span{}, false, err
-		}
-		// Admit the worst-case byte comparisons before calling the byte matcher.
-		cost := int64(len(record)-from+1) * int64(max(1, len(p)))
-		if cost > e.limits.WorkSteps-*work {
-			return Span{}, false, &BudgetError{Resource: "regex_work_steps", Maximum: e.limits.WorkSteps, Observed: *work + cost}
-		}
-		*work += cost
-		i := bytes.Index(record[from:], p)
-		if i < 0 {
-			continue
-		}
-		start := from + i
-		if best.Start < 0 || start < best.Start || (start == best.Start && start+len(p) > best.End) {
-			best = Span{start, start + len(p)}
-		}
-	}
-	return best, best.Start >= 0, nil
-}
-
-func (e literalEngine) first(ctx context.Context, record []byte) (Span, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return Span{}, false, err
-	}
-	if e.line {
-		for _, p := range e.patterns {
-			if bytes.Equal(record, p) {
-				return Span{0, len(record)}, true, nil
-			}
-		}
-		return Span{}, false, nil
-	}
-	var work int64
-	return e.leftmost(ctx, record, 0, &work)
-}
-
-func (e literalEngine) each(ctx context.Context, record []byte, yield func(Span) error) error {
-	if e.line {
-		span, ok, err := e.first(ctx, record)
-		if err != nil || !ok || span.End == span.Start {
-			return err
-		}
-		return yield(span)
-	}
-	var work int64
-	for from := 0; from <= len(record); {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		span, ok, err := e.leftmost(ctx, record, from, &work)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return nil
-		}
-		if span.End == span.Start {
-			from = nextScalar(record, span.Start)
-			continue
-		}
-		if err := yield(span); err != nil {
-			return err
-		}
-		from = span.End
-	}
-	return nil
-}
-
-func (e literalEngine) groups(ctx context.Context, record []byte, yield func([]int) error) error {
-	return e.each(ctx, record, func(s Span) error { return yield([]int{s.Start, s.End}) })
-}
-
-func (literalEngine) captureGroups() int { return 0 }
-
-func nextScalar(record []byte, at int) int {
-	if at >= len(record) {
-		return len(record) + 1
-	}
-	_, size := utf8.DecodeRune(record[at:])
-	return at + size
-}
-
 // --- POSIX BRE/ERE -------------------------------------------------------------
 
 func compilePOSIX(ctx context.Context, patterns []string, spec Spec, limits Limits) (engine, error) {
@@ -248,26 +113,6 @@ func compileTranslated(ctx context.Context, raw []string, translated []posixPatt
 		required:   required,
 		literal:    pureLiteralEngine(raw, translated, spec, limits),
 	}, nil
-}
-
-func pureLiteralEngine(raw []string, translated []posixPattern, spec Spec, limits Limits) *literalEngine {
-	if spec.IgnoreCase || spec.Word || len(raw) == 0 || len(raw) != len(translated) {
-		return nil
-	}
-	e := literalEngine{line: spec.Line, limits: limits, patterns: make([][]byte, len(raw))}
-	for i, p := range raw {
-		t := translated[i]
-		if t.groups != 0 || t.marked || t.text != p || !utf8.ValidString(p) || strings.ContainsRune(p, utf8.RuneError) || strings.ContainsAny(p, `\.+*?()|[]{}^$`) {
-			return nil
-		}
-		for _, r := range p {
-			if regexp2.IsMarker(r) {
-				return nil
-			}
-		}
-		e.patterns[i] = []byte(p)
-	}
-	return &e
 }
 
 // --- RE2 -------------------------------------------------------------------
@@ -356,7 +201,11 @@ func compilePerl(ctx context.Context, patterns []string, spec Spec, limits Limit
 		}
 		return nil, &PatternError{Code: CodeRegexInvalid, Pattern: strings.Join(patterns, "\n"), Detail: err.Error()}
 	}
-	return vmEngine{program: program, limits: limits, groupCount: offset}, nil
+	var literal *literalEngine
+	if len(patterns) == 1 && offset == 0 {
+		literal = pureLiteralEngine(patterns, quotedPOSIX(patterns), spec, limits)
+	}
+	return vmEngine{program: program, limits: limits, groupCount: offset, literal: literal}, nil
 }
 
 // --- bounded backtracking engine ----------------------------------------------
@@ -370,12 +219,21 @@ type vmEngine struct {
 	literal    *literalEngine
 }
 
-func (e vmEngine) canUseLiteral(b []byte) (literalEngine, bool) {
+func (e vmEngine) canUseLiteral(ctx context.Context, b []byte) (literalEngine, bool) {
 	if e.literal == nil || int64(len(b)) > e.limits.WorkSteps || int64(len(b))*12+8 > e.limits.MemoryBytes {
 		return literalEngine{}, false
 	}
 	lit := *e.literal
 	lit.limits = e.limits
+	if lit.line && bytes.IndexByte(b, '\n') >= 0 {
+		return literalEngine{}, false
+	}
+	if lit.fold {
+		if !asciiRecord(ctx, b) {
+			return literalEngine{}, false
+		}
+		lit.proofWork = int64(len(b))
+	}
 	return lit, true
 }
 
@@ -448,7 +306,7 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 }
 
 func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
-	if lit, ok := e.canUseLiteral(b); ok {
+	if lit, ok := e.canUseLiteral(ctx, b); ok {
 		return lit.first(ctx, b)
 	}
 	var span Span
@@ -461,14 +319,14 @@ func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
 }
 
 func (e vmEngine) each(ctx context.Context, b []byte, yield func(Span) error) error {
-	if lit, ok := e.canUseLiteral(b); ok {
+	if lit, ok := e.canUseLiteral(ctx, b); ok {
 		return lit.each(ctx, b, yield)
 	}
 	return e.search(ctx, b, true, func(g []int) error { return yield(Span{g[0], g[1]}) })
 }
 
 func (e vmEngine) groups(ctx context.Context, b []byte, yield func([]int) error) error {
-	if lit, ok := e.canUseLiteral(b); ok {
+	if lit, ok := e.canUseLiteral(ctx, b); ok {
 		return lit.groups(ctx, b, yield)
 	}
 	return e.search(ctx, b, true, func(g []int) error {
