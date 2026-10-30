@@ -12,6 +12,7 @@ import (
 
 func TestByteFiltersNeverExcludeMatcherResults(t *testing.T) {
 	root := t.TempDir()
+	markLiteralWatch(t, root)
 	index := New().Literals
 	contents := []string{"NeedleToken", "Kelvin ſource Σigma", "İstanbul ıSTANBUL", "ÉLAN élan", "abc abbc abcd", "start\nend", "", "\xffNeedleToken", "\ufeffNeedleToken", "\x00NeedleToken", "\xff\xfeN\x00e\x00e\x00d\x00l\x00e\x00"}
 	entries := make([]Entry, len(contents))

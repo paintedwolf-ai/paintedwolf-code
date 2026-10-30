@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
@@ -16,6 +17,7 @@ func TestCommandsLearnContentWithoutCatalogPreparation(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(argv), func(t *testing.T) {
 			h := newHarness(t, indexCorpus())
+			markContentWatch(t, h.root)
 			h.owners.Catalog = sourcecatalog.New()
 			cold := h.exec("", argv...)
 			warm := h.exec("", argv...)
@@ -40,6 +42,7 @@ func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(argv), func(t *testing.T) {
 			h := newHarness(t, files)
+			markContentWatch(t, h.root)
 			live := h.exec("", argv...)
 			h.owners.Catalog = sourcecatalog.New()
 			_ = h.exec("", "grep", "-ra", "not-present", "src")
@@ -49,4 +52,10 @@ func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func markContentWatch(t *testing.T, root string) {
+	t.Helper()
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
 }

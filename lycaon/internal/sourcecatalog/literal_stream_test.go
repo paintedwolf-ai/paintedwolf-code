@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLiteralStreamPreservesEveryChunkBoundary(t *testing.T) {
@@ -52,5 +53,31 @@ func TestLiteralFileProjectionRetentionSharesOneBudget(t *testing.T) {
 	cache.drop("/root", ".")
 	if cache.count != 0 || cache.bytes != 0 {
 		t.Fatalf("released cache retained count=%d bytes=%d", cache.count, cache.bytes)
+	}
+}
+
+func TestContentProjectionsSurviveEncodingAndChunkBoundaries(t *testing.T) {
+	for name, content := range map[string]string{"utf8": "Kelvin CompleteNeedle", "bom": "\ufeffKelvin CompleteNeedle", "utf16le": "\xff\xfeC\x00o\x00m\x00p\x00l\x00e\x00t\x00e\x00N\x00e\x00e\x00d\x00l\x00e\x00", "utf16be": "\xfe\xff\x00C\x00o\x00m\x00p\x00l\x00e\x00t\x00e\x00N\x00e\x00e\x00d\x00l\x00e"} {
+		for chunk := 1; chunk <= len(content); chunk++ {
+			t.Run(fmt.Sprintf("%s/%d", name, chunk), func(t *testing.T) {
+				builder := newLiteralContent(int64(len(content)))
+				for from := 0; from < len(content); from += chunk {
+					_, err := builder.Write([]byte(content[from:min(from+chunk, len(content))]))
+					testutil.FailErr(t, "write encoded chunk", err)
+				}
+				facts, err := builder.finish()
+				testutil.FailErr(t, "finish encoded content", err)
+				if !facts.decoded.searchable || !facts.decoded.bloom.admits(foldRequirement(litprefilter.AnyOf("completeneedle"))) {
+					t.Fatal("decoded projection lost a match")
+				}
+				if name == "utf8" || name == "bom" {
+					if !facts.raw.searchable || !facts.raw.bloom.admits(foldRequirement(litprefilter.AnyOf(content))) {
+						t.Fatal("byte projection lost encoded content")
+					}
+				} else if facts.raw.searchable {
+					t.Fatal("binary byte projection supplied a pruning proof")
+				}
+			})
+		}
 	}
 }

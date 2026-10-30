@@ -18,6 +18,7 @@ import (
 )
 
 func observeRoot(t *testing.T, catalog *Catalog, root string) Snapshot {
+	markLiteralWatch(t, root)
 	t.Helper()
 	snapshot, err := catalog.Observe(context.Background(), "project", []Root{{ID: "root", Path: root}})
 	testutil.FailErr(t, "observe root", err)

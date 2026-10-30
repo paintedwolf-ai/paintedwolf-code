@@ -20,6 +20,7 @@ import (
 func indexedHarness(t *testing.T, files map[string]string) (*harness, *sourcecatalog.Catalog) {
 	t.Helper()
 	h := newHarness(t, files)
+	markContentWatch(t, h.root)
 	catalog := sourcecatalog.New()
 	snapshot, err := catalog.Observe(context.Background(), "project", []sourcecatalog.Root{{ID: "root", Path: h.root}})
 	testutil.FailErr(t, "observe", err)
