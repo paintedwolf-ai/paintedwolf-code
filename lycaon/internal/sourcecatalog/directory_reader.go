@@ -34,8 +34,7 @@ func (c *Directories) NewDirectoryReader(project string, root Root) *DirectoryRe
 }
 
 // ReadDirectory borrows a read-admitted descriptor for dir when supplied.
-// Its directory offset is consumed;
-// callers falling back to another reader must rewind it first.
+// Rewind its consumed offset before falling back to another listing reader.
 func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum int, held *os.File) (DirectoryListing, error) {
 	if r.closed {
 		return DirectoryListing{}, os.ErrClosed
@@ -155,6 +154,9 @@ func (r *DirectoryReader) flush(ctx context.Context) error {
 		return err
 	}
 	defer release()
+	if err := validateObservationRoot(root, r.root.Path); err != nil {
+		return err
+	}
 	for dir, info := range r.pending {
 		if info == nil {
 			continue

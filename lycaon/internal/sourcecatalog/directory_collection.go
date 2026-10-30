@@ -15,6 +15,9 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 		return observation, false, err
 	}
 	defer release()
+	if err := validateObservationRoot(root, store.root.Path); err != nil {
+		return observation, false, err
+	}
 	directory, err := openObservationDirectory(ctx, store, root, dir, held)
 	if err != nil {
 		return observation, false, err
@@ -78,4 +81,19 @@ func openObservationDirectory(ctx context.Context, store *indexStore, root *os.R
 		return nil, err
 	}
 	return &observationDirectory{entries: entries, resolved: dir, stamp: directoryStampOf(info), privateFilter: repochange.NewPrivateDirectoryFilter(filepath.Join(root.Name(), filepath.FromSlash(dir)))}, nil
+}
+
+func validateObservationRoot(root *os.Root, path string) error {
+	current, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	held, err := root.Stat(".")
+	if err != nil {
+		return err
+	}
+	if !os.SameFile(current, held) {
+		return errObservationChanged
+	}
+	return nil
 }

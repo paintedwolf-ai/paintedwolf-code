@@ -240,3 +240,25 @@ func TestDirectoryReaderRetirementReleasesUnpublishedResources(t *testing.T) {
 		t.Fatal("retired reader retained structural generation")
 	}
 }
+
+func TestDirectoryReaderRejectsReplacedAttachedRoot(t *testing.T) {
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "dir/old", "source")
+	pending := catalog.Directories.NewDirectoryReader("p", root)
+	_, err := pending.ReadDirectory(t.Context(), "dir", 0, nil)
+	testutil.FailErr(t, "collect original attached root", err)
+	moved := filepath.Join(t.TempDir(), "moved-root")
+	testutil.FailErr(t, "move attached root", os.Rename(root.Path, moved))
+	writeIndexFile(t, root.Path, "dir/new", "source")
+	if err := pending.Close(t.Context()); !errors.Is(err, errObservationChanged) {
+		t.Fatalf("replaced-root drain=%v", err)
+	}
+	current := catalog.Directories.NewDirectoryReader("p", root)
+	if _, err := current.ReadDirectory(t.Context(), "dir", 0, nil); !errors.Is(err, errObservationChanged) {
+		t.Fatalf("cached descriptor read replaced root: %v", err)
+	}
+	testutil.FailErr(t, "close replaced-root reader", current.Close(t.Context()))
+	if _, err := pending.store.readObservation(t.Context(), "dir"); !errors.Is(err, pagedview.ErrMissing) {
+		t.Fatalf("published replaced-root observation: %v", err)
+	}
+}
