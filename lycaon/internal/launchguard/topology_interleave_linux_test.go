@@ -93,6 +93,12 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 	if err != nil {
 		return facts, err
 	}
+	var fillers []string
+	defer func() {
+		for index := len(fillers) - 1; index >= 0; index-- {
+			_ = unix.Unmount(fillers[index], unix.MNT_DETACH)
+		}
+	}()
 	for index := range 64 {
 		filler := filepath.Join(root, fmt.Sprintf("owned-after-target-%03d", index))
 		if err := os.Mkdir(filler, 0700); err != nil {
@@ -101,7 +107,7 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 		if err := mount(filler); err != nil {
 			return facts, err
 		}
-		defer unix.Unmount(filler, unix.MNT_DETACH)
+		fillers = append(fillers, filler)
 	}
 	info, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {

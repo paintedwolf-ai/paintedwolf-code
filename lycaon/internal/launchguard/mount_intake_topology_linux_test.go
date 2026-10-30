@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"errors"
+	"math"
 	"os"
 	"testing"
 
@@ -69,5 +70,18 @@ func TestIntakeCaptureDescriptorAndReadErrorsRemainFatal(t *testing.T) {
 	}
 	if changed, err := mountInfoEpochChanged(int(reader.Fd())); changed || err == nil {
 		t.Fatalf("HUP became mount epoch change: %v %v", changed, err)
+	}
+}
+
+func TestIntakePollRefusesDescriptorWidthBeforeReading(t *testing.T) {
+	for _, fd := range []int{-1, math.MaxInt32 + 1} {
+		called := false
+		_, changed, err := readIntakeMountTopology(fd, func(int, []byte) ([]byte, error) {
+			called = true
+			return nil, nil
+		})
+		if called || changed || !errors.Is(err, unix.EBADF) || MountIntakeExitStatus(err) != 80 {
+			t.Fatalf("unrepresentable descriptor reached topology read: fd=%d called=%v changed=%v err=%v", fd, called, changed, err)
+		}
 	}
 }

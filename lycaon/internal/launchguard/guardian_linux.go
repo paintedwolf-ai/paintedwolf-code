@@ -125,8 +125,12 @@ func (state *protectedGuardian) run() int {
 				if state.failed && state.status == 0 {
 					state.status = 1
 				}
-				_ = sendGuardianMessage(int(state.control.Fd()), guardianSettled, uint32(state.status))
-				return state.status
+				status := state.status
+				if status < 0 || status > 255 {
+					return 1
+				}
+				_ = sendGuardianMessage(int(state.control.Fd()), guardianSettled, uint32(status))
+				return status
 			}
 			// ECHILD alone is insufficient if any authenticated role still lives.
 			state.reportRetirement(guardianRetirement{Cause: guardianUnsettledChildren, RoleIndex: -1})
@@ -236,11 +240,15 @@ func (state *protectedGuardian) admit() error {
 
 func (state *protectedGuardian) observe() (guardianObservation, error) {
 	observation := guardianObservation{Cause: guardianPollFailed, RoleIndex: -1}
-	polls := []unix.PollFd{{Fd: int32(state.health.Fd()), Events: unix.POLLIN}}
+	health, err := guardianPollDescriptor(state.health.Fd())
+	if err != nil {
+		return observation, err
+	}
+	polls := []unix.PollFd{{Fd: health, Events: unix.POLLIN}}
 	for fd := 15; fd <= 17; fd++ {
 		polls = append(polls, unix.PollFd{Fd: int32(fd), Events: unix.POLLIN})
 	}
-	_, err := unix.Poll(polls, 100)
+	_, err = unix.Poll(polls, 100)
 	for index, poll := range polls {
 		observation.Poll[index] = poll.Revents
 	}

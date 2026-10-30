@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"errors"
+	"math"
 
 	"golang.org/x/sys/unix"
 )
@@ -33,7 +34,7 @@ func readIntakeMountTopology(fd int, read func(int, []byte) ([]byte, error)) ([]
 }
 
 func mountInfoEpochChanged(fd int) (bool, error) {
-	if fd < 0 {
+	if fd < 0 || fd > math.MaxInt32 {
 		return false, unix.EBADF
 	}
 	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLPRI | unix.POLLERR}}

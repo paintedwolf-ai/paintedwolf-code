@@ -94,7 +94,7 @@ func pruneParentFilesystem(kind string) bool {
 }
 
 func validatePruneParent(fd int, expected mountEntry) error {
-	if !pruneParentFilesystem(expected.filesystem) {
+	if expected.id <= 0 || !pruneParentFilesystem(expected.filesystem) {
 		return errors.New("unproved prune-only parent filesystem")
 	}
 	id, _, err := mountDescriptorIdentity(fd)

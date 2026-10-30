@@ -5,6 +5,7 @@ package launchguard
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"os"
 	"strconv"
 
@@ -38,8 +39,12 @@ func sealGuardianTransition(roles [guardianTransitionRoles]*os.File, caller Iden
 		if stat.Mask&unix.STATX_INO == 0 || stat.Ino == 0 {
 			return nil, errors.New("guardian role lacks kernel identity")
 		}
+		fd := guardianRoleFD(index)
+		if fd < 0 || fd > math.MaxUint32 {
+			return nil, errors.New("guardian role exceeds transition width")
+		}
 		row := raw[16+index*24:]
-		binary.LittleEndian.PutUint32(row, uint32(guardianRoleFD(index)))
+		binary.LittleEndian.PutUint32(row, uint32(fd))
 		binary.LittleEndian.PutUint64(row[8:], uint64(stat.Dev_major)<<32|uint64(stat.Dev_minor))
 		binary.LittleEndian.PutUint64(row[16:], stat.Ino)
 	}

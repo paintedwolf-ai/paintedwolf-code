@@ -83,7 +83,7 @@ func captureFixtureLifecyclePins() (_ *fixtureLifecyclePins, err error) {
 	}
 	matched, err := matchFixtureMountRole(guardDir, bootstrap, GuardianArgument, generation.Entry)
 	if err != nil || !matched {
-		return nil, fmt.Errorf("guardian image/role differs from owned selected entry: %v", err)
+		return nil, errors.Join(errors.New("guardian image/role differs from owned selected entry"), err)
 	}
 	var owned fixtureLifecyclePins
 	defer func() {

@@ -92,12 +92,14 @@ func decodeModuleViewPlan(raw []byte) (moduleViewPlan, error) {
 	cursor += int(stagingSize)
 	plan.structural = make([]int, int(structuralCount))
 	maxInt := uint64(^uint(0) >> 1)
+	var previous uint64
 	for index := range plan.structural {
 		id := binary.LittleEndian.Uint64(raw[cursor:])
-		if id == 0 || id > maxInt || (index > 0 && id <= uint64(plan.structural[index-1])) {
+		if id == 0 || id > maxInt || id <= previous {
 			return moduleViewPlan{}, errors.New("noncanonical structural mount identities")
 		}
 		plan.structural[index] = int(id)
+		previous = id
 		cursor += 8
 	}
 	plan.initial = make([]initialMountLease, int(initialCount))

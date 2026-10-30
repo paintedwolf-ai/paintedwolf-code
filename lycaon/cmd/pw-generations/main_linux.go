@@ -39,8 +39,10 @@ func runCommand(args []string, output io.Writer, policyPath string,
 	install func(string, func(packagegeneration.Generation, packagegeneration.SystemAccess) error, func() (string, error)) (packagegeneration.Generation, error),
 	remove func(func() error, func() (string, error)) error,
 ) error {
-	switch {
-	case len(args) == 3 && args[0] == "install" && args[1] == "--family" && (args[2] == "deb" || args[2] == "rpm" || args[2] == "pacman"):
+	if len(args) == 3 {
+		if args[0] != "install" || args[1] != "--family" || (args[2] != "deb" && args[2] != "rpm" && args[2] != "pacman") {
+			return errors.New("usage: pw-generations install --family deb|rpm|pacman | remove")
+		}
 		if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil { // #nosec G301 -- root-owned public launch policy must be readable by unprivileged validators
 			return err
 		}
@@ -50,7 +52,8 @@ func runCommand(args []string, output io.Writer, policyPath string,
 		}
 		fmt.Fprintf(output, "painted-wolf-code: selected generation %s\n", generation.ManifestSHA256)
 		return nil
-	case len(args) == 1 && args[0] == "remove":
+	}
+	if len(args) == 1 && args[0] == "remove" {
 		return remove(removePolicy, selection)
 	}
 	return errors.New("usage: pw-generations install --family deb|rpm|pacman | remove")

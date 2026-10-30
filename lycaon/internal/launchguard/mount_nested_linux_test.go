@@ -146,7 +146,7 @@ func checkLateNestedMounts(directory string) (err error) {
 	if err != nil || desktopBefore != desktopAfter {
 		return errors.New("desktop birth changed across namespace capture")
 	}
-	if err = nestedRolesAlive(pins); err != nil {
+	if err := nestedRolesAlive(pins); err != nil {
 		return err
 	}
 	sourceNS, err := os.Open("/proc/thread-self/ns/mnt")
@@ -256,7 +256,7 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 		return err
 	}
 	for time.Now().Before(deadline) {
-		if err = nestedRolesAlive(pins); err != nil {
+		if err := nestedRolesAlive(pins); err != nil {
 			return err
 		}
 		if err = nestedExpectUnderlying(sourceNS, desktopNS, target); err == nil {
@@ -332,7 +332,7 @@ func probeNestedSingleTree(directory string, pins *fixtureLifecyclePins) (proof 
 		return proof, err
 	}
 	defer mount.Close()
-	if err = nestedRolesAlive(pins); err != nil {
+	if err := nestedRolesAlive(pins); err != nil {
 		return proof, err
 	}
 	after, err := lifecycleBirth(intake.PID)

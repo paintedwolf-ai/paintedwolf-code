@@ -118,10 +118,21 @@ func sealMountSource(spec EntrySpec) error {
 func serveMountSource(entries []mountEntry, socket, lifetime int) error {
 	selected := make(map[uint64]string, len(entries))
 	for _, entry := range entries {
+		if entry.id <= 0 {
+			return errors.New("invalid selected mount identity")
+		}
 		selected[uint64(entry.id)] = entry.mountPoint
 	}
+	socketPoll, err := guardianPollDescriptor(uintptr(socket))
+	if err != nil {
+		return err
+	}
+	lifetimePoll, err := guardianPollDescriptor(uintptr(lifetime))
+	if err != nil {
+		return err
+	}
 	for sequence := uint64(1); sequence <= uint64(len(entries))+1; sequence++ {
-		fds := []unix.PollFd{{Fd: int32(socket), Events: unix.POLLIN}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP}}
+		fds := []unix.PollFd{{Fd: socketPoll, Events: unix.POLLIN}, {Fd: lifetimePoll, Events: unix.POLLIN | unix.POLLHUP}}
 		if _, err := unix.Poll(fds, -1); err != nil {
 			if errors.Is(err, unix.EINTR) {
 				sequence--

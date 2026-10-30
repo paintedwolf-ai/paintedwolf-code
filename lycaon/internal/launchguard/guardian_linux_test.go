@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"os"
 	"os/exec"
 	"testing"
 
@@ -127,5 +128,18 @@ func TestGuardianPollDescriptorPreservesABIIdentity(t *testing.T) {
 func TestMountDescriptorIdentityRejectsNegativeFD(t *testing.T) {
 	if _, _, err := mountDescriptorIdentity(-1); err == nil {
 		t.Fatal("negative descriptor selected proc fdinfo")
+	}
+}
+
+func TestGuardianObservationRefusesDescriptorWidthBeforePoll(t *testing.T) {
+	file := os.NewFile(uintptr(math.MaxInt32)+1, "unrepresentable-health-descriptor")
+	if file == nil {
+		t.Fatal("construct unrepresentable descriptor observation")
+	}
+	defer func() { _ = file.Close() }()
+	state := protectedGuardian{health: file}
+	observation, err := state.observe()
+	if err == nil || observation.Cause != guardianPollFailed || observation.RoleIndex != -1 {
+		t.Fatalf("unrepresentable health descriptor reached poll: observation=%+v err=%v", observation, err)
 	}
 }

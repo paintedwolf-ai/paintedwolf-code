@@ -78,6 +78,12 @@ func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 	}
 	defer os.RemoveAll(root)
 	// Ensure the real bounded reader requires multiple seq-file reads.
+	var fillers []string
+	defer func() {
+		for index := len(fillers) - 1; index >= 0; index-- {
+			_ = unix.Unmount(fillers[index], unix.MNT_DETACH)
+		}
+	}()
 	for index := range 64 {
 		target := filepath.Join(root, fmt.Sprintf("owned-filler-%03d", index))
 		if err := os.Mkdir(target, 0700); err != nil {
@@ -86,7 +92,7 @@ func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 		if err := unix.Mount("none", target, "tmpfs", unix.MS_NODEV|unix.MS_NOSUID|unix.MS_NOEXEC, "size=64k"); err != nil {
 			return facts, err
 		}
-		defer unix.Unmount(target, unix.MNT_DETACH)
+		fillers = append(fillers, target)
 	}
 	target := filepath.Join(root, "owned-churn")
 	if err := os.Mkdir(target, 0700); err != nil {

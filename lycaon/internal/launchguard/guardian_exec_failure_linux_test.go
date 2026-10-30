@@ -120,13 +120,13 @@ func runGuardianExecFault(probe string, bootstrap *os.File, mode string, uid, gi
 	if mode == "allow" {
 		var facts protectedFacts
 		if err != nil || json.Unmarshal(output.Bytes(), &facts) != nil || facts.PID <= 1 || facts.ReadError != "" || !facts.LifetimeRegular || facts.Namespace.OwnerUID != 0 || !facts.Namespace.FullUIDMap || !facts.Namespace.FullGIDMap {
-			return fmt.Errorf("allow baseline did not launch protected desktop: %v stdout=%s stderr=%s", err, output.String(), diagnostic.String())
+			return errors.Join(fmt.Errorf("allow baseline did not launch protected desktop: stdout=%s stderr=%s", output.String(), diagnostic.String()), err)
 		}
 		return nil
 	}
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || exit.ExitCode() != 1 || output.Len() != 0 || diagnostic.Len() == 0 {
-		return fmt.Errorf("unadmitted guardian exec failure did not refuse: %v stdout=%s stderr=%s", err, output.String(), diagnostic.String())
+		return errors.Join(fmt.Errorf("unadmitted guardian exec failure did not refuse: stdout=%s stderr=%s", output.String(), diagnostic.String()), err)
 	}
 	return nil
 }

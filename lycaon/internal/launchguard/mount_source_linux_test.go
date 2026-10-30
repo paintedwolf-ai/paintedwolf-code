@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"encoding/binary"
+	"math"
 	"os"
 	"os/exec"
 	"testing"
@@ -158,6 +159,26 @@ func TestMountSourceTopologyBindsTheExactStagingNamespace(t *testing.T) {
 		}
 		if _, _, err := decodeSourceTopology(bad); err == nil {
 			t.Fatalf("accepted malformed staging identity at byte %d", offset)
+		}
+	}
+}
+
+func TestMountSourceRefusesInvalidSelectedIdentityAndPollWidth(t *testing.T) {
+	for _, id := range []int{-1, 0} {
+		selected := mountEntry{id: id, filesystem: "ext4"}
+		if err := verifyMountSourceRoot(-1, selected); err == nil {
+			t.Fatalf("invalid selected mount identity admitted: %d", id)
+		}
+		if err := validatePruneParent(-1, selected); err == nil {
+			t.Fatalf("invalid prune parent identity admitted: %d", id)
+		}
+		if err := serveMountSource([]mountEntry{selected}, -1, -1); err == nil {
+			t.Fatalf("invalid source selection entered request loop: %d", id)
+		}
+	}
+	for _, pair := range [][2]int{{math.MaxInt32 + 1, 0}, {0, math.MaxInt32 + 1}, {-1, 0}, {0, -1}} {
+		if err := serveMountSource(nil, pair[0], pair[1]); err == nil {
+			t.Fatalf("unrepresentable source descriptor entered poll: %v", pair)
 		}
 	}
 }

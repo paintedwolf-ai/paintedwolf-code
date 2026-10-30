@@ -57,6 +57,9 @@ func mountDescriptorIdentity(fd int) (id, inode uint64, err error) {
 }
 
 func verifyMountSourceRoot(fd int, expected mountEntry) error {
+	if expected.id <= 0 {
+		return errors.New("invalid selected mount identity")
+	}
 	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
 	if err != nil || flags&unix.O_PATH == 0 {
 		return errors.New("mount source is not an opened path descriptor")

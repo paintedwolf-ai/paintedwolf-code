@@ -5,6 +5,7 @@ package launchguard
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -57,6 +58,9 @@ func authenticateGuardianTransition(file *os.File, spec EntrySpec) error {
 	}
 	for index := 0; index < guardianTransitionRoles; index++ {
 		fd := guardianRoleFD(index)
+		if fd < 0 || fd > math.MaxUint32 {
+			return errors.New("guardian role exceeds transition width")
+		}
 		row := raw[16+24*index:]
 		if binary.LittleEndian.Uint32(row) != uint32(fd) || binary.LittleEndian.Uint32(row[4:]) != 0 {
 			return errors.New("guardian proof has invalid role ordering")

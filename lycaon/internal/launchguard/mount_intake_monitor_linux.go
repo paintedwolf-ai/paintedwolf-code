@@ -86,13 +86,25 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 	if err != nil {
 		return err
 	}
+	infoPoll, err := guardianPollDescriptor(uintptr(info))
+	if err != nil {
+		return err
+	}
+	lifetimePoll, err := guardianPollDescriptor(uintptr(lifetime))
+	if err != nil {
+		return err
+	}
+	socketPoll, err := guardianPollDescriptor(uintptr(socket))
+	if err != nil {
+		return err
+	}
 	if err := intake.exchange(mountTransferReady, 0, "", -1); err != nil {
 		return err
 	}
 	lastHeartbeat := time.Now()
 	for {
 		watchdog.Reset(mountSourceSetupLimit)
-		fds := []unix.PollFd{{Fd: int32(info), Events: unix.POLLPRI | unix.POLLERR}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: int32(socket), Events: unix.POLLIN}}
+		fds := []unix.PollFd{{Fd: infoPoll, Events: unix.POLLPRI | unix.POLLERR}, {Fd: lifetimePoll, Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: socketPoll, Events: unix.POLLIN}}
 		pollWait := 100
 		if pending {
 			pollWait = 0 // An observed topology change already requires reconciliation.

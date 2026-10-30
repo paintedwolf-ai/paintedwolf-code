@@ -206,7 +206,7 @@ func makeLaunchCoverageReadable(directory, uidText string) error {
 	}
 	defer func() { _ = unix.Close(fd) }()
 	var collector unix.Stat_t
-	if err := unix.Fstat(fd, &collector); err != nil || collector.Uid != uint32(uid) || collector.Gid != 0 || collector.Mode&0o777 != 0o770 {
+	if err := unix.Fstat(fd, &collector); err != nil || uint64(collector.Uid) != uid || collector.Gid != 0 || collector.Mode&0o777 != 0o770 {
 		return fmt.Errorf("native fixture collector custody changed")
 	}
 	entries, err := os.ReadDir(mountDescriptorPath(fd))
@@ -223,7 +223,7 @@ func makeLaunchCoverageReadable(directory, uidText string) error {
 		}
 		var stat unix.Stat_t
 		err = unix.Fstat(file, &stat)
-		if err == nil && (stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Nlink != 1 || (stat.Uid != 0 && stat.Uid != uint32(uid))) {
+		if err == nil && (stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Nlink != 1 || (stat.Uid != 0 && uint64(stat.Uid) != uid)) {
 			err = fmt.Errorf("native runtime profile custody changed")
 		}
 		if err == nil {
