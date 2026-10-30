@@ -362,6 +362,8 @@ process CPU allowance. One reducer publishes files in operand and traversal
 order, including diagnostics, source mappings and revision pins. Pending work
 is limited to twice the worker count; output travels in 64 KiB chunks with a
 two-event queue per file, charged to the program's aggregate memory admission.
+The bounded buffer pool includes the reducer's current payload and recycles
+storage after each write, including mapped records and cancellation cleanup.
 The first output record is released promptly. Quiet matches, closed downstream
 pipes and cancellation stop pending workers and release their held roots and
 memory. Stdin and process substitutions retain sequential stream consumption.

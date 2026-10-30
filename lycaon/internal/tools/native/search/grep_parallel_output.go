@@ -21,6 +21,7 @@ type grepEventSink struct {
 	buffer  []byte
 	stderr  bool
 	started bool
+	buffers *grepBuffers
 }
 
 type grepFileWriter struct {
@@ -57,7 +58,11 @@ func (w *grepFileWriter) flush() error {
 	if !event.stderr {
 		w.sink.started = true
 	}
-	return w.sink.publish(event)
+	if err := w.sink.publish(event); err != nil {
+		w.sink.buffers.put(event.bytes)
+		return err
+	}
+	return nil
 }
 
 func (w *grepFileWriter) Write(raw []byte) (int, error) {
@@ -73,7 +78,11 @@ func (w *grepFileWriter) Write(raw []byte) (int, error) {
 	written := 0
 	for len(raw) > 0 {
 		if w.sink.buffer == nil {
-			w.sink.buffer = make([]byte, 0, grepOutputChunk)
+			var err error
+			w.sink.buffer, err = w.sink.buffers.get(w.sink.ctx)
+			if err != nil {
+				return written, err
+			}
 		}
 		n := min(len(raw), grepOutputChunk-len(w.sink.buffer))
 		w.sink.buffer = append(w.sink.buffer, raw[:n]...)

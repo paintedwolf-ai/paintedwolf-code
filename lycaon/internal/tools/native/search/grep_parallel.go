@@ -49,6 +49,7 @@ type grepFiles struct {
 	workers    sync.WaitGroup
 	window     int
 	release    func()
+	buffers    *grepBuffers
 }
 
 func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
@@ -57,7 +58,7 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 	}
 	workers = min(max(workers, 1), grepWorkerMaximum)
 	if memory := r.inv.owners.Revisions.Memory; memory != nil {
-		workers = min(workers, max(1, int(memory.AvailableWorking()/(2*grepWorkerCredit))))
+		workers = min(workers, max(1, int((memory.AvailableWorking()/2-grepOutputChunk)/grepWorkerCredit)))
 	}
 	ctx, cancel := context.WithCancel(r.inv.ctx)
 	p := &grepFiles{run: r, template: *r, invocation: *r.inv, maximum: r.inv.out.maximum, mapped: r.inv.out.mappings != nil, ctx: ctx, cancel: cancel, jobs: make(chan *grepFileJob, workers), window: workers * 2}
@@ -67,13 +68,14 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 		p.template.json = &rgJSON{started: r.json.started}
 	}
 	if memory := r.inv.owners.Revisions.Memory; memory != nil {
-		release, err := memory.Reserve(ctx, int64((p.window*grepEventWindow+workers)*grepOutputChunk+p.window*4096))
+		release, err := memory.Reserve(ctx, int64((p.window*grepEventWindow+workers+1)*grepOutputChunk+p.window*4096))
 		if err != nil {
 			cancel()
 			return nil, err
 		}
 		p.release = release
 	}
+	p.buffers = newGrepBuffers(p.window*grepEventWindow + workers + 1)
 	for range workers {
 		p.workers.Add(1)
 		go p.worker()
@@ -127,7 +129,9 @@ func (p *grepFiles) next() (finalErr error) {
 				p.addStats(job.result)
 				return job.result.err
 			}
-			if err := p.apply(event, base); err != nil {
+			err := p.apply(event, base)
+			p.buffers.put(event.bytes)
+			if err != nil {
 				return err
 			}
 		}
@@ -173,8 +177,10 @@ func (p *grepFiles) finish(err error) error {
 	p.workers.Wait()
 	for _, job := range append(p.pending, p.abandoned...) {
 		p.addStats(job.result)
+		p.discard(job)
 	}
-	p.pending = nil
+	p.pending, p.abandoned = nil, nil
+	p.buffers.clear()
 	if p.release != nil {
 		p.release()
 	}
@@ -183,6 +189,20 @@ func (p *grepFiles) finish(err error) error {
 		return nil
 	}
 	return err
+}
+
+func (p *grepFiles) discard(job *grepFileJob) {
+	for {
+		select {
+		case event, ok := <-job.events:
+			if !ok {
+				return
+			}
+			p.buffers.put(event.bytes)
+		default:
+			return
+		}
+	}
 }
 
 func (p *grepFiles) worker() {
@@ -212,7 +232,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	inv := p.invocation
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
 	inv.status = 0
-	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events}}
+	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events, buffers: p.buffers}}
 	inv.stderr = writer.errorWriter()
 	inv.out = newOutput(p.ctx, writer, p.maximum)
 	if !p.mapped {
