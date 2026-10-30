@@ -262,3 +262,19 @@ func TestDirectoryReaderRejectsReplacedAttachedRoot(t *testing.T) {
 		t.Fatalf("published replaced-root observation: %v", err)
 	}
 }
+
+func TestDirectoryNamespaceReuseRejectsReplacedRootCapability(t *testing.T) {
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "dir/old", "source")
+	reader := catalog.Directories.NewDirectoryReader("p", root)
+	_, err := reader.ReadDirectory(t.Context(), "dir", 0, nil)
+	testutil.FailErr(t, "collect reusable namespace", err)
+	testutil.FailErr(t, "publish reusable namespace", reader.Close(t.Context()))
+	observation, err := reader.store.readObservation(t.Context(), "dir")
+	testutil.FailErr(t, "read complete observation", err)
+	testutil.FailErr(t, "move cached root", os.Rename(root.Path, filepath.Join(t.TempDir(), "moved-root")))
+	writeIndexFile(t, root.Path, "dir/new", "source")
+	if _, err := readDirectoryNamespace(t.Context(), reader.store, "dir", observation, 0, true); !errors.Is(err, errObservationChanged) {
+		t.Fatalf("reused stale root capability: %v", err)
+	}
+}

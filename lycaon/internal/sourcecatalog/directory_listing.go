@@ -21,6 +21,11 @@ func readDirectoryNamespace(ctx context.Context, store *indexStore, dir string, 
 	if !observation.Complete || observation.Failure != "" {
 		return listing, ErrDirectoryNamespace
 	}
+	_, release, err := acquireObservationRoot(ctx, store)
+	if err != nil {
+		return listing, err
+	}
+	defer release()
 	navigation, err := openNavigation(ctx, store, headGeneration)
 	if err != nil {
 		return DirectoryListing{}, err
