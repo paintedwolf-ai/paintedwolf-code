@@ -131,3 +131,22 @@ func TestFindDeleteReleasesHeldDirectoriesAfterDepthFirstActions(t *testing.T) {
 		t.Fatalf("delete lifecycle=%v", work)
 	}
 }
+
+func TestFindOrdinaryDepth240UsesBoundedDirectoryLifetimesAndStraightComponentOpenWork(t *testing.T) {
+	logs := discoveryCapture(t)
+	const depth = 240
+	path := strings.Repeat("d/", depth) + "leaf"
+	h := newHarness(t, map[string]string{path: "data"})
+	h.owners.Catalog = discoveryCatalog(t)
+	result := h.exec("", "find", ".", "-name", "leaf", "-type", "f")
+	result.expect(t, "ordinary deep canonical traversal", "./"+path+"\n", "", 0)
+	work := logs.records[result.execution]
+	// Past the retained ancestors, each canonical fallback opens at most its depth.
+	var maximum int64 = heldTraversalDirectories + 1
+	for d := heldTraversalDirectories + 1; d <= depth; d++ {
+		maximum += int64(d)
+	}
+	if work["directory_handles"] != depth+1 || work["held_directory_peak"] != heldTraversalDirectories+1 || work["held_directory_remaining"] != 0 || work["relative_descriptor_opens"] > maximum || work["identity_descriptor_peak"] > 2 || work["identity_descriptor_remaining"] != 0 {
+		t.Fatalf("canonical deep work=%v maximum opens=%d", work, maximum)
+	}
+}
