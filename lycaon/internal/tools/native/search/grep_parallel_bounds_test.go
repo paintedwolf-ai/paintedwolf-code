@@ -58,7 +58,9 @@ func TestGrepFileEventChunksAndCancellationAreBounded(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	events := make(chan grepFileEvent, grepEventWindow)
-	writer := &grepFileWriter{sink: &grepEventSink{ctx: ctx, events: events}}
+	buffers := newGrepBuffers(grepEventWindow + 2)
+	writer := &grepFileWriter{sink: &grepEventSink{ctx: ctx, events: events, buffers: buffers}}
+	defer writer.close()
 	finished := make(chan error, 1)
 	go func() {
 		_, err := writer.Write(bytes.Repeat([]byte("x"), 10*grepOutputChunk))
@@ -68,14 +70,17 @@ func TestGrepFileEventChunksAndCancellationAreBounded(t *testing.T) {
 	if len(first.bytes) != grepOutputChunk {
 		t.Fatalf("event bytes = %d", len(first.bytes))
 	}
+	buffers.put(first.bytes)
 	cancel()
 	if err := <-finished; !errors.Is(err, context.Canceled) {
 		t.Fatalf("blocked event writer = %v", err)
 	}
 	for len(events) > 0 {
-		if event := <-events; len(event.bytes) > grepOutputChunk {
+		event := <-events
+		if len(event.bytes) > grepOutputChunk {
 			t.Fatalf("oversized event = %d", len(event.bytes))
 		}
+		buffers.put(event.bytes)
 	}
 }
 
@@ -120,7 +125,9 @@ func TestGrepParallelFilesShareOneOutputLimit(t *testing.T) {
 
 func TestGrepFirstRecordDoesNotWaitForFileCompletion(t *testing.T) {
 	events := make(chan grepFileEvent, grepEventWindow)
-	writer := &grepFileWriter{sink: &grepEventSink{ctx: t.Context(), events: events}}
+	buffers := newGrepBuffers(grepEventWindow + 2)
+	writer := &grepFileWriter{sink: &grepEventSink{ctx: t.Context(), events: events, buffers: buffers}}
+	defer writer.close()
 	_, err := writer.Write([]byte("first record\n"))
 	testutil.FailErr(t, "write first record", err)
 	select {
@@ -128,6 +135,7 @@ func TestGrepFirstRecordDoesNotWaitForFileCompletion(t *testing.T) {
 		if string(event.bytes) != "first record\n" {
 			t.Fatalf("first record = %q", event.bytes)
 		}
+		buffers.put(event.bytes)
 	default:
 		t.Fatal("first output record waited for file completion")
 	}
@@ -158,5 +166,14 @@ func TestGrepMappedRecordsReuseBoundedTransportStorage(t *testing.T) {
 	testutil.FailErr(t, "finish mapped records", r.files.finish(nil))
 	if len(output.mappings) != 4000 || output.writes < 4000 || len(output.seen) > maximum || len(output.seen) >= output.writes || memory.InUse().Working != 0 {
 		t.Fatalf("mapped transport reuse: mappings=%d writes=%d buffers=%d maximum=%d held=%+v", len(output.mappings), output.writes, len(output.seen), maximum, memory.InUse())
+	}
+}
+
+func TestGrepOutputRequiresBoundedBufferOwnership(t *testing.T) {
+	events := make(chan grepFileEvent, grepEventWindow)
+	writer := &grepFileWriter{sink: &grepEventSink{ctx: t.Context(), events: events}}
+	defer writer.close()
+	if n, err := writer.Write([]byte("record\n")); err == nil || n != 0 || len(events) != 0 {
+		t.Fatalf("unowned output: n=%d err=%v events=%d", n, err, len(events))
 	}
 }

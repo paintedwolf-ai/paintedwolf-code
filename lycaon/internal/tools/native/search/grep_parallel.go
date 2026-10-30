@@ -233,6 +233,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
 	inv.status = 0
 	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events, buffers: p.buffers}}
+	defer writer.close()
 	inv.stderr = writer.errorWriter()
 	inv.out = newOutput(p.ctx, writer, p.maximum)
 	if !p.mapped {

@@ -257,6 +257,9 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if e.proofWork > 0 && int64(len(b)) > e.limits.WorkSteps-e.proofWork {
+		return &BudgetError{Resource: "regex_work_steps", Maximum: e.limits.WorkSteps, Observed: e.proofWork + int64(len(b))}
+	}
 	if !e.required.Empty() && int64(len(b)) <= e.limits.WorkSteps && int64(len(b))*12+8 <= e.limits.MemoryBytes && !e.required.Matches(b) {
 		return nil
 	}
