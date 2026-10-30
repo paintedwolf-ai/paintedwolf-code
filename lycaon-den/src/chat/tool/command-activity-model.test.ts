@@ -81,3 +81,15 @@ it("appends late starts after visible rows instead of inserting above them", () 
  const rows = parts(project([entry("a", [fact("a"),fact("late")]),b]));
  expect(rows.map(row=>row.id)).toEqual(["a","b","a:activity:late"]);
 });
+
+it("keeps an established row when later host composition connects its execution elsewhere", () => {
+ const project = createCommandActivityProjection();
+ const initial = entry("call", [fact("filter", { label: "Process output", state: "waiting" })]);
+ project([initial]);
+ const update = entry("call", [fact("producer", { label: "Run process", execution_ids: ["producer","filter"] })]);
+ if (update.kind === "tool") update.part.commandProgram!.activity_executions = [{ id: "filter", state: "completed", outcome: "Exited 0", status_code: 0 }];
+ const rows = parts(project([update]));
+ expect(rows).toHaveLength(2);
+ expect(rows[0]!.commandActivity!.fact.label).toBe("Process output");
+ expect(rows[0]!.commandActivity!.fact.outcome).toBe("Exited 0");
+});
