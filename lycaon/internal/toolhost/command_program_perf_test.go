@@ -305,6 +305,7 @@ func warmCatalog(tb testing.TB, catalog *sourcecatalog.Catalog, dir string) bool
 		_, err = io.Copy(io.Discard, observation.Wrap(tb.Context(), file))
 		testutil.FailErr(tb, "observe fixture stream", err)
 		testutil.FailErr(tb, "close fixture stream", file.Close())
+		observation.Commit()
 		observation.Close()
 	}
 	return observable

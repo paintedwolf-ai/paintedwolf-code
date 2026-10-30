@@ -87,7 +87,7 @@ func (c *LiteralSearch) CanPruneBytes(rootPath string, req litprefilter.Requirem
 	return !cached.rawBloom.admitsRequirement(req)
 }
 
-// Wrap observes only bytes the consumer actually reads from a pinned stream.
+// Wrap prepares filters from captured bytes without publishing them.
 func (r *ContentRead) Wrap(ctx context.Context, reader io.Reader) io.Reader {
 	if r == nil {
 		return reader
@@ -99,6 +99,19 @@ func (r *ContentRead) Wrap(ctx context.Context, reader io.Reader) io.Reader {
 	}
 	r.stream = &contentReadStream{read: r, ctx: ctx, reader: reader, builder: newLiteralContent(r.read.version.Size)}
 	return r.stream
+}
+
+// Commit publishes only a complete capture that still matches the live version.
+func (r *ContentRead) Commit() bool {
+	if r == nil {
+		return false
+	}
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	if r.stream != nil && r.stream.finished && r.stream.builder != nil {
+		r.stream.completeLocked()
+	}
+	return r.learned
 }
 
 // Learned reports whether a complete observation reached the shared cache.
@@ -133,13 +146,16 @@ func (s *contentReadStream) Read(p []byte) (int, error) {
 		}
 		if !s.finished && err == io.EOF && s.bytes == s.read.read.version.Size {
 			s.finished = true
-			if facts, finishErr := s.builder.finish(); finishErr == nil {
-				s.read.publish(s.ctx, facts)
-			}
-			s.read.closeLocked()
 		}
 	}
 	return n, err
+}
+
+func (s *contentReadStream) completeLocked() {
+	if facts, err := s.builder.finish(); err == nil {
+		s.read.publish(s.ctx, facts)
+	}
+	s.read.closeLocked()
 }
 
 func (c *literalIndexCache) cachedFile(rootPath string, entry Entry) (literalFileCacheEntry, bool) {

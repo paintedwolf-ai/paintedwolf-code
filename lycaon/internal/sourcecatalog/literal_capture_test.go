@@ -148,6 +148,7 @@ func TestCapturedReaderPublishesOnlyCompletePinnedBytes(t *testing.T) {
 				observed = io.LimitReader(observed, 3)
 			}
 			_, _ = io.Copy(io.Discard, observed)
+			read.Commit()
 			read.Close()
 			want := kind == "complete"
 			if read.Learned() != want || (index.cache.files.count == 1) != want || len(index.cache.fileReads) != 0 {
