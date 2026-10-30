@@ -1,6 +1,7 @@
 package native_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,23 +56,28 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	const original = "print('unchanged')\n"
 	testutil.FailErr(t, "seed product file", os.WriteFile(product, []byte(original), 0o644))
 	for _, tc := range []struct {
+		name string
 		tool string
+		path string
 		run  func() (string, error)
 	}{
-		{"write", func() (string, error) {
+		{"write existing", "write", "src/main.py", func() (string, error) {
 			return writeTool.Run(t.Context(), map[string]any{"path": "src/main.py", "content": "print('nope')\n"}, tctx)
 		}},
-		{"edit", func() (string, error) {
+		{"create missing", "write", "src/new.py", func() (string, error) {
+			return writeTool.Run(t.Context(), map[string]any{"path": "src/new.py", "content": "print('nope')\n"}, tctx)
+		}},
+		{"edit existing", "edit", "src/main.py", func() (string, error) {
 			return editTool.Run(t.Context(), map[string]any{"path": "src/main.py", "old_string": "unchanged", "new_string": "changed"}, tctx)
 		}},
 	} {
-		t.Run(tc.tool, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			out, err := tc.run()
 			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != "WRITE_SCOPE_DENIED" {
 				t.Fatalf("product mutation: result %q error %v, want WRITE_SCOPE_DENIED", out, err)
 			}
-			if reject.Data["tool"] != tc.tool || reject.Data["profile"] != "plan_write_only" || reject.Data["path"] != "src/main.py" {
+			if reject.Data["tool"] != tc.tool || reject.Data["profile"] != "plan_write_only" || reject.Data["path"] != tc.path {
 				t.Fatalf("scope rejection facts = %+v", reject.Data)
 			}
 			if out != "" {
@@ -79,6 +85,9 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 			}
 			body, err := os.ReadFile(product)
 			testutil.FailErr(t, "read denied product path", err)
+			if _, err := os.Stat(filepath.Join(tmpDir, "src", "new.py")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("denied create changed destination: %v", err)
+			}
 			if string(body) != original {
 				t.Fatalf("denied mutation changed product bytes to %q", body)
 			}
