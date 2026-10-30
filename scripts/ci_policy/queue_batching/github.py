@@ -93,6 +93,25 @@ def enforce_holds(repository):
                 dissolve(repository, pull, record, 'no_combine')
 
 
+def withdraw_drafts(repository):
+    """Retire existing draft admission before any merge-group recovery."""
+    from ci_policy.batch_prs import source, withdraw as remove
+    withdrawn = []
+    for entry in queue(repository):
+        recorded = entry['pullRequest']
+        if not recorded['isDraft']:
+            continue
+        current = source(repository, recorded['number'])
+        if not current['isDraft'] or current['headRefOid'] != recorded['headRefOid']:
+            continue
+        remove(repository, current)
+        remaining = source(repository, recorded['number'])
+        if remaining['mergeQueueEntry'] is not None or remaining['autoMergeRequest'] is not None:
+            raise ValueError(f"draft PR #{recorded['number']} retains merge admission")
+        withdrawn.append(recorded['number'])
+    return withdrawn
+
+
 def build_window(repository):
     result = graphql(repository, """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){
       mergeQueue{configuration{maximumEntriesToBuild}}}}""")

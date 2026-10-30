@@ -42,6 +42,10 @@ def withdraw(repository, row):
           dequeuePullRequest(input: {id: $id}) { clientMutationId }
         }""", "variables": {"id": current["id"]}})
         current = source(repository, row["number"])
+        if current["headRefOid"] != row["headRefOid"] or current["isDraft"] != row["isDraft"]:
+            raise ValueError(f"PR #{row['number']} changed during queue withdrawal")
+        if current["mergeQueueEntry"] is not None:
+            raise ValueError(f"PR #{row['number']} remains in the merge queue")
     if current["autoMergeRequest"] is not None:
         api("graphql", "POST", {"query": """mutation($id: ID!) {
           disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId }

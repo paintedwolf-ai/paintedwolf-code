@@ -131,12 +131,12 @@ class LifecycleTests(unittest.TestCase):
 
     def test_failed_group_is_excluded_and_an_active_batch_prevents_duplicate_creation(self):
         pull = {**self.pull, 'body': c.describe(self.record)}
-        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[pull]), \
+        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'withdraw_drafts'), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[pull]), \
              patch.object(c, 'reconcile', return_value=True), patch.object(c, 'build') as build:
             self.assertEqual(c.run('o/r', POLICY)['state'], 'watching')
             build.assert_not_called()
         failed = {**self.record, 'settled': True, 'outcome': 'individual_fallback'}
-        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[{**pull, 'body': c.describe(failed)}]), \
+        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'withdraw_drafts'), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[{**pull, 'body': c.describe(failed)}]), \
              patch.object(gh, 'queue', return_value=entries()), patch.object(c, 'pages', return_value=[]), patch.object(c, 'build') as build:
             self.assertEqual(c.run('o/r', POLICY)['state'], 'no_waiting_batch')
             build.assert_not_called()
