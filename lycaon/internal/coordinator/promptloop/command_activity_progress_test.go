@@ -1,8 +1,9 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCommandActivityEdgesBypassCounterCoalescing(t *testing.T) {
