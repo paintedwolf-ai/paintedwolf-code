@@ -44,3 +44,5 @@ func (*ReadRoot) DirectoryPath(*os.File) (string, error)                { return
 func (*ReadRoot) OpenChildDirectory(*os.File, string) (*os.File, error) { return nil, ErrUnsupported }
 
 func (*ReadRoot) DescriptorOpens() int64 { return 0 }
+
+func (*ReadRoot) DirectoryIdentityDescriptors() (int64, int64) { return 0, 0 }

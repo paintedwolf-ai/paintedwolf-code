@@ -12,23 +12,31 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestFindReachedMetadataUsesOneHeldParent(t *testing.T) {
-	logs := discoveryCapture(t)
-	files := map[string]string{}
-	for i := range 200 {
-		files[fmt.Sprintf("dir/file-%03d", i)] = "data"
-	}
-	h := newHarness(t, files)
-	h.owners.Catalog = discoveryCatalog(t)
-	for attempt := range 2 {
-		result := h.exec("", "find", ".", "-name", "file-*", "-size", "4c")
-		if result.err != nil || result.stderr != "" || strings.Count(result.stdout, "\n") != 200 {
-			t.Fatalf("attempt=%d result=%+v", attempt, result)
-		}
-		work := logs.records[result.execution]
-		if work["directory_handles"] != 2 || (work["relative_descriptor_opens"] != 0 && work["relative_descriptor_opens"] != 2) || work["held_directory_peak"] != 2 || work["held_directory_remaining"] != 0 {
-			t.Fatalf("attempt=%d work=%v", attempt, work)
-		}
+func TestFindMetadataOpenWorkDoesNotGrowWithSiblingCount(t *testing.T) {
+	opensByAttempt := map[int]int64{}
+	for _, siblings := range []int{1, 200, 1000} {
+		t.Run(fmt.Sprint(siblings), func(t *testing.T) {
+			logs := discoveryCapture(t)
+			files := map[string]string{}
+			for i := range siblings {
+				files[fmt.Sprintf("dir/file-%03d", i)] = "data"
+			}
+			h := newHarness(t, files)
+			h.owners.Catalog = discoveryCatalog(t)
+			for attempt := range 2 {
+				result := h.exec("", "find", ".", "-name", "file-*", "-size", "4c")
+				if result.err != nil || result.stderr != "" || strings.Count(result.stdout, "\n") != siblings {
+					t.Fatalf("attempt=%d result=%+v", attempt, result)
+				}
+				work := logs.records[result.execution]
+				if siblings == 1 {
+					opensByAttempt[attempt] = work["relative_descriptor_opens"]
+				}
+				if work["directory_handles"] != 2 || work["relative_descriptor_opens"] != opensByAttempt[attempt] || work["held_directory_peak"] != 2 || work["held_directory_remaining"] != 0 || work["entry_metadata_reads"] != int64(siblings+2) {
+					t.Fatalf("attempt=%d work=%v", attempt, work)
+				}
+			}
+		})
 	}
 }
 

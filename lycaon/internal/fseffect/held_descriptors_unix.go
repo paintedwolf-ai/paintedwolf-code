@@ -57,11 +57,13 @@ var (
 )
 
 type openedRoot struct {
-	readOpens atomic.Int64
-	path      string
-	fd        int
-	dev       uint64
-	ino       uint64
+	readOpens      atomic.Int64
+	identityActive atomic.Int64
+	identityPeak   atomic.Int64
+	path           string
+	fd             int
+	dev            uint64
+	ino            uint64
 }
 
 type openedParent struct {

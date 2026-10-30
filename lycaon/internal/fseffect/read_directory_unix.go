@@ -14,10 +14,17 @@ import (
 
 // DirectoryPath reports the held directory's current native address within this root.
 func (r *ReadRoot) DirectoryPath(dir *os.File) (string, error) {
+	if err := r.validateDirectoryRoot(); err != nil {
+		return "", err
+	}
 	path, err := readDirectoryPath(dir)
 	if err != nil {
 		return r.directoryPathFromName(dir)
 	}
+	return r.directoryPathFromNative(dir, path)
+}
+
+func (r *ReadRoot) directoryPathFromNative(dir *os.File, path string) (string, error) {
 	if _, ok := lexicalRelUnder(r.root.path, path); !ok {
 		if exact, err := r.directoryPathFromName(dir); err == nil {
 			return exact, nil
@@ -33,11 +40,37 @@ func (r *ReadRoot) directoryPathFromName(dir *os.File) (string, error) {
 	if !ok {
 		return "", ErrSymlink
 	}
-	current, err := openReadWalk(r.root, rel)
+	if err := r.validateDirectoryRoot(); err != nil {
+		return "", err
+	}
+	fd, err := unix.FcntlInt(uintptr(r.root.fd), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return "", err
 	}
-	defer current.Close()
+	r.root.readOpens.Add(1)
+	r.root.identityOpened()
+	current := os.NewFile(uintptr(fd), r.root.path)
+	defer func() { _ = current.Close(); r.root.identityActive.Add(-1) }()
+	if rel != "." {
+		for _, name := range strings.Split(filepath.ToSlash(rel), "/") {
+			if name == "" || name == "." || name == ".." {
+				return "", ErrInvalidPath
+			}
+			next, err := unix.Openat(int(current.Fd()), name, metadataOpenFlags(true)|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			if err != nil {
+				if err == unix.ELOOP || err == unix.ENOTDIR {
+					return "", fmt.Errorf("%w: canonical directory identity changed", ErrSymlink)
+				}
+				return "", &fs.PathError{Op: "validate effect directory", Path: name, Err: err}
+			}
+			r.root.readOpens.Add(1)
+			r.root.identityOpened()
+			nextFile := os.NewFile(uintptr(next), filepath.Join(current.Name(), name))
+			_ = current.Close()
+			r.root.identityActive.Add(-1)
+			current = nextFile
+		}
+	}
 	expected, err := dir.Stat()
 	if err != nil {
 		return "", err
@@ -50,6 +83,11 @@ func (r *ReadRoot) directoryPathFromName(dir *os.File) (string, error) {
 		return "", ErrSymlink
 	}
 	return current.Name(), nil
+}
+
+// DirectoryIdentityDescriptors reports this root's identity-validation scratch peak and held count.
+func (r *ReadRoot) DirectoryIdentityDescriptors() (peak, held int64) {
+	return r.root.identityPeak.Load(), r.root.identityActive.Load()
 }
 
 // OpenChildDirectory opens an immediate directory relative to a held parent.
@@ -79,3 +117,27 @@ func (r *ReadRoot) OpenChildDirectory(dir *os.File, name string) (*os.File, erro
 
 // DescriptorOpens counts successful read descriptor opens and duplicates beneath this admitted root.
 func (r *ReadRoot) DescriptorOpens() int64 { return r.root.readOpens.Load() }
+
+func (r *openedRoot) identityOpened() {
+	active := r.identityActive.Add(1)
+	for {
+		peak := r.identityPeak.Load()
+		if active <= peak || r.identityPeak.CompareAndSwap(peak, active) {
+			return
+		}
+	}
+}
+
+func (r *ReadRoot) validateDirectoryRoot() error {
+	var held, named unix.Stat_t
+	if err := unix.Fstat(r.root.fd, &held); err != nil {
+		return err
+	}
+	if err := unix.Lstat(r.root.path, &named); err != nil {
+		return err
+	}
+	if named.Mode&unix.S_IFMT != unix.S_IFDIR || named.Dev != held.Dev || named.Ino != held.Ino {
+		return ErrSymlink
+	}
+	return nil
+}

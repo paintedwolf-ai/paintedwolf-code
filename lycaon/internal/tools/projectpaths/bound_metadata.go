@@ -76,6 +76,9 @@ type DirectoryNames struct {
 // Names reads byte-ordered membership with one hidden-entry selection.
 func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	if d.listed {
+		if err := d.AdmitDirectoryRead(); err != nil {
+			return nil, err
+		}
 		if d.includeHidden != options.IncludeHidden {
 			return nil, errors.New("directory membership selection changed")
 		}
@@ -87,15 +90,9 @@ func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	d.listed, d.includeHidden = true, options.IncludeHidden
 	var names []string
 	for {
-		if d.dir.admitRead != nil {
-			actual, err := d.currentPath()
-			if err == nil {
-				err = d.dir.admitRead(actual)
-			}
-			if err != nil {
-				d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
-				return nil, d.listErr
-			}
+		if err := d.AdmitDirectoryRead(); err != nil {
+			d.listErr = err
+			return nil, err
 		}
 		batch, err := d.file.Readdirnames(1024)
 		for _, name := range batch {
