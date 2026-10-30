@@ -25,8 +25,7 @@ func (r *ProgramOutputRetention) prepareChildInline(ctx context.Context, in tool
 	return r.recorder.prepareChildInline(ctx, in, body, redacted)
 }
 
-// prepareChildInline commits screened input bytes and the prepared child in
-// one database transaction. The reference remains scoped to that execution.
+// prepareChildInline commits screened input bytes with their prepared child.
 func (r *SQLRecorder) prepareChildInline(ctx context.Context, in toolcontract.ProgramChildStart, body []byte, redacted bool) error {
 	if r == nil || r.database == nil || len(body) > maxInlineProgramInput {
 		return fmt.Errorf("inline child input requires recorder and bounded body")

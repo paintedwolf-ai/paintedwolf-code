@@ -83,8 +83,7 @@ func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalRefere
 	return tx.Commit()
 }
 
-// SettleChild preserves the exact typed owner result independently of a later
-// authority stop. A failed ledger commit does not change the caller's result.
+// SettleChild retains the owner outcome separately from a later authority stop.
 func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in toolcontract.ProgramChildSettlement) error {
 	if err := in.Validate(); err != nil {
 		return err
@@ -146,8 +145,7 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in to
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// Unfinished children must first be reconciled with their real owners. An
-	// aggregate terminal cannot convert outstanding effects into a zero-effect stop.
+	// Outstanding children require owner reconciliation before program settlement.
 	var count int
 	if err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running'))+(SELECT count(*) FROM invocation_program_progress WHERE program_id=? AND state='running')`, programID, programID).Scan(&count); err != nil {
 		return err
