@@ -72,7 +72,7 @@ func newTestRegistrySummarizer(t *testing.T, provider modelcall.Provider) *Regis
 		Lite: ModelRef{ProviderID: "lite", Model: "lite"},
 	})
 
-	reg := newEmptyRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "Register", reg.Register(provider))
 
 	return &RegistrySummarizer{
@@ -270,4 +270,12 @@ func TestRegistrySummarizerCurate_usesLiteProvider(t *testing.T) {
 	if provider.calls != 1 {
 		t.Fatalf("lite provider calls = %d", provider.calls)
 	}
+}
+
+// newTestRegistry wires the inert model screen a registry needs before it
+// dispatches; an unset screen rejects every request.
+func newTestRegistry() *Registry {
+	reg := newEmptyRegistry()
+	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	return reg
 }

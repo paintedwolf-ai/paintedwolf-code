@@ -115,7 +115,7 @@ func TestRegistryDecoratorAppliesResponseRetryPolicy(t *testing.T) {
 			inner.ID(): {ID: inner.ID(), HTTPRetry: retryEmptyOncePolicy()},
 		},
 	})
-	provider := (&Registry{}).decorateProvider(snapshot, inner)
+	provider := (&Registry{outboundSecretScreen: NewModelSecretScreen(nil, nil)}).decorateProvider(snapshot, inner)
 
 	got, err := provider.Complete(t.Context(), modelcall.CompletionRequest{Model: "model"})
 	if err != nil {
