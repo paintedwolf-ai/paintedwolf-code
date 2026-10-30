@@ -50,7 +50,6 @@ func runFind(inv *invocation) error {
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
 	defer r.walker.close()
 	r.walker.lazy = true
-	defer r.walker.report()
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}

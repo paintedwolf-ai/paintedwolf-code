@@ -20,14 +20,16 @@ type BoundDir struct {
 	ownsRoot bool
 	file     *os.File
 	names    []string
+	listed   bool
+	listErr  error
 }
 
-// OpenDir opens a bound directory and lists its entry names in unsigned byte order.
+// OpenDir admits and holds a directory without reading its membership.
 func (p BoundPath) OpenDir() (*BoundDir, error) {
 	return p.OpenDirWithRoot(nil)
 }
 
-// OpenDirWithRoot opens a bound directory using shared when non-nil instead of opening a fresh ReadRoot.
+// OpenDirWithRoot borrows shared when supplied; Close releases only owned roots.
 func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error) {
 	if p.Null {
 		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
@@ -70,30 +72,38 @@ func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error)
 		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
 	}
-	names, err := file.Readdirnames(-1)
-	if err != nil {
-		_ = file.Close()
-		closeRoot()
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	parentHasRecovery := strings.Contains(p.Resolved.Abs, settingsoverlay.DirName())
-	kept := names[:0]
-	for _, name := range names {
-		if parentHasRecovery || name == settingsoverlay.DirName() || name == settingsoverlay.RecoveryDirName {
-			childAbs := p.Resolved.Abs + string(filepath.Separator) + name
-			if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
-				continue
-			}
-		}
-		kept = append(kept, name)
-	}
-	names = kept
-	slices.Sort(names)
-	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file, names: names}, nil
+	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file}, nil
 }
 
-// Names returns the sorted entry names in the held directory.
-func (d *BoundDir) Names() []string { return d.names }
+// Names reads one complete membership in unsigned byte order.
+func (d *BoundDir) Names() ([]string, error) {
+	if d.listed {
+		return d.names, d.listErr
+	}
+	d.listed = true
+	names, err := d.file.Readdirnames(-1)
+	if err != nil {
+		d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
+		return nil, d.listErr
+	}
+	kept := names[:0]
+	for _, name := range names {
+		if d.visible(name) {
+			kept = append(kept, name)
+		}
+	}
+	slices.Sort(kept)
+	d.names = kept
+	return d.names, nil
+}
+
+func (d *BoundDir) visible(name string) bool {
+	if strings.Contains(d.dir.Resolved.Abs, settingsoverlay.DirName()) || name == settingsoverlay.DirName() || name == settingsoverlay.RecoveryDirName {
+		child := d.dir.Resolved.Abs + string(filepath.Separator) + name
+		return !settingsoverlay.HasRecoverySegment(child) && !settingsoverlay.IsRecoveryOnlyDir(child)
+	}
+	return true
+}
 
 // Close releases the held directory and root descriptors.
 func (d *BoundDir) Close() error {
@@ -106,6 +116,9 @@ func (d *BoundDir) Close() error {
 // StatChild binds and stats one immediate entry of the held directory without following links.
 func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
 	child := d.dir.Child(name)
+	if !d.visible(name) {
+		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
+	}
 	st, err := d.root.StatChildAt(d.file, child.exactRelative, name, child.admitEntry)
 	if err != nil {
 		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, err)
@@ -153,7 +166,7 @@ func (p BoundPath) ReadDir() ([]string, error) {
 		return nil, err
 	}
 	defer dir.Close()
-	return dir.Names(), nil
+	return dir.Names()
 }
 
 // Child binds one entry beneath a bound directory with the same authority.

@@ -156,3 +156,20 @@ func TestFindCachedMembershipPreservesDeletionAndActionOrder(t *testing.T) {
 	}
 	h.exec("", "find", "tree", "-name", "*.tmp").expect(t, "deleted membership refresh", "", "", 0)
 }
+
+func TestIndexedGrepSharesRootsAndImmediateChildMetadata(t *testing.T) {
+	logs := discoveryCapture(t)
+	h := newHarness(t, map[string]string{"src/a": "source", "src/b": "other", "deep/child/c": "source"})
+	h.owners.Catalog = discoveryCatalog(t)
+	for attempt := range 2 {
+		r := h.exec("", "grep", "-rl", "source", ".")
+		r.expect(t, "indexed grep", "./deep/child/c\n./src/a\n", "", 0)
+		work := logs.records[r.execution]
+		if work["shared_root_opens"] != 1 || work["directory_handles"] != 4 || work["relative_child_stats"] != 6 || work["entry_metadata_reads"] != 7 {
+			t.Fatalf("attempt %d resources=%v", attempt, work)
+		}
+		if attempt == 1 && (work["directory_reuses"] != 4 || work["directory_live_lists"] != 0) {
+			t.Fatalf("warm membership=%v", work)
+		}
+	}
+}
