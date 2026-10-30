@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/reporting"
 )
 
 func TestUpdateProgress_rejectsTooManyLines(t *testing.T) {
@@ -49,9 +50,11 @@ func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	store.Set("sess-1", "## Progress\n- [ ] open step\n")
+	observed, err := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "observe existing plan", err)
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": "## Progress\n- [x] open step\n",
+	_, err = exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"content": "## Progress\n- [x] open step\n", "expected_revision": observed.Revision,
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
@@ -104,7 +107,9 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 		t.Fatalf("first write status = %q want updated", first)
 	}
 
-	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content}, tools.ToolContext{
+	observed, err := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "observe replay revision", err)
+	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content, "expected_revision": observed.Revision}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress replay", err)
@@ -171,5 +176,25 @@ func assertUpdateProgressReject(t *testing.T, code, content string) {
 	}
 	if store.Get(t.Context(), "sess-1") != "" {
 		t.Fatal("rejected write must not land in the progress store")
+	}
+}
+
+func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed current checklist", store.Set("session", "- [ ] Preserve"))
+	before, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "observe current checklist", err)
+	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, nil)
+	_, err = handler(t.Context(), map[string]any{"content": "- [x] Preserve"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	rejection := toolrejection.AsToolReject(err)
+	if rejection == nil || rejection.Code != "PROGRESS_REVISION_REQUIRED" {
+		t.Fatalf("missing revision outcome: %v", err)
+	}
+	snapshot, ok := rejection.Data["snapshot"].(progress.Snapshot)
+	if !ok || snapshot.Revision != before.Revision || snapshot.Content != before.Content {
+		t.Fatalf("missing recovery snapshot: %+v", rejection.Data)
+	}
+	if store.Get(t.Context(), "session") != before.Content {
+		t.Fatal("blind replacement changed current state")
 	}
 }

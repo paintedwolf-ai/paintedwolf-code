@@ -141,7 +141,9 @@ func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}
 	pending := "## Progress\n- [ ] Build feature"
 	for attempt := 0; attempt < 2; attempt++ {
-		_, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": pending}, tctx)
+		snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
+		testutil.FailErr(t, "observe pending checklist", err)
+		_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": pending, "expected_revision": snapshot.Revision}, tctx)
 		testutil.FailErr(t, "record pending work", err)
 		refusal, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true)
 		if !blocked || refusal == nil || refusal.Code() != "PROGRESS_OPEN_BEFORE_CLOSEOUT" {
@@ -154,7 +156,9 @@ func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 			t.Fatal("pending work armed a worker-completion latch")
 		}
 	}
-	_, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature"}, tctx)
+	snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
+	testutil.FailErr(t, "observe completed checklist revision", err)
+	_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature", "expected_revision": snapshot.Revision}, tctx)
 	testutil.FailErr(t, "record completed work", err)
 	if _, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true); blocked {
 		t.Fatal("completed work still blocks closeout")

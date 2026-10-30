@@ -13,7 +13,7 @@ import (
 )
 
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
@@ -42,14 +42,18 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	content := m.progress.Get(ctx, rootID)
+	snapshot, err := m.progress.Snapshot(ctx, rootID)
+	if err != nil {
+		return
+	}
+	content := snapshot.Content
 	done, pending, na := progress.CloseCounts(content)
 	baseline, armed := m.baselines.Load(rootID)
 	if pending == 0 && !armed {
 		return
 	}
 	if !armed {
-		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content}
+		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content, Revision: snapshot.Revision}
 	}
 	if entry := m.settledWorkEntry(jobID); entry != "" && !slices.Contains(baseline.Settled, entry) {
 		baseline.Settled = append(slices.Clone(baseline.Settled), entry)

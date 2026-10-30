@@ -22,7 +22,7 @@ func TestPreparedAuthorUpdateHasNoEffectUntilApply(t *testing.T) {
 	if !result.Updated || store.Get(t.Context(), "session") != content {
 		t.Fatalf("progress=%+v content=%q", result, store.Get(t.Context(), "session"))
 	}
-	result, err = prepared.Apply(t.Context(), store, "session", nil)
+	result, err = prepared.ExpectRevision(result.Snapshot.Revision).Apply(t.Context(), store, "session", nil)
 	testutil.FailErr(t, "reapply identical progress", err)
 	if result.Updated {
 		t.Fatal("identical progress created another update")
@@ -71,7 +71,9 @@ func TestPreparedAuthorUpdateUsesTheAppliedSessionHistory(t *testing.T) {
 		t.Fatalf("refused initial completion wrote %q", got)
 	}
 	testutil.FailErr(t, "install existing open checklist", store.Set("session", "## Progress\n- [ ] Inspect source"))
-	result, err := prepared.Apply(t.Context(), store, "session", nil)
+	observed, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "observe existing checklist", err)
+	result, err := prepared.ExpectRevision(observed.Revision).Apply(t.Context(), store, "session", nil)
 	testutil.FailErr(t, "complete the existing checklist", err)
 	if !result.Updated || store.Get(t.Context(), "session") != "## Progress\n- [x] Inspect source" {
 		t.Fatalf("completed checklist: %+v / %q", result, store.Get(t.Context(), "session"))

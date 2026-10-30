@@ -362,7 +362,9 @@ Matched results explain how to recover their public records when no body is pres
 `update_progress` returns the current bounded document snapshot, an opaque revision,
 `document_changed`, `state_changed`, `deliverable_closed`, and `reconciliation_status`.
 The revision includes the bound workflow run and persisted last-write identity;
-copy it into `expected_revision` when replacing the document. A stale replacement
+copy it into `expected_revision` when replacing the document. First creation
+may omit it; replacements without a revision return `PROGRESS_REVISION_REQUIRED`
+and the current snapshot without writing. A stale replacement
 returns `PROGRESS_REVISION_CHANGED` with the current state and writes nothing.
 Document replacement is atomic with its revision check. These are additive
 `agent-public` tool arguments and results; the stored Markdown and database shape

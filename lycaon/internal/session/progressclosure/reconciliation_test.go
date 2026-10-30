@@ -24,6 +24,11 @@ func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) 
 	testutil.FailErr(t, "read checklist", err)
 	view := closure.Reconciliation("session")
 	handler := reporting.ProgressHandler(store, func(_ctx context.Context, session string) string { return session }, closure)
+	_, err = handler(t.Context(), map[string]any{"content": before.Content, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	var missingRevision *toolrejection.ToolReject
+	if !errors.As(err, &missingRevision) || missingRevision.Code != "PROGRESS_REVISION_REQUIRED" || closure.Reconciliation("session") == nil {
+		t.Fatalf("acknowledgement bypassed revision requirement: %v", err)
+	}
 	body, err := handler(t.Context(), map[string]any{"content": before.Content, "expected_revision": before.Revision, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
 	testutil.FailErr(t, "acknowledge represented finish", err)
 	var result struct {
@@ -163,5 +168,26 @@ func TestFinishAfterCommitSurvivesAnOlderAcknowledgement(t *testing.T) {
 	testutil.FailErr(t, "commit document before new finish", err)
 	if !result.Updated || result.ReconciliationStatus != "changed" || result.Snapshot.Reconciliation == nil || len(result.Snapshot.Reconciliation.Jobs) != 2 || !progress.AllTerminal(result.Snapshot.Content) {
 		t.Fatalf("postcommit finish was consumed: %+v", result)
+	}
+}
+
+func TestReconciliationTokenBindsTheExactBaselineRevision(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
+	owner := progressclosure.New()
+	owner.SetProgress(store)
+	owner.Arm(t.Context(), "session", "worker-one")
+	first := owner.Reconciliation("session")
+	if !owner.Acknowledge("session", first.Token) {
+		t.Fatal("current token rejected")
+	}
+	testutil.FailErr(t, "publish identical bytes in a new revision", store.Set("session", "- [ ] Deliver"))
+	owner.Arm(t.Context(), "session", "worker-one")
+	second := owner.Reconciliation("session")
+	if first.Token == second.Token || owner.Acknowledge("session", first.Token) {
+		t.Fatal("old revision token acknowledged a newer baseline")
+	}
+	if !owner.Acknowledge("session", second.Token) {
+		t.Fatal("new baseline token rejected")
 	}
 }

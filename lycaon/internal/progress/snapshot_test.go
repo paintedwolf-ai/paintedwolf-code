@@ -54,7 +54,9 @@ func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
 		t.Helper()
 		update, err := PrepareAuthorUpdate(content)
 		testutil.FailErr(t, "prepare checklist", err)
-		result, err := update.Apply(t.Context(), store, "session", nil)
+		observed, err := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "observe checklist", err)
+		result, err := update.ExpectRevision(observed.Revision).Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "apply checklist", err)
 		return result
 	}

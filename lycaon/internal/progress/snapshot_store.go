@@ -27,11 +27,17 @@ func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	key := normalizeKey(sessionID)
 	record := s.bySess[key]
 	current := snapshotVersion(record.runID, record.content, strconv.FormatUint(record.revision, 10))
 	content, err := change(current)
 	if err != nil {
+		return current, err
+	}
+	if err := ctx.Err(); err != nil {
 		return current, err
 	}
 	if record.content != clampContent(content) {

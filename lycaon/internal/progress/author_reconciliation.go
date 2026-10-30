@@ -15,7 +15,7 @@ func (u AuthorUpdate) validateReconciliation(ctx context.Context, store Store, r
 	if reconciler != nil {
 		pending = reconciler.Reconciliation(root)
 	}
-	if u.expectedRevision != "" && pending != nil && pending.Token == u.reconciliationToken {
+	if pending != nil && pending.Token == u.reconciliationToken {
 		return nil
 	}
 	current, err := store.Snapshot(ctx, root)

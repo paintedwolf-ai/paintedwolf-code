@@ -102,37 +102,48 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 }
 
 func TestProgramEnvelopeChecksTheSharedOwnersObservedRevision(t *testing.T) {
-	parent, tc := frameFixture(t)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
-	testutil.FailErr(t, "freeze actual model frame", err)
-	defer frame.Close()
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "load current owner schema", err)
-	registry, err := tools.NewCatalogRegistry(schemas)
-	testutil.FailErr(t, "bind owner catalog", err)
-	testutil.FailErr(t, "register owner metadata", registry.Register("update_progress", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		t.Fatal("recursive progress handler dispatch")
-		return "", nil
-	}))
-	executor := NewExecutor(nil, registry, "fixture")
-	owner := progress.NewMemoryStore()
-	testutil.FailErr(t, "seed pending deliverable", owner.Set("session", "- [ ] Deliver"))
-	before, err := owner.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "observe current revision", err)
-	update := &ProgramProgressUpdate{ExecutionID: "progress-revision", Arguments: map[string]any{"content": "- [x] Deliver", "expected_revision": before.Revision}}
-	prepared, err := executor.PrepareProgramEnvelope(t.Context(), frame, &envelopeIdentityFixture{catalog: parent.CatalogDigest}, update, stageMemory(t, 64<<20), tc)
-	testutil.FailErr(t, "prepare revision-aware progress envelope", err)
-	defer prepared.Close()
-	testutil.FailErr(t, "publish newer scope", owner.Set("session", "- [ ] Deliver\n- [ ] Verify"))
-	marker := progressStartFunc(func(context.Context, toolcontract.ProgramProgressIdentity, string, toolcontract.ReviewedOperationInputs) error {
-		return nil
-	})
-	outcome, err := executor.ApplyProgramProgress(t.Context(), prepared, owner, nativeProgressFixture{owner}, nil, marker, tc)
-	var rejected *toolrejection.ToolReject
-	if !errors.As(err, &rejected) || rejected.Code != "PROGRESS_REVISION_CHANGED" || !outcome.OwnerInvoked || outcome.Outcome.Updated {
-		t.Fatalf("stale composed update: %+v / %v", outcome, err)
-	}
-	if owner.Get(t.Context(), "session") != "- [ ] Deliver\n- [ ] Verify" {
-		t.Fatal("composed progress bypassed the shared owner's revision")
+	for _, mode := range []string{"stale", "missing"} {
+		t.Run(mode, func(t *testing.T) {
+			parent, tc := frameFixture(t)
+			frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
+			testutil.FailErr(t, "freeze actual model frame", err)
+			defer frame.Close()
+			schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+			testutil.FailErr(t, "load current owner schema", err)
+			registry, err := tools.NewCatalogRegistry(schemas)
+			testutil.FailErr(t, "bind owner catalog", err)
+			testutil.FailErr(t, "register owner metadata", registry.Register("update_progress", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				t.Fatal("recursive progress handler dispatch")
+				return "", nil
+			}))
+			executor := NewExecutor(nil, registry, "fixture")
+			owner := progress.NewMemoryStore()
+			testutil.FailErr(t, "seed pending deliverable", owner.Set("session", "- [ ] Deliver"))
+			before, err := owner.Snapshot(t.Context(), "session")
+			testutil.FailErr(t, "observe current revision", err)
+			update := &ProgramProgressUpdate{ExecutionID: "progress-revision", Arguments: map[string]any{"content": "- [x] Deliver", "expected_revision": before.Revision}}
+			if mode == "missing" {
+				delete(update.Arguments, "expected_revision")
+			}
+			prepared, err := executor.PrepareProgramEnvelope(t.Context(), frame, &envelopeIdentityFixture{catalog: parent.CatalogDigest}, update, stageMemory(t, 64<<20), tc)
+			testutil.FailErr(t, "prepare revision-aware progress envelope", err)
+			defer prepared.Close()
+			testutil.FailErr(t, "publish newer scope", owner.Set("session", "- [ ] Deliver\n- [ ] Verify"))
+			marker := progressStartFunc(func(context.Context, toolcontract.ProgramProgressIdentity, string, toolcontract.ReviewedOperationInputs) error {
+				return nil
+			})
+			outcome, err := executor.ApplyProgramProgress(t.Context(), prepared, owner, nativeProgressFixture{owner}, nil, marker, tc)
+			var rejected *toolrejection.ToolReject
+			wantCode := "PROGRESS_REVISION_CHANGED"
+			if mode == "missing" {
+				wantCode = "PROGRESS_REVISION_REQUIRED"
+			}
+			if !errors.As(err, &rejected) || rejected.Code != wantCode || !outcome.OwnerInvoked || outcome.Outcome.Updated {
+				t.Fatalf("stale composed update: %+v / %v", outcome, err)
+			}
+			if owner.Get(t.Context(), "session") != "- [ ] Deliver\n- [ ] Verify" {
+				t.Fatal("composed progress bypassed the shared owner's revision")
+			}
+		})
 	}
 }

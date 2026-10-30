@@ -70,6 +70,9 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	var previous string
 	snapshot, err := store.Update(ctx, root, func(current Snapshot) (string, error) {
 		previous = current.Content
+		if current.Content != "" && u.expectedRevision == "" {
+			return "", &AuthorUpdateRejection{Code: "PROGRESS_REVISION_REQUIRED", Data: map[string]any{"snapshot": current}}
+		}
 		if u.expectedRevision != "" && u.expectedRevision != current.Revision {
 			return "", &AuthorUpdateRejection{Code: "PROGRESS_REVISION_CHANGED", Data: map[string]any{"snapshot": current}}
 		}
@@ -87,7 +90,7 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 		if reconciler != nil {
 			result.Snapshot.Reconciliation = reconciler.Reconciliation(root)
 		}
-		if rejection, ok := err.(*AuthorUpdateRejection); ok && rejection.Code == "PROGRESS_REVISION_CHANGED" {
+		if rejection, ok := err.(*AuthorUpdateRejection); ok && (rejection.Code == "PROGRESS_REVISION_CHANGED" || rejection.Code == "PROGRESS_REVISION_REQUIRED") {
 			rejection.Data["snapshot"] = result.Snapshot
 		}
 		return result, err

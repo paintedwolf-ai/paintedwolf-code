@@ -14,9 +14,9 @@ func reconciliation(root string, baseline guard.ProgressClosureBaseline) *progre
 	jobs := slices.Clone(baseline.JobIDs)
 	slices.Sort(jobs)
 	raw, _ := json.Marshal(struct {
-		Root, Content string
-		Jobs          []string
-	}{root, baseline.Content, jobs})
+		Root, Revision string
+		Jobs           []string
+	}{root, baseline.Revision, jobs})
 	digest := sha256.Sum256(raw)
 	return &progress.Reconciliation{Token: hex.EncodeToString(digest[:]), Jobs: jobs}
 }

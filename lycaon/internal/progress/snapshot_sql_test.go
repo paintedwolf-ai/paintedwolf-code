@@ -21,7 +21,9 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	for _, text := range []string{"- [ ] Other scope", before.Content} {
 		update, prepareErr := progress.PrepareAuthorUpdate(text)
 		testutil.FailErr(t, "prepare checklist", prepareErr)
-		_, applyErr := update.Apply(t.Context(), store, "session", nil)
+		observed, readErr := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "observe replacement revision", readErr)
+		_, applyErr := update.ExpectRevision(observed.Revision).Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "replace checklist", applyErr)
 	}
 	reopened := progress.NewSQLStore(database)
@@ -70,6 +72,19 @@ func TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.
 			testutil.FailErr(t, "read rejected replacement", err)
 			if before != after {
 				t.Fatal("rejected replacement changed snapshot")
+			}
+			during, cancelDuring := context.WithCancel(t.Context())
+			_, err = store.Update(during, "session", func(progress.Snapshot) (string, error) {
+				cancelDuring()
+				return "- [x] Preserve", nil
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation during publication: %v", err)
+			}
+			after, err = store.Snapshot(t.Context(), "session")
+			testutil.FailErr(t, "read canceled publication", err)
+			if before != after {
+				t.Fatal("canceled publication changed snapshot")
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()

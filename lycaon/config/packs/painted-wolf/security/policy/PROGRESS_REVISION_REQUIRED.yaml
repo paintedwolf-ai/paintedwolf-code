@@ -1,0 +1,24 @@
+oar: '1.0'
+id: PROGRESS_REVISION_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [update_progress]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_REVISION_REQUIRED"
+effect: block
+copy:
+  what: Replacing an existing checklist requires its current revision.
+  cause: This replacement omitted expected_revision.
+  why: The observed revision binds the replacement to the checklist it was prepared from.
+  fix: Use the returned snapshot to prepare the replacement, then submit its revision as expected_revision.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress snapshot revision required
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: update_progress
+  expect_contains: ['Code: PROGRESS_REVISION_REQUIRED']
