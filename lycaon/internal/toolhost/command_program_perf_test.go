@@ -300,7 +300,7 @@ func warmCatalog(tb testing.TB, catalog *sourcecatalog.Catalog, dir string) bool
 		info, err := file.Stat()
 		testutil.FailErr(tb, "stat fixture content", err)
 		version := fspath.ObserveFile(info)
-		observable = observable && version.Known && version.Links == 1
+		observable = observable && version.Known && version.Links > 0
 		observation := catalog.Literals.BeginRead(dir, entry, version)
 		_, err = io.Copy(io.Discard, observation.Wrap(tb.Context(), file))
 		testutil.FailErr(tb, "observe fixture stream", err)

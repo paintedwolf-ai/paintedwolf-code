@@ -2,10 +2,14 @@ package search
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCommandsLearnContentWithoutCatalogPreparation(t *testing.T) {
@@ -17,14 +21,15 @@ func TestCommandsLearnContentWithoutCatalogPreparation(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(argv), func(t *testing.T) {
 			h := newHarness(t, indexCorpus())
-			markContentWatch(t, h.root)
 			h.owners.Catalog = sourcecatalog.New()
 			cold := h.exec("", argv...)
 			warm := h.exec("", argv...)
 			if cold.err != nil || warm.err != nil || cold.stdout != warm.stdout || cold.stderr != warm.stderr || cold.result != warm.result {
 				t.Fatalf("cold=%+v warm=%+v", cold, warm)
 			}
-			if coldN, warmN := len(h.pins.paths(cold.execution)), len(h.pins.paths(warm.execution)); warmN >= coldN || warmN > 3 {
+			info, err := os.Stat(filepath.Join(h.root, "src", "match.go"))
+			testutil.FailErr(t, "native observation capability", err)
+			if coldN, warmN := len(h.pins.paths(cold.execution)), len(h.pins.paths(warm.execution)); fspath.ObserveFile(info).Known && (warmN >= coldN || warmN > 3) {
 				t.Fatalf("captures cold=%d warm=%d", coldN, warmN)
 			}
 		})
@@ -43,7 +48,6 @@ func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(argv), func(t *testing.T) {
 			h := newHarness(t, files)
-			markContentWatch(t, h.root)
 			live := h.exec("", argv...)
 			h.owners.Catalog = sourcecatalog.New()
 			_ = h.exec("", "grep", "-ra", "not-present", "src")
@@ -55,8 +59,52 @@ func TestIndexedByteSearchPreservesEncodedAndBinaryResults(t *testing.T) {
 	}
 }
 
-func markContentWatch(t *testing.T, root string) {
-	t.Helper()
-	repochange.MarkCoverageCompleteForTest(root)
-	t.Cleanup(func() { repochange.CloseRoot(root) })
+func TestContentProofsTrackLiveVersionsAcrossAliases(t *testing.T) {
+	for _, kind := range []string{"directory-link", "hard-link", "transient-outside-link"} {
+		t.Run(kind, func(t *testing.T) {
+			h := newHarness(t, map[string]string{"real/file.txt": "ordinary text\n"})
+			target := filepath.Join(h.root, "real", "file.txt")
+			info, err := os.Stat(target)
+			testutil.FailErr(t, "original file metadata", err)
+			aliases := []string{"./real/file.txt"}
+			writePath := target
+			switch kind {
+			case "directory-link":
+				testutil.FailErr(t, "directory alias", os.Symlink("real", filepath.Join(h.root, "alias")))
+				aliases = append(aliases, "./alias/file.txt")
+			case "hard-link":
+				writePath = filepath.Join(h.root, "alias.txt")
+				testutil.FailErr(t, "hard-link alias", os.Link(target, writePath))
+				aliases = append(aliases, "./alias.txt")
+			}
+			h.owners.Catalog = sourcecatalog.New()
+			cold := h.exec("", "grep", "-Rl", "NeedleToken", ".")
+			warm := h.exec("", "grep", "-Rl", "NeedleToken", ".")
+			cold.expect(t, "cold absence", "", "", 1)
+			warm.expect(t, "warm absence", "", "", 1)
+			current, err := os.Stat(target)
+			testutil.FailErr(t, "linked metadata", err)
+			if version := fspath.ObserveFile(current); version.Known && len(h.pins.paths(warm.execution)) >= len(h.pins.paths(cold.execution)) {
+				t.Fatal("current alias facts were not reused")
+			}
+			if kind == "transient-outside-link" {
+				writePath = filepath.Join(t.TempDir(), "outside")
+				testutil.FailErr(t, "outside hard link", os.Link(target, writePath))
+			}
+			testutil.FailErr(t, "write through alias", os.WriteFile(writePath, []byte("NeedleToken!!\n"), 0o644))
+			testutil.FailErr(t, "restore modification time", os.Chtimes(target, info.ModTime(), info.ModTime()))
+			if kind == "transient-outside-link" {
+				testutil.FailErr(t, "retire outside alias", os.Remove(writePath))
+			}
+			changed := h.exec("", "grep", "-Rl", "NeedleToken", ".")
+			if changed.err != nil || changed.result.Status != 0 {
+				t.Fatalf("changed search=%+v", changed)
+			}
+			for _, alias := range aliases {
+				if !strings.Contains(changed.stdout, alias+"\n") {
+					t.Fatalf("alias %s was excluded: %q", alias, changed.stdout)
+				}
+			}
+		})
+	}
 }

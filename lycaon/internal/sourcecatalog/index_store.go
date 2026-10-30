@@ -86,8 +86,7 @@ type indexStore struct {
 	observations         pagedview.Preparation[string, DirectoryObservation]
 	observationInterests observationInterests
 	// content holds the per-projection bloom builds this index feeds.
-	content         map[string]*contentBuild
-	contentRevision uint64
+	content map[string]*contentBuild
 	// projections counts open ProjectionRows, whose rows live in this store's
 	// presentation; guarded by mu. The store stays admitted while any is open.
 	projections int
