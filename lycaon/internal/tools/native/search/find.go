@@ -464,7 +464,7 @@ func (r *findRun) empty(e entry) (bool, error) {
 		if err := r.walker.visit(); err != nil {
 			return false, err
 		}
-		names, err := e.bound.ReadDir()
+		names, err := r.walker.directoryNames(e)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				r.inv.fail(false, "'%s': %s", e.display, reason)

@@ -1,9 +1,10 @@
 package fseffect
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 func readDirectoryPath(file *os.File) (string, error) {

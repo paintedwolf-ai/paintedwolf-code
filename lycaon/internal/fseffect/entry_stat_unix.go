@@ -52,6 +52,9 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 // StatChildAt reports an immediate child's no-follow metadata through a held
 // contained directory descriptor.
 func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(string) error) (EntryStat, error) {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
+		return EntryStat{}, ErrInvalidPath
+	}
 	dirName, err := r.DirectoryPath(dir)
 	if err != nil {
 		return EntryStat{}, err

@@ -168,6 +168,12 @@ func (d *BoundDir) Close() error {
 
 // StatChild binds and stats one immediate entry of the held directory without following links.
 func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
+	if d.closed {
+		return BoundPath{}, fseffect.EntryStat{}, os.ErrClosed
+	}
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsRune(name, 0) {
+		return BoundPath{}, fseffect.EntryStat{}, invalidOperand(name, "expected an immediate directory entry")
+	}
 	child := d.dir.Child(name)
 	if !d.VisibleChild(name) {
 		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)

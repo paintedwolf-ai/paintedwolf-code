@@ -2,12 +2,12 @@ package search
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -63,6 +63,7 @@ func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	}
 	if err := bound.Validate(); err != nil {
 		if old, ok := w.roots[path]; ok {
+			w.work.opens += old.DescriptorOpens()
 			_ = old.Close()
 			delete(w.roots, path)
 		}
@@ -116,19 +117,31 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	return e, nil
 }
 
-// children lists a directory's admitted entries in unsigned byte order.
-// follow reports the target metadata of contained links; a link whose
-// target cannot be reached stays a link.
 const heldTraversalDirectories = 64
 
-func (w *walker) children(dir entry, follow bool) ([]entry, func(), error) {
-	var opened *projectpaths.BoundDir
-	var err error
+// openDirectory preserves parent-relative authority for reached directories.
+func (w *walker) openDirectory(dir entry) (*projectpaths.BoundDir, error) {
 	if dir.parent != nil {
-		opened, err = dir.parent.OpenChildDirectory(dir.name)
-	} else {
-		opened, err = dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+		return dir.parent.OpenChildDirectory(dir.name)
 	}
+	return dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+}
+
+// directoryNames observes membership without retaining it across command actions.
+func (w *walker) directoryNames(dir entry) ([]string, error) {
+	opened, err := w.openDirectory(dir)
+	if err != nil {
+		return nil, err
+	}
+	w.work.handles++
+	w.work.peak = max(w.work.peak, w.held+1)
+	defer opened.Close()
+	return opened.Names(projectpaths.DirectoryNames{IncludeHidden: true})
+}
+
+// children keeps admitted, byte-ordered membership alive until the caller releases it.
+func (w *walker) children(dir entry, follow bool) ([]entry, func(), error) {
+	opened, err := w.openDirectory(dir)
 	if err != nil {
 		return nil, func() {}, err
 	}
