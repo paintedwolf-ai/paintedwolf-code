@@ -2,6 +2,7 @@ package projectpaths
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -75,29 +76,53 @@ func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error)
 	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file}, nil
 }
 
-// Names reads one complete membership in unsigned byte order.
-func (d *BoundDir) Names() ([]string, error) {
+// DirectoryEntriesLimitError reports membership beyond a consumer's bound.
+type DirectoryEntriesLimitError struct{ Entries int }
+
+func (e *DirectoryEntriesLimitError) Error() string {
+	return "directory membership exceeds entry limit"
+}
+
+// Names reads byte-ordered membership; a positive maximum bounds retained names.
+func (d *BoundDir) Names(maximum int) ([]string, error) {
 	if d.listed {
+		if d.listErr == nil && maximum > 0 && len(d.names) > maximum {
+			return nil, &DirectoryEntriesLimitError{Entries: maximum + 1}
+		}
 		return d.names, d.listErr
 	}
 	d.listed = true
-	names, err := d.file.Readdirnames(-1)
-	if err != nil {
-		d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
-		return nil, d.listErr
-	}
-	kept := names[:0]
-	for _, name := range names {
-		if d.visible(name) {
-			kept = append(kept, name)
+	var names []string
+	for {
+		quantum := 1024
+		if maximum > 0 {
+			quantum = min(quantum, maximum-len(names)+1)
+		}
+		batch, err := d.file.Readdirnames(quantum)
+		for _, name := range batch {
+			if d.VisibleChild(name) {
+				names = append(names, name)
+			}
+		}
+		if maximum > 0 && len(names) > maximum {
+			d.listErr = &DirectoryEntriesLimitError{Entries: maximum + 1}
+			return nil, d.listErr
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
+			return nil, d.listErr
 		}
 	}
-	slices.Sort(kept)
-	d.names = kept
+	slices.Sort(names)
+	d.names = names
 	return d.names, nil
 }
 
-func (d *BoundDir) visible(name string) bool {
+// VisibleChild applies the namespace's recovery exclusions.
+func (d *BoundDir) VisibleChild(name string) bool {
 	if strings.Contains(d.dir.Resolved.Abs, settingsoverlay.DirName()) || name == settingsoverlay.DirName() || name == settingsoverlay.RecoveryDirName {
 		child := d.dir.Resolved.Abs + string(filepath.Separator) + name
 		return !settingsoverlay.HasRecoverySegment(child) && !settingsoverlay.IsRecoveryOnlyDir(child)
@@ -116,7 +141,7 @@ func (d *BoundDir) Close() error {
 // StatChild binds and stats one immediate entry of the held directory without following links.
 func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
 	child := d.dir.Child(name)
-	if !d.visible(name) {
+	if !d.VisibleChild(name) {
 		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
 	}
 	st, err := d.root.StatChildAt(d.file, child.exactRelative, name, child.admitEntry)
@@ -166,7 +191,7 @@ func (p BoundPath) ReadDir() ([]string, error) {
 		return nil, err
 	}
 	defer dir.Close()
-	return dir.Names()
+	return dir.Names(0)
 }
 
 // Child binds one entry beneath a bound directory with the same authority.

@@ -204,7 +204,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 	opened, err := dir.OpenDir()
 	var names []string
 	if err == nil {
-		names, err = opened.Names()
+		names, err = opened.Names(0)
 		if err != nil {
 			_ = opened.Close()
 		}

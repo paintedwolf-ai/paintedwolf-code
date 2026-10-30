@@ -1,7 +1,6 @@
 package search
 
 import (
-	"errors"
 	"io/fs"
 	"log/slog"
 
@@ -94,11 +93,6 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 		w.work.prepared++
 	}
 	if err != nil {
-		var exceeded *sourcecatalog.DirectoryLimitError
-		if errors.As(err, &exceeded) {
-			w.visited = w.maximum
-			return nil, true, w.visit()
-		}
 		return nil, false, w.inv.ctx.Err()
 	}
 	filter, err := w.filter(dir.bound)
@@ -107,6 +101,9 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	}
 	out := make([]entry, 0, len(listing.Entries))
 	for _, item := range listing.Entries {
+		if !opened.VisibleChild(item.Name) {
+			continue
+		}
 		if err := w.visit(); err != nil {
 			return nil, true, err
 		}
