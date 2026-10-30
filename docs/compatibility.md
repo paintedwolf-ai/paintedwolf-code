@@ -249,6 +249,13 @@ count; drafts and unactivated tags do not. Activation receipts retain obligation
 when a GitHub mirror fails or a channel pointer later advances. SemVer 2.0 precedence applies to preview names: use dot-separated numeric prerelease identifiers (`-rc.N`) so multi-digit candidates sort numerically (`1.0.2-rc.10 > 1.0.2-rc.9`) across both release gates and the native updater.
 Full database shape and upgrade rehearsal checks follow with the built candidate.
 
+The native command cutover retires `paintedwolf.habit_redirect_match` in favor of
+`paintedwolf.native_operation` and `paintedwolf.native_command`. The former
+`USE_*_NATIVE` command-to-tool redirects are retired: supported native forms run
+directly, and unavailable forms use `COMMAND_NATIVE_FORM_UNSUPPORTED`. The
+retirement catalog records this lineage; it does not translate old facts or
+restore retired rules.
+
 The release controller is pinned to `refs/heads/main` and reads the selected candidate tree
 (including [`agent-public-retirements.json`](../schemas/agent-public-retirements.json)),
 so neither a tag push nor an older qualified source can select an older compatibility gate.

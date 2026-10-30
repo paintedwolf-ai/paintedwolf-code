@@ -20,6 +20,9 @@ host: paintedwolf
 # Successors: paintedwolf.misplaced_fields, paintedwolf.found_under, and paintedwolf.belongs_under.
 # Retired: paintedwolf.unparsed_json conflated encoded JSON with malformed JSON.
 # Successors: paintedwolf.json_encoded and paintedwolf.json_malformed.
+# Retired: paintedwolf.habit_redirect_match selected command-to-tool redirects.
+# Successors: paintedwolf.native_operation and paintedwolf.native_command identify
+# the reached native operation directly; command programs do not redirect to tools.
 # Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
