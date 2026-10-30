@@ -153,3 +153,15 @@ func TestScanReaderReleasesAdmissionOnEveryExit(t *testing.T) {
 		})
 	}
 }
+
+func TestScanReaderRejectsMissingAdmissionLease(t *testing.T) {
+	limits := catalogLimits(t)
+	limits.Reserve = func(context.Context, int64) (func(), error) { return nil, nil }
+	m, err := Compile(t.Context(), Spec{Patterns: []string{"a"}, Dialect: Fixed}, limits)
+	testutil.FailErr(t, "compile missing-lease fixture", err)
+	input := &endlessScanInput{}
+	_, err = ScanReader(t.Context(), input, 0, nil, m, ScanOptions{MaxSelected: -1}, func(Line) error { return nil })
+	if err == nil || input.read != 0 {
+		t.Fatalf("missing lease admitted: err=%v read=%d", err, input.read)
+	}
+}
