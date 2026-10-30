@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import patch
 
 import verification_cancel as cancel
+import verification_lifecycle.custody as custody
 from verification_state import read_state
 
 SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")
@@ -255,7 +256,7 @@ class LifecycleTests(unittest.TestCase):
         running.wait(timeout=10)
         os.kill(child, signal.SIGKILL)
         ticket = self.queue.status()["runs"][0]["ticket"]
-        self.await_state(lambda: cancel.lease_holders(self.queue.root / (ticket + ".lease")) == {orphan})
+        self.await_state(lambda: custody.lease_holders(self.queue.root / (ticket + ".lease")) == {orphan})
         result = self.invoke(ticket, "--reason", "supervisor and child exited; an escaped descendant holds the lease")
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads(result.stdout)
@@ -372,7 +373,7 @@ class LifecycleTests(unittest.TestCase):
         running.terminate()
         running.wait(timeout=10)
         lease = self.queue.root / (ticket + ".lease")
-        self.await_state(lambda: cancel.lease_holders(lease) == {holder})
+        self.await_state(lambda: custody.lease_holders(lease) == {holder})
         self.assertFalse(cancel.released(self.queue, ticket), "live inherited holder lost admission")
         stop.touch()
         self.await_state(lambda: cancel.released(self.queue, ticket))
