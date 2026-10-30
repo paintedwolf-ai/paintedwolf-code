@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestHeldChildDirectoryPreservesParentAndAdmitsRenamedPath(t *testing.T) {
@@ -165,5 +166,30 @@ func TestNamedDirectoryFallbackRevalidatesCurrentAuthorityAndIdentity(t *testing
 	testutil.FailErr(t, "recreate configured root", os.MkdirAll(filepath.Join(root, "parent", "child"), 0700))
 	if _, err := dir.namedDirectoryPath(); err == nil {
 		t.Fatal("named fallback accepted replaced configured root")
+	}
+}
+
+func TestHeldEntryMetadataExcludesDirectoryMovedIntoRecovery(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "create allowed directory", os.Mkdir(filepath.Join(root, "allowed"), 0700))
+	testutil.FailErr(t, "seed visible child", os.WriteFile(filepath.Join(root, "allowed", "entry"), []byte("visible"), 0600))
+	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}}}
+	paths, err := NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "create program paths", err)
+	bound, err := paths.Bind(t.Context(), "allowed", false)
+	testutil.FailErr(t, "bind allowed directory", err)
+	dir, err := bound.OpenDir()
+	testutil.FailErr(t, "hold allowed directory", err)
+	defer dir.Close()
+	_, _, err = dir.StatChild("entry")
+	testutil.FailErr(t, "read original child metadata", err)
+	recovery := filepath.Join(root, ".paintedwolf", "recovery")
+	testutil.FailErr(t, "create recovery namespace", os.MkdirAll(recovery, 0700))
+	testutil.FailErr(t, "move held parent into recovery", os.Rename(filepath.Join(root, "allowed"), filepath.Join(recovery, "moved")))
+	if _, _, err := dir.StatChild("entry"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovery metadata visible through held parent: %v", err)
+	}
+	if _, err := dir.Child("entry"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovery child admitted through held parent: %v", err)
 	}
 }
