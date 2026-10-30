@@ -12,12 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
-// ProgramInputCapture binds inspection to actual host program/capture scope and
-// shared resource pools. Scope is captured by the introducing host entry, never
-// derived from argument text. Resolved credential values are not input to this
-// producer. The original opaque review identity stays in the receipt separately.
+// ProgramInputCapture screens inspection bytes within the host capture scope.
 type ProgramInputCapture struct {
-	// State is the actual aggregate program lease, distinct from Outputs session storage.
+	// State charges the program; Outputs charges the session retention lifetime.
 	State                      toolcontract.ReviewStateAdmission
 	Outputs                    *ProgramOutputRetention
 	Projector                  *captureprojection.Projector
@@ -27,17 +24,13 @@ type ProgramInputCapture struct {
 	MaximumNodes, MaximumDepth int
 }
 
-// ProjectOperationInputs is the native approval inspection producer. It screens
-// raw keys/string bytes using the actual bounded capture owner; its lease must
-// remain held through lossless encoding and card/event publication.
+// ProjectOperationInputs retains its lease through encoding and publication.
 func (p ProgramInputCapture) ProjectOperationInputs(ctx context.Context, state toolcontract.ReviewStateAdmission, arguments map[string]any) (map[string]any, func(), error) {
 	projected, _, release, err := p.project(ctx, state, "operation.arguments", arguments)
 	return projected, release, err
 }
 
-// ProjectOperationDiagnostic screens an owner rejection's diagnostic data with
-// the same bounded capture before model-visible feedback. The exact value stays
-// in the host-only diagnostic inspection domain.
+// ProjectOperationDiagnostic screens owner diagnostics before model feedback.
 func (p ProgramInputCapture) ProjectOperationDiagnostic(ctx context.Context, state toolcontract.ReviewStateAdmission, data map[string]any) (map[string]any, func(), error) {
 	projected, _, release, err := p.project(ctx, state, "operation.diagnostic", data)
 	return projected, release, err
@@ -59,33 +52,14 @@ func (p ProgramInputCapture) project(ctx context.Context, state toolcontract.Rev
 	return result, metadata, release, nil
 }
 
-func (p ProgramInputCapture) RetainReviewedProgramInputs(ctx context.Context, in toolcontract.OperationInvocation, review toolcontract.ReviewedOperationInputs) (string, error) {
+func (p ProgramInputCapture) validateNativeScope(in toolcontract.OperationInvocation) error {
 	if err := in.Validate(); err != nil {
-		return "", err
+		return err
 	}
 	if in.Kind != toolcontract.ProgramChildInvocation || in.Identity.ProgramID != p.ProgramID || in.SessionID != p.Scope.SessionID || in.Scope.ProjectID != p.Scope.ProjectID {
-		return "", fmt.Errorf("reviewed input capture does not match actual child scope")
+		return fmt.Errorf("reviewed input capture does not match actual child scope")
 	}
-	return p.retain(ctx, in.Identity.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
-		body, _, err := p.Outputs.recorder.AttachProgramOutput(ctx, p.ProgramID, RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}, spill, p.Outputs.resources)
-		return body, err
-	}, func(reference string, body []byte, redacted bool) error {
-		return p.Outputs.attachInlineInput(ctx, p.ProgramID, in.Identity.ExecutionID, in.Identity.ExecutionID, reference, body, redacted)
-	})
-}
-
-func (p ProgramInputCapture) RetainReviewedProgressInputs(ctx context.Context, in toolcontract.ProgramProgressIdentity, review toolcontract.ReviewedOperationInputs) (string, error) {
-	if err := in.Scope.Validate(); err != nil {
-		return "", err
-	}
-	if in.ExecutionID == "" || in.ActorID == "" || in.ProgramID != p.ProgramID || in.SessionID != p.Scope.SessionID || in.RootSessionID != p.Scope.RootSessionID || in.Scope.ProjectID != p.Scope.ProjectID {
-		return "", fmt.Errorf("reviewed input capture does not match actual progress scope")
-	}
-	return p.retain(ctx, in.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
-		return p.Outputs.recorder.attachProgressInput(ctx, in, reference, spill, redacted)
-	}, func(reference string, body []byte, redacted bool) error {
-		return p.Outputs.attachInlineInput(ctx, p.ProgramID, "", in.ExecutionID, reference, body, redacted)
-	})
+	return nil
 }
 
 func (p ProgramInputCapture) retain(ctx context.Context, execution string, review toolcontract.ReviewedOperationInputs, attach func(string, *tooloutput.StreamSpill, bool) (*tooloutput.RetainedStreamBody, error), inline func(string, []byte, bool) error) (string, error) {
@@ -121,8 +95,7 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		}
 		return reference, nil
 	}
-	// This is the bound for one screened input body, independent of the
-	// cumulative receipt trace bound for the whole program.
+	// Bound each screened body independently of the program trace.
 	const maximumInputBodyBytes = 8 << 20
 	err = p.Outputs.retainInput(ctx, execution, reference, canonical, maximumInputBodyBytes, metadata.RedactedCount > 0, attach)
 	if err != nil {
@@ -137,10 +110,7 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 	if !r.ready || r.release == nil {
 		return fmt.Errorf("program output recovery is incomplete")
 	}
-	// Reserve the ownership slot BEFORE storage begins, including failure paths.
-	// No generated spill or ambiguous commit can outlive an uncharged local value.
-	// The canonical arguments live in the durable stream. This lease covers the
-	// retained claim and body handle, not another copy of the arguments.
+	// Charge ownership before storage; failed commits retain the body and leases.
 	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(execution)+len(reference))*2)
 	if err != nil {
 		return err
@@ -169,11 +139,7 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 	return nil
 }
 
-var _ ReviewedProgramInputRetention = ProgramInputCapture{}
-var _ ReviewedProgressInputRetention = ProgramInputCapture{}
-
-// PrepareChild atomically attaches the actual screened expanded-input body and
-// the new dynamic receipt. The caller supplies no placeholder body reference.
+// PrepareChild commits screened expanded inputs with the dynamic receipt.
 func (p ProgramInputCapture) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) (string, error) {
 	invocation := in.Invocation
 	if err := invocation.Validate(); err != nil {

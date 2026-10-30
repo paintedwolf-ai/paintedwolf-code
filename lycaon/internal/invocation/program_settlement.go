@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,46 +17,6 @@ func validDigest(s string) bool {
 	var target [32]byte
 	_, err := hex.Decode(target[:], []byte(s))
 	return err == nil
-}
-
-// startNativeOwner records ProgramAdmissionRecorder.BeforeNativeOwner. A committed
-// start marker is a conservative recovery obligation, not proof of an effect.
-// No operation is dispatched if the durable marker cannot be acknowledged.
-func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation string) error {
-	in := operation.Invocation()
-	if err := in.Validate(); err != nil {
-		return err
-	}
-	if in.Kind != toolcontract.ProgramChildInvocation || modelCallID == "" || !validDigest(reviewedArgumentsDigest) {
-		return fmt.Errorf("native child requires actual outer model call")
-	}
-	if r == nil || r.database == nil {
-		return fmt.Errorf("invocation recorder is not configured")
-	}
-	classes, err := json.Marshal(operation.Effects().Classes())
-	if err != nil {
-		return err
-	}
-	scope, err := json.Marshal(in.Scope)
-	if err != nil {
-		return err
-	}
-	tx, err := r.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err = chargeProgramTrace(ctx, tx, in.Identity.ProgramID, 1, int64(len(reviewedArgumentsDigest)+len(reviewedReference)+len(reviewedRepresentation)+len(operation.Command())+len(operation.Mode())+len(classes)), traceChargeNonTerminal); err != nil {
-		return err
-	}
-	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=?,reviewed_arguments_ref=?,reviewed_arguments_representation=?,native_command=?,effect_mode=?,effect_classes_json=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation, operation.Command(), operation.Mode(), string(classes), in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
-	if err != nil {
-		return err
-	}
-	if err = oneProgramTransition(result); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 // WaitChild preserves one execution identity while approval or an owned job waits.
@@ -90,8 +49,7 @@ func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalRefere
 	return tx.Commit()
 }
 
-// SettleChild preserves the exact typed owner result independently of a later
-// authority stop. A failed ledger commit does not change the caller's result.
+// SettleChild retains the owner outcome separately from a later authority stop.
 func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in toolcontract.ProgramChildSettlement) error {
 	if err := in.Validate(); err != nil {
 		return err
@@ -153,8 +111,7 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in to
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// Unfinished children must first be reconciled with their real owners. An
-	// aggregate terminal cannot convert outstanding effects into a zero-effect stop.
+	// Outstanding children require owner reconciliation before program settlement.
 	var count int
 	if err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running'))+(SELECT count(*) FROM invocation_program_progress WHERE program_id=? AND state='running')`, programID, programID).Scan(&count); err != nil {
 		return err

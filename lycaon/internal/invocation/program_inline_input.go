@@ -25,17 +25,7 @@ func (r *ProgramOutputRetention) prepareChildInline(ctx context.Context, in tool
 	return r.recorder.prepareChildInline(ctx, in, body, redacted)
 }
 
-func (r *ProgramOutputRetention) attachInlineInput(ctx context.Context, program, execution, initiating, reference string, body []byte, redacted bool) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.ready || r.release == nil {
-		return fmt.Errorf("program output recovery is incomplete")
-	}
-	return r.recorder.attachInlineProgramInput(ctx, program, execution, initiating, reference, body, redacted)
-}
-
-// prepareChildInline commits screened input bytes and the prepared child in
-// one database transaction. The reference remains scoped to that execution.
+// prepareChildInline commits screened input bytes with their prepared child.
 func (r *SQLRecorder) prepareChildInline(ctx context.Context, in toolcontract.ProgramChildStart, body []byte, redacted bool) error {
 	if r == nil || r.database == nil || len(body) > maxInlineProgramInput {
 		return fmt.Errorf("inline child input requires recorder and bounded body")
@@ -58,21 +48,6 @@ func (r *SQLRecorder) prepareChildInline(ctx context.Context, in toolcontract.Pr
 		return err
 	}
 	if err := insertInlineProgramInput(ctx, tx, in.Invocation.Identity.ProgramID, in.Invocation.Identity.ExecutionID, in.Invocation.Identity.ExecutionID, in.ArgumentsReference, body, redacted); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (r *SQLRecorder) attachInlineProgramInput(ctx context.Context, program, execution, initiating, reference string, body []byte, redacted bool) error {
-	if r == nil || r.database == nil || len(body) > maxInlineProgramInput {
-		return fmt.Errorf("inline input requires recorder and bounded body")
-	}
-	tx, err := r.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := insertInlineProgramInput(ctx, tx, program, execution, initiating, reference, body, redacted); err != nil {
 		return err
 	}
 	return tx.Commit()
