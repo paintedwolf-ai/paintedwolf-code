@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"syscall"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fssync"
 )
@@ -104,8 +105,19 @@ func validateArtifact(a Artifact) error {
 	return nil
 }
 
-func (s *Store) artifactPath(digest string) string {
-	return filepath.Join(s.root, "artifacts", digest[:2], digest)
+// artifactRel is the confinement-scoped artifact path passed to os.Root.
+// Digests are hex-validated, so no component can traverse or contain a separator.
+func (s *Store) artifactRel(digest string) string {
+	return filepath.Join("artifacts", digest[:2], digest)
+}
+
+// openRoot opens the store confined: symlinked path components inside the
+// store cannot redirect opens outside it.
+func (s *Store) openRoot() (*os.Root, error) {
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return nil, fmt.Errorf("modelstore: root: %w", err)
+	}
+	return os.OpenRoot(s.root)
 }
 
 func (s *Store) journalPath() string { return filepath.Join(s.root, "journal.jsonl") }
@@ -142,16 +154,23 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	if err := validateArtifact(want); err != nil {
 		return err
 	}
-	dir := filepath.Dir(s.artifactPath(want.Digest))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	root, err := s.openRoot()
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	dir := filepath.Join("artifacts", want.Digest[:2])
+	if err := root.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("modelstore: mkdir: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, ".staging-*")
+	// Create the staging file through the confined root: a symlinked prefix
+	// directory cannot redirect creation outside the store.
+	tmpName := filepath.Join(dir, ".staging-"+fmt.Sprint(time.Now().UnixNano()))
+	tmp, err := root.Create(tmpName)
 	if err != nil {
 		return fmt.Errorf("modelstore: temp: %w", err)
 	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer root.Remove(tmpName)
 
 	h := sha256.New()
 	limited := io.LimitReader(r, want.Bytes+1)
@@ -176,12 +195,19 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("modelstore: close: %w", err)
 	}
-	if err := os.Rename(tmpName, s.artifactPath(want.Digest)); err != nil {
+	if err := root.Rename(tmpName, s.artifactRel(want.Digest)); err != nil {
 		return fmt.Errorf("modelstore: publish: %w", err)
 	}
-	if dfd, err := os.Open(dir); err == nil {
-		_ = fssync.File(dfd)
+	dfd, err := root.Open(dir)
+	if err != nil {
+		return fmt.Errorf("modelstore: publish dir: %w", err)
+	}
+	if err := fssync.File(dfd); err != nil {
 		dfd.Close()
+		return fmt.Errorf("modelstore: publish dir sync: %w", err)
+	}
+	if err := dfd.Close(); err != nil {
+		return fmt.Errorf("modelstore: publish dir close: %w", err)
 	}
 	return nil
 }
@@ -191,7 +217,12 @@ func (s *Store) Verified(digest string) bool {
 	if !digestShape.MatchString(digest) {
 		return false
 	}
-	f, err := os.Open(s.artifactPath(digest))
+	root, err := s.openRoot()
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	f, err := root.Open(s.artifactRel(digest))
 	if err != nil {
 		return false
 	}
@@ -245,12 +276,21 @@ func (s *Store) Activate(signed SignedManifest) error {
 	if err := fssync.File(f); err != nil {
 		return fmt.Errorf("modelstore: journal sync: %w", err)
 	}
+	// The directory entry must be durable too, or a first activation can vanish.
+	if dfd, err := os.Open(s.root); err != nil {
+		return fmt.Errorf("modelstore: journal dir: %w", err)
+	} else if err := fssync.File(dfd); err != nil {
+		dfd.Close()
+		return fmt.Errorf("modelstore: journal dir sync: %w", err)
+	} else if err := dfd.Close(); err != nil {
+		return fmt.Errorf("modelstore: journal dir close: %w", err)
+	}
 	return nil
 }
 
-// recoverJournal truncates a torn trailing record so later appends stay
-// well-formed. Corruption before the last newline is an error, not history.
-// Caller holds the journal lock.
+// recoverJournal validates every complete record and truncates a torn trailing
+// record so later appends stay well-formed. Corruption in any complete record
+// is an error, not history. Caller holds the journal lock.
 func (s *Store) recoverJournal() error {
 	raw, err := os.ReadFile(s.journalPath())
 	if os.IsNotExist(err) {
@@ -262,22 +302,29 @@ func (s *Store) recoverJournal() error {
 	if len(raw) > MaxJournalBytes {
 		return fmt.Errorf("modelstore: journal of %d bytes exceeds the recovery bound", len(raw))
 	}
-	// Find the last complete line.
-	tail := len(raw)
-	if tail > 0 && raw[tail-1] == '\n' {
-		return nil // nothing torn
+	// A torn final line is truncated; every complete line must parse.
+	torn := len(raw) > 0 && raw[len(raw)-1] != '\n'
+	lines := splitLines(raw)
+	if torn && len(lines) > 0 {
+		lines = lines[:len(lines)-1]
 	}
+	for i, line := range lines {
+		var m Manifest
+		if err := json.Unmarshal(line, &m); err != nil {
+			return fmt.Errorf("modelstore: journal record %d is corrupt: %w", i, err)
+		}
+		if err := validate(m); err != nil {
+			return fmt.Errorf("modelstore: journal record %d is invalid: %w", i, err)
+		}
+	}
+	if !torn {
+		return nil
+	}
+	tail := len(raw)
 	if idx := lastNewline(raw); idx >= 0 {
 		tail = idx + 1
 	} else {
 		tail = 0
-	}
-	// Everything before the tail must parse; otherwise the journal is corrupt.
-	for _, line := range splitLines(raw[:tail]) {
-		var m Manifest
-		if err := json.Unmarshal(line, &m); err != nil {
-			return fmt.Errorf("modelstore: journal corrupt at byte %d: %w", 0, err)
-		}
 	}
 	return os.Truncate(s.journalPath(), int64(tail))
 }
@@ -291,8 +338,9 @@ func lastNewline(raw []byte) int {
 	return -1
 }
 
-// Active returns the newest journaled manifest per (model, device). A torn
-// final line is ignored (the next Activate repairs it under the lock).
+// Active returns the newest journaled manifest per (model, device). Only an
+// unstaged torn final line is skipped; the next Activate repairs it under the
+// lock. A corrupt complete record is an error, never silently older state.
 func (s *Store) Active() (map[string]Manifest, error) {
 	raw, err := os.ReadFile(s.journalPath())
 	if os.IsNotExist(err) {
@@ -301,11 +349,19 @@ func (s *Store) Active() (map[string]Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("modelstore: read journal: %w", err)
 	}
+	lines := splitLines(raw)
+	torn := len(raw) > 0 && raw[len(raw)-1] != '\n'
+	if torn && len(lines) > 0 {
+		lines = lines[:len(lines)-1]
+	}
 	out := map[string]Manifest{}
-	for _, line := range splitLines(raw) {
+	for i, line := range lines {
 		var m Manifest
 		if err := json.Unmarshal(line, &m); err != nil {
-			continue // torn tail: recoverable at the next Activate
+			return nil, fmt.Errorf("modelstore: journal record %d is corrupt: %w", i, err)
+		}
+		if err := validate(m); err != nil {
+			return nil, fmt.Errorf("modelstore: journal record %d is invalid: %w", i, err)
 		}
 		out[m.Model+"/"+m.Device] = m
 	}
@@ -328,4 +384,3 @@ func splitLines(raw []byte) [][]byte {
 	}
 	return out
 }
-

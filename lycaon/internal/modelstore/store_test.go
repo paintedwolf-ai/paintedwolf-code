@@ -193,3 +193,57 @@ func newReader(b []byte) *os.File {
 	f.Seek(0, 0)
 	return f
 }
+
+func TestSymlinkEscapeRejected(t *testing.T) {
+	s := newStore(t)
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	outside := t.TempDir()
+	// A symlinked `artifacts` prefix must not redirect staging outside the store.
+	if err := os.Symlink(outside, filepath.Join(s.root, "artifacts")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	payload := []byte("weights-bytes")
+	a := testArtifact(t, payload)
+	if err := s.Stage(newReader(payload), a); err == nil {
+		t.Fatal("expected symlinked artifacts dir to fail staging")
+	}
+	if _, err := os.Lstat(filepath.Join(outside, a.Digest[:2])); !os.IsNotExist(err) {
+		t.Fatal("staging escaped the store")
+	}
+	if s.Verified(a.Digest) {
+		t.Fatal("verified followed a symlink out of the store")
+	}
+}
+
+func TestCorruptCompleteRecordFailsActive(t *testing.T) {
+	s := newStore(t)
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	payload := []byte("weights-bytes")
+	a := testArtifact(t, payload)
+	if err := s.Stage(newReader(payload), a); err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	m := Manifest{Model: "m", Revision: "r", Device: "cpu", Artifact: a}
+	if err := s.Activate(SignedManifest{Manifest: m}); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+	// Corrupt a complete record: the trailing newline stays, so recovery and
+	// Active must both detect it rather than fall back to older state.
+	raw, err := os.ReadFile(s.journalPath())
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	if err := os.WriteFile(s.journalPath(), append([]byte("garbage"), raw...), 0o644); err != nil {
+		t.Fatalf("corrupt journal: %v", err)
+	}
+	if _, err := s.Active(); err == nil {
+		t.Fatal("expected Active to reject a corrupt complete record")
+	}
+	if err := s.Activate(SignedManifest{Manifest: Manifest{Model: "m", Revision: "r2", Device: "cpu", Artifact: a}}); err == nil {
+		t.Fatal("expected Activate to reject a corrupt complete record")
+	}
+}
