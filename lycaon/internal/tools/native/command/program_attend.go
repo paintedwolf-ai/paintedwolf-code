@@ -43,6 +43,7 @@ type ParkedProgramResult struct {
 
 // programEvaluation is one bound program handed from its call to evaluation.
 type programEvaluation struct {
+	ctx          context.Context
 	run          *programRun
 	call         *programCall
 	park         *programPark
@@ -130,8 +131,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
-		if projection, err := r.Recorder.ProjectProgram(callCtx, run.tc.Identity.SessionID, programID, 1); err == nil {
-			receipt := projection.Program
+		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
 			out.CommandProgram = &receipt
 		}
 	}
@@ -211,7 +211,7 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 // finish evaluates the program under supervision, settles it and returns its
 // bounded result, whether the call still holds it or it parked.
 func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
-	run, ctx := e.run, e.call.ctx
+	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {

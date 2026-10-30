@@ -55,7 +55,10 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		return ProgramOutcome{}, err
 	}
 	if run.tc.Effects.Out != nil {
-		receipt := projection.Program
+		receipt, activityErr := r.Recorder.ActivitySummary(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID)
+		if activityErr != nil {
+			receipt = projection.Program
+		}
 		run.tc.Effects.Out.CommandProgram = &receipt
 	}
 	programID := run.root.Identity.ProgramID

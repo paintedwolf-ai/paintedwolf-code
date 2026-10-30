@@ -114,6 +114,36 @@ Activity-span principles:
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
+## Command activities
+
+Command activities describe executed work rather than model-call boundaries. A
+command may contribute several activities; adjacent reads may share an activity only when the host supplies the same
+reviewed target and execution scope identity. Each captured revision remains
+separate evidence within that activity.
+The command program, dynamic executions and transcript calls retain their own
+identities beneath that presentation.
+
+The host composes bounded receipt pages from operation definitions, screened
+expanded inputs, parser spans and execution parentage. Context operations and
+stream processing remain attached to the work they support. External programs
+remain processes: their names and output never establish a verification verdict.
+Refusals, approvals, mutations and uncertain effects retain individual outcomes.
+Activity starts publish as soon as their durable host facts are available; the UI
+does not hold work to predict later calls. Identities also travel with the command
+result. Loading detailed receipts never changes row membership. Existing rows never merge, reorder or change their labels. Related work stays in
+the same group; its title may follow the active work without creating another
+group. An incoming observation may join a compatible established row when it
+arrives. Status, outcomes and counts
+update in place.
+Missing inputs or receipts use a neutral operation presentation.
+
+Den keeps the existing group, single-line activity and expanded-detail structure.
+Rows show the action, target and outcome. Expanded cards prioritize the outcome
+and bounded output, then the original submitted command with the activity's
+source spans highlighted. Long content remains available through the existing
+recorded-content view. Paths, identifiers and unbroken output wrap inside details;
+row targets ellipsize without displacing status or disclosure controls.
+
 ## The two clocks
 
 | Clock | Meaning | May change on patch? | Used for ordering? |

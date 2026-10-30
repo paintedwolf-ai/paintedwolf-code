@@ -84,6 +84,10 @@ func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID,
 			return out, err
 		}
 	}
+	out.Activities, err = readProgramActivities(ctx, tx, out.Executions, out.Program.State != "running" && out.Program.State != "waiting")
+	if err != nil {
+		return out, err
+	}
 	return out, tx.Commit()
 }
 
@@ -92,7 +96,7 @@ func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.
 	var status sql.NullInt64
 	var started string
 	var settled sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT p.id,p.parent_receipt_id,p.language_version,p.catalog_digest,p.source_digest,p.source_ref,p.state,p.status_code,p.stop_code,p.detail_ref,p.progress_state,p.progress_ref,p.started_at,p.settled_at FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, program, session).Scan(&out.ID, &out.ParentReceiptID, &out.LanguageVersion, &out.CatalogDigest, &out.SourceDigest, &out.SourceRef, &out.State, &status, &out.StopCode, &out.DetailRef, &out.ProgressState, &out.ProgressRef, &started, &settled)
+	err := tx.QueryRowContext(ctx, `SELECT p.id,p.parent_receipt_id,p.language_version,p.catalog_digest,p.source_digest,p.source_ref,p.state,p.status_code,p.stop_code,p.detail_ref,p.progress_state,p.progress_ref,p.started_at,p.settled_at,p.trace_events FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, program, session).Scan(&out.ID, &out.ParentReceiptID, &out.LanguageVersion, &out.CatalogDigest, &out.SourceDigest, &out.SourceRef, &out.State, &status, &out.StopCode, &out.DetailRef, &out.ProgressState, &out.ProgressRef, &started, &settled, &out.ActivityRevision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrProgramNotFound
 	}
