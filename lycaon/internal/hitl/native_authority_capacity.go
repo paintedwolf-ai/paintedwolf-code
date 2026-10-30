@@ -19,12 +19,13 @@ func admitAuthorityLifecycle(ctx context.Context, projection NativeAuthorityProj
 		return err
 	}
 	// The measured SQL read coexists with the restored authority.
-	releaseMargin, err := memory.ReserveProgramState(ctx, 2048+int64(len(projection.Canonical())))
+	releaseRead, err := memory.ReserveProgramState(ctx, 2048+int64(len(projection.Canonical())))
 	if err != nil {
 		return err
 	}
-	defer releaseMargin()
+	defer releaseRead()
 	restored, release, err := restoreNativeAuthority(ctx, memory, projection.Representation(), projection.Digest(), projection.Canonical())
+	releaseRead()
 	if err != nil {
 		return fmt.Errorf("approval cannot be answered: %w", err)
 	}
