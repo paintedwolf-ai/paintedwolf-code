@@ -162,9 +162,6 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 	}
 	captured, err := e.scanFile(ctx, resolved, file, info, true)
 	if err != nil {
-		if captured != nil {
-			captured.Close()
-		}
 		_ = file.Close()
 		return ExecutionStream{}, err
 	}

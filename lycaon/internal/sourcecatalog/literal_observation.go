@@ -87,17 +87,8 @@ func (c *LiteralSearch) CanPruneBytes(rootPath string, req litprefilter.Requirem
 	return !cached.rawBloom.admitsRequirement(req)
 }
 
-// Wrap observes only bytes the consumer actually reads from a pinned stream.
+// Wrap prepares filters from captured bytes without publishing them.
 func (r *ContentRead) Wrap(ctx context.Context, reader io.Reader) io.Reader {
-	return r.wrap(ctx, reader, false)
-}
-
-// WrapCapture delays publication until the capture owner accepts its full read.
-func (r *ContentRead) WrapCapture(ctx context.Context, reader io.Reader) io.Reader {
-	return r.wrap(ctx, reader, true)
-}
-
-func (r *ContentRead) wrap(ctx context.Context, reader io.Reader, deferred bool) io.Reader {
 	if r == nil {
 		return reader
 	}
@@ -106,7 +97,7 @@ func (r *ContentRead) wrap(ctx context.Context, reader io.Reader, deferred bool)
 	if !r.claim() {
 		return reader
 	}
-	r.stream = &contentReadStream{read: r, ctx: ctx, reader: reader, builder: newLiteralContent(r.read.version.Size), deferred: deferred}
+	r.stream = &contentReadStream{read: r, ctx: ctx, reader: reader, builder: newLiteralContent(r.read.version.Size)}
 	return r.stream
 }
 
@@ -140,7 +131,6 @@ type contentReadStream struct {
 	builder  *literalContent
 	bytes    int64
 	finished bool
-	deferred bool
 }
 
 func (s *contentReadStream) Read(p []byte) (int, error) {
@@ -156,9 +146,6 @@ func (s *contentReadStream) Read(p []byte) (int, error) {
 		}
 		if !s.finished && err == io.EOF && s.bytes == s.read.read.version.Size {
 			s.finished = true
-			if !s.deferred {
-				s.completeLocked()
-			}
 		}
 	}
 	return n, err

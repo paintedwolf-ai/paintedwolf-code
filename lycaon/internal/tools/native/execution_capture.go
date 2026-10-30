@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -39,7 +40,9 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 	if err != nil {
 		return nil, nil, err
 	}
+	var observation *sourcecatalog.ContentRead
 	defer func() {
+		defer observation.Close()
 		if closeErr := file.Close(); closeErr != nil {
 			if release != nil {
 				release()
@@ -50,6 +53,9 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 			} else {
 				finalErr = errors.Join(finalErr, closeErr)
 			}
+		}
+		if finalErr == nil {
+			observation.Commit()
 		}
 	}()
 	info, err := file.Stat()
@@ -76,13 +82,8 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 		defer decoder.Close()
 		reader = decoder
 	}
-	observation := e.observeFile(resolved, info)
-	defer observation.Close()
-	data, release, err = e.readWholeInput(ctx, observation.WrapCapture(ctx, reader), maximum, resolved.DisplayPath)
-	if err == nil {
-		observation.Commit()
-	}
-	return data, release, err
+	observation = e.observeFile(resolved, info)
+	return e.readWholeInput(ctx, observation.Wrap(ctx, reader), maximum, resolved.DisplayPath)
 }
 
 // BufferedBytes owns one admitted whole operand or staged result. It carries

@@ -79,6 +79,7 @@ func TestLiveCatalogKeepsChangedContentAsCandidateWithUnchangedMetadata(t *testi
 	_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
 	testutil.FailErr(t, "observe initial stream", err)
 	testutil.FailErr(t, "close initial stream", file.Close())
+	observation.Commit()
 	observation.Close()
 	require := litprefilter.AnyOf("OmegaNeedle")
 	if pruned := catalog.Literals.CanPrune(root, require, entry); pruned != (version.Known && version.Links == 1) {

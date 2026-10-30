@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
-// grepContentIndex owns pruning and captured-byte observation for one search.
+// grepContentIndex owns pruning and capture telemetry for one search.
 type grepContentIndex struct {
 	literals *sourcecatalog.LiteralSearch
 	require  litprefilter.Requirement

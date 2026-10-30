@@ -50,5 +50,5 @@ func fixtureFileVersion(root string, entry Entry) fspath.FileObservation {
 func captureObserved(read *ContentRead, ctx context.Context, content []byte) bool {
 	defer read.Close()
 	_, err := io.Copy(io.Discard, read.Wrap(ctx, bytes.NewReader(content)))
-	return err == nil && read.Learned()
+	return err == nil && read.Commit()
 }
