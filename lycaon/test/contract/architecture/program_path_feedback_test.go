@@ -35,7 +35,7 @@ func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
 		args       []string
 		code, want string
 	}{
-		{"basename", []string{"--unsupported"}, "COMMAND_OPTION_UNSUPPORTED", "basename [--] PATH [SUFFIX]"},
+		{"basename", []string{"--unsupported"}, "COMMAND_OPTION_UNSUPPORTED", "basename [-a] [-s SUFFIX] [-z] [--] PATH [SUFFIX] | PATH ..."},
 		{"native_path", []string{"--", "/dev/null"}, "COMMAND_OPERAND_INVALID", "null device"},
 		{"native_path", []string{"--", strings.Repeat("x", 131073)}, "COMMAND_LIMIT_EXCEEDED", "argument_bytes"},
 	} {

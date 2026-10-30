@@ -84,7 +84,14 @@ func entryContent(ctx context.Context, p Prepared, root string, entry trackedEnt
 		return nil, err
 	}
 	if !ok {
-		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "path": entry.path}}
+		observed, err := p.owners.Git.BlobSize(ctx, root, entry.oid)
+		if err != nil {
+			return nil, err
+		}
+		if observed <= maximum {
+			return nil, fmt.Errorf("Git blob %s unavailable after bounded read", entry.oid)
+		}
+		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": observed, "path": entry.path}}
 	}
 	return content, nil
 }

@@ -200,9 +200,11 @@ func TestArchetypePartialsInRenderedOutput(t *testing.T) {
 				hasWriteTools, _ := vars["profile_has_write_tools"].(bool)
 				hasReadTools, _ := vars["profile_has_read_tools"].(bool)
 				hasWriteFloor := strings.Contains(got, "Security floor.")
+				commandOffered, _ := vars["profile_has_command"].(bool)
+				needsSecurityFloor := hasWriteTools || commandOffered
 				hasReadFloor := strings.Contains(got, "Secret reads.")
-				if hasWriteTools != hasWriteFloor {
-					t.Fatalf("agent %q write-tools/floor mismatch (tools=%v floor=%v)", id, hasWriteTools, hasWriteFloor)
+				if needsSecurityFloor != hasWriteFloor {
+					t.Fatalf("agent %q write-tools/floor mismatch (tools=%v floor=%v)", id, needsSecurityFloor, hasWriteFloor)
 				}
 				if hasReadTools != hasReadFloor {
 					t.Fatalf("agent %q read-tools/floor mismatch (tools=%v floor=%v)", id, hasReadTools, hasReadFloor)

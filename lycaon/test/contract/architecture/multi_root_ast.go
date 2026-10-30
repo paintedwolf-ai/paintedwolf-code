@@ -103,7 +103,7 @@ func scanMultiRootToolFile(corp *testcorpus.GoCorpus, gf testcorpus.GoFile, out 
 		pos := corp.Fset.Position(call.Pos())
 		site := gf.Rel + ":" + strconv.Itoa(pos.Line)
 		if strings.Contains(base, "projectDir") || strings.Contains(base, "ProjectDir") || base == "root" {
-			if _, allowed := multiRootJoinAllowlist[gf.Rel]; !allowed {
+			if _, allowed := multiRootJoinAllowlist[gf.Rel]; !allowed && !gitRepositoryEntryJoin(gf, call) {
 				out.SingleRootJoins = append(out.SingleRootJoins, site+" base="+base+" arg="+second)
 			}
 		}
@@ -153,4 +153,24 @@ func exprString(e ast.Expr) string {
 		return exprString(v.X) + "." + v.Sel.Name
 	}
 	return ""
+}
+
+// Git index entries are relative to the repository resolved from the reached
+// directory (-C included), not an assumed project root. Bound the exception to
+// its single-return join; other functions and additional statements still scan.
+func gitRepositoryEntryJoin(file testcorpus.GoFile, call *ast.CallExpr) bool {
+	if file.Rel != "internal/tools/native/gitcmd/file_entries.go" {
+		return false
+	}
+	for _, decl := range file.AST.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "entryAbs" || fn.Body == nil || len(fn.Body.List) != 1 {
+			continue
+		}
+		ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
+		if ok && len(ret.Results) == 1 && ret.Results[0] == call {
+			return true
+		}
+	}
+	return false
 }

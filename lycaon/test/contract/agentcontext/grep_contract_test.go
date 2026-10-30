@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,53 +13,29 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-func TestGrepInvalidRegexStructuredReject(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
-	exec := toolfixture.ContractToolExecutor(t)
-	exec.Metadata.SetToolSchemas(schemas)
-
-	_, err = exec.Invoke(context.Background(), "grep", map[string]any{
-		"pattern": "[unclosed",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID:       "r1",
-			RepoFileCount:      100,
-			RepoFileCountKnown: true},
+func TestGrepInvalidRegexProgramStatus(t *testing.T) {
+	f := toolfixture.NewProgramFixture(t)
+	out, err := f.Invoke(t, "rg '[unclosed' .", tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	if err == nil {
-		t.Fatal("expected grep regex reject")
+	contractcheck.FailErr(t, "invoke invalid regex program", err)
+	if out.Status != 2 || out.Refusal != nil || out.Stdout != "" || out.Stderr == "" {
+		t.Fatalf("invalid regex lost its ordinary command failure: %+v", out)
 	}
-	assertStructuredRejectCode(t, err, "GREP_REGEX_INVALID")
 }
 
-func TestGrepAlternationMatchesByDefault(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
-	exec := toolfixture.ContractToolExecutor(t)
-	exec.Metadata.SetToolSchemas(schemas)
-
-	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "secrets.txt"), []byte("token=1\n"), 0o644); err != nil {
-		contractcheck.FailErr(t, "write file", err)
-	}
-
-	out, err := exec.Invoke(context.Background(), "grep", map[string]any{
-		"pattern": "password|secret|token",
-		"path":    ".",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-			ActiveRootID:       "r1",
-			RepoFileCount:      100,
-			RepoFileCountKnown: true},
+func TestRipgrepAlternationMatchesByDefault(t *testing.T) {
+	root := t.TempDir()
+	contractcheck.FailErr(t, "write alternation fixture", os.WriteFile(filepath.Join(root, "secrets.txt"), []byte("token=1\n"), 0o644))
+	f := toolfixture.NewProgramFixture(t)
+	out, err := f.Invoke(t, "rg 'password|secret|token' .", tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
-	contractcheck.FailErr(t, "grep alternation default regex", err)
-	if !strings.Contains(out, "token=1") {
-		t.Fatalf("alternation should match without a regex flag: %q", out)
+	contractcheck.FailErr(t, "invoke native RE2 alternation", err)
+	if out.Status != 0 || out.Refusal != nil || !strings.Contains(out.Stdout, "token=1") {
+		t.Fatalf("alternation should match natively: %+v", out)
 	}
 }
 
