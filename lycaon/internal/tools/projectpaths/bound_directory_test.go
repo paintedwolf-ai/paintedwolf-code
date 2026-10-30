@@ -31,13 +31,13 @@ func TestHeldDirectoryReadsMembershipOnlyOnDemand(t *testing.T) {
 	if stat.Size != 4 {
 		t.Fatalf("held child=%+v", stat)
 	}
-	first, err := directory.Names(0)
+	first, err := directory.Names(projectpaths.DirectoryNames{Maximum: 0, IncludeHidden: true})
 	testutil.FailErr(t, "read names on demand", err)
 	if !slices.Contains(first, "late") {
 		t.Fatalf("opening consumed membership: %v", first)
 	}
 	testutil.FailErr(t, "create after listing", os.WriteFile(filepath.Join(root, "later"), []byte("later"), 0o600))
-	second, err := directory.Names(0)
+	second, err := directory.Names(projectpaths.DirectoryNames{Maximum: 0, IncludeHidden: true})
 	testutil.FailErr(t, "reuse held membership", err)
 	if !slices.Equal(first, second) || slices.Contains(second, "later") {
 		t.Fatalf("held membership changed: %v -> %v", first, second)
@@ -58,12 +58,12 @@ func TestHeldDirectoryBoundsOnlyVisibleNames(t *testing.T) {
 	directory, err := bound.OpenDir()
 	testutil.FailErr(t, "open bounded directory", err)
 	defer func() { testutil.FailErr(t, "close bounded directory", directory.Close()) }()
-	names, err := directory.Names(1)
+	names, err := directory.Names(projectpaths.DirectoryNames{Maximum: 1, IncludeHidden: true})
 	var exceeded *projectpaths.DirectoryEntriesLimitError
 	if !errors.As(err, &exceeded) || exceeded.Entries != 2 || len(names) != 0 {
 		t.Fatalf("bounded names=%v error=%v", names, err)
 	}
-	if _, err := directory.Names(0); !errors.As(err, &exceeded) {
+	if _, err := directory.Names(projectpaths.DirectoryNames{Maximum: 0, IncludeHidden: true}); !errors.As(err, &exceeded) {
 		t.Fatalf("partial listing became complete: %v", err)
 	}
 }
@@ -79,7 +79,7 @@ func TestClosedDirectoryCannotPublishAnEmptyNamespace(t *testing.T) {
 	testutil.FailErr(t, "close directory", directory.Close())
 	var first error
 	for range 2 {
-		names, err := directory.Names(0)
+		names, err := directory.Names(projectpaths.DirectoryNames{Maximum: 0, IncludeHidden: true})
 		if err == nil || len(names) != 0 {
 			t.Fatalf("closed namespace=%v error=%v", names, err)
 		}

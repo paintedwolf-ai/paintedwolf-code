@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -150,6 +149,7 @@ func runLs(inv *invocation) error {
 	sortEntries(dirEntries, opts)
 	visits := inv.owners.limit("traversal_visits")
 	visited := int64(0)
+	defer inv.directoryWork.report(inv)
 	labelled := len(files) > 0 || len(dirEntries) > 1 || opts.recursive
 	first := len(files) == 0
 	var walk func(label string, entry lsEntry, operand bool) error
@@ -197,86 +197,19 @@ func runLs(inv *invocation) error {
 	return nil
 }
 
-// children reads one directory's entries itself: no ignore rules or map.
-// An unreadable directory is reported and yields no entries; GNU treats an
-// unreadable command-line operand as serious (2) and a nested one as minor.
-func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
-	opened, err := dir.OpenDir()
-	var names []string
-	if err == nil {
-		names, err = opened.Names(0)
-		if err != nil {
-			_ = opened.Close()
-		}
-	}
-	if err != nil {
-		if reason, ok := ordinary(err); ok {
-			_, _ = fmt.Fprintf(inv.stderr, "ls: cannot open directory '%s': %s\n", dir.Resolved.DisplayPath, reason)
-			status := 1
-			if operand {
-				status = 2
-			}
-			inv.status = max(inv.status, status)
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-	defer opened.Close()
-	if opts.all {
-		names = append([]string{"."}, names...)
-	}
-	var out []lsEntry
-	for _, name := range names {
-		if !opts.all && !opts.almost && strings.HasPrefix(name, ".") {
-			continue
-		}
-		*visited++
-		if maximum > 0 && *visited > maximum {
-			return nil, false, tools.CommandLimitExceeded("traversal_visits", maximum, *visited)
-		}
-		var (
-			child projectpaths.BoundPath
-			st    fseffect.EntryStat
-		)
-		if name == "." {
-			child = dir
-			st, err = opts.stat(child)
-		} else {
-			child, st, err = opened.StatChild(name)
-			if err == nil && opts.deref && typeLetter(st.Mode) == 'l' {
-				if target, targetErr := opened.StatChildFollowed(child); targetErr == nil {
-					st = target
-				}
-			}
-		}
-		if err != nil {
-			if reason, ok := ordinary(err); ok {
-				inv.fail(1, path.Join(dir.Resolved.DisplayPath, name), reason)
-				continue
-			}
-			return nil, false, err
-		}
-		entry := lsEntry{name: name, stat: st, bound: child}
-		out = append(out, entry)
-	}
-	if opts.all {
-		if parent, err := inv.parentEntry(dir); err == nil {
-			out = append(out, parent)
-		}
-	}
-	return out, true, nil
-}
-
 // parentEntry describes ".." through the parent's own binding when it is
 // inside the same admitted root; it is never followed outward.
-func (inv *invocation) parentEntry(dir projectpaths.BoundPath) (lsEntry, error) {
+func (inv *invocation) parentEntry(dir projectpaths.BoundPath, metadata bool) (lsEntry, error) {
 	parent, err := inv.paths.Bind(inv.ctx, path.Join(dir.Resolved.Abs, ".."), false)
 	if err != nil {
 		return lsEntry{}, err
 	}
-	st, err := parent.Stat(false)
-	if err != nil {
-		return lsEntry{}, err
+	var st fseffect.EntryStat
+	if metadata {
+		st, err = parent.Stat(false)
+		if err != nil {
+			return lsEntry{}, err
+		}
 	}
 	return lsEntry{name: "..", stat: st, bound: parent}, nil
 }
