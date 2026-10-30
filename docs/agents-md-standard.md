@@ -71,7 +71,7 @@ resolved operation or source-observation paths. Raw command text and historical
 `path` arguments do not select a command's policy. Each scoped block identifies
 its root and jurisdiction; shared ancestors appear once, with nested policies
 and the root overlay retaining their precedence. Write workers use their private
-branch roots through the same workspace owner as tool execution.
+branch roots through the same workspace registry as tool execution.
 
 The final prepared model request determines its immutable policy manifest.
 Reached native mutations check the current applicable revisions before review

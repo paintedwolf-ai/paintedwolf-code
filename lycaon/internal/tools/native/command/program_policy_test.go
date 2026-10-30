@@ -52,9 +52,9 @@ func TestProgramPolicyAdmissionPreservesEarlierOutputAndSkipsUntakenEffects(t *t
 	}
 }
 
-func TestProgramPolicyChecksReachedTypedOperandsForNativeAndHostedOwners(t *testing.T) {
+func TestProgramPolicyChecksReachedTypedOperandsForNativeAndHostedDispatch(t *testing.T) {
 	for _, operation := range []string{"write", ""} {
-		t.Run("owner="+operation, func(t *testing.T) {
+		t.Run("dispatch="+map[string]string{"write": "native", "": "hosted"}[operation], func(t *testing.T) {
 			invoked := 0
 			f := policyOperandFixture(t, operation, &invoked)
 			target := filepath.Join(f.Dir, "nested/target")
@@ -86,9 +86,9 @@ func TestProgramPolicyChecksReachedTypedOperandsForNativeAndHostedOwners(t *test
 	}
 }
 
-func TestProgramPolicyRechecksOperandsImmediatelyBeforeOwnerEffects(t *testing.T) {
+func TestProgramPolicyRechecksOperandsImmediatelyBeforeDispatch(t *testing.T) {
 	for _, operation := range []string{"write", ""} {
-		t.Run("owner="+operation, func(t *testing.T) {
+		t.Run("dispatch="+map[string]string{"write": "native", "": "hosted"}[operation], func(t *testing.T) {
 			invoked, checked := 0, 0
 			f := policyOperandFixture(t, operation, &invoked)
 			target := filepath.Join(f.Dir, "nested/target")
@@ -111,7 +111,7 @@ func TestProgramPolicyRechecksOperandsImmediatelyBeforeOwnerEffects(t *testing.T
 			raw, err := f.Call(t, ctx, "tee nested/target")
 			testutil.FailErr(t, "run operand policy recheck", err)
 			if checked != limit || invoked != 0 {
-				t.Fatalf("operand recheck = %d, owner calls=%d, result=%s", checked, invoked, raw)
+				t.Fatalf("operand recheck = %d, dispatch calls=%d, result=%s", checked, invoked, raw)
 			}
 		})
 	}
@@ -119,7 +119,7 @@ func TestProgramPolicyRechecksOperandsImmediatelyBeforeOwnerEffects(t *testing.T
 
 func TestProgramPolicyUsesTheReachedNativeDirectoryFrame(t *testing.T) {
 	for _, operation := range []string{"write", ""} {
-		t.Run("owner="+operation, func(t *testing.T) {
+		t.Run("dispatch="+map[string]string{"write": "native", "": "hosted"}[operation], func(t *testing.T) {
 			invoked := 0
 			f := policyOperandFixture(t, operation, &invoked)
 			nested := filepath.Join(f.Dir, "nested")
@@ -137,7 +137,7 @@ func TestProgramPolicyUsesTheReachedNativeDirectoryFrame(t *testing.T) {
 			raw, err := f.Call(t, ctx, "cd nested; tee target")
 			testutil.FailErr(t, "run native directory policy barrier", err)
 			if len(held) != 1 || invoked != 0 {
-				t.Fatalf("reached directory policy = %v owner calls=%d, result=%s", held, invoked, raw)
+				t.Fatalf("reached directory policy = %v dispatch calls=%d, result=%s", held, invoked, raw)
 			}
 		})
 	}

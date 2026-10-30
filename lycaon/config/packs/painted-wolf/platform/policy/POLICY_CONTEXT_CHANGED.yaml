@@ -12,6 +12,7 @@ copy:
   cause: 'The operation entered a new policy scope or its guidance changed.'
   why: 'Applicable guidance must reach the model before it chooses this effect.'
   fix: 'Read the current scoped guidance supplied on the next request, reconsider the operation, and issue a fresh call. Earlier completed program effects remain completed; do not replay them.'
+  instead: 'Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: native
 x-paintedwolf-message: Project guidance prerequisite
@@ -22,3 +23,4 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Code: POLICY_CONTEXT_CHANGED'
       - 'did not run'
+      - 'Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.'

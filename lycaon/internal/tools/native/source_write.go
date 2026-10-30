@@ -658,8 +658,7 @@ func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *tool
 	return completions, pending, errors.Join(publicationErr, err)
 }
 
-// Mixed attribution scopes keep the existing individual-effect owner. This
-// path does not add durable history or recovery to an unattached scope.
+// Mixed attribution scopes publish and settle each stream separately.
 func publishIndividualStreams(ctx context.Context, tc tools.ToolContext, streams []*agentStreamStage) ([]sourceeffect.Completion, error) {
 	completions := make([]sourceeffect.Completion, len(streams))
 	for i, stream := range streams {
@@ -674,7 +673,7 @@ func publishIndividualStreams(ctx context.Context, tc tools.ToolContext, streams
 	return completions, nil
 }
 
-// Commit publishes and settles through the same attributed write owner.
+// Commit publishes and settles one attributed stream.
 func (s *agentStreamStage) Commit(ctx context.Context, tc tools.ToolContext) (fseffect.Result, error) {
 	result, err := s.publish(ctx)
 	return result, finishAgentMutation(ctx, tc, s.mutation, s.journal, err)

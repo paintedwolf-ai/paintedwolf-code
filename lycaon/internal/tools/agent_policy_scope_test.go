@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestPolicyScopeRetainsTheOwnersResolvedRoot(t *testing.T) {
+func TestPolicyScopeRetainsTheExplicitlyResolvedRoot(t *testing.T) {
 	outer := t.TempDir()
 	inner := filepath.Join(outer, "nested")
 	file := filepath.Join(inner, "file.go")
@@ -24,8 +24,8 @@ func TestPolicyScopeRetainsTheOwnersResolvedRoot(t *testing.T) {
 		path string
 		want string
 	}{
-		{name: "relative owner path", path: "nested/file.go", want: "outer"},
-		{name: "qualified owner path", path: "@outer/nested/file.go", want: "outer"},
+		{name: "relative root path", path: "nested/file.go", want: "outer"},
+		{name: "qualified root path", path: "@outer/nested/file.go", want: "outer"},
 		{name: "qualified other root", path: "@inner/file.go", want: "inner"},
 		{name: "unqualified absolute path", path: file, want: "inner"},
 	} {
@@ -45,11 +45,11 @@ func TestPolicyScopeRetainsTheOwnersResolvedRoot(t *testing.T) {
 	ctx := WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
 		called = true
 		if len(targets) != 1 || targets[0].RootID != "outer" {
-			t.Fatalf("explicit policy target lost its owner: %+v", targets)
+			t.Fatalf("explicit policy target lost its root binding: %+v", targets)
 		}
 		return nil
 	})
-	testutil.FailErr(t, "explicit target owner", tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{RootID: "outer", Path: file, Mutation: true}}))
+	testutil.FailErr(t, "explicit target root", tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{RootID: "outer", Path: file, Mutation: true}}))
 	if !called {
 		t.Fatal("explicit target skipped policy admission")
 	}
@@ -71,10 +71,10 @@ func TestExplicitPolicyRootCannotFallBackToAnotherAttachment(t *testing.T) {
 		{target: agentpolicy.Target{RootID: "root", Path: filepath.Join(t.TempDir(), "file.go")}, want: projectroot.ErrPathEscape},
 	} {
 		if err := tc.CheckPolicyTargets(ctx, []agentpolicy.Target{test.target}); !errors.Is(err, test.want) {
-			t.Fatalf("explicit owner error = %v, want %v", err, test.want)
+			t.Fatalf("explicit root error = %v, want %v", err, test.want)
 		}
 	}
 	if called {
-		t.Fatal("invalid owner reached policy admission")
+		t.Fatal("invalid root reached policy admission")
 	}
 }

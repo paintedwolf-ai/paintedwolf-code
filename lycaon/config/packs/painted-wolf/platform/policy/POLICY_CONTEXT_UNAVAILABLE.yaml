@@ -12,6 +12,7 @@ copy:
   cause: 'The addressed workspace or a policy source is unavailable.'
   why: 'Applicable guidance must reach the model before it chooses this effect.'
   fix: 'Investigate the reported workspace and policy sources with read-only tools. Retry the operation after the applicable guidance is available and delivered.'
+  instead: 'Continue read-only investigation of accessible sources while resolving the reported workspace or policy access problem.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: native
 x-paintedwolf-message: Project guidance prerequisite
@@ -22,3 +23,4 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Code: POLICY_CONTEXT_UNAVAILABLE'
       - 'did not run'
+      - 'Continue read-only investigation of accessible sources while resolving the reported workspace or policy access problem.'

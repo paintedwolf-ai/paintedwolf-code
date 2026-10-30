@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
@@ -112,7 +113,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
-	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, facts.Contract.MutatesWorld()); err != nil {
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
 		return result, err
 	}
 	values := effect.Arguments
@@ -400,10 +401,15 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
-	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, definition.ReadOnlyFacts().Contract.MutatesWorld()); err != nil {
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
 		return err
 	}
 	return checkLiveProgramProgress(ctx, progressFacts, bound)
+}
+
+func nativePolicyMutation(bound toolcontract.BoundOperation) bool {
+	classes := bound.Effects().Classes()
+	return slices.Contains(classes, toolcontract.CommandMutation) || slices.Contains(classes, toolcontract.CommandExternalExec)
 }
 
 // validateNativeArguments checks structured native tool values against their

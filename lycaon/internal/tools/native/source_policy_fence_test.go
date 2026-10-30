@@ -15,7 +15,7 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-func TestStreamPolicyFreshnessIsIndependentOfJournalOwnership(t *testing.T) {
+func TestStreamPolicyFreshnessIsIndependentOfJournalPreparation(t *testing.T) {
 	for _, mode := range []string{"file", "stream", "batch"} {
 		for _, timing := range []string{"review", "intent"} {
 			t.Run(mode+"/"+timing, func(t *testing.T) {
