@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
@@ -123,8 +124,17 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 	if entries, indexed, err := w.indexedChildren(dir, follow, opened); indexed || err != nil {
 		return entries, err
 	}
-	names, err := opened.Names()
+	maximum := 0
+	if w.maximum > 0 {
+		maximum = int(max(1, w.maximum-w.visited))
+	}
+	names, err := opened.Names(maximum)
 	if err != nil {
+		var exceeded *projectpaths.DirectoryEntriesLimitError
+		if errors.As(err, &exceeded) {
+			w.visited = w.maximum
+			return nil, w.visit()
+		}
 		return nil, err
 	}
 	w.work.listed++

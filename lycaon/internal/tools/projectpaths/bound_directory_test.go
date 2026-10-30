@@ -3,6 +3,7 @@
 package projectpaths_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,13 +31,13 @@ func TestHeldDirectoryReadsMembershipOnlyOnDemand(t *testing.T) {
 	if stat.Size != 4 {
 		t.Fatalf("held child=%+v", stat)
 	}
-	first, err := directory.Names()
+	first, err := directory.Names(0)
 	testutil.FailErr(t, "read names on demand", err)
 	if !slices.Contains(first, "late") {
 		t.Fatalf("opening consumed membership: %v", first)
 	}
 	testutil.FailErr(t, "create after listing", os.WriteFile(filepath.Join(root, "later"), []byte("later"), 0o600))
-	second, err := directory.Names()
+	second, err := directory.Names(0)
 	testutil.FailErr(t, "reuse held membership", err)
 	if !slices.Equal(first, second) || slices.Contains(second, "later") {
 		t.Fatalf("held membership changed: %v -> %v", first, second)
@@ -45,4 +46,24 @@ func TestHeldDirectoryReadsMembershipOnlyOnDemand(t *testing.T) {
 	file, err := shared.OpenExact("late")
 	testutil.FailErr(t, "shared root survives directory", err)
 	testutil.FailErr(t, "close retained file", file.Close())
+}
+
+func TestHeldDirectoryBoundsOnlyVisibleNames(t *testing.T) {
+	tc, root := readSessionContext(t)
+	testutil.FailErr(t, "create recovery tree", os.MkdirAll(filepath.Join(root, ".paintedwolf", "recovery"), 0o700))
+	paths, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind invocation", err)
+	bound, err := paths.Bind(t.Context(), ".", false)
+	testutil.FailErr(t, "bind directory", err)
+	directory, err := bound.OpenDir()
+	testutil.FailErr(t, "open bounded directory", err)
+	defer func() { testutil.FailErr(t, "close bounded directory", directory.Close()) }()
+	names, err := directory.Names(1)
+	var exceeded *projectpaths.DirectoryEntriesLimitError
+	if !errors.As(err, &exceeded) || exceeded.Entries != 2 || len(names) != 0 {
+		t.Fatalf("bounded names=%v error=%v", names, err)
+	}
+	if _, err := directory.Names(0); !errors.As(err, &exceeded) {
+		t.Fatalf("partial listing became complete: %v", err)
+	}
 }

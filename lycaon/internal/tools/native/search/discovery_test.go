@@ -173,3 +173,17 @@ func TestIndexedGrepSharesRootsAndImmediateChildMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestFindNamespaceExclusionsDoNotSpendTraversalAllowance(t *testing.T) {
+	h := newHarness(t, map[string]string{"visible": "source", ".paintedwolf/recovery/only": "recovery"})
+	h.owners.overrides = map[string]int64{"traversal_visits": 2}
+	h.exec("", "find", ".").expect(t, "live exact allowance", ".\n./visible\n", "", 0)
+	h.owners.Catalog = discoveryCatalog(t)
+	for attempt := range 2 {
+		h.exec("", "find", ".").expect(t, "indexed exact allowance", ".\n./visible\n", "", 0)
+	}
+	h.owners.overrides["traversal_visits"] = 3
+	h.exec("", "find", ".", "-false").expect(t, "prepare complete namespace", "", "", 0)
+	h.owners.overrides["traversal_visits"] = 2
+	h.exec("", "find", ".").expect(t, "complete cached allowance", ".\n./visible\n", "", 0)
+}

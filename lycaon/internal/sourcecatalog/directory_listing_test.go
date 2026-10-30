@@ -52,8 +52,7 @@ func TestDirectoryNamespacePreparationRespectsConsumerBounds(t *testing.T) {
 		writeIndexFile(t, root.Path, name, "source")
 	}
 	listing, err := catalog.Directories.ReadDirectory(t.Context(), "p", root, ".", 2)
-	var exceeded *DirectoryLimitError
-	if !errors.As(err, &exceeded) || exceeded.Entries != 3 || !listing.Prepared {
+	if !errors.Is(err, ErrDirectoryNamespace) || !listing.Prepared {
 		t.Fatalf("bounded preparation=%+v error=%v", listing, err)
 	}
 	store, err := catalog.Trees.indexStore(t.Context(), "p", root)

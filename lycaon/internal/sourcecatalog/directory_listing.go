@@ -8,13 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
-// ErrDirectoryNamespace identifies a listing that omits filesystem entries.
-var ErrDirectoryNamespace = errors.New("directory namespace is not complete")
-
-// DirectoryLimitError reports observed membership beyond the caller's bound.
-type DirectoryLimitError struct{ Entries int }
-
-func (e *DirectoryLimitError) Error() string { return "directory namespace exceeds entry limit" }
+// ErrDirectoryNamespace marks when a bounded complete namespace is unavailable.
+var ErrDirectoryNamespace = errors.New("directory namespace requires live listing")
 
 // DirectoryListing contains the complete immediate namespace in byte order.
 type DirectoryListing struct {
@@ -46,9 +41,6 @@ func (c *Directories) ReadDirectory(ctx context.Context, project string, root Ro
 	}
 	listing := DirectoryListing{Reused: previous.Complete && previous.Sequence == observation.Sequence}
 	listing.Prepared = !listing.Reused
-	if maximum > 0 && observation.Entries > maximum {
-		return listing, &DirectoryLimitError{Entries: observation.Entries}
-	}
 	if !observation.Complete || observation.Failure != "" {
 		return listing, ErrDirectoryNamespace
 	}
@@ -67,6 +59,16 @@ func (c *Directories) ReadDirectory(ctx context.Context, project string, root Ro
 	children, err := navigation.Children(ctx, dir)
 	if err != nil {
 		return DirectoryListing{}, err
+	}
+	count, err := children.Count(ctx)
+	if err != nil {
+		return listing, err
+	}
+	if count != int64(observation.Entries) {
+		return listing, ErrDirectoryNamespace
+	}
+	if maximum > 0 && count > int64(maximum) {
+		return listing, ErrDirectoryNamespace
 	}
 	after := ""
 	for {
