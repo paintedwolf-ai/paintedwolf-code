@@ -2,6 +2,7 @@ package workeroutcomes
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -31,6 +32,7 @@ type WorkflowVars interface {
 }
 type ProgressReader interface {
 	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type VerificationFacts interface {
 	WorkflowGateState(context.Context, *api.Session, []api.Message) (bool, bool, bool, bool)
@@ -270,7 +272,12 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 		if err == nil {
 			progressContent := ""
 			if m.progress != nil {
-				progressContent = m.progress.Get(ctx, sessiontree.RootID(ctx, m.sessions, sess.ID))
+				snapshot, snapshotErr := m.progress.Snapshot(ctx, sessiontree.RootID(ctx, m.sessions, sess.ID))
+				if snapshotErr == nil {
+					progressContent = snapshot.Content
+					encoded, _ := json.Marshal(snapshot)
+					state.ProgressSnapshot = string(encoded)
+				}
 			}
 			verifyRequired, verifyPassed, verifyRepair, verifyUnverified := false, false, false, false
 			if m.verification != nil {

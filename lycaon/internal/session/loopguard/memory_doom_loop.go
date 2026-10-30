@@ -26,6 +26,7 @@ type doomLoopState struct {
 	// seenEffectSeq is the session effect sequence at this bucket's last attempt.
 	seenEffectSeq  int64
 	readDocumentID string
+	progress       bool
 }
 
 // sessionEffects tracks consecutive effectful calls. Read-only calls preserve the count.
@@ -160,7 +161,7 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 // Another mutation invalidates this invocation's repetition count.
 func (g *MemoryDoomLoopGuard) supersededLocked(sessionID, key string, st *doomLoopState) bool {
 	effects, _ := g.effects.Load(sessionID)
-	return effects.seq > st.seenEffectSeq && effects.key != key
+	return !st.progress && effects.seq > st.seenEffectSeq && effects.key != key
 }
 
 // RecordAttempt updates invocation and rejection counts; mutated marks a committed effect.
@@ -206,13 +207,13 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	}
 	st := sess[key]
 	if st == nil {
-		st = &doomLoopState{}
+		st = &doomLoopState{progress: strings.EqualFold(strings.TrimSpace(tool), "update_progress")}
 		sess[key] = st
 	}
 	g.states.Store(sessionID, sess)
 	g.recordCodeRejectLocked(sessionID, responseID, tool, rejectCode)
 	if g.supersededLocked(sessionID, key, st) {
-		*st = doomLoopState{}
+		*st = doomLoopState{progress: st.progress}
 	}
 	effects, _ := g.effects.Load(sessionID)
 	st.seenEffectSeq = effects.seq

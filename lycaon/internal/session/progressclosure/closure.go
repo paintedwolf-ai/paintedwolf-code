@@ -99,7 +99,7 @@ func (m *Service) ClearSatisfied(rootID, progressContent string, baseline guard.
 		return
 	}
 	done, pending, na := progress.CloseCounts(progressContent)
-	if pending == 0 || done+na > baseline.Closed || progressContent != baseline.Content {
+	if pending == 0 && !progress.ProgressMissing(progressContent) || done+na > baseline.Closed || progress.Reconciles(baseline.Content, progressContent) {
 		m.baselines.Delete(rootID)
 	}
 }

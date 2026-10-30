@@ -2,6 +2,11 @@ description: Set session progress checklist (markdown). Replaces the whole check
 schema:
   type: object
   properties:
+    expected_revision:
+      type: string
+      description: Current snapshot revision; prevents replacing a newer checklist.
+      minLength: 64
+      maxLength: 64
     content:
       type: string
       description: 'Checklist: `- [ ]` pending, `- [x]` done, `- [~]` terminal descope (not in-progress), `- [>]` optional (last). One row per deliverable in the request. Max 48 lines when needed; labels ≤60c.'

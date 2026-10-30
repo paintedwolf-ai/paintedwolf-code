@@ -9,7 +9,10 @@ import (
 // AuthorUpdate is the existing progress owner's prepared content. Preparation
 // validates without writing; callers validate their entire envelope before Apply.
 // Its private content prevents changes between validation and application.
-type AuthorUpdate struct{ content string }
+type AuthorUpdate struct {
+	content          string
+	expectedRevision string
+}
 
 // AuthorUpdateRejection preserves the progress catalog's code and typed facts.
 type AuthorUpdateRejection struct {
@@ -33,7 +36,18 @@ func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 }
 
 // AuthorUpdateResult is a progress-owner outcome, independent of program success.
-type AuthorUpdateResult struct{ Updated bool }
+type AuthorUpdateResult struct {
+	Updated      bool     `json:"document_changed"`
+	StateChanged bool     `json:"state_changed"`
+	Reconciled   bool     `json:"reconciled"`
+	Snapshot     Snapshot `json:"snapshot"`
+}
+
+// ExpectRevision binds a prepared replacement to an observed document.
+func (u AuthorUpdate) ExpectRevision(revision string) AuthorUpdate {
+	u.expectedRevision = strings.TrimSpace(revision)
+	return u
+}
 
 // Apply uses the already resolved root-session scope. Progress stays committed
 // if later program admission fails; this result supplies no effect authority.
@@ -47,16 +61,27 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string) (Auth
 	if u.content == "" || store == nil {
 		return AuthorUpdateResult{}, fmt.Errorf("prepared progress and store required")
 	}
-	prev := store.Get(ctx, root)
-	if code, data, ok := ValidateAuthorProgress(prev, u.content); !ok {
-		return AuthorUpdateResult{}, &AuthorUpdateRejection{Code: code, Data: data}
+	var result AuthorUpdateResult
+	var previous string
+	snapshot, err := store.Update(ctx, root, func(current Snapshot) (string, error) {
+		previous = current.Content
+		if u.expectedRevision != "" && u.expectedRevision != current.Revision {
+			return "", &AuthorUpdateRejection{Code: "PROGRESS_REVISION_CHANGED", Data: map[string]any{"revision": current.Revision, "content": current.Content}}
+		}
+		if code, data, ok := ValidateAuthorProgress(current.Content, u.content); !ok {
+			return "", &AuthorUpdateRejection{Code: code, Data: data}
+		}
+		result.Updated = current.Content != u.content
+		result.StateChanged = StateTransitions(current.Content, u.content)
+		result.Reconciled = Reconciles(current.Content, u.content)
+		return u.content, nil
+	})
+	result.Snapshot = snapshot
+	if err != nil {
+		return result, err
 	}
-	if strings.TrimSpace(prev) == u.content {
-		return AuthorUpdateResult{}, nil
+	if result.Updated {
+		NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Prev: previous})
 	}
-	if err := store.Set(root, u.content); err != nil {
-		return AuthorUpdateResult{}, fmt.Errorf("store progress: %w", err)
-	}
-	NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Prev: prev})
-	return AuthorUpdateResult{Updated: true}, nil
+	return result, nil
 }

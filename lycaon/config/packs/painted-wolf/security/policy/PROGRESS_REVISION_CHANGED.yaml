@@ -1,0 +1,24 @@
+oar: '1.0'
+id: PROGRESS_REVISION_CHANGED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [update_progress]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_REVISION_CHANGED"
+effect: block
+copy:
+  what: The checklist changed after the supplied revision.
+  cause: This replacement was prepared from an older progress snapshot.
+  why: A stale replacement would overwrite newer deliverable state.
+  fix: Use the returned current content and revision, reconcile the proposed changes, and submit the updated checklist with expected_revision.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress snapshot revision changed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: update_progress
+  expect_contains: ['Code: PROGRESS_REVISION_CHANGED']

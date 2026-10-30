@@ -184,6 +184,9 @@ func batchMadeProgress(history []api.Message, assistantMessageID string) bool {
 			continue
 		}
 		sawToolRow = true
+		if msg.ToolResult.Tool == "update_progress" && !progressResultAdvanced(msg.ToolResult.Content) {
+			continue
+		}
 		switch msg.ToolResult.Outcome {
 		case api.ToolResultOutcomeRejected, api.ToolResultOutcomeError:
 			continue

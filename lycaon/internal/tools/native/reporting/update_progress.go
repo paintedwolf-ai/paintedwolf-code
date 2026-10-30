@@ -31,7 +31,8 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			}
 			return "", err
 		}
-		result, err := prepared.Apply(ctx, store, root)
+		expected, _ := args["expected_revision"].(string)
+		result, err := prepared.ExpectRevision(expected).Apply(ctx, store, root)
 		if err != nil {
 			var rejected *progress.AuthorUpdateRejection
 			if errors.As(err, &rejected) {
@@ -44,7 +45,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			status = "updated"
 		}
 
-		raw, _ := surveyjson.Marshal(map[string]any{"status": status})
+		raw, _ := surveyjson.Marshal(map[string]any{"status": status, "document_changed": result.Updated, "state_changed": result.StateChanged, "reconciled": result.Reconciled, "snapshot": result.Snapshot})
 		return string(raw), nil
 	}
 }
