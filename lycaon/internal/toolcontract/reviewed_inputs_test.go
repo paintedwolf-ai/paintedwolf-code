@@ -37,7 +37,7 @@ func TestNativeValueDomainsCannotAcquireOperationMeaning(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(decoded, args) {
 			t.Fatal("neutral codec changed original byte values", err)
 		}
-		restored, releaseRestored, err := RestoreNativeValue(t.Context(), memory, domain, value.Representation(), value.Digest(), value.Canonical())
+		restored, _, releaseRestored, err := RestoreNativeValue(t.Context(), memory, domain, value.Representation(), value.Digest(), value.Canonical())
 		if err != nil || restored != value {
 			t.Fatal("neutral persisted value changed", err)
 		}
@@ -171,8 +171,7 @@ func TestReviewedInputsAdmitDepthPayloadAndReleaseOnFailure(t *testing.T) {
 	if _, _, err := NewReviewedOperationInputs(ctx, memory, map[string]any{}); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation lost")
 	}
-	// Review depth is charged by the host ledger; query-depth is not a new
-	// restriction on command argument objects.
+	// Nested arguments retain admitted storage through inspection.
 	memory.maximum = 8 << 20
 	var nested any = "deep"
 	for i := 0; i < 256; i++ {
@@ -190,5 +189,14 @@ func TestReviewedInputsAdmitDepthPayloadAndReleaseOnFailure(t *testing.T) {
 	release()
 	if memory.held != 0 {
 		t.Fatal("nested review leaked retained state")
+	}
+	for range 1024 {
+		nested = []any{nested}
+	}
+	if _, retained, err := NewReviewedOperationInputs(t.Context(), memory, map[string]any{"nested": nested}); err == nil || retained != nil {
+		t.Fatal("excessive nesting was admitted")
+	}
+	if memory.held != 0 {
+		t.Fatal("excessive nesting retained state")
 	}
 }

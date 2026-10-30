@@ -70,8 +70,8 @@ func TestNativeAuthorityProjectionRejectsUnknownFieldsEnumsAndUnadmittedWork(t *
 		testutil.FailErr(t, "project current-action authority", err)
 	}
 	defer release()
-	for _, change := range []string{"unknown field", "missing field", "unknown enum"} {
-		value, releaseValue, err := toolcontract.RestoreNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, projection.Representation(), projection.Digest(), projection.Canonical())
+	for _, change := range []string{"unknown field", "missing field", "unknown enum", "noncanonical integer"} {
+		value, _, releaseValue, err := toolcontract.RestoreNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, projection.Representation(), projection.Digest(), projection.Canonical())
 		if err != nil {
 			testutil.FailErr(t, "restore authority for tamper fixture", err)
 		}
@@ -87,6 +87,8 @@ func TestNativeAuthorityProjectionRejectsUnknownFieldsEnumsAndUnadmittedWork(t *
 			delete(option, "kind")
 		case "unknown enum":
 			option["kind"] = "invented_option_kind"
+		case "noncanonical integer":
+			option["authority"].([]any)[0].(map[string]any)["ttl_seconds"] = json.Number("-0")
 		}
 		tampered, releaseTampered, err := toolcontract.NewNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, tree)
 		if err != nil {
@@ -151,10 +153,11 @@ func requestNativeSocketApproval(t *testing.T, ctx context.Context, host nativeA
 }
 
 type nativeInstallRecorder struct {
-	mu         sync.Mutex
-	installed  []hitl.ApprovalOption
-	rolledBack []hitl.ApprovalOption
-	interrupt  bool
+	mu          sync.Mutex
+	installed   []hitl.ApprovalOption
+	rolledBack  []hitl.ApprovalOption
+	unavailable []hitl.ChatGrant
+	interrupt   bool
 }
 
 func (r *nativeInstallRecorder) InstallApprovalOption(_ context.Context, _ string, option hitl.ApprovalOption) (func(), error) {
@@ -173,6 +176,13 @@ func (r *nativeInstallRecorder) RollbackApprovalOption(_ context.Context, _ stri
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.rolledBack = append(r.rolledBack, option)
+	return nil
+}
+
+func (r *nativeInstallRecorder) RestoreUnavailableSocketIntent(_ context.Context, grant hitl.ChatGrant) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unavailable = append(r.unavailable, grant)
 	return nil
 }
 
@@ -293,10 +303,10 @@ func assertNativeSocketRoundTrip(t *testing.T, path string) {
 	replayed := &nativeInstallRecorder{}
 	replaying.manager.Authority.SetApprovalAuthorityInstaller(replayed)
 	testutil.FailErr(t, "replay chat grants", replaying.manager.Authority.RestoreChatGrants(ctx))
-	if len(replayed.installed) != 1 || replayed.installed[0].Authority[0].Kind != hitl.AuthoritySocketChat {
-		t.Fatalf("replayed %d chat grants", len(replayed.installed))
+	if len(replayed.installed) != 0 || len(replayed.unavailable) != 1 || replayed.unavailable[0].Delta.Kind != hitl.AuthoritySocketChat {
+		t.Fatalf("replayed %d active grants and %d unavailable intents", len(replayed.installed), len(replayed.unavailable))
 	}
-	for _, installed := range socketPaths(replayed.installed[0]) {
+	for _, installed := range socketPaths(hitl.ApprovalOption{Authority: []hitl.ApprovalAuthorityDelta{replayed.unavailable[0].Delta}}) {
 		if installed != path {
 			t.Fatalf("replayed socket path %q, want exact %q", installed, path)
 		}

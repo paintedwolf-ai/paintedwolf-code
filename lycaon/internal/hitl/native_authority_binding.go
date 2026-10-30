@@ -7,19 +7,13 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/authzledger"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// authorityBinding converts the known host authority structs to/from native
-// scalar/container values. It never serializes, screens or installs authority.
-// Every field is present, including zero values, so unknown/missing shapes fail.
+// authorityBinding admits typed storage and rejects missing or unknown fields.
 type authorityBinding struct {
 	ctx      context.Context
 	state    toolcontract.ReviewStateAdmission
@@ -27,13 +21,13 @@ type authorityBinding struct {
 }
 
 func (b *authorityBinding) reserve(n int64) error {
-	if n < 0 || n > (math.MaxInt64-2048)/16 {
+	if n < 0 || n > math.MaxInt64-128 {
 		return fmt.Errorf("native authority binding bound overflow")
 	}
 	if err := b.ctx.Err(); err != nil {
 		return err
 	}
-	release, err := b.state.ReserveProgramState(b.ctx, 2048+16*n)
+	release, err := b.state.ReserveProgramState(b.ctx, 128+n)
 	if err != nil {
 		return err
 	}
@@ -50,43 +44,6 @@ func (b *authorityBinding) close() {
 	b.releases = nil
 }
 func (b *authorityBinding) release() func() { var once sync.Once; return func() { once.Do(b.close) } }
-
-var authorityTimeType = reflect.TypeFor[time.Time]()
-
-func authorityKnownType(t reflect.Type) bool {
-	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice {
-		return authorityKnownType(t.Elem())
-	}
-	switch t {
-	case reflect.TypeFor[string](), reflect.TypeFor[bool](), reflect.TypeFor[int](), reflect.TypeFor[uint16](), authorityTimeType,
-		reflect.TypeFor[ApprovalOption](), reflect.TypeFor[ApprovalOptionKind](), reflect.TypeFor[ApprovalOptionRung](), reflect.TypeFor[ApprovalOptionDecision](),
-		reflect.TypeFor[ApprovalGrantScope](), reflect.TypeFor[ApprovalAuthorityDelta](), reflect.TypeFor[AuthorityDeltaKind](),
-		reflect.TypeFor[ApprovalGrant](), reflect.TypeFor[ApprovalGrantPredicate](), reflect.TypeFor[ApprovalGrantWitness](),
-		reflect.TypeFor[ApprovalSocketTarget](), reflect.TypeFor[DirectIPLease](), reflect.TypeFor[GrantedPathDelta](), reflect.TypeFor[AskQuietDelta](), reflect.TypeFor[TrustDestinationDelta](),
-		reflect.TypeFor[authzledger.PolicyIdentity](), reflect.TypeFor[secretmatch.Recipient](), reflect.TypeFor[secretmatch.ScreenSurface](), reflect.TypeFor[secretmatch.DestinationKind](), reflect.TypeFor[api.ElevatedAccessEffect]():
-		return true
-	default:
-		return false
-	}
-}
-
-func authorityFieldName(field reflect.StructField) (string, error) {
-	if field.Anonymous {
-		return "", fmt.Errorf("native authority has an unsupported embedded field")
-	}
-	if field.PkgPath != "" {
-		return "", nil
-	}
-	tag := field.Tag.Get("json")
-	name, _, _ := strings.Cut(tag, ",")
-	if name == "-" {
-		return "", nil
-	}
-	if name == "" {
-		name = field.Name
-	}
-	return name, nil
-}
 
 func (b *authorityBinding) value(v reflect.Value) (any, error) {
 	if !authorityKnownType(v.Type()) {
@@ -142,7 +99,7 @@ func (b *authorityBinding) value(v reflect.Value) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			if name == "" {
+			if name == "" || (authorityOmitZero(v.Type().Field(n)) && v.Field(n).IsZero()) {
 				continue
 			}
 			if _, exists := fields[name]; exists {
@@ -231,6 +188,9 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 		if err != nil {
 			return err
 		}
+		if strconv.FormatInt(value, 10) != string(number) {
+			return fmt.Errorf("native authority integer is not canonical")
+		}
 		dst.SetInt(value)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -241,6 +201,9 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 		value, err := strconv.ParseUint(string(number), 10, dst.Type().Bits())
 		if err != nil {
 			return err
+		}
+		if strconv.FormatUint(value, 10) != string(number) {
+			return fmt.Errorf("native authority integer is not canonical")
 		}
 		dst.SetUint(value)
 		return nil
@@ -283,10 +246,16 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 			}
 			item, exists := fields[name]
 			if !exists {
+				if authorityOmitZero(dst.Type().Field(n)) {
+					continue
+				}
 				return fmt.Errorf("native authority field %s absent", name)
 			}
 			if err := b.assign(dst.Field(n), item); err != nil {
 				return err
+			}
+			if authorityOmitZero(dst.Type().Field(n)) && dst.Field(n).IsZero() {
+				return fmt.Errorf("native authority zero field %s must be omitted", name)
 			}
 			known++
 		}
@@ -297,13 +266,4 @@ func (b *authorityBinding) assign(dst reflect.Value, raw any) error {
 	default:
 		return fmt.Errorf("native authority binding target unsupported: %s", dst.Type())
 	}
-}
-
-// authorityStorageBytes refuses an unrepresentable reflected allocation size
-// before it can enter the signed retained-state admission account.
-func authorityStorageBytes(size uintptr) (int64, error) {
-	if size > math.MaxInt64 {
-		return 0, fmt.Errorf("native authority storage size overflow")
-	}
-	return int64(size), nil
 }

@@ -1,0 +1,19 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/hitl/hitl.ApprovalAuthority",
+  "kind": "runtime_service",
+  "workstream": "approval-authority-lifecycle",
+  "disposition": "retain",
+  "reason": "One authority owner serializes authenticated selection, installation, journal commitment, compensation and replay. Streaming callbacks borrow that owner; they do not own mutations. Keep restart and unavailable-intent handling under the same lock. Capacity, exact raw authority, terminal ownership and record-count-independent replay contracts bound this service.",
+  "reviewed_commit": "1493abb5c9439ab1a69df28b974f2ca011b18475",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/hitl/native_authority_capacity_test.go": "c825cb9d4114d27e3bab4eed3ffe3d64db8508d04af05be520af89324f7442e0",
+    "lycaon/internal/hitl/native_authority_replay_capacity_test.go": "2e1011a781e248ece2b5e0b621fbfbfb3007c71dd85263eec918652da90839cb",
+    "lycaon/internal/hitl/native_authority_projection_test.go": "564102bbfc50ccee40b4901b0a75d9ef568272aa1dab371003eaeea473183e8e",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c",
+    "lycaon/internal/hitl/checkpoint_admission_test.go": "3b3f379046a7d23d372e3dff20f25504193381bb0cd311948cb068291e168b31",
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "208fae3de9908d220200f08279b6edae18047b84322b2e1418fad9851fe69e5c"
+  },
+  "reviewed_shape": "2c3c3fbfb5f79fa0b04c975577689dc5115199757712cfb2bfe8df6208d3031e"
+}
