@@ -57,10 +57,10 @@ type frame struct {
 	// Request side.
 	Method string          `json:"method,omitempty"`
 	ID     uint64          `json:"id,omitempty"`
-	// Load fields.
-	Manifest string          `json:"manifest,omitempty"`
-	Weights  string          `json:"weights,omitempty"`
-	Device   string          `json:"device,omitempty"`
+	// Load fields; the service requires manifest and weights on load.
+	Manifest string `json:"manifest"`
+	Weights  string `json:"weights"`
+	Device   string `json:"device,omitempty"`
 	// Event side (service frames have no id; the reader tags them by arrival).
 	Kind        string          `json:"kind,omitempty"`
 	RequestID   string          `json:"request_id,omitempty"`
