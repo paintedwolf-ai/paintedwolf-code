@@ -11,8 +11,9 @@ import (
 )
 
 type discoveryWork struct {
-	metadata, listed, reused, prepared int64
-	roots, handles, relative           int64
+	metadata, listed, reused, prepared    int64
+	roots, handles, relative, peak, opens int64
+	identityPeak, identityHeld            int64
 }
 
 // Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
@@ -35,14 +36,14 @@ func (w *walker) report() {
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
-		"directory_handles", w.work.handles, "relative_child_stats", w.work.relative)
+		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld, "relative_child_stats", w.work.relative)
 }
 
 type entryMetadata struct {
 	known  bool
 	stat   fseffect.EntryStat
 	err    error
-	parent *projectpaths.BoundPath
+	parent *projectpaths.BoundDir
 }
 
 // Metadata is fetched only after a reached primary needs it.
@@ -52,15 +53,9 @@ func (w *walker) inspect(e entry) (entry, error) {
 	}
 	m := e.metadata
 	if !m.known {
-		opened, err := m.parent.OpenDirWithRoot(w.readRoot(*m.parent))
-		m.err = err
-		if err == nil {
-			w.work.handles++
-			w.work.metadata++
-			w.work.relative++
-			_, m.stat, m.err = opened.StatChild(e.name)
-			_ = opened.Close()
-		}
+		w.work.metadata++
+		w.work.relative++
+		_, m.stat, m.err = m.parent.StatChild(e.name)
 		m.known = true
 	}
 	if m.err != nil {
@@ -98,6 +93,9 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	}
 	out := make([]entry, 0, len(listing.Entries))
 	for _, item := range listing.Entries {
+		if err := w.inv.ctx.Err(); err != nil {
+			return nil, true, err
+		}
 		if !opened.VisibleChild(item.Name) {
 			continue
 		}
@@ -110,7 +108,7 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 		}
 		e := entry{display: joinDisplay(dir.display, item.Name), name: item.Name, bound: child,
 			depth: dir.depth + 1, start: dir.start, link: item.IsSymlink}
-		if !w.lazy || item.IsDir || item.IsSymlink {
+		if !w.lazy {
 			w.work.metadata++
 			w.work.relative++
 			var stat fseffect.EntryStat
@@ -124,7 +122,13 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 			e.bound, e.stat, e.metadata = child, stat, nil
 			e.link = stat.Mode&fs.ModeSymlink != 0
 		} else {
-			e.metadata = &entryMetadata{parent: &dir.bound}
+			if item.IsDir {
+				e.stat.Mode = fs.ModeDir
+			}
+			if item.IsSymlink {
+				e.stat.Mode = fs.ModeSymlink
+			}
+			e.metadata = &entryMetadata{parent: opened}
 		}
 		e.display = child.Resolved.DisplayPath
 		if dir.display == "." || dir.display != dir.bound.Resolved.DisplayPath {

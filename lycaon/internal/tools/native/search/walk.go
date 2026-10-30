@@ -2,12 +2,12 @@ package search
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -23,6 +23,7 @@ type entry struct {
 	// Followed entries carry target metadata while retaining their path spelling.
 	link, followed bool
 	metadata       *entryMetadata
+	parent         *projectpaths.BoundDir
 }
 
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
@@ -37,6 +38,7 @@ type walker struct {
 	roots   map[string]*fseffect.ReadRoot
 	lazy    bool
 	work    discoveryWork
+	held    int64
 }
 
 func newWalker(inv *invocation) *walker {
@@ -44,6 +46,12 @@ func newWalker(inv *invocation) *walker {
 }
 
 func (w *walker) close() {
+	for _, r := range w.roots {
+		w.work.opens += r.DescriptorOpens()
+		peak, held := r.DirectoryIdentityDescriptors()
+		w.work.identityPeak = max(w.work.identityPeak, peak)
+		w.work.identityHeld += held
+	}
 	w.report()
 	for k, r := range w.roots {
 		_ = r.Close()
@@ -58,6 +66,10 @@ func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	}
 	if err := bound.Validate(); err != nil {
 		if old, ok := w.roots[path]; ok {
+			w.work.opens += old.DescriptorOpens()
+			peak, held := old.DirectoryIdentityDescriptors()
+			w.work.identityPeak = max(w.work.identityPeak, peak)
+			w.work.identityHeld += held
 			_ = old.Close()
 			delete(w.roots, path)
 		}
@@ -111,19 +123,71 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	return e, nil
 }
 
-// children lists a directory's admitted entries in unsigned byte order.
-// follow reports the target metadata of contained links; a link whose
-// target cannot be reached stays a link.
-func (w *walker) children(dir entry, follow bool) ([]entry, error) {
-	opened, err := dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+const heldTraversalDirectories = 64
+
+// openDirectory preserves parent-relative authority for reached directories.
+func (w *walker) openDirectory(dir entry) (*projectpaths.BoundDir, error) {
+	if dir.parent != nil {
+		return dir.parent.OpenChildDirectory(dir.name)
+	}
+	return dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+}
+
+// directoryNames observes membership without retaining it across command actions.
+func (w *walker) directoryNames(dir entry) ([]string, error) {
+	opened, err := w.openDirectory(dir)
 	if err != nil {
 		return nil, err
 	}
 	w.work.handles++
+	w.work.peak = max(w.work.peak, w.held+1)
 	defer opened.Close()
+	return opened.Names(projectpaths.DirectoryNames{IncludeHidden: true})
+}
+
+// children keeps admitted, byte-ordered membership alive until the caller releases it.
+func (w *walker) children(dir entry, follow bool) ([]entry, func(), error) {
+	opened, err := w.openDirectory(dir)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	w.work.handles++
+	w.work.peak = max(w.work.peak, w.held+1)
+	release := func() { _ = opened.Close() }
+	retain := w.held < heldTraversalDirectories
+	if retain {
+		w.held++
+		w.work.peak = max(w.work.peak, w.held)
+		release = func() { w.held--; _ = opened.Close() }
+	}
+	lazy := w.lazy
+	if !retain {
+		w.lazy = false
+	}
+	entries, err := w.readChildren(dir, follow, opened)
+	w.lazy = lazy
+	if err != nil {
+		release()
+		return nil, func() {}, err
+	}
+	if !retain {
+		release()
+		for i := range entries {
+			entries[i].parent = nil
+		}
+		return entries, func() {}, nil
+	}
+	for i := range entries {
+		entries[i].parent = opened
+	}
+	return entries, release, nil
+}
+
+func (w *walker) readChildren(dir entry, follow bool, opened *projectpaths.BoundDir) ([]entry, error) {
 	if entries, indexed, err := w.indexedChildren(dir, follow, opened); indexed || err != nil {
 		return entries, err
 	}
+
 	maximum := 0
 	if w.maximum > 0 {
 		maximum = int(max(1, w.maximum-w.visited))

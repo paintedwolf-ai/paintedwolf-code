@@ -57,25 +57,7 @@ func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error)
 		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	if p.admitRead != nil {
-		if err := p.admitRead(file.Name()); err != nil {
-			_ = file.Close()
-			closeRoot()
-			return nil, PathOperationError(p.Resolved.DisplayPath, err)
-		}
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		closeRoot()
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	if !info.IsDir() {
-		_ = file.Close()
-		closeRoot()
-		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
-	}
-	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file}, nil
+	return bindOpenDirectory(p, root, ownsRoot, file)
 }
 
 // DirectoryEntriesLimitError reports membership beyond a consumer's bound.
@@ -94,6 +76,9 @@ type DirectoryNames struct {
 // Names reads byte-ordered membership with one hidden-entry selection.
 func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	if d.listed {
+		if err := d.AdmitDirectoryRead(); err != nil {
+			return nil, err
+		}
 		if d.includeHidden != options.IncludeHidden {
 			return nil, errors.New("directory membership selection changed")
 		}
@@ -105,11 +90,9 @@ func (d *BoundDir) Names(options DirectoryNames) ([]string, error) {
 	d.listed, d.includeHidden = true, options.IncludeHidden
 	var names []string
 	for {
-		if d.dir.admitRead != nil {
-			if err := d.dir.admitRead(d.file.Name()); err != nil {
-				d.listErr = PathOperationError(d.dir.Resolved.DisplayPath, err)
-				return nil, d.listErr
-			}
+		if err := d.AdmitDirectoryRead(); err != nil {
+			d.listErr = err
+			return nil, err
 		}
 		batch, err := d.file.Readdirnames(1024)
 		for _, name := range batch {
@@ -147,7 +130,10 @@ func (d *BoundDir) Child(name string) (BoundPath, error) {
 		return child, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
 	}
 	if child.admitEntry != nil {
-		dirName := d.file.Name()
+		dirName, err := d.currentPath()
+		if err != nil {
+			return child, PathOperationError(child.Resolved.DisplayPath, err)
+		}
 		actual := dirName + string(filepath.Separator) + name
 		if strings.HasSuffix(dirName, string(filepath.Separator)) {
 			actual = filepath.Join(dirName, name)
@@ -179,6 +165,12 @@ func (d *BoundDir) Close() error {
 
 // StatChild binds and stats one immediate entry of the held directory without following links.
 func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
+	if d.closed {
+		return BoundPath{}, fseffect.EntryStat{}, os.ErrClosed
+	}
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsRune(name, 0) {
+		return BoundPath{}, fseffect.EntryStat{}, invalidOperand(name, "expected an immediate directory entry")
+	}
 	child := d.dir.Child(name)
 	if !d.VisibleChild(name) {
 		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
