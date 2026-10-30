@@ -17,7 +17,7 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
-PLATFORMS = {"linux": {"ubuntu-latest", "ubuntu-24.04-arm"}}
+PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
 # Runs its probe in container images that an offline lane must find already provisioned.
 CONTAINER_TARGET = "den:webkit:atspi"
 # Runs the pinned browser, which an offline lane must find already provisioned.
@@ -79,14 +79,14 @@ def lanes():
                 "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
             raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
-        if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
+        if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-24.04"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
         if "workers" in lane and (type(lane["workers"]) is not int or not 1 <= lane["workers"] <= 8):
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
         if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
             raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
         if "platform" in lane and (lane["platform"] not in PLATFORMS
-                                   or lane.get("runner", "ubuntu-latest") not in PLATFORMS[lane["platform"]]
+                                   or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
     validate_sources(values)
@@ -208,7 +208,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
-                           "runner": lane.get("runner", "ubuntu-latest")})
+                           "runner": lane.get("runner", "ubuntu-24.04")})
     if not result:
         raise ValueError("CI selection contains no verification")
     return {"include": order(result, values, timings, max_parallel(profile))}

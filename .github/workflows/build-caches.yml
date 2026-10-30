@@ -35,7 +35,7 @@ jobs:
       # Each platform prepares and publishes its compiler inputs on one runner.
       max-parallel: 1
       matrix:
-        runner: [ubuntu-latest, macos-15]
+        runner: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     permissions:

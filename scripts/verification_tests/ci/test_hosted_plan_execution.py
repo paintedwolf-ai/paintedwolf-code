@@ -1,4 +1,6 @@
 import copy
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -156,8 +158,21 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
                     # architecture-specific confinement.
-                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-latest")
+                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-24.04")
                     self.assertEqual(row["runner"], runner)
+
+    def test_linux_verification_uses_the_declared_release_build_baseline(self):
+        root = Path(__file__).resolve().parents[3]
+        platforms = json.loads((root / "packaging/release-platforms.json").read_text())["platforms"]
+        linux_runners = {platform["runner"] for platform in platforms if platform["goos"] == "linux"}
+        for profile in ci.PROFILES:
+            for platform in (False, True):
+                if platform and not any(profile in lane["profiles"] and "platform" in lane for lane in ci.lanes().values()):
+                    continue
+                for row in ci.matrix(profile, platform=platform)["include"]:
+                    if row["runner"].startswith("ubuntu"):
+                        with self.subTest(profile=profile, platform=platform, lane=row["lane"]):
+                            self.assertIn(row["runner"], linux_runners)
 
     def test_each_lane_installs_only_its_declared_setup(self):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}

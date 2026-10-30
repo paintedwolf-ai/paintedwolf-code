@@ -162,9 +162,18 @@ def entries(queue, lock_file):
             try:
                 lock_file(lease, blocking=False)
             except BlockingIOError:
-                result.append(json.load(lease))
+                try:
+                    result.append(json.load(lease))
+                except json.JSONDecodeError:
+                    result.append({"ticket": path.stem, "name": "Unreadable resource reservation",
+                                   "state": "running", "workers": capacity(), "locks": ["*"],
+                                   "metadata_status": "unreadable"})
             else:
-                entry = json.load(lease)
+                try:
+                    entry = json.load(lease)
+                except json.JSONDecodeError:
+                    path.unlink()
+                    continue
                 if retained(entry):
                     result.append(entry)
                 else:

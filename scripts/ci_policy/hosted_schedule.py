@@ -18,7 +18,7 @@ def validate_sources(lanes):
         if not measured or key == name or "timing_source" in source:
             raise ValueError(f"CI lane {name} needs a direct nightly timing source")
         if any(lane.get(field, default) != source.get(field, default)
-               for field, default in [("runner", "ubuntu-latest"), ("setup", None), ("workers", None), ("shards", 1)]):
+               for field, default in [("runner", "ubuntu-24.04"), ("setup", None), ("workers", None), ("shards", 1)]):
             raise ValueError(f"CI lane {name} timing source must use the same execution configuration")
         stages = lambda value: Counter(stage["name"] for stage in expand(value["targets"]))
         if stages(lane) - stages(source):
