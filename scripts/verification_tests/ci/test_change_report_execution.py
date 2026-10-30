@@ -214,8 +214,41 @@ class ChangedCoverageTests(unittest.TestCase):
                 self.assertIsNone(coverage_changes.measure_go("probe", {"example.com/m/a"}, {"example.com/m/a"}, "example.com/m"))
             command, env = call.call_args.args[0], call.call_args.kwargs["env"]
             self.assertIn("-count=1", command)
+            self.assertIn("-covermode=atomic", command)
             self.assertEqual(env["PW_GO_CHILD_COVERDIR"], str(root / "coverage" / "probe-children"))
             self.assertIsNone(coverage_changes.children_profile(root / "coverage" / "probe-children", root / "out"))
+
+    def test_go_child_conversion_failure_remains_a_measurement_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "covcounters.fixture.123.0").write_bytes(b"counters")
+            failed = subprocess.CompletedProcess([], 1, "", "counter mode clash: atomic versus set")
+            with patch.object(coverage_changes.subprocess, "run", return_value=failed):
+                with self.assertRaisesRegex(RuntimeError, "child Go coverage conversion failed.*counter mode clash"):
+                    coverage_changes.children_profile(root, root / "out")
+
+    def test_go_child_conversion_requires_its_actual_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "covcounters.fixture.123.0").write_bytes(b"counters")
+            with patch.object(coverage_changes.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")):
+                with self.assertRaisesRegex(RuntimeError, "produced no profile"):
+                    coverage_changes.children_profile(root, root / "out")
+
+    def test_go_child_conversion_retains_convertible_real_profile_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "covcounters.fixture.123.0").write_bytes(b"counters")
+            output = root / "out"
+
+            def convert(command, **_kwargs):
+                output.write_text("mode: atomic\nexample.com/m/a.go:1.1,2.2 1 1\n")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with patch.object(coverage_changes.subprocess, "run", side_effect=convert):
+                self.assertEqual(coverage_changes.children_profile(root, output), output)
+            self.assertEqual(coverage_changes.read_go_profile(output, "example.com/m"),
+                             {"lycaon/a.go": [("1.1", "2.2", 1, True)]})
 
     def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):
         # Vitest's CLI rejects unknown options, so a rerun-trigger override must reach vitest.config.ts.

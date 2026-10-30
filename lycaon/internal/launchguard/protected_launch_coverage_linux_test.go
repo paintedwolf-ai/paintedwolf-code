@@ -157,6 +157,7 @@ func TestProtectedLaunchCoverageOverlayReachesExecutableCalls(t *testing.T) {
 	if !errors.As(err, &status) || status.ExitCode() != 23 || len(output) != 0 {
 		t.Fatalf("covered real executable did not use overlay: error=%v output=%q", err, output)
 	}
+	requireManagedNativeCoverageMerge(t, build, directory, overlay, linked)
 	metadata, err := filepath.Glob(filepath.Join(directory, "coverage", "covmeta.*"))
 	testutil.FailErr(t, "locate real regression metadata", err)
 	if len(metadata) == 0 {
