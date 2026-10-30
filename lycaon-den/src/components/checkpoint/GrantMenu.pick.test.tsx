@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { GrantMenu } from "./ApprovalShell.tsx";
+import { GrantMenu } from "./GrantMenu.tsx";
 
 describe("GrantMenu pick", () => {
   it("hands the pick over while the chosen item still holds focus, then closes", () => {
