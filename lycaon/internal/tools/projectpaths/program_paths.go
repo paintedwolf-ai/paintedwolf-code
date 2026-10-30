@@ -282,6 +282,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err != nil {
 			return err
 		}
+		if settingsoverlay.IsRecoveryRelPath(scope) || settingsoverlay.HasRecoverySegment(actual) || settingsoverlay.IsRecoveryOnlyDir(actual) {
+			return &os.PathError{Op: "stat", Path: actual, Err: os.ErrNotExist}
+		}
 		if scope == "." || scope == "" {
 			return bound.admitRead(actual)
 		}
