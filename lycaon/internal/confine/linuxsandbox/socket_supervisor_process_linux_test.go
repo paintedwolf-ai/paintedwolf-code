@@ -124,7 +124,7 @@ func TestLinuxSocketSupervisorProcess(t *testing.T) {
 	testutil.FailErr(t, "decode supervisor arguments", json.Unmarshal([]byte(os.Getenv("PW_SOCKET_SUPERVISOR_ARGS")), &args))
 	self, err := os.Executable()
 	testutil.FailErr(t, "supervisor executable", err)
-	code, signal, err := linuxsandbox.Relaunch(self, args, profile, network, nil, nil)
+	code, signal, err := linuxsandbox.Relaunch(self, args, profile, network, nil, nil, nil)
 	testutil.FailErr(t, "actual Relaunch owner", err)
 	if code != 0 || signal != 0 {
 		t.Fatalf("target exit %d, signal %v", code, signal)
