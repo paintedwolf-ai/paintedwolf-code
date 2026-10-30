@@ -36,6 +36,5 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 type MetadataRoot struct{}
 
 func OpenMetadataRoot(string) (*MetadataRoot, error)           { return nil, ErrUnsupported }
-func (*MetadataRoot) Path() string                             { return "" }
 func (*MetadataRoot) OpenExact(string, bool) (*os.File, error) { return nil, ErrUnsupported }
 func (*MetadataRoot) Close() error                             { return ErrUnsupported }

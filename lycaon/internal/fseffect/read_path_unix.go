@@ -67,7 +67,6 @@ func OpenMetadataRoot(path string) (*MetadataRoot, error) {
 	}
 	return &MetadataRoot{root: root}, nil
 }
-func (r *MetadataRoot) Path() string { return r.root.path }
 func (r *MetadataRoot) Close() error { r.root.close(); return nil }
 func (r *MetadataRoot) OpenExact(rel string, directory bool) (*os.File, error) {
 	relative, err := exactReadRelative(rel)
