@@ -1,7 +1,9 @@
 package loopguard
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -45,4 +47,43 @@ func (r progressRecovery) matches(args map[string]any) bool {
 	}
 	token, _ := args["reconciliation_token"].(string)
 	return !r.reconciliation || token == r.token
+}
+
+// SetProgressPrerequisiteResolver connects current prerequisites from the root session.
+func (g *MemoryDoomLoopGuard) SetProgressPrerequisiteResolver(resolve func(context.Context, string) (progress.PrerequisiteState, error)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.progressState = resolve
+}
+
+func (g *MemoryDoomLoopGuard) resolvedProgressPrerequisite(ctx context.Context, sessionID, key string) (string, error) {
+	g.mu.RLock()
+	resolve := g.progressState
+	states, _ := g.states.Load(sessionID)
+	code := ""
+	if state := states[key]; state != nil {
+		code = state.lastCode
+	}
+	g.mu.RUnlock()
+	if resolve == nil || code != "PROGRESS_MISSING" && code != "PROGRESS_ITEM_NOT_CLOSED" {
+		return "", nil
+	}
+	state, err := resolve(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if state.SessionID != sessionID || state.RootSessionID == "" {
+		return "", fmt.Errorf("progress prerequisite state does not match session")
+	}
+	resolved := false
+	switch code {
+	case "PROGRESS_MISSING":
+		resolved = !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive)
+	case "PROGRESS_ITEM_NOT_CLOSED":
+		resolved = state.WorkerChild || state.Reconciliation == nil
+	}
+	if resolved {
+		return code, nil
+	}
+	return "", nil
 }

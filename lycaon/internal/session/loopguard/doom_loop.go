@@ -28,6 +28,7 @@ type DoomLoopGuard interface {
 	FruitlessSearchRun(sessionID, tool string, args map[string]any) int
 	SetPageTargetResolver(func(sessionID, pageID string) string)
 	SetReviewIntentResolver(func(context.Context, string) (string, error))
+	SetProgressPrerequisiteResolver(func(context.Context, string) (progress.PrerequisiteState, error))
 }
 
 // doomLoopQuestionArgs identifies a search question independently of scope and pagination.

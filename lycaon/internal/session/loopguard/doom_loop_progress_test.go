@@ -1,6 +1,7 @@
 package loopguard
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -145,5 +146,56 @@ func TestProgressRecoveryUsesOnlyStructuredHostRemedies(t *testing.T) {
 	recovery := progressRecoveryFromFailure(&api.InvocationFailure{Code: "PROGRESS_RECONCILIATION_CHANGED", Details: map[string]any{"snapshot": progress.Snapshot{Revision: revision}}})
 	if !recovery.matches(map[string]any{"expected_revision": revision}) || recovery.matches(map[string]any{"expected_revision": revision, "reconciliation_token": token}) {
 		t.Fatal("settled finish set did not require removing obsolete acknowledgement")
+	}
+}
+
+func TestProgressPrerequisiteRecoveryUsesCurrentScopedFacts(t *testing.T) {
+	for _, tc := range []struct {
+		name, code string
+		state      progress.PrerequisiteState
+		failure    error
+		allowed    bool
+	}{
+		{name: "pending checklist", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root", Content: "- [ ] Deliver"}, allowed: true},
+		{name: "worker exemption", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root", WorkerChild: true}, allowed: true},
+		{name: "review exemption", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root", ReviewLoopActive: true}, allowed: true},
+		{name: "still missing", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root"}},
+		{name: "acknowledged finish", code: "PROGRESS_ITEM_NOT_CLOSED", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root"}, allowed: true},
+		{name: "pending finish", code: "PROGRESS_ITEM_NOT_CLOSED", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root", Reconciliation: &progress.Reconciliation{Token: "pending"}}},
+		{name: "worker finish exemption", code: "PROGRESS_ITEM_NOT_CLOSED", state: progress.PrerequisiteState{SessionID: "session", RootSessionID: "root", WorkerChild: true, Reconciliation: &progress.Reconciliation{Token: "pending"}}, allowed: true},
+		{name: "read failed", code: "PROGRESS_MISSING", failure: errors.New("snapshot unavailable")},
+		{name: "wrong session", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "other", RootSessionID: "root", Content: "- [ ] Deliver"}},
+		{name: "missing root", code: "PROGRESS_MISSING", state: progress.PrerequisiteState{SessionID: "session", Content: "- [ ] Deliver"}},
+		{name: "unrelated code", code: "WRITE_SCOPE_DENIED", failure: errors.New("must not load unrelated state")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			guard := NewMemoryDoomLoopGuard()
+			queried := false
+			guard.SetProgressPrerequisiteResolver(func(context.Context, string) (progress.PrerequisiteState, error) {
+				queried = true
+				return tc.state, tc.failure
+			})
+			args := map[string]any{"path": "main.go"}
+			for n := range DoomLoopMaxSameCodeRejects {
+				testutil.FailErr(t, "record structured prerequisite refusal", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n), "edit", args, &api.InvocationFailure{Code: tc.code}, false))
+			}
+			allowed, count, _, err := guard.Check(t.Context(), "session", "next", "edit", args, true, nil)
+			if allowed != tc.allowed {
+				t.Fatalf("current prerequisite allowed=%v want=%v err=%v", allowed, tc.allowed, err)
+			}
+			if tc.code == "WRITE_SCOPE_DENIED" {
+				if queried || err != nil {
+					t.Fatal("unrelated rejection consulted progress state")
+				}
+			} else if !queried {
+				t.Fatal("current prerequisite was not queried")
+			}
+			if tc.failure != nil && tc.code != "WRITE_SCOPE_DENIED" && !errors.Is(err, tc.failure) {
+				t.Fatalf("read failure was not preserved: %v", err)
+			}
+			if tc.allowed && count != 0 {
+				t.Fatalf("resolved count=%d", count)
+			}
+		})
 	}
 }

@@ -384,6 +384,9 @@ Explicit finish tokens retain distinct operation identities. A typed revision or
 reconciliation rejection records its host-issued remedy, so a corrected retry
 reaches the progress handler even after repeated stale attempts. Diagnostic rejection totals
 remain intact; the handler revalidates the supplied basis before any write.
+Current root-session checklist, workflow and finish facts also release prior
+prerequisite refusals after resolution, without counting checklist establishment
+as deliverable advancement.
 
 Successful worker finishes publish a reconciliation token and exact job IDs in
 the current snapshot. Submit `reconciliation_token` with `expected_revision`

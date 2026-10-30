@@ -45,6 +45,7 @@ type sessionEffects struct {
 type MemoryDoomLoopGuard struct {
 	mu              sync.RWMutex
 	reviewIntent    func(context.Context, string) (string, error)
+	progressState   func(context.Context, string) (progress.PrerequisiteState, error)
 	intents         scopedstore.LRU[string]
 	responseIntents scopedstore.LRU[string]
 	// pageTarget groups live handles by target; unresolved handles retain their ids.
@@ -128,6 +129,10 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	if err != nil {
 		return false, 0, "", err
 	}
+	resolvedProgressCode, err := g.resolvedProgressPrerequisite(ctx, sessionID, key)
+	if err != nil {
+		return false, 0, "", err
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if intent, known := g.intents.Load(sessionID); known {
@@ -136,7 +141,9 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	sess, _ := g.states.Load(sessionID)
 	st := sess[key]
 	if st != nil {
-		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered || strings.EqualFold(strings.TrimSpace(tool), "update_progress") && st.progressRecovery.matches(args)
+		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered ||
+			strings.EqualFold(strings.TrimSpace(tool), "update_progress") && st.progressRecovery.matches(args) ||
+			resolvedProgressCode != "" && st.lastCode == resolvedProgressCode
 		if st.lastCode == "EDITOR_DOCUMENT_READ_REQUIRED" && st.readDocumentID != "" {
 			basis, known := reads.Basis(st.readDocumentID)
 			resolved = known && basis.Revision > 0 && (basis.Whole || len(basis.Spans) > 0)
