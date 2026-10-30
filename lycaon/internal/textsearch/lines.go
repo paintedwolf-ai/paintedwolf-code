@@ -92,6 +92,7 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 			}
 		}
 		raw, readErr := input.read(separator, int64(start), maxBytes, onExceed)
+		reject.consumed(len(raw))
 
 		if len(raw) == 0 && errors.Is(readErr, io.EOF) {
 			break
