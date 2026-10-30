@@ -79,6 +79,19 @@ func (o *WatchLifetime) Stop(ctx context.Context) {
 
 // Wait drains admitted work before dropping every captured host callback.
 func (o *WatchLifetime) Wait(ctx context.Context) error {
+	watchRegMu.Lock()
+	var pending []*changeConverger
+	for _, watch := range watchers {
+		if watch.lifetime == o {
+			pending = append(pending, watch.changes)
+		}
+	}
+	watchRegMu.Unlock()
+	for _, changes := range pending {
+		if err := changes.wait(ctx); err != nil {
+			return err
+		}
+	}
 	if err := o.work.Wait(ctx); err != nil {
 		return err
 	}

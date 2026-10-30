@@ -47,8 +47,10 @@ import (
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/promptattach"
+	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/scan"
+	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
@@ -61,7 +63,6 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 )
 
 // Dependencies are the host-supplied services the API routes over.
@@ -155,6 +156,7 @@ type WorkflowDependencies struct {
 }
 
 type SourceDependencies struct {
+	RepoProvider    repoinfo.Provider
 	SourceLedger    *sourceledger.Store
 	SourceMutations *projectsource.SourceMutationService
 	FileOperations  *fileops.Service
