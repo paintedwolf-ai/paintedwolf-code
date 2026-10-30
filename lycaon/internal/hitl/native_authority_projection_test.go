@@ -71,7 +71,7 @@ func TestNativeAuthorityProjectionRejectsUnknownFieldsEnumsAndUnadmittedWork(t *
 	}
 	defer release()
 	for _, change := range []string{"unknown field", "missing field", "unknown enum"} {
-		value, releaseValue, err := toolcontract.RestoreNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, projection.Representation(), projection.Digest(), projection.Canonical())
+		value, _, releaseValue, err := toolcontract.RestoreNativeValue(t.Context(), memory, toolcontract.ApprovalAuthorityDomain, projection.Representation(), projection.Digest(), projection.Canonical())
 		if err != nil {
 			testutil.FailErr(t, "restore authority for tamper fixture", err)
 		}

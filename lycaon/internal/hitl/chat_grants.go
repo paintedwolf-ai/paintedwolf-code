@@ -187,41 +187,55 @@ func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
 	now := time.Now().UTC()
-	grants, releaseGrants, err := restoredChatGrants(ctx, m.store, m.nativeAdmission, now)
+	grants, err := m.store.chatGrants(ctx, now)
 	if err != nil {
 		return err
 	}
-	defer releaseGrants()
 	for _, grant := range grants {
-		delta, live := grant.rebased(now)
-		if !live {
-			continue
+		if err := m.restoreChatGrant(ctx, grant, now); err != nil {
+			return err
 		}
-		option := ApprovalOption{Authority: []ApprovalAuthorityDelta{delta}}
-		if delta.Kind == AuthoritySocketChat {
-			unavailable := socketref.Platform().Command == socketref.NoRealization && socketref.Platform().Native == socketref.NoRealization
-			for _, target := range delta.Sockets {
-				if confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}) != nil {
-					unavailable = true
-				}
-			}
-			if unavailable {
-				restorer, ok := m.authorityInstaller.(unavailableSocketIntentRestorer)
-				if !ok {
-					return fmt.Errorf("saved socket intent restoration is not configured")
-				}
-				grant.Delta = delta
-				if err := restorer.RestoreUnavailableSocketIntent(ctx, grant); err != nil {
-					return err
-				}
-				continue
+	}
+	return nil
+}
+
+func (m *ApprovalAuthority) restoreChatGrant(ctx context.Context, grant ChatGrant, now time.Time) error {
+	if grant.authorityFormat != "" {
+		delta, release, err := m.store.nativeAuthority().chatGrant(ctx, m.nativeAdmission, grant.ChatSessionID, grant.ID, grant.Delta)
+		if err != nil {
+			return err
+		}
+		defer release()
+		grant.Delta = delta
+	}
+	delta, live := grant.rebased(now)
+	if !live {
+		return nil
+	}
+	option := ApprovalOption{Authority: []ApprovalAuthorityDelta{delta}}
+	if delta.Kind == AuthoritySocketChat {
+		unavailable := socketref.Platform().Command == socketref.NoRealization && socketref.Platform().Native == socketref.NoRealization
+		for _, target := range delta.Sockets {
+			if confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}) != nil {
+				unavailable = true
 			}
 		}
-		if _, err := m.authorityInstaller.InstallApprovalOption(ctx, grant.CheckpointID, option); err != nil {
-			slog.WarnContext(ctx, "chat grant no longer installs", "chat_session_id", grant.ChatSessionID, "grant_id", grant.ID, "error", err)
-			if _, forgetErr := m.store.forgetChatGrant(ctx, grant.ID); forgetErr != nil {
-				return forgetErr
+		if unavailable {
+			restorer, ok := m.authorityInstaller.(unavailableSocketIntentRestorer)
+			if !ok {
+				return fmt.Errorf("saved socket intent restoration is not configured")
 			}
+			grant.Delta = delta
+			if err := restorer.RestoreUnavailableSocketIntent(ctx, grant); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	if _, err := m.authorityInstaller.InstallApprovalOption(ctx, grant.CheckpointID, option); err != nil {
+		slog.WarnContext(ctx, "chat grant no longer installs", "chat_session_id", grant.ChatSessionID, "grant_id", grant.ID, "error", err)
+		if _, forgetErr := m.store.forgetChatGrant(ctx, grant.ID); forgetErr != nil {
+			return forgetErr
 		}
 	}
 	return nil

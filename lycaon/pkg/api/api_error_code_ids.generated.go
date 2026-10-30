@@ -7,6 +7,9 @@ package api
 type ApiErrorCode string
 
 const (
+	// ApiErrorCodeApprovalCapacityExceeded Approval authority exceeds the bounded
+	// decision capacity.
+	ApiErrorCodeApprovalCapacityExceeded ApiErrorCode = "approval_capacity_exceeded"
 	// ApiErrorCodeSourceViewNotFound The host does not retain this source view,
 	// presentation, or interest handle for the caller (never issued, expired,
 	// released, evicted, or issued before a restart); reopen it with the same
@@ -952,6 +955,7 @@ const (
 )
 
 var allApiErrorCodeValues = []ApiErrorCode{
+	ApiErrorCodeApprovalCapacityExceeded,
 	ApiErrorCodeSourceViewNotFound,
 	ApiErrorCodeSourceViewRevisionChanged,
 	ApiErrorCodeSourceViewCapacity,
@@ -1585,7 +1589,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeUnsupportedEncoding,
 		ApiErrorCodeSourceRawNotImage:
 		return 415
-	case ApiErrorCodeRewindAnchorIneligible,
+	case ApiErrorCodeApprovalCapacityExceeded,
+		ApiErrorCodeRewindAnchorIneligible,
 		ApiErrorCodeRewindModeUnsupported,
 		ApiErrorCodeFeedbackResponseRequired,
 		ApiErrorCodeSourceVersionUnavailable,

@@ -263,11 +263,12 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 
 // RecoverApprovalOperations rolls back authority installed without a committed checkpoint.
 func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error {
-	pending, releasePending, err := restoredApprovalOperations(ctx, m.store, m.nativeAdmission)
+	release := m.LockApprovalAuthority()
+	defer release()
+	pending, err := m.store.preparedApprovalOperations(ctx)
 	if err != nil {
 		return err
 	}
-	defer releasePending()
 	if len(pending) == 0 {
 		return nil
 	}
@@ -276,14 +277,26 @@ func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error
 		return fmt.Errorf("approval authority recovery is not configured")
 	}
 	for _, op := range pending {
-		if err := recovery.RollbackApprovalOption(ctx, op.CheckpointID, op.Option); err != nil {
-			return err
-		}
-		if err := m.store.rollbackApprovalOperation(ctx, op.CheckpointID); err != nil {
+		if err := m.recoverApprovalOperation(ctx, recovery, op); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (m *ApprovalAuthority) recoverApprovalOperation(ctx context.Context, recovery approvalAuthorityRecovery, op preparedApprovalOperation) error {
+	if op.authorityFormat != "" {
+		option, release, err := m.store.nativeAuthority().approvedOption(ctx, m.nativeAdmission, operationAuthoritySource(op.CheckpointID), op.Option)
+		if err != nil {
+			return err
+		}
+		defer release()
+		op.Option = option
+	}
+	if err := recovery.RollbackApprovalOption(ctx, op.CheckpointID, op.Option); err != nil {
+		return err
+	}
+	return m.store.rollbackApprovalOperation(ctx, op.CheckpointID)
 }
 
 type ApprovalAuthority struct {

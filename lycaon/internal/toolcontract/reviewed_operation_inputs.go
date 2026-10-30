@@ -35,16 +35,17 @@ type OperationInspectionProjector interface {
 	ProjectOperationInputs(context.Context, ReviewStateAdmission, map[string]any) (map[string]any, func(), error)
 }
 
+// Each reservation includes its lease and traversal frame. Payload sizes belong to callers.
 type reviewLeases struct{ releases []func() }
 
 func (l *reviewLeases) reserve(ctx context.Context, admission ReviewStateAdmission, payload int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if payload < 0 || payload > (math.MaxInt64-2048)/16 {
+	if payload < 0 || payload > math.MaxInt64-128 {
 		return fmt.Errorf("review argument memory bound overflow")
 	}
-	release, err := admission.ReserveProgramState(ctx, 2048+16*payload)
+	release, err := admission.ReserveProgramState(ctx, 128+payload)
 	if err != nil {
 		return err
 	}

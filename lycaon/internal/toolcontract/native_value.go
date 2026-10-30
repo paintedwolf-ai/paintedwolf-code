@@ -53,13 +53,33 @@ func NewNativeValue(ctx context.Context, state ReviewStateAdmission, domain Nati
 		leases.close()
 		return NativeValue{}, nil, err
 	}
-	raw, err := json.Marshal([]any{string(domain), 1, encoded})
+	bound, err := nativeJSONBound(encoded)
 	if err != nil {
 		leases.close()
 		return NativeValue{}, nil, err
 	}
+	// Marshal's buffer, returned bytes, and immutable string coexist during publication.
+	releaseJSON, err := state.ReserveProgramState(ctx, 3*bound)
+	if err != nil {
+		leases.close()
+		return NativeValue{}, nil, err
+	}
+	if releaseJSON == nil {
+		leases.close()
+		return NativeValue{}, nil, fmt.Errorf("native encoding requires retained admission")
+	}
+	defer releaseJSON()
+	defer leases.close()
+	raw, err := json.Marshal([]any{string(domain), 1, encoded})
+	if err != nil {
+		return NativeValue{}, nil, err
+	}
+	retained := &reviewLeases{}
+	if err := retained.reserve(ctx, state, int64(len(raw))); err != nil {
+		return NativeValue{}, nil, err
+	}
 	sum := sha256.Sum256(raw)
-	return NativeValue{domain: domain, digest: hex.EncodeToString(sum[:]), canonical: string(raw), valid: true}, leases.release(), nil
+	return NativeValue{domain: domain, digest: hex.EncodeToString(sum[:]), canonical: string(raw), valid: true}, retained.release(), nil
 }
 
 // Value decodes only this value's exact versioned domain. The detached raw
@@ -69,10 +89,15 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 		return nil, nil, fmt.Errorf("admitted native value required")
 	}
 	leases := &reviewLeases{}
+	defer func() {
+		if leases != nil {
+			leases.close()
+		}
+	}()
 	if int64(len(v.canonical)) > (math.MaxInt64-2048)/64 {
 		return nil, nil, fmt.Errorf("native value restore bound overflow")
 	}
-	if err := leases.reserve(ctx, state, int64(len(v.canonical))*4); err != nil {
+	if err := leases.reserve(ctx, state, int64(len(v.canonical))*8); err != nil {
 		return nil, nil, err
 	}
 	decoder := json.NewDecoder(strings.NewReader(v.canonical))
@@ -96,34 +121,36 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 		leases.close()
 		return nil, nil, err
 	}
-	return value, leases.release(), nil
+	release := leases.release()
+	leases = nil
+	return value, release, nil
 }
 
 // RestoreNativeValue verifies persisted version, domain, digest and canonical
 // grammar under admission before hashing/copying. Domain confusion refuses.
-func RestoreNativeValue(ctx context.Context, state ReviewStateAdmission, domain NativeValueDomain, representation, digest, canonical string) (NativeValue, func(), error) {
+func RestoreNativeValue(ctx context.Context, state ReviewStateAdmission, domain NativeValueDomain, representation, digest, canonical string) (NativeValue, any, func(), error) {
 	if !domain.valid() || representation != string(domain)+"_v1" {
-		return NativeValue{}, nil, fmt.Errorf("unknown native value representation")
+		return NativeValue{}, nil, nil, fmt.Errorf("unknown native value representation")
 	}
 	candidate := NativeValue{domain: domain, digest: digest, canonical: canonical, valid: true}
 	value, releaseDecoded, err := candidate.Value(ctx, state)
 	if err != nil {
-		return NativeValue{}, nil, err
+		return NativeValue{}, nil, nil, err
 	}
 	sum := sha256.Sum256([]byte(canonical))
 	if digest != hex.EncodeToString(sum[:]) {
 		releaseDecoded()
-		return NativeValue{}, nil, fmt.Errorf("native value digest mismatch")
+		return NativeValue{}, nil, nil, fmt.Errorf("native value digest mismatch")
 	}
 	normalized, releaseEncoded, err := NewNativeValue(ctx, state, domain, value)
 	if err != nil {
 		releaseDecoded()
-		return NativeValue{}, nil, err
+		return NativeValue{}, nil, nil, err
 	}
 	if normalized.canonical != canonical {
 		releaseEncoded()
 		releaseDecoded()
-		return NativeValue{}, nil, fmt.Errorf("noncanonical native value representation")
+		return NativeValue{}, nil, nil, fmt.Errorf("noncanonical native value representation")
 	}
-	return normalized, func() { releaseEncoded(); releaseDecoded() }, nil
+	return normalized, value, func() { releaseEncoded(); releaseDecoded() }, nil
 }

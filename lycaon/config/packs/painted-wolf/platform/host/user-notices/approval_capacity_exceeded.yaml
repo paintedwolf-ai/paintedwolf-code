@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Approval could not be applied"
+message: "This approval exceeds the app’s decision capacity. The action is still waiting for your decision."
+suggested_action: "Reject the action or stop the session. Report this from Settings → Advanced → Diagnostics."
+retryable: false
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "still waiting"

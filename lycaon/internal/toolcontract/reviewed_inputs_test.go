@@ -37,7 +37,7 @@ func TestNativeValueDomainsCannotAcquireOperationMeaning(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(decoded, args) {
 			t.Fatal("neutral codec changed original byte values", err)
 		}
-		restored, releaseRestored, err := RestoreNativeValue(t.Context(), memory, domain, value.Representation(), value.Digest(), value.Canonical())
+		restored, _, releaseRestored, err := RestoreNativeValue(t.Context(), memory, domain, value.Representation(), value.Digest(), value.Canonical())
 		if err != nil || restored != value {
 			t.Fatal("neutral persisted value changed", err)
 		}

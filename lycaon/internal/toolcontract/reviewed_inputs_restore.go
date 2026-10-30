@@ -29,21 +29,15 @@ func (r ReviewedOperationInputs) Arguments(ctx context.Context, admission Review
 // RestoreReviewedOperationInputs accepts only the executable-input domain and
 // object shape. Other native value domains cannot acquire operation meaning.
 func RestoreReviewedOperationInputs(ctx context.Context, admission ReviewStateAdmission, representation, digest, canonical string) (ReviewedOperationInputs, func(), error) {
-	value, release, err := RestoreNativeValue(ctx, admission, OperationArgumentsDomain, representation, digest, canonical)
+	value, object, release, err := RestoreNativeValue(ctx, admission, OperationArgumentsDomain, representation, digest, canonical)
 	if err != nil {
-		return ReviewedOperationInputs{}, nil, err
-	}
-	object, releaseObject, err := value.Value(ctx, admission)
-	if err != nil {
-		release()
 		return ReviewedOperationInputs{}, nil, err
 	}
 	if _, ok := object.(map[string]any); !ok {
-		releaseObject()
 		release()
 		return ReviewedOperationInputs{}, nil, fmt.Errorf("operation argument root must be an object")
 	}
-	return ReviewedOperationInputs{value: value}, func() { releaseObject(); release() }, nil
+	return ReviewedOperationInputs{value: value}, release, nil
 }
 
 func decodeReviewString(value any) (string, error) {
@@ -70,6 +64,13 @@ func decodeReviewString(value any) (string, error) {
 }
 
 func decodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leases *reviewLeases, value any) (any, error) {
+	return decodeReviewValueAt(ctx, admission, leases, value, 0)
+}
+
+func decodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, leases *reviewLeases, value any, depth int) (any, error) {
+	if depth > nativeValueMaxDepth {
+		return nil, fmt.Errorf("native value nesting exceeds %d", nativeValueMaxDepth)
+	}
 	node, ok := value.([]any)
 	if !ok || len(node) < 1 {
 		return nil, fmt.Errorf("invalid review value tag")
@@ -115,7 +116,7 @@ func decodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leas
 		}
 		result := make([]any, 0, len(items))
 		for _, item := range items {
-			v, err := decodeReviewValue(ctx, admission, leases, item)
+			v, err := decodeReviewValueAt(ctx, admission, leases, item, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -145,7 +146,7 @@ func decodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leas
 				return nil, fmt.Errorf("review keys are not distinct raw-byte sorted keys")
 			}
 			previous = key
-			item, err := decodeReviewValue(ctx, admission, leases, pair[1])
+			item, err := decodeReviewValueAt(ctx, admission, leases, pair[1], depth+1)
 			if err != nil {
 				return nil, err
 			}
