@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
-import type { Message } from "../../api/types.ts";
+import type { CommandProgramReceipt, Message } from "../../api/types.ts";
 import {
   classifyToolKind,
   isBenignToolResult,
@@ -531,4 +531,28 @@ describe("tool-part-model", () => {
       false,
     );
   });
+});
+
+it("shows a background activity's observed process outcome rather than its launch status", () => {
+ resetBackgroundProcessStoreForTests();
+ const part:ToolPartView={id:"activity",toolCallId:"launch",assistantMessageId:"assistant",messageId:"result",tool:"command",kind:"command",status:"completed",process:{handle:"job",running:true},commandActivity:{fact:{id:"process",group:"Running programs",label:"Run process",subject:"helper",state:"completed",outcome:"Exited 0",execution_ids:[],spans:[]},members:[],calls:[]}};
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Running");
+ applyBackgroundProcessEvent({session_id:"activity-job",process_id:"job",stream:"exit",end_offset:0,running:false,exit_code:7});
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Exited 7");
+ expect(toolPartDisplayStatus(part,"activity-job")).toBe("error");
+ part.status="error";part.commandActivity!.fact.outcome="Output read failed";
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Output read failed");
+ resetBackgroundProcessStoreForTests();
+ part.status="completed";applyBackgroundProcessOutputs("activity-job",[]);
+ expect(toolCompletionLabel(part,"activity-job")).toBe("Completed");
+ resetBackgroundProcessStoreForTests();
+});
+
+
+it("uses explicit program state for a result with an empty output body", () => {
+ for (const state of ["running","waiting","completed","failed","rejected","interrupted"] as const) {
+  const result:Message={id:"result",role:"tool",origin:"tool",authority:"none",trust_tier:"untrusted",content:"",created_at:"2026-10-30T10:00:00Z",tool_result:{tool:"command",content:"",command_program:{id:"program",state} as CommandProgramReceipt}};
+  const part=toolPartFromCall({id:"call",name:"command",args:{}},result,"assistant");
+  expect(part.status).toBe(state==="running"||state==="waiting"?"running":state==="completed"?"completed":"error");
+ }
 });

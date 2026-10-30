@@ -411,7 +411,7 @@ function hostActivityCandidate(
     };
   }
   if (activity.kind === "running_tool") {
-    if (activity.progress) {
+    if (activity.progress && activity.progress.phase !== "executing") {
       const progress = activity.progress;
       return {
         label: progress.phase === "selecting"

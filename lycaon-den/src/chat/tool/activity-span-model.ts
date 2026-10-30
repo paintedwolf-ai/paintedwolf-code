@@ -62,10 +62,10 @@ function entryCommandLabel(entry: ActivitySpanEntry): string {
   if (entry.kind === "index_warming") return "index warming";
   if (entry.kind === "turn_load") return LOCAL_AI_LABEL;
   if (isSkillToolPart(entry.part)) return SKILL_CHICKLET_NAME;
-  return entry.part.tool.trim().toLowerCase() || "tool activity";
+  return entry.part.commandActivity?.fact.label ?? (entry.part.tool.trim().toLowerCase() || "tool activity");
 }
 
-/** Adjacent calls join when the host scoped them together: one run, one worker loop, or one assistant row. */
+/** Transcript boundaries stop adjacent command and worker runs. */
 function activityScope(
   fallback: string,
   workflowRunId: string | undefined,
@@ -439,10 +439,13 @@ export function projectActivitySpans(
       continue;
     }
     const candidate = activityCandidate(item, opts);
+    const commandRun = candidate.role === "command" || candidate.entry.kind === "turn_load"
+      ? !scope?.startsWith("run:") && !candidate.scope.startsWith("run:") && run.some(value => value.role === "command") && run.every(value => value.role === "command" || value.entry.kind === "turn_load")
+      : false;
     // A first-touch write keeps later calls below its diff card.
     if (
       scope !== null &&
-      (scope !== candidate.scope ||
+      ((scope !== candidate.scope && !commandRun) ||
         (runAnchorPartIds.length > 0 && !candidateIsFileEdit(candidate)))
     ) {
       flushRun();

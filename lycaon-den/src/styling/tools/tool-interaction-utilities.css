@@ -323,3 +323,88 @@
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 
+
+/* Activity headers reserve outcome and disclosure space at every width. */
+.den-tool-part[data-command-activity] .den-tool-part-chicklet-main {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.den-tool-part[data-command-activity] .den-tool-part-title,
+.den-tool-part[data-expanded="true"][data-command-activity] .den-tool-part-title {
+  min-width: 0;
+  flex: 1 1 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.den-command-activity-outcome {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.den-command-activity-details,
+.den-command-activity-source {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.den-command-activity-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-width: 0;
+  padding: 4px 0;
+}
+.den-command-activity-step code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.den-command-activity-step span {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+.den-command-activity-command {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.den-command-activity-command mark {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+}
+.den-command-activity-details .den-tool-part-card-facts dd {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  margin-left: auto;
+}
+
+.den-tool-part[data-command-activity] .den-tool-part-name {
+  min-width: 0;
+  max-width: 45%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-command-activity-command,
+.den-command-activity-details .den-command-activity-output-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.den-command-activity-details .den-tool-part-card-facts dd {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
