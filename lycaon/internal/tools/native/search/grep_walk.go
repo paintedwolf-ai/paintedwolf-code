@@ -209,8 +209,7 @@ func displayOr(display string) string {
 	return display
 }
 
-// searchFile pins and searches one regular file. rg's recursion skips binary
-// files unless -uuu asks for them.
+// searchFile pins and searches one regular file, applying recursive binary policy.
 func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.files != nil {
 		return r.files.submit(e, names, walked)
