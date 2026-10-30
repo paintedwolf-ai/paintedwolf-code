@@ -1,11 +1,7 @@
 package contract
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,118 +9,69 @@ import (
 	"testing"
 
 	lyexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/tokenest"
-	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-func TestGitSurveysOutsideRepositoryReturnTypedRefusal(t *testing.T) {
-	for _, name := range []string{"git_diff", "git_status"} {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			executor := toolfixture.ContractToolExecutor(t)
-			out, err := executor.Invoke(t.Context(), name, map[string]any{}, tools.ToolContext{
-				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-					ActiveRootID: "r1"},
-				Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
-			})
-			var refusal *toolrejection.ToolReject
-			if !errors.As(err, &refusal) || refusal.Code != "TOOL_OWNER_FAILED" {
-				t.Fatalf("%s outside repository = %q, %v; want typed owner refusal", name, out, err)
-			}
-			if strings.Contains(out, "usage: git") {
-				t.Fatalf("CLI usage leaked: %s", out)
+func gitProgramContext(dir string) tools.ToolContext {
+	return tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
+	}
+}
+
+func TestGitSurveysOutsideRepositoryKeepNativeFailure(t *testing.T) {
+	for _, source := range []string{"git diff", "git status"} {
+		t.Run(source, func(t *testing.T) {
+			out, err := toolfixture.NewProgramFixture(t).Invoke(t, source, gitProgramContext(t.TempDir()))
+			contractcheck.FailErr(t, "invoke outside repository", err)
+			if out.Status == 0 || out.Refusal != nil || out.Stderr == "" {
+				t.Fatalf("native repository failure lost: %+v", out)
 			}
 		})
 	}
 }
 
-// The default status page fits the model's tool-result window.
-func TestGitStatusPagesLargeTreeContract(t *testing.T) {
-	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+func TestGitStatusListsLargeTreeAndNarrowsPathsContract(t *testing.T) {
+	dir := contractGitRepo(t)
 	contractcheck.FailErr(t, "mkdir fixtures", os.MkdirAll(filepath.Join(dir, "fixtures"), 0o755))
-	contractcheck.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
-	const fixtureFiles = 150
-	for i := range fixtureFiles {
+	const files = 150
+	for i := range files {
 		rel := filepath.Join("fixtures", fmt.Sprintf("f%03d.txt", i))
 		contractcheck.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(dir, rel), []byte("x\n"), 0o644))
 	}
-	contractcheck.FailErr(t, "write src/main.go", os.WriteFile(filepath.Join(dir, "src", "main.go"), []byte("package main\n"), 0o644))
-
-	execTool := toolfixture.ContractToolExecutor(t)
-	tctx := tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "coordinator"},
-	}
-	call := func(args map[string]any) map[string]any {
+	contractcheck.FailErr(t, "write new source", os.WriteFile(filepath.Join(dir, "src", "new.go"), []byte("package src\n"), 0o644))
+	f := toolfixture.NewProgramFixture(t)
+	call := func(source string) command.ProgramOutcome {
 		t.Helper()
-		out, err := execTool.Invoke(context.Background(), "git_status", args, tctx)
-		contractcheck.FailErr(t, "git_status invoke", err)
-		var obj map[string]any
-		contractcheck.FailErr(t, "decode git_status", json.Unmarshal([]byte(out), &obj))
-		if obj["available"] != true {
-			t.Fatalf("git_status unavailable: %s", out)
-		}
-		return obj
-	}
-	pagePaths := func(obj map[string]any) []string {
-		files, _ := obj["files"].([]any)
-		out := make([]string, 0, len(files))
-		for _, f := range files {
-			out = append(out, f.(map[string]any)["path"].(string))
+		out, err := f.Invoke(t, source, gitProgramContext(dir))
+		contractcheck.FailErr(t, "invoke git status", err)
+		if out.Status != 0 || out.Refusal != nil || out.Truncated {
+			t.Fatalf("incomplete status: %+v", out)
 		}
 		return out
 	}
-
-	first := call(map[string]any{})
-	if got := len(pagePaths(first)); got != toolhost.GitPageFiles {
-		t.Fatalf("default page = %d files want %d", got, toolhost.GitPageFiles)
-	}
-	if first["files_total"].(float64) != fixtureFiles+1 || first["untracked_count"].(float64) != fixtureFiles+1 {
-		t.Fatalf("receipt = total %v untracked %v want %d", first["files_total"], first["untracked_count"], fixtureFiles+1)
-	}
-	seen := map[string]struct{}{}
-	obj := first
-	for pages := 0; ; pages++ {
-		for _, p := range pagePaths(obj) {
-			if _, dup := seen[p]; dup {
-				t.Fatalf("path %q returned twice", p)
-			}
-			seen[p] = struct{}{}
+	out := call("git status --porcelain=v1 --untracked-files=all")
+	seen := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSuffix(out.Stdout, "\n"), "\n") {
+		if !strings.HasPrefix(line, "?? ") {
+			t.Fatalf("unexpected status %q", line)
 		}
-		next, more := obj["next_offset"].(float64)
-		if !more {
-			break
+		path := strings.TrimPrefix(line, "?? ")
+		if seen[path] {
+			t.Fatalf("duplicate path %q", path)
 		}
-		if pages > 5 {
-			t.Fatal("paging did not terminate")
-		}
-		obj = call(map[string]any{"offset": next})
+		seen[path] = true
 	}
-	if len(seen) != fixtureFiles+1 {
-		t.Fatalf("paged %d distinct files want %d", len(seen), fixtureFiles+1)
+	if len(seen) != files+1 || seen["fixtures/"] || !seen["fixtures/f000.txt"] || !seen["fixtures/f149.txt"] {
+		t.Fatalf("status paths = %v", seen)
 	}
-	if _, collapsed := seen["fixtures/"]; collapsed {
-		t.Fatal("untracked directory was collapsed instead of listed per file")
-	}
-
-	narrowed := call(map[string]any{"paths": []any{"src"}})
-	if got := pagePaths(narrowed); len(got) != 1 || got[0] != "src/main.go" {
-		t.Fatalf("paths=[src] selected %v", got)
-	}
-	if narrowed["files_total"].(float64) != 1 || narrowed["files_truncated"] != false {
-		t.Fatalf("narrowed receipt = %v", narrowed)
+	narrowed := call("git status --porcelain=v1 --untracked-files=all -- src")
+	if narrowed.Stdout != "?? src/new.go\n" {
+		t.Fatalf("path selection = %q", narrowed.Stdout)
 	}
 }
 
@@ -157,116 +104,48 @@ func contractGitRepo(t *testing.T) string {
 	return dir
 }
 
-// The producer retains selected hunks and their byte counts until screening.
-func TestGitDiffRetainsSelectedHunksUntilScreenedProjectionContract(t *testing.T) {
+// Native Git retains complete hunks before the bounded command projection.
+func TestGitDiffRetainsSelectedHunksThroughCommandContract(t *testing.T) {
 	dir := contractGitRepo(t)
-	// Each modified file carries ~1.2 KiB of hunk text, so twelve of them
-	// overflow the 5 KiB default page several times over.
 	body := "package src\n\n" + strings.Repeat("// a line of commentary that pads the hunk to a realistic width\n", 18) + "var v = 1\n"
 	for i := range 12 {
 		rel := filepath.Join("src", fmt.Sprintf("f%02d.go", i))
 		contractcheck.FailErr(t, "modify "+rel, os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o644))
 	}
-	contractcheck.FailErr(t, "write untracked", os.WriteFile(filepath.Join(dir, "src", "new.go"), []byte("package src\n\nvar fresh = true\n"), 0o644))
-
-	execTool := toolfixture.ContractToolExecutor(t)
-	tctx := tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "coordinator"},
-	}
-	call := func(args map[string]any) (map[string]any, string) {
+	f := toolfixture.NewProgramFixture(t)
+	call := func(source string) command.ProgramOutcome {
 		t.Helper()
-		out, err := execTool.Invoke(context.Background(), "git_diff", args, tctx)
-		contractcheck.FailErr(t, "git_diff invoke", err)
-		var obj map[string]any
-		contractcheck.FailErr(t, "decode git_diff", json.Unmarshal([]byte(out), &obj))
-		if obj["available"] != true {
-			t.Fatalf("git_diff unavailable: %s", out)
-		}
-		return obj, out
-	}
-	entries := func(obj map[string]any) []map[string]any {
-		files, _ := obj["files"].([]any)
-		out := make([]map[string]any, 0, len(files))
-		for _, f := range files {
-			out = append(out, f.(map[string]any))
+		out, err := f.Invoke(t, source, gitProgramContext(dir))
+		contractcheck.FailErr(t, "invoke git diff", err)
+		if out.Status != 0 || out.Refusal != nil || out.Truncated {
+			t.Fatalf("incomplete diff: %+v", out)
 		}
 		return out
 	}
-
-	first, raw := call(map[string]any{})
-	if tokenest.EstimateDefault(raw) < compaction.DefaultCompactionConfig().ChunkTokenThreshold {
-		t.Fatal("fixture must exercise retention before model compaction")
+	out := call("git diff")
+	if len(out.Stdout) <= 5<<10 || strings.Count(out.Stdout, "diff --git ") != 12 || strings.Count(out.Stdout, "+var v = 1") != 12 || out.StdoutRef == "" {
+		t.Fatalf("diff lost retained hunks: %+v", out)
 	}
-	if first["files_total"].(float64) != 12 || first["max_bytes"].(float64) != git.DefaultGitDiffPageBytes {
-		t.Fatalf("receipt = %v", first)
-	}
-	page := entries(first)
-	if len(page) != 12 {
-		t.Fatalf("producer must retain every selected file before screening, got %d", len(page))
-	}
-	used := 0
-	for _, e := range page {
-		hunk, _ := e["diff"].(string)
-		if e["diff_bytes"] != float64(len(hunk)) {
-			t.Fatalf("entry lost original byte count: %v", e)
+	for i := range 12 {
+		path := fmt.Sprintf("src/f%02d.go", i)
+		if !strings.Contains(out.Stdout, "diff --git a/"+path+" b/"+path+"\n") {
+			t.Fatalf("missing whole hunk %s", path)
 		}
-		if !strings.HasPrefix(hunk, "diff --git ") || e["insertions"].(float64) < 18 {
-			t.Fatalf("entry lacks whole hunks: %v", e)
-		}
-		if e["diff_truncated"] == true {
-			t.Fatalf("whole files must not be cut on a multi-file page: %v", e)
-		}
-		used += len(hunk)
 	}
-	if used <= git.DefaultGitDiffPageBytes {
-		t.Fatalf("fixture must exceed the model hunk budget, got %d bytes", used)
+	stat := call("git diff --stat")
+	if !strings.Contains(stat.Stdout, "12 files changed") || strings.Contains(stat.Stdout, "diff --git ") {
+		t.Fatalf("stat = %q", stat.Stdout)
 	}
-	seen := map[string]struct{}{}
-	obj := first
-	for pages := 0; ; pages++ {
-		for _, e := range entries(obj) {
-			p := e["path"].(string)
-			if _, dup := seen[p]; dup {
-				t.Fatalf("path %q returned twice", p)
-			}
-			seen[p] = struct{}{}
-		}
-		next, more := obj["next_offset"].(float64)
-		if !more {
-			if obj["files_truncated"] != false {
-				t.Fatalf("last page must not be truncated: %v", obj)
-			}
-			break
-		}
-		if pages > 12 {
-			t.Fatal("paging did not terminate")
-		}
-		obj, _ = call(map[string]any{"offset": next})
+	selected := call("git diff HEAD -- src/f00.go")
+	if strings.Count(selected.Stdout, "diff --git ") != 1 || !strings.Contains(selected.Stdout, "+var v = 1") {
+		t.Fatalf("revision/path selection = %q", selected.Stdout)
 	}
-	if len(seen) != 12 {
-		t.Fatalf("paged %d distinct files want 12", len(seen))
+	refused, err := f.Invoke(t, "git diff --output=escaped.patch", gitProgramContext(dir))
+	contractcheck.FailErr(t, "invoke unsupported output option", err)
+	if refused.Refusal == nil || refused.Refusal.Code != "COMMAND_EFFECT_NOT_ALLOWED" {
+		t.Fatalf("output option escaped capture: %+v", refused)
 	}
-
-	stat, _ := call(map[string]any{"stat": true})
-	if got := entries(stat); len(got) != 12 || got[0]["diff"] != nil || stat["files_truncated"] != false {
-		t.Fatalf("stat mode must list every file without hunks: %v", stat)
-	}
-
-	untracked, _ := call(map[string]any{"untracked": true, "paths": []any{"src/new.go"}})
-	if got := entries(untracked); len(got) != 1 || got[0]["untracked"] != true || got[0]["insertions"].(float64) != 3 || !strings.Contains(got[0]["diff"].(string), "+var fresh = true") {
-		t.Fatalf("untracked file must appear as an addition with counts: %v", untracked)
-	}
-
-	base, _ := call(map[string]any{"base_ref": "HEAD", "paths": []any{"src/f00.go"}})
-	if got := entries(base); len(got) != 1 || base["base_ref"] != "HEAD" || got[0]["insertions"].(float64) < 18 {
-		t.Fatalf("base_ref HEAD must diff the worktree against HEAD: %v", base)
-	}
-	if _, err := execTool.Invoke(context.Background(), "git_diff", map[string]any{"base_ref": "--output=/tmp/x"}, tctx); err == nil {
-		out, _ := execTool.Invoke(context.Background(), "git_diff", map[string]any{"base_ref": "--output=/tmp/x"}, tctx)
-		if !strings.Contains(out, `"available":false`) {
-			t.Fatalf("an option-shaped base_ref must be refused, got %s", out)
-		}
+	if _, err := os.Stat(filepath.Join(dir, "escaped.patch")); !os.IsNotExist(err) {
+		t.Fatalf("refused output wrote a file: %v", err)
 	}
 }

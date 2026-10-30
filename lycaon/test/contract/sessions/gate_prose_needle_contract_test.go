@@ -108,6 +108,7 @@ var matcherNeedleArgs = map[string][]int{
 
 // matcherNonNeedle lists calls without string-pattern arguments.
 var matcherNonNeedle = map[string]bool{
+	"QuoteMeta":     true, // escapes literal regexp input; it performs no comparison
 	"Clone":         true, // copies its input; it performs no comparison
 	"Fields":        true,
 	"FieldsFunc":    true, // splits on a rune predicate; there is no needle

@@ -50,17 +50,17 @@ var frozenPostureToolMatrix = []postureToolExpectation{
 	// Profile grant; the turn surface gates invoke.
 	{
 		posture: api.SessionPostureSpec,
-		include: []string{"read", "write", "edit", "grep", "workflow_compose", "command"},
-		exclude: []string{"delegate_dispatch"},
+		include: []string{"edit", "workflow_compose", "command"},
+		exclude: []string{"delegate_dispatch", "read", "write", "grep", "git_diff"},
 	},
 	{
 		posture: api.SessionPostureBuild,
-		include: []string{"delegate_dispatch", "task", "read", "grep", "write", "state_start", "workflow_advance", "workflow_transition", "command"},
+		include: []string{"delegate_dispatch", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
 	},
 	{
 		posture: api.SessionPostureBuild,
 		withRun: true,
-		include: []string{"read", "write", "edit", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
+		include: []string{"edit", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
 	},
 }
 
@@ -77,7 +77,7 @@ func TestFrozenPostureToolMatrix(t *testing.T) {
 					t.Fatalf("expected %q in listed tools: %v", tool, listed)
 				}
 			}
-			for _, tool := range row.exclude {
+			for _, tool := range append(row.exclude, "read", "write", "grep", "git_diff") {
 				if containsToolName(listed, tool) {
 					t.Fatalf("expected %q absent from listed tools: %v", tool, listed)
 				}
@@ -123,7 +123,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: row.posture}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create session in store", err)
 	if row.withRun {
-		if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0"}); err != nil {
+		if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1"}); err != nil {
 			contractcheck.FailErr(t, "workflowMgr.Starts.StartHuman failed", err)
 		}
 	}
