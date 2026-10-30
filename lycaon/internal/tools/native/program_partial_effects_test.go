@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -210,14 +211,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		t.Fatalf("node reachability after loss: %+v", states)
 	}
 
-	// The journal named by the receipt still resolves to the landed bytes.
-	var path, op string
-	testutil.FailErr(t, "resolve recorded journal", database.QueryRowContext(t.Context(), `SELECT path,op FROM source_effects WHERE id=?`, journal).Scan(&path, &op))
-	data, err := os.ReadFile(filepath.Join(dir, "new.txt"))
-	testutil.FailErr(t, "read landed write", err)
-	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
-		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
-	}
+	assertPartialEffectsJournal(t, ledger, dir, journal)
 	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
 		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
 	}
@@ -288,4 +282,18 @@ func partialEffectsHTTP(attempt toolcontract.BoundOperation, httpArgs map[string
 		}}, nil
 	}
 	return httpEffect
+}
+
+// assertPartialEffectsJournal resolves the receipt to the actual mutation-door bytes.
+func assertPartialEffectsJournal(t *testing.T, ledger *sourceledger.Store, dir, journal string) {
+	t.Helper()
+	database := ledger.LedgerDB()
+	// The journal named by the receipt still resolves to the landed bytes.
+	var path, op string
+	testutil.FailErr(t, "resolve recorded journal", database.QueryRowContext(t.Context(), `SELECT path,op FROM source_effects WHERE id=?`, journal).Scan(&path, &op))
+	data, err := os.ReadFile(filepath.Join(dir, "new.txt"))
+	testutil.FailErr(t, "read landed write", err)
+	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
+		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
+	}
 }
