@@ -1,10 +1,11 @@
+import { GrantMenu } from "./GrantMenu.tsx";
 import { For, Show, createSignal } from "solid-js";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckboxControl } from "../primitives/DenCheckbox.tsx";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import { resolveSourceRequest } from "../../platform/navigation/open-source.ts";
-import { ActionsZone, approvalKeyHandler, GrantMenu, RedirectRail, ShellCard, ShellHeader, ShellScroll, useApprovalCollapse } from "./ApprovalShell.tsx";
+import { ActionsZone, approvalKeyHandler, RedirectRail, ShellCard, ShellHeader, ShellScroll, useApprovalCollapse } from "./ApprovalShell.tsx";
 import { checkpointRowLabel } from "./checkpoint-row-label.ts";
 import type { ApprovalCardProps } from "./approval-card-types.ts";
 

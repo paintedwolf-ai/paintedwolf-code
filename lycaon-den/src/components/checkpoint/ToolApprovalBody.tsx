@@ -1,3 +1,4 @@
+import { GrantMenu } from "./GrantMenu.tsx";
 import { IgnoreSecretDialog } from "../source/secrets/IgnoreSecretDialog.tsx";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { For, Show, createMemo, createSignal, createEffect, on, onCleanup, onMount } from "solid-js";
@@ -9,7 +10,7 @@ import { DenButton } from "../primitives/DenButton.tsx";
 import { openSourceLocation } from "../../platform/navigation/open-source.ts";
 import { revealApprovalOrigin } from "../../chat/checkpoint/approval-reveal.ts";
 import { approvalSlot } from "../../chat/checkpoint/approval-slots.ts";
-import { ActionsZone, approvalKeyHandler, ContextZone, GrantMenu, RedirectRail, ShellCard, ShellHeader, ShellScroll, SubjectBlock, SubjectFact, SubjectLocation, SubjectTargets, useApprovalCollapse } from "./ApprovalShell.tsx";
+import { ActionsZone, approvalKeyHandler, ContextZone, RedirectRail, ShellCard, ShellHeader, ShellScroll, SubjectBlock, SubjectFact, SubjectLocation, SubjectTargets, useApprovalCollapse } from "./ApprovalShell.tsx";
 import { ApprovalContentLink } from "./ApprovalContentLink.tsx";
 import { ApprovalFileChanges } from "./ApprovalFileChanges.tsx";
 import { checkpointRowLabel } from "./checkpoint-row-label.ts";
