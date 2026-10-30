@@ -359,6 +359,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	mem := store.NewMemory()
 	blocker := &blockingNamingLLM{entered: make(chan struct{}, 2), release: make(chan struct{}), text: "Should never publish"}
 	providers := &llm.Registry{}
+	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
 	svc := &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
 	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -366,8 +367,15 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 	mgr.Runner.Curation.Kick(ctx, sess, "Build a CLI todo tracker with SQLite persistence")
+	namingFinished := make(chan struct{})
+	go func() {
+		mgr.Runner.Curation.Wait(t.Context())
+		close(namingFinished)
+	}()
 	select {
 	case <-blocker.entered:
+	case <-namingFinished:
+		t.Fatal("detached naming finished without entering the provider")
 	case <-t.Context().Done():
 		t.Fatal("detached naming did not start")
 	}
