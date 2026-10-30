@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"unicode/utf8"
 )
 
@@ -90,7 +91,7 @@ func decodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 	}
 	switch tag {
 	case "utf8", "bytes_base64":
-		return decodeReviewString(node)
+		return admitReviewString(ctx, admission, leases, node)
 	case "bool":
 		v, ok := node[1].(bool)
 		if ok {
@@ -100,6 +101,9 @@ func decodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 		text, ok := node[1].(string)
 		if !ok {
 			break
+		}
+		if err := leases.reserve(ctx, admission, int64(len(text))); err != nil {
+			return nil, err
 		}
 		number := json.Number(text)
 		raw, err := json.Marshal(number)
@@ -138,7 +142,7 @@ func decodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 			if !ok || len(pair) != 2 {
 				return nil, fmt.Errorf("invalid review object entry")
 			}
-			key, err := decodeReviewString(pair[0])
+			key, err := admitReviewString(ctx, admission, leases, pair[0])
 			if err != nil {
 				return nil, err
 			}
@@ -155,4 +159,23 @@ func decodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 		return result, nil
 	}
 	return nil, fmt.Errorf("invalid review value payload")
+}
+
+func admitReviewString(ctx context.Context, admission ReviewStateAdmission, leases *reviewLeases, value any) (string, error) {
+	tagged, ok := value.([]any)
+	if !ok || len(tagged) != 2 {
+		return "", fmt.Errorf("invalid review string tag")
+	}
+	text, ok := tagged[1].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid review string payload")
+	}
+	if int64(len(text)) > math.MaxInt64/2 {
+		return "", fmt.Errorf("native string size overflow")
+	}
+	// Base64 decoding can hold its byte buffer and returned string together.
+	if err := leases.reserve(ctx, admission, 2*int64(len(text))); err != nil {
+		return "", err
+	}
+	return decodeReviewString(value)
 }

@@ -33,6 +33,9 @@ func admitAuthorityLifecycle(ctx context.Context, projection NativeAuthorityProj
 		return err
 	}
 	for n, option := range restored.options {
+		if option.Disabled {
+			continue
+		}
 		_, _, releaseOption, err := prepareNativeOption(ctx, memory, option, display[n], Resolution{PersonID: "00000000-0000-4000-8000-000000000001"})
 		if err != nil {
 			return fmt.Errorf("approval choice cannot be answered: %w", err)

@@ -55,7 +55,7 @@ func encodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, le
 		sort.Strings(keys)
 		entries := make([]any, 0, len(keys))
 		for _, key := range keys {
-			if err := leases.reserve(ctx, admission, int64(len(key))); err != nil {
+			if err := leases.reserve(ctx, admission, 2*int64(base64.StdEncoding.EncodedLen(len(key)))); err != nil {
 				return nil, err
 			}
 			item, err := encodeReviewValueAt(ctx, admission, leases, v[key], depth+1)

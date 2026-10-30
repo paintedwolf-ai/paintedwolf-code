@@ -97,7 +97,10 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 	if int64(len(v.canonical)) > (math.MaxInt64-2048)/64 {
 		return nil, nil, fmt.Errorf("native value restore bound overflow")
 	}
-	if err := leases.reserve(ctx, state, int64(len(v.canonical))*8); err != nil {
+	// The parser envelope is scratch; decoded values retain their own reservations.
+	parsing := &reviewLeases{}
+	defer parsing.close()
+	if err := parsing.reserve(ctx, state, int64(len(v.canonical))*8); err != nil {
 		return nil, nil, err
 	}
 	decoder := json.NewDecoder(strings.NewReader(v.canonical))

@@ -15,7 +15,7 @@ func TestNativeApprovalCapacityCoversAnsweringBeforePublication(t *testing.T) {
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "create production memory", err)
 	option := CurrentActionOption()
-	option.Coverage = strings.Repeat("x", 5<<19)
+	option.Coverage = strings.Repeat("x", 45<<16)
 	projection, release, err := NewNativeAuthorityProjection(t.Context(), memory, []ApprovalOption{option})
 	testutil.FailErr(t, "encode a plan that fits creation", err)
 	release()
