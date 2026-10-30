@@ -27,11 +27,13 @@ func TestSeatbeltProtectedReadApprovalScope(t *testing.T) {
 		grant              string
 		certificateAllowed bool
 		credentialAllowed  bool
+		dirStatAllowed     bool
+		dirListAllowed     bool
 	}{
 		{name: "unapproved"},
-		{name: "certificate", grant: certificate, certificateAllowed: true},
-		{name: "credential", grant: credential, credentialAllowed: true},
-		{name: "directory", grant: parent, certificateAllowed: true, credentialAllowed: true},
+		{name: "certificate", grant: certificate, certificateAllowed: true, dirStatAllowed: true},
+		{name: "credential", grant: credential, credentialAllowed: true, dirStatAllowed: true},
+		{name: "directory", grant: parent, certificateAllowed: true, credentialAllowed: true, dirStatAllowed: true, dirListAllowed: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			boundary := confine.Confinement{Roots: []string{t.TempDir()}, ReadDenyPaths: []string{data}}
@@ -39,14 +41,19 @@ func TestSeatbeltProtectedReadApprovalScope(t *testing.T) {
 				boundary.ProtectedReadGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(tc.grant)}
 			}
 			for _, probe := range []struct {
+				prog    string
 				path    string
 				allowed bool
 			}{
-				{certificate, tc.certificateAllowed}, {credential, tc.credentialAllowed}, {control, false},
+				{"/bin/cat", certificate, tc.certificateAllowed},
+				{"/bin/cat", credential, tc.credentialAllowed},
+				{"/bin/cat", control, false},
+				{"/usr/bin/stat", data, tc.dirStatAllowed},
+				{"/bin/ls", data, tc.dirListAllowed},
 			} {
-				code, output := confinedRun(t, self, boundary, "/bin/cat", probe.path)
+				code, output := confinedRun(t, self, boundary, probe.prog, probe.path)
 				if (code == 0) != probe.allowed {
-					t.Fatalf("read %s exit=%d allowed=%v output=%s", probe.path, code, probe.allowed, output)
+					t.Fatalf("%s %s exit=%d allowed=%v output=%s", probe.prog, probe.path, code, probe.allowed, output)
 				}
 			}
 		})

@@ -65,3 +65,16 @@ x-paintedwolf-scenarios:
       - 'Code: SANDBOX_TRY_READ_PATH'
       - capability_request.read_path
       - id_ed25519
+  - id: keychain_traversal
+    vars:
+      tool: command
+      failed_stages: [gh pr view]
+      refused_read_paths:
+        - /Users/person/Library/Keychains
+        - /Users/person/Library/Keychains/login.keychain-db
+      refused_read_grants:
+        - /Users/person/Library/Keychains/login.keychain-db
+    expect_contains:
+      - 'Code: SANDBOX_TRY_READ_PATH'
+      - capability_request.read_path
+      - login.keychain-db

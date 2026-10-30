@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -238,5 +239,71 @@ func TestBoundProfileTagsEveryDenyRule(t *testing.T) {
 	testutil.FailErr(t, "build untagged profile", err)
 	if strings.Contains(untagged, "with message") {
 		t.Fatalf("unbound profile carries a tag:\n%s", untagged)
+	}
+}
+
+func TestSandboxRefusalsGrants(t *testing.T) {
+	keychains := filepath.Join(t.TempDir(), "Keychains")
+	testutil.FailErr(t, "create keychains dir", os.MkdirAll(keychains, 0o700))
+	loginDB := filepath.Join(keychains, "login.keychain-db")
+
+	repo := filepath.Join(t.TempDir(), "repo")
+	repoSub := filepath.Join(repo, "sub")
+	testutil.FailErr(t, "create repo sub", os.MkdirAll(repoSub, 0o700))
+	dotenv := filepath.Join(repo, ".env")
+	agents := filepath.Join(repo, "AGENTS.md")
+
+	for _, tc := range []struct {
+		name     string
+		access   FilesystemAccess
+		refusals []SandboxRefusal
+		want     []string
+	}{
+		{
+			name:   "keychain traversal metadata on ancestor drops ancestor grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains", Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: "/Users/person/Library/Keychains"},
+				{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains/login.keychain-db", Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: "/Users/person/Library/Keychains/login.keychain-db"},
+			},
+			want: []string{"/Users/person/Library/Keychains/login.keychain-db"},
+		},
+		{
+			name:   "existing directory metadata traversal still yields exact child grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-metadata", Target: loginDB, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: loginDB},
+			},
+			want: []string{loginDB},
+		},
+		{
+			name:   "directory file-read-data refusal preserves directory grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-data", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-metadata", Target: loginDB, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: loginDB},
+			},
+			want: []string{keychains},
+		},
+		{
+			name:   "cross-layer write grants stay distinct while same-layer directory covers child",
+			access: AccessWrite,
+			refusals: []SandboxRefusal{
+				{Operation: "file-write-create", Target: filepath.Join(repo, "out.txt"), Layer: FloorOutsideWriteRoots, Recovery: RecoverWriteRoot, Grant: repo},
+				{Operation: "file-write-create", Target: filepath.Join(repoSub, "nested.txt"), Layer: FloorOutsideWriteRoots, Recovery: RecoverWriteRoot, Grant: repoSub},
+				{Operation: "file-write-data", Target: dotenv, Layer: FloorProtected, Recovery: RecoverWriteRoot, Grant: dotenv},
+				{Operation: "file-write-data", Target: agents, Layer: FloorAgentPolicy, Recovery: RecoverWriteRoot, Grant: agents},
+			},
+			want: []string{repo, dotenv, agents},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := (SandboxRefusals{Refusals: tc.refusals}).Grants(tc.access)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Grants(%s) = %v, want %v", tc.access, got, tc.want)
+			}
+		})
 	}
 }

@@ -68,3 +68,22 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 		t.Fatal("observed refusal reports were discarded during path grouping")
 	}
 }
+
+func TestObserveConfineDropsAncestorMetadataReadGrant(t *testing.T) {
+	gc := oar.NewGuardContext()
+	ObserveConfine(gc, confine.Observation{Applied: true, Refusals: confine.SandboxRefusals{
+		Witness: confine.WitnessKernel,
+		Refusals: []confine.SandboxRefusal{
+			{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath, Grant: "/Users/person/Library/Keychains"},
+			{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains/login.keychain-db", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath, Grant: "/Users/person/Library/Keychains/login.keychain-db"},
+		},
+	}})
+	wantPaths := []string{"/Users/person/Library/Keychains", "/Users/person/Library/Keychains/login.keychain-db"}
+	if !slices.Equal(gc.Refusals.RefusedReadPaths, wantPaths) {
+		t.Fatalf("RefusedReadPaths = %v, want %v", gc.Refusals.RefusedReadPaths, wantPaths)
+	}
+	wantGrants := []string{"/Users/person/Library/Keychains/login.keychain-db"}
+	if !slices.Equal(gc.Refusals.RefusedReadGrants, wantGrants) {
+		t.Fatalf("RefusedReadGrants = %v, want %v", gc.Refusals.RefusedReadGrants, wantGrants)
+	}
+}
