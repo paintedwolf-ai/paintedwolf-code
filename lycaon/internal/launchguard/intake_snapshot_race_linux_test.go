@@ -3,6 +3,7 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,9 +66,11 @@ func TestIntakeStaleSnapshotFixture(t *testing.T) {
 
 func TestIntakeSnapshotAfterOwnedUnmount(t *testing.T) {
 	command := exec.Command("sudo", "-n", "env", intakeSnapshotFixture+"=1", os.Args[0], "-test.run=^TestIntakeStaleSnapshotFixture$")
-	out, err := command.CombinedOutput()
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	out, err := command.Output()
 	if err != nil {
-		t.Fatalf("isolated owned mount snapshot fixture: %v\n%s", err, out)
+		t.Fatalf("isolated owned mount snapshot fixture: %v\n%s\n%s", err, out, stderr.String())
 	}
 	var facts intakeSnapshotFacts
 	testutil.FailErr(t, "decode actual stale snapshot facts", json.Unmarshal(out, &facts))

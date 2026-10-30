@@ -50,9 +50,11 @@ func TestTopologyOwnedPollerFixture(t *testing.T) {
 
 func TestTopologyOwnedReaderHasExclusiveEpochNotifications(t *testing.T) {
 	command := exec.Command("sudo", "-n", "env", "PW_TOPOLOGY_OWNED_POLLER=1", os.Args[0], "-test.run=^TestTopologyOwnedPollerFixture$")
-	out, err := command.CombinedOutput()
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	out, err := command.Output()
 	if err != nil {
-		t.Fatalf("owned reader poll experiment: %v\n%s", err, out)
+		t.Fatalf("owned reader poll experiment: %v\n%s\n%s", err, out, stderr.String())
 	}
 	var facts topologyPollerFacts
 	if err := json.Unmarshal(out, &facts); err != nil {

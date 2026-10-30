@@ -3,6 +3,7 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,9 +49,11 @@ func TestTopologyOwnedChurnFixture(t *testing.T) {
 
 func TestTopologyCaptureDuringOwnedPrivateMountChurn(t *testing.T) {
 	command := exec.Command("sudo", "-n", "env", "PW_TOPOLOGY_OWNED_CHURN=1", os.Args[0], "-test.run=^TestTopologyOwnedChurnFixture$")
-	out, err := command.CombinedOutput()
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	out, err := command.Output()
 	if err != nil {
-		t.Fatalf("owned private mount churn observation: %v\n%s", err, out)
+		t.Fatalf("owned private mount churn observation: %v\n%s\n%s", err, out, stderr.String())
 	}
 	var facts topologyChurnFacts
 	if err := json.Unmarshal(out, &facts); err != nil {

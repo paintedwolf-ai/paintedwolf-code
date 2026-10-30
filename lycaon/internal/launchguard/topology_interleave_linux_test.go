@@ -3,6 +3,7 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,9 +51,11 @@ func TestTopologyOwnedInterleaveFixture(t *testing.T) {
 
 func TestTopologySplitReadAcrossOwnedMountReplacement(t *testing.T) {
 	command := exec.Command("sudo", "-n", "env", "PW_TOPOLOGY_OWNED_INTERLEAVE=1", os.Args[0], "-test.run=^TestTopologyOwnedInterleaveFixture$")
-	out, err := command.CombinedOutput()
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	out, err := command.Output()
 	if err != nil {
-		t.Fatalf("owned split-read mount replacement: %v\n%s", err, out)
+		t.Fatalf("owned split-read mount replacement: %v\n%s\n%s", err, out, stderr.String())
 	}
 	var facts topologyInterleaveFacts
 	if err := json.Unmarshal(out, &facts); err != nil {
