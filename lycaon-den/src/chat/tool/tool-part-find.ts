@@ -7,6 +7,7 @@ export const TOOL_CONTENT_REVEAL_EVENT = "den:tool-content-reveal";
 
 /** Text Find searches for a collapsed card, from its data; retained content searches remotely. */
 export function toolPartFindCorpus(part: ToolPartView): string {
+  if (part.commandActivity) return [part.commandActivity.fact.label, part.commandActivity.fact.subject, part.commandActivity.fact.outcome, ...part.commandActivity.calls.map(toolPartFindCorpus)].join("\n");
   return [part.title, part.displaySubject, part.argsReference ? "" : JSON.stringify(part.args), part.outputReference ? "" : part.output]
     .filter(Boolean)
     .join("\n");
@@ -15,6 +16,14 @@ export function toolPartFindCorpus(part: ToolPartView): string {
 /** Search card data without creating its body or downloading retained output. */
 export async function searchToolPart(part: ToolPartView, sessionId: string | undefined, query: string, sensitive: boolean, signal: AbortSignal): Promise<VirtualListMatch[]> {
   const matches: VirtualListMatch[] = [];
+  if (part.commandActivity) {
+    for (const call of part.commandActivity.calls) {
+      if (signal.aborted || matches.length >= 10000) break;
+      const found = await searchToolPart(call, sessionId, query, sensitive, signal);
+      matches.push(...found.map(match => ({ ...match, toolCallId: call.toolCallId })));
+    }
+    return matches.slice(0, 10000);
+  }
   for (const [field, text, reference, messageId] of [
     ["title", part.title ?? "", undefined, part.messageId],
     ["tool_args", JSON.stringify(part.args ?? {}), part.argsReference, part.argsMessageId ?? part.assistantMessageId],

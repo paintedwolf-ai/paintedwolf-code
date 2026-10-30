@@ -6,7 +6,8 @@ export type CommandActivityView = {
   fact: CommandActivity;
   calls: ToolPartView[];
   members: CommandActivity[];
-  continuation?: { cursor: string; remaining: number };
+  outputReads?: number;
+  continuation?: { cursor: string };
 };
 
 type Assignment = { program: string; key: string; label: string; group: string; subject: string };
@@ -21,6 +22,7 @@ function status(fact: CommandActivity): ToolPartView["status"] {
 export function createCommandActivityProjection() {
   const assignments = new Map<string, Assignment>();
   const positions = new Map<string, number>();
+  const outputAssignments = new Map<string, string>();
   const knownFacts = new Map<string, Map<string, CommandActivity>>();
   const remembered = new Map<string, CommandProgramReceipt>();
   let nextPosition = 0;
@@ -31,7 +33,11 @@ export function createCommandActivityProjection() {
     for (const entry of entries) {
       if (entry.kind !== "tool") { result.push(entry); previous = undefined; continue; }
       const canonical = entry.part.commandProgram;
-      const program = canonical && canonical.state !== "running" && canonical.state !== "waiting" ? canonical : live(entry.part) ?? remembered.get(entry.part.toolCallId) ?? canonical;
+      let program = canonical && canonical.state !== "running" && canonical.state !== "waiting" ? canonical : live(entry.part) ?? remembered.get(entry.part.toolCallId) ?? canonical;
+      const retainedProgram = remembered.get(entry.part.toolCallId);
+      if (program && !program.activities && retainedProgram?.id === program.id && retainedProgram.activities) {
+        program = { ...program, activities: retainedProgram.activities, activity_executions: retainedProgram.activity_executions, activities_cursor: retainedProgram.activities_cursor, activities_omitted: retainedProgram.activities_omitted };
+      }
       if (program) remembered.set(entry.part.toolCallId, program);
       let facts = program?.activities;
       if (program?.activities) {
@@ -45,6 +51,31 @@ export function createCommandActivityProjection() {
         }
         knownFacts.set(program.id, retained);
         facts = [...retained.values()];
+      }
+      if (entry.part.tool === "command_output") {
+        const handle = entry.part.process?.handle ?? (typeof entry.part.args?.process_id === "string" ? entry.part.args.process_id : undefined);
+        let assigned = outputAssignments.get(entry.part.id);
+        if (!assigned && handle) {
+          assigned = [...rows.values()].find(row => row.commandActivity?.fact.job_handle === handle)?.id ?? entry.part.id;
+          outputAssignments.set(entry.part.id, assigned);
+        }
+        const established = assigned ? rows.get(assigned) : undefined;
+        if (established?.commandActivity) {
+          established.commandActivity.calls.push(entry.part);
+          established.commandActivity.outputReads = (established.commandActivity.outputReads ?? 0) + 1;
+          if (entry.part.process?.handle === handle) established.process = entry.part.process;
+          if (entry.part.status === "error") {
+            established.status = "error";
+            established.commandActivity.fact = { ...established.commandActivity.fact, outcome: "Output read failed" };
+          }
+          continue;
+        }
+        if (handle) {
+          const fact: CommandActivity = { id: entry.part.id, group: "Following a running program", label: "Read process output", subject: handle, job_handle: handle, state: entry.part.status === "running" ? "running" : entry.part.status === "error" ? "failed" : "completed", outcome: entry.part.status === "running" ? "Reading" : entry.part.status === "error" ? "Read failed" : "Completed", execution_ids: [], spans: [] };
+          const row: ToolPartView = { ...entry.part, commandActivity: { fact, calls: [entry.part], members: [fact], outputReads: 1 } };
+          rows.set(row.id, row); result.push({ ...entry, part: row }); previous = row;
+          continue;
+        }
       }
       if (!program || !facts?.length) {
         if (!(entry.part.tool === "command" && entry.part.status === "running")) result.push(entry);
@@ -65,7 +96,7 @@ export function createCommandActivityProjection() {
         if (!row) {
           const frozen = { ...fact, label: assigned.label, group: assigned.group, subject: assigned.subject };
           row = { ...entry.part, id: assigned.key, title: frozen.subject, commandProgram: program,
-            status: status(fact), commandActivity: { fact: frozen, calls: [], members: [] } };
+            status: status(fact), process: entry.part.process?.handle === fact.job_handle ? entry.part.process : undefined, invocation: undefined, error: null, commandActivity: { fact: frozen, calls: [], members: [] } };
           rows.set(assigned.key, row);
           result.push({ ...entry, part: row });
         }
@@ -88,7 +119,7 @@ export function createCommandActivityProjection() {
         const id = `${entry.part.id}:activity:remaining`;
         if (!rows.has(id)) {
           const fact: CommandActivity = { id, group: "Working on the project", label: "More operations", subject: `${program.activities_omitted} additional execution records`, state: program.state === "running" || program.state === "waiting" ? program.state : "completed", outcome: "Recorded", execution_ids: [], spans: [] };
-          const row: ToolPartView = { ...entry.part, id, commandProgram: program, commandActivity: { fact, calls: [{ ...entry.part, commandProgram: program }], members: [], continuation: { cursor: program.activities_cursor, remaining: program.activities_omitted } } };
+          const row: ToolPartView = { ...entry.part, id, commandProgram: program, commandActivity: { fact, calls: [{ ...entry.part, commandProgram: program }], members: [], continuation: { cursor: program.activities_cursor } } };
           rows.set(id, row); result.push({ ...entry, part: row }); previous = undefined;
         }
       }
@@ -97,6 +128,8 @@ export function createCommandActivityProjection() {
     for (const entry of result) if (!positions.has(key(entry))) positions.set(key(entry), nextPosition++);
     result.sort((a, b) => positions.get(key(a))! - positions.get(key(b))!);
     const activeCalls = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.toolCallId] : []));
+    const activePartIds = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.id] : []));
+    for (const id of outputAssignments.keys()) if (!activePartIds.has(id)) outputAssignments.delete(id);
     for (const call of remembered.keys()) if (!activeCalls.has(call)) remembered.delete(call);
     const activePrograms = new Set([...remembered.values()].map(program => program.id));
     for (const program of knownFacts.keys()) if (!activePrograms.has(program)) knownFacts.delete(program);
@@ -134,4 +167,23 @@ export function commandSourceSegments(source: string, program: CommandProgramRec
     if (offset < bytes.length) result.push({ text: decoder.decode(bytes.subarray(offset)), highlighted: false });
     return result;
   } catch { return [{ text: source, highlighted: false }]; }
+}
+
+/** The group follows active work without moving its activity rows. */
+export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], fallback: string): string {
+ const activities = entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
+ if (!activities.length) return fallback;
+ const active = activities.filter(fact => fact.state === "running" || fact.state === "waiting");
+ return (active.at(-1) ?? activities.at(-1))!.group;
+}
+
+
+/** Receipts without an activity snapshot use the same card and retain all operations. */
+export function commandActivityPart(part: ToolPartView): ToolPartView {
+ if (part.commandActivity || !part.commandProgram) return part;
+ const program = part.commandProgram;
+ const state = program.state === "rejected" ? "refused" : program.state;
+ const outcome = state === "completed" && program.status_code !== undefined ? `Exited ${program.status_code}` : ({ running:"Running",waiting:"Waiting",refused:"Refused",failed:"Failed",interrupted:"Interrupted",completed:"Completed" }[state]);
+ const fact: CommandActivity = { id:`${program.id}:result`, group:"Running commands", label:"Run command", subject:program.stop_code ?? part.title ?? "Recorded command", state, outcome, status_code:program.status_code, execution_ids:[], spans:[] };
+ return {...part,commandActivity:{fact,calls:[part],members:[],continuation:{cursor:""}}};
 }

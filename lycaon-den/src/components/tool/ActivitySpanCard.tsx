@@ -1,5 +1,3 @@
-import { createCommandActivityProjection } from "../../chat/tool/command-activity-model.ts";
-import { liveCommandProgram } from "../../chat/tool/command-activity-live.ts";
 import { Index, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
 import {
   activitySpanEnterFadeKey,
@@ -37,7 +35,7 @@ import { findController } from "../../find/find-controller.ts";
 import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
 
-type Props = {
+export type ActivitySpanCardProps = {
   label: string;
   entries: readonly ActivitySpanEntry[];
   layout: TranscriptLayout;
@@ -145,12 +143,9 @@ function ActivityFailureChip(props: { failed: number }) {
   );
 }
 
-export function ActivitySpanCard(props: Props) {
-  const projectActivities = createCommandActivityProjection();
-  const entries = createMemo(() => projectActivities(props.entries, part => liveCommandProgram(props.sessionId, part.toolCallId)));
-  const stableLabel = props.entries.some(entry => entry.kind === "tool" && entry.part.tool === "command")
-    ? "Working on the project" : formatSentenceCase(props.label);
-  const label = () => stableLabel;
+export function ActivitySpanCard(props: ActivitySpanCardProps) {
+  const entries = () => props.entries;
+  const label = () => formatSentenceCase(props.label);
   const { bindTranscriptEntry } = useTranscriptEntry(() => {
     const key = props.entryKey?.trim();
     if (!key) return { sessionId: props.sessionId };
@@ -169,11 +164,11 @@ export function ActivitySpanCard(props: Props) {
   let revealRow: ((key: string) => void) | undefined;
   let restoreFind: (() => void) | undefined;
   const revealTool = (toolCallId: string, match: VirtualListMatch) => {
-    const entry = entries().find(entry => entry.kind === "tool" && entry.part.toolCallId === toolCallId);
+    const entry = entries().find(entry => entry.kind === "tool" && (entry.part.toolCallId === toolCallId || entry.part.commandActivity?.calls.some(call => call.toolCallId === toolCallId)));
     if (entry?.kind !== "tool") return;
     restoreFind?.(); restoreFind = revealTemporarily();
     setFindToolKey(entry.part.id); revealRow?.(entry.part.id);
-    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-call-id="${CSS.escape(toolCallId)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
+    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-call-id="${CSS.escape(entry.part.toolCallId)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
   };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   createEffect(() => {
@@ -209,7 +204,7 @@ export function ActivitySpanCard(props: Props) {
   // Process events refresh status and failure counts.
   const statusAttr = () => {
     processRevision();
-    const status = activitySpanStatus(entries().length ? entries() : props.entries, props.sessionId);
+    const status = activitySpanStatus(props.entries, props.sessionId) === "running" ? "running" : activitySpanStatus(entries().length ? entries() : props.entries, props.sessionId);
     return status === "completed" ? "done" : status;
   };
   const failed = () => {
@@ -273,7 +268,7 @@ export function ActivitySpanCard(props: Props) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-          <span class="den-activity-span-hint" data-tooltip={summary().detail}>{summary().detail}</span>
+          <span class="den-activity-span-hint" data-tip={summary().detail} data-tip-when-clipped="">{summary().detail}</span>
         </span>
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
@@ -301,7 +296,7 @@ export function ActivitySpanCard(props: Props) {
             search={(entry, query, sensitive, signal) => entry.kind === "tool" ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal) : Promise.resolve([])}
             onFindReveal={(entry, match) => {
               if (entry.kind !== "tool") return;
-              revealTool(entry.part.toolCallId, match);
+              revealTool(match.toolCallId ?? entry.part.toolCallId, match);
             }}>
             {(entry) => (
               <div class="den-activity-span-item" data-activity-entry-key={entryLeadKey(entry())}>
@@ -321,6 +316,8 @@ export function ActivitySpanCard(props: Props) {
 }
 
 function commandActivityDirectory(entries: readonly ActivitySpanEntry[]): string {
- const directories = [...new Set(entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity?.fact.directory ? [entry.part.commandActivity.fact.directory] : []))];
+ const tools = entries.filter(entry => entry.kind === "tool");
+ if (tools.some(entry => entry.kind === "tool" && !entry.part.commandActivity?.fact.directory)) return "";
+ const directories = [...new Set(tools.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity?.fact.directory ? [entry.part.commandActivity.fact.directory] : []))];
  return directories.length === 1 ? directories[0]! : "";
 }

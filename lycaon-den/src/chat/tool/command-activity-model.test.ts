@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandSourceSegments, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityHeadline, commandSourceSegments, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -92,4 +92,61 @@ it("keeps an established row when later host composition connects its execution 
  expect(rows).toHaveLength(2);
  expect(rows[0]!.commandActivity!.fact.label).toBe("Process output");
  expect(rows[0]!.commandActivity!.fact.outcome).toBe("Exited 0");
+});
+
+it("updates an established job activity with output reads", () => {
+ const project = createCommandActivityProjection();
+ const launch = entry("launch", [fact("process", { label: "Run process", job_handle: "job-1" })]);
+ project([launch]);
+ const read = entry("read");
+ if (read.kind === "tool") { read.part.tool = "command_output"; read.part.args = { process_id: "job-1" }; }
+ const rows = parts(project([launch, read]));
+ expect(rows).toHaveLength(1);
+ expect(rows[0]!.id).toBe("launch");
+ expect(rows[0]!.commandActivity!.calls.map(call=>call.toolCallId)).toEqual(["launch","read"]);
+ expect(rows[0]!.commandActivity!.outputReads).toBe(1);
+});
+
+it("folds output observations when the launch is outside the transcript window", () => {
+ const project = createCommandActivityProjection();
+ const reads = ["a","b"].map(id => {
+  const row = entry(id);
+  if (row.kind === "tool") { row.part.tool = "command_output"; row.part.args = { process_id: "job-1" }; }
+  return row;
+ });
+ const rows = parts(project(reads));
+ expect(rows).toHaveLength(1);
+ expect(rows[0]!.commandActivity!.fact.label).toBe("Read process output");
+ expect(rows[0]!.commandActivity!.outputReads).toBe(2);
+});
+
+it("does not absorb an already visible output row when launch facts arrive later", () => {
+ const project = createCommandActivityProjection();
+ const read = entry("read");
+ if (read.kind === "tool") { read.part.tool = "command_output"; read.part.args = { process_id: "job-1" }; }
+ const launch = entry("launch");
+ if (launch.kind === "tool") launch.part.status = "running";
+ expect(parts(project([launch,read])).map(row=>row.id)).toEqual(["read"]);
+ const rows=parts(project([entry("launch",[fact("job",{ job_handle:"job-1" })]),read]));
+ expect(rows.map(row=>row.id)).toEqual(["read","launch"]);
+});
+
+it("retains live activity rows when the terminal receipt has no presentation snapshot", () => {
+ const project=createCommandActivityProjection();
+ project([entry("a",[fact("read")])]);
+ const terminal=entry("a");
+ if(terminal.kind==="tool") terminal.part.commandProgram={id:"program:a",state:"completed"} as CommandProgramReceipt;
+ expect(parts(project([terminal]))[0]!.commandActivity!.fact.id).toBe("read");
+});
+
+
+it("lets the group title follow active work without splitting its rows", () => {
+ const project = createCommandActivityProjection();
+ const reads=entry("read",[fact("read")]);
+ expect(commandActivityHeadline(project([reads]),"Running commands")).toBe("Exploring project files");
+ const build=entry("build",[fact("build",{group:"Running programs",state:"running"})]);
+ const rows=project([reads,build]);
+ expect(rows).toHaveLength(2);
+ expect(commandActivityHeadline(rows,"Running commands")).toBe("Running programs");
+ expect(commandActivityHeadline([],"Inspecting changes")).toBe("Inspecting changes");
 });

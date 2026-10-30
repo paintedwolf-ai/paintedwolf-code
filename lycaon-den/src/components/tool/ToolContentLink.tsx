@@ -12,6 +12,7 @@ export function ToolContentLink(props: {
   content: ChatContentDocument["content"];
   projectId?: string;
   messageId?: string;
+  toolCallId?: string;
   revealOffset?: number;
 }) {
   const tool = useToolContent();
@@ -24,7 +25,7 @@ export function ToolContentLink(props: {
     return {
       kind: "tool",
       sessionId: identity.sessionId,
-      toolCallId: identity.toolCallId,
+      toolCallId: props.toolCallId ?? identity.toolCallId,
       messageId: props.messageId ?? identity.messageId,
       pane: props.pane,
       title: `${props.label} · ${identity.title ?? "Tool"}`,

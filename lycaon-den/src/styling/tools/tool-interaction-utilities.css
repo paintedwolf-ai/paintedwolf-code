@@ -338,7 +338,11 @@
   text-overflow: ellipsis;
 }
 .den-command-activity-outcome {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-den-hint);
   color: var(--den-text-muted);
@@ -394,9 +398,15 @@
   white-space: nowrap;
 }
 .den-command-activity-command,
-.den-command-activity-details .den-command-program-output-preview {
+.den-command-activity-details .den-command-activity-output-preview {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.den-command-activity-details .den-tool-part-card-facts dd {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   overflow: hidden;
 }

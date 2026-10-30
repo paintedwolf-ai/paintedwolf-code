@@ -15,7 +15,7 @@ import { AssistantProseBody } from "./AssistantProseBody.tsx";
 import { InvocationRenderingSlot } from "./InvocationRenderingSlot.tsx";
 import { ToolPartCard } from "../tool/ToolPartCard.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
-import { ActivitySpanCard } from "../tool/ActivitySpanCard.tsx";
+import { CommandActivitySpan } from "../tool/CommandActivitySpan.tsx";
 import { WorkerGroupCard } from "../worker/WorkerGroupCard.tsx";
 
 export function WorkerTranscriptMessageRow(props: {
@@ -177,7 +177,7 @@ export function ActivitySpanRow(props: {
   client?: import("../../api/client.ts").LycaonClient | null;
 }) {
   const card = (
-    <ActivitySpanCard
+    <CommandActivitySpan
       label={props.item.label}
       entries={props.item.entries}
       layout={props.layout}

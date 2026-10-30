@@ -89,8 +89,8 @@ const receiptPage: CommandProgramReceiptPage = {
   nodes_omitted: 0,
 };
 
-webE2e.describe("command program card", () => {
-  webE2e("opens one command card with plain program sections", async ({ page, request }) => {
+webE2e.describe("command activity details", () => {
+  webE2e("opens retained receipts through compact activity details", async ({ page, request }) => {
     await page.route(`**/v1/sessions/*/program-receipts/${programId}*`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(receiptPage) }));
     await bootstrapChatSession(page, request);
@@ -114,14 +114,13 @@ webE2e.describe("command program card", () => {
     await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
     const card = stream.getByTestId("tool-part-card");
     await expect(card).toHaveCount(1);
-    await card.locator(".den-transcript-disclosure-toggle").first().click();
-    const body = card.getByTestId("command-program-card");
-    await expect(body.getByTestId("command-program-stage")).toHaveCount(3);
-    await expect(body.getByTestId("command-program-summary")).toHaveText("Failed · Partial effects · Unknown outcome");
-    for (const name of ["program", "result", "stages", "changes", "remaining"]) {
-      await expect(body.getByTestId(`command-program-section-${name}`)).toBeVisible();
-    }
-    await expect(body.getByTestId("command-program-section-program")).not.toContainText("quarterly totals");
-    await expect(body.getByTestId("command-program-section-program")).toContainText("Full program");
+    if (await card.getAttribute("data-expanded") !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
+    const body = card.getByTestId("command-activity-details");
+    await expect(body.locator(".den-command-activity-step")).toHaveCount(3);
+    await expect(body).toContainText("Partial effects; unknown outcome");
+    await expect(body).toContainText("HTTP_REQUEST_FAILED");
+    await expect(body).toContainText("Full original command");
+    await expect(body).toContainText("Not started");
+    await expect(body.locator("details")).toHaveCount(0);
   });
 });

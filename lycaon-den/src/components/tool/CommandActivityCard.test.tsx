@@ -31,7 +31,7 @@ describe("compact command activity details", () => {
   expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy();
   expect(view.container.querySelector("mark")?.textContent).toContain("cargo test");
   expect(view.container.querySelectorAll("details")).toHaveLength(0);
-  expect(view.container.textContent).toContain("test output");
+  await waitFor(() => expect(view.container.textContent).toContain("test output"));
   fireEvent.click(view.getByRole("button", { name: "Copy command" }));
   await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(source));
  });
@@ -41,8 +41,8 @@ describe("compact command activity details", () => {
   const get = vi.fn().mockResolvedValue({ program, executions: [execution], nodes: [], executions_omitted: 0, nodes_omitted: 0 });
   const view = render(() => <CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: get })} />);
   fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
-  await waitFor(() => expect(view.container.querySelector(".den-command-program-output-preview")).toBeTruthy());
-  expect(view.container.querySelector(".den-command-program-output-preview")!.textContent!.length).toBeLessThanOrEqual(480);
+  await waitFor(() => expect(view.container.querySelector(".den-command-activity-output-preview")).toBeTruthy());
+  expect(view.container.querySelector(".den-command-activity-output-preview")!.textContent!.length).toBeLessThanOrEqual(480);
   expect(view.container.querySelector(".den-command-activity-command")!.textContent!.length).toBeLessThanOrEqual(481);
   expect(view.container.textContent).toContain("Full original command");
  });
@@ -52,4 +52,47 @@ describe("compact command activity details", () => {
   await waitFor(() => expect(view.container.textContent).toContain("Execution details are unavailable"));
   expect(view.container.textContent).toContain("cargo test");
  });
+});
+
+it("does not reload unchanged receipts when live snapshots replace their objects", async () => {
+ const { createSignal } = await import("solid-js");
+ const get=vi.fn().mockResolvedValue({ program, executions:[receipt()],nodes:[],executions_omitted:0,nodes_omitted:0 });
+ const [value,setValue]=createSignal(part());
+ const client=stubClient({ getCommandProgramReceipt:get });
+ const view=render(()=><CommandActivityCard part={value()} layout="chat" sessionId="activity-card-test" client={client}/>);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(()=>expect(view.container.textContent).toContain("test output"));
+ const next=part(); next.commandActivity!.fact={...next.commandActivity!.fact};
+ setValue(next);
+ await Promise.resolve();
+ expect(get).toHaveBeenCalledOnce();
+});
+
+it("preserves uncertain effects, approvals and unpublished changes in compact details", async () => {
+ const { ToolPartCard }=await import("./ToolPartCard.tsx");
+ const value=part().commandActivity!.calls[0]!;
+ const execution=receipt();
+ execution.effect_certainty="unknown"; execution.approval_ref="approval-1"; execution.accepted_revision="revision-1"; execution.held_version_id="held-1"; execution.recovery_ref="recovery-1";
+ const get=vi.fn().mockResolvedValue({ program:{...program,state:"waiting"},executions:[execution],nodes:[],executions_omitted:0,nodes_omitted:0 });
+ const view=render(()=><ToolPartCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({getCommandProgramReceipt:get})}/>);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(()=>expect(view.container.textContent).toContain("Unknown outcome"));
+ expect(view.container.textContent).toContain("approval-1");
+ expect(view.container.textContent).toContain("Accepted, not published");
+ expect(view.container.querySelectorAll("details")).toHaveLength(0);
+ expect(view.container.querySelectorAll('[data-testid="tool-part-card"]')).toHaveLength(1);
+});
+
+it("pages additional operations without changing the activity identity", async () => {
+ const value=part();value.commandActivity!.continuation={cursor:"start"};
+ const get=vi.fn(async (_session:string,_program:string,opts?:{cursor?:string})=>({ program,executions:[{...receipt(),command:opts?.cursor==="next"?"second operation":"first operation"}],nodes:[],executions_omitted:opts?.cursor==="next"?0:1,next_cursor:opts?.cursor==="next"?undefined:"next",nodes_omitted:0 }));
+ const view=render(()=><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({getCommandProgramReceipt:get})}/>);
+ const row=view.container.querySelector('[data-testid="tool-part-card"]');
+ fireEvent.click(disclosureToggle(row));
+ await waitFor(()=>expect(view.container.textContent).toContain("first operation"));
+ fireEvent.click(view.getByRole("button",{name:"Next operations"}));
+ await waitFor(()=>expect(view.container.textContent).toContain("second operation"));
+ expect(view.container.querySelector('[data-testid="tool-part-card"]')).toBe(row);
+ fireEvent.click(view.getByRole("button",{name:"Previous operations"}));
+ await waitFor(()=>expect(view.container.textContent).toContain("first operation"));
 });

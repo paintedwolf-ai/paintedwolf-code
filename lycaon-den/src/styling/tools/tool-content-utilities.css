@@ -331,58 +331,14 @@ font-size: var(--text-den-compact);
 }
 
 
-/* Command program rows: one card, stage rows inside it. */
-@utility den-command-program-stages {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-}
-
-
-@utility den-command-program-stage {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--den-line) 40%, transparent);
-}
-
-
-@utility den-command-program-stage-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin: 0;
-  font-size: var(--text-den-hint);
-  color: var(--den-text-muted);
-  overflow-wrap: anywhere;
-}
-
-
-@utility den-command-program-statements {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-  font-size: var(--text-den-hint);
-  overflow-wrap: anywhere;
-}
-
-
-@utility den-command-program-paging {
+@utility den-command-activity-paging {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
 
 
-@utility den-command-program-output-preview {
+@utility den-command-activity-output-preview {
   margin: 0;
   max-height: 12rem;
   overflow: hidden;

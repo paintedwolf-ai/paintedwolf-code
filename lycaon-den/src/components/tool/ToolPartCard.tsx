@@ -9,7 +9,7 @@ import type { TaskActivityContext } from "../../chat/task/task-card-model.ts";
 import { isSkillToolPart } from "../../chat/skill/skill-card-model.ts";
 import { isVerdictToolPart } from "../../chat/verdict/verdict-card-model.ts";
 import { GenericToolCard } from "./GenericToolCard.tsx";
-import { CommandProgramCard } from "./CommandProgramCard.tsx";
+import { commandActivityPart } from "../../chat/tool/command-activity-model.ts";
 import { SkillCard } from "../skill/SkillCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import { VerdictCard } from "../verdict/VerdictCard.tsx";
@@ -29,7 +29,7 @@ type Props = {
 
 /** Route tool parts to specialized or generic cards. */
 export function ToolPartCard(props: Props) {
-  if (props.part.commandActivity) return <CommandActivityCard {...props} />;
+  if (props.part.commandActivity || props.part.commandProgram) return <CommandActivityCard {...props} part={commandActivityPart(props.part)} />;
   if (isTaskToolPart(props.part)) {
     return (
       <TaskCard
@@ -63,19 +63,6 @@ export function ToolPartCard(props: Props) {
         layout={props.layout}
         sessionId={props.sessionId}
         projectId={props.projectId}
-        rootRefs={props.rootRefs}
-      />
-    );
-  }
-  // Retained structured command cards without a program receipt stay generic.
-  if (props.part.commandProgram) {
-    return (
-      <CommandProgramCard
-        part={props.part}
-        layout={props.layout}
-        sessionId={props.sessionId}
-        projectId={props.projectId}
-        client={props.client}
         rootRefs={props.rootRefs}
       />
     );

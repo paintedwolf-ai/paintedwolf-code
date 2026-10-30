@@ -23,6 +23,7 @@ import type {
 import {
   toolCompletionLabel,
   toolSummaryFields,
+  toolPartDisplayStatus,
 } from "../../chat/tool/tool-part-model.ts";
 import {
   bindFindableView,
@@ -80,14 +81,14 @@ export function ToolPartShell(props: Props) {
   const summary = () => {
     processRevision();
     const activity = props.part.commandActivity;
-    return activity ? { status: props.part.status, title: activity.fact.subject + (activity.members.length > 1 ? ` · ${activity.members.length} reads` : "") } : toolSummaryFields(props.part, props.sessionId);
+    return activity ? { status: toolPartDisplayStatus(props.part, props.sessionId), title: activity.fact.subject + (activity.outputReads ? ` · ${activity.outputReads} output reads` : activity.members.length > 1 ? ` · ${activity.members.length} reads` : "") } : toolSummaryFields(props.part, props.sessionId);
   };
   const toolName = () => props.name?.trim() || props.part.commandActivity?.fact.label || props.part.tool;
   const toolLabel = () => formatToolLabel(toolName());
   const accessibleSummary = () => {
     const title = summary().title;
     const target = title !== toolName() && title !== toolLabel() ? title : "";
-    return [toolLabel(), target, statusDot(summary().status)].filter(Boolean).join(", ");
+    return [toolLabel(), target, props.part.commandActivity?.fact.outcome, statusDot(summary().status)].filter(Boolean).join(", ");
   };
   const completion = () => props.part.commandActivity?.fact.outcome ?? toolCompletionLabel(props.part);
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
@@ -112,18 +113,21 @@ export function ToolPartShell(props: Props) {
   }
 
   const [outputOffset, setOutputOffset] = createSignal<number>();
+  const [revealedCallId, setRevealedCallId] = createSignal<string>();
   const [argsOffset, setArgsOffset] = createSignal<number>();
   let restoreContentFind: (() => void) | undefined;
   createEffect(() => {
     void findController.query(); void findController.isOpen();
     restoreContentFind?.(); restoreContentFind = undefined;
+    setOutputOffset(undefined); setArgsOffset(undefined); setRevealedCallId(undefined);
   });
   onCleanup(() => restoreContentFind?.());
   createEffect(() => {
     const host = hostEl(); if (!host) return;
     const reveal = (event: Event) => {
-      const match = (event as CustomEvent<{ field?: string; from: number }>).detail;
+      const match = (event as CustomEvent<{ field?: string; from: number; toolCallId?: string }>).detail;
       restoreContentFind?.(); restoreContentFind = revealTemporarily();
+      setRevealedCallId(match.toolCallId ?? props.part.toolCallId);
       if (match.field === "tool_output") setOutputOffset(match.from);
       if (match.field === "tool_args") setArgsOffset(match.from);
     };
@@ -210,10 +214,10 @@ export function ToolPartShell(props: Props) {
             summary().title !== toolLabel()
           }
         >
-          <span class="den-tool-part-title" data-tooltip={summary().title}>{summary().title}</span>
+          <span class="den-tool-part-title" data-tip={summary().title} data-tip-when-clipped="">{summary().title}</span>
         </Show>
         <Show when={completion()}>
-          {(label) => <span data-tooltip={label()} class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
+          {(label) => <span data-tip={label()} data-tip-when-clipped="" class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel
@@ -221,7 +225,7 @@ export function ToolPartShell(props: Props) {
         class="den-tool-part-card-body den-tool-part-body"
         data-testid="tool-part-body"
       >
-        <ToolContentProvider value={{ output: outputAccess, args: argsAccess, outputOffset, argsOffset,
+        <ToolContentProvider value={{ output: outputAccess, args: argsAccess, outputOffset, argsOffset, revealedCallId,
           identity: () => ({ projectId: props.projectId, sessionId: props.sessionId ?? "", messageId: props.part.messageId,
             toolCallId: props.part.toolCallId ?? props.part.id, title: `${toolLabel()} · ${props.part.title ?? ""}` }),
         }}>
