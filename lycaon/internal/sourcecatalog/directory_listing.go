@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-
-	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
 // ErrDirectoryNamespace marks when a bounded complete namespace is unavailable.
@@ -16,30 +14,6 @@ type DirectoryListing struct {
 	Entries  []Entry
 	Reused   bool
 	Prepared bool
-}
-
-// ReadDirectory reuses fresh membership and prepares cold directories on demand.
-// Read admission and live metadata remain the caller's responsibility.
-// A positive maximum bounds preparation to one entry beyond the limit.
-func (c *Directories) ReadDirectory(ctx context.Context, project string, root Root, dir string, maximum int) (DirectoryListing, error) {
-	if err := validateObservationDirectory(root, dir); err != nil {
-		return DirectoryListing{}, err
-	}
-	store, err := c.trees.indexStore(ctx, project, root)
-	if err != nil {
-		return DirectoryListing{}, err
-	}
-	dir = normalizeDir(dir)
-	previous, _ := store.readObservation(ctx, dir)
-	limit := 0
-	if maximum > 0 {
-		limit = maximum + 1
-	}
-	observation, err := c.observeUntil(ctx, store, dir, limit, backgroundwork.PriorityInteractive)
-	if err != nil {
-		return DirectoryListing{}, err
-	}
-	return readDirectoryNamespace(ctx, store, dir, observation, maximum, previous.Complete && previous.Sequence == observation.Sequence)
 }
 
 func readDirectoryNamespace(ctx context.Context, store *indexStore, dir string, observation DirectoryObservation, maximum int, reused bool) (DirectoryListing, error) {

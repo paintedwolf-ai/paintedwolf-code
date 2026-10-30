@@ -40,7 +40,7 @@ func TestDirectoryKindsRetainsTheOpenedDirectory(t *testing.T) {
 	physical, release, err := store.navigation.Acquire(t.Context(), store.root.Path)
 	testutil.FailErr(t, "open root", err)
 	defer release()
-	directory, err := catalog.Directories.openObservationDirectory(t.Context(), store, physical, "directory")
+	directory, err := openObservationDirectory(t.Context(), store, physical, "directory", nil)
 	testutil.FailErr(t, "open confined directory", err)
 	defer directory.close()
 	outside := t.TempDir()

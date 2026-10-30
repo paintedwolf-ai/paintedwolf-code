@@ -91,10 +91,10 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	if w.work.readers == nil {
 		w.work.readers = make(map[string]*sourcecatalog.DirectoryReader)
 	}
-	reader := w.work.readers[root.ID]
+	reader := w.work.readers[root.Path]
 	if reader == nil {
 		reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
-		w.work.readers[root.ID] = reader
+		w.work.readers[root.Path] = reader
 	}
 	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, nil)
 	if listing.Prepared {
