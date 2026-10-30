@@ -58,6 +58,8 @@ func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *test
 				plan := HostLaunch("synthetic native binary fixture")
 				if confined {
 					plan = AgentLaunch(LaunchAgentCommand, "synthetic native binary fixture", &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}).WithPathAuthority(confine.NativeLaunchPaths(root))
+					// Agent launches use a reduced environment; supply the fixture PATH as host plumbing.
+					plan.ExtraEnv = []string{"PATH=" + fixture.path}
 				}
 				cmd, cleanup, err := PrepareCommand(ctx, fixture.name, args, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=" + fixture.path}})
 				testutil.FailErr(t, "prepare native filename fixture", err)
