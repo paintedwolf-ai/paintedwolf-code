@@ -9,8 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/litprefilter"
-	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
 )
 
@@ -49,11 +47,8 @@ type grepRun struct {
 	skipDirectories bool
 	walker          *walker
 	// json is rg --json's printer; nil for the plain forms.
-	json *rgJSON
-	// prune holds the index requirement when acceleration applies; drafts
-	// are the unsaved documents the index cannot speak for.
-	prune    litprefilter.Requirement
-	pruned   int
+	json     *rgJSON
+	index    grepContentIndex
 	selected bool
 	stopped  bool
 	operands commandprogram.Fields
@@ -338,7 +333,7 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if r.rg && inv.flag("--json") && r.mode == modeLines {
 		r.json = &rgJSON{started: time.Now()}
 	}
-	r.indexAcceleration()
+	r.index = newGrepContentIndex(r.inv, r.matcher.Requirement(), !r.scan.Invert && r.json == nil && !(r.rg && r.mode == modeFilesWithout))
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
 			return inv.usage(*r.replace, err.Error())
@@ -576,10 +571,11 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 		return r.inv.out.text(e.display, "\n")
 	}
 	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
-	if r.indexProvesNoMatch(e) {
-		r.pruned++
+	if r.index.canPrune(e) {
 		return r.searchNoMatch(e.display, names)
 	}
+	observation := r.index.begin(e)
+	defer observation.Close()
 	streamed, pin, err := r.inv.openWalkedPinnedStream(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
@@ -594,30 +590,7 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 			return nil
 		}
 	}
-	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
-}
-
-// indexAcceleration enables Bloom pruning when a missing record can only
-// mean no output: never under -v (unmatched files print), nor for rg's
-// --files-without-match, whose walk skips binary files a pruned file would
-// not reveal.
-func (r *grepRun) indexAcceleration() {
-	if r.inv.owners.Catalog == nil || r.scan.Invert || r.json != nil || r.rg && r.mode == modeFilesWithout {
-		return
-	}
-	r.prune = r.matcher.Requirement()
-}
-
-// indexProvesNoMatch asks the source catalog about one walked file. The
-// cached filter speaks only for the exact size, mode and mtime it was built
-// under.
-func (r *grepRun) indexProvesNoMatch(e entry) bool {
-	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
-		return false
-	}
-	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{
-		Path: e.bound.Resolved.ScopeRel, Name: e.name, Size: e.stat.Size, Mode: uint32(e.stat.Mode), Modified: e.stat.ModTime.UTC(),
-	})
+	return r.searchStream(e.display, observation.Wrap(r.inv.ctx, streamed.Reader), 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
 // color accepts --color=never and auto (stdout is never a terminal, so both
