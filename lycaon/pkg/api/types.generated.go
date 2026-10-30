@@ -1292,6 +1292,14 @@ type CommandActivity struct {
 	Spans        []CommandActivitySpan `json:"spans"`
 }
 
+// CommandActivityExecution
+type CommandActivityExecution struct {
+	ID         string `json:"id"`
+	State      string `json:"state"`
+	Outcome    string `json:"outcome"`
+	StatusCode *int   `json:"status_code,omitempty"`
+}
+
 // CommandActivitySpan
 type CommandActivitySpan struct {
 	SourceRef string `json:"source_ref"`
@@ -1481,6 +1489,8 @@ type CommandProgramReceipt struct {
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
 	// Initial host activity identities. Details loading must not regroup these rows.
 	Activities []CommandActivity `json:"activities,omitempty"`
+	// Bounded live execution outcomes for rows whose presentation membership is already established.
+	ActivityExecutions []CommandActivityExecution `json:"activity_executions,omitempty"`
 	// Monotonic receipt trace revision for live snapshot reconciliation.
 	ActivityRevision  int64  `json:"activity_revision,omitempty"`
 	ActivitiesCursor  string `json:"activities_cursor,omitempty"`

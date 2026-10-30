@@ -156,6 +156,10 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 		return api.CommandProgramReceipt{}, err
 	}
 	page.Program.Activities = page.Activities
+	for _, receipt := range page.Executions {
+		state, outcome := activityOutcome(receipt)
+		page.Program.ActivityExecutions = append(page.Program.ActivityExecutions, api.CommandActivityExecution{ID: receipt.ID, State: state, Outcome: outcome, StatusCode: receipt.StatusCode})
+	}
 	page.Program.ActivitiesCursor = page.NextCursor
 	page.Program.ActivitiesOmitted = page.ExecutionsOmitted
 	return page.Program, nil

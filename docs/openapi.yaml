@@ -26438,6 +26438,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandActivitySpan'
+    CommandActivityExecution:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - state
+        - outcome
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - refused
+            - failed
+            - interrupted
+            - unknown
+        outcome:
+          type: string
+        status_code:
+          type: integer
+          x-go-pointer: true
     CommandProgramOutputLimit:
       x-go-generate: true
       type: object
@@ -26603,6 +26629,11 @@ components:
           description: Initial host activity identities. Details loading must not regroup these rows.
           items:
             $ref: '#/components/schemas/CommandActivity'
+        activity_executions:
+          type: array
+          description: Bounded live execution outcomes for rows whose presentation membership is already established.
+          items:
+            $ref: '#/components/schemas/CommandActivityExecution'
         activity_revision:
           type: integer
           format: int64

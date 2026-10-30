@@ -36,7 +36,7 @@ func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecu
 		}
 		input.arguments = arguments
 	}
-	if receipt.Lifecycle == "read_only" && activityPresentation(input).label == "Read source" && !activityNeedsAttention(receipt) {
+	if receipt.Lifecycle == "read_only" && activityPresentation(input).label == "Read source" {
 		identity := stringArgument(input.arguments, "activity_path_identity")
 		if identity != "" {
 			sum := sha256.Sum256([]byte(input.scope + "|" + identity))
@@ -77,7 +77,7 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 		sum := sha256.Sum256([]byte(paths[0]))
 		result["activity_path_identity"] = hex.EncodeToString(sum[:])
 	}
-	for _, name := range []string{"command", "cwd", "path"} {
+	for _, name := range []string{"command", "cwd", "path", "pattern", "query", "url", "message"} {
 		if value := stringArgument(arguments, name); value != "" {
 			result[name] = boundedActivityText(value)
 		}
@@ -93,6 +93,21 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 			values = append(values, boundedActivityText(path))
 		}
 		targets[role] = values
+	}
+	options, _ := arguments["options"].([]any)
+	for _, raw := range options {
+		option, _ := raw.(map[string]any)
+		role := stringArgument(option, "value_role")
+		if role != "pattern" && role != "glob" && role != "regex" && role != "query" {
+			continue
+		}
+		values, _ := option["values"].([]any)
+		if len(values) > 0 {
+			if value, ok := values[0].(string); ok {
+				result["query"] = boundedActivityText(value)
+				break
+			}
+		}
 	}
 	result["path_targets"] = targets
 	return result, nil

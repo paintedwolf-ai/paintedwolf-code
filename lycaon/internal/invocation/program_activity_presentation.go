@@ -14,7 +14,7 @@ func activityPresentation(input activityInput) activityRule {
 	if strings.HasPrefix(input.operation, "program ") {
 		return activityRule{"container", "Running commands", "Run command"}
 	}
-	if receipt.EffectMode == "external" || receipt.NativeCommand == "external" {
+	if receipt.EffectMode == "external" || receipt.NativeCommand == "external" || (input.operation == "command" && receipt.Owner == "processes") {
 		return activityRule{"primary", "Running programs", "Run process"}
 	}
 	if input.operation == "cd" {
@@ -96,7 +96,19 @@ func activityPaths(arguments map[string]any, role string) []string {
 }
 
 func activitySubject(input activityInput) string {
-	if input.receipt.NativeCommand == "external" {
+	if query := stringArgument(input.arguments, "query"); query != "" {
+		return boundedActivityText(query)
+	}
+	if pattern := stringArgument(input.arguments, "pattern"); pattern != "" {
+		return boundedActivityText(pattern)
+	}
+	if url := stringArgument(input.arguments, "url"); url != "" {
+		return boundedActivityText(url)
+	}
+	if message := stringArgument(input.arguments, "message"); message != "" {
+		return boundedActivityText(message)
+	}
+	if activityPresentation(input).label == "Run process" {
 		if command := stringArgument(input.arguments, "command"); command != "" {
 			return boundedActivityText(command)
 		}
