@@ -69,7 +69,9 @@ type Provider interface {
 	SetOnSettled(fn func(projectDir string))
 	// Wait joins analysis, refinement, and their settled callbacks.
 	Wait(ctx context.Context) error
-	// Close stops background analysis.
+	// Stop closes admission and cancels background analysis without joining it.
+	Stop()
+	// Close stops background analysis and joins settled callbacks.
 	Close() error
 }
 
@@ -479,16 +481,17 @@ func (p *fileProvider) Wait(ctx context.Context) error {
 	}
 }
 
-// Close cancels analysis and waits for workers and their settled callbacks.
-func (p *fileProvider) Close() error {
+// Stop closes analysis admission before canceling the current busy interval.
+func (p *fileProvider) Stop() {
 	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
-		return nil
-	}
 	p.closed = true
 	p.mu.Unlock()
 	p.cancel()
+}
+
+// Close joins stopped analysis and its synchronous settled callbacks.
+func (p *fileProvider) Close() error {
+	p.Stop()
 	_ = p.Wait(context.Background())
 	p.memo.forget()
 	return nil

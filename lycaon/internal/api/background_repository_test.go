@@ -12,6 +12,7 @@ type backgroundRepo struct {
 	entered chan struct{}
 	release chan struct{}
 	once    sync.Once
+	stop    func()
 }
 
 func (*backgroundRepo) Brief(context.Context, string) (*repoinfo.Brief, error) {
@@ -21,7 +22,12 @@ func (*backgroundRepo) KnownEmpty(context.Context, string) (bool, error) { retur
 func (*backgroundRepo) Warm(string)                                      {}
 func (*backgroundRepo) Changed(context.Context, string)                  {}
 func (*backgroundRepo) SetOnSettled(func(string))                        {}
-func (*backgroundRepo) Close() error                                     { return nil }
+func (p *backgroundRepo) Stop() {
+	if p.stop != nil {
+		p.stop()
+	}
+}
+func (*backgroundRepo) Close() error { return nil }
 
 func (p *backgroundRepo) Wait(ctx context.Context) error {
 	p.once.Do(func() { close(p.entered) })
@@ -61,4 +67,17 @@ func TestBackgroundDrainIncludesRepositorySettlement(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("server drain did not finish after repository settlement")
 	}
+}
+
+func TestBackgroundStopCancelsRepositoryBeforeDrain(t *testing.T) {
+	p := &backgroundRepo{entered: make(chan struct{}), release: make(chan struct{})}
+	p.stop = sync.OnceFunc(func() { close(p.release) })
+	s := newTestServer(t, func(deps *Dependencies) { deps.Source.RepoProvider = p })
+	s.StopBackground(t.Context())
+	select {
+	case <-p.release:
+	default:
+		t.Fatal("shutdown did not cancel repository analysis before its join")
+	}
+	s.WaitForBackground(t.Context())
 }

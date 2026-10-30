@@ -46,6 +46,8 @@ func (p *WarmTrackingRepo) Brief(context.Context, string) (*repoinfo.Brief, erro
 
 func (p *WarmTrackingRepo) Warm(path string) { p.Warmed = append(p.Warmed, path) }
 
+func (*WarmTrackingRepo) Stop() {}
+
 func (*WarmTrackingRepo) Close() error { return nil }
 
 func (*WarmTrackingRepo) KnownEmpty(context.Context, string) (bool, error) { return false, nil }

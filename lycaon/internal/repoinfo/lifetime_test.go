@@ -79,3 +79,54 @@ func TestWaitCanReuseIdleIntervals(t *testing.T) {
 		waiters.Wait()
 	}
 }
+
+func TestStopCancelsAnalysisAndClosesAdmission(t *testing.T) {
+	entered, canceled := make(chan struct{}), make(chan struct{})
+	var starts atomic.Int32
+	p := newProviderWithAnalyze(func(ctx context.Context, _ string) (*Brief, error) {
+		starts.Add(1)
+		close(entered)
+		<-ctx.Done()
+		close(canceled)
+		return nil, ctx.Err()
+	})
+	t.Cleanup(func() { _ = p.Close() })
+	root := t.TempDir()
+	p.Warm(root)
+	<-entered
+	p.Stop()
+	if err := p.Wait(t.Context()); err != nil {
+		t.Fatalf("join canceled analysis: %v", err)
+	}
+	select {
+	case <-canceled:
+	default:
+		t.Fatal("analysis was not canceled before join")
+	}
+	p.Warm(root)
+	p.Changed(t.Context(), root)
+	if starts.Load() != 1 {
+		t.Fatal("stopped provider admitted another analysis")
+	}
+}
+
+func TestStopPreservesSettledCallbackJoin(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	p := newProviderWithAnalyze(func(context.Context, string) (*Brief, error) { return &Brief{}, nil })
+	finish := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(func() { _ = p.Close() })
+	t.Cleanup(finish)
+	p.SetOnSettled(func(string) { close(entered); <-release })
+	p.Warm(t.TempDir())
+	<-entered
+	p.Stop()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := p.Wait(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("stopped provider omitted callback join: %v", err)
+	}
+	finish()
+	if err := p.Close(); err != nil {
+		t.Fatalf("close stopped provider: %v", err)
+	}
+}

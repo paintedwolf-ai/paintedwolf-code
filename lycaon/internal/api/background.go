@@ -24,6 +24,9 @@ func (s *Server) StopBackground(ctx context.Context) {
 		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
+	if s.repoProvider != nil {
+		s.repoProvider.Stop()
+	}
 	s.Sources.Watch.Stop(ctx)
 }
 
