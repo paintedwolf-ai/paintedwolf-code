@@ -44,9 +44,11 @@ func TestLabelOnlyProgressDoesNotEraseRepeatedNoOpHistory(t *testing.T) {
 	guard := NewMemoryDoomLoopGuard()
 	args := map[string]any{"content": "- [ ] Deliver"}
 	for n := 0; n < DoomLoopMaxAttempts; n++ {
+		args["expected_revision"] = fmt.Sprintf("%064x", n)
 		testutil.FailErr(t, "record repeated no-op", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n), "update_progress", args, nil, false))
 		testutil.FailErr(t, "record bookkeeping rewrite", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n, "-label"), "update_progress", map[string]any{"content": fmt.Sprintf("- [ ] Deliver detail %d", n)}, nil, false))
 	}
+	args["expected_revision"] = fmt.Sprintf("%064x", DoomLoopMaxAttempts)
 	allowed, _, _, err := guard.Check(t.Context(), "session", "next", "update_progress", args, true, nil)
 	testutil.FailErr(t, "check unchanged deliverable context", err)
 	if allowed {

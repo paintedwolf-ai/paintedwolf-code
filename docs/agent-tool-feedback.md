@@ -374,8 +374,14 @@ Establish a checklist once before the first governed mutation. Pending rows perm
 continued implementation without another progress call. Identical submissions
 create no document revision or progress event and do not count as workflow
 advancement. Rewording labels is a document change, not a deliverable transition.
-Unrelated mutations do not erase the repetition history of a progress no-op.
-Only a new user-request boundary resets that history independently of progress.
+Unrelated mutations do not erase the repetition history of a pending-checklist
+no-op. Material progress or a new user-request boundary renews that context.
+All-terminal checklists share a rewording-resistant bucket; an intervening world
+effect permits recording newly completed work without an invented pending update.
+Explicit finish tokens retain distinct operation identities. A typed revision or
+reconciliation rejection records its host-issued remedy, so a corrected retry
+reaches the owner even after repeated stale attempts. Diagnostic rejection totals
+remain intact; the owner revalidates the supplied basis before any write.
 
 Successful worker finishes publish a reconciliation token and exact job IDs in
 the current snapshot. Submit `reconciliation_token` with `expected_revision`

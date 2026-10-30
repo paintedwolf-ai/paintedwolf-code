@@ -96,9 +96,19 @@ func doomLoopUpdateProgressArgs(args map[string]any) map[string]any {
 	}
 	content, _ := args["content"].(string)
 	if progress.AllTerminal(content) {
-		return map[string]any{"all_terminal": true}
+		fingerprint := map[string]any{"all_terminal": true}
+		if token, _ := args["reconciliation_token"].(string); token != "" {
+			fingerprint["reconciliation_token"] = token
+		}
+		return fingerprint
 	}
-	return args
+	fingerprint := make(map[string]any, len(args))
+	for key, value := range args {
+		if key != "expected_revision" {
+			fingerprint[key] = value
+		}
+	}
+	return fingerprint
 }
 
 // doomLoopPageTargetArg groups reopened pages by target, using ids for unresolved handles.
