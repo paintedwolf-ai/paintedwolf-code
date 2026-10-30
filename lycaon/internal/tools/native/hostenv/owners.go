@@ -124,7 +124,7 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.tc, d.nested, d.bound, streams)
 }
 
-func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+func (d dispatcher) EffectMode(_ context.Context, request commandprogram.OperationRequest) string {
 	prepared, err := d.owners.Prepare(request)
 	if err != nil {
 		return ""
