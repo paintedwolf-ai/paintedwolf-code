@@ -13,7 +13,7 @@ test("command activities contain long text at narrow card widths", async ({ page
  await page.route("**/program-receipts/**", route => route.fulfill({ json: { program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 } }));
  await apiSeedSessionTranscript(request, session, transcriptMessages([
   { id: assistant, role: "assistant", content: "", ord: 1, tool_calls: [{ id: call, name: "command", args: { command: source } }], created_at: "2026-10-30T10:00:00Z" },
-  { id: crypto.randomUUID(), role: "tool", content: "", ord: 2, tool_result: { tool: "command", tool_call_id: call, assistant_message_id: assistant, content: "", outcome: "completed", command_program: program }, created_at: "2026-10-30T10:00:01Z" },
+  { id: crypto.randomUUID(), role: "tool", content: "", ord: 2, tool_result: { tool: "command", tool_call_id: call, assistant_message_id: assistant, tool_args: { command: source }, content: "", outcome: "completed", command_program: program }, created_at: "2026-10-30T10:00:01Z" },
  ]));
  const group = liveChatStage(page).getByTestId("activity-span-card").first();
  await expect(group).toBeVisible();
@@ -35,6 +35,11 @@ test("command activities contain long text at narrow card widths", async ({ page
   })).toBe(true);
   expect(await row.locator(".den-tool-part-title").first().evaluate(element => getComputedStyle(element).whiteSpace)).toBe("nowrap");
   expect(await row.locator(".den-command-activity-command").evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true);
+  for (const selector of [".den-tool-part-name", ".den-command-activity-outcome"]) {
+   expect(await row.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true);
+  }
+  await page.mouse.move(0,0);
+  await page.getByTestId("den-tooltip").waitFor({state:"hidden"});
   await group.screenshot({ path: testInfo.outputPath(`activity-${width}.png`) });
  }
 });

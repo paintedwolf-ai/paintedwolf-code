@@ -62,10 +62,12 @@ it("does not reload unchanged receipts when live snapshots replace their objects
  const view=render(()=><CommandActivityCard part={value()} layout="chat" sessionId="activity-card-test" client={client}/>);
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
  await waitFor(()=>expect(view.container.textContent).toContain("test output"));
+ const copy=view.getByRole("button",{name:"Copy command"});
  const next=part(); next.commandActivity!.fact={...next.commandActivity!.fact};
  setValue(next);
  await Promise.resolve();
  expect(get).toHaveBeenCalledOnce();
+ expect(view.getByRole("button",{name:"Copy command"})).toBe(copy);
 });
 
 it("preserves uncertain effects, approvals and unpublished changes in compact details", async () => {

@@ -130,11 +130,10 @@ remain processes: their names and output never establish a verification verdict.
 Refusals, approvals, mutations and uncertain effects retain individual outcomes.
 Activity starts publish as soon as their durable host facts are available; the UI
 does not hold work to predict later calls. Identities also travel with the command
-result. Loading detailed receipts never changes row membership. Existing rows never merge, reorder or change their labels. Related work stays in
-the same group; its title may follow the active work without creating another
+result. Loading detailed receipts never changes row membership. Existing rows
+never merge, reorder or change their labels. Related work stays in the same group; its title may follow the active work without creating another
 group. An incoming observation may join a compatible established row when it
-arrives. Status, outcomes and counts
-update in place.
+arrives. Status, outcomes and counts update in place.
 Missing inputs or receipts use a neutral operation presentation.
 
 Den keeps the existing group, single-line activity and expanded-detail structure.

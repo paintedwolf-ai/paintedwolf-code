@@ -41,6 +41,7 @@ export type ActivitySpanCardProps = {
   layout: TranscriptLayout;
   sessionId?: string;
   entryKey?: string;
+  running?: boolean;
   renderToolEntry: (part: () => ToolPartView) => JSX.Element;
 };
 
@@ -204,7 +205,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
   // Process events refresh status and failure counts.
   const statusAttr = () => {
     processRevision();
-    const status = activitySpanStatus(props.entries, props.sessionId) === "running" ? "running" : activitySpanStatus(entries().length ? entries() : props.entries, props.sessionId);
+    const status = props.running || activitySpanStatus(props.entries, props.sessionId) === "running" ? "running" : activitySpanStatus(entries().length ? entries() : props.entries, props.sessionId);
     return status === "completed" ? "done" : status;
   };
   const failed = () => {

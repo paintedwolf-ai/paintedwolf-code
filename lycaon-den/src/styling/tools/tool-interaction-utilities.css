@@ -332,7 +332,7 @@
 .den-tool-part[data-command-activity] .den-tool-part-title,
 .den-tool-part[data-expanded="true"][data-command-activity] .den-tool-part-title {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -381,10 +381,8 @@
   color: var(--den-text);
   background: var(--den-tint-2);
 }
-.den-command-activity-details .den-tool-part-card-facts > div {
-  flex-wrap: wrap;
-}
 .den-command-activity-details .den-tool-part-card-facts dd {
+  flex: 1 1 0;
   overflow-wrap: anywhere;
   margin-left: auto;
 }

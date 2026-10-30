@@ -4,6 +4,7 @@ import { commandSourceSegments } from "../../chat/tool/command-activity-model.ts
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { writeClipboardText } from "../../utils/clipboard.ts";
+import { KeyedIndex } from "../keyed-index.tsx";
 import { RedactedText } from "../transcript/RedactionMark.tsx";
 import { ToolContentLink } from "./ToolContentLink.tsx";
 
@@ -66,9 +67,9 @@ export function CommandActivitySources(props: {
   return <section class="den-tool-part-card-section" aria-label="Original command">
     <h4 class="den-tool-part-card-section-label">{props.activity.calls.some(call => command(call)) ? "Original command" : "Original input"}</h4>
     <Show when={props.activity.fact.job_handle} keyed>{handle => <ToolContentLink pane={`activity:${props.activity.fact.id}:process`} label="Process output" content={{ kind: "process", handle }} projectId={props.projectId} />}</Show>
-    <For each={props.calls}>{call => <Show when={command(call)} keyed fallback={<><OriginalInputLink call={call} activity={props.activity} projectId={props.projectId} /><CallOutputLink call={call} activity={props.activity} projectId={props.projectId} /></>}>
-      {text => <CommandSource call={call} activity={props.activity} projectId={props.projectId} text={text} copy={text => void copy(text)} />}
-    </Show>}</For>
+    <KeyedIndex each={props.calls} keyOf={call => call.id}>{call => <Show when={command(call())} keyed fallback={<><OriginalInputLink call={call()} activity={props.activity} projectId={props.projectId} /><CallOutputLink call={call()} activity={props.activity} projectId={props.projectId} /></>}>
+      {text => <CommandSource call={call()} activity={props.activity} projectId={props.projectId} text={text} copy={text => void copy(text)} />}
+    </Show>}</KeyedIndex>
     <Show when={props.offset > 0 || props.calls.length < props.activity.calls.length}>
       <div class="den-command-activity-paging" role="group" aria-label="Activity calls">
         <button type="button" class="den-chat-content-link" disabled={props.offset === 0} onClick={props.onPrevious}>Previous calls</button>
