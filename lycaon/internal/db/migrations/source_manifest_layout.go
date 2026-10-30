@@ -214,17 +214,21 @@ func prepareLayoutEntryInsert(ctx context.Context, tx *sql.Tx, count int) (*sql.
 }
 
 func insertLayoutEntries(ctx context.Context, tx *sql.Tx, full *sql.Stmt, chunkID string, entries []layoutEntry) error {
+	var tail *sql.Stmt
+	if count := len(entries) % layoutInsertRows; count != 0 {
+		var err error
+		tail, err = prepareLayoutEntryInsert(ctx, tx, count)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tail.Close() }()
+	}
 	args := make([]any, 0, layoutInsertRows*8)
 	for start := 0; start < len(entries); start += layoutInsertRows {
 		batch := entries[start:min(start+layoutInsertRows, len(entries))]
 		statement := full
 		if len(batch) < layoutInsertRows {
-			var err error
-			statement, err = prepareLayoutEntryInsert(ctx, tx, len(batch))
-			if err != nil {
-				return err
-			}
-			defer func() { _ = statement.Close() }()
+			statement = tail
 		}
 		args = args[:0]
 		for _, entry := range batch {
