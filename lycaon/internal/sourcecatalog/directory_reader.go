@@ -94,7 +94,7 @@ func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum
 			return err
 		}
 		for _, node := range discovery.nodes {
-			listing.Entries = append(listing.Entries, Entry{RootID: r.root.ID, Path: node.path, Parent: node.parent, Name: node.name, Depth: node.depth, IsDir: node.isDir, IsSymlink: node.isSymlink, Boundary: r.store.policy.boundaryDir(node.path) != ""})
+			listing.Entries = append(listing.Entries, Entry{RootID: r.root.ID, Path: node.path, Parent: node.parent, Name: node.name, Depth: node.depth, IsDir: node.isDir, IsSymlink: node.isSymlink, Boundary: node.isDir && r.store.policy.boundaryDir(node.path) != ""})
 		}
 		return nil
 	})
