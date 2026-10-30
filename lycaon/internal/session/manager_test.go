@@ -25,19 +25,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// testMockConfig reads files through command, the coordinator floor's file
-// tool, ahead of the shared fixture's entries for the same prompts.
+// testMockConfig loads the same command-program responses as the runtime fixture.
 func testMockConfig(t *testing.T) *llm.MockConfig {
 	t.Helper()
 	cfg, err := llm.LoadMockConfig()
 	if err != nil {
 		t.Fatalf("load mock config: %v", err)
 	}
-	floor := []llm.MockResponseEntry{
-		{Pattern: "read.*readme", ToolCalls: []llm.MockToolCall{{ID: "call_1", Name: "command", Args: map[string]any{"command": "cat README.md"}}}, FollowUpText: "I've read README.md."},
-		{Pattern: "infinite loop", AlwaysTool: true, ToolCalls: []llm.MockToolCall{{ID: "call_loop", Name: "command", Args: map[string]any{"command": "cat loop.txt"}}}},
-	}
-	cfg.Responses = append(floor, cfg.Responses...)
 	return cfg
 }
 

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
 )
@@ -120,7 +121,7 @@ func WriteBisect(ctx context.Context, dir string, files map[string]string, appen
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, Source: strings.NewReader(content), Mode: 0o644, PreserveMode: true}); err != nil {
 			return err
 		}
 	}
@@ -129,7 +130,7 @@ func WriteBisect(ctx context.Context, dir string, files map[string]string, appen
 		if err != nil {
 			return err
 		}
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := fseffect.OpenWrite(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, true, 0o644)
 		if err != nil {
 			return err
 		}
