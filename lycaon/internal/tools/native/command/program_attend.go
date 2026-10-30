@@ -90,6 +90,10 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
+		out.Facts = out.Facts.Merge(e.run.tc.Effects.Out.Facts)
+		if e.run.tc.Effects.Out.ExternalAccess != nil {
+			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
+		}
 	}
 	return ending.result, ending.err
 }

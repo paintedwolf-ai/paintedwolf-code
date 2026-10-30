@@ -126,9 +126,7 @@ func (f ToolResultFacts) Merge(other ToolResultFacts) ToolResultFacts {
 	for _, feedback := range feedbackForFacts(other) {
 		next = next.WithFeedback(feedback.Code, feedback.Details, feedback.Subject)
 	}
-	if other.Confine.Applied {
-		next.Confine = other.Confine
-	}
+	next.Confine = f.Confine.Merge(other.Confine)
 	if other.IndexWatch.Active() {
 		next.IndexWatch = other.IndexWatch
 	}
