@@ -43,7 +43,7 @@ func (n *findNode) eval(r *findRun, e entry) (bool, error) {
 	}
 	if !n.structural {
 		var err error
-		e, err = r.walker.inspect(e, r.followAll)
+		e, err = r.walker.inspect(e)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
 				return false, nil

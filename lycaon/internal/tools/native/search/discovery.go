@@ -40,24 +40,20 @@ type entryMetadata struct {
 }
 
 // Metadata is fetched only after a reached primary needs it.
-func (w *walker) inspect(e entry, follow bool) (entry, error) {
+func (w *walker) inspect(e entry) (entry, error) {
 	if e.metadata == nil {
 		return e, nil
 	}
 	m := e.metadata
 	if !m.known {
-		w.work.metadata++
-		if m.parent == nil {
-			m.stat, m.err = e.bound.Stat(false)
-		} else {
-			opened, err := m.parent.OpenDirWithRoot(w.readRoot(*m.parent))
-			m.err = err
-			if err == nil {
-				w.work.handles++
-				w.work.relative++
-				_, m.stat, m.err = opened.StatChild(e.name)
-				_ = opened.Close()
-			}
+		opened, err := m.parent.OpenDirWithRoot(w.readRoot(*m.parent))
+		m.err = err
+		if err == nil {
+			w.work.handles++
+			w.work.metadata++
+			w.work.relative++
+			_, m.stat, m.err = opened.StatChild(e.name)
+			_ = opened.Close()
 		}
 		m.known = true
 	}
@@ -66,12 +62,6 @@ func (w *walker) inspect(e entry, follow bool) (entry, error) {
 	}
 	e.stat = m.stat
 	e.link = e.stat.Mode&fs.ModeSymlink != 0
-	if e.link && follow {
-		w.work.metadata++
-		if target, err := e.bound.Stat(true); err == nil {
-			e.stat, e.link, e.followed = target, false, true
-		}
-	}
 	return e, nil
 }
 
@@ -108,16 +98,8 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 			return nil, true, err
 		}
 		child := dir.bound.Child(item.Name)
-		mode := fs.FileMode(0)
-		if item.IsDir {
-			mode |= fs.ModeDir
-		}
-		if item.IsSymlink {
-			mode = fs.ModeSymlink
-		}
 		e := entry{display: joinDisplay(dir.display, item.Name), name: item.Name, bound: child,
-			stat: fseffect.EntryStat{Mode: mode}, depth: dir.depth + 1, start: dir.start,
-			link: item.IsSymlink, metadata: &entryMetadata{parent: &dir.bound}}
+			depth: dir.depth + 1, start: dir.start, link: item.IsSymlink}
 		if !w.lazy || item.IsDir || item.IsSymlink {
 			w.work.metadata++
 			w.work.relative++
@@ -131,6 +113,8 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 			}
 			e.bound, e.stat, e.metadata = child, stat, nil
 			e.link = stat.Mode&fs.ModeSymlink != 0
+		} else {
+			e.metadata = &entryMetadata{parent: &dir.bound}
 		}
 		e.display = child.Resolved.DisplayPath
 		if dir.display == "." || dir.display != dir.bound.Resolved.DisplayPath {
