@@ -42,7 +42,7 @@ it("keeps a failed approval pending, shows its recovery on the card, and permits
   expect((approve as HTMLButtonElement).disabled).toBe(false);
   expect(approve.textContent).toBe(originalChoice);
   expect(reportError).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByTestId("approval-reject"));
+  fireEvent.click(screen.getByTestId("approval-no"));
   await waitFor(() => expect(resolveCheckpoint).toHaveBeenCalledTimes(2));
   expect(resolveCheckpoint.mock.calls[1]?.[2]).toMatchObject({ kind: "tool_approval", action: "reject" });
   await waitFor(() => expect(screen.queryByTestId("approval-decision-error")).toBeNull());

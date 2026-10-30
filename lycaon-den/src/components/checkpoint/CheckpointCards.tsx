@@ -142,7 +142,7 @@ export function CheckpointCards(props: Props) {
 
   const decisions = createCheckpointDecisions({
     client: props.client,
-    sessionId: props.sessionId,
+    sessionId: () => props.sessionId,
     projectId,
     onStart: (id) => focusReturn.note(id),
     reportError: (error) => notices.reportError(error),
@@ -180,6 +180,9 @@ export function CheckpointCards(props: Props) {
                 </Show>
                 <span class="den-approval-queue-label">
                   {checkpointRowLabel(checkpoint)}
+                  <Show when={decisions.notice(checkpoint.checkpointId)} keyed>
+                    {(notice) => <span data-testid="checkpoint-queue-error"> · {notice.title}</span>}
+                  </Show>
                 </span>
               </button>
             )}

@@ -27,101 +27,35 @@ function reviewRuleMatches(
 
 type Dependencies = {
   client: LycaonClient;
-  sessionId: string;
+  sessionId: () => string;
   projectId: () => string | undefined;
   onStart: (checkpointId: string) => void;
   reportError: (error: unknown) => void;
 };
 
-/** Submits checkpoint decisions and consumes guidance only after commitment. */
+/** Submits decisions and consumes their captured guidance after commitment. */
 export function createCheckpointDecisions(dependencies: Dependencies) {
   const submissions = createCheckpointSubmission();
-  const scope = (checkpoint: PendingCheckpoint) => sessionScope(dependencies.projectId() ?? "", checkpoint.sessionId);
+  const scope = (checkpoint: PendingCheckpoint, projectId?: string) => sessionScope(projectId ?? "", checkpoint.sessionId);
 
-  const skipReviewPath = async (
-    checkpoint: PendingCheckpoint,
-    mode: "day" | "always",
-  ) => {
-    if (submissions.pending(checkpoint.checkpointId)) return;
-    const path = checkpoint.content_apply?.path?.trim();
-    const tool = checkpoint.content_apply?.tool?.trim() || "write";
-    if (!path) return;
-    const projectId = dependencies.projectId();
-    if (!projectId) return;
-    dependencies.onStart(checkpoint.checkpointId);
-    await submissions.run(checkpoint.checkpointId, scope(checkpoint), async () => {
-      const current = await dependencies.client.getReviewSettings(projectId);
-      const rules = current.review_paths ?? [];
-      const review_paths =
-        mode === "always"
-          ? rules.filter((r) => !reviewRuleMatches(r, tool, path))
-          : rules.map((r) =>
-              reviewRuleMatches(r, tool, path)
-                ? {
-                    ...r,
-                    disabled_until: new Date(
-                      Date.now() + 24 * 60 * 60 * 1000,
-                    ).toISOString(),
-                  }
-                : r,
-            );
-      await dependencies.client.updateReviewSettings({ review_paths }, projectId);
-      await resolveContentApply(dependencies.client, checkpoint, "approve");
-    });
-  };
-
-  // Only an explicit No attaches composer guidance.
-  const captureGuidance = (withGuidance?: boolean) => {
+  const captureGuidance = (sessionId: string, withGuidance: boolean) => {
     if (!withGuidance) return { draft: "", secrets: [], secretAttachmentIds: [] };
-    const secretAttachments = pendingAttachmentsForSession(dependencies.sessionId).filter(
-      (attachment) => attachment.kind === "secret",
-    );
+    const attachments = pendingAttachmentsForSession(sessionId).filter((attachment) => attachment.kind === "secret");
     return {
-      draft: composerDraftForSession(dependencies.sessionId),
-      secrets: promptPartsFromPendingAttachments(secretAttachments).secrets,
-      secretAttachmentIds: secretAttachments.map((attachment) => attachment.id),
+      draft: composerDraftForSession(sessionId),
+      secrets: promptPartsFromPendingAttachments(attachments).secrets,
+      secretAttachmentIds: attachments.map((attachment) => attachment.id),
     };
   };
+  type Guidance = ReturnType<typeof captureGuidance>;
 
-  const onToolApproval = async (
-    checkpoint: PendingCheckpoint,
-    action: "approve" | "reject",
-    options?: { optionId?: string; withGuidance?: boolean },
-  ) => {
-    if (submissions.pending(checkpoint.checkpointId)) return;
-    const captured = action === "reject" ? captureGuidance(options?.withGuidance) : captureGuidance();
-    const guidance = captured.draft.trim();
-    dependencies.onStart(checkpoint.checkpointId);
-    const completed = await submissions.run(checkpoint.checkpointId, scope(checkpoint), async () => {
-      await resolveToolApproval(
-        dependencies.client,
-        checkpoint,
-        action,
-        {
-          optionId: options?.optionId,
-          guidance: guidance || undefined,
-          secrets: captured.secrets,
-        },
-      );
-    });
-    if (completed) await consumeAttachedGuidance(captured);
-  };
-
-  const consumeAttachedGuidance = async (captured: ReturnType<typeof captureGuidance>) => {
-    if (!captured.draft.trim() && captured.secretAttachmentIds.length === 0) return;
-    if (composerDraftForSession(dependencies.sessionId) !== captured.draft) return;
-    const destinationProjectId = dependencies.projectId();
-    if (!destinationProjectId) return;
+  const consumeGuidance = async (captured: Guidance, sessionId: string, projectId?: string) => {
+    if (!projectId || (!captured.draft.trim() && captured.secretAttachmentIds.length === 0)) return;
+    if (composerDraftForSession(sessionId) !== captured.draft) return;
     try {
-      await replaceComposerDocumentDraft(
-        { projectId: destinationProjectId, sessionId: dependencies.sessionId },
-        "",
-      );
+      await replaceComposerDocumentDraft({ projectId, sessionId }, "");
       for (const attachmentId of captured.secretAttachmentIds) {
-        await removeComposerDocumentAttachment(
-        { projectId: destinationProjectId, sessionId: dependencies.sessionId },
-          attachmentId,
-      );
+        await removeComposerDocumentAttachment({ projectId, sessionId }, attachmentId);
       }
       await flushComposerDraftsToDisk();
     } catch (error) {
@@ -129,31 +63,54 @@ export function createCheckpointDecisions(dependencies: Dependencies) {
     }
   };
 
-  const onContentApply = async (
-    checkpoint: PendingCheckpoint,
-    body: {
-      decision: "approve" | "reject" | "approve_partial";
-      approvedHunks?: string[];
-      withGuidance?: boolean;
-    },
-  ) => {
+  const submit = async (checkpoint: PendingCheckpoint, withGuidance: boolean, answer: (captured: Guidance) => Promise<void>) => {
     if (submissions.pending(checkpoint.checkpointId)) return;
-    const captured = body.decision === "reject" ? captureGuidance(body.withGuidance) : captureGuidance();
-    const guidance = captured.draft.trim();
+    const sessionId = dependencies.sessionId();
+    const projectId = dependencies.projectId();
+    let captured: Guidance | undefined;
     dependencies.onStart(checkpoint.checkpointId);
-    const completed = await submissions.run(checkpoint.checkpointId, scope(checkpoint), async () => {
-      await resolveContentApply(
-        dependencies.client,
-        checkpoint,
-        body.decision,
-        {
-          approvedHunks: body.approvedHunks,
-          guidance: guidance || undefined,
-          secrets: captured.secrets,
-        },
-      );
+    const completed = await submissions.run(checkpoint.checkpointId, scope(checkpoint, projectId), async () => {
+      captured = captureGuidance(sessionId, withGuidance);
+      await answer(captured);
     });
-    if (completed) await consumeAttachedGuidance(captured);
+    if (completed && captured) await consumeGuidance(captured, sessionId, projectId);
+  };
+
+  const onToolApproval = (checkpoint: PendingCheckpoint, action: "approve" | "reject", options?: { optionId?: string; withGuidance?: boolean }) =>
+    submit(checkpoint, action === "reject" && Boolean(options?.withGuidance), (captured) =>
+      resolveToolApproval(dependencies.client, checkpoint, action, {
+        optionId: options?.optionId,
+        guidance: captured.draft.trim() || undefined,
+        secrets: captured.secrets,
+      }),
+    );
+
+  const onContentApply = (checkpoint: PendingCheckpoint, body: { decision: "approve" | "reject" | "approve_partial"; approvedHunks?: string[]; withGuidance?: boolean }) =>
+    submit(checkpoint, body.decision === "reject" && Boolean(body.withGuidance), (captured) =>
+      resolveContentApply(dependencies.client, checkpoint, body.decision, {
+        approvedHunks: body.approvedHunks,
+        guidance: captured.draft.trim() || undefined,
+        secrets: captured.secrets,
+      }),
+    );
+
+  const skipReviewPath = async (checkpoint: PendingCheckpoint, mode: "day" | "always") => {
+    if (submissions.pending(checkpoint.checkpointId)) return;
+    const path = checkpoint.content_apply?.path?.trim();
+    const tool = checkpoint.content_apply?.tool?.trim() || "write";
+    const projectId = dependencies.projectId();
+    if (!path || !projectId) return;
+    dependencies.onStart(checkpoint.checkpointId);
+    await submissions.run(checkpoint.checkpointId, scope(checkpoint, projectId), async () => {
+      const current = await dependencies.client.getReviewSettings(projectId);
+      const review_paths = mode === "always"
+        ? (current.review_paths ?? []).filter((rule) => !reviewRuleMatches(rule, tool, path))
+        : (current.review_paths ?? []).map((rule) => reviewRuleMatches(rule, tool, path)
+          ? { ...rule, disabled_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }
+          : rule);
+      await dependencies.client.updateReviewSettings({ review_paths }, projectId);
+      await resolveContentApply(dependencies.client, checkpoint, "approve");
+    });
   };
 
   return { ...submissions, onToolApproval, onContentApply, skipReviewPath };

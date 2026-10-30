@@ -24,6 +24,12 @@ describe("checkpoint submission", () => {
     expect(submission.notice("card")).toMatchObject({ code: "approval_capacity_exceeded", title: "Approval could not be applied", suggestedAction: "Reject the action or stop the session.", scope });
     expect(await submission.run("card", scope, async () => {})).toBe(true);
     expect(submission.notice("card")).toBeUndefined();
+    expect(submission.pending("card")).toBe(true);
+    const duplicate = vi.fn(async () => {});
+    expect(await submission.run("card", scope, duplicate)).toBe(false);
+    expect(duplicate).not.toHaveBeenCalled();
+    submission.retain([]);
+    expect(submission.pending("card")).toBe(false);
     dispose();
   });
 
