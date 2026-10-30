@@ -44,19 +44,17 @@ func unavailable(form, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_NATIVE_FORM_UNSUPPORTED", Data: map[string]any{"command": form, "detail": reason}}
 }
 
-// runFind walks each starting point in byte order, pre-order unless -delete
-// asks for depth-first, and evaluates the expression at every admitted depth.
-// Without an action the expression is ( EXPR ) -print. Links are entries,
-// never followed.
+// runFind preserves byte order and the requested depth and link traversal.
 func runFind(inv *invocation) error {
 	inv.failure = 1
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
 	defer r.walker.close()
+	r.walker.lazy = true
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}
 	items := inv.argv.Items
-	// BSD and GNU global options precede the starting points.
+	// Global options precede the starting points.
 	for len(items) > 0 && items[0].Option != nil && r.leadingOption(items[0].Option.Key) {
 		items = items[1:]
 	}
@@ -142,6 +140,16 @@ func (r *findRun) visit(e entry) error {
 	}
 	if !r.actions {
 		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
+	}
+	if e.dir() || e.link {
+		var err error
+		e, err = r.walker.inspect(e)
+		if err != nil {
+			if _, ok := ordinary(err); ok {
+				return nil
+			}
 			return err
 		}
 	}
