@@ -25,6 +25,15 @@ func (v *UTF8Validator) Add(raw []byte, eof bool) bool {
 		v.pendingN = 0
 	}
 	for len(raw) > 0 {
+		for len(raw) > 0 && raw[0] < utf8.RuneSelf {
+			if raw[0] == 0 {
+				return false
+			}
+			raw = raw[1:]
+		}
+		if len(raw) == 0 {
+			return true
+		}
 		if !utf8.FullRune(raw) {
 			if eof {
 				return false
@@ -32,8 +41,8 @@ func (v *UTF8Validator) Add(raw []byte, eof bool) bool {
 			v.pendingN = copy(v.pending[:], raw)
 			return true
 		}
-		_, size := utf8.DecodeRune(raw)
-		if !validUTF8Rune(raw[:size]) {
+		r, size := utf8.DecodeRune(raw)
+		if r == utf8.RuneError && size == 1 {
 			return false
 		}
 		raw = raw[size:]
