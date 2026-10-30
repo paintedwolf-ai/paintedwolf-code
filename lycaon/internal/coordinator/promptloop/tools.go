@@ -3,7 +3,6 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -353,7 +353,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 				result.replaceContent(result.content)
 			}
 			if run.runErr == nil && result.facts.Succeeded() {
-				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.committedEffect())
+				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.advancesRepetitionContext())
 			}
 		}
 		observability.LogToolInvocation(observability.ToolInvocationCapture{

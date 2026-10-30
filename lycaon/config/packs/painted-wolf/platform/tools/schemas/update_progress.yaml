@@ -2,8 +2,19 @@ description: Set session progress checklist (markdown). Replaces the whole check
 schema:
   type: object
   properties:
+    reconciliation_token:
+      type: string
+      minLength: 64
+      maxLength: 64
+      description: Current host reconciliation token; acknowledges its listed worker finishes without closing unfinished deliverables.
+    expected_revision:
+      type: string
+      description: Current snapshot revision. Required when a checklist exists; omitted only for first creation.
+      minLength: 64
+      maxLength: 64
     content:
       type: string
+      maxLength: 8000
       description: 'Checklist: `- [ ]` pending, `- [x]` done, `- [~]` terminal descope (not in-progress), `- [>]` optional (last). One row per deliverable in the request. Max 48 lines when needed; labels ≤60c.'
   required: [content]
   additionalProperties: false

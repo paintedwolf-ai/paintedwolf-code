@@ -57,12 +57,12 @@ x-paintedwolf-scenarios:
   - 'leg_status: blocked'
 - id: carries_repeated_code_exit
   vars:
-    code: PROGRESS_ITEM_NOT_CLOSED
-    code_instead: '`update_progress` that closes or revises a step, then retry `task`'
+    code: PROGRESS_RECONCILIATION_REQUIRED
+    code_instead: '`update_progress` with the current reconciliation_token and expected_revision, then retry `task`'
     count: 3
     profile: coordinator
     tool: task
   expect_contains:
   - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - PROGRESS_ITEM_NOT_CLOSED
+  - PROGRESS_RECONCILIATION_REQUIRED
   - update_progress

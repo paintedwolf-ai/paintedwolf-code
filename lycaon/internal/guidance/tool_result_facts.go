@@ -12,6 +12,8 @@ import (
 
 // ToolResultFacts records an invocation outcome and feedback.
 type ToolResultFacts struct {
+	// WorkflowAdvanced is the handler-stated advancement for this invocation.
+	WorkflowAdvanced *bool
 	// ContentReplaced prevents parallel captures from exposing content policy replaced or withheld.
 	ContentReplaced bool
 	// ProviderErrorCode is a structured error identifier supplied by a provider adapter.
@@ -120,6 +122,10 @@ func (f ToolResultFacts) WithOutcome(outcome api.ToolResultOutcome) ToolResultFa
 func (f ToolResultFacts) Merge(other ToolResultFacts) ToolResultFacts {
 	next := f.WithOutcome(other.Outcome)
 	next.ContentReplaced = f.ContentReplaced || other.ContentReplaced
+	if other.WorkflowAdvanced != nil {
+		advanced := *other.WorkflowAdvanced
+		next.WorkflowAdvanced = &advanced
+	}
 	if other.ProviderErrorCode != "" {
 		next.ProviderErrorCode = other.ProviderErrorCode
 	}

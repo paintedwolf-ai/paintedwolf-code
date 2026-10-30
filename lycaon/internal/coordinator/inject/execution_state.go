@@ -57,7 +57,7 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 				code, _ := row["code"].(string)
 				switch result.Tool {
 				case "update_progress":
-					if code == "PROGRESS_MISSING" || code == "PROGRESS_ITEM_NOT_CLOSED" {
+					if code == "PROGRESS_MISSING" || code == "PROGRESS_ITEM_NOT_CLOSED" || code == "PROGRESS_RECONCILIATION_REQUIRED" {
 						row["checklist_after"] = true
 					}
 				case "request_tools":
@@ -181,7 +181,7 @@ func rejectedChange(result *api.ToolResult) bool {
 	if receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
 		return false
 	}
-	if receipt.Failure.Code == "PROGRESS_MISSING" || receipt.Failure.Code == "PROGRESS_ITEM_NOT_CLOSED" {
+	if receipt.Failure.Code == "PROGRESS_MISSING" || receipt.Failure.Code == "PROGRESS_ITEM_NOT_CLOSED" || receipt.Failure.Code == "PROGRESS_RECONCILIATION_REQUIRED" {
 		return true
 	}
 	switch result.Tool {

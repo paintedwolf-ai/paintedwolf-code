@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -12,12 +13,13 @@ import (
 )
 
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
 }
 type Service struct {
+	mu        sync.Mutex
 	progress  Progress
 	tasks     Tasks
 	baselines scopedstore.LRU[guard.ProgressClosureBaseline]
@@ -26,13 +28,10 @@ type Service struct {
 func New() *Service                       { return &Service{} }
 func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
-func (m *Service) Forget(id string)       { m.baselines.Delete(id) }
+func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
-// Arm latches the checklist after a worker settles its
-// deliverable. Only a successful finish arms it: a partial, failed, or held
-// leg has closed nothing, and its resume is the same deliverable continuing.
-// The first baseline holds until the checklist changes; later successes join
-// the list of finishes the reconciliation must account for.
+// Arm records a successful worker finish against the current checklist.
+// Later finishes join the same set until explicit acknowledgement.
 func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if m == nil || m.progress == nil {
 		return
@@ -41,18 +40,26 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if rootID == "" {
 		return
 	}
-	content := m.progress.Get(ctx, rootID)
-	done, pending, na := progress.CloseCounts(content)
-	if pending == 0 {
-		m.baselines.Delete(rootID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	snapshot, err := m.progress.Snapshot(ctx, rootID)
+	if err != nil {
 		return
 	}
+	content := snapshot.Content
+	done, pending, na := progress.CloseCounts(content)
 	baseline, armed := m.baselines.Load(rootID)
+	if pending == 0 && !armed {
+		return
+	}
 	if !armed {
-		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content}
+		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content, Revision: snapshot.Revision}
 	}
 	if entry := m.settledWorkEntry(jobID); entry != "" && !slices.Contains(baseline.Settled, entry) {
 		baseline.Settled = append(slices.Clone(baseline.Settled), entry)
+	}
+	if jobID != "" && !slices.Contains(baseline.JobIDs, jobID) {
+		baseline.JobIDs = append(slices.Clone(baseline.JobIDs), jobID)
 	}
 	m.baselines.Store(rootID, baseline)
 }
@@ -83,39 +90,11 @@ func (m *Service) Baseline(rootID string) (baseline guard.ProgressClosureBaselin
 	if rootID == "" {
 		return guard.ProgressClosureBaseline{}, false
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	exp, ok := m.baselines.Load(rootID)
 	if !ok {
 		return guard.ProgressClosureBaseline{}, false
 	}
 	return exp, true
-}
-
-func (m *Service) ClearSatisfied(rootID, progressContent string, baseline guard.ProgressClosureBaseline) {
-	if m == nil {
-		return
-	}
-	rootID = strings.TrimSpace(rootID)
-	if rootID == "" {
-		return
-	}
-	done, pending, na := progress.CloseCounts(progressContent)
-	if pending == 0 || done+na > baseline.Closed || progressContent != baseline.Content {
-		m.baselines.Delete(rootID)
-	}
-}
-
-// Unchanged checklist writes keep the reconciliation latch armed.
-func (m *Service) AfterWrite(ctx context.Context, rootID string) {
-	if m == nil || m.progress == nil {
-		return
-	}
-	rootID = strings.TrimSpace(rootID)
-	if rootID == "" {
-		return
-	}
-	baseline, armed := m.Baseline(rootID)
-	if !armed {
-		return
-	}
-	m.ClearSatisfied(rootID, m.progress.Get(ctx, rootID), baseline)
 }

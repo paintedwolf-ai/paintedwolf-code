@@ -631,6 +631,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
+        progress_snapshot: { type: string }
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }

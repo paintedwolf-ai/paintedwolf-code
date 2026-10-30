@@ -249,6 +249,7 @@ func (e *turnContextAssembler) turnStateInject(
 	}
 
 	in := inject.TurnStateInjectInput{
+		ProgressSnapshot:         implState.ProgressSnapshot,
 		ProgressMissing:          implState.ProgressMissing,
 		ProfileHasUpdateProgress: profileHasUpdateProgress,
 		VerifyRequired:           frame.RequiresEvidence("verify"),

@@ -86,8 +86,10 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 			}
 			sess := &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}
 			history := []api.Message{{ID: "assistant-1", Role: api.MessageRoleAssistant, Content: tc.text, ToolCalls: calls}}
-			history, _, _, _, _, parked, err := loop.Batch.executeToolCallsInTurn(context.Background(), sess, sess.ID, calls,
+			batchResult, err := loop.Batch.executeToolCallsInTurn(context.Background(), sess, sess.ID, calls,
 				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, Agent: "coordinator"}}, history, "investigate", "assistant-1", "", nil)
+			history = batchResult.history
+			parked := batchResult.breakToolLoop
 			testutil.FailErr(t, "execute wait batch", err)
 			if parked != tc.park || (waitRuns == 1) != tc.park {
 				t.Fatalf("parked=%v, wait invocations=%d, want park=%v", parked, waitRuns, tc.park)

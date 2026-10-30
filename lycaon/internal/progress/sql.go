@@ -11,14 +11,15 @@ import (
 
 // SQLStore is the durable Store backed by the session_progress table.
 type SQLStore struct {
-	queries *db.Queries
+	queries  *db.Queries
+	database db.Handle
 }
 
 var _ RunScopedStore = (*SQLStore)(nil)
 
 // NewSQLStore returns a progress store backed by database.
 func NewSQLStore(database db.Handle) *SQLStore {
-	return &SQLStore{queries: db.New(database)}
+	return &SQLStore{queries: db.New(database), database: database}
 }
 
 func (s *SQLStore) Set(sessionID, content string) error {

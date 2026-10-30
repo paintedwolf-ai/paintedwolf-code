@@ -23,3 +23,6 @@ ON CONFLICT(session_id) DO UPDATE SET
     workflow_run_id = excluded.workflow_run_id,
     content = excluded.content,
     updated_at = excluded.updated_at;
+
+-- name: GetSessionProgressSnapshot :one
+SELECT content, workflow_run_id, updated_at FROM session_progress WHERE session_id = ?;

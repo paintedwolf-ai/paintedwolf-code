@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -54,7 +54,7 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 	}
 	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted)
 	testutil.FailErr(t, "render pruned procedures", err)
-	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") {
+	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("pruned surface lost progress requirements: %s", block)
 	}
 }
@@ -70,19 +70,19 @@ func TestToolProceduresFollowOfferedSchemas(t *testing.T) {
 			page  bool
 		}{
 			{name: "discovery", tools: []string{"request_tools", "read"}},
-			{name: "command", tools: []string{"command"}, want: true},
+			{name: "command", tools: []string{"command"}, want: true, http: true},
 			{name: "terminal", tools: []string{"terminal_open"}, want: true},
 			{name: "verification", tools: []string{"verify"}, want: true},
-			{name: "command and verification", tools: []string{"command", "verify"}, want: true},
-			{name: "runner and page capture", tools: []string{"command", "capture_page"}, want: true},
+			{name: "command and verification", tools: []string{"command", "verify"}, want: true, http: true},
+			{name: "runner and page capture", tools: []string{"command", "capture_page"}, want: true, http: true},
 			{name: "page capture", tools: []string{"capture_page"}, page: true},
 			{name: "live page controls", tools: []string{"page_snapshot", "page_act", "page_close"}, page: true},
 			{name: "page family", tools: []string{"page_open", "page_snapshot", "page_act", "page_close"}, page: true},
 			{name: "measurement", tools: []string{"measure_page"}, page: true},
 			{name: "mockup", tools: []string{"render_view"}, page: true},
 			{name: "view image", tools: []string{"view_image"}, page: true},
-			{name: "HTTP", tools: []string{"http_request"}, http: true},
-			{name: "runner and HTTP", tools: []string{"command", "http_request"}, want: true, http: true},
+			{name: "retired HTTP", tools: []string{"http_request"}},
+			{name: "runner with readiness", tools: []string{"command", "wait"}, want: true, http: true},
 			{name: "web research only", tools: []string{"fetch_url"}},
 			{name: "narrowed", tools: []string{"command_output", "wait"}},
 			{name: "no tools"},
@@ -93,16 +93,15 @@ func TestToolProceduresFollowOfferedSchemas(t *testing.T) {
 				if (block != "") != (tc.want || tc.http || tc.page) {
 					t.Fatalf("block = %q, want runner=%v HTTP=%v", block, tc.want, tc.http)
 				}
-				if tc.want && !strings.Contains(block, "`write_root`") {
-					t.Fatalf("runner procedure lacks write-root capability: %q", block)
-				}
-				for _, field := range []string{"body_json", "cookie_jar", "response_body: discard", "reauthorizes hops"} {
+				for _, field := range []string{"native `curl`", "--data-binary @path", "`-o path`", "authorizing each destination", "capability_request.loopback_connect"} {
 					if strings.Contains(block, field) != tc.http {
 						t.Fatalf("HTTP procedure field %q present=%v, want %v", field, strings.Contains(block, field), tc.http)
 					}
 				}
-				if !tc.want && strings.Contains(block, "`write_root`") {
-					t.Fatal("runner procedure leaked into a schema set without execution")
+				for _, retired := range []string{"body_json", "cookie_jar", "response_body: discard", "Use `http_request`"} {
+					if strings.Contains(block, retired) {
+						t.Fatalf("procedure teaches retired HTTP field %q", retired)
+					}
 				}
 				assertOfferedRunnerProcedures(t, tc.tools, block)
 				assertOfferedPageProcedures(t, tc.tools, block)
@@ -124,16 +123,19 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 	for marker, want := range map[string]bool{
 		"command(verification: true)": has("command"),
 		"VERIFY_UNVERIFIABLE":         has("verify"),
-		"For static page preview":     (has("command") || has("terminal_open") || has("verify")) && has("capture_page"),
+		"mode needs no server":        (has("command") || has("terminal_open") || has("verify")) && has("capture_page"),
 	} {
 		if strings.Contains(block, marker) != want {
 			t.Fatalf("procedure %q present=%v, want %v for %v", marker, strings.Contains(block, marker), want, offered)
 		}
 	}
+	if strings.Contains(block, "`write_root`") {
+		t.Fatal("procedure invented workspace instruction roots")
+	}
 	for marker, capability := range map[string]toolcontract.Capability{
-		"`local_listen`":     toolcontract.CapabilityLocalListen,
-		"`socket_paths`":     toolcontract.CapabilitySocket,
-		"`direct_ip` is for": toolcontract.CapabilityDirectIP,
+		"`local_listen`": toolcontract.CapabilityLocalListen,
+		"`socket_paths`": toolcontract.CapabilitySocket,
+		"`direct_ip`":    toolcontract.CapabilityDirectIP,
 	} {
 		want := false
 		for _, runner := range []string{"command", "verify", "terminal_open"} {
@@ -158,19 +160,19 @@ func assertOfferedPageProcedures(t *testing.T, offered []string, block string) {
 func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	gatedAndLifecycle := []string{
-		"write", "edit", "replace_lines", "restore_version", "jq_edit",
+		"edit", "replace_lines", "restore_version", "jq_edit",
 		"task", "delegate_dispatch", "delegate_decompose",
 		"preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board",
 	}
-	for _, tool := range []string{"update_progress", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "read", "delete", "wait"} {
+	for _, tool := range []string{"update_progress", "command", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "read", "delete", "wait"} {
 		for _, profile := range []string{"coordinator", "implementer"} {
 			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
 			testutil.FailErr(t, "render progress procedure", err)
-			want := profile == "coordinator" && (tool == "update_progress" || progress.IsProgressGatedTool(tool))
+			want := profile == "coordinator" && (tool == "update_progress" || tool == "command" || progress.IsProgressGatedTool(tool))
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, and explanations need none")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
 			for _, candidate := range gatedAndLifecycle {
@@ -182,10 +184,10 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 		}
 	}
 
-	investigateOffered := []string{"read_file", "grep", "glob", "ast_grep", "symbol_outline", "update_progress"}
+	investigateOffered := []string{"request_tools", "read", "update_progress"}
 	investigateBlock, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-investigate", "coordinator", investigateOffered, nil)
 	testutil.FailErr(t, "render investigate progress procedure", err)
-	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, and explanations need none", "PROGRESS_ITEM_NOT_CLOSED"} {
+	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations", "PROGRESS_RECONCILIATION_REQUIRED"} {
 		if !strings.Contains(investigateBlock, required) {
 			t.Fatalf("investigate progress procedure missing %q: %s", required, investigateBlock)
 		}
@@ -196,9 +198,9 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 		}
 	}
 
-	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "write", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
+	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "edit", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
 	testutil.FailErr(t, "render lifecycle progress procedure", err)
-	if !strings.Contains(withLifecycle, "Before `write` or `task`, call it") {
+	if !strings.Contains(withLifecycle, "Establish the checklist once before the first `edit` or `task`") {
 		t.Fatalf("unexpected gated tool phrasing: %s", withLifecycle)
 	}
 	if !strings.Contains(withLifecycle, "Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, `pack_board`.") {

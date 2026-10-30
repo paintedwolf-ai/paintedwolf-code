@@ -131,3 +131,21 @@ func TestRefusalFromErrorOnlyMatchesRefusals(t *testing.T) {
 type errNotARefusal struct{}
 
 func (errNotARefusal) Error() string { return "dial tcp: connection refused" }
+
+func TestWorkflowAdvancementSurvivesFactEnrichmentWithoutSharingProducerState(t *testing.T) {
+	declared := false
+	merged := (ToolResultFacts{}).Merge(ToolResultFacts{WorkflowAdvanced: &declared})
+	declared = true
+	if merged.WorkflowAdvanced == nil || *merged.WorkflowAdvanced {
+		t.Fatal("producer mutation changed captured advancement")
+	}
+	enriched := merged.Merge((ToolResultFacts{}).WithCode("DIAGNOSTIC"))
+	if enriched.WorkflowAdvanced == nil || *enriched.WorkflowAdvanced {
+		t.Fatal("enrichment discarded neutral advancement")
+	}
+	advanced := true
+	next := enriched.Merge(ToolResultFacts{WorkflowAdvanced: &advanced})
+	if next.WorkflowAdvanced == nil || !*next.WorkflowAdvanced {
+		t.Fatal("explicit advancement was lost")
+	}
+}

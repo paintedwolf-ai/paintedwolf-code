@@ -74,3 +74,15 @@ func TestRenderTurnStateBlock(t *testing.T) {
 		}
 	})
 }
+
+func TestTurnStateCarriesCurrentOwnerSnapshot(t *testing.T) {
+	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: testConfigRoot(t)}))
+	snapshot := `{"content":"- [ ] Deliver","revision":"current-owner-revision","reconciliation":{"token":"worker-finish-token","jobs":["worker-one"]}}`
+	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "snapshot", inject.TurnStateInjectInput{ProgressSnapshot: snapshot, ProfileHasUpdateProgress: true})
+	testutil.FailErr(t, "render current progress", err)
+	for _, value := range []string{"current-owner-revision", "worker-finish-token", "worker-one", "Deliver"} {
+		if !strings.Contains(block, value) {
+			t.Fatalf("snapshot omitted %q: %s", value, block)
+		}
+	}
+}

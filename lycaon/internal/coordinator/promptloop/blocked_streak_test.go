@@ -7,7 +7,7 @@ func TestNovelBlockedCodeDoesNotSpendTheAllowance(t *testing.T) {
 	st := &promptLoopTurnState{}
 	for i, code := range []string{
 		"SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT",
-		"PROGRESS_ITEM_NOT_CLOSED",
+		"PROGRESS_RECONCILIATION_REQUIRED",
 		"DOOM_LOOP_CODE_REPEAT",
 	} {
 		if st.noteBlockedBatch(code, "") {
@@ -24,15 +24,15 @@ func TestNovelBlockedCodeDoesNotSpendTheAllowance(t *testing.T) {
 
 func TestRepeatedBlockedCodeSpendsTheAllowance(t *testing.T) {
 	st := &promptLoopTurnState{}
-	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
+	if st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", "") {
 		t.Fatal("closed out on the Code's first appearance")
 	}
 	for i := 1; i < BlockedLoopRejectCap; i++ {
-		if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
+		if st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", "") {
 			t.Fatalf("closed out after %d repeats, want %d", i, BlockedLoopRejectCap)
 		}
 	}
-	if !st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
+	if !st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", "") {
 		t.Fatalf("did not close out after %d repeats of one Code", BlockedLoopRejectCap)
 	}
 }
@@ -42,7 +42,7 @@ func TestAlternatingBlockedCodesStillCloseOut(t *testing.T) {
 	st := &promptLoopTurnState{}
 	closed := false
 	for i := 0; i < BlockedLoopAbsoluteCap; i++ {
-		code := "PROGRESS_ITEM_NOT_CLOSED"
+		code := "PROGRESS_RECONCILIATION_REQUIRED"
 		if i%2 == 1 {
 			code = "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"
 		}
@@ -72,13 +72,13 @@ func TestEveryBatchNovelStillHitsAbsoluteCap(t *testing.T) {
 // A batch that runs clears the streak, so a Code is new again afterwards.
 func TestRunningBatchClearsTheStreak(t *testing.T) {
 	st := &promptLoopTurnState{}
-	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "")
-	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "")
+	st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", "")
+	st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", "")
 	if st.consecutiveBlockedBatches != 1 {
 		t.Fatalf("consecutiveBlockedBatches = %d, want 1", st.consecutiveBlockedBatches)
 	}
 	st.clearBlockedStreak()
-	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", ""); st.consecutiveBlockedBatches != 0 {
+	if st.noteBlockedBatch("PROGRESS_RECONCILIATION_REQUIRED", ""); st.consecutiveBlockedBatches != 0 {
 		t.Errorf("Code was still charged after a batch ran: %d repeats", st.consecutiveBlockedBatches)
 	}
 	if st.blockedBatchesThisStreak != 1 {

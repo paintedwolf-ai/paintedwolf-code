@@ -157,39 +157,44 @@ func TestExecutionStatePrerequisitesAreOrderedPerRejectedCall(t *testing.T) {
 }
 
 func TestExecutionStatePrerequisiteScopingAndPathRetirement(t *testing.T) {
-	editReject := executionReceipt("edit", "edit-old", api.InvocationStatusRejected, "EDIT_OLD_STRING_NOT_FOUND")
-	editReject.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
-	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
-	taskReject := executionReceipt("task", "task-item", api.InvocationStatusRejected, "PROGRESS_ITEM_NOT_CLOSED")
-	taskReject.ToolResult.ToolArgs = nil
-	progress2 := executionReceipt("update_progress", "progress2", api.InvocationStatusCompleted, "")
+	for _, code := range []string{"PROGRESS_ITEM_NOT_CLOSED", "PROGRESS_RECONCILIATION_REQUIRED"} {
+		t.Run(code, func(t *testing.T) {
+			editReject := executionReceipt("edit", "edit-old", api.InvocationStatusRejected, "EDIT_OLD_STRING_NOT_FOUND")
+			editReject.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
+			progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
+			taskReject := executionReceipt("task", "task-item", api.InvocationStatusRejected, code)
+			taskReject.ToolResult.ToolArgs = nil
+			progress2 := executionReceipt("update_progress", "progress2", api.InvocationStatusCompleted, "")
 
-	history := []api.Message{editReject, progress, taskReject, progress2}
-	vars := executionStateVars(history, "")
-	rows := vars["operations"].([]map[string]any)
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(rows))
-	}
-	if rows[0]["checklist_after"] != nil {
-		t.Fatalf("EDIT_OLD_STRING_NOT_FOUND received checklist_after: %#v", rows[0])
-	}
-	if rows[1]["checklist_after"] != true {
-		t.Fatalf("PROGRESS_ITEM_NOT_CLOSED did not receive checklist_after: %#v", rows[1])
-	}
+			history := []api.Message{editReject, progress, taskReject, progress2}
+			vars := executionStateVars(history, "")
+			rows := vars["operations"].([]map[string]any)
+			if len(rows) != 2 {
+				t.Fatalf("expected 2 operations, got %d", len(rows))
+			}
+			if rows[0]["checklist_after"] != nil {
+				t.Fatalf("EDIT_OLD_STRING_NOT_FOUND received checklist_after: %#v", rows[0])
+			}
+			if rows[1]["checklist_after"] != true {
+				t.Fatalf("%s did not receive checklist_after: %#v", code, rows[1])
+			}
 
-	editSuccess := executionReceipt("edit", "edit-new", api.InvocationStatusCompleted, "")
-	editSuccess.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
-	vars2 := executionStateVars(append(history, editSuccess), "")
-	rows2 := vars2["operations"].([]map[string]any)
-	if len(rows2) != 1 || rows2[0]["tool"] != "task" {
-		t.Fatalf("successful edit did not clear edit on same path: %#v", rows2)
-	}
+			editSuccess := executionReceipt("edit", "edit-new", api.InvocationStatusCompleted, "")
+			editSuccess.ToolResult.ToolArgs = map[string]any{"path": "game.js"}
+			vars2 := executionStateVars(append(history, editSuccess), "")
+			rows2 := vars2["operations"].([]map[string]any)
+			if len(rows2) != 1 || rows2[0]["tool"] != "task" {
+				t.Fatalf("successful edit did not clear edit on same path: %#v", rows2)
+			}
 
-	pathlessReject := executionReceipt("write", "bad-args", api.InvocationStatusRejected, "TOOL_ARGS_INVALID")
-	pathlessReject.ToolResult.ToolArgs = nil
-	vars3 := executionStateVars([]api.Message{pathlessReject, editSuccess}, "")
-	if vars3 != nil && len(vars3["operations"].([]map[string]any)) != 0 {
-		t.Fatalf("completed change did not clear pathless change rejection: %#v", vars3)
+			pathlessReject := executionReceipt("write", "bad-args", api.InvocationStatusRejected, "TOOL_ARGS_INVALID")
+			pathlessReject.ToolResult.ToolArgs = nil
+			vars3 := executionStateVars([]api.Message{pathlessReject, editSuccess}, "")
+			if vars3 != nil && len(vars3["operations"].([]map[string]any)) != 0 {
+				t.Fatalf("completed change did not clear pathless change rejection: %#v", vars3)
+			}
+
+		})
 	}
 }
 

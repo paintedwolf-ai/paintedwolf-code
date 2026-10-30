@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ProgramProgressState supplies the same live owner/workflow facts to reached
+// ProgramProgressState supplies current checklist and workflow facts to reached
 // native children that the retained coordinator gate uses before tool dispatch.
 func (m *Service) ProgramProgressState(ctx context.Context, sessionID string) (progress.PrerequisiteState, error) {
 	if err := ctx.Err(); err != nil {
@@ -33,6 +33,9 @@ func (m *Service) progressPrerequisites(ctx context.Context, sess *api.Session) 
 	state := progress.PrerequisiteState{SessionID: sess.ID, RootSessionID: sessiontree.RootID(ctx, m.store, sess.ID), WorkerChild: sess.IsWorkerChild()}
 	if m.progress != nil {
 		state.Content = m.progress.Get(ctx, state.RootSessionID)
+	}
+	if m.ProgressClosure != nil {
+		state.Reconciliation = m.ProgressClosure.Reconciliation(state.RootSessionID)
 	}
 	state.ReviewLoopActive = m.workflows != nil && m.workflows.Policy != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
 	return state

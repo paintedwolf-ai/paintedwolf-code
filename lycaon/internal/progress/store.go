@@ -12,6 +12,8 @@ const ContentMaxChars = 8000
 type Store interface {
 	Set(sessionID, content string) error
 	Get(ctx context.Context, sessionID string) string
+	Snapshot(ctx context.Context, sessionID string) (Snapshot, error)
+	Update(ctx context.Context, sessionID string, change func(Snapshot) (string, error)) (Snapshot, error)
 }
 
 func normalizeKey(sessionID string) string {

@@ -25,7 +25,7 @@ func TestObserverReleaseDrainsActiveCallback(t *testing.T) {
 		close(cancelled)
 		<-finish
 	})
-	release := Bind(&events.Publisher{}, nil, nil, nil, nil, repository, nil, nil)
+	release := Bind(&events.Publisher{}, nil, nil, nil, repository, nil, nil)
 	notifyDone := make(chan struct{})
 	go func() {
 		repochange.Notify(t.Context(), repochange.Event{ProjectDir: t.TempDir(), Kind: repochange.WorktreeChanged})
