@@ -3,8 +3,9 @@ package sourcecatalog
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/pagedview"
 	"path"
+
+	"github.com/lycaon/lycaon/internal/pagedview"
 )
 
 // Pruning compares complete memberships, so a partial listing cannot remove a child.

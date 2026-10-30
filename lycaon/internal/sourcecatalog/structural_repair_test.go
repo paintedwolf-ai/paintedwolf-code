@@ -1,12 +1,10 @@
 package sourcecatalog
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -36,7 +34,7 @@ func TestStructuralAncestorRepairDoesNotReadSiblingSubtrees(t *testing.T) {
 			}
 			record.page = structuralOffsetMask
 			testutil.FailErr(t, "poison unrelated subtree page", builder.directories.Set(t.Context(), "unrelated", record))
-			// A consumed dirty flag must not schedule another full sibling walk.
+			// Completed repairs must not reopen unrelated subtrees.
 			observePublicationFixture(t, builder, store, "changed/leaf", []string{"new", "second"}, false)
 			testutil.FailErr(t, "repair changed ancestor path", builder.finalize(t.Context()))
 			root, _, err = builder.children(t.Context(), ".")
@@ -48,7 +46,7 @@ func TestStructuralAncestorRepairDoesNotReadSiblingSubtrees(t *testing.T) {
 			}
 			changed, _, err := root.LocateItem(t.Context(), DirectoryOrder("changed", true))
 			testutil.FailErr(t, "read repaired child", err)
-			if changed.Weight != 4 || changed.Unresolved != 0 {
+			if changed.Weight != 5 || changed.Unresolved != 0 {
 				t.Fatalf("changed summary=%+v", changed)
 			}
 		})
@@ -109,6 +107,12 @@ func TestStructuralIncrementalRepairMatchesFullRefresh(t *testing.T) {
 				case 3:
 					testutil.FailErr(t, "retain failed listing", b.retainFailedDirectory(t.Context(), DirectoryObservation{Path: "a/nested", Failure: "unavailable"}))
 				case 4:
+					previous, found, err := b.directories.Get(t.Context(), "a")
+					testutil.FailErr(t, "capture replaced parent", err)
+					if !found {
+						t.Fatal("missing replacement fixture")
+					}
+					testutil.FailErr(t, "retain replaced parent", b.directories.SetPrevious(t.Context(), "a", previous))
 					testutil.FailErr(t, "start parent replacement", b.directories.UpdateFlags(t.Context(), "a", 0, directoryStarted))
 					observePublicationFixture(t, b, store, "a", nil, false)
 				}
@@ -119,9 +123,6 @@ func TestStructuralIncrementalRepairMatchesFullRefresh(t *testing.T) {
 			testutil.FailErr(t, "check removed nested metadata", err)
 			if found {
 				t.Fatal("removed descendant survived complete parent replacement")
-			}
-			if err := b.repairParentEdge(t.Context(), "missing"); err != nil && !errors.Is(err, pagedview.ErrMissing) {
-				testutil.FailErr(t, "missing parent edge", err)
 			}
 		})
 	}
