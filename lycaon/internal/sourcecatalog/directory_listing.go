@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-
-	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
 // ErrDirectoryNamespace marks when a bounded complete namespace is unavailable.
@@ -18,32 +16,16 @@ type DirectoryListing struct {
 	Prepared bool
 }
 
-// ReadDirectory reuses fresh membership and prepares cold directories on demand.
-// Read admission and live metadata remain the caller's responsibility.
-// A positive maximum bounds preparation to one entry beyond the limit.
-func (c *Directories) ReadDirectory(ctx context.Context, project string, root Root, dir string, maximum int) (DirectoryListing, error) {
-	if err := validateObservationDirectory(root, dir); err != nil {
-		return DirectoryListing{}, err
-	}
-	store, err := c.trees.indexStore(ctx, project, root)
-	if err != nil {
-		return DirectoryListing{}, err
-	}
-	dir = normalizeDir(dir)
-	previous, _ := store.readObservation(ctx, dir)
-	limit := 0
-	if maximum > 0 {
-		limit = maximum + 1
-	}
-	observation, err := c.observeUntil(ctx, store, dir, limit, backgroundwork.PriorityInteractive)
-	if err != nil {
-		return DirectoryListing{}, err
-	}
-	listing := DirectoryListing{Reused: previous.Complete && previous.Sequence == observation.Sequence}
-	listing.Prepared = !listing.Reused
+func readDirectoryNamespace(ctx context.Context, store *indexStore, dir string, observation DirectoryObservation, maximum int, reused bool) (DirectoryListing, error) {
+	listing := DirectoryListing{Reused: reused, Prepared: !reused}
 	if !observation.Complete || observation.Failure != "" {
 		return listing, ErrDirectoryNamespace
 	}
+	_, release, err := acquireObservationRoot(ctx, store)
+	if err != nil {
+		return listing, err
+	}
+	defer release()
 	navigation, err := openNavigation(ctx, store, headGeneration)
 	if err != nil {
 		return DirectoryListing{}, err
