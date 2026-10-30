@@ -55,7 +55,7 @@ func NewProgramOutputRetention(ctx context.Context, recorder *SQLRecorder, store
 	if release == nil {
 		return nil, fmt.Errorf("output lifetime admission returned no lease")
 	}
-	store = recorder.ProgramBlobStore(store)
+	store = recorder.ProgramBlobStore(store) //nolint:contextcheck // Durable retention checks outlive this constructor's admission context.
 	store.Dir = tooloutput.ToolOutputSpillDir
 	return &ProgramOutputRetention{recorder: recorder, store: store, resources: resources, sessionID: strings.Clone(sessionID), entries: make(map[string]*programRetainedBody), release: release}, nil
 }
@@ -126,7 +126,7 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	defer func() { _ = tx.Rollback() }()
 	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?`
 	var size int64
-	if err = tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB))`+selection, program, reference, session).Scan(&size); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB))`+selection, program, reference, session).Scan(&size); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > 1<<30 {
@@ -141,14 +141,14 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	}
 	defer release()
 	var claim string
-	if err = tx.QueryRowContext(ctx, `SELECT o.retention_claim_id`+selection, program, reference, session).Scan(&claim); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT o.retention_claim_id`+selection, program, reference, session).Scan(&claim); err != nil {
 		return nil, err
 	}
 	entry := r.entries[claim]
 	if entry == nil || entry.body == nil {
 		return nil, fmt.Errorf("durable output body has not been reconciled")
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return entry.body.Open(ctx)

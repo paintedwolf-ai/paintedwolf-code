@@ -26,11 +26,11 @@ func (r *SQLRecorder) prepareChildBody(ctx context.Context, in toolcontract.Prog
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err = insertProgramChild(ctx, tx, in); err != nil {
+		if err := insertProgramChild(ctx, tx, in); err != nil {
 			return err
 		}
 		output := RetainedOutput{ExecutionID: in.Invocation.Identity.ExecutionID, Stream: "arguments", Reference: in.ArgumentsReference, Complete: true, Redacted: redacted}
-		if err = insertProgramOutput(ctx, tx, in.Invocation.Identity.ProgramID, output, reference, "", nil); err != nil {
+		if err := insertProgramOutput(ctx, tx, in.Invocation.Identity.ProgramID, output, reference, "", nil); err != nil {
 			return err
 		}
 		return tx.Commit()

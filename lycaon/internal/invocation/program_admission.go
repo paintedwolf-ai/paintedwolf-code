@@ -27,7 +27,7 @@ func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound t
 		return err
 	}
 	var err error
-	if err = bound.Invocation().Validate(); err != nil {
+	if err := bound.Invocation().Validate(); err != nil {
 		return err
 	}
 	reference, err := r.Inputs.RetainReviewedProgramInputs(ctx, bound.Invocation(), inputs)

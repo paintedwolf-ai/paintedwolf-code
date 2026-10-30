@@ -29,6 +29,7 @@ func (r *SQLRecorder) ProgramBlobStore(store blobstore.Store) blobstore.Store {
 			return false, fmt.Errorf("invocation recorder is not configured")
 		}
 		var present bool
+		// This store callback guards collection after individual operations end.
 		err := r.database.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE blob_id=?)`, id).Scan(&present)
 		return present, err
 	}
@@ -90,7 +91,7 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err = insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
+		if err := insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -134,7 +135,7 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	preview, truncated := outputPreview(screenedPreview, reference.Blob.Size)
 	events := int64(1 + len(output.Mappings))
 	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(reference.Blob.ID) + len(blob) + len(mappings) + len(preview))
-	if err = chargeProgramTrace(ctx, tx, program, events, bytes, traceChargeNonTerminal); err != nil {
+	if err := chargeProgramTrace(ctx, tx, program, events, bytes, traceChargeNonTerminal); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, reference.Blob.ID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))

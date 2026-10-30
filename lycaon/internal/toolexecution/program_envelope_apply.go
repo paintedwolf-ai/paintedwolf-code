@@ -22,7 +22,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if e == nil {
 		return result, fmt.Errorf("executor required")
 	}
-	if err = p.validate(ctx); err != nil {
+	if err := p.validate(ctx); err != nil {
 		return result, err
 	}
 	end, err := p.frame.beginUse()
@@ -36,10 +36,10 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if p.attempted || store == nil || facts == nil || observer == nil {
 		return result, fmt.Errorf("progress owner, facts, recorder and unattempted envelope required")
 	}
-	if err = p.frame.validateHostContext(ctx, tc); err != nil {
+	if err := p.frame.validateHostContext(ctx, tc); err != nil {
 		return result, err
 	}
-	if err = p.frame.validateScope(p.identity.Scope, tc); err != nil {
+	if err := p.frame.validateScope(p.identity.Scope, tc); err != nil {
 		return result, err
 	}
 	definition, ok := e.definitionFor("update_progress")
@@ -100,13 +100,13 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if err != nil {
 		return result, progressOwnerError(err)
 	}
-	if err = p.validate(ctx); err != nil {
+	if err := p.validate(ctx); err != nil {
 		return result, err
 	}
-	if err = p.frame.validateHostContext(ctx, tc); err != nil {
+	if err := p.frame.validateHostContext(ctx, tc); err != nil {
 		return result, err
 	}
-	if err = p.frame.validateScope(p.identity.Scope, tc); err != nil {
+	if err := p.frame.validateScope(p.identity.Scope, tc); err != nil {
 		return result, err
 	}
 	current, err := facts.ProgramProgressState(ctx, p.identity.SessionID)
@@ -120,10 +120,10 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	result.Identity.RootSessionID = current.RootSessionID
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
 	p.attempted = true
-	if err = observer.BeforeProgressOwner(ctx, result.Identity, tc.Identity.ToolCallID, reviewed); err != nil {
+	if err := observer.BeforeProgressOwner(ctx, result.Identity, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
-	if err = p.validate(ctx); err != nil {
+	if err := p.validate(ctx); err != nil {
 		return result, err
 	}
 	latest, err := facts.ProgramProgressState(ctx, p.identity.SessionID)

@@ -11,10 +11,10 @@ import (
 )
 
 type programReceiptLimits struct {
-	events, bytes, arguments, nodes, children       int64
-	terminalEvents, terminalBytes                   int64
-	parentEvents, parentBytes, progressEvents       int64
-	progressBytes                                   int64
+	events, bytes, arguments, nodes, children int64
+	terminalEvents, terminalBytes             int64
+	parentEvents, parentBytes, progressEvents int64
+	progressBytes                             int64
 }
 
 type traceChargeMode int
@@ -73,6 +73,8 @@ func chargeProgramTrace(ctx context.Context, tx *sql.Tx, programID string, event
 		return fmt.Errorf("read program trace budget: %w", err)
 	}
 	switch mode {
+	case traceChargeNonTerminal:
+		// Non-terminal writes keep every live owner's settlement reserve.
 	case traceChargeChildStart:
 		if totalChildren+1 > limits.children {
 			return errors.New("program child execution limit exceeded")

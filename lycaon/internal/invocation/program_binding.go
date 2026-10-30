@@ -42,10 +42,10 @@ func readProgramExecutionBinding(ctx context.Context, reader db.DBTX, sessionID,
 	}
 	decoder := json.NewDecoder(strings.NewReader(scope))
 	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&v.Scope); err != nil {
+	if err := decoder.Decode(&v.Scope); err != nil {
 		return out, err
 	}
-	if err = v.Validate(); err != nil {
+	if err := v.Validate(); err != nil {
 		return out, err
 	}
 	return out, nil
