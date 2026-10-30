@@ -2,6 +2,7 @@ package sourcecatalog
 
 import (
 	"io"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -45,7 +46,8 @@ func (s *literalBloomStream) writeChunk(raw []byte) {
 		raw = append(s.carry, raw...)
 	}
 	complete := trimIncompleteUTF8Tail(raw)
-	s.folded = litprefilter.AppendCanonicalFold(s.folded[:0], complete)
+	s.folded = slices.Grow(s.folded[:0], len(complete))
+	s.folded = litprefilter.AppendCanonicalFold(s.folded, complete)
 	s.carry = append(s.carry[:0], raw[len(complete):]...)
 	for _, b := range s.folded {
 		if s.filled < len(s.window) {
