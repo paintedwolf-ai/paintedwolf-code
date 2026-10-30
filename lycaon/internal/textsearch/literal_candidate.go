@@ -17,7 +17,11 @@ func (e literalEngine) foldedCandidate(ctx context.Context, record []byte, first
 		chunk := record[from:next]
 		at := bytes.IndexByte(chunk, lower)
 		if lower >= 'a' && lower <= 'z' {
-			upper := bytes.IndexByte(chunk, lower-('a'-'A'))
+			prefix := chunk
+			if at >= 0 {
+				prefix = chunk[:at]
+			}
+			upper := bytes.IndexByte(prefix, lower-('a'-'A'))
 			if upper >= 0 && (at < 0 || upper < at) {
 				at = upper
 			}
