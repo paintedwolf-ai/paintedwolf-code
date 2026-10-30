@@ -373,15 +373,17 @@ are unchanged.
 Establish a checklist once before the first governed mutation. Pending rows permit
 continued implementation without another progress call. Identical submissions
 create no document revision or progress event and do not count as workflow
-advancement. Rewording labels is a document change, not a deliverable transition.
+advancement. The progress handler supplies typed advancement facts directly to
+invocation and batch settlement; transcript text does not determine them.
+Rewording labels is a document change, not a deliverable transition.
 Unrelated mutations do not erase the repetition history of a pending-checklist
 no-op. Material progress or a new user-request boundary renews that context.
 All-terminal checklists share a rewording-resistant bucket; an intervening world
 effect permits recording newly completed work without an invented pending update.
 Explicit finish tokens retain distinct operation identities. A typed revision or
 reconciliation rejection records its host-issued remedy, so a corrected retry
-reaches the owner even after repeated stale attempts. Diagnostic rejection totals
-remain intact; the owner revalidates the supplied basis before any write.
+reaches the progress handler even after repeated stale attempts. Diagnostic rejection totals
+remain intact; the handler revalidates the supplied basis before any write.
 
 Successful worker finishes publish a reconciliation token and exact job IDs in
 the current snapshot. Submit `reconciliation_token` with `expected_revision`
@@ -392,7 +394,7 @@ If finishes change during the document write, the result preserves the document'
 outcome and returns the new pending reconciliation state. Acknowledgement never
 creates a document revision by itself.
 
-Each request owns its checklist. Completed progress remains in the transcript as
+Each request has its own checklist. Completed progress remains in the transcript as
 `progress_complete` and does not cover a follow-up request. Establishing a new
 checklist requires at least one pending deliverable. A tool-free response ends
 the turn; use `surface_note` for updates while continuing.

@@ -10,7 +10,7 @@ import (
 )
 
 // CheckOperationProgress is called for known admission prerequisites and again
-// before reached effects using current owner content and workflow facts. It does
+// before reached effects using current stored content and workflow facts. It does
 // not inspect or execute untaken branches and never changes checklist content.
 func CheckOperationProgress(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, content string, workerChild, reviewLoopActive bool) error {
 	if definition.Digest() == "" {

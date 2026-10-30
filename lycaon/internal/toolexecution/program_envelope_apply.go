@@ -9,13 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// ProgramProgressStart records an envelope-owner attempt before applying it.
+// ProgramProgressStart records a progress update attempt before applying it.
 // It never attributes the payload to an invented shell source unit or span.
 type ProgramProgressStart interface {
 	BeforeProgressOwner(context.Context, toolcontract.ProgramProgressIdentity, string, toolcontract.ReviewedOperationInputs) error
 }
 
-// ApplyProgramProgress uses existing policy, screening and author-update owner.
+// ApplyProgramProgress uses reviewed inputs and shared checklist publication.
 // The caller records its result even when a later program operation is denied.
 // An attempted update cannot be automatically replayed through this envelope.
 func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramEnvelope, store progress.Store, facts ProgramProgressFacts, reconciler progress.Reconciler, observer ProgramProgressStart, tc tools.ToolContext) (result ProgramProgressResult, err error) {

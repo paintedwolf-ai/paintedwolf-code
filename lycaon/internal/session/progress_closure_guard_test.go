@@ -42,7 +42,7 @@ func testCoordinatorPreInvokePipeline(t *testing.T) *oar.GuardPipeline {
 	return pipeline
 }
 
-// closureGuardPreInvoke evaluates the current reconciliation owner state.
+// closureGuardPreInvoke evaluates current reconciliation state.
 func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, tool string) (bool, error) {
 	t.Helper()
 	content := mgr.RewindRuntime.Progress.Get(t.Context(), rootID)

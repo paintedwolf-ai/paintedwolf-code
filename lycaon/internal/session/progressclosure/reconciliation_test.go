@@ -29,8 +29,12 @@ func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) 
 	if !errors.As(err, &missingRevision) || missingRevision.Code != "PROGRESS_REVISION_REQUIRED" || closure.Reconciliation("session") == nil {
 		t.Fatalf("acknowledgement bypassed revision requirement: %v", err)
 	}
-	body, err := handler(t.Context(), map[string]any{"content": before.Content, "expected_revision": before.Revision, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	out := &tools.ToolInvocationOut{}
+	body, err := handler(t.Context(), map[string]any{"content": before.Content, "expected_revision": before.Revision, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
 	testutil.FailErr(t, "acknowledge represented finish", err)
+	if out.Facts.WorkflowAdvanced == nil || !*out.Facts.WorkflowAdvanced {
+		t.Fatal("finish acknowledgement did not publish typed advancement")
+	}
 	var result struct {
 		Status, ReconciliationStatus string
 		Snapshot                     progress.Snapshot

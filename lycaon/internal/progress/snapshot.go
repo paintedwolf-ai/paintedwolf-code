@@ -69,7 +69,7 @@ func snapshotVersion(runID, content, version string) Snapshot {
 	return snapshot
 }
 
-// Reconciler owns the pending worker-finish set independently of the document.
+// Reconciler tracks pending worker finishes independently of the document.
 type Reconciler interface {
 	Reconciliation(string) *Reconciliation
 	Acknowledge(string, string) bool

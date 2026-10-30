@@ -11,7 +11,7 @@ import (
 const ProgressItemNotClosedCode = "PROGRESS_ITEM_NOT_CLOSED"
 
 // ProgressClosureBaseline snapshots the checklist when the closure latch arms.
-// Only the reconciliation owner acknowledges finished worker jobs.
+// Only the reconciliation service acknowledges finished worker jobs.
 type ProgressClosureBaseline struct {
 	Closed   int    // done + n/a rows at arm time
 	Content  string // stored checklist bytes at arm time

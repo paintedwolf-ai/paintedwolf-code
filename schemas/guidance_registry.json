@@ -1869,6 +1869,7 @@
       "summary": "This host does not support instance-bound process operations."
     },
     "PROGRESS_DOCUMENT_TOO_LARGE": {
+      "branch_instruction": "Submit one concise row per deliverable within the reported character limit.",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "The checklist exceeds its document size budget."
@@ -1910,16 +1911,19 @@
       "summary": "Pending checklist label \"{{ paintedwolf.label }}\" appears after a `- [\u003e]` optional line."
     },
     "PROGRESS_RECONCILIATION_CHANGED": {
+      "branch_instruction": "Review the current listed finishes and submit their reconciliation_token with expected_revision.",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "The pending worker-finish set changed."
     },
     "PROGRESS_REVISION_CHANGED": {
+      "branch_instruction": "Reconcile the replacement against the current snapshot and submit its expected_revision.",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "The checklist changed after the supplied revision."
     },
     "PROGRESS_REVISION_REQUIRED": {
+      "branch_instruction": "Use the current snapshot revision as expected_revision when replacing the checklist.",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "Replacing an existing checklist requires its current revision."

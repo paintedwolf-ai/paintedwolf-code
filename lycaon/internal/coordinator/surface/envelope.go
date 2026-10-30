@@ -70,7 +70,7 @@ type ImplementSessionState struct {
 	ProgressOpenCount int
 	// ProgressMissing is true when the root session has no checklist rows yet.
 	ProgressMissing bool
-	// ProgressSnapshot is the current owner-authored document and revision.
+	// ProgressSnapshot is the current stored checklist and revision.
 	ProgressSnapshot string
 	// ProgressGatedToolAttemptedSinceIntent includes rejected attempts.
 	ProgressGatedToolAttemptedSinceIntent bool

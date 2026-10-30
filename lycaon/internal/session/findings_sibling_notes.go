@@ -2,7 +2,7 @@ package session
 
 import "github.com/lycaon/lycaon/internal/progress"
 
-// SetProgressStore connects the session progress owner.
+// SetProgressStore connects the session progress store.
 func (m *Host) SetProgressStore(store progress.RunScopedStore) {
 	if m == nil {
 		return

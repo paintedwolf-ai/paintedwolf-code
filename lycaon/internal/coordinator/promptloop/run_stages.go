@@ -258,19 +258,19 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 				return out, err
 			}
 		}
-		var anyTaskEnqueued bool
-		var taskEnqueuedThisTurn int
-		var lastTaskMessageID string
-		var breakToolLoop bool
-		var batchTurnTools []string
-		var err error
-		st.history, batchTurnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, breakToolLoop, err = l.Batch.executeToolCallsInTurn(
+		batchResult, err := l.Batch.executeToolCallsInTurn(
 			ctx, sess, sessionID, completion.ToolCalls, in.ToolCtx, st.history, userPrompt, st.lastAssistantID, surfaceID, st,
 		)
+		st.history = batchResult.history
 		if err != nil {
 			return out, err
 		}
-		batchProgress := classifyBatchProgress(st.history, assistantMsg.ID)
+		batchTurnTools := batchResult.turnTools
+		anyTaskEnqueued := batchResult.anyTaskEnqueued
+		taskEnqueuedThisTurn := batchResult.taskEnqueuedThisTurn
+		lastTaskMessageID := batchResult.lastTaskMessageID
+		breakToolLoop := batchResult.breakToolLoop
+		batchProgress := batchResult.progress
 		if batchProgress.Advanced {
 			st.clearBlockedStreak()
 			st.noteBatchLifecycle(judgeBatch(l.Context.Deps.Tools, st.history, assistantMsg.ID))

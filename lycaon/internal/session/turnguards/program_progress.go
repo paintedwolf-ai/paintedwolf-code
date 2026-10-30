@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ProgramProgressState supplies the same live owner/workflow facts to reached
+// ProgramProgressState supplies current checklist and workflow facts to reached
 // native children that the retained coordinator gate uses before tool dispatch.
 func (m *Service) ProgramProgressState(ctx context.Context, sessionID string) (progress.PrerequisiteState, error) {
 	if err := ctx.Err(); err != nil {

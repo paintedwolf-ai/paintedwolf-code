@@ -53,7 +53,7 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		return nil
 	}
 
-	_, turnTools, _, _, _, _, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
@@ -67,6 +67,7 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		"",
 		nil,
 	)
+	turnTools := batchResult.turnTools
 	testutil.FailErr(t, "executeToolCallsInTurn", err)
 	if len(turnTools) != 1 || turnTools[0] != "answer_decision" {
 		t.Fatalf("turnTools = %v want [answer_decision]", turnTools)

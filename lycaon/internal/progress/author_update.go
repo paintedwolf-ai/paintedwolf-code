@@ -38,13 +38,18 @@ func PrepareAuthorUpdate(content string) (AuthorUpdate, error) {
 	return AuthorUpdate{content: content}, nil
 }
 
-// AuthorUpdateResult is a progress-owner outcome, independent of program success.
+// AuthorUpdateResult records checklist publication and finish acknowledgement.
 type AuthorUpdateResult struct {
 	ReconciliationStatus string   `json:"reconciliation_status"`
 	Updated              bool     `json:"document_changed"`
 	StateChanged         bool     `json:"state_changed"`
 	DeliverableClosed    bool     `json:"deliverable_closed"`
 	Snapshot             Snapshot `json:"snapshot"`
+}
+
+// AdvancesWorkflow distinguishes deliverable advancement from document bookkeeping.
+func (r AuthorUpdateResult) AdvancesWorkflow() bool {
+	return r.StateChanged || r.ReconciliationStatus == "acknowledged"
 }
 
 // ExpectRevision binds a prepared replacement to an observed document.

@@ -59,8 +59,12 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 			history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls, CreatedAt: time.Now().UTC()}}
 			state := &promptLoopTurnState{}
 			sess := &api.Session{ID: "session", Posture: api.SessionPostureBuild}
-			history, _, dispatched, count, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls,
+			batchResult, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls,
 				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, history, "build", "assistant", "", state)
+			history = batchResult.history
+			dispatched := batchResult.anyTaskEnqueued
+			count := batchResult.taskEnqueuedThisTurn
+			stopped := batchResult.breakToolLoop
 			testutil.FailErr(t, "dispatch wave", err)
 			if stopped || !dispatched || count != 6-len(rejected) || len(ran) != count || len(inspected) != 6 {
 				t.Fatalf("stopped=%v dispatched=%v count=%d ran=%v inspected=%v", stopped, dispatched, count, ran, inspected)

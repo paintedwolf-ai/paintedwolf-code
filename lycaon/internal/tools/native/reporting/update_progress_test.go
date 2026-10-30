@@ -198,3 +198,23 @@ func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T
 		t.Fatal("blind replacement changed current state")
 	}
 }
+
+func TestProgressHandlerPublishesAdvancementFromTheCommittedResult(t *testing.T) {
+	store := progress.NewMemoryStore()
+	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, nil)
+	for _, tc := range []struct {
+		content  string
+		advanced bool
+	}{{"- [ ] Deliver", false}, {"- [ ] Deliver", false}, {"- [ ] Deliver revised", false}, {"- [x] Deliver revised", true}} {
+		before, err := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "observe current checklist", err)
+		out := &tools.ToolInvocationOut{}
+		body, err := handler(t.Context(), map[string]any{"content": tc.content, "expected_revision": before.Revision}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
+		testutil.FailErr(t, "publish checklist", err)
+		var result progress.AuthorUpdateResult
+		testutil.FailErr(t, "decode display for comparison", json.Unmarshal([]byte(body), &result))
+		if out.Facts.WorkflowAdvanced == nil || *out.Facts.WorkflowAdvanced != tc.advanced || result.AdvancesWorkflow() != tc.advanced {
+			t.Fatalf("typed/display result mismatch: %+v / %s", out.Facts, body)
+		}
+	}
+}

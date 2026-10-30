@@ -91,7 +91,7 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 	if admission.InUse().State != 0 {
 		t.Fatal("review snapshot lease leaked")
 	}
-	// A later program rejection does not roll back this separately committed owner.
+	// A later program rejection does not roll back the committed checklist.
 	definition := nativeDefinition(t, "write")
 	if err := CheckOperationProgress(definition, parent, "", false, false); err == nil {
 		t.Fatal("missing progress fixture failed to reject")

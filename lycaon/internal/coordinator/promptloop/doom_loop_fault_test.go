@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -137,74 +138,105 @@ func TestCallerFaultClassification(t *testing.T) {
 	}
 }
 
-func TestRepetitionContextRequiresMaterialProgress(t *testing.T) {
+func TestRepetitionContextUsesTypedProgressIndependentOfDisplay(t *testing.T) {
+	yes, no := true, false
 	for _, tc := range []struct {
-		name, tool, output string
-		want               bool
+		name, tool string
+		advanced   *bool
+		want       bool
 	}{
-		{"document only", "update_progress", `{"status":"updated","state_changed":false}`, false},
-		{"unchanged", "update_progress", `{"status":"unchanged"}`, false},
-		{"state changed", "update_progress", `{"status":"updated","state_changed":true}`, true},
-		{"acknowledged", "update_progress", `{"status":"unchanged","reconciliation_status":"acknowledged"}`, true},
-		{"unknown", "update_progress", `{"status":"unknown"}`, false},
-		{"missing", "update_progress", `{}`, false},
-		{"invalid", "update_progress", `updated`, false},
-		{"write", "write", `ok`, true},
-		{"read", "read", `ok`, false},
+		{"changed deliverable", "update_progress", &yes, true},
+		{"bookkeeping", "update_progress", &no, false},
+		{"missing fact", "update_progress", nil, false},
+		{"write", "write", nil, true},
+		{"read", "read", &yes, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			contract, ok := toolcontract.Lookup(tc.tool)
 			if !ok {
 				t.Fatalf("missing contract for %s", tc.tool)
 			}
-			run := completedToolRun{call: api.ToolCall{Name: tc.tool}, contract: contract, output: tc.output}
-			if got := run.advancesRepetitionContext(); got != tc.want {
-				t.Fatalf("repetition context advance = %v, want %v", got, tc.want)
+			for _, body := range []string{"", `{"state_changed":true}`, "[progress#1]\nTruncated display\n>>> Tool feedback"} {
+				run := completedToolRun{call: api.ToolCall{Name: tc.tool}, contract: contract, output: body, toolCtx: tools.ToolContext{Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{Facts: guidance.ToolResultFacts{WorkflowAdvanced: tc.advanced}}}}}
+				if got := run.advancesRepetitionContext(); got != tc.want {
+					t.Fatalf("display changed advancement: %v want %v", got, tc.want)
+				}
 			}
 		})
 	}
 }
 
-func TestChecklistNoOpAndRelabelDoNotAdvanceBatch(t *testing.T) {
-	for _, body := range []string{`{"status":"unchanged","state_changed":false}`, `{"status":"updated","document_changed":true,"state_changed":false}`} {
-		history := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "update_progress", Content: body, Outcome: api.ToolResultOutcomeCompleted}}}
-		if result := classifyBatchProgress(history, "assistant"); result.Advanced || result.Blocked {
-			t.Fatalf("bookkeeping advanced batch: %s", body)
-		}
-		history[0].ToolResult.Content = `{"status":"updated","state_changed":true,"reconciled":true}`
-		if !classifyBatchProgress(history, "assistant").Advanced {
-			t.Fatal("deliverable transition did not advance batch")
-		}
-		history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "command", Outcome: api.ToolResultOutcomeCompleted}})
-		if !classifyBatchProgress(history, "assistant").Advanced {
-			t.Fatal("checklist prevented independent work")
-		}
+func TestBatchProgressSeparatesNeutralResultsAndRefusals(t *testing.T) {
+	outcome := batchProgressOutcome{}
+	outcome.observe(false, &api.ToolResult{Tool: "update_progress", Outcome: api.ToolResultOutcomeCompleted, Content: `{"state_changed":true}`})
+	if outcome.Advanced || outcome.Blocked {
+		t.Fatalf("display overrode neutral fact: %+v", outcome)
+	}
+	outcome.observe(false, &api.ToolResult{Tool: "edit", Outcome: api.ToolResultOutcomeRejected})
+	if outcome.Advanced || !outcome.Blocked {
+		t.Fatalf("no-op masked rejected work: %+v", outcome)
+	}
+	outcome.observe(true, &api.ToolResult{Tool: "update_progress", Outcome: api.ToolResultOutcomeCompleted})
+	if !outcome.Advanced {
+		t.Fatal("stated advancement was lost")
+	}
+	empty := batchProgressOutcome{}
+	empty.observe(true, nil)
+	empty.observe(true, &api.ToolResult{Outcome: api.ToolResultOutcomeError})
+	if empty.Advanced || !empty.Blocked {
+		t.Fatalf("failed invocation advanced: %+v", empty)
 	}
 }
 
-func TestNeutralChecklistCannotHideARejectedOperation(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "update_progress", Content: `{"status":"unchanged"}`, Outcome: api.ToolResultOutcomeCompleted}},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "edit", Outcome: api.ToolResultOutcomeRejected}},
-	}
-	result := classifyBatchProgress(history, "assistant")
-	if result.Advanced || !result.Blocked {
-		t.Fatalf("no-op masked rejected work: %+v", result)
-	}
-}
-
-func TestProgressClassificationPreservesDeclaredResultFraming(t *testing.T) {
-	for _, body := range []string{`{"status":"unchanged","state_changed":false}`, `{"status":"updated","state_changed":true}`, `{"status":"unchanged","reconciliation_status":"acknowledged"}`} {
-		for _, decoration := range []struct{ prefix, suffix string }{{"", ""}, {"[progress#1]\n", "\n\n>>> Tool feedback\nRecorded diagnostic"}} {
-			plain := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{AssistantMessageID: "assistant", Tool: "update_progress", Content: body, Outcome: api.ToolResultOutcomeCompleted}}}
-			expected := classifyBatchProgress(plain, "assistant")
-			plain[0].ToolResult.Content = decoration.prefix + body + decoration.suffix
-			if actual := classifyBatchProgress(plain, "assistant"); actual != expected {
-				t.Fatalf("declared framing changed outcome: plain=%+v decorated=%+v", expected, actual)
+func TestBatchProgressConsumesInvocationFactsBeforeTranscriptProjection(t *testing.T) {
+	for _, tc := range []struct {
+		name                        string
+		tools                       []string
+		advanced, refused, parallel bool
+	}{
+		{"neutral", []string{"update_progress"}, false, false, false},
+		{"advancing", []string{"update_progress"}, true, false, false},
+		{"neutral and rejected", []string{"update_progress", "edit"}, false, true, false},
+		{"parallel neutral", []string{"read", "read"}, false, false, true},
+		{"parallel advancing", []string{"read", "read"}, true, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registry := tools.NewStubRegistry()
+			for _, name := range []string{"update_progress", "read", "edit"} {
+				testutil.FailErr(t, "register typed result producer", registry.Register(name, func(_ context.Context, _ map[string]any, call tools.ToolContext) (string, error) {
+					advanced := tc.advanced
+					call.Effects.Out.Facts.WorkflowAdvanced = &advanced
+					return `{"state_changed":true}`, nil
+				}))
 			}
-			if progressResultAdvanced(decoration.prefix+body+decoration.suffix) != expected.Advanced {
-				t.Fatal("raw and transcript progress outcomes diverged")
+			loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{Tools: registry}, Tools: ToolsDeps{
+				BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, name string, _ map[string]any) (string, bool, error) {
+					if tc.refused && name == "edit" {
+						return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", "Rejected fixture")
+					}
+					return "", false, nil
+				},
+				EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, _ string, facts guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+					return "Display replaced after execution", facts
+				},
+			}, Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }}})
+			calls := make([]api.ToolCall, len(tc.tools))
+			for index, name := range tc.tools {
+				calls[index] = api.ToolCall{ID: fmt.Sprint(index), Name: name, Args: map[string]any{"path": fmt.Sprint(index), "content": "- [ ] Deliver"}}
 			}
-		}
+			if tc.parallel && len(partitionToolBatchRuns(registry, calls)[0]) != len(calls) {
+				t.Fatal("fixture did not exercise parallel settlement")
+			}
+			session := &api.Session{ID: "session", Posture: api.SessionPostureBuild}
+			history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
+			batch, err := loop.Batch.executeToolCallsInTurn(t.Context(), session, session.ID, calls, tools.ToolContext{}, history, "work", "assistant", "", nil)
+			testutil.FailErr(t, "execute typed batch", err)
+			if batch.progress.Advanced != tc.advanced || batch.progress.Blocked != tc.refused {
+				t.Fatalf("batch facts changed with display: %+v", batch.progress)
+			}
+			if len(batch.history) != len(calls)+1 {
+				t.Fatalf("settled transcript lost calls: %d", len(batch.history))
+			}
+		})
 	}
 }

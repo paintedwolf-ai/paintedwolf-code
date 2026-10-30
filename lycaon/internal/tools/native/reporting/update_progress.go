@@ -41,6 +41,10 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 			}
 			return "", err
 		}
+		if tctx.Effects.Out != nil {
+			advanced := result.AdvancesWorkflow()
+			tctx.Effects.Out.Facts.WorkflowAdvanced = &advanced
+		}
 		status := "unchanged"
 		if result.Updated {
 			status = "updated"
