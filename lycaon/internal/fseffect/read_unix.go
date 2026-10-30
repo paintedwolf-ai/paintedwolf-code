@@ -227,6 +227,10 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 			_ = unix.Close(curFD)
 		}
 	}
+	return openReadWalk(root, relPath)
+}
+
+func openReadWalk(root *openedRoot, relPath string) (*os.File, error) {
 	return walkReadContained(root, relPath, true, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
 		fd, err := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 		if err != nil {

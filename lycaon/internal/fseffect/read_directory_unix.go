@@ -4,23 +4,49 @@ package fseffect
 
 import (
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // DirectoryPath reports the held directory's current native address within this root.
 func (r *ReadRoot) DirectoryPath(dir *os.File) (string, error) {
 	path, err := readDirectoryPath(dir)
 	if err != nil {
-		return "", err
+		return r.directoryPathFromName(dir)
 	}
 	if _, ok := lexicalRelUnder(r.root.path, path); !ok {
 		return "", fmt.Errorf("%w: held directory moved outside root", ErrSymlink)
 	}
 	return path, nil
+}
+
+// directoryPathFromName validates identity without relying on descriptor-path support.
+func (r *ReadRoot) directoryPathFromName(dir *os.File) (string, error) {
+	rel, ok := lexicalRelUnder(r.root.path, dir.Name())
+	if !ok {
+		return "", ErrSymlink
+	}
+	current, err := openReadWalk(r.root, rel)
+	if err != nil {
+		return "", err
+	}
+	defer current.Close()
+	expected, err := dir.Stat()
+	if err != nil {
+		return "", err
+	}
+	actual, err := current.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !os.SameFile(expected, actual) {
+		return "", ErrSymlink
+	}
+	return current.Name(), nil
 }
 
 // OpenChildDirectory opens an immediate directory relative to a held parent.

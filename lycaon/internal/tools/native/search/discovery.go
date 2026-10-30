@@ -35,7 +35,7 @@ func (w *walker) report() {
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
-		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "relative_descriptor_opens", w.work.opens, "relative_child_stats", w.work.relative)
+		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "relative_child_stats", w.work.relative)
 }
 
 type entryMetadata struct {
@@ -92,6 +92,9 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	}
 	out := make([]entry, 0, len(listing.Entries))
 	for _, item := range listing.Entries {
+		if err := w.inv.ctx.Err(); err != nil {
+			return nil, true, err
+		}
 		if !opened.VisibleChild(item.Name) {
 			continue
 		}
