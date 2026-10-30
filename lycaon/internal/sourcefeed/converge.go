@@ -43,6 +43,8 @@ type changeConverger struct {
 	headMoved   bool
 	closed      bool
 	flush       func(context.Context, pendingExternalBatch)
+	active      int
+	idle        chan struct{}
 }
 
 func newChangeConverger(quiet, maxDelay time.Duration, flush func(context.Context, pendingExternalBatch)) *changeConverger {
@@ -127,6 +129,10 @@ func (c *changeConverger) armLocked(ctx context.Context) {
 	now := time.Now()
 	if c.first.IsZero() {
 		c.first = now
+		if c.active == 0 {
+			c.idle = make(chan struct{})
+		}
+		c.active++
 	}
 	delay := c.quiet
 	if remaining := c.maxDelay - now.Sub(c.first); remaining < delay {
@@ -159,6 +165,7 @@ func (c *changeConverger) fire(ctx context.Context, generation uint64) {
 	}
 	changes := c.takeLocked()
 	c.mu.Unlock()
+	defer c.finish()
 	if (len(changes.changes) > 0 || changes.resync || changes.headMoved) && c.flush != nil {
 		c.flush(ctx, changes)
 	}
@@ -171,10 +178,40 @@ func (c *changeConverger) close(ctx context.Context) {
 	c.mu.Lock()
 	c.closed = true
 	c.generation++
+	pending := !c.first.IsZero()
 	changes := c.takeLocked()
 	c.mu.Unlock()
+	if pending {
+		defer c.finish()
+	}
 	if (len(changes.changes) > 0 || changes.resync || changes.headMoved) && c.flush != nil {
 		c.flush(ctx, changes)
+	}
+}
+
+// wait joins admitted batches through their synchronous publication.
+func (c *changeConverger) wait(ctx context.Context) error {
+	for {
+		c.mu.Lock()
+		active, idle := c.active, c.idle
+		c.mu.Unlock()
+		if active == 0 {
+			return nil
+		}
+		select {
+		case <-idle:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (c *changeConverger) finish() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.active--
+	if c.active == 0 {
+		close(c.idle)
 	}
 }
 
