@@ -388,6 +388,11 @@ Current root-session checklist, workflow and finish facts also release prior
 prerequisite refusals after resolution, without counting checklist establishment
 as deliverable advancement.
 
+`PROGRESS_RECONCILIATION_REQUIRED` names the explicit finish-acknowledgement
+prerequisite. `PROGRESS_ITEM_NOT_CLOSED` remains deprecated with its original
+checklist-change predicate and names the successor. The new rule overrides the
+legacy rule for matching occurrences; stored historical codes are unchanged.
+
 Successful worker finishes publish a reconciliation token and exact job IDs in
 the current snapshot. Submit `reconciliation_token` with `expected_revision`
 to acknowledge those finishes without closing unfinished rows or rewriting labels.

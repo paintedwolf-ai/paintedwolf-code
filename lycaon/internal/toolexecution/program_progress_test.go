@@ -83,7 +83,7 @@ func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.
 	provider.state.Reconciliation = &progress.Reconciliation{Token: "new-finish", Jobs: []string{"worker-one"}}
 	err := checkReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt")
 	var refused *toolrejection.ToolReject
-	if !errors.As(err, &refused) || refused.Code != "PROGRESS_ITEM_NOT_CLOSED" {
+	if !errors.As(err, &refused) || refused.Code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("late finish bypassed write-door refresh: %v", err)
 	}
 	for _, name := range []string{"read", "delete"} {

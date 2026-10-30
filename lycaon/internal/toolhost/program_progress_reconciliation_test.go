@@ -29,7 +29,7 @@ func TestComposedMutationRequiresAcknowledgementOfKnownWorkerFinishes(t *testing
 	owner.Arm(t.Context(), fixture.Session, "worker-one")
 	fixture.Runtime.Progress = reconciledProgramProgress{store, owner}
 	outcome := callComposedProgram(t, fixture, "printf 'payload\\n' > result.txt")
-	if outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_ITEM_NOT_CLOSED" {
+	if outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("pending finish admitted mutation: %+v", outcome)
 	}
 	if _, err := os.Stat(filepath.Join(fixture.Dir, "result.txt")); !os.IsNotExist(err) {

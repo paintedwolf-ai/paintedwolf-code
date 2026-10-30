@@ -441,11 +441,11 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
 		HintCodes: map[string]guidance.HintEntry{
-			"PROGRESS_ITEM_NOT_CLOSED": {Message: "reconcile the checklist"},
+			"PROGRESS_RECONCILIATION_REQUIRED": {Message: "reconcile the checklist"},
 		},
 	})
 	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
-		return "", false, guidance.NewRefusal("PROGRESS_ITEM_NOT_CLOSED", "Rejected: reconcile the checklist first")
+		return "", false, guidance.NewRefusal("PROGRESS_RECONCILIATION_REQUIRED", "Rejected: reconcile the checklist first")
 	}
 	deps.Nudges.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
 		code := original.Code()
@@ -473,7 +473,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		t.Fatalf("closeout content = %q", result.LastAssistantContent)
 	}
 
-	if total := guard.CodeRejectResponses(sess.ID, "read", "PROGRESS_ITEM_NOT_CLOSED"); total < loopguard.DoomLoopMaxCodeRepeats {
+	if total := guard.CodeRejectResponses(sess.ID, "read", "PROGRESS_RECONCILIATION_REQUIRED"); total < loopguard.DoomLoopMaxCodeRepeats {
 		t.Fatalf("code reject total = %d want >= %d — pre-invoke refusals must accrue", total, loopguard.DoomLoopMaxCodeRepeats)
 	}
 	if escalateCalls == 0 {

@@ -80,10 +80,10 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 	if !ok {
 		t.Fatalf("err = %T want a refusal", err)
 	}
-	if refusal.Code() != "PROGRESS_ITEM_NOT_CLOSED" {
+	if refusal.Code() != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("refusal code = %q", refusal.Code())
 	}
-	if !strings.Contains(refusal.Body, "PROGRESS_ITEM_NOT_CLOSED") {
+	if !strings.Contains(refusal.Body, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("body = %q", refusal.Body)
 	}
 	if !strings.Contains(refusal.Body, "job-1") {

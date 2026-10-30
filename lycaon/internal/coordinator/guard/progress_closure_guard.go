@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const ProgressItemNotClosedCode = "PROGRESS_ITEM_NOT_CLOSED"
+const ProgressReconciliationRequiredCode = "PROGRESS_RECONCILIATION_REQUIRED"
 
 // ProgressClosureBaseline snapshots the checklist when the closure latch arms.
 // Only the reconciliation service acknowledges finished worker jobs.
@@ -45,7 +45,7 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
 	// Document changes do not consume worker-finish obligations.
 	gc.Progress.ProgressReconciledSinceArm = progressContent != baseline.Content
-	gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
+	gc.PutRejectData(ProgressReconciliationRequiredCode, map[string]any{
 		"tool":         strings.TrimSpace(tool),
 		"pending":      pending,
 		"settled_work": append([]string(nil), baseline.Settled...),

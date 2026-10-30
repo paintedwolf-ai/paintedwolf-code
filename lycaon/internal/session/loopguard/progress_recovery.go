@@ -65,7 +65,7 @@ func (g *MemoryDoomLoopGuard) resolvedProgressPrerequisite(ctx context.Context, 
 		code = state.lastCode
 	}
 	g.mu.RUnlock()
-	if resolve == nil || code != "PROGRESS_MISSING" && code != "PROGRESS_ITEM_NOT_CLOSED" {
+	if resolve == nil || code != "PROGRESS_MISSING" && code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		return "", nil
 	}
 	state, err := resolve(ctx, sessionID)
@@ -79,7 +79,7 @@ func (g *MemoryDoomLoopGuard) resolvedProgressPrerequisite(ctx context.Context, 
 	switch code {
 	case "PROGRESS_MISSING":
 		resolved = !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive)
-	case "PROGRESS_ITEM_NOT_CLOSED":
+	case "PROGRESS_RECONCILIATION_REQUIRED":
 		resolved = state.WorkerChild || state.Reconciliation == nil
 	}
 	if resolved {

@@ -54,7 +54,7 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 	}
 	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted)
 	testutil.FailErr(t, "render pruned procedures", err)
-	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") {
+	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("pruned surface lost progress requirements: %s", block)
 	}
 }
@@ -172,7 +172,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
 			for _, candidate := range gatedAndLifecycle {
@@ -187,7 +187,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	investigateOffered := []string{"request_tools", "read", "update_progress"}
 	investigateBlock, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-investigate", "coordinator", investigateOffered, nil)
 	testutil.FailErr(t, "render investigate progress procedure", err)
-	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations", "PROGRESS_ITEM_NOT_CLOSED"} {
+	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations", "PROGRESS_RECONCILIATION_REQUIRED"} {
 		if !strings.Contains(investigateBlock, required) {
 			t.Fatalf("investigate progress procedure missing %q: %s", required, investigateBlock)
 		}
