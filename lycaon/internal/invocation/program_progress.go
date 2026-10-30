@@ -52,9 +52,7 @@ func (r *SQLRecorder) startProgressOwner(ctx context.Context, tx *sql.Tx, identi
 	return nil
 }
 
-// ProgressSettlement is the actual AuthorUpdate owner's outcome. Updated content
-// is never proof of shell execution or task completion. An ambiguous owner error
-// is recorded unknown; this API provides no automatic progress replay.
+// ProgressSettlement records the owner outcome without automatic replay.
 type ProgressSettlement struct {
 	Identity        toolcontract.ProgramProgressIdentity
 	OwnerInvoked    bool
@@ -102,8 +100,7 @@ func (r *SQLRecorder) SettleProgramProgress(ctx context.Context, in ProgressSett
 	return tx.Commit()
 }
 
-// RecordProgressRefusal retains an existing owner's structural preflight refusal
-// without claiming invocation or overwriting an already accepted update.
+// RecordProgressRefusal preserves an accepted update and records no invocation.
 func (r *SQLRecorder) RecordProgressRefusal(ctx context.Context, programID, ownerReference string) error {
 	if r == nil || r.database == nil || ownerReference == "" {
 		return fmt.Errorf("progress refusal requires authoritative owner reference")

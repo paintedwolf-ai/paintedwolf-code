@@ -71,7 +71,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	testutil.FailErr(t, "capture actual profile", err)
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
-	retention := partialEffectsCapture(t, recorder, programID, "s1", "p1")
+	retention := partialEffectsCapture(t, recorder, database, programID, "s1", "p1")
 	observer := &invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}
 	memory := programDoorMemory(t)
 
@@ -181,8 +181,10 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
 		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
 	}
-	if requests.Load() != 1 || memory.InUse().State != 0 {
-		t.Fatalf("replayed or leaked: requests=%d held=%d", requests.Load(), memory.InUse().State)
+	var reviewedCount int
+	testutil.FailErr(t, "count retained reviewed inputs", database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions e JOIN invocation_program_outputs o ON o.program_id=e.program_id AND o.reference=e.reviewed_arguments_ref WHERE e.program_id=?`, programID).Scan(&reviewedCount))
+	if requests.Load() != 1 || reviewedCount != 2 || memory.InUse().State != 0 {
+		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), reviewedCount, memory.InUse().State)
 	}
 }
 
