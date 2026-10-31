@@ -17,7 +17,7 @@ import (
 )
 
 // Show returns commit patch or file content at ref.
-func (m *Manager) Show(ctx context.Context, projectDir string, opts GitShowOpts) (*GitShowResult, error) {
+func (m *gitDiffStatusManager) Show(ctx context.Context, projectDir string, opts GitShowOpts) (*GitShowResult, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (m *Manager) Show(ctx context.Context, projectDir string, opts GitShowOpts)
 }
 
 // Blame returns per-line attribution for a path.
-func (m *Manager) Blame(ctx context.Context, projectDir string, opts GitBlameOpts) ([]GitBlameLine, error) {
+func (m *gitDiffStatusManager) Blame(ctx context.Context, projectDir string, opts GitBlameOpts) ([]GitBlameLine, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (m *Manager) Blame(ctx context.Context, projectDir string, opts GitBlameOpt
 }
 
 // Restore applies Git's native restore modes to explicit paths.
-func (m *Manager) Restore(ctx context.Context, projectDir string, opts GitRestoreOpts) error {
+func (m *gitDiffStatusManager) Restore(ctx context.Context, projectDir string, opts GitRestoreOpts) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func (m *Manager) Restore(ctx context.Context, projectDir string, opts GitRestor
 }
 
 // RevParse resolves refs to SHAs (peeled for annotated tags).
-func (m *Manager) RevParse(ctx context.Context, projectDir string, refs []string) ([]GitRefEntry, error) {
+func (m *gitBranchManager) RevParse(ctx context.Context, projectDir string, refs []string) ([]GitRefEntry, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -227,7 +227,7 @@ func (m *Manager) RevParse(ctx context.Context, projectDir string, refs []string
 }
 
 // Branches lists local branches and marks the current branch.
-func (m *Manager) Branches(ctx context.Context, projectDir string, maxBranches int) ([]GitBranchEntry, error) {
+func (m *gitBranchManager) Branches(ctx context.Context, projectDir string, maxBranches int) ([]GitBranchEntry, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err

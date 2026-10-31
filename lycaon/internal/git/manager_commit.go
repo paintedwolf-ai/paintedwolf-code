@@ -20,7 +20,7 @@ type GitCommitOpts struct {
 }
 
 // Commit stages paths and creates or amends a commit.
-func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitOpts) (hash string, err error) {
+func (m *gitCommitManager) Commit(ctx context.Context, projectDir string, opts GitCommitOpts) (hash string, err error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return "", err
@@ -71,7 +71,7 @@ func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitO
 	if code != 0 {
 		return "", NewCommitFailed(out, code)
 	}
-	hash, err = m.HeadSHA(ctx, dir)
+	hash, err = headSHA(ctx, dir)
 	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return hash, err
 }

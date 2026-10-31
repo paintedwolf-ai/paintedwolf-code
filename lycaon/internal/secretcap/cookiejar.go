@@ -30,7 +30,7 @@ type CookieJar struct {
 	Store     *httpcookies.Store
 	id        string
 	request   CookieJarRequest
-	issuer    *Service
+	issuer    *secretJarService
 }
 
 // ErrInvalidCookieJar refuses a jar name outside its limits.
@@ -38,7 +38,7 @@ var ErrInvalidCookieJar = fmt.Errorf("%w: cookie jar name", ErrInvalidPut)
 
 // OpenCookieJar loads the chat-visible jar and registers its values for screening.
 // An absent jar starts empty in memory.
-func (s *Service) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*CookieJar, error) {
+func (s *secretJarService) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*CookieJar, error) {
 	req = normalizeCookieJarRequest(req)
 	if !validJarName(req.Name) || req.ProjectID == "" || req.ChatSessionID == "" || req.SessionID == "" || req.OperationID == "" {
 		return nil, ErrInvalidCookieJar
@@ -85,7 +85,7 @@ func (s *Service) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*Coo
 
 // jarRow finds the live jar of origin named name that the chat can see,
 // preferring the chat's own jar over a project one.
-func (s *Service) jarRow(ctx context.Context, origin, projectID, chatSessionID, name string) (row db.ManagedSecrets, found bool, err error) {
+func (s *secretJarService) jarRow(ctx context.Context, origin, projectID, chatSessionID, name string) (row db.ManagedSecrets, found bool, err error) {
 	rows, err := s.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
 		ProjectID: strings.TrimSpace(projectID), ChatSessionID: nullable(chatSessionID),
 	})
@@ -117,7 +117,7 @@ func validJarName(name string) bool {
 }
 
 // jarAccess admits a live, visible jar of origin; any other origin is wrongOrigin.
-func (s *Service) jarAccess(row db.ManagedSecrets, origin string, wrongOrigin error, projectID, chatSessionID string) error {
+func (s *secretJarService) jarAccess(row db.ManagedSecrets, origin string, wrongOrigin error, projectID, chatSessionID string) error {
 	if row.Origin != origin {
 		return wrongOrigin
 	}
@@ -134,7 +134,7 @@ func (s *Service) jarAccess(row db.ManagedSecrets, origin string, wrongOrigin er
 }
 
 // rememberJarValues screens individual entries without substituting the whole jar.
-func (s *Service) rememberJarValues(chatSessionID, entry, jarID string, values []string) {
+func (s *secretJarService) rememberJarValues(chatSessionID, entry, jarID string, values []string) {
 	if s.remember == nil || strings.TrimSpace(chatSessionID) == "" || len(values) == 0 {
 		return
 	}

@@ -105,7 +105,7 @@ func seriesPathsJSON(paths []string) string {
 	return string(b)
 }
 
-func (s *SQLStore) GetSeries(ctx context.Context, canonicalPath, scannerID string) (*SeriesRow, error) {
+func (s *sqlRunStore) GetSeries(ctx context.Context, canonicalPath, scannerID string) (*SeriesRow, error) {
 	row, err := s.queries.GetScanSeries(ctx, db.GetScanSeriesParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
@@ -119,7 +119,7 @@ func (s *SQLStore) GetSeries(ctx context.Context, canonicalPath, scannerID strin
 	return &out, nil
 }
 
-func (s *SQLStore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
+func (s *sqlCore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
 	rows, err := s.queries.ListScanSeriesForPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (s *SQLStore) ListSeriesForPath(ctx context.Context, canonicalPath string) 
 	return out, nil
 }
 
-func (s *SQLStore) ListDueSeries(ctx context.Context, now time.Time) ([]SeriesRow, error) {
+func (s *sqlRunStore) ListDueSeries(ctx context.Context, now time.Time) ([]SeriesRow, error) {
 	rows, err := s.queries.ListDueScanSeries(ctx, db.ListDueScanSeriesParams{
 		NowAt: formatCadenceTime(now), RecoverBeforeAt: formatCadenceTime(now.Add(-DispatchClaimTTL)),
 	})
@@ -145,7 +145,7 @@ func (s *SQLStore) ListDueSeries(ctx context.Context, now time.Time) ([]SeriesRo
 	return out, nil
 }
 
-func (s *SQLStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error) {
+func (s *sqlRunStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error) {
 	rows, err := s.queries.ListActiveScanSeries(ctx)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (s *SQLStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error) {
 	return out, nil
 }
 
-func (s *SQLStore) SeriesByActiveScan(ctx context.Context, scanID string) (*SeriesRow, error) {
+func (s *sqlRunStore) SeriesByActiveScan(ctx context.Context, scanID string) (*SeriesRow, error) {
 	row, err := s.queries.GetScanSeriesByActiveScan(ctx, scanID)
 	if db.IsNoRows(err) {
 		return nil, nil
@@ -170,7 +170,7 @@ func (s *SQLStore) SeriesByActiveScan(ctx context.Context, scanID string) (*Seri
 }
 
 // HeartbeatClaim extends the claim only while its token still matches.
-func (s *SQLStore) HeartbeatClaim(ctx context.Context, row SeriesRow, at time.Time) error {
+func (s *sqlRunStore) HeartbeatClaim(ctx context.Context, row SeriesRow, at time.Time) error {
 	if row.DispatchToken == "" {
 		return nil
 	}
@@ -181,13 +181,13 @@ func (s *SQLStore) HeartbeatClaim(ctx context.Context, row SeriesRow, at time.Ti
 	return err
 }
 
-func (s *SQLStore) DeleteSeries(ctx context.Context, canonicalPath, scannerID string) error {
+func (s *sqlRunStore) DeleteSeries(ctx context.Context, canonicalPath, scannerID string) error {
 	return s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
 }
 
-func (s *SQLStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
+func (s *sqlRunStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
 	categories, err := categoriesJSON(row.Categories)
 	if err != nil {
 		return err
@@ -215,15 +215,15 @@ func (s *SQLStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
 // DispatchClaimTTL bounds a persisted dispatch lease without a heartbeat.
 const DispatchClaimTTL = 2 * time.Minute
 
-func (s *SQLStore) NextSeriesDue(ctx context.Context) (time.Time, error) {
+func (s *sqlRunStore) NextSeriesDue(ctx context.Context) (time.Time, error) {
 	raw, err := s.queries.NextScanSeriesDue(ctx)
 	return parseCadenceTime(raw), err
 }
-func (s *SQLStore) OldestDispatchHeartbeat(ctx context.Context) (time.Time, error) {
+func (s *sqlRunStore) OldestDispatchHeartbeat(ctx context.Context) (time.Time, error) {
 	raw, err := s.queries.OldestScanDispatchHeartbeat(ctx)
 	return parseCadenceTime(raw), err
 }
-func (s *SQLStore) FindingChangesSince(ctx context.Context, canonical string, since time.Time) (int, int, error) {
+func (s *sqlRunStore) FindingChangesSince(ctx context.Context, canonical string, since time.Time) (int, int, error) {
 	counts, err := s.queries.CountScanFindingEventsSince(ctx, db.CountScanFindingEventsSinceParams{CanonicalPath: canonical, ObservedAt: db.FormatTime(since)})
 	if err != nil {
 		return 0, 0, err

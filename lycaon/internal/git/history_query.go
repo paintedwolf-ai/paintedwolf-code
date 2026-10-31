@@ -68,7 +68,7 @@ func historyRevision(ctx context.Context, dir, ref string) (string, error) {
 	return strings.Join(parts, separator), nil
 }
 
-func (m *Manager) Log(ctx context.Context, projectDir string, opts GitLogOpts) ([]GitCommit, error) {
+func (m *gitCommitManager) Log(ctx context.Context, projectDir string, opts GitLogOpts) ([]GitCommit, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ type GitComparison struct {
 	MergeBases []string `json:"merge_bases"`
 }
 
-func (m *Manager) Compare(ctx context.Context, projectDir, base, head string) (GitComparison, error) {
+func (m *gitCommitManager) Compare(ctx context.Context, projectDir, base, head string) (GitComparison, error) {
 	result := GitComparison{BaseRef: base, HeadRef: head, MergeBases: []string{}}
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {

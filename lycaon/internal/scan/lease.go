@@ -11,7 +11,7 @@ import (
 
 const ScanClaimLease = 45 * time.Second
 
-func (s *SQLStore) RenewClaim(ctx context.Context, scanID, claimToken string) (bool, error) {
+func (s *sqlRunStore) RenewClaim(ctx context.Context, scanID, claimToken string) (bool, error) {
 	now := time.Now().UTC()
 	rows, err := s.queries.RenewScanClaim(ctx, db.RenewScanClaimParams{
 		HeartbeatAt: db.NullString(db.FormatTime(now)), LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(ScanClaimLease))),
@@ -24,7 +24,7 @@ func (s *SQLStore) RenewClaim(ctx context.Context, scanID, claimToken string) (b
 }
 
 // RecoverExpiredClaims fails scans whose leases expired.
-func (s *SQLStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, error) {
+func (s *sqlRunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, error) {
 	now := db.FormatTime(time.Now().UTC())
 	ids, err := s.queries.ListExpiredScanIDs(ctx, db.NullString(now))
 	if err != nil {
@@ -64,7 +64,7 @@ func (s *SQLStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, er
 	return recovered, nil
 }
 
-func (s *SQLStore) NextLeaseExpiry(ctx context.Context) (time.Time, error) {
+func (s *sqlRunStore) NextLeaseExpiry(ctx context.Context) (time.Time, error) {
 	raw, err := s.queries.NextScanLeaseExpiry(ctx)
 	return parseCadenceTime(raw), err
 }
