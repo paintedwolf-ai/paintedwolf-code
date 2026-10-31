@@ -3,19 +3,29 @@
 package contactsheet
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
+	"io"
 	"math"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fonts"
 	"golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
+	_ "golang.org/x/image/webp"
 )
+
+// FilmstripMime is the store/wire mime for an ordered capture filmstrip container.
+const FilmstripMime = "application/vnd.lycaon.filmstrip+zip"
 
 // Cell is one frame and the label printed above it.
 type Cell struct {
@@ -55,10 +65,10 @@ func Compose(cells []Cell, opts Options) ([]byte, error) {
 	if h := float64(opts.MaxEdge-gutter*(rows+1)-labelBand*rows) / float64(rows); float64(cellW)*aspect > h {
 		cellW = int(h / aspect)
 	}
-	if cellW < 16 {
+	if cellW < min(16, max(first.Dx(), 1)) {
 		return nil, fmt.Errorf("contact sheet of %d cells does not fit %dpx", len(cells), opts.MaxEdge)
 	}
-	cellH := int(math.Round(float64(cellW) * aspect))
+	cellH := max(1, int(math.Round(float64(cellW)*aspect)))
 	width := cols*cellW + gutter*(cols+1)
 	height := rows*(cellH+labelBand) + gutter*(rows+1)
 	sheet := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -111,4 +121,90 @@ func drawLabel(dst *image.RGBA, face font.Face, label string, x, y, width int) {
 func ClockLabel(ms float64) string {
 	tenths := int(ms/100 + 0.5)
 	return fmt.Sprintf("%d:%02d.%d", tenths/600, (tenths/10)%60, tenths%10)
+}
+
+// FilmstripFrameLabel formats one filmstrip frame header from its zero-based index and caption.
+func FilmstripFrameLabel(index int, caption string) string {
+	caption = strings.TrimSpace(caption)
+	if caption == "" {
+		return fmt.Sprintf("#%d", index+1)
+	}
+	return fmt.Sprintf("#%d · %s", index+1, caption)
+}
+
+type filmstripArchiveManifest struct {
+	Frames []struct {
+		Index   int    `json:"index"`
+		File    string `json:"file"`
+		Caption string `json:"caption"`
+	} `json:"frames"`
+}
+
+// FilmstripPoster returns the contact-sheet PNG for a filmstrip zip archive, reading
+// a pre-composed poster.png when present or composing one from manifest frames.
+func FilmstripPoster(archive []byte, maxEdge int) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return nil, fmt.Errorf("read filmstrip zip: %w", err)
+	}
+	files := make(map[string]*zip.File, len(zr.File))
+	for _, f := range zr.File {
+		files[f.Name] = f
+	}
+	if pf, ok := files["poster.png"]; ok {
+		raw, err := readZipEntry(pf)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) > 0 {
+			return raw, nil
+		}
+	}
+	mf, ok := files["manifest.json"]
+	if !ok {
+		return nil, fmt.Errorf("filmstrip archive has no manifest.json")
+	}
+	manRaw, err := readZipEntry(mf)
+	if err != nil {
+		return nil, err
+	}
+	var man filmstripArchiveManifest
+	if err := json.Unmarshal(manRaw, &man); err != nil {
+		return nil, fmt.Errorf("decode filmstrip manifest: %w", err)
+	}
+	if len(man.Frames) == 0 {
+		return nil, fmt.Errorf("filmstrip archive has no frames")
+	}
+	cells := make([]Cell, 0, len(man.Frames))
+	for _, fr := range man.Frames {
+		ff, ok := files[fr.File]
+		if !ok {
+			return nil, fmt.Errorf("filmstrip archive missing frame %q", fr.File)
+		}
+		raw, err := readZipEntry(ff)
+		if err != nil {
+			return nil, err
+		}
+		img, _, err := image.Decode(bytes.NewReader(raw))
+		if err != nil {
+			return nil, fmt.Errorf("decode filmstrip frame %q: %w", fr.File, err)
+		}
+		cells = append(cells, Cell{
+			Image: img,
+			Label: FilmstripFrameLabel(fr.Index, fr.Caption),
+		})
+	}
+	if maxEdge <= 0 {
+		maxEdge = 2048
+	}
+	return Compose(cells, Options{MaxEdge: maxEdge, Columns: min(4, len(cells))})
+}
+
+func readZipEntry(f *zip.File) ([]byte, error) {
+	r, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
 }
