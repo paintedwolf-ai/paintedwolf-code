@@ -19,6 +19,7 @@ import { setProjectFilesRevealRequest } from "../../files/tree/project-files-rev
 import { openSourceInFilesStage } from "../../files/components/project-files-open.ts";
 import { applyOpenFilesSurfaceRequest, registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { registerOpenFindingSink, setFindingFocusRequest } from "../../platform/navigation/open-finding.ts";
+import { registerOpenRunningStageSink } from "../../platform/navigation/open-running.ts";
 import { selectSecurityFolder } from "../../platform/files/security-folder-selection.ts";
 import { registerNotificationSessionOpenSink } from "../../notifications/notification-open.ts";
 import { registerChatDestinationOpenSink } from "../../chat/composer/chat-destination.ts";
@@ -161,6 +162,9 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     setFindingFocusRequest(req);
     openStageWithPlacement("security", "routed");
   });
+  const unregisterOpenRunning = registerOpenRunningStageSink(() => {
+    openStageWithPlacement("running", "routed");
+  });
   const unregisterProjectLookup = registerOpenSourceProjectLookup((id) => {
     const project = projects.byId(id);
     return project ? { roots: project.roots } : undefined;
@@ -211,6 +215,7 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     unregisterOpenSource();
     unregisterOpenFilesSurface();
     unregisterOpenFinding();
+    unregisterOpenRunning();
     unregisterProjectLookup();
     unregisterNotificationOpen();
     unregisterChatDestinationOpen();
