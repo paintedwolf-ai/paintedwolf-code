@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	detachedProbeHelperFDEnv     = "LYCAON_USERPATH_DETACHED_FD"
-	detachedProbeHelperReportEnv = "LYCAON_USERPATH_DETACHED_REPORT"
+	detachedProbeHelperFDEnv     = "USERPATH_DETACHED_FD"
+	detachedProbeHelperReportEnv = "USERPATH_DETACHED_REPORT"
 )
 
 func TestProbeDoesNotLeakInheritedDescriptorsToDetachedChildren(t *testing.T) {
