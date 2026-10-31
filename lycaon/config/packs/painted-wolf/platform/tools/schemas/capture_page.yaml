@@ -1,9 +1,9 @@
 tags: [visual, browser]
 description: >-
-  One-shot open→act→snapshot→close; prefer page_* for live/authenticated state. Use project_dir
-  for a static tree or url plus process_handle for a loopback app. Targets are exclusive.
-  Returns structure, requests, errors, console, and a screenshot; use filmstrip for settled
-  sequence claims and timeline for anything that happens while the page is painting.
+  Serve and preview static HTML/CSS/JS web files from project_dir (built-in local static file and
+  HTTP server replacement) or capture a running localhost url + process_handle in a headless
+  browser: one-shot open→act→snapshot→close returning screenshot/filmstrip/timeline, DOM
+  structure, console errors, and network requests. Prefer page_* for live/authenticated state.
 schema:
   type: object
   properties:
