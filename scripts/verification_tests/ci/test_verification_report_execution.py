@@ -31,11 +31,27 @@ class VerificationReportTests(unittest.TestCase):
             for name, receipt in receipts.items():
                 (batch / name).write_text(json.dumps(receipt))
             (batch / "1-go.progress.json").write_text("{}")
+            (root / "ci").mkdir(parents=True)
+            (root / "ci" / "run.json").write_text(json.dumps({
+                "lane": "ready", "targets": ["test:full", "lint:full", "den:test", "build"],
+                "started_at": 100.0, "finished_at": 160.0, "status": "failed"
+            }))
             summary = root / "summary.md"
             with patch.object(ci, "artifact_root", return_value=root), \
                     patch.dict(ci.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), \
                     patch("builtins.print") as printed:
                 ci.report("failure")
+            record = json.loads((root / "ci" / "run.json").read_text())
+            self.assertEqual(record["passed_stages"], [])
+            # When a stage inside a batch receipt passes all subjects, passed_stages records it.
+            receipts["1-go.json"]["evidence"].append({"stage": "build", "results": {"task": {"status": "passed"}}})
+            (batch / "1-go.json").write_text(json.dumps(receipts["1-go.json"]))
+            with patch.object(ci, "artifact_root", return_value=root), \
+                    patch.dict(ci.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), \
+                    patch("builtins.print"):
+                ci.report("failure")
+            record = json.loads((root / "ci" / "run.json").read_text())
+            self.assertEqual(record["passed_stages"], ["build"])
             text = summary.read_text()
             self.assertIn("- **failed** `test:full` · `example/pkg`: `TestBudget`", text)
             self.assertIn("budget_test.go:31: over cap", text)
