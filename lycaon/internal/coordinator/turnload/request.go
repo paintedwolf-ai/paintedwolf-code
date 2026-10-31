@@ -92,6 +92,17 @@ func exactCatalogNames(need string, names []string) []string {
 
 func containsCatalogID(text, name string) bool {
 	text, name = strings.ToLower(text), strings.ToLower(name)
+	if hasBoundedCatalogID(text, name) {
+		return true
+	}
+	if strings.IndexByte(name, '_') >= 0 {
+		return hasBoundedCatalogID(text, strings.ReplaceAll(name, "_", " ")) ||
+			hasBoundedCatalogID(text, strings.ReplaceAll(name, "_", "-"))
+	}
+	return false
+}
+
+func hasBoundedCatalogID(text, name string) bool {
 	for start := 0; start < len(text); {
 		i := strings.Index(text[start:], name)
 		if i < 0 {
@@ -108,13 +119,24 @@ func containsCatalogID(text, name string) bool {
 	return false
 }
 
+func isExactCatalogMatch(need, name string) bool {
+	if strings.EqualFold(need, name) {
+		return true
+	}
+	if strings.IndexByte(name, '_') >= 0 {
+		return strings.EqualFold(need, strings.ReplaceAll(name, "_", " ")) ||
+			strings.EqualFold(need, strings.ReplaceAll(name, "_", "-"))
+	}
+	return false
+}
+
 // ResolveRequest turns request_tools text into the schemas to load: names
 // the text spells out, then the engine's ranking of the rest or its nearest
 // tools when none reaches the bar.
 func ResolveRequest(ctx context.Context, d decide.Decider, spec RequestSpec, need string, cards []ToolCard) RequestOutcome {
 	need = strings.TrimSpace(need)
 	out := RequestOutcome{Need: need, Exact: ExactNames(need, cards)}
-	if len(out.Exact) == 1 && strings.EqualFold(need, out.Exact[0]) {
+	if len(out.Exact) == 1 && isExactCatalogMatch(need, out.Exact[0]) {
 		return out
 	}
 	rest := make([]ToolCard, 0, len(cards))
