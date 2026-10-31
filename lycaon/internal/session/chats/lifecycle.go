@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -198,9 +198,6 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 		slog.WarnContext(ctx, "remove deleted session checkpoints", "session_id", id, "error", checkpointErr)
 	}
 	m.removeScratch(ctx, tree)
-	if m.loopbackProv != nil {
-		m.loopbackProv.ForgetSession(id)
-	}
 	m.Gate.Forget(id)
 	m.publishSessionDeleted(ctx, sess)
 	if m.events != nil {

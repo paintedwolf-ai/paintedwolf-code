@@ -1,7 +1,6 @@
 package session
 
 import (
-
 	"context"
 	"fmt"
 	"os"
@@ -356,9 +355,9 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 }
 
 type rewindFaultJournal struct {
-	delegate sourceeffect.Journal
-	before   func(int)
-	count    int
+	sourceeffect.Journal
+	before func(int)
+	count  int
 }
 
 func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.Plan) (sourceeffect.Pending, error) {
@@ -367,11 +366,7 @@ func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.P
 		j.count++
 		j.before(n)
 	}
-	return j.delegate.PrepareEffect(ctx, p)
-}
-
-func (j *rewindFaultJournal) RemoveEntry(ctx context.Context, r sourceeffect.Removal) (string, error) {
-	return j.delegate.RemoveEntry(ctx, r)
+	return j.Journal.PrepareEffect(ctx, p)
 }
 
 // RegisterProjectContextForTest wires a project and its trust store.

@@ -35,7 +35,7 @@ type Service struct {
 	captures        *checkpointcontrol.Capture
 	execution       *execution.Lifetime
 	projects        Projects
-	loopbackProv    tools.ContainerRecorder
+	loopbackProv    tools.LoopbackEndpointObserver
 	SourceLedger    sourceledger.Recorder
 	history         tools.SourceHistory
 	commands        sourceledger.CommandWindowOpener
@@ -67,7 +67,7 @@ func (m *Service) Project(ctx context.Context, id string) (*project.Project, err
 	return m.projects.Get(ctx, id)
 }
 func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
-func (m *Service) SetContainers(containers tools.ContainerRecorder) {
+func (m *Service) SetLoopbackObserver(containers tools.LoopbackEndpointObserver) {
 	m.loopbackProv = containers
 }
 func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {

@@ -283,9 +283,6 @@ func runCommandBackground(
 	exitCtx := context.WithoutCancel(ctx)
 	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() {
 		networkLife.complete(exitCtx)
-		if snap, snapErr := registry.Snapshot(exitCtx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
-			recordContainerLaunch(tctx, snap)
-		}
 	})
 	window.closeOnExit(ctx, registry, tctx.Identity.SessionID, handle)
 	result := hostcmd.BackgroundStartResult{
@@ -308,9 +305,6 @@ func runCommandBackground(
 		var terminationReason bgprocess.TerminationReason
 		if snap, snapErr := registry.Snapshot(ctx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
 			terminationReason = snap.TerminationReason
-			recordContainerLaunch(tctx, snap)
-		} else {
-			recordContainerLaunch(tctx, bgprocess.Snapshot{Tail: tail, Output: tail})
 		}
 		if confinement != nil {
 			stamped := confine.StampRefusal(toolName, tctx.Identity.SessionID,

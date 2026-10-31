@@ -127,11 +127,6 @@ type PrimaryMutationRecorder interface {
 	RecordPrimaryMutation(ctx context.Context, sessionID, relPath string)
 }
 
-// ContainerRecorder records invocation-launched container IDs for session provenance.
-type ContainerRecorder interface {
-	RecordSessionContainer(chatSessionID, containerID, socketPath string)
-}
-
 // LoopbackEndpointObserver attributes a loopback destination to its active listener(s).
 type LoopbackEndpointObserver interface {
 	ObserveLoopbackEndpoint(ctx context.Context, sessionID, workspaceDir string, peer netip.AddrPort) *api.LoopbackListenerFact
@@ -329,8 +324,8 @@ type InvocationExecution struct {
 type InvocationLocal struct {
 	// OwnedLoopbackPorts requires fresh exact listener proof at every mediated write.
 	OwnedLoopbackPorts []uint16
-	// ContainerRecorder records container launches for session loopback provenance.
-	ContainerRecorder ContainerRecorder
+	// LoopbackObserver reads current host-observed listener facts.
+	LoopbackObserver LoopbackEndpointObserver
 	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
 	SocksProxyEnv bool
 	// LocalListenGranted covers this invocation's local listener.

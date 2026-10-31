@@ -19,8 +19,6 @@ type stubLoopbackObserver struct {
 	calls int
 }
 
-func (s *stubLoopbackObserver) RecordSessionContainer(string, string, string) {}
-
 func (s *stubLoopbackObserver) ObserveLoopbackEndpoint(_ context.Context, _, _ string, _ netip.AddrPort) *api.LoopbackListenerFact {
 	if len(s.facts) == 0 {
 		return nil
@@ -89,7 +87,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 				SessionID: "session-current",
 				Agent:     toolprofiles.DefaultToolProfileID,
 			},
-			Local:   tools.InvocationLocal{ContainerRecorder: obs},
+			Local:   tools.InvocationLocal{LoopbackObserver: obs},
 			Effects: tools.InvocationEffects{Out: outcome},
 		})
 		if err != nil {
@@ -138,7 +136,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 				SessionID: "session-current",
 				Agent:     toolprofiles.DefaultToolProfileID,
 			},
-			Local:   tools.InvocationLocal{ContainerRecorder: obs},
+			Local:   tools.InvocationLocal{LoopbackObserver: obs},
 			Effects: tools.InvocationEffects{Out: outcome},
 		})
 		if err != nil {
@@ -191,7 +189,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 				SessionID: "session-current",
 				Agent:     toolprofiles.DefaultToolProfileID,
 			},
-			Local:   tools.InvocationLocal{ContainerRecorder: obs},
+			Local:   tools.InvocationLocal{LoopbackObserver: obs},
 			Effects: tools.InvocationEffects{Out: outcome},
 		}); err != nil {
 			t.Fatalf("run http_request: %v", err)

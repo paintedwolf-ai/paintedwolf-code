@@ -13,8 +13,8 @@ import (
 
 type nativeListenerObserver func(context.Context, string, netip.AddrPort) (string, bool, error)
 
-// ObserveSessionListener checks all port holders before using exact native or
-// recorded-container evidence for the requested endpoint.
+// ObserveSessionListener checks all port holders before using exact native
+// session evidence for the requested endpoint.
 func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, sessionID string, endpoint netip.AddrPort) (string, bool, error) {
 	if p == nil {
 		return "", false, lineage.ErrObservationIncomplete

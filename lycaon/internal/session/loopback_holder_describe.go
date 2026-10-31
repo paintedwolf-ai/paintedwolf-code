@@ -226,59 +226,9 @@ type containerPortMapping struct {
 	LoopbackOnly bool
 }
 
-// RecordSessionContainer records an invocation-launched container ID for a session.
-func (p *DefaultLoopbackProvenance) RecordSessionContainer(sessionID, containerID, socketPath string) {
-	if p == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	containerID = strings.TrimSpace(containerID)
-	if sessionID == "" || len(containerID) != 64 {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.sessionContainers == nil {
-		p.sessionContainers = make(map[string][]string)
-	}
-	for _, id := range p.sessionContainers[sessionID] {
-		if id == containerID {
-			return
-		}
-	}
-	p.sessionContainers[sessionID] = append(p.sessionContainers[sessionID], containerID)
-}
-
-// ForgetSession clears recorded container provenance for a deleted session.
-func (p *DefaultLoopbackProvenance) ForgetSession(sessionID string) {
-	if p == nil || sessionID == "" {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.sessionContainers, sessionID)
-}
-
-func (p *DefaultLoopbackProvenance) sessionContainerIDs(sessionID string) map[string]bool {
-	if p == nil || sessionID == "" {
-		return nil
-	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	ids := p.sessionContainers[sessionID]
-	if len(ids) == 0 {
-		return nil
-	}
-	m := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		m[id] = true
-	}
-	return m
-}
-
-// findContainerPublishedPort matches a workspace or session container publishing port. It
+// findContainerPublishedPort matches a workspace container publishing port. It
 // is loopback-only when every publication of that port is.
-func (p *DefaultLoopbackProvenance) findContainerPublishedPort(ctx context.Context, sessionID, workspaceDir string, port uint16) (ContainerPortPublication, bool) {
+func (p *DefaultLoopbackProvenance) findContainerPublishedPort(ctx context.Context, workspaceDir string, port uint16) (ContainerPortPublication, bool) {
 	if p.containers == nil {
 		return ContainerPortPublication{}, false
 	}
@@ -290,24 +240,9 @@ func (p *DefaultLoopbackProvenance) findContainerPublishedPort(ctx context.Conte
 			canonWorkspace = workspaceDir
 		}
 	}
-	recorded := p.sessionContainerIDs(sessionID)
-	if rootID := p.rootSessionID(ctx, sessionID); rootID != "" && rootID != sessionID {
-		for id := range p.sessionContainerIDs(rootID) {
-			if recorded == nil {
-				recorded = make(map[string]bool)
-			}
-			recorded[id] = true
-		}
-	}
 	match, found := ContainerPortPublication{LoopbackOnly: true}, false
 	for _, c := range p.containers(ctx) {
-		matched := false
-		if recorded[c.ID] {
-			matched = true
-		} else if canonWorkspace != "" && composeProjectMatches(c.WorkingDir, canonWorkspace, workspaceDir) {
-			matched = true
-		}
-		if !matched {
+		if canonWorkspace == "" || !composeProjectMatches(c.WorkingDir, canonWorkspace, workspaceDir) {
 			continue
 		}
 		for _, pub := range c.Ports {

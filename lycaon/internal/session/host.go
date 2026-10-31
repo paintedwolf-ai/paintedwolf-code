@@ -97,12 +97,12 @@ type Host struct {
 	loopbackProv   LoopbackProvenanceResolver
 }
 
-// SetLoopbackProvenance installs the provenance resolver for task container recording.
+// SetLoopbackProvenance installs host listener observation and provenance.
 func (m *Host) SetLoopbackProvenance(p LoopbackProvenanceResolver) {
 	if m != nil {
 		m.loopbackProv = p
-		m.ToolContext.SetContainers(p)
-		m.Chats.SetLoopback(p)
+		observer, _ := p.(tools.LoopbackEndpointObserver)
+		m.ToolContext.SetLoopbackObserver(observer)
 		if dp, ok := p.(*DefaultLoopbackProvenance); ok {
 			dp.SetHostSources(
 				m.Chats,

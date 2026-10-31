@@ -32,6 +32,8 @@ type provenanceFixture struct {
 	now            []socketListener
 	nowErr         error
 	sessions       map[int]string
+	processNames   map[int]string
+	meta           map[string]holderSessionMeta
 	containers     []dockerContainerInfo
 	nativeObserver nativeListenerObserver
 }
@@ -591,44 +593,6 @@ func TestQueryDockerContainersOverSocket(t *testing.T) {
 	want := map[uint16][]bool{8080: {true}, 8081: {false, false}, 8082: {true}}
 	if !reflect.DeepEqual(loopback, want) {
 		t.Fatalf("published loopback facts = %v, want %v", loopback, want)
-	}
-}
-
-func TestStdoutContainerIDAttributesPublishedPort(t *testing.T) {
-	containerID := "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
-	fixture := &provenanceFixture{
-		now:          []socketListener{listenerAt(888, "127.0.0.1:9000")},
-		processNames: map[int]string{888: "docker-proxy"},
-		containers: []dockerContainerInfo{
-			{
-				ID:   containerID,
-				Name: "my-container",
-				Ports: []containerPortMapping{
-					{IP: "127.0.0.1", PublicPort: 9000, LoopbackOnly: true},
-				},
-			},
-		},
-	}
-	res := fixture.resolver(t.Context())
-	owned, _ := res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if owned {
-		t.Fatal("port should not be chat-owned before container is recorded")
-	}
-
-	res.RecordSessionContainer("session-1", containerID, "/var/run/docker.sock")
-
-	owned, ev := res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if !owned {
-		t.Fatal("port should be chat-owned after container ID is recorded from stdout")
-	}
-	if ev.Method != ProvenanceContainer || ev.OwnerID != "my-container" {
-		t.Fatalf("unexpected evidence: %+v", ev)
-	}
-
-	res.ForgetSession("session-1")
-	owned, _ = res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if owned {
-		t.Fatal("port should not be chat-owned after session is forgotten")
 	}
 }
 

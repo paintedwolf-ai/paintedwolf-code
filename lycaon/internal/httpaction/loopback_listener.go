@@ -115,7 +115,7 @@ func (o *loopbackHopObservation) settle(
 }
 
 func observeLoopbackEndpoint(ctx context.Context, tctx tools.ToolContext, peer netip.AddrPort) *api.LoopbackListenerFact {
-	if obs, ok := tctx.Local.ContainerRecorder.(tools.LoopbackEndpointObserver); ok && obs != nil {
+	if obs := tctx.Local.LoopbackObserver; obs != nil {
 		return obs.ObserveLoopbackEndpoint(ctx, tctx.ChatSessionID(), tctx.ActiveRootPath(), peer)
 	}
 	return observeLoopbackEndpointFallback(tctx, peer)

@@ -115,10 +115,6 @@ type LoopbackProvenanceResolver interface {
 	// HeldByOther reports whether a listener the session does not own holds port,
 	// or whether the host cannot tell.
 	HeldByOther(ctx context.Context, sessionID, workspaceDir string, port uint16) bool
-	// RecordSessionContainer records an invocation-launched container ID for a session.
-	RecordSessionContainer(sessionID, containerID, socketPath string)
-	// ForgetSession clears recorded container provenance for a deleted session.
-	ForgetSession(sessionID string)
 }
 
 // LoopbackEndpointInspector inspects the listeners answering a specific loopback address and port.
@@ -177,12 +173,11 @@ type DefaultLoopbackProvenance struct {
 	// containers lists running containers from every reachable engine.
 	containers func(ctx context.Context) []dockerContainerInfo
 
-	mu                sync.RWMutex
-	sessionContainers map[string][]string
-	sessions          sessiontree.Reader
-	projects          func(ctx context.Context, projectID string) (*project.Project, error)
-	processes         func() *bgprocess.Registry
-	metaOverride      func(ctx context.Context, sessionID, lineageID, owner string) (holderSessionMeta, bool)
+	mu           sync.RWMutex
+	sessions     sessiontree.Reader
+	projects     func(ctx context.Context, projectID string) (*project.Project, error)
+	processes    func() *bgprocess.Registry
+	metaOverride func(ctx context.Context, sessionID, lineageID, owner string) (holderSessionMeta, bool)
 }
 
 // NewLoopbackProvenance snapshots the listening ports present at engine start.
@@ -354,7 +349,7 @@ func (p *DefaultLoopbackProvenance) ownership(
 	targetAddr netip.Addr,
 	held []socketListener,
 ) (bool, ProvenanceEvidence) {
-	pub, hasPub := p.findContainerPublishedPort(ctx, sessionID, workspaceDir, port)
+	pub, hasPub := p.findContainerPublishedPort(ctx, workspaceDir, port)
 	var pubPtr *ContainerPortPublication
 	if hasPub {
 		pubCopy := pub

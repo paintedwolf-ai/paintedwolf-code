@@ -52,9 +52,6 @@ func (f fixedProvenance) HeldByOther(_ context.Context, _, _ string, port uint16
 	return f.held[port]
 }
 
-func (f fixedProvenance) RecordSessionContainer(sessionID, containerID, socketPath string) {}
-func (f fixedProvenance) ForgetSession(sessionID string)                                   {}
-
 func postureOf(p gate.Posture) func(string) gate.Posture {
 	return func(string) gate.Posture { return p }
 }
