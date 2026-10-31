@@ -54,26 +54,34 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 
 	proc := &Process{
-		isCheck:        spec.IsCheck,
-		sourceRevision: spec.SourceRevision, sourceRootDigest: spec.SourceRootDigest, cwd: spec.Cwd,
 		Handle:        handle,
 		SessionID:     sessionID,
 		ProjectID:     trim(spec.ProjectID),
 		RootSessionID: trim(spec.RootSessionID),
-		buffer:        NewRingBuffer(r.ringBufferBytes),
+		mode:          spec.Mode,
 		running:       true,
 		silent:        spec.Mode == JobModeAwaited,
-		done:          make(chan struct{}),
-		cancel:        cancel,
-		mode:          spec.Mode,
-		originTool:    trim(spec.OriginTool),
-		toolCallID:    trim(spec.ToolCallID),
-		runID:         trim(spec.RunID),
-		runKey:        runKey,
-		startedAt:     time.Now().UTC(),
-		timeout:       spec.Timeout,
-		boundary:      confine.BoundaryOf(req.Launch.Confinement),
-		facts:         spec.Facts,
+		processRuntimeState: processRuntimeState{
+			startedAt: time.Now().UTC(),
+			timeout:   spec.Timeout,
+			done:      make(chan struct{}),
+			cancel:    cancel,
+		},
+		processIOState: processIOState{
+			buffer:     NewRingBuffer(r.ringBufferBytes),
+			originTool: trim(spec.OriginTool),
+			toolCallID: trim(spec.ToolCallID),
+		},
+		processConfinementState: processConfinementState{
+			isCheck:          spec.IsCheck,
+			sourceRevision:   spec.SourceRevision,
+			sourceRootDigest: spec.SourceRootDigest,
+			cwd:              spec.Cwd,
+			runID:            trim(spec.RunID),
+			runKey:           runKey,
+			boundary:         confine.BoundaryOf(req.Launch.Confinement),
+			facts:            spec.Facts,
+		},
 	}
 	if proc.RootSessionID == "" {
 		proc.RootSessionID = sessionID

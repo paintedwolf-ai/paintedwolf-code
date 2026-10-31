@@ -124,18 +124,24 @@ func (r *Terminal) startPTY(
 		SessionID:     sessionID,
 		ProjectID:     trim(projectID),
 		RootSessionID: trim(rootSessionID),
-		buffer:        NewRingBuffer(r.ringBufferBytes),
-		running:       true,
-		done:          make(chan struct{}),
-		cancel:        cancel,
 		kind:          processKindPTY,
-		ptyOutputDone: make(chan struct{}),
-		screen:        newPTYScreen(int(size.Cols), int(size.Rows)),
-		boundary:      confine.BoundaryOf(req.Launch.Confinement),
-		facts:         facts,
 		mode:          mode,
+		running:       true,
 		silent:        silent,
-		startedAt:     time.Now().UTC(),
+		processRuntimeState: processRuntimeState{
+			startedAt: time.Now().UTC(),
+			done:      make(chan struct{}),
+			cancel:    cancel,
+		},
+		processIOState: processIOState{
+			buffer:        NewRingBuffer(r.ringBufferBytes),
+			ptyOutputDone: make(chan struct{}),
+			screen:        newPTYScreen(int(size.Cols), int(size.Rows)),
+		},
+		processConfinementState: processConfinementState{
+			boundary: confine.BoundaryOf(req.Launch.Confinement),
+			facts:    facts,
+		},
 	}
 	if proc.RootSessionID == "" {
 		proc.RootSessionID = sessionID

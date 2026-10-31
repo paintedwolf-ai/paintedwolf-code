@@ -48,7 +48,9 @@ func newProjectionHarness(t *testing.T, ringBytes int) *projectionHarness {
 	h.reg.Output.SetCaptureProjector(projectionProjector())
 	h.proc = &Process{
 		Handle: "h1", SessionID: "s1", ProjectID: "p1", RootSessionID: "s1",
-		buffer: NewRingBuffer(ringBytes), running: true, done: make(chan struct{}),
+		running:             true,
+		processRuntimeState: processRuntimeState{done: make(chan struct{})},
+		processIOState:      processIOState{buffer: NewRingBuffer(ringBytes)},
 	}
 	h.reg.jobs.mu.Lock()
 	h.reg.jobs.sessions["s1"] = map[string]*Process{"h1": h.proc}

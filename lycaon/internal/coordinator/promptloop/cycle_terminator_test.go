@@ -191,7 +191,7 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 	if surfaceID != "" {
 		plan, planErr := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
 		testutil.FailErr(t, "compile "+surfaceID, planErr)
-		st = &promptLoopTurnState{turnToolPlan: plan}
+		st = &promptLoopTurnState{turnBatchState: turnBatchState{turnToolPlan: plan}}
 	}
 
 	batchResult, err := loop.Batch.executeToolCallsInTurn(

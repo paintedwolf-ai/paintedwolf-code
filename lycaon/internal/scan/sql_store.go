@@ -17,6 +17,14 @@ var ErrNoPendingScans = errors.New("no pending code scans")
 
 // SQLStore persists code scan records.
 type SQLStore struct {
+	sqlCore
+	sqlFindingStore
+	sqlRunStore
+	sqlIgnoreStore
+	sqlLedgerStore
+}
+
+type sqlCore struct {
 	SecretIgnores SecretIgnoreSource
 	db            db.Handle
 	queries       *db.Queries
@@ -27,13 +35,36 @@ type SQLStore struct {
 	SeriesChanged WorkSignal
 }
 
+type sqlFindingStore struct {
+	*sqlCore
+}
+
+type sqlRunStore struct {
+	*sqlCore
+}
+
+type sqlIgnoreStore struct {
+	*sqlCore
+}
+
+type sqlLedgerStore struct {
+	*sqlCore
+}
+
 // NewSQLStore creates a code scan store.
 func NewSQLStore(database db.Handle) *SQLStore {
-	return &SQLStore{db: database, queries: db.New(database)}
+	s := &SQLStore{
+		sqlCore: sqlCore{db: database, queries: db.New(database)},
+	}
+	s.sqlFindingStore.sqlCore = &s.sqlCore
+	s.sqlRunStore.sqlCore = &s.sqlCore
+	s.sqlIgnoreStore.sqlCore = &s.sqlCore
+	s.sqlLedgerStore.sqlCore = &s.sqlCore
+	return s
 }
 
 // DB returns the underlying database handle.
-func (s *SQLStore) DB() db.Handle {
+func (s *sqlCore) DB() db.Handle {
 	if s == nil {
 		return nil
 	}
@@ -41,7 +72,7 @@ func (s *SQLStore) DB() db.Handle {
 }
 
 // Insert stores a code scan row.
-func (s *SQLStore) Insert(ctx context.Context, scan api.CodeScan, paths []string, baseSnapshotID string) error {
+func (s *sqlCore) Insert(ctx context.Context, scan api.CodeScan, paths []string, baseSnapshotID string) error {
 	if scan.ID == "" {
 		scan.ID = uuid.NewString()
 	}
