@@ -12,7 +12,7 @@ import (
 func TestBundledRoleExclusionsAllowGeneralModels(t *testing.T) {
 	doc, err := LoadRoleExclusions()
 	testutil.FailErr(t, "load exclusions", err)
-	for _, kind := range []string{"openai", "together", "gemini", "ollama", "azure"} {
+	for _, kind := range []string{"openai", "together", "gemini", "ollama", "azure", "scaleway"} {
 		for _, id := range []string{"gpt-5-nano", "Qwen/Qwen3.5-9B", "Qwen/Qwen3.8-Flash", "gemini-2.0-flash", "model-1b", "tiny"} {
 			model := modelinfo.Entry{ID: id, ContextLength: 8192, Capabilities: modelinfo.ModelCapabilities{Tools: modelinfo.Evidence(modelinfo.CapabilitySupported, "fixture")}}
 			if got := ModelRoleEligibility(kind, model, PolicySlotCoordinator, doc); got.State != "eligible" {

@@ -176,6 +176,7 @@ fixtures:
   - api.anthropic.com
   - api.cohere.com
   - api.redis.com
+  - api.scaleway.ai
   negative:
   - example.com
   - github.com

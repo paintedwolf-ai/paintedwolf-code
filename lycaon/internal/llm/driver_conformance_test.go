@@ -47,6 +47,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "lmstudio", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "omlx", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "cloudflare-workers-ai", wantBearer: true, promptCache: promptCacheForbidKey, cloudflareAccount: true},
+		{kind: "scaleway", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "vertex", wantBearer: true, promptCache: promptCacheForbidKey},
 	}
 }

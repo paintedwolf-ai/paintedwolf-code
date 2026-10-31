@@ -634,5 +634,71 @@
         }
       }
     }
+  },
+  "scaleway": {
+    "id": "scaleway",
+    "name": "Scaleway",
+    "models": {
+      "qwen3-235b-a22b-instruct-2507": {
+        "id": "qwen3-235b-a22b-instruct-2507",
+        "name": "Qwen3 235B A22B Instruct 2507",
+        "description": "Large MoE instruction model for coding, reasoning, and multi-step tool use",
+        "family": "qwen",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-07-01",
+        "last_updated": "2025-07-01",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 128000,
+          "output": 32768
+        },
+        "cost": {
+          "input": 0.85,
+          "output": 3.4,
+          "cache_read": 0.2
+        }
+      },
+      "qwen3-embedding-8b": {
+        "id": "qwen3-embedding-8b",
+        "name": "Qwen3 Embedding 8B",
+        "description": "Dense embedding model for semantic retrieval and similarity search",
+        "family": "qwen-embedding",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": false,
+        "temperature": false,
+        "release_date": "2025-06-05",
+        "last_updated": "2025-06-05",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 32768,
+          "output": 4096
+        },
+        "cost": {
+          "input": 0.04,
+          "output": 0
+        }
+      }
+    }
   }
 }

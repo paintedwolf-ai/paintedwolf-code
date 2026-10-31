@@ -362,3 +362,39 @@ func TestDiscoveredOutputLimitOutranksFeed(t *testing.T) {
 		t.Fatalf("MaxTokens = %d, want the feed's 8192 when discovery states none", kept.MaxTokens)
 	}
 }
+
+func TestMergeScalewayCatalogAndDedicatedOverrides(t *testing.T) {
+	doc := fixtureDoc(t)
+	discovered := []modelinfo.Entry{
+		{ID: "qwen3-235b-a22b-instruct-2507", Untyped: true},
+		{ID: "qwen3-embedding-8b", Untyped: true},
+	}
+	localOverrides := []modelinfo.Entry{
+		{ID: "custom-dedicated-deployment", ContextLength: 65536},
+	}
+	merged := mergeAssignableModels(
+		"scaleway",
+		localOverrides,
+		discovered,
+		nil,
+		doc,
+		modelfeed.StatusOK,
+		true,
+	)
+	if !merged.CatalogAuthoritative {
+		t.Fatal("expected scaleway catalog authoritative when feed is available")
+	}
+	ids := map[string]modelinfo.Entry{}
+	for _, m := range merged.Models {
+		ids[m.ID] = m
+	}
+	if _, ok := ids["qwen3-235b-a22b-instruct-2507"]; !ok {
+		t.Fatalf("expected serverless chat model in merged set, got %v", ids)
+	}
+	if _, ok := ids["custom-dedicated-deployment"]; !ok {
+		t.Fatalf("expected dedicated local override model in merged set, got %v", ids)
+	}
+	if _, ok := ids["qwen3-embedding-8b"]; ok {
+		t.Fatalf("embedding model must not appear in merged set: %v", ids)
+	}
+}

@@ -60,6 +60,7 @@ var providerKindSpecs = map[string]ProviderKindSpec{
 	"omlx":                  {Kind: "omlx", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"litellm-proxy":         {Kind: "litellm-proxy", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"cloudflare-workers-ai": {Kind: "cloudflare-workers-ai", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
+	"scaleway":              {Kind: "scaleway", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 }
 
 func ValidateProviderProtocolBase(kind, raw string) error {

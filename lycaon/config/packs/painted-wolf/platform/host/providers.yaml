@@ -588,3 +588,13 @@ providers:
     models: []
     http_retry_profile: hosted-standard
     prompt_cache_profile: cloudflare
+
+  - id: scaleway
+    reasoning_wire: reasoning_content
+    kind: scaleway
+    label: Scaleway
+    base_url: https://api.scaleway.ai/v1
+    api_key_env: SCW_SECRET_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit

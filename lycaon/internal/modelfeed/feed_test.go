@@ -122,6 +122,7 @@ func TestFixtureProviderKeysPresent(t *testing.T) {
 	want := []string{
 		"openai", "anthropic", "togetherai", "openrouter", "fireworks-ai",
 		"amazon-bedrock", "google-vertex", "google", "azure", "cloudflare-workers-ai",
+		"scaleway",
 	}
 	for _, key := range want {
 		if _, ok := doc.Providers[key]; !ok {

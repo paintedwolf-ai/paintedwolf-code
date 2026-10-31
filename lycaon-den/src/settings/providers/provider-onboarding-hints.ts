@@ -28,6 +28,8 @@ export const PROVIDER_ONBOARDING_MODEL_HINTS = {
     "Claude Sonnet, Gemini Flash, or Kimi — pick a strong model with tools.",
   "cloudflare-workers-ai":
     "Prefer large Workers AI models with tools; small ones struggle.",
+  scaleway:
+    "Prefer Qwen3 235B or Llama 3.3 70B, or another strong model with tools.",
 } as const satisfies Record<string, string>;
 
 export type ProviderOnboardingKind = keyof typeof PROVIDER_ONBOARDING_MODEL_HINTS;

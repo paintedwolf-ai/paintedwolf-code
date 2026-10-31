@@ -55,6 +55,17 @@ func TestEligibleModelsDropsNonChat(t *testing.T) {
 	if ids["text-embedding-3-small"] || ids["gpt-image-1"] || ids["synthetic-embed-temp"] {
 		t.Fatalf("expected embeds/image dropped, got %v", ids)
 	}
+
+	scalewayIDs := map[string]bool{}
+	for _, m := range loadFixtureDoc(t).EligibleModels("scaleway") {
+		scalewayIDs[m.ID] = true
+	}
+	if !scalewayIDs["qwen3-235b-a22b-instruct-2507"] {
+		t.Fatalf("expected scaleway chat model kept, got %v", scalewayIDs)
+	}
+	if scalewayIDs["qwen3-embedding-8b"] {
+		t.Fatalf("expected scaleway embedding dropped, got %v", scalewayIDs)
+	}
 }
 
 func TestConversationEligibleKeepsFreeAndUnpricedChatModels(t *testing.T) {

@@ -146,7 +146,7 @@ providers:
     reasoning_wire: reasoning_content
 ```
 
-`reasoning_content` sends the prior trace in that field. `reasoning_details` sends the `reasoning` text and structured `reasoning_details` blocks. `none` disables replay; omission inherits the kind default. Cloudflare uses `reasoning_content`; OpenRouter uses `reasoning_details`. Unknown values are refused, and native transports with a different message protocol reject this setting.
+`reasoning_content` sends the prior trace in that field. `reasoning_details` sends the `reasoning` text and structured `reasoning_details` blocks. `none` disables replay; omission inherits the kind default. Cloudflare and Scaleway use `reasoning_content`; OpenRouter uses `reasoning_details`. Unknown values are refused, and native transports with a different message protocol reject this setting.
 
 Streaming and complete responses retain reasoning separately from visible assistant text. Replay is restricted to the exact provider instance and model that produced it; tool-call identities remain paired with their results. Reasoning control (`think_style`, effort mapping, thinking settings) is a separate axis from preserving the response history.
 
