@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"strings"
 	"testing"
@@ -33,6 +36,36 @@ func TestPackUnpackFilmstripRoundTrip(t *testing.T) {
 	}
 	if string(got[1].Bytes) != string(frames[1].Bytes) {
 		t.Fatal("png bytes mismatch")
+	}
+}
+
+func TestFilmstripPosterRendersContactSheetFromValidPNGFrames(t *testing.T) {
+	framePNG := func(w, h int, c color.RGBA) []byte {
+		img := image.NewRGBA(image.Rect(0, 0, w, h))
+		for y := range h {
+			for x := range w {
+				img.Set(x, y, c)
+			}
+		}
+		var buf bytes.Buffer
+		testutil.FailErr(t, "png.Encode", png.Encode(&buf, img))
+		return buf.Bytes()
+	}
+	frames := []CaptureFrame{
+		{Index: 0, Caption: "initial", Bytes: framePNG(64, 48, color.RGBA{R: 200, G: 40, B: 40, A: 255}), Mime: "image/png"},
+		{Index: 1, Caption: "click #next", Bytes: framePNG(64, 48, color.RGBA{R: 40, G: 200, B: 40, A: 255}), Mime: "image/png"},
+	}
+	raw, err := PackFilmstripZip(frames)
+	testutil.FailErr(t, "PackFilmstripZip", err)
+	sheet, err := FilmstripPoster(raw)
+	testutil.FailErr(t, "FilmstripPoster", err)
+	cfg, err := png.DecodeConfig(bytes.NewReader(sheet))
+	testutil.FailErr(t, "DecodeConfig", err)
+	if cfg.Width <= 64 || cfg.Height <= 48 {
+		t.Fatalf("expected multi-frame contact sheet dimensions > 64x48, got %dx%d", cfg.Width, cfg.Height)
+	}
+	if _, err := ComposeFilmstripSheet(nil); err == nil {
+		t.Fatal("expected error for empty frames")
 	}
 }
 

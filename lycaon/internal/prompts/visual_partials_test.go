@@ -244,6 +244,11 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 	if !hasActiveTesting || !hasFixMandate {
 		t.Fatalf("guidance must require actively exercising the flow and fixing defects before capture; got:\n%s", both)
 	}
+	for _, layoutPhrase := range []string{"`rect`", "`viewport` overflow", "stretching", "clipping", "overlap"} {
+		if !strings.Contains(page, layoutPhrase) {
+			t.Fatalf("page operating procedure missing layout self-review guidance %q; got:\n%s", layoutPhrase, page)
+		}
+	}
 
 	expectedTools := []string{
 		"capture_page", "page_open", "page_snapshot", "page_act", "page_close",
