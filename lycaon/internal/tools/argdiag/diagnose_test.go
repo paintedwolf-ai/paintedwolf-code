@@ -229,3 +229,99 @@ func TestDiagnoseArgumentsSwallowedByJSONText(t *testing.T) {
 		t.Fatalf("replacement = %#v, want files and scope beside brief", rep)
 	}
 }
+
+func commandCapabilitySchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"command"},
+		"properties": map[string]any{
+			"command": map[string]any{"type": "string"},
+			"capability_request": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"minProperties":        1,
+				"properties": map[string]any{
+					"direct_ip": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"declared_destinations": map[string]any{
+								"type":  "array",
+								"items": map[string]any{"type": "string"},
+							},
+						},
+					},
+					"local_listen": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"ports": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
+						},
+					},
+					"loopback_connect": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"ports": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
+						},
+					},
+					"read_path":    map[string]any{"type": "string"},
+					"write_root":   map[string]any{"type": "string"},
+					"socket_paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		},
+	}
+}
+
+func TestDiagnoseRelocatesBooleanCapabilityFlagAsEmptyObject(t *testing.T) {
+	schema := commandCapabilitySchema()
+	for _, field := range []string{"direct_ip", "local_listen", "loopback_connect"} {
+		t.Run(field, func(t *testing.T) {
+			data := rejectArgs(t, schema, map[string]any{
+				"command": "curl -s http://127.0.0.1:8080/health",
+				field:     true,
+			})
+			assertMisplaced(t, data, []string{field}, "", "capability_request")
+			rep, _ := data["replacement_args"].(map[string]any)
+			if rep == nil {
+				t.Fatalf("expected replacement_args for %s, got nil", field)
+			}
+			capReq, _ := rep["capability_request"].(map[string]any)
+			nested, ok := capReq[field].(map[string]any)
+			if !ok || len(nested) != 0 {
+				t.Fatalf("capability_request.%s = %#v, want empty object", field, capReq[field])
+			}
+			if err := tools.ValidateToolArgs(schema, rep); err != nil {
+				t.Fatalf("replacement_args failed validation: %v", err)
+			}
+		})
+	}
+}
+
+func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *testing.T) {
+	schema := commandCapabilitySchema()
+	cases := []struct {
+		input string
+		value any
+		want  string
+	}{
+		{input: "read_paths", value: []any{"/tmp"}, want: "capability_request.read_path"},
+		{input: "write_paths", value: []any{"/tmp"}, want: "capability_request.write_root"},
+		{input: "write_roots", value: []any{"/tmp"}, want: "capability_request.write_root"},
+		{input: "socket_path", value: "/tmp/daemon.sock", want: "capability_request.socket_paths"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			data := rejectArgs(t, schema, map[string]any{
+				"command": "ls /tmp",
+				tc.input:  tc.value,
+			})
+			if data["field"] != tc.input || data["did_you_mean"] != tc.want {
+				t.Fatalf("field=%v did_you_mean=%v, want field=%q did_you_mean=%q",
+					data["field"], data["did_you_mean"], tc.input, tc.want)
+			}
+		})
+	}
+}
