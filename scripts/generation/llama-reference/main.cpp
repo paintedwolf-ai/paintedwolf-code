@@ -84,7 +84,7 @@ int main(int argc, char ** argv) {
         const auto prompt = spec.at("prompt_tokens").get<std::vector<llama_token>>();
         const int generated = spec.at("generation_tokens");
         const int trials = spec.at("trials");
-        if (prompt.empty() || prompt.size() > 65536 || generated < 1 || generated > 4096 || trials < 1 || trials > 20) {
+        if (prompt.empty() || prompt.size() + generated > 65536 || generated < 1 || generated > 4096 || trials < 1 || trials > 20) {
             throw std::runtime_error("benchmark dimensions exceed their bounds");
         }
         ggml_backend_load_all();

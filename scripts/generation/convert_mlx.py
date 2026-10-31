@@ -140,7 +140,7 @@ def convert(source, destination, expected):
         for name in ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja", "generation_config.json"]:
             shutil.copyfile(source / name, destination / name)
         manifest = {"schema": "paintedwolf-mlx-conversion/1", "source_sha256": expected,
-                    "recipe": "affine-q4-group64-f16", "tensor_staging_bytes": TILE_BYTES,
+                    "recipe": "affine-q4-group64-f16", "source_tile_bytes": TILE_BYTES,
                     "weights_sha256": digest(target), "weights_bytes": target.stat().st_size}
         (destination / "conversion.json").write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
