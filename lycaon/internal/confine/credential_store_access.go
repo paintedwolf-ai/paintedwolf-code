@@ -162,6 +162,38 @@ func credentialStoreDBusSocketPaths() []string {
 	return []string{resolved}
 }
 
+func isSessionDBusSocketTarget(target string) bool {
+	clean := filepath.Clean(strings.TrimSpace(target))
+	if clean == "" || !filepath.IsAbs(clean) {
+		return false
+	}
+	if address, ok := os.LookupEnv("DBUS_SESSION_BUS_ADDRESS"); ok && strings.TrimSpace(address) != "" {
+		if candidates, ok := parseDBusUnixSocketCandidates(strings.TrimSpace(address)); ok {
+			for _, candidate := range candidates {
+				if PathEqual(clean, candidate) {
+					return true
+				}
+			}
+		}
+	}
+	if runtimeDir, ok := os.LookupEnv("XDG_RUNTIME_DIR"); ok && filepath.IsAbs(strings.TrimSpace(runtimeDir)) {
+		if PathEqual(clean, filepath.Join(strings.TrimSpace(runtimeDir), "bus")) {
+			return true
+		}
+	}
+	for _, prefix := range []string{"/run/user/", "/var/run/user/", "/private/var/run/user/"} {
+		if rest, ok := strings.CutPrefix(clean, prefix); ok {
+			uidStr, tail, ok := strings.Cut(rest, "/")
+			if ok && tail == "bus" && uidStr != "" {
+				if _, err := strconv.Atoi(uidStr); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func parseDBusUnixSocketCandidates(address string) ([]string, bool) {
 	if len(address) > 64<<10 {
 		return nil, false

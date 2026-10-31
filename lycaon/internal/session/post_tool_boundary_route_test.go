@@ -134,6 +134,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 		refusal          confine.SandboxRefusal
 	}{
 		{"SANDBOX_TRY_READ_PATH", "read_path", confine.SandboxRefusal{Operation: "file-read-data", Target: "/protected/input", Grant: "/protected/input", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath}},
+		{"SANDBOX_TRY_CREDENTIAL_STORE", "credential_store", confine.SandboxRefusal{Operation: "file-read-data", Target: "/Users/person/Library/Keychains/login.keychain-db", Grant: "/Users/person/Library/Keychains/login.keychain-db", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore}},
 		{"SANDBOX_TRY_WRITE_ROOT", "write_root", confine.SandboxRefusal{Operation: "file-write-data", Target: "/outside/output", Grant: "/outside", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot}},
 		{"SANDBOX_TRY_SOCKET_PATH", "socket_paths", confine.SandboxRefusal{Operation: "network-outbound", Target: "/tmp/service.sock", Grant: "/tmp/service.sock", Recovery: confine.RecoverSocketPath}},
 		{"SANDBOX_TRY_LOCAL_NETWORK", "local_listen", confine.SandboxRefusal{Operation: "network-bind", Target: "local:*:8080", Recovery: confine.RecoverLocalListen}},
