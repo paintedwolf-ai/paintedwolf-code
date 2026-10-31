@@ -13,16 +13,14 @@ import tempfile
 import uuid
 
 from .native_repositories import assemble
-from .candidate_repositories import retain as retain_candidates
+from .candidate_inventory import retain as retain_candidates
 from .openpgp import ephemeral
-from .repository_setup_rehearsal import rehearse as rehearse_setup
-from .repository_setup_upgrade import rehearse as rehearse_setup_upgrade
+from .repository_setup_rehearsal import rehearse as rehearse_setup, rehearse_upgrade as rehearse_setup_upgrade
 from .repository_validation import admit
 from .repository_transaction import publish
-from .repository_origin import serve
 from .repository_r2 import publish_r2
 from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object
-from .repository_installation import apt as install_apt, dnf as install_dnf
+from .repository_installation import apt as install_apt, dnf as install_dnf, serve
 from .signing import digest
 
 PACKAGE = "paintedwolf-repository-fixture"

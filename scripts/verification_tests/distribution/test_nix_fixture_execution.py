@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import nix_fixture
+from scripts.linux_release import nix_runner as nix_fixture
 
 TOOLS = {"bash": "/nix/store/" + "a" * 32 + "-bash-5.3/bin/bash",
          "coreutils": "/nix/store/" + "b" * 32 + "-coreutils-9.8/bin/mkdir",

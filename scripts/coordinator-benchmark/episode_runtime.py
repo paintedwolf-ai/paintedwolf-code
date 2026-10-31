@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 from progress import save, timestamp
-from process_group import stop_process
+from local_runtime import stop_process
 from recovery import infrastructure_recovery, recovery_delay
 
 

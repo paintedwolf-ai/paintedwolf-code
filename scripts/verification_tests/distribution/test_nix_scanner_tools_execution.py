@@ -4,7 +4,7 @@ import unittest
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
-from scripts.linux_release import nix_scanner_tools as host
+from scripts.linux_release import nix_closure_notices as host
 
 ROOT = '/nix/store/' + '0' * 32 + '-application.drv'
 TOOL = '/nix/store/' + '1' * 32 + '-' + host.PNAME + '-1.0.2.drv'

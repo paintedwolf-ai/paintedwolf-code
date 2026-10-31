@@ -10,8 +10,7 @@ import tempfile
 
 from .pacman_publication import publish
 from .r2_objects import current, prefix, public_bytes, put
-from .repository_pending import activation_plan, marker as activation_marker_record
-from .repository_objects import encoded
+from .repository_objects import activation_plan, encoded, marker as activation_marker_record
 from .repository_operations import OPERATIONS, transition, withdrawal, version_marker
 
 

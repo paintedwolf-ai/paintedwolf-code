@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import factory_source as factory
+from scripts.linux_release import release_source as factory
 from scripts.linux_release import nix
 
 

@@ -11,11 +11,43 @@ import shutil
 import tempfile
 from urllib.parse import urlsplit
 
-from . import repository_native
-from .repository_objects import encoded, immutable, replace
-from .repository_validation import admit
 from .openpgp import selection
-from .repository_operations import OPERATIONS, transition, retained, mark_withdrawal, archive_trust
+from .repository_objects import encoded, immutable, replace
+from .repository_operations import OPERATIONS, archive_trust, mark_withdrawal, retained, transition
+from .repository_validation import admit
+
+
+def configuration(receipt: dict, url: str, fingerprint: str) -> str:
+    if receipt["family"] == "deb":
+        return (f"Types: deb\nURIs: {url}/\nSuites: {receipt['channel']}\nComponents: main\n"
+                "Signed-By: /etc/apt/keyrings/painted-wolf-code.asc\n")
+    if receipt["family"] != "rpm":
+        raise ValueError("native configuration requires deb or rpm")
+    return (f"[painted-wolf-code-{receipt['channel']}]\nname=Painted Wolf Code\nmirrorlist={url}/mirrorlist\n"
+            "enabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=file:///etc/pki/rpm-gpg/painted-wolf-code.asc\n"
+            f"# Verify the imported key fingerprint: {fingerprint}\n")
+
+
+def activate(receipt: dict, generation: Path, channel: Path, base_url: str):
+    family = receipt["family"]
+    if family == "deb":
+        authority = f"dists/{receipt['channel']}/InRelease"
+        for row in receipt["objects"]:
+            name = row["path"]
+            if name == authority:
+                continue
+            target = channel / name
+            data = (generation / name).read_bytes()
+            if "/by-hash/" in name or name.startswith("pool/"):
+                immutable(target, data)
+            else:
+                replace(target, data)
+        replace(channel / authority, (generation / authority).read_bytes())
+    elif family == "rpm":
+        replace(channel / "mirrorlist",
+                (base_url.rstrip("/") + "/generations/" + generation.name + "/\n").encode())
+    else:
+        raise ValueError("native activation requires deb or rpm")
 
 
 def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog: Path,
@@ -55,13 +87,13 @@ def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(generation / row["path"], target)
             admit(receipt, readback, catalog, rehearsal)
-        config = repository_native.configuration(receipt, base_url.rstrip("/") + f"/channels/{family}/{channel}", key["fingerprint"])
+        config = configuration(receipt, base_url.rstrip("/") + f"/channels/{family}/{channel}", key["fingerprint"])
         immutable(generation / "client.conf", config.encode())
         record = {**record, "configuration": f"generations/{identity}/client.conf"}
         mark_withdrawal(store, record)
         # The package manager consumes one final authority object. All objects reached by
         # an older authority remain available after promotion or recovery.
-        repository_native.activate(receipt, generation, pointer.parent, base_url)
+        activate(receipt, generation, pointer.parent, base_url)
         replace(pointer, encoded(record))
         parent = os.open(pointer.parent, os.O_RDONLY)
         try:

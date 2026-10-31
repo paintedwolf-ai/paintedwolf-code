@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import preparation
 import snapshot
-import source_revision
+import target_selection as source_revision
 from source_layout import freeze_sources, owns
 from progress import save
 

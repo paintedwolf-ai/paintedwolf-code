@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 import subprocess
 
-from scripts.linux_release.release_qualification import require as qualified
+from scripts.linux_release.release_signing import require as qualified
 from update_keys import load_registry
 
 from .document import snapshot

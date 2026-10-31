@@ -11,10 +11,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from scripts.linux_release import (
-    pacman_installation,
     pacman_rehearsal,
     pacman_repository,
     repository_remote,
+    repository_remote as pacman_installation,
 )
 from scripts.linux_release.signing import digest
 from scripts.verification_tests.distribution.pacman_repository_fixtures import (

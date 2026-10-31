@@ -100,7 +100,7 @@ class FocusedOutcomeControls(unittest.TestCase):
         self.assertTrue(oracle.required_fields({'count':1,'note':'extra'},{'count':1}))
 
     def test_candidate_container_does_not_receive_oracle_or_baseline(self):
-        with patch('oracle_process.capture') as run:
+        with patch('grade.capture') as run:
             run.return_value.returncode=0
             run.return_value.stdout=b'[]'
             self.assertEqual(self.add_container_observation(),[])

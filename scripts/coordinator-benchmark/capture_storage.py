@@ -1,11 +1,13 @@
-"""Isolate active runtime copies and share identical files after shutdown."""
+"""Isolate active runtime copies, checkpoint closed stores, and share identical files after shutdown."""
 import argparse
+from contextlib import closing, contextmanager
 import ctypes
 import fcntl
 import hashlib
 import os
 import pathlib
 import shutil
+import sqlite3
 import sys
 import tempfile
 from snapshot import RUNTIME_METADATA
@@ -14,6 +16,32 @@ RUNTIME_EXECUTABLES = ('pw-logs', 'pw-document-core', 'bialy')
 
 PRIVATE_CONFIG_FILES = ('credential-vault.age', '.credential-vault-development-identity',
                         'providers.local.yaml', 'model-policy.yaml', 'api.token')
+
+
+@contextmanager
+def closed_ledger(capture):
+    database = capture / 'store.db'
+    wal = database.with_name(database.name + '-wal')
+    if wal.exists() and wal.stat().st_size:
+        raise ValueError('worker ledger has uncheckpointed writes; wait for application shutdown')
+    with closing(sqlite3.connect(database.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)) as db:
+        db.row_factory = sqlite3.Row
+        yield db
+
+
+def checkpoint_closed_store(database, process, timeout=30):
+    if process.poll() is None:
+        raise ValueError('application must exit before checkpointing its ledger')
+    if database.is_symlink() or not database.is_file():
+        raise ValueError('application ledger is not a regular file')
+    with closing(sqlite3.connect(database.resolve().as_uri() + '?mode=rw', uri=True, timeout=timeout)) as db:
+        busy, frames, copied = db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+        if busy or frames != copied:
+            raise ValueError('application ledger checkpoint remains blocked')
+    wal = database.with_name(database.name + '-wal')
+    if wal.exists() and wal.stat().st_size:
+        raise ValueError('application ledger changed after checkpointing')
+    return {'busy': busy, 'log_frames': frames, 'checkpointed_frames': copied}
 
 
 def cleanup_private_config(config, exit_record):

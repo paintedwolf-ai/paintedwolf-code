@@ -8,7 +8,7 @@ import subprocess
 import sys
 from progress import save, timestamp
 from completion import selected_measurements
-from grading_state import report_lease
+from grading_identity import report_lease
 from snapshot import file_hash, identity
 
 

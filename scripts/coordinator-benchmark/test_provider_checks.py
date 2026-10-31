@@ -1,10 +1,65 @@
 import json
 import pathlib
+import sqlite3
 import tempfile
 import unittest
 import urllib.error
+from unittest.mock import Mock, patch
 
+from preparation import validate_decision_controls
 from provider_checks import check_model, disposition, load_plan, run_checks, select_references, source_fingerprint
+from smoke import Application
+
+
+class PreflightControlsTests(unittest.TestCase):
+    def test_each_held_worker_and_swapped_answers_require_negative_controls(self):
+        labels = ['Recent','Archive']
+        suite = {'cases':[{'id':'decision','setup':{'dispatches':[
+            {'label':label,'stages':[{'kind':'needs_decision'}]} for label in labels]}}]}
+        controls = [{'id':'decision','kind':'shortcut','control':'unanswered-worker-decision','worker':label,
+                     'failed':['planned-leg-settled-'+label,'decision-answered-'+label]} for label in labels]
+        controls.append({'id':'decision','kind':'shortcut','control':'swapped-worker-decisions',
+                         'failed':['decision-answered-'+label for label in labels]})
+        validate_decision_controls(controls,suite,{'decision'})
+        for index in range(len(controls)):
+            for replacement in [None,{**controls[index],'failed':[]},{**controls[index],'kind':'intended'}]:
+                changed = controls[:index]+([replacement] if replacement else [])+controls[index+1:]
+                with self.subTest(index=index,replacement=replacement), self.assertRaises(ValueError):
+                    validate_decision_controls(changed,suite,{'decision'})
+
+
+class PreflightWaitTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.application = object.__new__(Application)
+        self.application.directory = pathlib.Path(self.temporary.name)
+        self.application.process = Mock()
+        self.application.process.poll.return_value = None
+        self.sleep = patch('smoke.time.sleep')
+        self.sleep.start()
+        self.addCleanup(self.sleep.stop)
+
+    def test_slow_preparation_waits_for_observed_completion(self):
+        observed = Mock(side_effect=[None]*1500 + [{'receipt': 'complete'}])
+        self.assertEqual(self.application.wait_for(observed, 'preparation'), {'receipt': 'complete'})
+        self.assertEqual(observed.call_count, 1501)
+
+    def test_application_death_ends_wait(self):
+        self.application.process.poll.return_value = 1
+        with self.assertRaisesRegex(RuntimeError, 'application exited'):
+            self.application.wait_for(lambda: None, 'preparation')
+
+    def test_typed_submission_failure_ends_wait(self):
+        with sqlite3.connect(self.application.directory/'store.db') as db:
+            db.execute('CREATE TABLE prompt_submissions(session_id TEXT,status TEXT,error_code TEXT)')
+            db.execute("INSERT INTO prompt_submissions VALUES('root','failed','fixture_error')")
+        with self.assertRaisesRegex(RuntimeError, 'submission failed'):
+            self.application.wait_for(lambda: None, 'preparation', 'root')
+
+    def test_operator_interrupt_is_not_swallowed(self):
+        with self.assertRaises(KeyboardInterrupt):
+            self.application.wait_for(Mock(side_effect=KeyboardInterrupt), 'preparation')
 
 
 def receipt(ok=True, kind='compatibility'):
@@ -45,13 +100,13 @@ class ProviderCheckTests(unittest.TestCase):
         load_plan(pathlib.Path(__file__).with_name('provider-checks.json'))
 
     def test_transport_retry_and_resume_preserve_each_attempt(self):
-        class Application:
+        class StubApplication:
             calls=0
             def request(self,path,body):
                 self.calls+=1
                 if self.calls==1:return {'ok':False,'failure':{'kind':'provider','code':'provider_rate_limited','retryable':True}}
                 return receipt()
-        app=Application();waits=[]
+        app=StubApplication();waits=[]
         with tempfile.TemporaryDirectory() as directory:
             out=pathlib.Path(directory)
             first=check_model(app,provider(),'reference',out,2,3,wait=waits.append)
@@ -60,12 +115,12 @@ class ProviderCheckTests(unittest.TestCase):
             self.assertEqual(waits,[5]);self.assertEqual(len(list(out.rglob('*attempt-*.json'))),3)
 
     def test_permanent_http_failure_does_not_retry(self):
-        class Application:
+        class StubApplication:
             calls=0
             def request(self,path,body):
                 self.calls+=1
                 raise urllib.error.HTTPError(path,403,'Forbidden',{},None)
-        app=Application()
+        app=StubApplication()
         with tempfile.TemporaryDirectory() as directory:
             samples=check_model(app,provider(),'reference',pathlib.Path(directory),1,3,wait=lambda _:self.fail('permanent error retried'))
         self.assertEqual(app.calls,1)
@@ -89,14 +144,14 @@ class ProviderCheckTests(unittest.TestCase):
 
     def test_failed_reference_does_not_hide_another_reference(self):
         plan=reference_plan();plan['providers'][0]['models'].append({'id':'unselected','covers':['second contract']})
-        class Application:
+        class StubApplication:
             def request(self,path,body=None):
                 if path=='/v1/providers':return {'providers':[provider()]}
                 if body['model']=='reference':raise RuntimeError('controlled fixture failure')
                 return receipt()
         with tempfile.TemporaryDirectory() as directory:
             out=pathlib.Path(directory)
-            report=run_checks(Application(),plan,'',out,'b'*64)
+            report=run_checks(StubApplication(),plan,'',out,'b'*64)
             self.assertEqual(report['status'],'inconclusive')
             self.assertEqual([row['model'] for row in report['models']],['unselected'])
             self.assertEqual(report['failures'][0]['model'],'reference')

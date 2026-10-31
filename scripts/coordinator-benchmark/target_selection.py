@@ -1,10 +1,142 @@
-"""Select application and evaluator identities before build or credential access."""
+"""Select application targets, measurement operations, and roster revisions."""
+import copy
 import json
+import os
 import pathlib
-from snapshot import ROOT, file_hash
-from source_revision import resolve, working_tree, read_file
+import re
+import subprocess
+import tempfile
+import uuid
+from snapshot import ROOT, file_hash, identity
 from built_runtime import verify_application
 from release_policy import decision
+
+CONTRACT = 'lycaon/internal/harnessfixture/contract.json'
+
+
+def selected_operations(manifest, mode='exploration', tier='all', cases=None):
+    operations = manifest['operations']
+    selected = [op['id'] for op in operations if
+                (op['role'] == 'calibration' if mode == 'calibration' else
+                 op['role'] == 'scored' and tier in {'all', op.get('tier', 'gate')})]
+    if cases is not None:
+        requested = set(cases.split(','))
+        if not requested or '' in requested or not requested <= set(selected):
+            raise ValueError('case selection must name operations in the selected mode and tier')
+        selected = [name for name in selected if name in requested]
+    if not selected:
+        raise ValueError('benchmark selection has no operations')
+    return selected
+
+
+def git(root, *args):
+    return subprocess.check_output(['git', *args], cwd=root)
+
+
+def resolve(root, ref):
+    if not ref or ref.startswith('-'):
+        raise ValueError('select an application tag or full commit identity')
+    tag = 'refs/tags/' + ref.removeprefix('refs/tags/')
+    tagged = subprocess.run(['git', 'show-ref', '--verify', '--quiet', tag], cwd=root).returncode
+    if tagged not in (0, 1):
+        raise ValueError('could not inspect the selected tag')
+    if tagged and not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', ref):
+        raise ValueError('application revisions must be tags or full commit identities; branches are mutable')
+    selected = tag if not tagged else ref
+    commit = git(root, 'rev-parse', '--verify', selected + '^{commit}').decode().strip()
+    tree = git(root, 'rev-parse', commit + '^{tree}').decode().strip()
+    return {'ref': ref, 'revision': commit, 'tree': tree, 'dirty': False, 'kind': 'tag' if not tagged else 'commit'}
+
+
+def working_tree(root):
+    commit = subprocess.check_output(['bash', 'scripts/repo-snapshot-lock.sh', 'read', '--',
+                                     'bash', 'scripts/test-source-snapshot.sh', 'capture'], cwd=root, text=True).strip()
+    parent = git(root, 'rev-parse', commit + '^').decode().strip()
+    tree = git(root, 'rev-parse', commit + '^{tree}').decode().strip()
+    clean = git(root, 'rev-parse', parent + '^{tree}').decode().strip() == tree
+    return {'ref': None, 'revision': parent, 'snapshot': commit, 'tree': tree,
+            'dirty': not clean, 'kind': 'worktree'}
+
+
+def read_file(root, revision, path):
+    return git(root, 'show', revision['tree'] + ':' + path)
+
+
+def contract(root, revision):
+    value = json.loads(read_file(root, revision, CONTRACT))
+    if (set(value) != {'revision', 'benchmark_paths', 'harness_paths'}
+            or type(value['revision']) is not int or value['revision'] < 1):
+        raise ValueError('unsupported application evaluation contract')
+    for group in ('benchmark_paths', 'harness_paths'):
+        if not isinstance(value[group], list) or not value[group]:
+            raise ValueError('evaluation contract requires explicit source boundaries')
+        for name in value[group]:
+            if not isinstance(name, str):
+                raise ValueError('evaluation source boundary requires a relative path')
+            path = pathlib.PurePosixPath(name)
+            if path.is_absolute() or '..' in path.parts or name in {'.', ''}:
+                raise ValueError('evaluation source boundary escapes the application')
+    return value
+
+
+def export(root, revision, destination):
+    names = git(root, 'ls-tree', '-r', '--name-only', '-z', revision['tree'])
+    destination.mkdir(parents=True, exist_ok=False)
+    with tempfile.TemporaryDirectory() as temporary:
+        environment = {**os.environ, 'GIT_INDEX_FILE': str(pathlib.Path(temporary) / 'index')}
+        subprocess.run(['git', 'read-tree', revision['tree']], cwd=root, env=environment, check=True)
+        subprocess.run(['git', 'checkout-index', '--stdin', '-z', '--prefix=' + str(destination) + '/'],
+                       cwd=root, env=environment, input=names, check=True)
+    return names.decode().rstrip('\0').split('\0')
+
+
+def replace_candidate(plan, removed, replacement):
+    previous = next(m for m in plan['models'] if m['id'] == removed)
+    if replacement['id'] in {m['id'] for m in plan['models']}:
+        raise ValueError('a replacement needs a new candidate identity')
+    common = lambda config: {k: v for k, v in config.items() if k not in {'coordinator', 'configuration_sha256'}}
+    if common(replacement['configuration']) != common(previous['configuration']):
+        raise ValueError('replacement changes the application or supporting models')
+    revised = copy.deepcopy(plan)
+    revised['models'] = [copy.deepcopy(replacement) if m['id'] == removed else m for m in revised['models']]
+    public_ref = {k: v for k, v in replacement.items() if k != 'configuration'}
+    revised['roster']['models'] = [public_ref if m['id'] == removed else m for m in revised['roster']['models']]
+    policy = revised['execution']['policy']
+    mapping = {p: resource['id'] for resource in policy['resources'] for p in resource['providers']}
+    config = replacement['configuration']
+    refs = [config['coordinator'], config['lite'], *config['workers']]
+    if any(ref['provider'] not in mapping for ref in refs):
+        raise ValueError('replacement requires an unplanned provider capacity')
+    policy['models'].pop(removed)
+    policy['models'][replacement['id']] = {'coordinator': mapping[refs[0]['provider']],
+        'resources': sorted({mapping[ref['provider']] for ref in refs})}
+    used = {resource for model in policy['models'].values() for resource in model['resources']}
+    policy['resources'] = [r for r in policy['resources'] if r['id'] in used]
+    next_index = max(item['index'] for item in revised['episodes']) + 1
+    for item in revised['episodes']:
+        if item['model'] == removed:
+            item['model'], item['index'] = replacement['id'], next_index
+            next_index += 1
+    revised['benchmark']['execution'] = copy.deepcopy(revised['execution'])
+    revised['comparison_id'] = identity({'benchmark': revised['benchmark'],
+                                         'application_configuration': common(replacement['configuration'])})
+    revised['run_id'] = str(uuid.uuid4())
+    return revised
+
+
+def retained_records(previous, revised, records):
+    old_items = {str(i['index']): i for i in previous['episodes']}
+    retained = {}
+    for item in revised['episodes']:
+        key = str(item['index'])
+        if key not in records:
+            continue
+        if old_items.get(key) != item:
+            raise ValueError('completed capture identity changed')
+        if 'error' in records[key]:
+            raise ValueError('an unresolved attempt cannot become completed')
+        retained[key] = copy.deepcopy(records[key])
+    return retained
 
 
 def add_arguments(parser):
