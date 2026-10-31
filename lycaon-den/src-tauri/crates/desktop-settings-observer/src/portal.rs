@@ -1,4 +1,5 @@
 //! The executable reads only fixed desktop preference keys; it accepts no requests.
+#[path = "portal_decode.rs"]
 mod portal_decode;
 
 use desktop_settings_observer::{Frame, Setting, Status, NAMESPACES};
