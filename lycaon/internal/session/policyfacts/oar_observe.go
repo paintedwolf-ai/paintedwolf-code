@@ -85,20 +85,22 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
-		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalWritePaths = append(gc.Refusals.RefusedTerminalWritePaths, path.Path)
+			continue
 		}
+		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
 		if path.Layer == confine.FloorReadCredentialStore {
 			gc.Refusals.RefusedCredentialStorePaths = appendUnique(gc.Refusals.RefusedCredentialStorePaths, path.Path)
 			continue
 		}
-		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalReadPaths = append(gc.Refusals.RefusedTerminalReadPaths, path.Path)
+			continue
 		}
+		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 	}
 	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
 	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
