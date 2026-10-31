@@ -11,16 +11,15 @@ import (
 	"testing"
 )
 
-// The end-to-end check drives the compiled nativegen binary over stdio, so it
-// needs the release binary; build it from the engine crate before running.
+// TestServiceRoundTripOverStdio drives the compiled nativegen binary over stdio when configured.
 func TestServiceRoundTripOverStdio(t *testing.T) {
 	bin := os.Getenv("NATIVEGEN_BIN")
 	if bin == "" {
-		t.Skip("NATIVEGEN_BIN not set; build the nativegen release binary to run this check")
+		t.Skip("NATIVEGEN_BIN not set")
 	}
 	dir := os.Getenv("NATIVEGEN_MODEL")
 	if dir == "" {
-		t.Skip("NATIVEGEN_MODEL not set; point it at a checkpoint directory")
+		t.Skip("NATIVEGEN_MODEL not set")
 	}
 	if _, err := os.Stat(bin); err != nil {
 		t.Fatalf("nativegen binary: %v", err)
@@ -76,7 +75,7 @@ func TestServiceRoundTripOverStdio(t *testing.T) {
 		return out, json.Unmarshal(raw, &out)
 	}
 
-	if err := send(map[string]any{"method": "hello"}); err != nil {
+	if err := send(map[string]any{"id": 1, "method": "hello"}); err != nil {
 		t.Fatalf("hello: %v", err)
 	}
 	reply, err := recv()
@@ -87,7 +86,7 @@ func TestServiceRoundTripOverStdio(t *testing.T) {
 		t.Fatalf("hello reply: %v", reply)
 	}
 
-	if err := send(map[string]any{"method": "load", "manifest": "", "weights": dir, "device": "cpu"}); err != nil {
+	if err := send(map[string]any{"id": 2, "method": "load", "manifest": "", "weights": dir, "device": "cpu"}); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	reply, err = recv()

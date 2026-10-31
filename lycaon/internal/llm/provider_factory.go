@@ -29,10 +29,10 @@ type providerBuild struct {
 var driverFactories = catalogruntime.NewFactorySet(
 	map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
 		"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			// BaseURL carries the nativegen binary path; the model directory arrives with the load call.
 			return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
 				BinaryPath: build.entry.BaseURL,
 				Device:     "cpu",
+				Models:     build.entry.Models,
 			}), nil
 		},
 		"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
