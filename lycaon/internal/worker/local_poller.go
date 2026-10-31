@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
@@ -49,6 +50,7 @@ type LocalWorkerPoller struct {
 	outcomeLocks        promptstate.MutexRegistry
 	cancelMu            sync.Mutex
 	cancels             map[string]*pollerExecution
+	abortReasons        map[string]bgprocess.TerminationReason
 }
 
 type pollerExecution struct {
@@ -171,8 +173,17 @@ func (p *LocalWorkerPoller) notifyCapacity() {
 
 // Abort joins active execution and releases the task's retained runtime.
 func (p *LocalWorkerPoller) Abort(ctx context.Context, taskID string) error {
+	reason := bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationWorkerCancelled)
+	ctx = bgprocess.WithTerminationReason(ctx, reason)
+	key := strings.TrimSpace(taskID)
 	p.cancelMu.Lock()
-	execution := p.cancels[strings.TrimSpace(taskID)]
+	if p.abortReasons == nil {
+		p.abortReasons = make(map[string]bgprocess.TerminationReason)
+	}
+	if existing := p.abortReasons[key]; existing == "" {
+		p.abortReasons[key] = reason
+	}
+	execution := p.cancels[key]
 	p.cancelMu.Unlock()
 	if execution != nil {
 		execution.cancel(context.Canceled)
@@ -362,6 +373,13 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 
 // Cancellation releases retained runtime after execution exits and before workspace cleanup.
 func (p *LocalWorkerPoller) settleCancellation(ctx context.Context, task *api.WorkerTask, result *api.WorkerResult) {
+	p.cancelMu.Lock()
+	abortReason := p.abortReasons[strings.TrimSpace(task.ID)]
+	p.cancelMu.Unlock()
+	if abortReason == "" {
+		abortReason = bgprocess.TerminationWorkerCancelled
+	}
+	ctx = bgprocess.WithTerminationReason(ctx, abortReason)
 	// Only the current cancellation owner releases runtime and records the result.
 	if won, _ := p.commitTerminal(ctx, task, "cancellation intent", func() (bool, error) {
 		return p.Queue.RequestClaimCancellation(ctx, task)

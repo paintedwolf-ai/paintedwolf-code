@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -194,6 +195,11 @@ const stoppedTurnPoll = 10 * time.Millisecond
 func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string) error {
 	var errs []error
 	defer m.AcquireStoppedTurn(ctx, sess.ID)()
+	fallback := bgprocess.TerminationStoppedByUser
+	if strings.TrimSpace(sess.ParentSessionID) != "" {
+		fallback = bgprocess.TerminationWorkerCancelled
+	}
+	ctx = bgprocess.WithTerminationReason(ctx, fallback)
 	preserveQueue := sess.ID == preserveQueueSessionID
 	if m.store != nil {
 		if preserveQueue {

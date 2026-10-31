@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -59,7 +60,8 @@ func (m *Cancellations) StopRuntime(ctx context.Context, childID string) error {
 		return fmt.Errorf("worker child session required")
 	}
 	m.execution.Cancel(child.ID)
-	member := store.SessionTreeMember{ID: child.ID, ProjectID: child.ProjectID}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationWorkerCancelled)
+	member := store.SessionTreeMember{ID: child.ID, ParentSessionID: child.ParentSessionID, ProjectID: child.ProjectID}
 	if err := m.stops.StopRuntime(ctx, member, ""); err != nil {
 		return err
 	}

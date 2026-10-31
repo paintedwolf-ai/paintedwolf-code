@@ -40,7 +40,7 @@ func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 		t.Fatalf("unknown jobs = %+v", jobs)
 	}
 
-	_, err = reg.Lifecycle.Stop("sess-1", handle)
+	_, err = reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop", err)
 	for t.Context().Err() == nil {
 		if len(reg.ActiveDirectIPJobs("sess-1")) == 0 {

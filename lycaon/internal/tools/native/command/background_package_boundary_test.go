@@ -71,7 +71,7 @@ func TestBackgroundOutputDoesNotClassifyOrdinaryLiveOutputAsRefusal(t *testing.T
 }
 
 func TestBackgroundOutputPreservesTerminationWithoutRepeatingFailure(t *testing.T) {
-	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationTimedOut, bgprocess.TerminationStopped, bgprocess.TerminationExited, ""} {
+	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationTimedOut, bgprocess.TerminationStoppedByAgent, bgprocess.TerminationStoppedByUser, bgprocess.TerminationExited, ""} {
 		outFacts := &tools.ToolInvocationOut{}
 		observeBackgroundOutput(tools.ToolContext{Effects: tools.InvocationEffects{Out: outFacts}}, commandOutput{}, confine.Boundary{Applied: true}, confine.SpawnFacts{}, reason)
 		obs := outFacts.Facts.Confine

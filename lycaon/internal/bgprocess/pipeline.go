@@ -186,16 +186,15 @@ func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec
 	proc.exitCode = exitCode
 	proc.failure = failure
 	proc.finishedAt = finishedAt
-	proc.reason = TerminationExited
 	if res != nil && res.TimedOut {
 		proc.reason = TerminationTimedOut
-	} else if proc.stopped {
-		proc.reason = TerminationStopped
+	} else if !proc.stopped || proc.reason == "" {
+		proc.reason = TerminationExited
 	}
 	r.jobs.pruneCompletedLocked(proc.SessionID)
 	r.jobs.mu.Unlock()
-	close(proc.done)
 	r.Output.publishTerminal(ctx, proc)
+	close(proc.done)
 }
 
 var _ io.Writer = streamWriter{}

@@ -729,6 +729,8 @@ components:
       $ref: components/schemas/events.yaml#/components/schemas/LLMCallEvent
     ActivityEvent:
       $ref: components/schemas/events.yaml#/components/schemas/ActivityEvent
+    BackgroundProcessTerminationReason:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessTerminationReason
     BackgroundProcessEvent:
       $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessEvent
     BackgroundProcess:
