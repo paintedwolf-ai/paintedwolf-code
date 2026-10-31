@@ -289,9 +289,9 @@ func TestToolCallOnlyEmptyProseKeepsDraftKindWithRejectedVersions(t *testing.T) 
 func TestWithdrawnTerminalState(t *testing.T) {
 	var patched api.Message
 	st := &promptLoopTurnState{
-		draftSlotID:          "slot-1",
-		draftSlotAppended:    true,
-		lastAssistantContent: "never committed",
+		draftSlotID:       "slot-1",
+		draftSlotAppended: true,
+		turnStreamState:   turnStreamState{lastAssistantContent: "never committed"},
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Projection: ProjectionDeps{

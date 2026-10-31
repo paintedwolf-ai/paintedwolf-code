@@ -109,7 +109,7 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 			IsSpendCeiling: func(err error) bool { return errors.Is(err, ceilingErr) },
 		},
 	})
-	st := &promptLoopTurnState{lastAssistantID: "a1"}
+	st := &promptLoopTurnState{turnStreamState: turnStreamState{lastAssistantID: "a1"}}
 	decision, err := loop.Nudges.applySpendCeiling(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "implement", "prompt", 10,
 		PromptRunInput{}, st,

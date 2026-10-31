@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (q *InMemoryQueue) ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (q *InMemoryQueue) ListPendingOutcomes(ctx context.Context) ([]api.WorkerTa
 	return out, nil
 }
 
-func (q *InMemoryQueue) MarkOutcomeDelivered(ctx context.Context, jobID string) error {
+func (q *memoryQueueQuery) MarkOutcomeDelivered(ctx context.Context, jobID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -63,21 +63,21 @@ func (q *InMemoryQueue) MarkOutcomeDelivered(ctx context.Context, jobID string) 
 }
 
 // List returns tasks for a project, optionally filtered by status.
-func (q *InMemoryQueue) List(ctx context.Context, projectID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) List(ctx context.Context, projectID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	return q.list(ctx, projectID, "", "", status...)
 }
 
 // ListBySession returns tasks for a project scoped to a coordinator session.
-func (q *InMemoryQueue) ListBySession(ctx context.Context, projectID, sessionID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListBySession(ctx context.Context, projectID, sessionID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	return q.list(ctx, projectID, strings.TrimSpace(sessionID), "", status...)
 }
 
 // ListByWorkflowRunID returns tasks bound to a workflow run.
-func (q *InMemoryQueue) ListByWorkflowRunID(ctx context.Context, runID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListByWorkflowRunID(ctx context.Context, runID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	return q.list(ctx, "", "", strings.TrimSpace(runID), status...)
 }
 
-func (q *InMemoryQueue) ListCancellationRequestsByRunID(ctx context.Context, runID string) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListCancellationRequestsByRunID(ctx context.Context, runID string) ([]api.WorkerTask, error) {
 	tasks, err := q.ListByWorkflowRunID(ctx, runID,
 		api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusHeld, api.WorkerStatusCanceled)
 	if err != nil {
@@ -94,7 +94,7 @@ func (q *InMemoryQueue) ListCancellationRequestsByRunID(ctx context.Context, run
 	return requested, nil
 }
 
-func (q *InMemoryQueue) ListByWorkspacePath(ctx context.Context, workspacePath string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListByWorkspacePath(ctx context.Context, workspacePath string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	wantKey := enginepaths.ProjectKey(workspacePath)
 	if wantKey == "" {
 		return nil, nil
@@ -113,7 +113,7 @@ func (q *InMemoryQueue) ListByWorkspacePath(ctx context.Context, workspacePath s
 }
 
 // ListPendingOverlayPromote returns completed write workers awaiting overlay promote.
-func (q *InMemoryQueue) ListPendingOverlayPromote(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListPendingOverlayPromote(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
 	tasks, err := q.ListBySession(ctx, "", sessionID, api.WorkerStatusComplete)
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (q *InMemoryQueue) ListPendingOverlayPromote(ctx context.Context, sessionID
 }
 
 // ListLiveOverlaysForSession returns actionable write overlays.
-func (q *InMemoryQueue) ListLiveOverlaysForSession(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) ListLiveOverlaysForSession(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
 	tasks, err := q.ListBySession(ctx, "", sessionID,
 		api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusComplete, api.WorkerStatusHeld)
 	if err != nil {
@@ -141,7 +141,7 @@ func (q *InMemoryQueue) ListLiveOverlaysForSession(ctx context.Context, sessionI
 	return filterLiveOverlays(tasks), nil
 }
 
-func (q *InMemoryQueue) list(ctx context.Context, projectID, sessionID, workflowRunID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (q *memoryQueueQuery) list(ctx context.Context, projectID, sessionID, workflowRunID string, status ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (q *InMemoryQueue) list(ctx context.Context, projectID, sessionID, workflow
 }
 
 // Get returns a task by ID.
-func (q *InMemoryQueue) Get(jobID string) (*api.WorkerTask, bool) {
+func (q *memoryQueueCore) Get(jobID string) (*api.WorkerTask, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	job, ok := q.jobs[jobID]
@@ -185,7 +185,7 @@ func (q *InMemoryQueue) Get(jobID string) (*api.WorkerTask, bool) {
 }
 
 // GetLatestByChildSessionID returns the newest run for a child session.
-func (q *InMemoryQueue) GetLatestByChildSessionID(_ context.Context, childSessionID string) (*api.WorkerTask, bool) {
+func (q *memoryQueueQuery) GetLatestByChildSessionID(_ context.Context, childSessionID string) (*api.WorkerTask, bool) {
 	childSessionID = strings.TrimSpace(childSessionID)
 	if childSessionID == "" {
 		return nil, false
@@ -207,7 +207,7 @@ func (q *InMemoryQueue) GetLatestByChildSessionID(_ context.Context, childSessio
 }
 
 // ListBranchJobs includes jobs whose branch is still being provisioned.
-func (q *InMemoryQueue) ListBranchJobs(context.Context) ([]BranchJob, error) {
+func (q *memoryQueueQuery) ListBranchJobs(context.Context) ([]BranchJob, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	var out []BranchJob

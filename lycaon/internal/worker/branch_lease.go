@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -126,4 +129,141 @@ func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus,
 		api.WorkerMergeStatusRejected, api.WorkerMergeStatusAborted:
 	}
 	return false
+}
+
+// RecoverOrphanedMergeApplies repairs expired promotion leases.
+func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
+	if s == nil || s.Store == nil || s.Queue == nil {
+		return fmt.Errorf("merge apply sweep requires queue and store")
+	}
+	eng := s.engine()
+	for {
+		ids, err := s.Store.ListMergeApplying(ctx)
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		for _, id := range ids {
+			task, ok := s.Queue.Get(id)
+			if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusApplying {
+				continue
+			}
+			lock, lockErr := acquirePromoteFileLock(ctx, s.hostDataDirFor(task))
+			if lockErr != nil {
+				return lockErr
+			}
+			if _, err := eng.reclaimOrphanedApply(ctx, task, id); err != nil {
+				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
+			}
+			lock.release()
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(mergeApplyLease / 3):
+		}
+	}
+}
+
+// mergeApplyClaim holds one promotion lease.
+type mergeApplyClaim struct {
+	jobID         string
+	token         string
+	cancel        context.CancelCauseFunc
+	heartbeatStop context.CancelFunc
+	heartbeatDone chan struct{}
+	stopOnce      sync.Once
+}
+
+var errMergeApplyClaimLost = errors.New("merge apply claim lost")
+
+var mergeApplyHeartbeatInterval = mergeApplyLease / 3
+
+func (s *MergeService) beginMergeClaim(ctx context.Context, jobID string) (*mergeApplyClaim, context.Context, error) {
+	if s == nil || s.Store == nil {
+		return nil, nil, fmt.Errorf("overlay promote requires a configured merge store")
+	}
+	token, claimed, err := s.Store.BeginMergeApply(ctx, jobID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !claimed {
+		return nil, nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
+	}
+	claimCtx, cancel := context.WithCancelCause(ctx)
+	claim := &mergeApplyClaim{jobID: jobID, token: token, cancel: cancel}
+	s.engine().startMergeHeartbeat(ctx, claim)
+	return claim, claimCtx, nil
+}
+
+// startMergeHeartbeat renews the apply lease for the duration of the apply.
+func (s mergeEngine) startMergeHeartbeat(ctx context.Context, claim *mergeApplyClaim) {
+	hbCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	done := make(chan struct{})
+	claim.heartbeatStop = cancel
+	claim.heartbeatDone = done
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(mergeApplyHeartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-ticker.C:
+				renewed, err := s.Store.RenewMergeApply(hbCtx, claim.jobID, claim.token)
+				if err != nil || !renewed {
+					slog.WarnContext(hbCtx, "merge apply lease renewal lost", "job_id", claim.jobID, "err", err)
+					claim.cancel(errMergeApplyClaimLost)
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (claim *mergeApplyClaim) stop() {
+	if claim == nil {
+		return
+	}
+	claim.stopOnce.Do(func() {
+		claim.heartbeatStop()
+		<-claim.heartbeatDone
+		claim.cancel(nil)
+	})
+}
+
+// releaseMergeClaim returns the branch to pending under the claim.
+func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
+	claim.stop()
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	return s.Store.ReleaseMergeApply(cleanupCtx, claim.jobID, claim.token)
+}
+
+func (s mergeEngine) teardownBranch(task *api.WorkerTask) error {
+	if s.MergeService == nil || s.Workspace == nil || task == nil {
+		return nil
+	}
+	return s.Workspace.DestroyWorkerWorkspace(&workspace.Binding{
+		ID:   task.ID,
+		Root: task.WorkspaceRoot,
+	})
+}
+
+// holdBranch leases the overlay's branch tree for a merge read, rebuilding a
+// reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
+func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
+	if err != nil {
+		if errors.Is(err, ErrWorkerBranchUnavailable) {
+			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+				"job_id": jobID, "reason": "overlay workspace unavailable",
+			})
+		}
+		return nil, err
+	}
+	return lease, nil
 }
