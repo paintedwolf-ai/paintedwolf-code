@@ -72,7 +72,9 @@ class SeatbeltCustodyTests(unittest.TestCase):
 
         def deny_setugid_tools(cmd, *args, **kwargs):
             binary = Path(cmd[0]).name if cmd else ""
-            if binary in {"ps", "lsof"}:
+            # Darwin's setugid tools are denied by Seatbelt. Linux keeps
+            # its normal ps observer while exercising native /proc custody.
+            if binary == "lsof" or (sys.platform == "darwin" and binary == "ps"):
                 raise PermissionError("Operation not permitted (Seatbelt)")
             return real_run(cmd, *args, **kwargs)
 
@@ -120,7 +122,16 @@ class SeatbeltCustodyTests(unittest.TestCase):
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
-                self.addCleanup(lambda: child.kill() if child.poll() is None else None)
+                def settle_fixture():
+                    stop_descendant.touch()
+                    release_parent.touch()
+                    try:
+                        child.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        child.wait(timeout=10)
+
+                self.addCleanup(settle_fixture)
 
                 for _ in range(1000):
                     if ready.exists():
@@ -143,9 +154,10 @@ class SeatbeltCustodyTests(unittest.TestCase):
 
                 payload = {"runs": [reservation.entry], "operations": []}
                 health.annotate(self.queue, payload)
-                self.assertEqual(reservation.entry["health"]["owner"], "present")
-                self.assertEqual(reservation.entry["health"]["child"], "present")
-                self.assertIn(reservation.entry["health"]["state"], {"observing", "active"})
+                observed = reservation.entry["health"]
+                self.assertEqual(observed["owner"], "present")
+                self.assertEqual(observed["child"], "present")
+                self.assertIn(observed["state"], {"observing", "active"})
 
                 stat_info = reservation.path.stat()
                 expected_dev_ino = (stat_info.st_dev, stat_info.st_ino)

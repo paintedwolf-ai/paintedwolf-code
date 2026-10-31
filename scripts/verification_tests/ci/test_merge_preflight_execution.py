@@ -1,4 +1,6 @@
 """Merge phases preserve the full recipe and stop before expensive work on failure."""
+from collections import Counter
+from itertools import product
 import io
 import json
 import zipfile
@@ -28,6 +30,10 @@ class MergePreflightTests(unittest.TestCase):
                 call.assert_not_called()
                 measure.assert_not_called()
 
+    def history_state(self, failed=()):
+        return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
+                "native_passed": [], "contract_failures": []}
+
     def history_archive(self, record=None, failures=None):
         record = record if record is not None else {
             'lane': 'ready', 'shard': '', 'status': 'failed',
@@ -46,19 +52,20 @@ class MergePreflightTests(unittest.TestCase):
         artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
         unrelated = [{**previous, 'id': 25, 'pull_requests': [{'number': 8}]},
                      {**previous, 'id': 26, 'workflow_id': 11}, {**previous, 'id': 30}]
-        cases = [(previous, 'budgets'), ({**previous, 'conclusion': 'success'}, ''),
-                 ({**previous, 'conclusion': 'cancelled'}, ''), ({**previous, 'status': 'in_progress'}, '')]
+        cases = [(previous, ['budgets']), ({**previous, 'conclusion': 'success'}, []),
+                 ({**previous, 'conclusion': 'cancelled'}, []), ({**previous, 'status': 'in_progress'}, [])]
         for run, expected in cases:
             with self.subTest(run=run), patch.object(preflight, 'repository', return_value='repos/o/r'), \
                     patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
                         {'workflow_runs': [run, {**previous, 'id': 19}, *unrelated]}, {'artifacts': [artifact]}]) as api, \
                     patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()) as fetch:
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), expected)
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']),
+                                 self.history_state(expected) if expected else {})
                 self.assertEqual(fetch.call_count, int(bool(expected)))
                 self.assertIn('/workflows/10/runs?event=pull_request', api.call_args_list[1].args[0])
         for event in ({}, {'pull_request': {}}):
             with patch.object(preflight, 'api') as api:
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
                 api.assert_not_called()
 
     def test_uncertain_history_never_reorders(self):
@@ -74,10 +81,10 @@ class MergePreflightTests(unittest.TestCase):
                     patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
                         {'workflow_runs': [run]}, {'artifacts': artifacts}]), \
                     patch.object(preflight.subprocess, 'check_output', return_value=raw):
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
         with patch.object(preflight, 'repository', return_value='repos/o/r'), \
                 patch.object(preflight, 'api', side_effect=OSError):
-            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+            self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
 
     def test_branch_query_finds_history_behind_unrelated_workflow_traffic(self):
         run = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
@@ -92,20 +99,23 @@ class MergePreflightTests(unittest.TestCase):
                 patch.object(preflight, 'api', side_effect=api), \
                 patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()):
             event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
-            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), 'budgets')
+            self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), self.history_state(['budgets']))
 
-    def test_receipt_requires_matching_identity_and_one_declared_failed_stage(self):
+    def test_receipt_requires_matching_identity_and_declared_failed_stages(self):
         run = {'id': 20, 'run_attempt': 2}
         record = dict(lane='ready', shard='', status='failed', identity={'run': '20', 'attempt': '2'})
         for change in ({'lane': 'limits'}, {'status': 'passed'}, {'shard': '1/2'},
                        {'identity': {'run': '21', 'attempt': '2'}}, {'identity': {'run': '20', 'attempt': '1'}}):
-            self.assertEqual(preflight.failed_target(self.history_archive({**record, **change}), run, ['budgets']), '')
+            self.assertIsNone(preflight.receipt_state(self.history_archive({**record, **change}), run, ['budgets']))
         for failures in ([], [None], [{'stage': 'test:contract', 'status': 'failed'}],
-                         [{'stage': 'budgets', 'status': 'unverified'}],
-                         [{'stage': stage, 'status': 'failed'} for stage in ('budgets', 'build')]):
-            self.assertEqual(preflight.failed_target(self.history_archive(failures=failures), run, ['budgets', 'build']), '')
+                         [{'stage': 'budgets', 'status': 'unverified'}]):
+            self.assertIsNone(preflight.receipt_state(self.history_archive(failures=failures), run, ['budgets', 'build']))
         repeated = [{'stage': 'budgets', 'status': 'failed'}] * 2
-        self.assertEqual(preflight.failed_target(self.history_archive(failures=repeated), run, ['budgets']), 'budgets')
+        self.assertEqual(preflight.receipt_state(self.history_archive(failures=repeated), run, ['budgets']),
+                         self.history_state(['budgets']))
+        failures = [{'stage': stage, 'status': 'failed'} for stage in ('budgets', 'build')]
+        self.assertEqual(preflight.receipt_state(self.history_archive(failures=failures), run, ['budgets', 'build']),
+                         self.history_state(['budgets', 'build']))
 
     def test_ready_history_checks_repeat_failure_before_native_compilation(self):
         from ci_policy import hosted_execution as execution
@@ -160,6 +170,30 @@ class MergePreflightTests(unittest.TestCase):
                 if after_verdict == 0:
                     expected += [compile_native, before_cmd]
                 self.assertEqual([entry.args[0] for entry in call.call_args_list], expected)
+
+    def test_history_only_reorders_the_complete_inventory(self):
+        targets = ["build", "lint:full", "coverage:changes"]
+        native = [["./task", "den:test:rust", "--", "--compile-only"],
+                  ["./task", "decide:test", "--", "--compile-only"]]
+        native_names = [command[1] for command in native]
+        expected = Counter(targets + native_names)
+        for states in product(("unverified", "failed", "passed"), repeat=len(targets) + len(native)):
+            history = {}
+            for prefix, names, statuses in (("", targets, states[:len(targets)]),
+                                            ("native_", native_names, states[len(targets):])):
+                for status in ("failed", "passed"):
+                    key = prefix + status + ("_targets" if not prefix else "")
+                    history[key] = [name for name, state in zip(names, statuses) if state == status] * 2
+                    history[key].append("unknown:history-entry")
+            with self.subTest(states=states):
+                inventory = []
+                for command in preflight.ready_commands(targets, native, history):
+                    self.assertEqual(command[0], "./task")
+                    if command in native:
+                        inventory.append(command[1])
+                    else:
+                        inventory.extend(command[1:])
+                self.assertEqual(Counter(inventory), expected)
 
     def test_native_only_and_private_group_rotation_preserve_all_targets(self):
         native_cmds = [['./task', 'den:test:rust', '--', '--compile-only'], ['./task', 'decide:test', '--', '--compile-only']]
