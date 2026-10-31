@@ -60,7 +60,7 @@ func FormatWorkerCompletionEnvelope(env WorkerCompletionEnvelope) string {
 		return ""
 	}
 	// Command tails and worker prose can embed the absolute branch root.
-	return enginepaths.RewriteWorkerBranchPaths(string(out))
+	return enginepaths.RewriteWorkerBranchPaths(strings.ReplaceAll(string(out), "&#xA;", "\n"))
 }
 
 func parentTaskResult(summary, body string, hasReport bool) string {
