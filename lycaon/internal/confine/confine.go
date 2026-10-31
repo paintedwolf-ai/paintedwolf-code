@@ -540,7 +540,13 @@ func readDenyMatches(c Confinement) []fsMatch {
 			}
 		}
 	}
-	out = append(out, subpathMatches(KeyMaterialReadDenyPaths(), FloorReadKeyMaterial)...)
+	for _, p := range KeyMaterialReadDenyPaths() {
+		layer := FloorReadKeyMaterial
+		if !c.CredentialStore && isOSCredentialStoreDenyPath(p) {
+			layer = FloorReadCredentialStore
+		}
+		out = append(out, subpathMatches([]string{p}, layer)...)
+	}
 	return append(out, subpathMatches(resolveEach(c.ReadDenyPaths), FloorReadConfigured)...)
 }
 

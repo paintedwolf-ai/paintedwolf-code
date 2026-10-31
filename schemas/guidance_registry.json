@@ -2242,6 +2242,12 @@
       "emit": "guard:sandbox",
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
+    "SANDBOX_TRY_CREDENTIAL_STORE": {
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "In `{{ tool }}`, the sandbox refused access to the host OS credential store at {{ paintedwolf.refused_credential_store_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
+    },
     "SANDBOX_TRY_HOST_EXECUTION": {
       "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",

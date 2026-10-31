@@ -195,6 +195,7 @@ func TestNetworkAndProcessRefusalsRouteToTheirCapability(t *testing.T) {
 		grant, port       string
 	}{
 		{"network-outbound", "/var/run/docker.sock", RecoverSocketPath, "/var/run/docker.sock", ""},
+		{"network-outbound", "/run/user/1000/bus", RecoverCredentialStore, "/run/user/1000/bus", ""},
 		{"network-outbound", "remote:*:5432", RecoverOutboundPort, "", "5432"},
 		{"network-bind", "local:*:8080", RecoverLocalListen, "", "8080"},
 		{"network-bind", "/Users/p/.colima/_lima/_networks/user-v2/user-v2_fd.sock", RecoverHostExecution, "", ""},
@@ -238,5 +239,38 @@ func TestBoundProfileTagsEveryDenyRule(t *testing.T) {
 	testutil.FailErr(t, "build untagged profile", err)
 	if strings.Contains(untagged, "with message") {
 		t.Fatalf("unbound profile carries a tag:\n%s", untagged)
+	}
+}
+
+func TestCredentialStoreRefusalsRouteToCredentialStoreCapability(t *testing.T) {
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve home", err)
+	t.Setenv("HOME", home)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	SetKeyMaterialPathsSource(func() []string {
+		return []string{"~/.ssh/", "~/Library/Keychains/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"}
+	})
+	t.Cleanup(func() { SetKeyMaterialPathsSource(nil) })
+
+	project, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
+	rules, err := filesystemRules(Confinement{Roots: []string{project}})
+	testutil.FailErr(t, "build rules", err)
+
+	for _, target := range []string{
+		filepath.Join(home, "Library", "Keychains", "login.keychain-db"),
+		filepath.Join(home, ".local", "share", "keyrings", "login.keyring"),
+		filepath.Join(home, ".local", "share", "kwalletd", "kdewallet.kwl"),
+	} {
+		got := routeRefusal(rules, "file-read-data", target, false)
+		if got.Recovery != RecoverCredentialStore || got.Layer != FloorReadCredentialStore {
+			t.Fatalf("read refusal on %s routed to %+v, want RecoverCredentialStore / FloorReadCredentialStore", target, got)
+		}
+	}
+
+	sshKey := filepath.Join(home, ".ssh", "id_ed25519")
+	gotSSH := routeRefusal(rules, "file-read-data", sshKey, false)
+	if gotSSH.Recovery != RecoverReadPath || gotSSH.Layer != FloorReadKeyMaterial {
+		t.Fatalf("read refusal on %s routed to %+v, want RecoverReadPath / FloorReadKeyMaterial", sshKey, gotSSH)
 	}
 }

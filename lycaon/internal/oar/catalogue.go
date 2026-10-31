@@ -122,6 +122,7 @@ var factDecls = []factDecl{
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_grants", oarcore.TypeListString, FactTierHost, ""},
+	{"refused_credential_store_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"receiving_tool_summarize", oarcore.TypeBool, FactTierHost, ""},
 	{"refused_terminal_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_terminal_write_paths", oarcore.TypeListString, FactTierHost, ""},

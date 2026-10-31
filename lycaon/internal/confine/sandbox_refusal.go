@@ -24,11 +24,12 @@ type SandboxRefusal struct {
 type RefusalRecovery string
 
 const (
-	RecoverWriteRoot      RefusalRecovery = "write_root"
-	RecoverReadPath       RefusalRecovery = "read_path"
-	RecoverSocketPath     RefusalRecovery = "socket_paths"
-	RecoverLocalListen    RefusalRecovery = "local_listen"
-	RecoverProcessControl RefusalRecovery = "process_control"
+	RecoverWriteRoot       RefusalRecovery = "write_root"
+	RecoverReadPath        RefusalRecovery = "read_path"
+	RecoverCredentialStore RefusalRecovery = "credential_store"
+	RecoverSocketPath      RefusalRecovery = "socket_paths"
+	RecoverLocalListen     RefusalRecovery = "local_listen"
+	RecoverProcessControl  RefusalRecovery = "process_control"
 	// RecoverOutboundPort covers a connection the kernel names only by port:
 	// loopback_connect opens it on this machine, direct_ip elsewhere.
 	RecoverOutboundPort RefusalRecovery = "loopback_connect_or_direct_ip"
@@ -87,6 +88,28 @@ func (s SandboxRefusals) With(recoveries ...RefusalRecovery) []SandboxRefusal {
 	return out
 }
 
+// CredentialStorePaths returns the unique refused targets whose recovery is
+// credential_store.
+func (s SandboxRefusals) CredentialStorePaths() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range s.Refusals {
+		if r.Recovery != RecoverCredentialStore && r.Layer != FloorReadCredentialStore {
+			continue
+		}
+		target := r.Target
+		if target == "" {
+			target = r.Grant
+		}
+		if target == "" || seen[target] {
+			continue
+		}
+		seen[target] = true
+		out = append(out, target)
+	}
+	return out
+}
+
 // Display is the refusal as copy quotes it: operation, target, and process.
 func (r SandboxRefusal) Display() string {
 	text := r.Operation
@@ -132,7 +155,7 @@ func routeRefusal(rules FilesystemRules, operation, target string, truncated boo
 	if truncated {
 		r.Target += truncatedReportSuffix
 		switch r.Recovery {
-		case RecoverWriteRoot, RecoverReadPath, RecoverSocketPath:
+		case RecoverWriteRoot, RecoverReadPath, RecoverCredentialStore, RecoverSocketPath:
 			r.Recovery, r.Grant, r.Layer = RecoverNone, "", ""
 		case RecoverLocalListen, RecoverProcessControl, RecoverOutboundPort, RecoverHostExecution, RecoverNone:
 			// These recoveries do not grant a path from the truncated target.
@@ -147,6 +170,8 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 		return routeFilesystemRefusal(rules, r, access)
 	}
 	switch {
+	case operation == "network-outbound" && strings.HasPrefix(target, "/") && isSessionDBusSocketTarget(target):
+		r.Recovery, r.Grant = RecoverCredentialStore, target
 	case operation == "network-outbound" && strings.HasPrefix(target, "/"):
 		r.Recovery, r.Grant = RecoverSocketPath, target
 	case operation == "network-outbound":

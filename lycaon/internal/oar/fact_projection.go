@@ -122,6 +122,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"refused_write_grants":            strList(gc.Refusals.RefusedWriteGrants),
 		"refused_read_paths":              strList(gc.Refusals.RefusedReadPaths),
 		"refused_read_grants":             strList(gc.Refusals.RefusedReadGrants),
+		"refused_credential_store_paths":  strList(gc.Refusals.RefusedCredentialStorePaths),
 		"receiving_tool_summarize":        gc.Invocation.Tool == "summarize",
 		"refused_terminal_read_paths":     strList(gc.Refusals.RefusedTerminalReadPaths),
 		"refused_terminal_write_paths":    strList(gc.Refusals.RefusedTerminalWritePaths),

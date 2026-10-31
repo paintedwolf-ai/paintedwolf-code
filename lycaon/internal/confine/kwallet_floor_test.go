@@ -38,7 +38,7 @@ func TestDefaultConfinementProtectsBundledKWalletStore(t *testing.T) {
 	for _, name := range []string{"kdewallet.kwl", "kdewallet.salt"} {
 		path := filepath.Join(store, name)
 		for access, want := range map[confine.FilesystemAccess]confine.FloorVerdict{
-			confine.AccessRead:  {Layer: confine.FloorReadKeyMaterial},
+			confine.AccessRead:  {Layer: confine.FloorReadCredentialStore},
 			confine.AccessWrite: {Layer: confine.FloorProtected},
 		} {
 			if got := boundary.Filesystem.Verdict(access, path); got != want {

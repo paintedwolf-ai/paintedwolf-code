@@ -59,6 +59,44 @@ func KeyMaterialWritePaths() []string { return resolveEach(keyMaterialTreeRoots(
 // an exception. CLI credential files outside this floor stay readable.
 func KeyMaterialReadDenyPaths() []string { return resolveEach(keyMaterialTreeRoots()) }
 
+var osCredentialStoreRelDirs = []string{
+	filepath.Join("Library", "Keychains"),
+	filepath.Join(".local", "share", "keyrings"),
+	filepath.Join(".local", "share", "kwalletd"),
+	filepath.Join("AppData", "Roaming", "Microsoft", "Credentials"),
+	filepath.Join("AppData", "Local", "Microsoft", "Credentials"),
+	filepath.Join("AppData", "Local", "Microsoft", "Vault"),
+}
+
+// OSCredentialStoreReadDenyPaths returns the resolved OS credential store paths
+// within the catalogued key-material read floor.
+func OSCredentialStoreReadDenyPaths() []string {
+	var raw []string
+	for _, p := range catalogedKeyMaterialPaths() {
+		rel := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p), "~/"), "/")
+		if rel == "" || strings.HasPrefix(rel, "/") {
+			continue
+		}
+		cleanRel := filepath.Clean(rel)
+		for _, storeRel := range osCredentialStoreRelDirs {
+			if cleanRel == storeRel {
+				raw = append(raw, p)
+				break
+			}
+		}
+	}
+	return resolveEach(expandHomePaths(raw))
+}
+
+func isOSCredentialStoreDenyPath(p string) bool {
+	for _, storePath := range OSCredentialStoreReadDenyPaths() {
+		if PathEqual(p, storePath) {
+			return true
+		}
+	}
+	return false
+}
+
 // credentialStorePathsSource supplies catalogued CLI credential-file paths for
 // the write floor (distinct from Request.CredentialStore, which governs read
 // access to the host OS credential store).
