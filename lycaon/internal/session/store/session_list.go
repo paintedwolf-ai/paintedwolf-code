@@ -109,7 +109,11 @@ func sessionSummaryFilter(q SummaryQuery) (string, []any) {
 }
 
 // ListProjectSummaries returns one chat page and its total.
-func (s *SQL) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
+func (s *sqlSessionViews) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
+	return listProjectSummariesSQL(ctx, s.core, q)
+}
+
+func listProjectSummariesSQL(ctx context.Context, s *sqlCore, q SummaryQuery) (SummaryPage, error) {
 	if err := ctx.Err(); err != nil {
 		return SummaryPage{}, err
 	}
@@ -151,38 +155,8 @@ LIMIT ?`
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := []api.SessionSummary{}
-	for rows.Next() {
-		var (
-			row                   api.SessionSummary
-			title, arch           sql.NullString
-			pin                   sql.NullInt64
-			createdAt, activityAt string
-			posture, status       string
-		)
-		if err := rows.Scan(&row.ID, &row.ProjectID, &row.OwnerPersonID, &title, &posture, &status,
-			&arch, &pin, &createdAt, &activityAt, &row.MessageCount); err != nil {
-			return SummaryPage{}, fmt.Errorf("scan session summary: %w", err)
-		}
-		row.Title = title.String
-		row.Posture = api.SessionPosture(posture)
-		row.Status = api.SessionStatus(status)
-		if row.CreatedAt, err = db.ParseTime(createdAt); err != nil {
-			return SummaryPage{}, err
-		}
-		if row.ActivityAt, err = db.ParseTime(activityAt); err != nil {
-			return SummaryPage{}, err
-		}
-		if row.ArchivedAt, err = db.TimePtrFromNull(arch); err != nil {
-			return SummaryPage{}, err
-		}
-		if pin.Valid {
-			rank := int(pin.Int64)
-			row.PinRank = &rank
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
+	out, err := scanProjectSummaryRows(rows)
+	if err != nil {
 		return SummaryPage{}, err
 	}
 	page := SummaryPage{Sessions: out, Total: total}
@@ -194,15 +168,92 @@ LIMIT ?`
 	return page, nil
 }
 
+func scanProjectSummaryRows(rows *sql.Rows) ([]api.SessionSummary, error) {
+	out := []api.SessionSummary{}
+	for rows.Next() {
+		var (
+			row                   api.SessionSummary
+			title, arch           sql.NullString
+			pin                   sql.NullInt64
+			createdAt, activityAt string
+			posture, status       string
+		)
+		if err := rows.Scan(&row.ID, &row.ProjectID, &row.OwnerPersonID, &title, &posture, &status,
+			&arch, &pin, &createdAt, &activityAt, &row.MessageCount); err != nil {
+			return nil, fmt.Errorf("scan session summary: %w", err)
+		}
+		row.Title = title.String
+		row.Posture = api.SessionPosture(posture)
+		row.Status = api.SessionStatus(status)
+		var err error
+		if row.CreatedAt, err = db.ParseTime(createdAt); err != nil {
+			return nil, err
+		}
+		if row.ActivityAt, err = db.ParseTime(activityAt); err != nil {
+			return nil, err
+		}
+		if row.ArchivedAt, err = db.TimePtrFromNull(arch); err != nil {
+			return nil, err
+		}
+		if pin.Valid {
+			rank := int(pin.Int64)
+			row.PinRank = &rank
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ListProjectSummaries matches SQL paging in memory.
-func (s *Memory) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
+func (s *memorySessionViews) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
+	return listProjectSummariesMemory(ctx, s.core, q)
+}
+
+func listProjectSummariesMemory(ctx context.Context, s *memoryCore, q SummaryQuery) (SummaryPage, error) {
 	if err := ctx.Err(); err != nil {
 		return SummaryPage{}, err
 	}
+	matched := filterMemoryProjectSummaries(s, q)
+	sort.SliceStable(matched, func(i, j int) bool {
+		comparison := compareSummary(matched[i], summaryCursor(matched[j], q.Sort), q.Sort)
+		if q.Order != api.SessionListOrderAsc {
+			return comparison > 0
+		}
+		return comparison < 0
+	})
+
+	total := len(matched)
+	start := 0
+	if q.After != nil {
+		for start < len(matched) {
+			comparison := compareSummary(matched[start], *q.After, q.Sort)
+			if q.Order == api.SessionListOrderAsc && comparison > 0 ||
+				q.Order != api.SessionListOrderAsc && comparison < 0 {
+				break
+			}
+			start++
+		}
+	}
+	end := start + q.effectiveLimit()
+	if end > total {
+		end = total
+	}
+	page := SummaryPage{Sessions: matched[start:end], Total: total}
+	if end < total && len(page.Sessions) > 0 {
+		cursor := summaryCursor(page.Sessions[len(page.Sessions)-1], q.Sort)
+		page.Next = &cursor
+	}
+	return page, nil
+}
+
+func filterMemoryProjectSummaries(s *memoryCore, q SummaryQuery) []api.SessionSummary {
 	projectID := strings.TrimSpace(q.ProjectID)
 	needle := strings.ToLower(strings.TrimSpace(q.TitleQuery))
-
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	matched := []api.SessionSummary{}
 	for id, sess := range s.sessions {
 		if strings.TrimSpace(sess.ProjectID) != projectID {
@@ -234,38 +285,7 @@ func (s *Memory) ListProjectSummaries(ctx context.Context, q SummaryQuery) (Summ
 			ActivityAt:    sess.ActivityAt,
 		})
 	}
-	s.mu.RUnlock()
-
-	sort.SliceStable(matched, func(i, j int) bool {
-		comparison := compareSummary(matched[i], summaryCursor(matched[j], q.Sort), q.Sort)
-		if q.Order != api.SessionListOrderAsc {
-			return comparison > 0
-		}
-		return comparison < 0
-	})
-
-	total := len(matched)
-	start := 0
-	if q.After != nil {
-		for start < len(matched) {
-			comparison := compareSummary(matched[start], *q.After, q.Sort)
-			if q.Order == api.SessionListOrderAsc && comparison > 0 ||
-				q.Order != api.SessionListOrderAsc && comparison < 0 {
-				break
-			}
-			start++
-		}
-	}
-	end := start + q.effectiveLimit()
-	if end > total {
-		end = total
-	}
-	page := SummaryPage{Sessions: matched[start:end], Total: total}
-	if end < total && len(page.Sessions) > 0 {
-		cursor := summaryCursor(page.Sessions[len(page.Sessions)-1], q.Sort)
-		page.Next = &cursor
-	}
-	return page, nil
+	return matched
 }
 
 func summaryCursor(row api.SessionSummary, sortBy api.SessionListSort) SummaryCursor {

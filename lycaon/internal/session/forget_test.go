@@ -2,15 +2,37 @@ package session
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -140,5 +162,232 @@ func TestForgetJobClearsUnclaimedWakePayloads(t *testing.T) {
 
 	if digest := m.Workers.Digests.Take(job); digest != "" {
 		t.Error("workerDigests survived ForgetJob")
+	}
+}
+
+func TestMain(m *testing.M) {
+	gittestsetup.Enable()
+	guidancetestsetup.Install()
+	anchortestsetup.Install()
+	testutil.VerifyNoLeaks(m, func() {
+		repochange.ResetWatchersForTest()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := sourcecatalog.Process().Drain(ctx); err != nil {
+			panic(fmt.Errorf("drain source catalog: %w", err))
+		}
+	})
+}
+
+func TestResolveToolProfileDelegationUsesCoordinator(t *testing.T) {
+	sess := &api.Session{Posture: api.SessionPostureOrchestrate}
+	if got := profiles.ResolveToolProfile(sess, orchestration.NewMemoryAgentRegistry(), ""); got != "coordinator" {
+		t.Fatalf("profile = %q want coordinator", got)
+	}
+}
+
+func TestResolveToolProfileWorkerAgent(t *testing.T) {
+	reg := orchestration.NewMemoryAgentRegistryForTest()
+	sess := &api.Session{Posture: api.SessionPostureOrchestrate, AgentType: "implementer"}
+	if got := profiles.ResolveToolProfile(sess, reg, ""); got != "implement" {
+		t.Fatalf("profile = %q want implement", got)
+	}
+}
+
+func TestResolveToolProfilePlanUsesCoordinator(t *testing.T) {
+	sess := &api.Session{Posture: api.SessionPostureSpec}
+	if got := profiles.ResolveToolProfile(sess, nil, ""); got != "coordinator" {
+		t.Fatalf("profile = %q want coordinator", got)
+	}
+}
+
+func TestSkillSelectorForSessionUsesAgentDefinition(t *testing.T) {
+	t.Parallel()
+	reg := orchestration.NewMemoryAgentRegistry()
+	if err := reg.Register(agentdef.Profile{
+		ID:     "curated-worker",
+		Skills: skills.Selector{Names: []string{"verify-a-change"}},
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	m := newSkillsTestManager(t)
+	m.Profiles.SetAgentRegistry(reg)
+	got := m.Profiles.SkillSelector(context.Background(), &api.Session{AgentType: "curated-worker"})
+	want := skills.Selector{Names: []string{"verify-a-change"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("skill selector = %#v, want %#v", got, want)
+	}
+}
+
+// Host turns leave pending user questions unanswered.
+func TestVisibleUserIntentMessageExcludesHostRows(t *testing.T) {
+	hostRows := []api.Message{
+		{Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindHostLoopWake},
+		{Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindHostKick, HostSignalID: "worker.task.finished"},
+		{Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindCoordinatorGuidance, HostSignalID: "PROGRESS_MISSING"},
+	}
+	for _, msg := range hostRows {
+		if promptinput.VisibleIntent(msg) {
+			t.Fatalf("%+v must not read as user intent", msg)
+		}
+	}
+	if !promptinput.VisibleIntent(api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "please add a --version flag"}) {
+		t.Fatal("real user chat must read as user intent")
+	}
+	if promptinput.VisibleIntent(api.Message{
+		Role: api.MessageRoleUser, Origin: api.MessageOriginUser,
+		Kind: api.MessageKindUserContinuation, Content: "use a different flag",
+	}) {
+		t.Fatal("an in-turn user continuation must not reset the coordinator batch")
+	}
+}
+
+func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	sess := &api.Session{ID: "sess-web-page"}
+	args := map[string]any{"url": "https://docs.example.test/guide"}
+	raised := func(deferred bool) guidance.ToolResultFacts {
+		return guidance.ToolResultFacts{}.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
+			"host":               "docs.example.test",
+			"bytes":              "612480",
+			"content_type":       "text/html; charset=utf-8",
+			"fetch_url_deferred": deferred,
+		}, &api.FeedbackSubject{Kind: "host", ID: "docs.example.test"})
+	}
+
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(false))
+	for _, want := range []string{
+		`{"status":200}`,
+		"Code: HTTP_REQUEST_WEB_PAGE",
+		"612480-byte HTML document from docs.example.test",
+		"call fetch_url with the same URL.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+	if !facts.HasCode(toolrejection.HTTPRequestWebPageCode) {
+		t.Fatalf("facts = %#v, want the web page code", facts)
+	}
+
+	deferred, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(true))
+	if !strings.Contains(deferred, "after loading it with request_tools") {
+		t.Fatalf("deferred fetch_url card omits request_tools:\n%s", deferred)
+	}
+
+	plain, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, guidance.ToolResultFacts{})
+	if strings.Contains(plain, "HTTP_REQUEST_WEB_PAGE") {
+		t.Fatalf("an exchange with no stated web page carried the card:\n%s", plain)
+	}
+}
+
+func TestTryIdleMutationSerializesWithSessionLock(t *testing.T) {
+	m := newForgetTestManager(t)
+	unlock, ok := m.Runner.Execution.TryIdleMutation("sess-1")
+	if !ok || unlock == nil {
+		t.Fatal("expected idle mutation lock")
+	}
+
+	if _, ok := m.Runner.Execution.TryIdleMutation("sess-1"); ok {
+		t.Fatal("second TryIdleMutation must fail while held")
+	}
+
+	held := make(chan struct{})
+	released := make(chan struct{})
+	go func() {
+		lock := m.Runner.Execution.Prompt.Acquire("sess-1")
+		close(held)
+		lock.Lock()
+		defer lock.Unlock()
+		close(released)
+	}()
+	select {
+	case <-held:
+	case <-t.Context().Done():
+		t.Fatal("sessionLock waiter did not start")
+	}
+	if m.Runner.Execution.Prompt.Acquire("sess-1").TryLock() {
+		t.Fatal("sessionLock must be held while idle mutation holds the lock")
+	}
+	select {
+	case <-released:
+		t.Fatal("sessionLock must block while idle mutation holds the lock")
+	default:
+	}
+	unlock()
+	select {
+	case <-released:
+	case <-t.Context().Done():
+		t.Fatal("sessionLock did not acquire after idle mutation release")
+	}
+}
+
+func TestTryIdleMutationSameMutexAsPrompt(t *testing.T) {
+	m := newForgetTestManager(t)
+	unlock, ok := m.Runner.Execution.TryIdleMutation("sess-1")
+	if !ok {
+		t.Fatal("expected lock")
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	blocked := make(chan struct{})
+	go func() {
+		defer wg.Done()
+		close(blocked)
+		lock := m.Runner.Execution.Prompt.Acquire("sess-1")
+		lock.Lock()
+		defer lock.Unlock()
+	}()
+	<-blocked
+	if m.Runner.Execution.Prompt.Acquire("sess-1").TryLock() {
+		t.Fatal("expected prompt lock to be held")
+	}
+	unlock()
+	wg.Wait()
+}
+
+func TestEffectiveLimitsAppliesLiveDerived(t *testing.T) {
+	tmp := t.TempDir()
+	bundledPolicy := filepath.Join(tmp, "policy.yaml")
+	globalPolicy := filepath.Join(tmp, "global-policy.yaml")
+	if err := os.WriteFile(bundledPolicy, []byte(`
+coordinator:
+  provider_id: fw
+  model: accounts/fireworks/models/kimi-k2p7-code
+lite:
+  provider_id: ""
+  model: ""
+agent_pool:
+  selection: first
+  models: []
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := llm.NewPolicyStoreAt(globalPolicy)
+	testutil.FailErr(t, "NewPolicyStoreAt", err)
+
+	configtest.Overlay(t, map[config.Rel]string{
+		config.SessionLimits: "max_iterations: 10\nmax_tool_spill_bytes: 1024\n",
+	})
+	globalLimits := filepath.Join(tmp, "global-limits.yaml")
+	limStore, err := settings.NewLimitsStoreAt(globalLimits)
+	testutil.FailErr(t, "NewLimitsStoreAt", err)
+
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
+
+	sess := &api.Session{WorkspacePath: tmp}
+	got := mgr.Limits.Effective(t.Context(), sess)
+	if got.MaxToolResultBytes != 524288 || got.MaxCoordinatorLoopCycles != 256 {
+		t.Fatalf("kimi derived limits = bytes %d cycles %d", got.MaxToolResultBytes, got.MaxCoordinatorLoopCycles)
+	}
+
+	testutil.FailErr(t, "PutGlobal overlay", limStore.PutGlobal(settings.SessionLimits{MaxToolResultBytes: 99999}))
+	got = mgr.Limits.Effective(t.Context(), sess)
+	if got.MaxToolResultBytes != 99999 {
+		t.Fatalf("overlay MaxToolResultBytes = %d want 99999", got.MaxToolResultBytes)
+	}
+	if got.MaxCoordinatorLoopCycles != 256 {
+		t.Fatalf("cycles = %d want derived 64", got.MaxCoordinatorLoopCycles)
 	}
 }
