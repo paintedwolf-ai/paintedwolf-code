@@ -166,6 +166,9 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if err := m.DisposeRuntime(ctx, id); err != nil {
 		return fmt.Errorf("dispose session runtime: %w", err)
 	}
+	if m.queue != nil {
+		m.queue.Clear(id)
+	}
 	checkpointStore, checkpointErr := m.Captures.ForSession(ctx, id)
 	if errors.Is(checkpointErr, checkpointcontrol.ErrCheckpointRootUnset) {
 		checkpointErr = nil
@@ -201,18 +204,10 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 }
 
 func (m *Service) DisposeRuntime(ctx context.Context, id string) error {
-	if m == nil {
+	if m == nil || m.resources == nil {
 		return nil
 	}
-	if m.resources != nil {
-		if err := m.resources.Dispose(ctx, resourcelifecycle.SessionScope(id)); err != nil {
-			return err
-		}
-	}
-	if m.queue != nil {
-		m.queue.Clear(id)
-	}
-	return nil
+	return m.resources.Dispose(ctx, resourcelifecycle.SessionScope(id))
 }
 
 func (m *Service) ReleaseRuntime(ctx context.Context, id string) error {
