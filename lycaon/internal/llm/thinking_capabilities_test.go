@@ -136,6 +136,7 @@ func TestThinkingEvidenceControlsEveryAdapterWire(t *testing.T) {
 		"gemini": providerprofile.Gemini(), "openrouter": providerprofile.Openrouter(),
 		"lmstudio": providerprofile.Lmstudio(), "omlx": providerprofile.Omlx(),
 		"litellm-proxy": providerprofile.Litellm(), "cloudflare-workers-ai": providerprofile.CloudflareWorkersAI(),
+		"mistral": providerprofile.Mistral(),
 	}
 	for _, state := range []string{"unsupported", "unknown"} {
 		for name, profile := range profiles {

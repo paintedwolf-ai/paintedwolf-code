@@ -634,5 +634,156 @@
         }
       }
     }
+  },
+  "mistral": {
+    "id": "mistral",
+    "name": "Mistral",
+    "models": {
+      "mistral-large-latest": {
+        "id": "mistral-large-latest",
+        "name": "Mistral Large",
+        "family": "mistral-large",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2024-11-18",
+        "last_updated": "2025-05-01",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "cost": {
+          "input": 2,
+          "output": 6
+        }
+      },
+      "magistral-medium-latest": {
+        "id": "magistral-medium-latest",
+        "name": "Magistral Medium",
+        "family": "magistral",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-06-10",
+        "last_updated": "2025-06-10",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "cost": {
+          "input": 2,
+          "output": 5
+        }
+      },
+      "pixtral-large-latest": {
+        "id": "pixtral-large-latest",
+        "name": "Pixtral Large",
+        "family": "pixtral",
+        "attachment": true,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2024-11-18",
+        "last_updated": "2025-05-01",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "cost": {
+          "input": 2,
+          "output": 6
+        }
+      },
+      "codestral-latest": {
+        "id": "codestral-latest",
+        "name": "Codestral",
+        "family": "codestral",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-01-13",
+        "last_updated": "2025-05-01",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "limit": {
+          "context": 262144,
+          "output": 32768
+        },
+        "cost": {
+          "input": 0.3,
+          "output": 0.9
+        }
+      },
+      "mistral-embed": {
+        "id": "mistral-embed",
+        "name": "Mistral Embed",
+        "family": "mistral-embed",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": false,
+        "temperature": false,
+        "release_date": "2023-12-11",
+        "last_updated": "2023-12-11",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "limit": {
+          "context": 8192,
+          "output": 0
+        },
+        "cost": {
+          "input": 0.1,
+          "output": 0
+        }
+      }
+    }
   }
 }

@@ -1,7 +1,10 @@
 package providerwire
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -100,6 +103,69 @@ func (p ToolCallPairs) Add(call api.ToolCall, roundTrip bool) string {
 	}
 	p[call.ID] = id
 	return id
+}
+
+const alphanumeric62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// IsAlphanumeric9ToolCallID reports whether id is strictly 9 ASCII alphanumeric characters.
+func IsAlphanumeric9ToolCallID(id string) bool {
+	if len(id) != 9 {
+		return false
+	}
+	for i := 0; i < 9; i++ {
+		c := id[i]
+		if (c < '0' || c > '9') && (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
+			return false
+		}
+	}
+	return true
+}
+
+// NormalizeAlphanumeric9ToolCallID returns id when it is already 9 ASCII alphanumeric
+// characters, or a deterministic 9-character base62 digest otherwise.
+func NormalizeAlphanumeric9ToolCallID(id string) string {
+	trimmed := strings.TrimSpace(id)
+	if IsAlphanumeric9ToolCallID(trimmed) {
+		return trimmed
+	}
+	return hashAlphanumeric9(trimmed)
+}
+
+func hashAlphanumeric9(seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	var out [9]byte
+	for i := range out {
+		val := binary.BigEndian.Uint16(sum[i*2 : i*2+2])
+		out[i] = alphanumeric62[int(val)%len(alphanumeric62)]
+	}
+	return string(out[:])
+}
+
+// AddAlphanumeric9 binds a tool call to a 9-character ASCII alphanumeric wire identity.
+func (p ToolCallPairs) AddAlphanumeric9(call api.ToolCall) string {
+	candidate := strings.TrimSpace(call.WireID)
+	if candidate == "" {
+		candidate = strings.TrimSpace(call.ID)
+	}
+	wireID := NormalizeAlphanumeric9ToolCallID(candidate)
+	for suffix := 1; p.hasWireID(wireID, call.ID); suffix++ {
+		wireID = hashAlphanumeric9(fmt.Sprintf("%s#%d", candidate, suffix))
+	}
+	key := call.ID
+	if key == "" {
+		key = fmt.Sprintf("_anon_%d", len(p))
+	}
+	p[key] = wireID
+	return wireID
+}
+
+func (p ToolCallPairs) hasWireID(wireID, hostID string) bool {
+	for k, v := range p {
+		if v == wireID && (hostID == "" || k != hostID) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p ToolCallPairs) Take(result *api.ToolResult) (string, bool) {

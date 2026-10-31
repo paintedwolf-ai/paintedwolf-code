@@ -30,6 +30,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 		{"gemini native discovery", "gemini", "*openaicompat.Provider", providerprofile.DiscoveryGemini, modelinfo.ThinkStyleEffortLevels},
 		{"openrouter profile discovery", "openrouter", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleReasoningObject},
 		{"cloudflare workers ai catalog", "cloudflare-workers-ai", "*openaicompat.CloudflareProvider", providerprofile.DiscoveryCloudflareWorkersAI, modelinfo.ThinkStyleEffortLevels},
+		{"mistral profile discovery", "mistral", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"lmstudio native discovery", "lmstudio", "*openaicompat.Provider", providerprofile.DiscoveryLMStudio, modelinfo.ThinkStyleEffortLevels},
 		{"omlx native discovery", "omlx", "*openaicompat.Provider", providerprofile.DiscoveryOMLX, modelinfo.ThinkStyleEffortLevels},
 		{"litellm proxy native discovery", "litellm-proxy", "*openaicompat.Provider", providerprofile.DiscoveryLiteLLM, modelinfo.ThinkStyleEffortLevels},

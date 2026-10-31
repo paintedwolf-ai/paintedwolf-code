@@ -16,6 +16,7 @@ var feedProviderKeyByKind = map[string]string{
 	"vertex-express":        "google",
 	"azure":                 "azure",
 	"cloudflare-workers-ai": "cloudflare-workers-ai",
+	"mistral":               "mistral",
 }
 
 // Shared feed keys use an explicit canonical kind to avoid map-order choices.

@@ -47,6 +47,8 @@ const (
 	DiscoveryShapeCatalogArray ResponseShape = "catalog_array"
 	// DiscoveryShapeOpenRouter parses rich model records.
 	DiscoveryShapeOpenRouter ResponseShape = "openrouter"
+	// DiscoveryShapeMistral parses Mistral /v1/models records.
+	DiscoveryShapeMistral ResponseShape = "mistral"
 )
 
 // PricingScale converts discovered price fields to catalog per-1k USD.
@@ -61,6 +63,7 @@ const (
 
 type discoveryCatalogRecord struct {
 	Thinking            *openRouterThinking
+	Mistral             *mistralCapabilities
 	ID                  string
 	WireType            string
 	ContextLength       int
@@ -74,6 +77,13 @@ type discoveryCatalogRecord struct {
 	OutputModalities    []string
 	InputModalities     []string
 	SupportedParameters []string
+}
+
+type mistralCapabilities struct {
+	CompletionChat  *bool `json:"completion_chat"`
+	FunctionCalling *bool `json:"function_calling"`
+	Vision          *bool `json:"vision"`
+	Classification  *bool `json:"classification"`
 }
 
 func OpenAIProfile() Profile {
@@ -118,6 +128,13 @@ func OpenRouterProfile() Profile {
 		ResponseShape:         DiscoveryShapeOpenRouter,
 		RequireOutputModality: "text",
 		PricingScale:          DiscoveryPricingPerToken,
+	}
+}
+
+func MistralProfile() Profile {
+	return Profile{
+		ListPath:      "/models",
+		ResponseShape: DiscoveryShapeMistral,
 	}
 }
 
@@ -177,7 +194,9 @@ func FromProfile(
 		}
 		seen[id] = struct{}{}
 		entry := modelinfo.Entry{ID: id, Untyped: ProfileUntyped(profile)}
-		if !entry.Untyped {
+		if profile.ResponseShape == DiscoveryShapeMistral {
+			applyMistralCapabilities(&entry, rec.Mistral)
+		} else if !entry.Untyped {
 			entry.Capabilities.Chat = modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-discovery")
 		}
 		entry.Callable = discoveryCallability(rec, profile)
@@ -215,6 +234,8 @@ func decodeDiscoveryCatalogRecords(r io.Reader, shape ResponseShape) ([]discover
 		return decodeDiscoveryCatalogArray(r)
 	case DiscoveryShapeOpenRouter:
 		return decodeDiscoveryOpenRouterRecords(r)
+	case DiscoveryShapeMistral:
+		return decodeDiscoveryMistralRecords(r)
 	default:
 		return decodeDiscoveryOpenAIDataRecords(r)
 	}
@@ -322,7 +343,57 @@ func decodeDiscoveryOpenRouterRecords(r io.Reader) ([]discoveryCatalogRecord, er
 	return out, nil
 }
 
+func decodeDiscoveryMistralRecords(r io.Reader) ([]discoveryCatalogRecord, error) {
+	var listed struct {
+		Data []struct {
+			ID               string               `json:"id"`
+			MaxContextLength int                  `json:"max_context_length"`
+			ContextLength    int                  `json:"context_length"`
+			Capabilities     *mistralCapabilities `json:"capabilities"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(r).Decode(&listed); err != nil {
+		return nil, err
+	}
+	out := make([]discoveryCatalogRecord, 0, len(listed.Data))
+	for _, item := range listed.Data {
+		ctxLen := item.MaxContextLength
+		if ctxLen <= 0 {
+			ctxLen = item.ContextLength
+		}
+		out = append(out, discoveryCatalogRecord{
+			ID:            strings.TrimSpace(item.ID),
+			ContextLength: ctxLen,
+			Mistral:       item.Capabilities,
+		})
+	}
+	return out, nil
+}
+
+func applyMistralCapabilities(entry *modelinfo.Entry, caps *mistralCapabilities) {
+	if caps == nil {
+		entry.Untyped = true
+		return
+	}
+	if state := modelinfo.OptionalState(caps.CompletionChat); state != modelinfo.CapabilityUnknown {
+		entry.Capabilities.Chat = modelinfo.Evidence(state, "mistral")
+	} else {
+		entry.Untyped = true
+	}
+	if state := modelinfo.OptionalState(caps.FunctionCalling); state != modelinfo.CapabilityUnknown {
+		entry.Capabilities.Tools = modelinfo.Evidence(state, "mistral")
+	}
+	if state := modelinfo.OptionalState(caps.Vision); state != modelinfo.CapabilityUnknown {
+		entry.Capabilities.Vision = modelinfo.Evidence(state, "mistral")
+	}
+}
+
 func discoveryRecordAllowed(rec discoveryCatalogRecord, profile Profile) bool {
+	if profile.ResponseShape == DiscoveryShapeMistral && rec.Mistral != nil {
+		if rec.Mistral.CompletionChat != nil && !*rec.Mistral.CompletionChat {
+			return false
+		}
+	}
 	if len(profile.IncludeWireTypes) > 0 && !discoveryWireTypeAllowed(rec.WireType, profile.IncludeWireTypes) {
 		return false
 	}

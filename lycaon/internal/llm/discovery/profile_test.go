@@ -1,10 +1,122 @@
 package discovery
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 )
+
+func TestMistralDiscoveryParsesMetadataAndFiltersNonChat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer mistral-test-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"object": "list",
+			"data": [
+				{
+					"id": "mistral-large-latest",
+					"max_context_length": 131072,
+					"capabilities": {
+						"completion_chat": true,
+						"function_calling": true,
+						"vision": false
+					}
+				},
+				{
+					"id": "pixtral-large-latest",
+					"max_context_length": 131072,
+					"capabilities": {
+						"completion_chat": true,
+						"function_calling": true,
+						"vision": true
+					}
+				},
+				{
+					"id": "mistral-partial-caps",
+					"max_context_length": 32768,
+					"capabilities": {
+						"completion_chat": true
+					}
+				},
+				{
+					"id": "mistral-untyped-row",
+					"max_context_length": 16384
+				},
+				{
+					"id": "mistral-embed",
+					"max_context_length": 8192,
+					"capabilities": {
+						"completion_chat": false,
+						"function_calling": false,
+						"vision": false
+					}
+				}
+			]
+		}`))
+	}))
+	defer srv.Close()
+
+	entries, err := FromProfile(context.Background(), srv.URL+"/v1", "mistral-test-key", srv.Client(), MistralProfile())
+	if err != nil {
+		t.Fatalf("FromProfile(MistralProfile): %v", err)
+	}
+	byID := make(map[string]modelinfo.Entry, len(entries))
+	for _, entry := range entries {
+		byID[entry.ID] = entry
+	}
+	if _, exists := byID["mistral-embed"]; exists {
+		t.Fatal("mistral-embed with completion_chat=false must be excluded")
+	}
+
+	large, ok := byID["mistral-large-latest"]
+	if !ok {
+		t.Fatal("missing mistral-large-latest")
+	}
+	if large.Untyped || large.ContextLength != 131072 {
+		t.Fatalf("mistral-large-latest = %+v", large)
+	}
+	largeCaps := large.EffectiveCapabilities()
+	if largeCaps.Chat.State != modelinfo.CapabilitySupported ||
+		largeCaps.Tools.State != modelinfo.CapabilitySupported ||
+		largeCaps.Vision.State != modelinfo.CapabilityUnsupported ||
+		largeCaps.Reasoning.State != modelinfo.CapabilityUnknown {
+		t.Fatalf("mistral-large-latest capabilities = %+v", largeCaps)
+	}
+
+	pixtral, ok := byID["pixtral-large-latest"]
+	if !ok || pixtral.EffectiveCapabilities().Vision.State != modelinfo.CapabilitySupported {
+		t.Fatalf("pixtral-large-latest capabilities = %+v", pixtral.EffectiveCapabilities())
+	}
+
+	partial, ok := byID["mistral-partial-caps"]
+	if !ok {
+		t.Fatal("missing mistral-partial-caps")
+	}
+	partialCaps := partial.EffectiveCapabilities()
+	if partialCaps.Chat.State != modelinfo.CapabilitySupported ||
+		partialCaps.Tools.State != modelinfo.CapabilityUnknown ||
+		partialCaps.Vision.State != modelinfo.CapabilityUnknown {
+		t.Fatalf("omitted capabilities must stay unknown: %+v", partialCaps)
+	}
+
+	untyped, ok := byID["mistral-untyped-row"]
+	if !ok {
+		t.Fatal("missing mistral-untyped-row")
+	}
+	if !untyped.Untyped || untyped.EffectiveCapabilities().Chat.State != modelinfo.CapabilityUnknown {
+		t.Fatalf("row without capabilities block must remain untyped/unknown: %+v", untyped)
+	}
+}
 
 func TestOpenRouterRequiresPositiveTextOutputMetadata(t *testing.T) {
 	profile := OpenRouterProfile()

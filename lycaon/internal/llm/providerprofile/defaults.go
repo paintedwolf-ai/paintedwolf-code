@@ -94,6 +94,13 @@ func CloudflareWorkersAI() Profile {
 	return profile
 }
 
+func Mistral() Profile {
+	profile := OpenAI()
+	profile.DiscoveryProfile = discovery.MistralProfile()
+	profile.ToolCallID = ToolCallIDAlphanumeric9
+	return profile
+}
+
 func Openrouter() Profile {
 	profile := OpenAI()
 	profile.DiscoveryProfile = discovery.OpenRouterProfile()

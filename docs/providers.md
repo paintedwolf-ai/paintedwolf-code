@@ -34,6 +34,8 @@ The Gemini chat adapter preserves signed tool-call groups exactly. Unsigned impo
 
 Together, local inference, and Gemini adapters project one leading system message: the initial system blocks join in order and later host events keep their position as user turns. This satisfies chat templates that reject a system message outside the first slot without moving new host state into the past. OpenAI's native adapter keeps its supported system-message timeline.
 
+Mistral's `/v1/models` discovery reads `max_context_length` and the structured `capabilities` block (`completion_chat`, `function_calling`, `vision`), filtering rows that declare `completion_chat: false` while leaving omitted capability fields unknown. On the chat-completions wire, the Mistral profile (`ToolCallIDAlphanumeric9`) preserves 9-character ASCII alphanumeric wire tool-call IDs and deterministically normalizes non-conforming host or imported tool-call IDs to 9 alphanumeric characters across both `tool_calls[].id` and paired `tool_call_id` messages.
+
 ## Catalog authority
 
 Catalog entries declare stable provider kind, model id, display metadata, context/output limits, feature flags, driver profile, utility eligibility, and optional pricing/feed keys.
