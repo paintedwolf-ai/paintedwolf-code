@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -25,9 +28,102 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
+var (
+	templateRoot    string
+	emptyTemplate   = repoTemplate{name: "empty"}
+	defaultTemplate = repoTemplate{name: "default"}
+)
+
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	os.Exit(m.Run())
+	root, err := os.MkdirTemp("", "gitcmd-templates-*")
+	if err != nil {
+		panic(err)
+	}
+	templateRoot, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		panic(err)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(templateRoot)
+	os.Exit(code)
+}
+
+type repoTemplate struct {
+	name string
+	once sync.Once
+	dir  string
+	err  error
+}
+
+func (rt *repoTemplate) materialize(t *testing.T, build func(*harness)) *harness {
+	t.Helper()
+	rt.once.Do(func() {
+		bin, err := gitengine.BinaryPath()
+		if err != nil {
+			rt.err = err
+			return
+		}
+		dir := filepath.Join(templateRoot, rt.name)
+		tmpl := filepath.Join(templateRoot, rt.name+"-git-template")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			rt.err = err
+			return
+		}
+		if err := os.MkdirAll(tmpl, 0o755); err != nil {
+			rt.err = err
+			return
+		}
+		seed := &harness{t: t, root: dir, bin: bin, template: tmpl}
+		build(seed)
+		rt.dir = dir
+	})
+	testutil.FailErr(t, "template "+rt.name, rt.err)
+	h := newUninitializedHarness(t)
+	cloneTree(t, rt.dir, h.root)
+	return h
+}
+
+func cloneTree(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		switch mode := info.Mode(); {
+		case mode.IsDir():
+			return os.MkdirAll(target, mode.Perm())
+		case mode&os.ModeSymlink != 0:
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		default:
+			if cloned, err := fileclone.Clone(path, target); err == nil && cloned {
+				if runtime.GOOS != "darwin" && mode.Perm() != 0o600 {
+					return os.Chmod(target, mode.Perm())
+				}
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, data, mode.Perm())
+		}
+	})
+	testutil.FailErr(t, "clone fixture tree", err)
 }
 
 // fixtureEnv pins identities and dates so every repository is reproducible.
@@ -54,29 +150,32 @@ type harness struct {
 	nested commandprogram.NestedCommand
 }
 
-func newHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	h.write("a.txt", "one\ntwo\n")
-	h.write("sub/b.txt", "bee\n")
-	h.git("add", ".")
-	h.git("commit", "-q", "-m", "first commit")
-	h.git("tag", "v1")
-	h.write("a.txt", "one\ntwo\nthree\n")
-	h.git("commit", "-q", "-am", "second commit")
-	h.git("branch", "topic")
-	h.write("a.txt", "one\nTWO\nthree\n")
-	h.write("staged.txt", "s\n")
-	h.git("add", "staged.txt")
-	h.write("new.txt", "untracked\n")
-	return h
-}
-
-func newEmptyHarness(t *testing.T) *harness {
-	h := newUninitializedHarness(t)
+func seedEmptyRepo(h *harness) {
 	h.git("init", "-q", "-b", "main")
 	h.git("config", "user.name", "Ann Author")
 	h.git("config", "user.email", "ann@example.test")
-	return h
+}
+
+func newHarness(t *testing.T) *harness {
+	return defaultTemplate.materialize(t, func(h *harness) {
+		seedEmptyRepo(h)
+		h.write("a.txt", "one\ntwo\n")
+		h.write("sub/b.txt", "bee\n")
+		h.git("add", ".")
+		h.git("commit", "-q", "-m", "first commit")
+		h.git("tag", "v1")
+		h.write("a.txt", "one\ntwo\nthree\n")
+		h.git("commit", "-q", "-am", "second commit")
+		h.git("branch", "topic")
+		h.write("a.txt", "one\nTWO\nthree\n")
+		h.write("staged.txt", "s\n")
+		h.git("add", "staged.txt")
+		h.write("new.txt", "untracked\n")
+	})
+}
+
+func newEmptyHarness(t *testing.T) *harness {
+	return emptyTemplate.materialize(t, seedEmptyRepo)
 }
 
 func newUninitializedHarness(t *testing.T) *harness {

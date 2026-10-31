@@ -243,6 +243,27 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 	if p.request.Kind == "stage" || (p.status == "" && len(p.addPaths()) == 0) {
 		return nil, nil
 	}
+	var staged []string
+	stagedArgs := []string{"diff", "--name-only", "--no-renames", "-z", "HEAD", "--"}
+	if p.result.Before.Head == "" {
+		stagedArgs = []string{"ls-files", "--cached", "-z", "--"}
+	}
+	stagedArgs = append(stagedArgs, p.addPaths()...)
+	staged, err := gitPaths(ctx, repo.Root, stagedArgs...)
+	if err != nil {
+		return nil, err
+	}
+	recordOperationVisits(ctx, len(staged))
+	indexPath := filepath.Join(repo.GitDir, "index")
+	if err := p.capture(indexPath); err != nil {
+		return nil, err
+	}
+	if p.inputs[indexPath].SHA256 != p.result.Before.Index {
+		p.result.Before.Index = p.inputs[indexPath].SHA256
+		if err := p.copyIndex(ctx, repo, scratch); err != nil {
+			return nil, err
+		}
+	}
 	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
 	if paths := p.addPaths(); len(paths) > 0 {
 		dirtyArgs = append(dirtyArgs, "--")
@@ -262,17 +283,6 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 		recordOperationVisits(ctx, len(tracked))
 		dirty = append(dirty, tracked...)
 	}
-	var staged []string
-	stagedArgs := []string{"diff", "--name-only", "--no-renames", "-z", "HEAD", "--"}
-	if p.result.Before.Head == "" {
-		stagedArgs = []string{"ls-files", "--cached", "-z", "--"}
-	}
-	stagedArgs = append(stagedArgs, p.addPaths()...)
-	staged, err = gitPaths(ctx, repo.Root, stagedArgs...)
-	if err != nil {
-		return nil, err
-	}
-	recordOperationVisits(ctx, len(staged))
 	dirty = uniquePaths(append(dirty, staged...))
 	for _, path := range dirty {
 		if err := assertOperationParents(repo.Root, path); err != nil {

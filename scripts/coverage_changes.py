@@ -259,7 +259,7 @@ def run_go(scope):
         return findings, bool(findings), measured
     lines = change_report.changed_lines(ROOT, scope.base, changed)
     # Packages are measured by their own tests first; one that falls short is
-    # measured again with the short test binaries that transitively reach it.
+    # measured again with the external short test binaries that reach it.
     own = {package for package in touched if packages[package]["tested"]}
     blocks = measure_go("changes-go", set(touched) & go_linked(packages, own), own, module) if own else {}
     if blocks is None:
@@ -267,8 +267,8 @@ def run_go(scope):
     units = go_units(touched, blocks, lines, module)
     short = {p for p, unit in units.items() if unit.uncovered > floor["grace"] and unit.percent() < floor["percent"]}
     short |= set(touched) - own
-    if short and importers(short):
-        wider_tested = (own & short) | importers(short)
+    wider_tested = importers(short) - own if short else set()
+    if wider_tested:
         wider = measure_go("changes-go-importers", short & go_linked(packages, wider_tested), wider_tested, module)
         if wider is None:
             return [Finding("error", "go", "tests failed, so changed coverage was not measured; fix the tests above")], True, measured

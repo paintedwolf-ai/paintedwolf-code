@@ -13,22 +13,25 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
+var bisectTemplate = repoTemplate{name: "bisect"}
+
 // newBisectHarness builds twelve commits where commit 7 first records a bad
 // state, with check.sh as the untracked check Git itself can run.
 func newBisectHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	for i := 1; i <= 12; i++ {
-		state := "good\n"
-		if i >= 7 {
-			state = "bad\n"
+	return bisectTemplate.materialize(t, func(h *harness) {
+		seedEmptyRepo(h)
+		for i := 1; i <= 12; i++ {
+			state := "good\n"
+			if i >= 7 {
+				state = "bad\n"
+			}
+			h.write("state", state)
+			h.write("n", strings.Repeat("x", i)+"\n")
+			h.git("add", "--", "state", "n")
+			h.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
 		}
-		h.write("state", state)
-		h.write("n", strings.Repeat("x", i)+"\n")
-		h.git("add", "--", "state", "n")
-		h.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
-	}
-	h.write("check.sh", "grep -q good state\n")
-	return h
+		h.write("check.sh", "grep -q good state\n")
+	})
 }
 
 // checkNested stands in for program dispatch: it answers each check from the

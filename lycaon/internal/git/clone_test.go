@@ -12,6 +12,7 @@ import (
 )
 
 func TestGitManagerCloneCopiesRepo(t *testing.T) {
+	t.Parallel()
 	mgr := NewManager()
 
 	origin := filepath.Join(t.TempDir(), "origin")

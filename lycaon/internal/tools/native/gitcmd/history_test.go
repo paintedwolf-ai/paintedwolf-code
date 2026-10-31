@@ -25,36 +25,39 @@ func (h *harness) gitAs(name, date string, args ...string) {
 	}
 }
 
+var historyTemplate = repoTemplate{name: "history"}
+
 // newHistoryHarness builds five commits by two authors with annotated and
 // lightweight tags, three branches and a hard reset in the reflog.
 func newHistoryHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	steps := []struct{ author, date, file, content, message string }{
-		{"Ann", "2026-01-01T00:00:00Z", "src/main.go", "package main\n\nfunc legacyEntry() {}\n", "add entry"},
-		{"Ann", "2026-01-02T00:00:00Z", "docs/guide.md", "legacyEntry is documented here\n", "document entry"},
-		{"Bob", "2026-01-03T00:00:00Z", "src/main.go", "package main\n\nfunc entry() {}\n", "rename entry"},
-		{"Bob", "2026-01-04T00:00:00Z", "src/util.go", "package main\n\nfunc helper() {}\n", "add helper"},
-		{"Ann", "2026-01-05T00:00:00Z", "bin.dat", "bin\x00entry\n", "add data"},
-	}
-	for i, step := range steps {
-		h.write(step.file, step.content)
-		h.gitAs(step.author, step.date, "add", "--", step.file)
-		h.gitAs(step.author, step.date, "commit", "-q", "-m", step.message)
-		switch i {
-		case 0:
-			h.gitAs("Ann", step.date, "tag", "-a", "-m", "first release", "v1.0")
-		case 2:
-			h.gitAs("Bob", step.date, "branch", "older")
-		case 3:
-			h.gitAs("Bob", step.date, "tag", "v1.1-light")
-			h.gitAs("Bob", step.date, "branch", "newer")
+	return historyTemplate.materialize(t, func(h *harness) {
+		seedEmptyRepo(h)
+		steps := []struct{ author, date, file, content, message string }{
+			{"Ann", "2026-01-01T00:00:00Z", "src/main.go", "package main\n\nfunc legacyEntry() {}\n", "add entry"},
+			{"Ann", "2026-01-02T00:00:00Z", "docs/guide.md", "legacyEntry is documented here\n", "document entry"},
+			{"Bob", "2026-01-03T00:00:00Z", "src/main.go", "package main\n\nfunc entry() {}\n", "rename entry"},
+			{"Bob", "2026-01-04T00:00:00Z", "src/util.go", "package main\n\nfunc helper() {}\n", "add helper"},
+			{"Ann", "2026-01-05T00:00:00Z", "bin.dat", "bin\x00entry\n", "add data"},
 		}
-	}
-	h.write("scratch.txt", "discarded\n")
-	h.gitAs("Ann", "2026-01-06T00:00:00Z", "add", "--", "scratch.txt")
-	h.gitAs("Ann", "2026-01-06T00:00:00Z", "commit", "-q", "-m", "temporary")
-	h.gitAs("Ann", "2026-01-06T00:00:00Z", "reset", "-q", "--hard", "HEAD~1")
-	return h
+		for i, step := range steps {
+			h.write(step.file, step.content)
+			h.gitAs(step.author, step.date, "add", "--", step.file)
+			h.gitAs(step.author, step.date, "commit", "-q", "-m", step.message)
+			switch i {
+			case 0:
+				h.gitAs("Ann", step.date, "tag", "-a", "-m", "first release", "v1.0")
+			case 2:
+				h.gitAs("Bob", step.date, "branch", "older")
+			case 3:
+				h.gitAs("Bob", step.date, "tag", "v1.1-light")
+				h.gitAs("Bob", step.date, "branch", "newer")
+			}
+		}
+		h.write("scratch.txt", "discarded\n")
+		h.gitAs("Ann", "2026-01-06T00:00:00Z", "add", "--", "scratch.txt")
+		h.gitAs("Ann", "2026-01-06T00:00:00Z", "commit", "-q", "-m", "temporary")
+		h.gitAs("Ann", "2026-01-06T00:00:00Z", "reset", "-q", "--hard", "HEAD~1")
+	})
 }
 
 func TestHistoryQueriesMatchBundledGit(t *testing.T) {

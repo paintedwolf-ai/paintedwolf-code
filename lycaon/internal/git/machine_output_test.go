@@ -13,6 +13,7 @@ import (
 )
 
 func TestMachineOutputPreservesUnusualPathsAndMixedStatus(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 	ctx := context.Background()
@@ -49,6 +50,7 @@ func TestMachineOutputPreservesUnusualPathsAndMixedStatus(t *testing.T) {
 }
 
 func TestRepositoryMutationLeaseSpansLinkedWorktrees(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	base, err := mgr.Branch(t.Context(), dir)
 	testutil.FailErr(t, "read base branch", err)
