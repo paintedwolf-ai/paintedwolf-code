@@ -83,7 +83,6 @@ func (l *modelTurn) retryProseFinishAfterBookkeeping(
 	req modelcall.CompletionRequest,
 	onProgress func(*modelcall.Completion),
 	llmCallID, providerID, model string,
-	sourceRequest modelcall.SourceRequest,
 ) (*modelcall.Completion, []string, bool) {
 	retryReq := req
 	retryReq.ToolUse = modelcall.ToolUseForbidden
@@ -104,7 +103,6 @@ func (l *modelTurn) retryProseFinishAfterBookkeeping(
 	}
 	completion := collected.completion
 	completion.ToolCalls = nil
-	completion.SourceContext = sourceRequest.ForCompletion(completion)
 	if err := l.recordUsage(ctx, sess, retryCallID, collected.providerID, collected.model, retryReq, completion); err != nil {
 		slog.WarnContext(ctx, "record llm call usage", "call_id", retryCallID, "error", err)
 	}
