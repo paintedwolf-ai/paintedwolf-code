@@ -85,6 +85,11 @@ Contained: hitl.Contained{HostExecution: true},
 	if approvals.executionCapabilityCovers(foreign) {
 		t.Fatal("permission changed capability")
 	}
+	foreign = action
+	foreign.Execution.Contained = hitl.Contained{CredentialStore: true}
+	if approvals.executionCapabilityCovers(foreign) {
+		t.Fatal("permission changed capability to credential_store")
+	}
 	approvals.grants.revoke(task.Grant.ID)
 	if approvals.executionCapabilityCovers(action) {
 		t.Fatal("revoked permission covers action")

@@ -21,6 +21,9 @@ func ElevatedEffectsForAction(action ProposedAction) []api.ElevatedAccessEffect 
 	if action.Execution.Contained.ProcessControl || action.Execution.ProcessAccess == "signal" {
 		effects = append(effects, api.ElevatedAccessEffectProcessControl)
 	}
+	if action.Execution.Contained.CredentialStore {
+		effects = append(effects, api.ElevatedAccessEffectCredentialStore)
+	}
 	if action.Execution.Contained.SocketCount > 0 || len(action.Sockets.SocketGrants) > 0 {
 		effects = append(effects, api.ElevatedAccessEffectLocalService)
 	}
@@ -41,6 +44,8 @@ func ElevatedGrantEffects(grant ApprovalGrant) []api.ElevatedAccessEffect {
 			effects = append(effects, api.ElevatedAccessEffectHostExecution)
 		case "process_control", "process_signal":
 			effects = append(effects, api.ElevatedAccessEffectProcessControl)
+		case "credential_store":
+			effects = append(effects, api.ElevatedAccessEffectCredentialStore)
 		}
 	}
 	slices.Sort(effects)
@@ -62,6 +67,8 @@ func elevatedQuietEffects(segment string) []api.ElevatedAccessEffect {
 		effect = api.ElevatedAccessEffectHostExecution
 	case subject == "process_control" || subject == "native_process:signal":
 		effect = api.ElevatedAccessEffectProcessControl
+	case subject == "credential_store":
+		effect = api.ElevatedAccessEffectCredentialStore
 	case strings.HasPrefix(subject, "socket:"):
 		effect = api.ElevatedAccessEffectLocalService
 	default:

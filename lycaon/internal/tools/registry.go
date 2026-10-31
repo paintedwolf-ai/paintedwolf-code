@@ -312,6 +312,7 @@ type InvocationExecution struct {
 	VerificationCheck bool
 	ProcessReview     ProcessReviewer
 	ProcessControl    bool
+	CredentialStore   bool
 	HostExecution     bool
 	executionPermit   *executionPermit
 }
