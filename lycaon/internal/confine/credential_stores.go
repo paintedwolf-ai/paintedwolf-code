@@ -8,8 +8,8 @@ import (
 )
 
 // keyMaterialPathsSource supplies the catalogued key-material floor, installed
-// fail-closed at boot from the shipped pack. It and the credential stores are
-// read together at every refusal, so both are pack data.
+// fail-closed at boot from the shipped pack. It and the CLI credential-file
+// stores are read together at every refusal, so both are pack data.
 var keyMaterialPathsSource atomic.Pointer[func() []string]
 
 // SetKeyMaterialPathsSource installs the pack-derived key-material floor.
@@ -55,14 +55,54 @@ func keyMaterialTreeRoots() []string {
 func KeyMaterialWritePaths() []string { return resolveEach(keyMaterialTreeRoots()) }
 
 // KeyMaterialReadDenyPaths is the command-plane read floor: the same key trees,
-// denied for reads until a declared read_path grant punches an exact exception.
-// Credential stores stay readable — CLIs authenticate from them.
+// denied for reads until a declared read_path or credential_store grant opens
+// an exception. CLI credential files outside this floor stay readable.
 func KeyMaterialReadDenyPaths() []string { return resolveEach(keyMaterialTreeRoots()) }
 
-// credentialStorePathsSource supplies catalogued credential paths.
+var osCredentialStoreRelDirs = []string{
+	filepath.Join("Library", "Keychains"),
+	filepath.Join(".local", "share", "keyrings"),
+	filepath.Join(".local", "share", "kwalletd"),
+	filepath.Join("AppData", "Roaming", "Microsoft", "Credentials"),
+	filepath.Join("AppData", "Local", "Microsoft", "Credentials"),
+	filepath.Join("AppData", "Local", "Microsoft", "Vault"),
+}
+
+// OSCredentialStoreReadDenyPaths returns the resolved OS credential store paths
+// within the catalogued key-material read floor.
+func OSCredentialStoreReadDenyPaths() []string {
+	var raw []string
+	for _, p := range catalogedKeyMaterialPaths() {
+		rel := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p), "~/"), "/")
+		if rel == "" || strings.HasPrefix(rel, "/") {
+			continue
+		}
+		cleanRel := filepath.Clean(rel)
+		for _, storeRel := range osCredentialStoreRelDirs {
+			if cleanRel == storeRel {
+				raw = append(raw, p)
+				break
+			}
+		}
+	}
+	return resolveEach(expandHomePaths(raw))
+}
+
+func isOSCredentialStoreDenyPath(p string) bool {
+	for _, storePath := range OSCredentialStoreReadDenyPaths() {
+		if PathEqual(p, storePath) {
+			return true
+		}
+	}
+	return false
+}
+
+// credentialStorePathsSource supplies catalogued CLI credential-file paths for
+// the write floor (distinct from Request.CredentialStore, which governs read
+// access to the host OS credential store).
 var credentialStorePathsSource atomic.Pointer[func() []string]
 
-// SetCredentialStorePathsSource installs the pack-derived credential store paths.
+// SetCredentialStorePathsSource installs the pack-derived CLI credential-file write floor paths.
 func SetCredentialStorePathsSource(fn func() []string) {
 	if fn == nil {
 		credentialStorePathsSource.Store(nil)
@@ -71,7 +111,7 @@ func SetCredentialStorePathsSource(fn func() []string) {
 	credentialStorePathsSource.Store(&fn)
 }
 
-// CredentialStorePaths returns resolved catalogued stores.
+// CredentialStorePaths returns resolved catalogued CLI credential-file write floor paths.
 func CredentialStorePaths() []string {
 	fn := credentialStorePathsSource.Load()
 	if fn == nil {

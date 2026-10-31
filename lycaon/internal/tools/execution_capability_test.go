@@ -38,6 +38,14 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
 		t.Fatal("accepted conflicting authority")
 	}
+	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": true, "host_execution": true}}); reject == nil {
+		t.Fatal("accepted credential_store with host_execution")
+	}
+	for _, value := range []any{false, nil, "true", 1, map[string]any{}} {
+		if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": value}}); reject == nil {
+			t.Fatalf("accepted invalid credential_store: %#v", value)
+		}
+	}
 }
 
 func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
@@ -70,6 +78,25 @@ func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	tc.Execution.executionPermit = nil
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("missing permit accepted")
+	}
+
+	credReq := confine.Request{CredentialStore: true, Roots: []string{"/tmp/project"}}
+	credTC := ToolContext{
+		Identity:  InvocationIdentity{SessionID: "task", ToolCallID: "call-cred"},
+		Execution: InvocationExecution{CredentialStore: true},
+	}
+	credTC.Execution.executionPermit = &executionPermit{
+		session:         credTC.Identity.SessionID,
+		call:            credTC.Identity.ToolCallID,
+		credentialStore: true,
+		boundary:        ExecutionBoundaryDigest(credReq),
+		arguments:       executionArgumentsDigest(credTC.Effects.CanonicalArgs),
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject != nil {
+		t.Fatalf("matching credential_store permit: %v", reject)
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject == nil {
+		t.Fatal("credential_store permit reused")
 	}
 }
 

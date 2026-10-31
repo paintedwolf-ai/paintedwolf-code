@@ -180,7 +180,7 @@ func (p ApprovalPlan) OptionContinues(option ApprovalOption) bool {
 	}
 	for _, delta := range option.Authority {
 		switch p.Subject.Kind {
-		case ApprovalSubjectAction, ApprovalSubjectDestinationSet, ApprovalSubjectSecret, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectHostExecution:
+		case ApprovalSubjectAction, ApprovalSubjectDestinationSet, ApprovalSubjectSecret, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectCredentialStore, ApprovalSubjectHostExecution:
 			if delta.Kind == AuthorityCurrentAction || delta.Kind == AuthorityGenericGrant {
 				return true
 			}

@@ -526,10 +526,13 @@ func consentDrift(f Facts) (bool, []Fact, string) {
 
 // Unobserved channels require review at every posture. Direct-IP reuse lasts only for the chat.
 func unobservedChannel(f Facts) (bool, []Fact, string) {
-	if f.ProcessAccess != "" || f.Containment.HostExecution || f.Containment.ProcessControl {
+	if f.ProcessAccess != "" || f.Containment.HostExecution || f.Containment.ProcessControl || f.Containment.CredentialStore {
 		covered := f.LeasedExact || f.ExecutionCapabilityLeased
 		if !covered {
 			subject := "process_control"
+			if f.Containment.CredentialStore && !f.Containment.ProcessControl {
+				subject = "credential_store"
+			}
 			if f.ProcessAccess != "" {
 				subject = "native_process:" + f.ProcessAccess
 			}

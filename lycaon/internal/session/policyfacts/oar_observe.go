@@ -64,6 +64,12 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 	for _, refusal := range refusals.Refusals {
 		gc.Execution.SandboxRefusals = append(gc.Execution.SandboxRefusals, refusal.Display())
 		switch refusal.Recovery {
+		case confine.RecoverCredentialStore:
+			target := refusal.Target
+			if target == "" {
+				target = refusal.Grant
+			}
+			gc.Refusals.RefusedCredentialStorePaths = appendUnique(gc.Refusals.RefusedCredentialStorePaths, target)
 		case confine.RecoverSocketPath:
 			gc.Refusals.RefusedSocketPaths = appendUnique(gc.Refusals.RefusedSocketPaths, refusal.Grant)
 		case confine.RecoverOutboundPort:
@@ -88,6 +94,10 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
+		if path.Layer == confine.FloorReadCredentialStore {
+			gc.Refusals.RefusedCredentialStorePaths = appendUnique(gc.Refusals.RefusedCredentialStorePaths, path.Path)
+			continue
+		}
 		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalReadPaths = append(gc.Refusals.RefusedTerminalReadPaths, path.Path)

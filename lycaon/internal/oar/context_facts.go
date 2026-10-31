@@ -146,18 +146,19 @@ type ExecutionFacts struct {
 }
 
 type RefusalsFacts struct {
-	RefusedWritePaths         []string
-	RefusedWriteGrants        []string
-	RefusedReadPaths          []string
-	RefusedReadGrants         []string
-	RefusedTerminalReadPaths  []string
-	RefusedTerminalWritePaths []string
-	SandboxRefusalWitness     string
-	RefusedSocketPaths        []string
-	RefusedConnectPorts       []string
-	RefusedListenPorts        []string
-	RefusedSignals            []string
-	UnsandboxedRefusals       []string
+	RefusedWritePaths           []string
+	RefusedWriteGrants          []string
+	RefusedReadPaths            []string
+	RefusedReadGrants           []string
+	RefusedCredentialStorePaths []string
+	RefusedTerminalReadPaths    []string
+	RefusedTerminalWritePaths   []string
+	SandboxRefusalWitness       string
+	RefusedSocketPaths          []string
+	RefusedConnectPorts         []string
+	RefusedListenPorts          []string
+	RefusedSignals              []string
+	UnsandboxedRefusals         []string
 }
 
 type SourceFacts struct {

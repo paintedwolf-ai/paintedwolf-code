@@ -82,7 +82,7 @@ components:
       enum: [pre_spawn, pre_dial, pre_send]
     ApprovalSubjectKind:
       type: string
-      enum: [action, action_set, socket_set, direct_ip, process_control, host_execution, local_listen, loopback_connect, destination_set, write_root_set, read_path_set, secret, package_set]
+      enum: [action, action_set, socket_set, direct_ip, process_control, credential_store, host_execution, local_listen, loopback_connect, destination_set, write_root_set, read_path_set, secret, package_set]
     ApprovalOptionKind:
       type: string
       enum: [current_action, lease, redacted, quiet, tracked]

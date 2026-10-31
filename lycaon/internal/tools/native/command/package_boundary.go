@@ -13,8 +13,21 @@ func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *con
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
 	if tctx.Files.PackageExecution != nil {
 		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
+		if confinement != nil && confinement.CredentialStore {
+			launch = launch.WithExtraEnv(credentialStoreSessionEnv()...)
+		}
 	}
 	return launch
+}
+
+func credentialStoreSessionEnv() []string {
+	var out []string
+	for _, key := range []string{"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"} {
+		if val, ok := os.LookupEnv(key); ok && val != "" {
+			out = append(out, key+"="+val)
+		}
+	}
+	return out
 }
 
 func packageExecutionCacheEnv() []string {

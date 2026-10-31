@@ -305,7 +305,7 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 // containmentFor subtracts authorized network capabilities from boundary facts.
 func containmentFor(action hitl.ProposedAction) gate.Containment {
 	c := gate.Containment{
-		ProcessControl: action.Execution.Contained.ProcessControl, HostExecution: action.Execution.Contained.HostExecution,
+		ProcessControl: action.Execution.Contained.ProcessControl, CredentialStore: action.Execution.Contained.CredentialStore, HostExecution: action.Execution.Contained.HostExecution,
 		SpawnsProcess:     isProcessSpawningTool(action.Invocation.Tool),
 		FSJailed:          action.Execution.Contained.FSJailed,
 		Egress:            action.Execution.Contained.Egress,
