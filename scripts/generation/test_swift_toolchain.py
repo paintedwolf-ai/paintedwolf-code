@@ -1,6 +1,7 @@
 """Isolated compiler publication contracts."""
 
 import io
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,6 +16,9 @@ class SwiftToolchainTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.cache = Path(self.temporary.name)
+        digest = patch.object(swift_toolchain, "EXPECTED_SHA256", hashlib.sha256(b"package").hexdigest())
+        digest.start()
+        self.addCleanup(digest.stop)
 
     def test_signature_failure_never_extracts_or_publishes(self):
         with patch.object(swift_toolchain.shutil, "disk_usage", return_value=type("Disk", (), {"free": 20 << 30})()), \

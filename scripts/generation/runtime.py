@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from artifact_paths import artifact_root, bin_dir, compiler_cache_dir
 from sources import ensure_source
 import swift_toolchain
+from provenance import record_build, verified_build, file_digest
 
 PINS = json.loads(Path(__file__).with_name("sources.json").read_text())
 
@@ -77,6 +78,7 @@ def build(args):
     if args.backend == "reference-swift":
         run([swift_toolchain.executable(bin_dir(ROOT)), "build", "--package-path", source, "--scratch-path", output,
              "--configuration", "release", "--jobs", workers, "--product", "generation-swift-reference"])
+        record_build(args.backend, output, output / "release/generation-swift-reference")
     elif args.backend == "reference-llama":
         if not (source / ".source-sha256").is_file():
             raise ValueError("run generation:prepare for this candidate first")
@@ -93,6 +95,7 @@ def build(args):
         run(["cmake", "-S", Path(__file__).parent / "llama-reference", "-B", output,
              "-DLLAMA_SOURCE_DIR=" + str(source), *options])
         run(["cmake", "--build", output, "--parallel", workers, "--target", "generation-reference"])
+        record_build(args.backend, output, output / "generation-reference")
     elif args.backend == "native":
         run(["cargo", "build", "--locked", "--release", "--manifest-path", source / "Cargo.toml"],
             env={**os.environ, "CARGO_TARGET_DIR": str(output)})
@@ -104,7 +107,7 @@ def test(args):
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
         run([swift_toolchain.executable(bin_dir(ROOT)), "test", "--package-path", source, "--scratch-path", output,
-             "--jobs", os.environ.get("PW_TEST_WORKERS", "1")])
+             "--configuration", "release", "--jobs", os.environ.get("PW_TEST_WORKERS", "1")])
         return
     if args.backend == "reference-mlx":
         run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
@@ -131,9 +134,11 @@ def bench(args):
                      "trials": args.trials, "ple": args.ple}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
+    build_receipt = None
     if args.backend in {"reference-llama", "reference-swift"}:
         _, build = paths(args.backend)
         binary = build / "generation-reference" if args.backend == "reference-llama" else build / "release/generation-swift-reference"
+        build_receipt = verified_build(args.backend, build, binary)
         command = [str(binary), str(args.model.resolve()), str(input_path)]
         environment = os.environ
     elif args.backend == "reference-mlx":
@@ -144,6 +149,10 @@ def bench(args):
     else:
         raise ValueError("the native candidate needs its backend implementation before benchmarking")
     metadata = {"backend": args.backend, "source_pins": PINS, "command": command,
+                "build_receipt": build_receipt,
+                "orchestrator_sha256": file_digest(Path(__file__)),
+                "python_sources": {name: file_digest(Path(__file__).with_name(name))
+                                   for name in ("mlx_bench.py", "mapped_ple.py", "pyproject.toml", "uv.lock")},
                 "artifact_identity": args.artifact_identity, "platform": platform.platform(),
                 "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
                 "load_average_before": os.getloadavg(),

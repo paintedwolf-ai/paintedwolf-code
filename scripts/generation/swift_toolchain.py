@@ -9,6 +9,7 @@ import tempfile
 import urllib.request
 
 VERSION = "6.3.3"
+EXPECTED_SHA256 = "ee82e57774d6650f94aa06302435d6f44a055b9411698db8ecb85d9a3bcc91d0"
 URL = "https://download.swift.org/swift-6.3.3-release/xcode/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-osx.pkg"
 
 
@@ -20,7 +21,7 @@ def prepare(cache):
     destination = executable(cache).parents[2]
     if executable(cache).is_file():
         record = json.loads((destination / "source.json").read_text())
-        if record["url"] != URL:
+        if record["url"] != URL or record["sha256"] != EXPECTED_SHA256:
             raise ValueError("isolated Swift toolchain identity mismatch")
         return executable(cache)
     cache.mkdir(parents=True, exist_ok=True)
@@ -37,6 +38,8 @@ def prepare(cache):
                     raise ValueError("Swift toolchain package exceeds its bound")
                 digest.update(block)
                 output.write(block)
+        if digest.hexdigest() != EXPECTED_SHA256:
+            raise ValueError("Swift toolchain package digest mismatch")
         subprocess.run(["pkgutil", "--check-signature", str(package)], check=True)
         expanded = temporary / "expanded"
         subprocess.run(["pkgutil", "--expand-full", str(package), str(expanded)], check=True)
