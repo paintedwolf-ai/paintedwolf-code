@@ -1,17 +1,24 @@
 import { batch } from "solid-js";
 import { produce, unwrap } from "solid-js/store";
+import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
+import { defaultEol } from "../../components/source/editor/eol.ts";
+import { isComposedBufferKind, type FileBufferKind } from "./project-files-buffer-kind.ts";
 import {
   closeTargetKeys,
   orderWithPinnedGroup,
   type CloseFamily,
 } from "../tabs/files-tab-strip.ts";
 import {
+  diffsBufferKey,
   fileBufferKey,
   fileDisplayName,
   neighborKeyAfterClose,
   retargetPathUnderPath,
+  walkPageBufferKey,
   type FileBufferKey,
 } from "../components/project-files-model.ts";
+import type { WalkGroupStep } from "../walk/walk-model.ts";
+import { diffsAddressKey, type DiffsAddress } from "../review/diffs-address.ts";
 import {
   flushFilesDraftSyncFor,
   cancelFilesDraftSyncFor,
@@ -24,26 +31,172 @@ import {
   flushEditorDocumentDraft,
   forgetEditorDocument,
   preserveEditorDocumentDraft,
+  retainEditorDocument,
   editorReplica,
 } from "./editor-document.ts";
 import {
+  type AimOrigin,
+  type BufferOpenIntent,
   type FileBuffer,
+  type FileDiffPreview,
   type GitReviewSelection,
   type ProjectFilesState,
+  bufferKeyAtAddress,
   emptyFilesState,
   ensureProject,
   filesStore,
+  focusBuffer,
   nextBufferPayloadGeneration,
   projectFilesState,
   setFilesStore,
   setFilesStoreRaw,
 } from "./files-buffer-state.ts";
-import {
-  bufferKeyAtAddress,
-  focusBuffer,
-  openFilesBuffer,
-} from "./project-files-buffers.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
+
+function clearOtherPreviews(state: ProjectFilesState, exceptKey: FileBufferKey | null): void {
+  for (const key of state.order) {
+    if (key === exceptKey) continue;
+    const buf = state.byKey[key];
+    if (buf?.preview) buf.preview = false;
+  }
+}
+
+export function openFilesBuffer(
+  projectId: string,
+  args: {
+    rootId: string;
+    rootLabel: string;
+    fileId?: string;
+    documentId?: string;
+    path: string;
+    intent: BufferOpenIntent;
+    jobId?: string;
+    revealLine?: number;
+    revealColumn?: number;
+    revealEndLine?: number;
+    revealFocus?: boolean;
+    condenseContext?: boolean;
+    /** Initial pane while the source read is pending. */
+    kind?: FileBufferKind;
+    decodeAs?: "utf-16le" | "utf-16be";
+    pinned?: boolean;
+    preview?: boolean;
+    diffPreview?: FileDiffPreview;
+    /** The group step a walk page presents; keys the buffer by step. */
+    walkStep?: WalkGroupStep;
+    walkGitSelection?: GitReviewSelection;
+    /** The comparison a diffs page reads; keys the buffer by comparison. */
+    diffs?: DiffsAddress;
+    chatContent?: ChatContentDocument;
+    /** Tab name for a pane with no path to name it. */
+    name?: string;
+    /** Who is aiming; a reader unless the open follows a presentation. */
+    origin?: AimOrigin;
+  },
+): FileBufferKey {
+  const jobId = args.jobId?.trim() || undefined;
+  const origin = args.origin ?? "reader";
+  let key = args.kind === "chat" && args.chatContent ? chatContentDocumentKey(args.chatContent)
+    : args.kind === "trust" ? `trust:${projectId}`
+    : args.kind === "walk" && args.walkStep ? walkPageBufferKey(args.walkStep.key)
+    : args.kind === "diffs" && args.diffs ? diffsBufferKey(diffsAddressKey(args.diffs))
+    : fileBufferKey(args.rootId, args.path, jobId, args.fileId);
+  ensureProject(projectId);
+  setFilesStore(projectId, produce((state) => {
+    if (!isComposedBufferKind(args.kind ?? "text") && !args.fileId && !state.byKey[key]) {
+      const addressed = bufferKeyAtAddress(state, args.rootId, args.path, jobId);
+      if (addressed) key = addressed;
+    }
+    const existing = state.byKey[key];
+    if (existing) {
+      if (args.revealLine != null) existing.revealLine = args.revealLine;
+      if (args.revealColumn != null) existing.revealColumn = args.revealColumn;
+      else if (args.revealLine != null) existing.revealColumn = null;
+      if (args.revealEndLine != null) existing.revealEndLine = args.revealEndLine;
+      else if (args.revealLine != null) existing.revealEndLine = null;
+      if (args.revealFocus) existing.revealFocus = true;
+      if (args.condenseContext && existing.kind === "text") existing.condenseContext = true;
+      if (args.intent === "permanent" && existing.preview) existing.preview = false;
+      if (args.kind === "diff") {
+        existing.rootId = args.rootId;
+        existing.rootLabel = args.rootLabel;
+        existing.path = args.path;
+        existing.name = fileDisplayName(args.path);
+        existing.diffPreview = args.diffPreview;
+      }
+      if (args.kind === "chat") { existing.chatContent = args.chatContent; existing.name = args.name ?? "Chat content"; }
+      if (args.kind === "trust") existing.name = args.name ?? "Trust changes";
+      if (args.kind === "diffs" && args.diffs) {
+        existing.diffs = args.diffs;
+        if (args.name) existing.name = args.name;
+      }
+      if (args.kind === "walk") {
+        existing.walkStep = args.walkStep;
+        if (args.walkGitSelection) existing.walkGitSelection = args.walkGitSelection;
+        if (args.name) existing.name = args.name;
+      }
+      focusBuffer(state, key, origin);
+      retainEditorDocument(existing);
+      return;
+    }
+
+    const wantPreview = args.preview === true || (args.intent === "transient" && args.pinned !== true);
+    const pinned = args.pinned === true;
+    const preview = pinned ? false : wantPreview;
+
+    if (preview) {
+      // Clean previews reuse their strip position; dirty previews become permanent.
+      const previewKey = state.order.find((k) => {
+        const candidate = state.byKey[k];
+        return candidate?.preview && !candidate.dirty;
+      });
+      if (previewKey && previewKey !== key) {
+        const idx = state.order.indexOf(previewKey);
+        void evictEditorDocument(state.byKey[previewKey]?.documentId).catch(() => undefined);
+        delete state.byKey[previewKey];
+        if (idx >= 0) state.order[idx] = key;
+        else state.order.push(key);
+      } else {
+        state.order.push(key);
+      }
+      clearOtherPreviews(state, key);
+    } else {
+      state.order.push(key);
+    }
+
+    state.byKey[key] = {
+      key, rootId: args.rootId, rootLabel: args.rootLabel, fileId: args.fileId?.trim() || null,
+      path: args.path, name: args.name ?? fileDisplayName(args.path),
+      documentId: args.documentId ?? null, documentRevision: null,
+      ...(jobId ? { jobId } : {}), loading: true, sourcePresent: false, loadError: null,
+      content: { state: "unloaded" }, payloadGeneration: nextBufferPayloadGeneration(),
+      eol: defaultEol(), baseEol: defaultEol(), mixedEol: false, baseMixedEol: false,
+      detectedIndent: undefined, indentOverride: undefined, editorConfig: undefined,
+      baseSha256: null, sizeBytes: 0, kind: args.kind ?? "text", mime: null, mtime: null,
+      overLimit: false, encoding: args.decodeAs ?? null, writable: null,
+      unsupportedEncodingDetected: null, dirty: false, editRevision: 0,
+      preview, pinned, diverged: false, heldAgentVersionId: null, closeError: null,
+      ...(args.kind === "diff" || args.diffPreview ? { diffPreview: args.diffPreview } : {}),
+      ...(args.kind === "chat" ? { chatContent: args.chatContent } : {}),
+      ...(args.kind === "walk" ? { walkStep: args.walkStep, walkGitSelection: args.walkGitSelection } : {}),
+      ...(args.kind === "diffs" ? { diffs: args.diffs } : {}),
+    };
+    if (args.revealLine != null) state.byKey[key]!.revealLine = args.revealLine;
+    if (args.revealColumn != null) state.byKey[key]!.revealColumn = args.revealColumn;
+    if (args.revealEndLine != null) state.byKey[key]!.revealEndLine = args.revealEndLine;
+    if (args.revealFocus) state.byKey[key]!.revealFocus = true;
+    if (args.condenseContext) state.byKey[key]!.condenseContext = true;
+    // A composed pane has no read to wait for.
+    if (args.kind && isComposedBufferKind(args.kind)) {
+      state.byKey[key]!.loading = false;
+      state.byKey[key]!.kind = args.kind;
+    }
+    // Restored pinned tabs stay in the pinned group.
+    if (pinned) state.order = orderWithPinnedGroup(state.order, state.byKey);
+    focusBuffer(state, key, origin);
+  }));
+  return key;
+}
 
 /** Lease released, reused by a reopen, or restored with the tab after failure. */
 export type FilesBufferRelease = "released" | "superseded" | "restored";

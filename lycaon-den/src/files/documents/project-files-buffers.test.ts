@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { required } from "../../test/at.ts";
 import { filesBufferText, filesBufferBase } from "./project-files-buffers.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -874,5 +877,69 @@ describe("project-files-buffers presentation retention", () => {
     setFilesActiveBuffer(PROJECT, second);
     expect(projectFilesState(PROJECT).activeKey).toBe(first);
     expect(projectFilesState(PROJECT).pendingKey).toBe(second);
+  });
+});
+
+describe("files/documents module import DAG", () => {
+  it("contains zero relative runtime import cycles across src/files/documents/*.ts", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const files = readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .sort();
+    expect(files.length).toBeGreaterThan(0);
+
+    const fileSet = new Set(files);
+    const graph = new Map<string, string[]>();
+    const importExportRe = /\b(?:import|export)\s+(type\s+)?(?:([^;"']*?)\s+from\s+)?["'](\.\/[^"']+)["']/g;
+
+    for (const file of files) {
+      const source = readFileSync(join(dir, file), "utf8");
+      const deps = new Set<string>();
+      for (const match of source.matchAll(importExportRe)) {
+        if (match[1]) continue;
+        const clause = (match[2] ?? "").replace(/\s+from\s*$/, "").trim();
+        if (clause.startsWith("{") && clause.endsWith("}")) {
+          const specifiers = clause
+            .slice(1, -1)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (specifiers.length > 0 && specifiers.every((s) => s.startsWith("type "))) {
+            continue;
+          }
+        }
+        let target = match[3]!.replace(/^\.\//, "");
+        if (!target.endsWith(".ts")) target += ".ts";
+        if (fileSet.has(target)) deps.add(target);
+      }
+      graph.set(file, [...deps].sort());
+    }
+
+    const visited = new Set<string>();
+    const onStack = new Set<string>();
+    const stack: string[] = [];
+    const cycles: string[] = [];
+
+    const visit = (node: string): void => {
+      visited.add(node);
+      onStack.add(node);
+      stack.push(node);
+      for (const dep of graph.get(node) ?? []) {
+        if (!visited.has(dep)) {
+          visit(dep);
+        } else if (onStack.has(dep)) {
+          const start = stack.indexOf(dep);
+          cycles.push([...stack.slice(start), dep].join(" -> "));
+        }
+      }
+      stack.pop();
+      onStack.delete(node);
+    };
+
+    for (const file of files) {
+      if (!visited.has(file)) visit(file);
+    }
+
+    expect(cycles).toEqual([]);
   });
 });
