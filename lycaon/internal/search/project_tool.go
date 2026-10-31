@@ -71,28 +71,19 @@ func ProjectToolMessage(projectID, sessionID string, msg api.Message, toolName s
 	return markRowsUntrusted(rows, toolName)
 }
 
-// rawToolResultRows indexes a non-web tool result as raw text, one row per
-// evidence handle the result minted (`recall handle:<h>` and the recorded-body
-// lookup key on it). A result that minted none is still indexed under its tool.
+// rawToolResultRows indexes a non-web tool result as one raw row per minted handle.
 func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, revealRef, ts, content string) []IndexRow {
-	handles := make([]string, 0, len(msg.EvidenceHandles))
-	for _, h := range msg.EvidenceHandles {
-		if h = strings.TrimSpace(h); h != "" {
-			handles = append(handles, h)
-		}
-	}
-	if len(handles) == 0 {
-		handles = append(handles, "")
-	}
 	path := ""
 	if msg.ToolResult != nil {
 		path = toolCallPath(msg.ToolResult.ToolArgs)
 	}
-	rows := make([]IndexRow, 0, len(handles))
-	for _, handle := range handles {
+	defaultSnippet := truncateSnippet(content, 2000)
+	specs := extractToolHandleSpecs(msg.EvidenceHandles, path, defaultSnippet, content)
+	rows := make([]IndexRow, 0, len(specs))
+	for _, spec := range specs {
 		suffix := "result"
-		if handle != "" {
-			suffix = "result:" + handle
+		if spec.handle != "" {
+			suffix = "result:" + spec.handle
 		}
 		rows = append(rows, IndexRow{
 			ID:        RowID(SourceTool, msg.ID, suffix),
@@ -102,12 +93,13 @@ func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, r
 			SessionID: sessionID,
 			MessageID: msg.ID,
 			SourceRef: revealRef,
-			Handle:    handle,
-			Path:      path,
+			Handle:    spec.handle,
+			Path:      spec.path,
+			Line:      spec.line,
 			Tool:      toolName,
 			Shape:     "raw",
 			Role:      string(api.MessageRoleTool),
-			Snippet:   truncateSnippet(content, 2000),
+			Snippet:   spec.snippet,
 			TS:        ts,
 			Untrusted: ingestion.IsRetrievalTool(toolName),
 		})

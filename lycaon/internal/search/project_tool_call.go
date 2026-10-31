@@ -45,12 +45,20 @@ func ProjectToolCalls(projectID, sessionID string, msg api.Message) []IndexRow {
 	return rows
 }
 
-// toolCallPath returns the structured file anchor.
+// toolCallPath returns the normalized structured file anchor.
 func toolCallPath(args map[string]any) string {
 	if raw, ok := args["path"].(string); ok {
-		return strings.TrimSpace(raw)
+		return cleanToolPath(raw)
 	}
 	return ""
+}
+
+func cleanToolPath(raw string) string {
+	p := strings.TrimSpace(raw)
+	for strings.HasPrefix(p, "./") {
+		p = strings.TrimSpace(strings.TrimPrefix(p, "./"))
+	}
+	return p
 }
 
 func toolCallSnippet(name string, args map[string]any) string {
