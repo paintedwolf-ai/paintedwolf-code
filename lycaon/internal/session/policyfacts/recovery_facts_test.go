@@ -50,8 +50,8 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 		name      string
 		got, want []string
 	}{
-		{"read paths", gc.Refusals.RefusedReadPaths, []string{"/state/store.db", "/credentials/token"}},
-		{"write paths", gc.Refusals.RefusedWritePaths, []string{"/state/approvals.yaml", "/workspace/output.txt"}},
+		{"read paths", gc.Refusals.RefusedReadPaths, []string{"/credentials/token"}},
+		{"write paths", gc.Refusals.RefusedWritePaths, []string{"/workspace/output.txt"}},
 		{"terminal reads", gc.Refusals.RefusedTerminalReadPaths, []string{"/state/store.db"}},
 		{"terminal writes", gc.Refusals.RefusedTerminalWritePaths, []string{"/state/approvals.yaml"}},
 		{"read grants", gc.Refusals.RefusedReadGrants, []string{"/credentials/token"}},
