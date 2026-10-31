@@ -60,6 +60,12 @@ func (m *Service) ScratchDir(ctx context.Context, sess *api.Session) string {
 	}
 	return m.execution.SessionDirectories(ctx, sess).Scratch
 }
+func (m *Service) Project(ctx context.Context, id string) (*project.Project, error) {
+	if m == nil || m.projects == nil || strings.TrimSpace(id) == "" {
+		return nil, nil
+	}
+	return m.projects.Get(ctx, id)
+}
 func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
 func (m *Service) SetContainers(containers tools.ContainerRecorder) {
 	m.loopbackProv = containers

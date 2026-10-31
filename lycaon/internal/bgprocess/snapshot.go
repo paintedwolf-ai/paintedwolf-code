@@ -335,6 +335,52 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	return out
 }
 
+// LineageJob is the process metadata recorded for an action lineage.
+type LineageJob struct {
+	Handle        string
+	SessionID     string
+	RootSessionID string
+	ProjectID     string
+	Command       string
+	Background    bool
+	Running       bool
+}
+
+// LookupByLineage returns the command job whose action lease owns lineageID.
+func (r *Registry) LookupByLineage(lineageID string) (LineageJob, bool) {
+	if r == nil || r.jobs == nil {
+		return LineageJob{}, false
+	}
+	lineageID = trim(lineageID)
+	if lineageID == "" {
+		return LineageJob{}, false
+	}
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	for _, procs := range r.jobs.sessions {
+		for _, proc := range procs {
+			if proc == nil || proc.facts.Action == nil || proc.facts.Action.LineageID() != lineageID {
+				continue
+			}
+			handle := ""
+			if !proc.silent {
+				handle = proc.Handle
+			}
+			stages := append([]hostcmd.StageResult(nil), proc.Stages...)
+			return LineageJob{
+				Handle:        handle,
+				SessionID:     proc.SessionID,
+				RootSessionID: proc.RootSessionID,
+				ProjectID:     proc.ProjectID,
+				Command:       hostcmd.CommandLine(stages),
+				Background:    !proc.silent,
+				Running:       proc.running,
+			}, true
+		}
+	}
+	return LineageJob{}, false
+}
+
 // CountLivePTYs returns the number of running pty-backed handles in a session.
 func (r *Registry) CountLivePTYs(sessionID string) int {
 	if r == nil {

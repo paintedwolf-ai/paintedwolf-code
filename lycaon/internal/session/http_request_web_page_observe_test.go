@@ -48,3 +48,31 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 		t.Fatalf("an exchange with no stated web page carried the card:\n%s", plain)
 	}
 }
+
+func TestHTTPRequestLoopbackOtherSessionCardAdvisesReportingToUser(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	sess := &api.Session{ID: "sess-loopback-other"}
+	args := map[string]any{"url": "http://127.0.0.1:8000/"}
+	detail := "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'."
+	raised := guidance.ToolResultFacts{}.WithFeedback(toolrejection.HTTPRequestLoopbackOtherSessionCode, map[string]any{
+		"destination": "127.0.0.1:8000",
+		"port":        "8000",
+		"detail":      detail,
+	}, &api.FeedbackSubject{Kind: "host", ID: "127.0.0.1:8000"})
+
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised)
+	for _, want := range []string{
+		`{"status":200}`,
+		"Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION",
+		detail,
+		"let the user decide",
+		"Do not stop, signal, or reconfigure the other listener yourself",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+	if !facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		t.Fatalf("facts = %#v, want %s", facts, toolrejection.HTTPRequestLoopbackOtherSessionCode)
+	}
+}

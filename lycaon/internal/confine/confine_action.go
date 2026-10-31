@@ -66,6 +66,9 @@ func BindAction(c *Confinement, cmd EgressCommand) (result *ActionLease, failure
 	c.lineage = line
 	c.LineageID = string(line.ID())
 	refusalWatch.bindLineage(lease.refusalTag, c.LineageID)
+	egressBroker.mu.Lock()
+	egressBroker.rememberLineageLocked(c.LineageID, cmd)
+	egressBroker.mu.Unlock()
 
 	if c.Network != NetworkProxyOnly {
 		return lease, nil
@@ -80,7 +83,6 @@ func BindAction(c *Confinement, cmd EgressCommand) (result *ActionLease, failure
 	egressBroker.mu.Lock()
 	egressBroker.tokens[c.LineageID] = cmd
 	egressBroker.loopback[c.LineageID] = loopbackConnectAuthority(c)
-	egressBroker.rememberLineageLocked(c.LineageID, cmd)
 	egressBroker.mu.Unlock()
 	lease.mediated = true
 	c.ProxyAddr = addrs.HTTP
@@ -315,6 +317,21 @@ func (b *egressBrokerT) loopbackFor(lineageID string, port uint16) bool {
 	grant := b.loopback[lineageID]
 	b.mu.Unlock()
 	return grant != nil && grant(port)
+}
+
+// CommandForLineage returns the recorded command metadata for a live or retired action lineage.
+func CommandForLineage(lineageID string) (EgressCommand, bool) {
+	lineageID = strings.TrimSpace(lineageID)
+	if lineageID == "" {
+		return EgressCommand{}, false
+	}
+	egressBroker.mu.Lock()
+	defer egressBroker.mu.Unlock()
+	if cmd, ok := egressBroker.tokens[lineageID]; ok {
+		return cmd, true
+	}
+	cmd, ok := egressBroker.lineages[lineageID]
+	return cmd, ok
 }
 
 // LineageMarkerForTest returns the descendant marker a confined launch hands its

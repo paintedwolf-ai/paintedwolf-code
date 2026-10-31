@@ -17,8 +17,9 @@ type InvocationFacts struct {
 	ToolPayloadChunkable  bool
 	ToolIsHandoff         bool
 	PackRunnerTask        bool
-	CommandNotArgv        bool
-	HTTPRequestWebPage    bool
+	CommandNotArgv                  bool
+	HTTPRequestWebPage              bool
+	HTTPRequestLoopbackOtherSession bool
 }
 
 type SessionFacts struct {

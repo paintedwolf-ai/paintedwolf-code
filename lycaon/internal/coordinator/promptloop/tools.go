@@ -38,22 +38,23 @@ func warnLedgerUnwired() {
 
 // toolCaptures holds per-invocation UI metadata.
 type toolCaptures struct {
-	sourceContext    *api.SourceContext
-	overlayPromotion *api.OverlayPromotion
-	ownerRef         string
-	fileEdit         *tools.FileEditCapture
-	visual           *tools.VisualCapture
-	note             *tools.AgentNoteCapture
-	externalAccess   *api.ExternalAccess
-	displaySubject   string
-	skill            *api.SkillActivation
-	process          *api.ToolProcessHandle
+	sourceContext         *api.SourceContext
+	overlayPromotion      *api.OverlayPromotion
+	ownerRef              string
+	fileEdit              *tools.FileEditCapture
+	visual                *tools.VisualCapture
+	note                  *tools.AgentNoteCapture
+	externalAccess        *api.ExternalAccess
+	displaySubject        string
+	skill                 *api.SkillActivation
+	process               *api.ToolProcessHandle
 	verdict               *api.VerdictOutcome
 	commandProgram        *api.CommandProgramReceipt
 	sourceDeliveryHandles []string
 	sourceRun             *tools.SourceRunCapture
-	dispatch         *api.WorkerDispatch
-	completion       *api.ToolCompletion
+	listener              *api.LoopbackListenerFact
+	dispatch              *api.WorkerDispatch
+	completion            *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
 	// sourceReads is the project text the handler returned.
@@ -428,6 +429,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		commandProgram:        out.CommandProgram,
 		sourceDeliveryHandles: append([]string(nil), out.SourceDeliveryHandles...),
 		sourceRun:             out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		listener:      out.Listener,
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,
 	}
@@ -548,6 +550,9 @@ func applyToolResultSidecars(
 	}
 	if captures.commandProgram != nil {
 		tr.CommandProgram = captures.commandProgram
+	}
+	if captures.listener != nil {
+		tr.Listener = captures.listener
 	}
 	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
 		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)

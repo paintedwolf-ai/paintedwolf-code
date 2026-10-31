@@ -77,7 +77,8 @@ type result struct {
 	ReceiptToken string         `json:"redaction_receipt,omitempty"`
 	// UnixSocket is the reviewed socket the request reached; the URL host
 	// then names no network destination.
-	UnixSocket string `json:"unix_socket,omitempty"`
+	UnixSocket string                    `json:"unix_socket,omitempty"`
+	Listener   *api.LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 type requestSpec struct {
@@ -121,7 +122,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
 			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
 			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
-			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted,
+			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted, Listener: ex.listener,
 		}
 		placement := placeResponseBody(ctx, resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
 		out.Body, out.BodyEncoding = placement.inline, placement.encoding
@@ -132,6 +133,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		out.Cookies = ex.cookies
 		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
+		reportLoopbackListener(tctx, ex.listener)
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
 		}
@@ -219,6 +221,7 @@ type exchanged struct {
 	tokens       *tokenReceipt
 	cookies      *cookieReceipt
 	bodyRedacted bool
+	listener     *api.LoopbackListenerFact
 }
 
 type responseUse uint8
@@ -315,7 +318,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		ActionID: tctx.EffectActionID(),
 	})
 	defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
-	resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
@@ -345,7 +348,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	}
 	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
 		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
-		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted}, nil
+		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted, listener: listenerFact}, nil
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -430,15 +433,18 @@ func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
 	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
-) (outboundhttp.Response, *inboundwrite.Receipt, []byte, error) {
+) (outboundhttp.Response, *inboundwrite.Receipt, []byte, *api.LoopbackListenerFact, error) {
+	var loopbackObs loopbackHopObservation
+	firstHopSeen := false
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket:    spec.socket,
-		SocketBinding: spec.socketBinding,
-		HostHeader:    outbound.hostHeader,
-		Resolve:       spec.resolve,
+		UnixSocket:     spec.socket,
+		SocketBinding:  spec.socketBinding,
+		HostHeader:     outbound.hostHeader,
+		Resolve:        spec.resolve,
+		OnFirstHopConn: func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
@@ -450,6 +456,10 @@ func send(
 			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
 				return err
 			}
+		}
+		if !firstHopSeen {
+			firstHopSeen = true
+			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
 		}
 		if outbound.beforeCookieHop != nil {
 			return outbound.beforeCookieHop(hopCtx, hopURL)
@@ -496,10 +506,13 @@ func send(
 		}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
+		return outboundhttp.Response{}, nil, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
-	return resp, landed, bufferedResponsePathBytes, err
+	if err != nil {
+		return resp, landed, bufferedResponsePathBytes, nil, err
+	}
+	return resp, landed, bufferedResponsePathBytes, loopbackObs.settle(ctx, tctx, spec, resp), nil
 }
 
 // sendReject maps a typed transport failure after received cookies are saved.
@@ -685,7 +698,7 @@ func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.Too
 			return addr.IsLoopback() && ports[port]
 		}
 	}
-	directGranted := tctx.Direct.DirectIPAuthorized || (!tctx.Direct.DirectIPRequested && request != nil && request.DirectIP != nil)
+	directGranted := tctx.Direct.DirectIPAuthorized
 	if !directGranted {
 		return allowLoopback, nil
 	}

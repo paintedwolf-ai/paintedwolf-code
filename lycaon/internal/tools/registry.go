@@ -7,6 +7,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"net/netip"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -102,6 +103,8 @@ type ToolInvocationOut struct {
 	CommandProgram *api.CommandProgramReceipt
 	// SourceDeliveryHandles lists confirmed source-delivery handles minted during the call.
 	SourceDeliveryHandles []string
+	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
+	Listener *api.LoopbackListenerFact
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.
@@ -127,6 +130,11 @@ type PrimaryMutationRecorder interface {
 // ContainerRecorder records invocation-launched container IDs for session provenance.
 type ContainerRecorder interface {
 	RecordSessionContainer(chatSessionID, containerID, socketPath string)
+}
+
+// LoopbackEndpointObserver attributes a loopback destination to its active listener(s).
+type LoopbackEndpointObserver interface {
+	ObserveLoopbackEndpoint(ctx context.Context, sessionID, workspaceDir string, peer netip.AddrPort) *api.LoopbackListenerFact
 }
 
 // ToolContext is per-invocation context for a tool handler.
