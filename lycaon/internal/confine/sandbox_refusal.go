@@ -1,6 +1,9 @@
 package confine
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // SandboxRefusal is one operation the kernel refused a process of an action.
 // Repeats of one operation on one target fold into Count.
@@ -62,13 +65,25 @@ type SandboxRefusals struct {
 // layer's recovery names.
 func (s SandboxRefusals) Paths(access FilesystemAccess) []BoundaryPath {
 	var out []BoundaryPath
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	for _, r := range s.Refusals {
-		if operationAccess(r.Operation) != access || r.Layer == "" || seen[r.Target] {
+		if operationAccess(r.Operation) != access || r.Layer == "" {
 			continue
 		}
-		seen[r.Target] = true
-		out = append(out, BoundaryPath{Path: r.Target, Access: access, Layer: r.Layer, Grant: r.Grant})
+		if idx, ok := seen[r.Target]; ok {
+			if !slices.Contains(out[idx].Operations, r.Operation) {
+				out[idx].Operations = append(out[idx].Operations, r.Operation)
+			}
+			continue
+		}
+		seen[r.Target] = len(out)
+		out = append(out, BoundaryPath{
+			Path:       r.Target,
+			Access:     access,
+			Layer:      r.Layer,
+			Grant:      r.Grant,
+			Operations: []string{r.Operation},
+		})
 	}
 	return out
 }
@@ -123,7 +138,8 @@ type BoundaryPath struct {
 	Access FilesystemAccess
 	Layer  FloorLayer
 	// Grant is the path the layer's recovery asks for; empty when terminal.
-	Grant string
+	Grant      string
+	Operations []string
 }
 
 // routeRefusal derives recovery from applied rules; truncated targets get no path grant.

@@ -83,21 +83,15 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalWritePaths = append(gc.Refusals.RefusedTerminalWritePaths, path.Path)
 		}
-		if path.Grant != "" {
-			gc.Refusals.RefusedWriteGrants = append(gc.Refusals.RefusedWriteGrants, path.Grant)
-		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
 		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalReadPaths = append(gc.Refusals.RefusedTerminalReadPaths, path.Path)
 		}
-		if path.Grant != "" {
-			gc.Refusals.RefusedReadGrants = append(gc.Refusals.RefusedReadGrants, path.Grant)
-		}
 	}
-	gc.Refusals.RefusedWriteGrants = confine.CoveringGrants(gc.Refusals.RefusedWriteGrants)
-	gc.Refusals.RefusedReadGrants = confine.CoveringGrants(gc.Refusals.RefusedReadGrants)
+	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
+	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
 }
 
 func appendUnique(list []string, value string) []string {
