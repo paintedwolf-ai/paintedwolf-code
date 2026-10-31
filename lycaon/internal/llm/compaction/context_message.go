@@ -9,35 +9,47 @@ import (
 
 // ContextMessage is a session message used by the compactor.
 type ContextMessage struct {
-	Ord                int64
-	Seq                int64
-	ID                 string
-	Role               string
-	Content            string
-	Origin             api.MessageOrigin
-	Authority          api.ContentAuthority
-	TrustTier          api.ContentTrustTier
-	ContentParts       []api.MessageContentPart
-	Visibility         api.MessageVisibility
-	CheckpointDecision *api.CheckpointDecisionMeta
-	ToolFeedback       []api.ToolFeedback
-	ModelReasoning     *api.ModelReasoning
-	ToolCalls          []api.ToolCall
+	Ord          int64
+	ID           string
+	Role         string
+	Content      string
+	ContentParts []api.MessageContentPart
+	ToolCalls    []api.ToolCall
 	// ToolCallID resolves the producing tool across assistant and result rows.
-	ToolCallID           string
-	ToolName             string
-	SourceContext        *api.SourceContext
-	EvidenceHandles      []string
-	HostSecretRedaction  *api.HostSecretRedactionMeta
+	ToolCallID      string
+	ToolName        string
+	EvidenceHandles []string
+	// ContextPinned protects instructions throughout compaction.
+	ContextPinned bool
+	ContextMessageProvenance
+	ContextMessageCompaction
+}
+
+// ContextMessageProvenance holds origin, trust, and replay metadata for a context row.
+type ContextMessageProvenance struct {
+	Seq                 int64
+	Origin              api.MessageOrigin
+	Authority           api.ContentAuthority
+	TrustTier           api.ContentTrustTier
+	Visibility          api.MessageVisibility
+	SourceContext       *api.SourceContext
+	HostSecretRedaction *api.HostSecretRedactionMeta
+	ModelReasoning      *api.ModelReasoning
+	// PromptCacheBreakpoint marks a stable boundary for provider caches.
+	PromptCacheBreakpoint api.PromptCacheTier
+	// ModelProjected prevents duplicate data markers after an IR round trip.
+	ModelProjected bool
+}
+
+// ContextMessageCompaction holds compaction state, diet stamps, and visual token estimates.
+type ContextMessageCompaction struct {
+	CheckpointDecision   *api.CheckpointDecisionMeta
+	ToolFeedback         []api.ToolFeedback
 	DietStamp            string
 	DietStampSource      string
 	WorkerSummary        *api.WorkerSummaryMeta
 	CompactedChunk       *CompactedChunkMeta
 	CompactionCheckpoint bool
-	// ContextPinned protects instructions throughout compaction.
-	ContextPinned bool
-	// PromptCacheBreakpoint marks a stable boundary for provider caches.
-	PromptCacheBreakpoint api.PromptCacheTier
 	// ToolImageTokens estimates the tool result's perceive image. It is charged
 	// only while the image sits inside the perception window.
 	ToolImageTokens int
@@ -45,35 +57,37 @@ type ContextMessage struct {
 	AttachmentImageTokens int
 	// DropVisualOnCompact clears ToolResult.Visual when this row's text is compacted.
 	DropVisualOnCompact bool
-	// ModelProjected prevents duplicate data markers after an IR round trip.
-	ModelProjected bool
 }
 
 // ContextMessageFromAPI converts wire messages for compaction.
 func ContextMessageFromAPI(m api.Message) ContextMessage {
 	m = api.NormalizeMessageProvenance(m)
 	out := ContextMessage{
-		Ord:                   m.Ord,
-		Seq:                   m.Seq,
-		ID:                    m.ID,
-		Role:                  string(m.Role),
-		Content:               m.Content,
-		Origin:                m.Origin,
-		Authority:             m.Authority,
-		TrustTier:             m.TrustTier,
-		ContentParts:          append([]api.MessageContentPart(nil), m.ContentParts...),
-		Visibility:            m.Visibility,
-		ToolCalls:             append([]api.ToolCall(nil), m.ToolCalls...),
-		CompactionCheckpoint:  m.CompactionCheckpoint,
-		ContextPinned:         m.ContextPinned,
-		PromptCacheBreakpoint: m.PromptCacheBreakpoint,
-		EvidenceHandles:       append([]string(nil), m.EvidenceHandles...),
-		SourceContext:         m.SourceContext,
-		HostSecretRedaction:   cloneHostSecretRedaction(m.HostSecretRedaction),
-		DietStamp:             m.DietStamp,
-		DietStampSource:       m.DietStampSource,
-		ModelProjected:        m.ModelProjected,
-		ModelReasoning:        m.ModelReasoning,
+		Ord:             m.Ord,
+		ID:              m.ID,
+		Role:            string(m.Role),
+		Content:         m.Content,
+		ContentParts:    append([]api.MessageContentPart(nil), m.ContentParts...),
+		ToolCalls:       append([]api.ToolCall(nil), m.ToolCalls...),
+		ContextPinned:   m.ContextPinned,
+		EvidenceHandles: append([]string(nil), m.EvidenceHandles...),
+		ContextMessageProvenance: ContextMessageProvenance{
+			Seq:                   m.Seq,
+			Origin:                m.Origin,
+			Authority:             m.Authority,
+			TrustTier:             m.TrustTier,
+			Visibility:            m.Visibility,
+			PromptCacheBreakpoint: m.PromptCacheBreakpoint,
+			SourceContext:         m.SourceContext,
+			HostSecretRedaction:   cloneHostSecretRedaction(m.HostSecretRedaction),
+			ModelProjected:        m.ModelProjected,
+			ModelReasoning:        m.ModelReasoning,
+		},
+		ContextMessageCompaction: ContextMessageCompaction{
+			CompactionCheckpoint: m.CompactionCheckpoint,
+			DietStamp:            m.DietStamp,
+			DietStampSource:      m.DietStampSource,
+		},
 	}
 	if m.ToolResult != nil {
 		if out.Content == "" {

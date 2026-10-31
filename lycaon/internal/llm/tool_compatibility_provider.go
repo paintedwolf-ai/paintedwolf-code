@@ -25,7 +25,7 @@ type toolVerificationTarget struct {
 	profile  providerprofile.Profile
 }
 
-func (r *Registry) resolveToolVerification(ctx context.Context, providerID, model string) (toolVerificationTarget, error) {
+func (r *registryDiscovery) resolveToolVerification(ctx context.Context, providerID, model string) (toolVerificationTarget, error) {
 	var target toolVerificationTarget
 	models := r.EffectiveModels(ctx, providerID)
 	snapshot := r.snapshot.Load()
@@ -52,7 +52,7 @@ func (r *Registry) resolveToolVerification(ctx context.Context, providerID, mode
 }
 
 // CheckToolCompatibility is an explicit paid diagnostic, never a side effect of listing.
-func (r *Registry) CheckToolCompatibility(ctx context.Context, providerID, model string) (ToolVerification, error) {
+func (r *registryDiscovery) CheckToolCompatibility(ctx context.Context, providerID, model string) (ToolVerification, error) {
 	target, err := r.resolveToolVerification(ctx, providerID, model)
 	if err != nil {
 		return ToolVerification{}, err

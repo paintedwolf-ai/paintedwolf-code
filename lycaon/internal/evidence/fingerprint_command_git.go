@@ -241,3 +241,69 @@ func stripGitPathPrefix(token string) string {
 	}
 	return token
 }
+
+func findResultPaths(content string) []string {
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return nil
+	}
+	raw, ok := obj["results"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if p, ok := m["path"].(string); ok && strings.TrimSpace(p) != "" {
+			out = append(out, NormalizeLedgerPath(p))
+		}
+	}
+	return out
+}
+
+func listDirPaths(content string) []string {
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return nil
+	}
+	if p, ok := obj["path"].(string); ok && strings.TrimSpace(p) != "" {
+		out := []string{NormalizeLedgerPath(p)}
+		raw, ok := obj["entries"].([]any)
+		if !ok {
+			out = append(out, listDirMapTagFiles(obj)...)
+			return out
+		}
+		for _, item := range raw {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if ep, ok := m["path"].(string); ok && strings.TrimSpace(ep) != "" {
+				out = append(out, NormalizeLedgerPath(ep))
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func listDirMapTagFiles(obj map[string]any) []string {
+	raw, ok := obj["tags"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if f, ok := m["file"].(string); ok && strings.TrimSpace(f) != "" {
+			out = append(out, NormalizeLedgerPath(f))
+		}
+	}
+	return out
+}

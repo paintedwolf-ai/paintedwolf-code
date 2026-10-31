@@ -183,7 +183,9 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	if !found && text != "" && requestHistoryDropped(rows, fitted) {
 		reference := compaction.ContextMessage{ID: "host-request-history-reference", Role: "system",
-			Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
+			ContextMessageProvenance: compaction.ContextMessageProvenance{
+				Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
+			},
 			Content: text, ContextPinned: true}
 		fitted = compaction.DeterministicFit(cfg, append([]compaction.ContextMessage{reference}, contexts...), tokens)
 	}

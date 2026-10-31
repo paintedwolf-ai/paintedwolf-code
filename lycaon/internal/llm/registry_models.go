@@ -17,14 +17,14 @@ import (
 )
 
 // RefreshDiscovery invalidates one discovered model list.
-func (r *Registry) RefreshDiscovery(providerID string) {
+func (r *registryDiscovery) RefreshDiscovery(providerID string) {
 	r.discovery.Invalidate(providerID)
 	r.cloudflareUsage.InvalidateAll()
 	r.InvalidateListCache()
 }
 
 // RefreshModels invalidates and reloads one discovered model list.
-func (r *Registry) RefreshModels(ctx context.Context, providerID string) error {
+func (r *registryDiscovery) RefreshModels(ctx context.Context, providerID string) error {
 	providerID = strings.TrimSpace(providerID)
 	configured, err := r.ensureConfigured(ctx, providerID)
 	if err != nil {
@@ -59,11 +59,11 @@ func (r *Registry) RefreshModels(ctx context.Context, providerID string) error {
 }
 
 // EffectiveModels returns catalog models merged with live discovery when configured.
-func (r *Registry) EffectiveModels(ctx context.Context, providerID string) []modelinfo.Entry {
+func (r *registryRouting) EffectiveModels(ctx context.Context, providerID string) []modelinfo.Entry {
 	return r.resolveModels(ctx, providerID).Models
 }
 
-func (r *Registry) resolveModels(ctx context.Context, providerID string) mergeResult {
+func (r *registryRouting) resolveModels(ctx context.Context, providerID string) mergeResult {
 	snapshot := r.snapshot.Load()
 	if snapshot == nil {
 		return mergeResult{DiscoveryStatus: DiscoveryStatusSkipped}
@@ -78,19 +78,19 @@ func (r *Registry) resolveModels(ctx context.Context, providerID string) mergeRe
 }
 
 // modelMetadata reads usable prices and capabilities without network waits.
-func (r *Registry) modelMetadata(providerID string) []modelinfo.Entry {
+func (r *registryRouting) modelMetadata(providerID string) []modelinfo.Entry {
 	result, refresh := r.modelSnapshot(context.Background(), providerID)
 	refresh()
 	return result.Models
 }
 
 // DiscoveredRate returns validated live prices for the selected model.
-func (r *Registry) DiscoveredRate(providerID, model string) (pricing.Rate, bool) {
+func (r *registryDiscovery) DiscoveredRate(providerID, model string) (pricing.Rate, bool) {
 	return modelinfo.DiscoveredRateFromEntries(r.modelMetadata(providerID), model)
 }
 
 // LocalFree reads the catalog classification for per-token charges.
-func (r *Registry) LocalFree(instanceID string) bool {
+func (r *registryDiscovery) LocalFree(instanceID string) bool {
 	if r == nil {
 		return false
 	}
@@ -103,7 +103,7 @@ func (r *Registry) LocalFree(instanceID string) bool {
 }
 
 // PricedAsModelID resolves the effective model’s pricing identity.
-func (r *Registry) PricedAsModelID(instanceID, model string) string {
+func (r *registryDiscovery) PricedAsModelID(instanceID, model string) string {
 	if r == nil {
 		return model
 	}
@@ -121,7 +121,7 @@ func (r *Registry) PricedAsModelID(instanceID, model string) string {
 }
 
 // ModelExists reports whether modelID is known for providerID, including live discovery.
-func (r *Registry) ModelExists(providerID, modelID string) bool {
+func (r *registryDiscovery) ModelExists(providerID, modelID string) bool {
 	if strings.TrimSpace(modelID) == "" {
 		return true
 	}
@@ -135,7 +135,7 @@ func (r *Registry) ModelExists(providerID, modelID string) bool {
 }
 
 // TestConnectivity validates credentials through model discovery.
-func (r *Registry) TestConnectivity(ctx context.Context, providerID string) (modelCount int, err error) {
+func (r *registryDiscovery) TestConnectivity(ctx context.Context, providerID string) (modelCount int, err error) {
 	providerID = strings.TrimSpace(providerID)
 	configured, err := r.ensureConfigured(ctx, providerID)
 	if err != nil {
@@ -180,7 +180,7 @@ func (r *Registry) TestConnectivity(ctx context.Context, providerID string) (mod
 	return len(merged.Models), nil
 }
 
-func (r *Registry) effectiveModelsForEntryLocked(
+func (r *registryCore) effectiveModelsForEntryLocked(
 	ctx context.Context,
 	entry CatalogEntry,
 	p modelcall.Provider,
@@ -201,7 +201,7 @@ func (r *Registry) effectiveModelsForEntryLocked(
 	return merged.Models
 }
 
-func (r *Registry) mergeForEntrySnapshot(
+func (r *registryCore) mergeForEntrySnapshot(
 	ctx context.Context,
 	entry CatalogEntry,
 	snapshot *providerRegistrySnapshot,
@@ -212,7 +212,7 @@ func (r *Registry) mergeForEntrySnapshot(
 	)
 }
 
-func (r *Registry) mergeForEntrySnapshotWithFeed(
+func (r *registryCore) mergeForEntrySnapshotWithFeed(
 	ctx context.Context,
 	entry CatalogEntry,
 	snapshot *providerRegistrySnapshot,
@@ -245,7 +245,7 @@ func (r *Registry) mergeForEntrySnapshotWithFeed(
 	return merged
 }
 
-func (r *Registry) feedSnapshot() (doc *modelfeed.Document, status string, usable bool) {
+func (r *registryCore) feedSnapshot() (doc *modelfeed.Document, status string, usable bool) {
 	feed := r.modelFeed.Load()
 	if feed == nil {
 		return nil, modelfeed.StatusUnavailable, false
@@ -253,7 +253,7 @@ func (r *Registry) feedSnapshot() (doc *modelfeed.Document, status string, usabl
 	return feed.Snapshot()
 }
 
-func (r *Registry) entryReadiness(ctx context.Context, entry CatalogEntry, apiKey string) (providerReadiness, bool) {
+func (r *registryCore) entryReadiness(ctx context.Context, entry CatalogEntry, apiKey string) (providerReadiness, bool) {
 	if entry.Kind == "bedrock" {
 		probeCtx, cancel := context.WithTimeout(ctx, discovery.BedrockTimeout)
 		defer cancel()
@@ -284,7 +284,7 @@ func (r *Registry) entryReadiness(ctx context.Context, entry CatalogEntry, apiKe
 }
 
 // ModelHasVision reports whether providerID/modelID declares the vision modality.
-func (r *Registry) ModelHasVision(ctx context.Context, providerID, modelID string) bool {
+func (r *registryDiscovery) ModelHasVision(ctx context.Context, providerID, modelID string) bool {
 	if r == nil {
 		return false
 	}

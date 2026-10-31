@@ -3,6 +3,7 @@ package evidence
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -10,7 +11,111 @@ import (
 var (
 	scanFindingFileRE = regexp.MustCompile(`"file"\s*:\s*"([^"]+)"`)
 	scanFindingURIRE  = regexp.MustCompile(`"uri"\s*:\s*"([^"]+)"`)
+	toolBodyURLRE     = regexp.MustCompile(`https?://[^\s\])>'"]+`)
 )
+
+// captureRecordBody retains bounded tool output without trailing host feedback.
+func captureRecordBody(rec *Record, content string) string {
+	body := stripToolHostSuffix(content)
+	if len(body) > EvidenceCaptureBodyCapBytes {
+		body = body[:EvidenceCaptureBodyCapBytes]
+		rec.Truncated = true
+	}
+	if strings.TrimSpace(body) != "" {
+		rec.Body = append(rec.Body, body)
+	}
+	return body
+}
+
+func populateMCPEvidenceRecord(projectDir string, rec *Record, content string) {
+	if rec == nil {
+		return
+	}
+	body := captureRecordBody(rec, content)
+	for _, url := range urlsInToolBody(body) {
+		rec.touchURL(url)
+	}
+	scanCommandPaths(projectDir, rec, body, nil)
+}
+
+func populateSearchRecord(rec *Record, content string) {
+	if rec == nil {
+		return
+	}
+	body := stripToolHostSuffix(content)
+	for _, url := range urlsInToolBody(body) {
+		rec.touchURL(url)
+	}
+	// Search titles supply citation labels.
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return
+	}
+	results, _ := obj["results"].([]any)
+	for _, item := range results {
+		hit, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		url, _ := hit["url"].(string)
+		title, _ := hit["title"].(string)
+		rec.touchURLTitle(url, title)
+	}
+}
+
+// populateFetchTitle records the fetched page's title against the URL asked
+// for and the URL the tool reports, which differ after a redirect.
+func populateFetchTitle(rec *Record, requested, content string) {
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return
+	}
+	title, _ := obj["title"].(string)
+	if strings.TrimSpace(title) == "" {
+		return
+	}
+	rec.touchURLTitle(requested, title)
+	if final, _ := obj["url"].(string); strings.TrimSpace(final) != "" {
+		rec.touchURLTitle(final, title)
+	}
+}
+
+func populateURLFromPayload(rec *Record, content string) {
+	if rec == nil {
+		return
+	}
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return
+	}
+	if finalURL, ok := obj["final_url"].(string); ok && strings.TrimSpace(finalURL) != "" {
+		rec.touchURL(finalURL)
+	}
+	if u, ok := obj["url"].(string); ok && strings.TrimSpace(u) != "" {
+		rec.touchURL(u)
+	}
+}
+
+func urlsInToolBody(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]struct{}{}
+	for _, match := range toolBodyURLRE.FindAllString(text, -1) {
+		url := strings.TrimSpace(match)
+		if url == "" {
+			continue
+		}
+		if _, dup := seen[url]; dup {
+			continue
+		}
+		seen[url] = struct{}{}
+		out = append(out, url)
+	}
+	return out
+}
 
 // populateScanArtifactRecord captures scan tool JSON and indexes finding paths.
 func populateScanArtifactRecord(projectDir string, rec *Record, content string) {
@@ -164,6 +269,28 @@ func scanJSONFilePaths(body string) []string {
 	}
 	for _, m := range gitJSONPathRE.FindAllStringSubmatch(body, -1) {
 		add(m[1])
+	}
+	return out
+}
+
+func grepMatchPaths(content string) []string {
+	obj, ok := jsonToolPayload(content)
+	if !ok {
+		return nil
+	}
+	raw, ok := obj["matches"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if p, ok := m["path"].(string); ok && strings.TrimSpace(p) != "" {
+			out = append(out, NormalizeLedgerPath(p))
+		}
 	}
 	return out
 }

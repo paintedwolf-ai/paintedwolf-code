@@ -14,7 +14,7 @@ import (
 )
 
 // ensureConfigured retries ambient credential resolution.
-func (r *Registry) ensureConfigured(ctx context.Context, providerID string) (bool, error) {
+func (r *registryRouting) ensureConfigured(ctx context.Context, providerID string) (bool, error) {
 	providerID = strings.TrimSpace(providerID)
 	snapshot := r.snapshot.Load()
 	if snapshot == nil {
@@ -80,13 +80,13 @@ func (r *Registry) ensureConfigured(ctx context.Context, providerID string) (boo
 	return ready, buildErr
 }
 
-func (r *Registry) rebuild(ctx context.Context, invalidateObservations ...string) error {
+func (r *registryRouting) rebuild(ctx context.Context, invalidateObservations ...string) error {
 	r.mutationMu.Lock()
 	defer r.mutationMu.Unlock()
 	return r.rebuildLocked(ctx, invalidateObservations...)
 }
 
-func (r *Registry) rebuildLocked(ctx context.Context, invalidateObservations ...string) error {
+func (r *registryRouting) rebuildLocked(ctx context.Context, invalidateObservations ...string) error {
 	next := make(map[string]modelcall.Provider)
 	entries := make(map[string]CatalogEntry)
 	credentialValues := make(map[string]string)
@@ -147,16 +147,16 @@ func (r *Registry) rebuildLocked(ctx context.Context, invalidateObservations ...
 }
 
 // Reload refreshes catalog and rebuilds providers.
-func (r *Registry) Reload(ctx context.Context) error {
+func (r *registryCatalog) Reload(ctx context.Context) error {
 	return r.reload(ctx)
 }
 
 // ReloadProviderMutation rebuilds and invalidates one authentication observation.
-func (r *Registry) ReloadProviderMutation(ctx context.Context, providerID string) error {
+func (r *registryCatalog) ReloadProviderMutation(ctx context.Context, providerID string) error {
 	return r.reload(ctx, providerID)
 }
 
-func (r *Registry) reload(ctx context.Context, invalidateObservations ...string) error {
+func (r *registryCatalog) reload(ctx context.Context, invalidateObservations ...string) error {
 	r.mutationMu.Lock()
 	defer r.mutationMu.Unlock()
 	if err := r.catalog.Reload(); err != nil {
@@ -174,7 +174,7 @@ func (r *Registry) reload(ctx context.Context, invalidateObservations ...string)
 }
 
 // Register adds a runtime provider (tests).
-func (r *Registry) Register(p modelcall.Provider) error {
+func (r *registryCatalog) Register(p modelcall.Provider) error {
 	if p == nil || p.ID() == "" {
 		return fmt.Errorf("invalid provider")
 	}
@@ -218,7 +218,7 @@ func (r *Registry) Register(p modelcall.Provider) error {
 	return nil
 }
 
-func (r *Registry) publishHydratedProviders(
+func (r *registryCore) publishHydratedProviders(
 	expected *providerRegistrySnapshot,
 	modelsByProvider map[string][]modelinfo.Entry,
 ) {
@@ -244,7 +244,7 @@ func (r *Registry) publishHydratedProviders(
 	}))
 }
 
-func (r *Registry) publishConnectivityResult(
+func (r *registryCore) publishConnectivityResult(
 	expected *providerRegistrySnapshot,
 	providerID string,
 	models []modelinfo.Entry,
@@ -269,7 +269,7 @@ func (r *Registry) publishConnectivityResult(
 	}))
 }
 
-func (r *Registry) providerRetryPolicy(entry CatalogEntry) providerretry.ProviderHTTPRetry {
+func (r *registryCore) providerRetryPolicy(entry CatalogEntry) providerretry.ProviderHTTPRetry {
 	policy := entry.HTTPRetry.Clone()
 	policy = policy.BindRateGate(r.rateGate, entry.ID)
 	endpoint, err := url.Parse(entry.BaseURL)

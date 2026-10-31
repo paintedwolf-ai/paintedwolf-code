@@ -7,7 +7,8 @@ import (
 )
 
 func ctxMsg(id string, tier api.ContentTrustTier, partTiers ...api.ContentTrustTier) ContextMessage {
-	msg := ContextMessage{ID: id, TrustTier: tier}
+	msg := ContextMessage{ID: id}
+	msg.TrustTier = tier
 	for _, t := range partTiers {
 		msg.ContentParts = append(msg.ContentParts, api.MessageContentPart{TrustTier: t})
 	}
