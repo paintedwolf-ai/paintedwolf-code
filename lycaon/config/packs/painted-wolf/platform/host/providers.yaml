@@ -23,29 +23,36 @@ model_thinking:
     controls: {state: supported, efforts: [low, medium, high], default_effort: medium}
   - match: ["claude-mythos-preview"]
     style: adaptive
+    continuation_policy: require_fields
     always_on: true
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, max], default_effort: high}
   - match: ["claude-fable", "claude-mythos"]
     style: adaptive
+    continuation_policy: require_fields
     always_on: true
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], default_effort: high}
   - match: ["claude-sonnet-5"]
     style: adaptive
+    continuation_policy: require_fields
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
   - match: ["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
     style: adaptive
+    continuation_policy: require_fields
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
   - match: ["claude-opus-4-6", "claude-opus-4.6", "claude-sonnet-4-6", "claude-sonnet-4.6"]
     style: adaptive
+    continuation_policy: require_fields
     controls: {state: supported, efforts: [low, medium, high, max], can_disable: true, default_effort: high}
   - match: ["claude-sonnet-4", "claude-opus-4", "claude-haiku-4-5", "claude-haiku-4.5", "claude-3-7"]
     style: budget_tokens
+    continuation_policy: require_fields
     controls: {state: supported, can_disable: true, budget: {min: 1024}}
   - match: ["claude"]
     style: budget_tokens
+    continuation_policy: require_fields
   # These families' templates wrap reasoning in <think> tags. A serving stack
   # that reports reasoning in its own field can still leave the open tag in
   # the content, and one that reports none leaves the whole block there.
