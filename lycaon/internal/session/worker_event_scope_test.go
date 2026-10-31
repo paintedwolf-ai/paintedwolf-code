@@ -519,7 +519,7 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 		t.Fatal("timed out waiting for cancelled worker background process completion")
 	}
 	if gotCancelReason != bgprocess.TerminationWorkerCancelled {
-		t.Fatalf("cancelled worker process reason = %q, want worker_cancelled", gotCancelReason)
+		t.Fatalf("cancelled worker process reason = %q, want worker_canceled", gotCancelReason)
 	}
 
 	testutil.FailErr(t, "dispose completed worker runtime",

@@ -18,7 +18,7 @@ copy:
   what: No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or
     stopped.
   cause: The requested handle was not found, and the session has no running command jobs. Background commands
-    also end when Painted Wolf Code quits, and this does not establish whether the handle expired, belongs elsewhere,
+    also end when the application quits, and this does not establish whether the handle expired, belongs elsewhere,
     or was never issued.
   why: Retrying an unavailable handle cannot recover that execution’s output.
   fix: Inspect the intended command’s retained result and lifecycle. Use a handle only if that execution actually

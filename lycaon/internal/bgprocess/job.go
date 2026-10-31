@@ -31,7 +31,7 @@ const (
 	TerminationRootDetached    TerminationReason = "root_detached"
 	TerminationAppQuit         TerminationReason = "app_quit"
 	TerminationWorkerCompleted TerminationReason = "worker_completed"
-	TerminationWorkerCancelled TerminationReason = "worker_cancelled"
+	TerminationWorkerCancelled TerminationReason = "worker_canceled"
 )
 
 // IsStopped reports whether termination was requested rather than reached by process exit or timeout.

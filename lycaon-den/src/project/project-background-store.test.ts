@@ -48,7 +48,7 @@ describe("formatBackgroundTerminationReason", () => {
       ["project_deleted", "Stopped when the project was deleted"],
       ["app_quit", "Ended when Painted Wolf Code quit"],
       ["worker_completed", "Stopped when the worker finished"],
-      ["worker_cancelled", "Stopped when the worker was cancelled"],
+      ["worker_canceled", "Stopped when the worker was canceled"],
       ["timed_out", "Timed out"],
       ["exited", "Exited"],
     ];

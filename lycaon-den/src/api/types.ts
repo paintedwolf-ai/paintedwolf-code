@@ -5908,7 +5908,7 @@ export interface components {
          * @description Why a background process ended: natural exit, timeout, explicit stop by the agent or user, or host teardown of the owning chat, project, detached root, app process, or worker runtime.
          * @enum {string}
          */
-        BackgroundProcessTerminationReason: "exited" | "timed_out" | "stopped_by_agent" | "stopped_by_user" | "chat_deleted" | "project_deleted" | "root_detached" | "app_quit" | "worker_completed" | "worker_cancelled";
+        BackgroundProcessTerminationReason: "exited" | "timed_out" | "stopped_by_agent" | "stopped_by_user" | "chat_deleted" | "project_deleted" | "root_detached" | "app_quit" | "worker_completed" | "worker_canceled";
         BackgroundProcessEvent: {
             process_id: string;
             /** Format: uuid */
@@ -10993,8 +10993,10 @@ export interface components {
             address?: string;
             pid?: number;
             process_name?: string;
+            /** Format: uuid */
             session_id?: string;
             session_title?: string;
+            /** Format: uuid */
             project_id?: string;
             project_name?: string;
             handle?: string;
@@ -11018,8 +11020,10 @@ export interface components {
             connected_address?: string;
             pid?: number;
             process_name?: string;
+            /** Format: uuid */
             session_id?: string;
             session_title?: string;
+            /** Format: uuid */
             project_id?: string;
             project_name?: string;
             handle?: string;
@@ -18600,6 +18604,7 @@ export interface operations {
             409: components["responses"]["Error"];
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Error"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
@@ -18645,6 +18650,7 @@ export interface operations {
             };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Error"];
             /** @description This app session cannot verify presence */
             503: {
                 headers: {

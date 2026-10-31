@@ -1588,6 +1588,8 @@ paths:
           $ref: '#/components/responses/ContentTooLarge'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -1641,6 +1643,8 @@ paths:
           $ref: '#/components/responses/ContentTooLarge'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Error'
         '503':
           description: This app session cannot verify presence
           content:
@@ -15766,7 +15770,7 @@ components:
         - root_detached
         - app_quit
         - worker_completed
-        - worker_cancelled
+        - worker_canceled
     BackgroundProcessEvent:
       x-go-generate: true
       type: object
@@ -28310,11 +28314,13 @@ components:
         session_id:
           x-go-name: SessionID
           type: string
+          format: uuid
         session_title:
           type: string
         project_id:
           x-go-name: ProjectID
           type: string
+          format: uuid
         project_name:
           type: string
         handle:
@@ -28326,6 +28332,7 @@ components:
         container_id:
           x-go-name: ContainerID
           type: string
+          pattern: ^[a-f0-9]{64}$
         container_name:
           type: string
     LoopbackPublishedContainer:
@@ -28338,6 +28345,7 @@ components:
         container_id:
           x-go-name: ContainerID
           type: string
+          pattern: ^[a-f0-9]{64}$
         container_name:
           type: string
         host_ip:
@@ -28374,11 +28382,13 @@ components:
         session_id:
           x-go-name: SessionID
           type: string
+          format: uuid
         session_title:
           type: string
         project_id:
           x-go-name: ProjectID
           type: string
+          format: uuid
         project_name:
           type: string
         handle:
@@ -28390,6 +28400,7 @@ components:
         container_id:
           x-go-name: ContainerID
           type: string
+          pattern: ^[a-f0-9]{64}$
         container_name:
           type: string
         ambiguous:

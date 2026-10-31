@@ -506,7 +506,7 @@ components:
       - root_detached
       - app_quit
       - worker_completed
-      - worker_cancelled
+      - worker_canceled
     BackgroundProcessEvent:
       x-go-generate: true
       type: object

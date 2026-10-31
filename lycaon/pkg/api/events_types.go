@@ -154,6 +154,6 @@ const (
 	BackgroundProcessTerminationReasonRootDetached    BackgroundProcessTerminationReason = "root_detached"
 	BackgroundProcessTerminationReasonAppQuit         BackgroundProcessTerminationReason = "app_quit"
 	BackgroundProcessTerminationReasonWorkerCompleted BackgroundProcessTerminationReason = "worker_completed"
-	BackgroundProcessTerminationReasonWorkerCancelled BackgroundProcessTerminationReason = "worker_cancelled"
+	BackgroundProcessTerminationReasonWorkerCancelled BackgroundProcessTerminationReason = "worker_canceled"
 )
 
