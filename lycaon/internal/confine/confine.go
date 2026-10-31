@@ -477,10 +477,16 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
+		if c.CredentialStore {
+			literals = mergeSortedStrings(literals, darwinLoginKeychainLiterals())
+		}
 		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
+			if c.CredentialStore {
+				ancestors = mergeSortedStrings(ancestors, darwinLoginKeychainMetadataDirs())
+			}
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
