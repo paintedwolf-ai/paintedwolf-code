@@ -95,20 +95,20 @@ func (e *Secrets) AskSecretScreen(ctx context.Context, finding secretmatch.Alert
 	defer releaseReview()
 	args := secretScreenArgs(payload)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: payload.Surface,
-Args: args,
-},
-Presentation: hitl.ActionPresentation{
-EstimatedImpact: secretEstimatedImpact(payload),
-},
-Scope: hitl.ActionScope{
-SessionID: finding.SessionID,
-RootSessionID: finding.RootSessionID,
-ProjectID: finding.ProjectID,
-ProjectDir: finding.ProjectDir,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: payload.Surface,
+			Args: args,
+		},
+		Presentation: hitl.ActionPresentation{
+			EstimatedImpact: secretEstimatedImpact(payload),
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     finding.SessionID,
+			RootSessionID: finding.RootSessionID,
+			ProjectID:     finding.ProjectID,
+			ProjectDir:    finding.ProjectDir,
+		},
+	}
 	grantOffers := []hitl.ApprovalGrantOffer(nil)
 	if decision != nil && decision.Reuse().Offered() {
 		grantOffers = secretReleaseLadder(action.Scope.ChatSession(), finding.ProjectID, finding.ProjectDir,
@@ -338,11 +338,11 @@ func (e *Secrets) explainSecretScreen(args map[string]any, screen *hitl.SecretSc
 	explanation := &hitl.ApprovalExplanation{}
 	if e.Approvals.approvalExplainer != nil {
 		copy := e.Approvals.approvalExplainer.ExplainApproval(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: toolsecrets.OutboundSecretExplainTool,
-Args: args,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: toolsecrets.OutboundSecretExplainTool,
+				Args: args,
+			},
+		})
 		explanation.What = copy.What
 		explanation.Who = copy.Who
 		explanation.IfWrong = copy.IfWrong

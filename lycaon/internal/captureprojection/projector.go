@@ -501,8 +501,8 @@ func (m RasterMask) Union(o RasterMask) RasterMask {
 	out := RasterMask{
 		rects: append(append([]Rect(nil), m.rects...), o.rects...), cssWidth: max(m.cssWidth, o.cssWidth), cssHeight: max(m.cssHeight, o.cssHeight),
 		Metadata: Metadata{
-			RedactedCount:  max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
-			CatalogVersion: m.Metadata.CatalogVersion,
+			RedactedCount:      max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
+			CatalogVersion:     m.Metadata.CatalogVersion,
 			StructuredCoverage: m.Metadata.StructuredCoverage && o.Metadata.StructuredCoverage,
 		},
 	}

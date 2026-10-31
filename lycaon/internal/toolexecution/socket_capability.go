@@ -207,37 +207,37 @@ func socketCapabilityProposedAction(
 		contained = contained.WithDialedSockets(merged)
 	}
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: filesFromArgs(tool, args),
-ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.Identity.ToolCallID,
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: chatSession,
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), merged...),
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Egress: hitl.ActionEgress{
-Visibility: "unobserved",
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          tool,
+			Args:          args,
+			Files:         filesFromArgs(tool, args),
+			ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+			ActionID:      tc.Identity.ToolCallID,
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      chatSession,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants: append([]confine.SocketGrant(nil), merged...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+		Egress: hitl.ActionEgress{
+			Visibility: "unobserved",
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 }
 
 // authorizeMissingSocketGrants reviews grants absent from the action digest.

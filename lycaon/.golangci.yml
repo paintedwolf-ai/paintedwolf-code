@@ -13,6 +13,14 @@ run:
   # Concurrent lint processes share the checkout cache.
   allow-parallel-runners: true
 
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - config/runtime/scanners/rules/vendor
+      - internal/syntaxhealth/testdata/go-eof
+
 linters:
   default: none
   enable:

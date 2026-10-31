@@ -41,15 +41,15 @@ func TestDirectIPGrantNeverReachesTheDurableStore(t *testing.T) {
 // Direct-IP leases are checked by runtime identity, outside generic rule matching.
 func TestDirectIPGrantNeverMatchesGenerically(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "ntpdate time.nist.gov"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/proj",
-SessionID: "sess-ladder",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "ntpdate time.nist.gov"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/proj",
+			SessionID:  "sess-ladder",
+		},
+	}
 	if grantMatchesAction(directIPGrant(), action) {
 		t.Fatal("a direct-IP lease matched through generic action matching")
 	}

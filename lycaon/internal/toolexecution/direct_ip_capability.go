@@ -52,42 +52,42 @@ func DirectIPReview(tool string, args map[string]any, tc tools.ToolContext, decl
 	confInputs.SocksProxyEnv = false
 	contained := hitl.ContainedForAction(confInputs)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: filesFromArgs(tool, args),
-ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.Identity.ToolCallID,
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: rootSession,
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
-SocketScopes: append([]string(nil), tc.Socket.SocketScopes...),
-SocketGrantStates: append([]string(nil), tc.Socket.SocketGrantStates...),
-AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Egress: hitl.ActionEgress{
-DirectIPRequested: true,
-Visibility: hitl.DirectIPVisibilityUnobserved,
-DeclaredDestinations: append([]string(nil), declared...),
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          tool,
+			Args:          args,
+			Files:         filesFromArgs(tool, args),
+			ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+			ActionID:      tc.Identity.ToolCallID,
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      rootSession,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
+			SocketScopes:            append([]string(nil), tc.Socket.SocketScopes...),
+			SocketGrantStates:       append([]string(nil), tc.Socket.SocketGrantStates...),
+			AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+		Egress: hitl.ActionEgress{
+			DirectIPRequested:    true,
+			Visibility:           hitl.DirectIPVisibilityUnobserved,
+			DeclaredDestinations: append([]string(nil), declared...),
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 	lease := hitl.DirectIPLease{
 		ActionDigest:          hitl.GrantKey(action),
 		RequestDigest:         directIPRequestDigest(declared),

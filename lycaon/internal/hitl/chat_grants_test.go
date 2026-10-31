@@ -74,14 +74,14 @@ func TestChatGrantSurvivesRestartAndRevoke(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "make"},
-},
-Scope: hitl.ActionScope{
-SessionID: sessionID,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "make"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: sessionID,
+		},
+	}
 	chat := hitl.ApprovalGrant{ElevatedEffects: []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}, ID: "grant_make", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowForThisChat}
 	day := hitl.ApprovalGrant{ID: "grant_make_day", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowFor1Day, TTLSeconds: hitl.DayRungTTLSeconds}
 	presentation, reasons := approvalPlanPresentation()
@@ -146,14 +146,14 @@ func TestDayRungKeepsItsDeadlineAcrossRestart(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "make"},
-},
-Scope: hitl.ActionScope{
-SessionID: sessionID,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "make"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: sessionID,
+		},
+	}
 	day := hitl.ApprovalGrant{ID: "grant_make_day", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowFor1Day, TTLSeconds: hitl.DayRungTTLSeconds}
 	presentation, reasons := approvalPlanPresentation()
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{

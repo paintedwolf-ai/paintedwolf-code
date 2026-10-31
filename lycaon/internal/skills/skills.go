@@ -27,8 +27,8 @@ type Skill struct {
 	AllowedTools  string // display metadata only
 	// OptionalTools names tools mentioned in the body that are not required dependencies.
 	OptionalTools []string
-	UnitID   string
-	PackID   string
+	UnitID        string
+	PackID        string
 	// Dir is a display-only provenance path.
 	Dir              string
 	Resources        []string
@@ -279,4 +279,3 @@ func splitLines(b []byte) []string {
 func joinLines(lines []string) []byte {
 	return []byte(strings.Join(lines, "\n"))
 }
-

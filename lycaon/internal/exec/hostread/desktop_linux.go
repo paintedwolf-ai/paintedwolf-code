@@ -75,7 +75,7 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 }
 
 type boundedOutput struct {
-	buffer bytes.Buffer
+	buffer   bytes.Buffer
 	exceeded bool
 }
 

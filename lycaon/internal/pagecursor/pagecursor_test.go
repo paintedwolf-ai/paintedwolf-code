@@ -179,4 +179,3 @@ func TestOpenRejectsUnframedToken(t *testing.T) {
 		t.Fatalf("unframed token error = %v, want ErrInvalid", err)
 	}
 }
-

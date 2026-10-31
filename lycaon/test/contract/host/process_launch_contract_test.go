@@ -78,7 +78,7 @@ func TestEngineLaunchDoorsRouteThroughTheBroker(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	for file, want := range map[string]string{
-		"lycaon/internal/exec/pipeline.go":        "relayThroughBroker(cmd)",
+		"lycaon/internal/exec/pipeline.go":         "relayThroughBroker(cmd)",
 		"lycaon/internal/exec/supervisor_linux.go": "relayThroughBroker(cmd)",
 	} {
 		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))

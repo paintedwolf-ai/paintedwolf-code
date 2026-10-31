@@ -161,17 +161,17 @@ func approvalRecordInput(row StoredCheckpoint, status DecisionStatus) authzledge
 
 func proposedActionFromCheckpoint(row StoredCheckpoint) ProposedAction {
 	return ProposedAction{
-Invocation: ActionInvocation{
-Tool: row.ToolName,
-Args: cloneArgs(row.Args),
-Files: append([]string(nil), row.Files...),
-},
-Scope: ActionScope{
-ProjectID: row.ProjectID,
-ProjectDir: row.ProjectDir,
-SessionID: row.SessionID,
-},
-}
+		Invocation: ActionInvocation{
+			Tool:  row.ToolName,
+			Args:  cloneArgs(row.Args),
+			Files: append([]string(nil), row.Files...),
+		},
+		Scope: ActionScope{
+			ProjectID:  row.ProjectID,
+			ProjectDir: row.ProjectDir,
+			SessionID:  row.SessionID,
+		},
+	}
 }
 
 // Ensure Manager implements CheckpointManager.

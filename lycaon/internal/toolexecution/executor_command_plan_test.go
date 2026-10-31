@@ -48,8 +48,7 @@ func (g *recordingApprovalGate) last(t *testing.T) hitl.ProposedAction {
 		}
 	}
 	t.Fatal("the approval gate reviewed no command")
-	return hitl.ProposedAction{
-}
+	return hitl.ProposedAction{}
 }
 
 func (g *recordingApprovalGate) reset() {

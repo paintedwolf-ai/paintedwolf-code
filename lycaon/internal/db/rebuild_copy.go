@@ -149,7 +149,7 @@ func copyRebuildTable(ctx context.Context, tx *sql.Tx, object rebuildObject, fro
 		return err
 	}
 	statement := "INSERT INTO " + rebuildIdentifier(object.name) + " (" + strings.Join(columns, ",") + ") SELECT " + strings.Join(selected, ",") + " " + from // #nosec G202
-	if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
+	if _, err := tx.ExecContext(ctx, statement); err != nil {                                                                                                 // #nosec G701
 		return fmt.Errorf("copy retained table %s: %w", object.name, err)
 	}
 	return nil

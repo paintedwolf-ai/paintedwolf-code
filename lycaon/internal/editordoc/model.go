@@ -19,11 +19,11 @@ import (
 )
 
 var (
-	ErrReadOnly           = errors.New("editor source is read-only")
-	ErrNotFound           = errors.New("editor document not found")
-	ErrInvalidEOL         = errors.New("editor line ending must be lf or crlf")
-	ErrRevisionConflict   = errors.New("editor document revision conflict")
-	ErrRootDetached       = errors.New("editor document root is not attached")
+	ErrReadOnly         = errors.New("editor source is read-only")
+	ErrNotFound         = errors.New("editor document not found")
+	ErrInvalidEOL       = errors.New("editor line ending must be lf or crlf")
+	ErrRevisionConflict = errors.New("editor document revision conflict")
+	ErrRootDetached     = errors.New("editor document root is not attached")
 	// ErrOperationConflict rejects operation reuse with different input.
 	ErrOperationConflict = errors.New("editor save operation id was already used for different input")
 )

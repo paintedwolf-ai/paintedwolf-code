@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/lineage"
 )

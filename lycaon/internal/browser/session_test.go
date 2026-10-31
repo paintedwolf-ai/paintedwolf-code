@@ -200,4 +200,3 @@ func TestSessionAndPoolHelpers(t *testing.T) {
 	}
 	pool.Close()
 }
-

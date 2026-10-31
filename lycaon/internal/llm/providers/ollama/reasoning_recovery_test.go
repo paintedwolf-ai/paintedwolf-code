@@ -138,4 +138,3 @@ func TestOllamaStrictBudgetRetryClampsFittedOutputAfterCalibration(t *testing.T)
 		t.Fatalf("strict retry num_predict = %d, want clamped below %d", body.Options.NumPredict, req.MaxTokens)
 	}
 }
-
