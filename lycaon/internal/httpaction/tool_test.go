@@ -264,7 +264,7 @@ func TestDirectIPPolicyAllowsPrivateUnicastAndRespectsDeclaredDestinations(t *te
 	}
 	allow, reject := loopbackPolicy(req, tools.ToolContext{})
 	if reject != nil || allow == nil {
-		t.Fatalf("loopbackPolicy = %v, reject = %v", allow, reject)
+		t.Fatalf("loopbackPolicy allow=%t, reject=%v", allow != nil, reject)
 	}
 	if !allow(netip.MustParseAddr("192.0.2.1"), 8080) {
 		t.Fatal("declared private destination 192.0.2.1:8080 was denied")
