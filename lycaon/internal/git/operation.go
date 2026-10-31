@@ -176,19 +176,31 @@ func operationStatus(before, after RepositoryState, code int, err error) string 
 	return "completed"
 }
 
-func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+func readRepositoryMetadata(ctx context.Context, dir string) (RepositoryState, error) {
 	state := RepositoryState{Conflicts: []string{}}
-	var err error
-	state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
+	repo, _ := gitrepo.Discover(dir)
+	headContent, err := readRestoreContent(filepath.Join(repo.GitDir, "HEAD"))
 	if err != nil {
 		return state, err
 	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"symbolic-ref", "--quiet", "HEAD"}, hermeticOpts(0))
-	if err != nil || code > 1 {
-		return state, fmt.Errorf("read symbolic HEAD: %w", err)
+	headLine := strings.TrimSpace(string(headContent.Bytes))
+	if ref, ok := strings.CutPrefix(headLine, "ref:"); ok {
+		ref = strings.TrimSpace(ref)
+		state.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		loose, _ := readRestoreContent(filepath.Join(repo.CommonDir, filepath.FromSlash(ref)))
+		if oid := strings.TrimSpace(string(loose.Bytes)); validObjectID(oid) {
+			state.Head = oid
+		} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); loose.Exists || packed.Exists {
+			state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
+		}
+	} else if validObjectID(headLine) {
+		state.Head = headLine
+	} else {
+		state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
 	}
-	state.Branch = strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/heads/")
-	repo, _ := gitrepo.Discover(dir)
+	if err != nil {
+		return state, err
+	}
 	index, err := readRestoreContent(filepath.Join(repo.GitDir, "index"))
 	if err != nil {
 		return state, err
@@ -204,17 +216,34 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 		return state, err
 	}
 	state.StashLog = stashLog.SHA256
-	state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
+	stashRef, _ := readRestoreContent(filepath.Join(repo.CommonDir, "refs", "stash"))
+	if oid := strings.TrimSpace(string(stashRef.Bytes)); validObjectID(oid) {
+		state.Stash = oid
+	} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); stashLog.Exists || stashRef.Exists || packed.Exists {
+		state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
+		if err != nil {
+			return state, err
+		}
+	}
+	return state, nil
+}
+
+func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+	state, err := readRepositoryMetadata(ctx, dir)
 	if err != nil {
 		return state, err
 	}
-	conflicts, err := gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
-	if err != nil {
-		return state, err
-	}
-	state.Conflicts = conflicts
 	_, entries, err := readPorcelainStatus(ctx, dir, false)
+	if err != nil {
+		return state, err
+	}
 	state.Dirty = len(entries) > 0
+	for _, entry := range entries {
+		if entry.status[0] == 'U' || entry.status[1] == 'U' || entry.status == "AA" || entry.status == "DD" {
+			state.Conflicts, err = gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
+			break
+		}
+	}
 	return state, err
 }
 

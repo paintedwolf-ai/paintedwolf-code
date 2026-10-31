@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
 // BisectState is a bisect session as Git records it: BISECT_* files in the
@@ -48,15 +49,12 @@ type BisectStep struct {
 
 var bisectFiles = []string{"BISECT_START", "BISECT_TERMS", "BISECT_NAMES", "BISECT_LOG", "BISECT_EXPECTED_REV", "BISECT_ANCESTORS_OK", "BISECT_RUN", "BISECT_FIRST_PARENT", "BISECT_HEAD"}
 
-func bisectPath(ctx context.Context, dir, name string) (string, error) {
-	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--path-format=absolute", "--git-path", name}, hermeticOpts(0))
-	if err != nil {
-		return "", err
+func bisectPath(_ context.Context, dir, name string) (string, error) {
+	repo, ok := gitrepo.Discover(dir)
+	if !ok || repo.GitDir == "" {
+		return "", ErrNotRepository
 	}
-	if code != 0 {
-		return "", fmt.Errorf("locate %s: %s", name, bytes.TrimSpace(out))
-	}
-	return filepath.Clean(strings.TrimSpace(string(out))), nil
+	return filepath.Join(repo.GitDir, name), nil
 }
 
 func readBisectFile(ctx context.Context, dir, name string) (string, bool, error) {

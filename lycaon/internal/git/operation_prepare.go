@@ -78,12 +78,15 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 }
 
 func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) error {
-	replacements, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "for-each-ref", "--count=1", "--format=%(refname)", "refs/replace/")
-	if err != nil {
-		return err
-	}
-	if len(replacements) != 0 {
-		return operationRefusal("replacement_history_unsupported")
+	replaceEntries, _ := os.ReadDir(filepath.Join(repo.CommonDir, "refs", "replace"))
+	if _, packedErr := os.Lstat(filepath.Join(repo.CommonDir, "packed-refs")); len(replaceEntries) > 0 || packedErr == nil {
+		replacements, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "for-each-ref", "--count=1", "--format=%(refname)", "refs/replace/")
+		if err != nil {
+			return err
+		}
+		if len(replacements) != 0 {
+			return operationRefusal("replacement_history_unsupported")
+		}
 	}
 	if _, err := os.Lstat(filepath.Join(repo.CommonDir, "info", "grafts")); err == nil {
 		return operationRefusal("replacement_history_unsupported")
@@ -420,7 +423,7 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 		}
 	}
 
-	state, err := readRepositoryState(ctx, repo.Root)
+	state, err := readRepositoryMetadata(ctx, repo.Root)
 	if err != nil {
 		return err
 	}

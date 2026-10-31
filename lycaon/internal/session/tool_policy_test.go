@@ -14,8 +14,8 @@ func TestListToolsForPromptSpecHidesDelegation(t *testing.T) {
 	if hasTool(listed, "delegate_dispatch") {
 		t.Fatalf("spec posture must hide delegate_dispatch, got %v", toolNames(listed))
 	}
-	if !hasTool(listed, "read") {
-		t.Fatal("expected read visible in spec posture")
+	if !hasTool(listed, "command") {
+		t.Fatal("expected command visible in spec posture")
 	}
 	if !hasTool(listed, "workflow_compose") {
 		t.Fatal("expected workflow_compose visible in spec posture")
@@ -39,12 +39,12 @@ func TestListToolsForPromptCoordinatorCeiling(t *testing.T) {
 	ctx := context.Background()
 	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	// Profile grant; the turn surface gates invoke.
-	for _, name := range []string{"grep", "read", "command"} {
+	for _, name := range []string{"survey_repo", "edit", "command"} {
 		if !hasTool(listed, name) {
 			t.Fatalf("coordinator profile should list %q", name)
 		}
 	}
-	if !hasTool(listed, "write") {
-		t.Fatal("coordinator profile should list write (plan-scoped)")
+	if !hasTool(listed, "replace_lines") {
+		t.Fatal("coordinator profile should list replace_lines (plan-scoped)")
 	}
 }

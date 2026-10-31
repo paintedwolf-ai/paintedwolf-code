@@ -17,24 +17,22 @@ import (
 // Conversion settings are read once and pinned on both rehearsal and execution.
 // Paths, executable drivers, credentials, includes, and remote settings are not copied.
 func (p *preparedOperation) prepareConfig(ctx context.Context, repo gitrepo.Repo, scratch string) error {
+	raw, code, err := gitexec.Run(ctx, repo.Root, []string{"config", "--list", "--null"}, hermeticOpts(0))
+	if err != nil || code != 0 {
+		return fmt.Errorf("read Git conversion configuration failed")
+	}
+	values := map[string]string{}
+	for _, record := range strings.Split(string(raw), "\x00") {
+		if key, value, ok := strings.Cut(record, "\n"); ok {
+			values[strings.ToLower(strings.TrimSpace(key))] = value
+		}
+	}
 	for _, key := range []string{"core.autocrlf", "core.eol", "core.filemode", "core.ignorecase", "core.symlinks", "core.safecrlf", "merge.conflictStyle", "merge.renormalize", "merge.renames", "merge.renameLimit", "merge.directoryRenames", "merge.default"} {
-		raw, code, err := gitexec.Run(ctx, repo.Root, []string{"config", "--get", key}, hermeticOpts(0))
-		if err != nil {
-			return err
+		if value, ok := values[strings.ToLower(key)]; ok {
+			p.opts.ExtraConfig = append(p.opts.ExtraConfig, key+"="+value)
 		}
-		if code == 1 {
-			continue
-		}
-		if code != 0 {
-			return fmt.Errorf("read Git conversion configuration failed")
-		}
-		p.opts.ExtraConfig = append(p.opts.ExtraConfig, key+"="+strings.TrimSuffix(string(raw), "\n"))
 	}
-	raw, code, err := gitexec.Run(ctx, repo.Root, []string{"config", "--bool", "--get", "core.sparseCheckout"}, hermeticOpts(0))
-	if err != nil {
-		return err
-	}
-	if code == 0 && strings.TrimSpace(string(raw)) == "true" {
+	if v := strings.ToLower(strings.TrimSpace(values["core.sparsecheckout"])); v == "true" || v == "1" || v == "yes" || v == "on" {
 		return operationRefusal("sparse_checkout_unsupported")
 	}
 	return p.copyFile(filepath.Join(repo.CommonDir, "info", "attributes"), filepath.Join(scratch, ".git", "info", "attributes"))

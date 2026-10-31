@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -20,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -130,6 +133,24 @@ func startNativeAuthorityHost(t *testing.T, path string) nativeAuthorityHost {
 	return nativeAuthorityHost{database: database, manager: manager, memory: memory}
 }
 
+func nativeSocketBinding(t *testing.T) socketref.Binding {
+	t.Helper()
+	if socketref.Platform().Command != socketref.RetainedObject {
+		return socketref.Binding{}
+	}
+	root, err := os.MkdirTemp("/tmp", "na-") //nolint:usetesting // Native retained aliases have bounded addresses.
+	testutil.FailErr(t, "native socket root", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	sockPath := filepath.Join(root, "s")
+	listener, err := net.Listen("unix", sockPath)
+	testutil.FailErr(t, "native socket listener", err)
+	t.Cleanup(func() { _ = listener.Close() })
+	capture, err := socketref.Capture(sockPath)
+	testutil.FailErr(t, "native socket capture", err)
+	t.Cleanup(capture.Close)
+	return capture.Binding()
+}
+
 // requestNativeSocketApproval mints a socket card for a native action through
 // the actual socket offer and plan producers.
 func requestNativeSocketApproval(t *testing.T, ctx context.Context, host nativeAuthorityHost, review *hitl.NativeActionReview, sessionID, path string) string {
@@ -140,10 +161,11 @@ func requestNativeSocketApproval(t *testing.T, ctx context.Context, host nativeA
 		Invocation: hitl.ActionInvocation{Tool: "command", Args: args, NativeInputs: input, ActionID: "actual-model-call"},
 		Scope:      hitl.ActionScope{SessionID: sessionID, RootSessionID: sessionID},
 	}
-	grants := []confine.SocketGrant{{ApprovedPath: path, ResolvedPath: path}}
+	binding := nativeSocketBinding(t)
+	grants := []confine.SocketGrant{{ApprovedPath: path, ResolvedPath: path, Binding: binding}}
 	response, err := requestExplicitApprovalCheckpoint(t, ctx, host.manager, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ToolCallID: "actual-model-call", ProposedAction: &action,
-		SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: path, ResolvedPath: path}}},
+		SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: path, ResolvedPath: path, Binding: binding}}},
 		GrantOffers:      capabilitygrants.SocketExecutionGrantOffers(action, grants),
 	})
 	testutil.FailErr(t, "request native socket approval", err)
@@ -431,10 +453,11 @@ func TestNativeCapabilityCompositionKeepsEveryRawPathThroughRestart(t *testing.T
 		Scope:      hitl.ActionScope{SessionID: sessionID, RootSessionID: sessionID, ProjectID: testdbseed.DefaultProjectID},
 	}
 	_, explicit := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+	binding := nativeSocketBinding(t)
 	socketRequest := hitl.CheckpointRequest{
 		SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, Kind: api.CheckpointKindToolApproval, ToolCallID: "actual-model-call", ProposedAction: &action, Decision: explicit,
-		SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: socket, ResolvedPath: socket}}},
-		GrantOffers:      capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{{ApprovedPath: socket, ResolvedPath: socket}}),
+		SocketCapability: &hitl.SocketCapability{Targets: []hitl.SocketCapabilityTarget{{ApprovedPath: socket, ResolvedPath: socket, Binding: binding}}},
+		GrantOffers:      capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{{ApprovedPath: socket, ResolvedPath: socket, Binding: binding}}),
 	}
 	socketPlan, err := hitl.CompileCheckpointApprovalPlan(socketRequest)
 	testutil.FailErr(t, "compile native socket review", err)

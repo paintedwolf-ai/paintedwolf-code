@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -203,6 +205,16 @@ func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
 }
 
 func TestSupervisedCommandSeesOnlyItsIntendedDescriptors(t *testing.T) {
+	for fd := 3; fd < 64; fd++ {
+		flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+		if err != nil || flags&unix.FD_CLOEXEC != 0 {
+			continue
+		}
+		_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags|unix.FD_CLOEXEC)
+		t.Cleanup(func() {
+			_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags)
+		})
+	}
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "locate descriptor fixture runtime", err)
 	// fstat probes descriptors without opening one, unlike listing /proc/self/fd.

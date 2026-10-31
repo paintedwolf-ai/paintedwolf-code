@@ -155,6 +155,11 @@ func publishIndexDelta(ctx context.Context, dir string, opts gitexec.Opts, befor
 		}
 	}
 	opts.Input = []byte(input.String())
-	_, err := restoreGit(ctx, dir, opts, "update-index", "-z", "--index-info")
-	return err
+	if _, err := restoreGit(ctx, dir, opts, "update-index", "-z", "--index-info"); err != nil {
+		return err
+	}
+	if opts.IndexFile == "" {
+		_, _, _ = gitexec.Run(ctx, dir, []string{"update-index", "-q", "--unmerged", "--refresh"}, hermeticOpts(0))
+	}
+	return nil
 }

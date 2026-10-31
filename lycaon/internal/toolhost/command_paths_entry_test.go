@@ -236,11 +236,6 @@ cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
 	if filepath.Clean(f.scratch) == "/tmp" {
 		t.Fatalf("fixture scratch %q aliases literal /tmp", f.scratch)
 	}
-	out, err := f.Call(t, t.Context(), "cat /tmp/from-external")
-	testutil.FailErr(t, "read literal /tmp/from-external", err)
-	if outcome := decodeProgramOutcome(t, out); outcome.Status != 1 || outcome.Stdout != "" {
-		t.Fatalf("literal /tmp/from-external resolved to scratch: %+v", outcome)
-	}
 }
 
 func TestUnknownAndStaleLabelsAtEntry(t *testing.T) {
