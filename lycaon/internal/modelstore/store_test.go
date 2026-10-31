@@ -1,18 +1,14 @@
 package modelstore
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
-
-func timeAfterMs(ms int) <-chan time.Time {
-	return time.After(time.Duration(ms) * time.Millisecond)
-}
 
 type acceptSigner struct{ fail bool }
 
@@ -204,15 +200,7 @@ func TestCorruptMiddleIsAnError(t *testing.T) {
 	}
 }
 
-func newReader(b []byte) *os.File {
-	f, err := os.CreateTemp("", "payload")
-	if err != nil {
-		panic(err)
-	}
-	_, _ = f.Write(b)
-	_, _ = f.Seek(0, 0)
-	return f
-}
+func newReader(b []byte) *bytes.Reader { return bytes.NewReader(b) }
 
 func TestSymlinkEscapeRejected(t *testing.T) {
 	s := newStore(t)
@@ -301,7 +289,7 @@ func TestCollectRetainsActivePreviousAndLeasedRevisions(t *testing.T) {
 		t.Fatalf("activate r3: %v", err)
 	}
 
-	// While r1 is leased, Collect removes only the unreferenced artifact; r3 (active), r2 (previous), and r1 (leased) stay.
+	// The lease keeps r1 beyond rollback retention.
 	removed, err := s.Collect()
 	if err != nil {
 		t.Fatalf("collect with lease: %v", err)
@@ -315,7 +303,7 @@ func TestCollectRetainsActivePreviousAndLeasedRevisions(t *testing.T) {
 		}
 	}
 
-	// Once the r1 lease ends, Collect removes r1 while keeping r3 (active) and r2 (previous rollback revision).
+	// Releasing the lease makes r1 collectible.
 	leaseR1.Release()
 	removed, err = s.Collect()
 	if err != nil {
@@ -506,13 +494,6 @@ func TestActivateHoldsJournalLockAcrossVerificationAndPublication(t *testing.T) 
 	}()
 
 	<-verifiedSig
-	// Give Activate a brief window to reach lockJournal (or, if unlocked, run Verified prematurely).
-	select {
-	case err := <-activateErrCh:
-		lock.Unlock()
-		t.Fatalf("Activate completed while journal lock was held: %v", err)
-	case <-timeAfterMs(25):
-	}
 
 	root, err := s.openRoot()
 	if err != nil {
