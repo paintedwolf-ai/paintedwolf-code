@@ -74,12 +74,13 @@ func FindOversizedChunks(messages []ContextMessage, cfg CompactionConfig, bindin
 			continue
 		}
 		out = append(out, ContentChunk{
-			MessageIndex: i,
-			MessageID:    m.ID,
-			Tokens:       tokens,
-			Kind:         classifyChunk(m),
-			ToolName:     messages[i].ToolName,
-			Class:        class,
+			MessageIndex:    i,
+			MessageID:       m.ID,
+			Tokens:          tokens,
+			Kind:            classifyChunk(m),
+			ToolName:        messages[i].ToolName,
+			EvidenceHandles: extractChunkHandles(m),
+			Class:           class,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -208,13 +209,14 @@ func FindPromptTailToolChunks(messages []ContextMessage, cfg CompactionConfig, b
 	for idx, tt := range selected {
 		m := messages[idx]
 		out = append(out, ContentChunk{
-			MessageIndex: idx,
-			MessageID:    m.ID,
-			Tokens:       tt.tokens,
-			Kind:         classifyChunk(m),
-			ToolName:     messages[idx].ToolName,
-			PromptTail:   true,
-			Class:        tt.class,
+			MessageIndex:    idx,
+			MessageID:       m.ID,
+			Tokens:          tt.tokens,
+			Kind:            classifyChunk(m),
+			ToolName:        messages[idx].ToolName,
+			PromptTail:      true,
+			EvidenceHandles: extractChunkHandles(m),
+			Class:           tt.class,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

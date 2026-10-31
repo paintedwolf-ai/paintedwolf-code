@@ -237,7 +237,9 @@ func (c *SimpleCompactor) compactOversizedChunks(ctx context.Context, info Sessi
 		}
 		ch.HostDataDir = info.HostDataDir
 		ch.MaxToolSpillBytes = info.MaxToolSpillBytes
-		ch.EvidenceHandles = messages[ch.MessageIndex].EvidenceHandles
+		if len(ch.EvidenceHandles) == 0 {
+			ch.EvidenceHandles = extractChunkHandles(messages[ch.MessageIndex])
+		}
 		projection := c.projectChunk(ctx, info, ch, messages[ch.MessageIndex], minSavings)
 		if projection.Attempted {
 			attempted++

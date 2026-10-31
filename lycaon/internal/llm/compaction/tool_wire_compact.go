@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,7 +57,7 @@ func (c *SimpleCompactor) CompactToolWireIfOversized(ctx context.Context, info S
 		ToolName:          toolName,
 		HostDataDir:       info.HostDataDir,
 		MaxToolSpillBytes: info.MaxToolSpillBytes,
-		EvidenceHandles:   append([]string(nil), opts.EvidenceHandles...),
+		EvidenceHandles:   extractChunkHandles(msg),
 		Class:             class,
 	}
 	out, compactMeta, err := c.chunks.CompactChunk(ctx, ch, content)
@@ -76,4 +77,29 @@ func (c *SimpleCompactor) CompactToolWireIfOversized(ctx context.Context, info S
 		return content, meta, false, nil
 	}
 	return out, compactMeta, true, nil
+}
+
+func extractChunkHandles(m ContextMessage) []string {
+	var out []string
+	seen := make(map[string]struct{}, len(m.EvidenceHandles)+1)
+	for _, h := range m.EvidenceHandles {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		if _, dup := seen[h]; dup {
+			continue
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	if tag, _ := hostmarker.SplitEvidenceHandleTag(m.Content); tag != "" {
+		tag = strings.Trim(strings.TrimSpace(tag), "[]")
+		if evidence.IsEvidenceHandleToken(tag) {
+			if _, dup := seen[tag]; !dup {
+				out = append(out, tag)
+			}
+		}
+	}
+	return out
 }
