@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -262,6 +264,13 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		}
 		spec.socket = grant.ResolvedPath
 		spec.socketBinding = grant.Binding
+	}
+	if tctx.Direct.DirectIPRequested {
+		if reject := tools.FinalizeDirectIPForSpawn(tctx); reject != nil {
+			return exchanged{}, reject
+		}
+		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
+		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
@@ -650,17 +659,107 @@ func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.Too
 			ports[port] = true
 		}
 	}
-	if allLoopback {
-		return func(addr netip.Addr, port uint16) bool {
-			return addr.IsLoopback()
-		}, nil
+	if tctx.Local.SocksProxyEnv && (tctx.Direct.DirectIPRequested || (request != nil && request.DirectIP != nil)) {
+		return nil, &toolrejection.ToolReject{
+			Code: isolation.CodeSocksProxyInvalid,
+			Data: map[string]any{"reason": "socks_proxy is incompatible with capability_request.direct_ip"},
+		}
 	}
-	if len(ports) == 0 {
-		return nil, nil
+	var allowLoopback func(netip.Addr, uint16) bool
+	if allLoopback {
+		allowLoopback = func(addr netip.Addr, _ uint16) bool {
+			return addr.IsLoopback()
+		}
+	} else if len(ports) > 0 {
+		allowLoopback = func(addr netip.Addr, port uint16) bool {
+			return addr.IsLoopback() && ports[port]
+		}
+	}
+	directGranted := tctx.Direct.DirectIPAuthorized || (!tctx.Direct.DirectIPRequested && request != nil && request.DirectIP != nil)
+	if !directGranted {
+		return allowLoopback, nil
+	}
+	declared := tctx.Direct.DirectIPDeclared
+	if len(declared) == 0 && request != nil && request.DirectIP != nil {
+		declared = request.DirectIP.DeclaredDestinations
 	}
 	return func(addr netip.Addr, port uint16) bool {
-		return addr.IsLoopback() && ports[port]
+		if allowLoopback != nil && allowLoopback(addr, port) {
+			return true
+		}
+		return directIPAddressAllowed(declared, addr, port)
 	}, nil
+}
+
+// directIPAddressAllowed checks whether a non-public unicast destination is
+// covered by a granted direct_ip capability and its optional destination list.
+func directIPAddressAllowed(declared []string, addr netip.Addr, port uint16) bool {
+	addr = addr.Unmap()
+	if !egress.IPDirectAllowed(addr) {
+		return false
+	}
+	if permits, narrowed := confine.ParseDirectIPPermits(declared); narrowed {
+		portAllowed := false
+		for _, p := range permits {
+			if p.Protocol == "tcp" && p.Port == port {
+				portAllowed = true
+				break
+			}
+		}
+		if !portAllowed {
+			return false
+		}
+	}
+	if len(declared) == 0 {
+		return true
+	}
+	allConstrained := true
+	matched := false
+	for _, raw := range declared {
+		m, constrained := declaredDirectIPMatch(raw, addr, port)
+		if !constrained {
+			allConstrained = false
+			continue
+		}
+		if m {
+			matched = true
+		}
+	}
+	return !allConstrained || matched
+}
+
+func declaredDirectIPMatch(raw string, addr netip.Addr, port uint16) (matched bool, constrained bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false, false
+	}
+	if scheme, rest, found := strings.Cut(s, "://"); found {
+		switch strings.ToLower(strings.TrimSpace(scheme)) {
+		case "tcp", "http", "https":
+			s = rest
+		case "udp":
+			return false, true
+		default:
+			return false, false
+		}
+	}
+	hostPort, _, _ := strings.Cut(s, "/")
+	if host, portText, err := net.SplitHostPort(hostPort); err == nil {
+		parsedPort, pErr := strconv.ParseUint(strings.TrimSpace(portText), 10, 16)
+		if pErr != nil || parsedPort == 0 {
+			return false, true
+		}
+		portMatches := uint16(parsedPort) == port
+		if declaredAddr, aErr := netip.ParseAddr(strings.TrimSuffix(strings.TrimSpace(host), ".")); aErr == nil {
+			return portMatches && declaredAddr.Unmap() == addr, true
+		}
+		return portMatches, true
+	}
+	trimmed := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(hostPort), "["), "]")
+	if declaredAddr, err := netip.ParseAddr(strings.TrimSuffix(trimmed, ".")); err == nil {
+		return declaredAddr.Unmap() == addr, true
+	}
+	return false, false
 }
 
 func invalid(err error) *toolrejection.ToolReject {

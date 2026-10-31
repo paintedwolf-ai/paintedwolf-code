@@ -43,3 +43,38 @@ func TestIPPublic(t *testing.T) {
 		})
 	}
 }
+
+func TestIPDirectAllowed(t *testing.T) {
+	tests := []struct {
+		address string
+		allowed bool
+	}{
+		{"10.0.0.1", true},
+		{"100.64.0.1", true},
+		{"172.16.0.1", true},
+		{"192.0.2.1", true},
+		{"192.168.1.1", true},
+		{"198.18.0.1", true},
+		{"198.51.100.1", true},
+		{"203.0.113.1", true},
+		{"fc00::1", true},
+		{"2001:db8::1", true},
+		{"8.8.8.8", false},
+		{"2606:4700:4700::1111", false},
+		{"0.0.0.0", false},
+		{"0.1.2.3", false},
+		{"127.0.0.1", false},
+		{"::1", false},
+		{"169.254.169.254", false},
+		{"fe80::1", false},
+		{"255.255.255.255", false},
+		{"ff02::1", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.address, func(t *testing.T) {
+			if got := egress.IPDirectAllowed(netip.MustParseAddr(tc.address)); got != tc.allowed {
+				t.Fatalf("IPDirectAllowed(%s)=%t want %t", tc.address, got, tc.allowed)
+			}
+		})
+	}
+}
