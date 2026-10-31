@@ -161,6 +161,7 @@ resources:
             names: [gh]
         connections:
           - mode: proxy
+          - mode: credential_store
   - id: go
     family: runtimes
     label: Go

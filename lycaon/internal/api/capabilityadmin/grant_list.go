@@ -133,7 +133,8 @@ func (s *Inventory) approvalGrants(chat string) []hitl.ApprovalGrant {
 			for _, mode := range s.HostResources.ConnectionModes(strings.Split(grant.Predicate.Pattern, ",")) {
 				switch mode {
 				case hostresources.ConnectionNone, hostresources.ConnectionProxy, hostresources.ConnectionSOCKS,
-					hostresources.ConnectionBaselineLoopback, hostresources.ConnectionDynamic:
+					hostresources.ConnectionBaselineLoopback, hostresources.ConnectionDynamic,
+					hostresources.ConnectionCredentialStore:
 					continue
 				case hostresources.ConnectionLocalService:
 					grant.ElevatedEffects = append(grant.ElevatedEffects, wire.ElevatedAccessEffectLocalService)

@@ -5475,7 +5475,7 @@ export interface components {
         /** @enum {string} */
         HostResourceExecutionSurface: "process_exec";
         /** @enum {string} */
-        HostResourceConnectionMode: "none" | "proxy" | "socks" | "baseline_loopback" | "local_service" | "direct_ip" | "dynamic";
+        HostResourceConnectionMode: "none" | "proxy" | "socks" | "baseline_loopback" | "local_service" | "direct_ip" | "dynamic" | "credential_store";
         /** @enum {string} */
         HostResourceLocalServiceTransport: "unix_socket" | "named_pipe";
         HostResourceConnection: {

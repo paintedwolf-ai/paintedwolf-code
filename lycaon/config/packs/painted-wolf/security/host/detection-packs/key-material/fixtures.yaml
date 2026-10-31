@@ -40,6 +40,8 @@ fixtures:
     target_files: ['~/.local/share/keyrings/login.keyring']
   - command: cp wallet.kwl ~/.local/share/kwalletd/kdewallet.kwl
     target_files: ['~/.local/share/kwalletd/kdewallet.kwl']
+  - command: cmdkey /add:github.com /user:dev /pass:secret
+    target_files: ['~/AppData/Local/Microsoft/Credentials/DFBE70A7E5CC19A398EBF1B96859CE5D']
   negative:
   - command: cp wallet.kwl ~/.local/share/kwalletd-backup/kdewallet.kwl
     target_files: ['~/.local/share/kwalletd-backup/kdewallet.kwl']

@@ -14576,6 +14576,7 @@ components:
         - local_service
         - direct_ip
         - dynamic
+        - credential_store
     HostResourceLocalServiceTransport:
       type: string
       enum:
