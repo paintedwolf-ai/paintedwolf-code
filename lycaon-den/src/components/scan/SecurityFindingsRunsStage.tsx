@@ -169,9 +169,9 @@ export function SecurityFindingsRunsStage(props: SecurityFindingsRunsStageProps)
               overview={props.overview}
               displayed={props.displayedPass}
               starting={props.startingFullScan}
-              onStartFullScan={() =>
-                props.onStartFullScan([...defaultFullScanSelection(props.overview)])
-              }
+              onStartFullScan={() => {
+                void props.onStartFullScan([...defaultFullScanSelection(props.overview)]);
+              }}
               onClearFilters={props.onClearFilters}
             />
           </Show>

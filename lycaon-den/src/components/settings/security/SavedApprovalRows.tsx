@@ -511,23 +511,26 @@ export function SavedApprovalGroupsSection(props: {
   const renderGroupRows = (group: GrantScopeGroup) => (
     <ul class="den-saved-approvals-list" data-testid="saved-approvals-table">
       <For each={group.grants}>
-        {(grant) =>
-          props.projectId ? (
+        {(grant) => (
+          <Show
+            when={props.projectId}
+            fallback={
+              <SavedApprovalGrantRow
+                grant={grant}
+                nowMs={props.nowMs}
+                actionsDisabled={props.actionsDisabled}
+                onRevoke={props.onRevokeGrant}
+              />
+            }
+          >
             <SavedApprovalReviewGrantRow
               grant={grant}
               nowMs={props.nowMs}
               actionsDisabled={props.actionsDisabled}
               onRevoke={props.onRevokeGrant}
             />
-          ) : (
-            <SavedApprovalGrantRow
-              grant={grant}
-              nowMs={props.nowMs}
-              actionsDisabled={props.actionsDisabled}
-              onRevoke={props.onRevokeGrant}
-            />
-          )
-        }
+          </Show>
+        )}
       </For>
     </ul>
   );
