@@ -84,6 +84,10 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 // InvokeEvaluator admits the evaluator's local owner under its real execution
 // identity. It does not create a model tool call or grant child effects.
 func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (result toolcontract.ProducerResult, err error) {
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})

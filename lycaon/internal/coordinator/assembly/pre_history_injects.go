@@ -84,7 +84,11 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 ) ([]api.Message, error) {
 	var tail []api.Message
 
-	tail = append(tail, e.agentsMDChainInject(ctx, sess, history, turn)...)
+	policies, err := e.agentsMDChainInject(ctx, sess, history, turn)
+	if err != nil {
+		return nil, err
+	}
+	tail = append(tail, policies...)
 	if block, ok := e.skillProcedureInject(ctx, sess, frame.Machine.ProfileID); ok {
 		tail = append(tail, block)
 	} else if block, ok := e.skillPointerInject(ctx, sess, frame.Machine.ProfileID); ok {

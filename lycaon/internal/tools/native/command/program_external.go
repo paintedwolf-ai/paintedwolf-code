@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // ExternalStages launches one confined external stage per request through the
@@ -23,7 +25,7 @@ import (
 // stays literal: no shell, no PATH re-resolution by the host, no fallback.
 type ExternalStages struct {
 	ToolContext     tools.ToolContext
-	Dir             string
+	Cwd             projectpaths.Resolved
 	ExtraWriteRoots []string
 	BaseEnvironment []string
 }
@@ -39,9 +41,17 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
 	tctx := l.ToolContext
-	cwd := l.Dir
+	cwd := l.Cwd.Abs
 	if cwd == "" {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
+	}
+	rootID := l.Cwd.Root.ID
+	if l.Cwd.External {
+		rootID = ""
+	}
+	policyTargets := []agentpolicy.Target{{RootID: rootID, Path: cwd, Mutation: true}}
+	if err := tctx.CheckPolicyTargets(ctx, policyTargets); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
 	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		if ctx.Err() != nil {
@@ -71,6 +81,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	opts.Child = confine.ProcessAttributes{Limits: childLimits(request.Process.Limits), IgnoreHangup: request.Process.IgnoreHangup}
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
+	}
+	if err := tctx.CheckPolicyTargets(ctx, policyTargets); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		if ctx.Err() != nil {
@@ -144,7 +157,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Cwd.Abs, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}

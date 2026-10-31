@@ -9,17 +9,19 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/history"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
+	"github.com/lycaon/lycaon/internal/session/policyindex"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Model struct {
-	Workspace  *sessionscope.Service
-	Cost       cost.CostTracker
-	History    *history.Service
-	LLM        modelcall.LLMClient
-	LLMService *llm.Service
-	Limits     *sessionlimits.Service
+	PolicyIndex *policyindex.Service
+	Workspace   *sessionscope.Service
+	Cost        cost.CostTracker
+	History     *history.Service
+	LLM         modelcall.LLMClient
+	LLMService  *llm.Service
+	Limits      *sessionlimits.Service
 }
 
 func (m *Model) Build() promptloop.ModelDeps {
@@ -35,7 +37,7 @@ func (m *Model) Build() promptloop.ModelDeps {
 			if m.LLMService != nil && m.LLMService.Registry != nil {
 				budgets = m.LLMService.Registry
 			}
-			return m.History.FitRequest(ctx, sess, rows, req, budgets)
+			return m.History.FitRequest(ctx, sess, rows, req, budgets, m.PolicyIndex)
 		}
 	}
 	deps.RecordCompactionTokenObservation = func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int) {

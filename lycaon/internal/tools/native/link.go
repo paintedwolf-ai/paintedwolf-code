@@ -78,33 +78,35 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 	if err != nil {
 		return err
 	}
-	err = fseffect.Link(fseffect.LinkRequest{Location: loc, Target: in.Target, Replace: in.Force,
-		BeforeCommit: func(_ fseffect.Target) error {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if err := projectpaths.AdmitLinkTarget(tc, resolved.Abs, in.Target); err != nil {
-				return err
-			}
-			if change.Op == api.SourceChangeOpWrite || !before.exists {
-				if err := (ExecutionRevisions{Boundary: t.Boundary}).Verify(ctx, tc, in.Destination); err != nil {
+	err = applyPreparedAgentMutation(ctx, tc, change, journal, func() error {
+		return fseffect.Link(fseffect.LinkRequest{Location: loc, Target: in.Target, Replace: in.Force,
+			BeforeCommit: func(_ fseffect.Target) error {
+				if err := ctx.Err(); err != nil {
 					return err
 				}
-			}
-			current, err := captureRemovedEntry(ctx, loc, in.Memory, false)
-			if err != nil {
-				return err
-			}
-			if current.release != nil {
-				defer current.release()
-			}
-			if current.exists != (change.Op == api.SourceChangeOpWrite) || current.sha256 != change.BeforeSHA256 || current.isDir || (current.exists && !current.isLink) {
-				return fmt.Errorf("%w: link entry changed before publication", errMutationSnapshotMoved)
-			}
-			return nil
-		},
+				if err := projectpaths.AdmitLinkTarget(tc, resolved.Abs, in.Target); err != nil {
+					return err
+				}
+				if change.Op == api.SourceChangeOpWrite || !before.exists {
+					if err := (ExecutionRevisions{Boundary: t.Boundary}).Verify(ctx, tc, in.Destination); err != nil {
+						return err
+					}
+				}
+				current, err := captureRemovedEntry(ctx, loc, in.Memory, false)
+				if err != nil {
+					return err
+				}
+				if current.release != nil {
+					defer current.release()
+				}
+				if current.exists != (change.Op == api.SourceChangeOpWrite) || current.sha256 != change.BeforeSHA256 || current.isDir || (current.exists && !current.isLink) {
+					return fmt.Errorf("%w: link entry changed before publication", errMutationSnapshotMoved)
+				}
+				return nil
+			},
+		})
 	})
-	if err := finishAgentMutation(ctx, tc, change, journal, err); err != nil {
+	if err != nil {
 		return err
 	}
 	afterSuccessfulMutation(ctx, tc, resolved.Abs)

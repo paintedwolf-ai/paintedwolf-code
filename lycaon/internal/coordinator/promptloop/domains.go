@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -35,6 +35,7 @@ type ContextDeps struct {
 	RootSessionID                   func(ctx context.Context, sessionID string) string
 	Policy                          toolpolicy.Engine
 	CommitWorkerContext             func(context.Context, string, string) error
+	PrepareAgentPolicy              func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
 	BuildMessages                   func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
 	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
