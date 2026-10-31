@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
+	"github.com/lycaon/lycaon/internal/workercompletionxml"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
@@ -98,8 +101,75 @@ func TestCompactSpillIndexNonListUnchanged(t *testing.T) {
 	if meta.Strategy != "spill_index" {
 		t.Fatalf("strategy=%q want spill_index", meta.Strategy)
 	}
+	if !strings.Contains(out, "801 lines") {
+		t.Fatalf("expected line count in compaction banner: %q", out[:minInt(200, len(out))])
+	}
 	if !strings.Contains(out, "...[compacted middle omitted]...") {
 		t.Fatalf("expected char head/tail marker: %q", out[:minInt(200, len(out))])
+	}
+}
+
+func TestCompactSpillIndexTaskEnvelopeIsLinePageable(t *testing.T) {
+	dir := t.TempDir()
+	findings := make([]map[string]any, 12)
+	for i := range findings {
+		findings[i] = map[string]any{
+			"path": "internal/pkg/file_" + strconv.Itoa(i) + ".go",
+			"line": i + 1,
+			"note": strings.Repeat("detailed finding note ", 8) + strconv.Itoa(i),
+		}
+	}
+	reportJSON, err := json.MarshalIndent(map[string]any{
+		"leg_status":     "complete",
+		"brief":          strings.Repeat("survey summary prose ", 40),
+		"objectives_met": []string{"objective one", "objective two", "objective three"},
+		"findings":       findings,
+	}, "", "  ")
+	testutil.FailErr(t, "marshal report_json", err)
+	xmlBytes, err := xml.MarshalIndent(workercompletionxml.Doc{
+		JobID:          "92a8068b-b369-401a-8251-6d614ca549f4",
+		ChildSessionID: "82a167f8-cffc-48bd-b3a6-630f3d4930ee",
+		AgentType:      "repo-researcher",
+		State:          "complete",
+		Summary:        "surveyed handlers",
+		ReportJSON:     string(reportJSON),
+	}, "", "  ")
+	testutil.FailErr(t, "marshal task XML", err)
+	content := strings.ReplaceAll(string(xmlBytes), "&#xA;", "\n")
+	wantLines := toolkit.CountLines(content)
+	if wantLines < 40 {
+		t.Fatalf("expected multi-line task envelope, got %d lines", wantLines)
+	}
+
+	cfg := testCompactionConfig()
+	cfg.ChunkTargetTokens = 150
+	compactor := NewChunkCompactor(cfg, nil)
+	chunk := ContentChunk{
+		Kind:        ChunkKindToolResult,
+		ToolName:    "task",
+		Class:       testChunkDiet("task", ""),
+		Tokens:      tokenest.EstimateDefault(content),
+		HostDataDir: dir,
+	}
+	out, meta, err := compactor.CompactChunk(context.Background(), chunk, content)
+	testutil.FailErr(t, "CompactChunk", err)
+	if meta.Strategy != "spill_index" {
+		t.Fatalf("strategy=%q want spill_index", meta.Strategy)
+	}
+	wantLineBanner := strconv.Itoa(wantLines) + " lines; full observation at "
+	if !strings.Contains(out, wantLineBanner) {
+		t.Fatalf("banner missing %q: %q", wantLineBanner, out[:minInt(220, len(out))])
+	}
+	paths := tooloutput.SpillPaths(out)
+	if len(paths) != 1 {
+		t.Fatalf("spill paths = %v, want 1", paths)
+	}
+	raw, err := os.ReadFile(tooloutput.DiskPath(dir, paths[0]))
+	testutil.FailErr(t, "read spill", err)
+	spillBytes, err := zstdcodec.Decompress(raw)
+	testutil.FailErr(t, "decompress spill", err)
+	if gotLines := toolkit.CountLines(string(spillBytes)); gotLines != wantLines {
+		t.Fatalf("spill lines = %d want %d", gotLines, wantLines)
 	}
 }
 
