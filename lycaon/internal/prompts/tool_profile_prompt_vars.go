@@ -186,6 +186,43 @@ func VisibleToolsNativePartialVars(visibleTools []string) map[string]any {
 	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views})
 }
 
+// MergeProfileRequestableVars sets profile_can_request for the tools profileID
+// can still load when request_tools is offered.
+func MergeProfileRequestableVars(profileID string, offered []string, into map[string]any) {
+	if into == nil {
+		return
+	}
+	into["profile_can_request"] = requestableToolSet(offered, profileAllowedToolNames(profileID))
+}
+
+func profileAllowedToolNames(profileID string) []string {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil
+	}
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return nil
+	}
+	resolvedID := profileID
+	if mapped, err := ToolProfileForAgent(profileID); err == nil {
+		resolvedID = mapped
+	}
+	for _, p := range profiles {
+		if p.ID != profileID && p.ID != resolvedID {
+			continue
+		}
+		var out []string
+		for _, name := range visibleToolNames(p, nil) {
+			if p.ToolAllowed(name) {
+				out = append(out, name)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any {
 	enabled := enabledToolSet(data.Tools)
 	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, enabled)

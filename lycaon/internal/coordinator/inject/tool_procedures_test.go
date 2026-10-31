@@ -205,3 +205,39 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 		t.Fatalf("unexpected lifecycle tool phrasing: %s", withLifecycle)
 	}
 }
+
+func TestRunnerProcedureStaticPreviewPointerFollowsOfferedAndRequestableCapturePage(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	for _, profile := range []string{"coordinator", "implementer"} {
+		offered, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-offered", profile, []string{"command", "capture_page"}, nil)
+		testutil.FailErr(t, "render offered capture_page runner procedure", err)
+		if !strings.Contains(offered, "For static page preview, `capture_page` in `project_dir` mode needs no server.") {
+			t.Fatalf("%s offered capture_page missing project_dir pointer: %s", profile, offered)
+		}
+
+		requestable, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-requestable", profile, []string{"command", "request_tools"}, nil)
+		testutil.FailErr(t, "render requestable capture_page runner procedure", err)
+		if !strings.Contains(requestable, "For static page preview, load page capture with `request_tools`") || !strings.Contains(requestable, "instead of starting a static server.") {
+			t.Fatalf("%s requestable capture_page missing request_tools static-preview pointer: %s", profile, requestable)
+		}
+		assertOfferedPageProcedures(t, []string{"command", "request_tools"}, requestable)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		profile string
+		tools   []string
+	}{
+		{name: "no request_tools", profile: "coordinator", tools: []string{"command"}},
+		{name: "profile without capture_page", profile: "editor_file", tools: []string{"command", "request_tools"}},
+		{name: "unknown profile", profile: "unknown", tools: []string{"command", "request_tools"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-omitted", tc.profile, tc.tools, nil)
+			testutil.FailErr(t, "render runner procedure without capture_page", err)
+			if strings.Contains(block, "For static page preview") {
+				t.Fatalf("unexpected static-preview pointer for %s/%v: %s", tc.profile, tc.tools, block)
+			}
+		})
+	}
+}

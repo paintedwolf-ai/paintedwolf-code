@@ -21,6 +21,7 @@ func RenderToolProceduresBlock(
 	sort.Strings(names)
 	vars := prompts.VisibleToolsNativePartialVars(names)
 	vars["offered_tools"] = names
+	prompts.MergeProfileRequestableVars(profileID, names, vars)
 	mergeRunnerCapabilityVars(names, vars)
 	prompts.MergeHTTPActionVars(names, vars)
 	surface := "worker"
