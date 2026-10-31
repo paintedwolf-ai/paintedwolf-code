@@ -76,6 +76,9 @@ func (s *Store) parseRecords(raw []byte) ([]Manifest, int, error) {
 		if err := decoder.Decode(&record); err != nil {
 			return nil, 0, fmt.Errorf("modelstore: record %d: %w", i, err)
 		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			return nil, 0, fmt.Errorf("modelstore: trailing value in record %d", i)
+		}
 		if record.Version != 1 {
 			return nil, 0, fmt.Errorf("modelstore: unknown journal version %d", record.Version)
 		}

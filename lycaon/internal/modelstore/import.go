@@ -11,8 +11,19 @@ import (
 	"github.com/lycaon/lycaon/internal/filelock"
 )
 
+var ErrRevisionInUse = errors.New("modelstore: revision is in use")
+
 // Import retains staged payloads until the authenticated revision is activated.
 func (s *Store) Import(ctx context.Context, signed SignedManifest, source func(context.Context, Artifact) (io.ReadCloser, error)) error {
+	return s.importRevision(ctx, signed, source, false)
+}
+
+// Repair replaces damaged files after every reader has released the revision.
+func (s *Store) Repair(ctx context.Context, signed SignedManifest, source func(context.Context, Artifact) (io.ReadCloser, error)) error {
+	return s.importRevision(ctx, signed, source, true)
+}
+
+func (s *Store) importRevision(ctx context.Context, signed SignedManifest, source func(context.Context, Artifact) (io.ReadCloser, error), repair bool) error {
 	if err := validate(signed.Manifest); err != nil {
 		return err
 	}
@@ -22,7 +33,7 @@ func (s *Store) Import(ctx context.Context, signed SignedManifest, source func(c
 	if err := s.signer.Verify(signed); err != nil {
 		return err
 	}
-	pins, err := s.pinImport(signed.Manifest)
+	pins, err := s.pinImport(signed.Manifest, repair)
 	if err != nil {
 		return err
 	}
@@ -51,7 +62,7 @@ func (s *Store) Import(ctx context.Context, signed SignedManifest, source func(c
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.Activate(signed)
+	return s.activate(signed, repair)
 }
 
 type contextReader struct {
@@ -70,13 +81,28 @@ func (s *Store) artifactLock(digest string) (*os.File, error) {
 	return filelock.Open(filepath.Join(s.root, "locks", "artifacts", digest+".lock"))
 }
 
-func (s *Store) pinImport(m Manifest) ([]*os.File, error) {
+func (s *Store) pinImport(m Manifest, repair bool) ([]*os.File, error) {
 	lock, err := s.lockJournal()
 	if err != nil {
 		return nil, err
 	}
 	defer lock.Unlock()
 	var pins []*os.File
+	if repair {
+		f, err := s.revisionLock(m)
+		if err != nil {
+			return nil, err
+		}
+		held, err := filelock.TryExclusive(f)
+		if err != nil || !held {
+			f.Close()
+			if err != nil {
+				return nil, err
+			}
+			return nil, ErrRevisionInUse
+		}
+		pins = append(pins, f)
+	}
 	for _, a := range manifestFiles(m) {
 		f, err := s.artifactLock(a.Digest)
 		if err == nil {

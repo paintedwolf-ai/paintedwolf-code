@@ -1,12 +1,13 @@
 package modelstore
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fssync"
 )
@@ -25,11 +26,11 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	}
 	defer root.Close()
 	dir := filepath.Join("artifacts", want.Digest[:2])
-	if err := root.MkdirAll(dir, 0o755); err != nil {
+	if err := root.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("modelstore: mkdir: %w", err)
 	}
-	tmpName := filepath.Join(dir, ".staging-"+fmt.Sprint(time.Now().UnixNano()))
-	tmp, err := root.Create(tmpName)
+	tmpName := filepath.Join(dir, ".staging-"+rand.Text())
+	tmp, err := root.OpenFile(tmpName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("modelstore: temp: %w", err)
 	}

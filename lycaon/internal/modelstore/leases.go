@@ -34,7 +34,10 @@ func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*L
 	held, err := filelock.TryShared(f)
 	if err != nil || !held {
 		f.Close()
-		return nil, fmt.Errorf("modelstore: cannot lease revision: held=%v: %w", held, err)
+		if err != nil {
+			return nil, fmt.Errorf("modelstore: cannot lease revision: %w", err)
+		}
+		return nil, ErrRevisionInUse
 	}
 	return &Lease{lock: f, Manifest: m, Owner: owner, Generation: generation, Dir: dir}, nil
 }

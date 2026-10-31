@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
@@ -45,15 +47,19 @@ func manifestFiles(m Manifest) map[string]Artifact {
 }
 
 // materializeRevision publishes a complete directory under the journal lock.
-func (s *Store) materializeRevision(m Manifest) (string, error) {
+func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	root, err := s.openRoot()
 	if err != nil {
 		return "", err
 	}
 	defer root.Close()
 	rel := s.revisionRel(m)
+	exists := false
 	if _, err := root.Lstat(rel); err == nil {
-		return s.checkRevision(m)
+		if !repair {
+			return s.checkRevision(m)
+		}
+		exists = true
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
@@ -98,7 +104,19 @@ func (s *Store) materializeRevision(m Manifest) (string, error) {
 	if err := syncRootDir(root, tmp); err != nil {
 		return "", err
 	}
-	if err := root.Rename(tmp, rel); err != nil {
+	if exists {
+		first, err := fspath.EntryIdentity(filepath.Join(s.root, tmp))
+		if err != nil {
+			return "", err
+		}
+		second, err := fspath.EntryIdentity(filepath.Join(s.root, rel))
+		if err != nil {
+			return "", err
+		}
+		if err := fseffect.ExchangeGuarded(s.root, tmp, rel, first, second); err != nil {
+			return "", err
+		}
+	} else if err := root.Rename(tmp, rel); err != nil {
 		return "", err
 	}
 	if err := syncRootDir(root, filepath.Dir(rel)); err != nil {

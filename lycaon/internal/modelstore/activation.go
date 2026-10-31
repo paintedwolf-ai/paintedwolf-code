@@ -11,6 +11,10 @@ import (
 
 // Activate verifies manifest authority and appends the manifest to the activation journal under lock.
 func (s *Store) Activate(signed SignedManifest) error {
+	return s.activate(signed, false)
+}
+
+func (s *Store) activate(signed SignedManifest, repair bool) error {
 	if s.signer == nil {
 		return errors.New("modelstore: no manifest authority configured")
 	}
@@ -47,7 +51,7 @@ func (s *Store) Activate(signed SignedManifest) error {
 			return fmt.Errorf("modelstore: revision identity collision for %s", s.revisionRel(m))
 		}
 	}
-	if _, err := s.materializeRevision(m); err != nil {
+	if _, err := s.materializeRevision(m, repair); err != nil {
 		return err
 	}
 	line, err := json.Marshal(journalRecord{Version: 1, Signed: signed})
