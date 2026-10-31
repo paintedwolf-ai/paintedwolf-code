@@ -67,7 +67,8 @@ type ProgramRuntime struct {
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
 	// SourceRuns records a parked program's run evidence.
-	SourceRuns SourceRunRecorder
+	SourceRuns     SourceRunRecorder
+	FailureTracker *CommandFailureTracker
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -246,12 +247,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	release = func() { documents.close(); releaseDocuments() }
 	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
 	ctx = tools.WithCommandReadObserver(ctx, documents.read)
-	// A validation run's source identity is captured before anything runs.
-	var verification func() commandSourceIdentity
-	if tc.Execution.VerificationCheck {
-		_, reader := commandSourceReaders(ctx, tc, paths.Cwd().Abs)
-		identity := reader()
-		verification = func() commandSourceIdentity { return identity }
+	failureAttempt, verification, err := beginProgramAttempt(ctx, r.FailureTracker, tc, args, paths.Cwd().Abs)
+	if err != nil {
+		return "", err
 	}
 	var owners ProgramOwners
 	if r.Owners != nil {
@@ -317,7 +315,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	return r.attend(callCtx, &programEvaluation{
 		run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
 		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope, documents: documents,
-		paths: paths, verification: verification, release: release, callTC: callTC,
+		paths: paths, verification: verification, failureAttempt: failureAttempt, release: release, callTC: callTC,
 	})
 
 }

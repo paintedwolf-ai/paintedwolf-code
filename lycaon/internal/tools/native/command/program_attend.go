@@ -54,9 +54,10 @@ type programEvaluation struct {
 	outputs      *invocation.ProgramOutputRetention
 	scope        captureprojection.Scope
 	documents    *programDocuments
-	paths        *projectpaths.ProgramPaths
-	verification func() commandSourceIdentity
-	release      func()
+	paths          *projectpaths.ProgramPaths
+	verification   func() commandSourceIdentity
+	failureAttempt *commandFailureAttempt
+	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
 	// run.tc's private outcome until the result belongs to the call.
 	callTC tools.ToolContext
@@ -255,6 +256,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	if settledNow {
+		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
