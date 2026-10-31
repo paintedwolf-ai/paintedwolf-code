@@ -276,7 +276,9 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
 		}
 	} else {
-		l.Closeout.resumeWork(ctx, sessionID, st)
+		if batchResumesCloseoutWork(completion.ToolCalls) {
+			l.Closeout.resumeWork(ctx, sessionID, st)
+		}
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
