@@ -247,10 +247,7 @@ func TestCredentialStoreRefusalsRouteToCredentialStoreCapability(t *testing.T) {
 	testutil.FailErr(t, "resolve home", err)
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
-	SetKeyMaterialPathsSource(func() []string {
-		return []string{"~/.ssh/", "~/Library/Keychains/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"}
-	})
-	t.Cleanup(func() { SetKeyMaterialPathsSource(nil) })
+	t.Cleanup(installKeyMaterialFloor(t, "~/.ssh/", "~/Library/Keychains/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"))
 
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)

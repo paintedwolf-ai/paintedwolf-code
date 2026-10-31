@@ -178,10 +178,7 @@ func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
 
-	SetKeyMaterialPathsSource(func() []string {
-		return []string{"~/.ssh/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"}
-	})
-	t.Cleanup(func() { SetKeyMaterialPathsSource(nil) })
+	t.Cleanup(installKeyMaterialFloor(t, "~/.ssh/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"))
 
 	keyringsDir := filepath.Join(home, ".local", "share", "keyrings")
 	kwalletDir := filepath.Join(home, ".local", "share", "kwalletd")
