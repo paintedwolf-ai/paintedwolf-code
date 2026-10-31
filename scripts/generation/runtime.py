@@ -14,11 +14,14 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from artifact_paths import artifact_root, bin_dir, compiler_cache_dir
 from sources import ensure_source
+import swift_toolchain
 
 PINS = json.loads(Path(__file__).with_name("sources.json").read_text())
 
 
 def paths(backend):
+    if backend == "reference-swift":
+        return Path(__file__).parent / "swift-reference", compiler_cache_dir(ROOT) / "generation-swift"
     if backend == "reference-llama":
         pin = PINS["llama.cpp"]
         source = bin_dir(ROOT) / "generation-sources" / pin["sha256"]
@@ -32,6 +35,11 @@ def run(command, **kwargs):
 
 
 def prepare(args):
+    if args.backend == "reference-swift":
+        source, build = paths(args.backend)
+        compiler = swift_toolchain.prepare(bin_dir(ROOT))
+        run([compiler, "package", "--package-path", source, "--scratch-path", build, "resolve"])
+        return
     if args.backend == "reference-llama":
         print(ensure_source(PINS["llama.cpp"], bin_dir(ROOT) / "generation-sources"))
     elif args.backend == "reference-mlx":
@@ -66,7 +74,10 @@ def python_environment():
 def build(args):
     source, output = paths(args.backend)
     workers = os.environ.get("PW_TEST_WORKERS", "1")
-    if args.backend == "reference-llama":
+    if args.backend == "reference-swift":
+        run([swift_toolchain.executable(bin_dir(ROOT)), "build", "--package-path", source, "--scratch-path", output,
+             "--configuration", "release", "--jobs", workers, "--product", "generation-swift-reference"])
+    elif args.backend == "reference-llama":
         if not (source / ".source-sha256").is_file():
             raise ValueError("run generation:prepare for this candidate first")
         options = ["-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=OFF",
@@ -90,6 +101,11 @@ def build(args):
 
 
 def test(args):
+    if args.backend == "reference-swift":
+        source, output = paths(args.backend)
+        run([swift_toolchain.executable(bin_dir(ROOT)), "test", "--package-path", source, "--scratch-path", output,
+             "--jobs", os.environ.get("PW_TEST_WORKERS", "1")])
+        return
     if args.backend == "reference-mlx":
         run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
              "python", "-m", "unittest", "discover", "-s", Path(__file__).parent,
@@ -115,9 +131,10 @@ def bench(args):
                      "trials": args.trials, "ple": args.ple}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
-    if args.backend == "reference-llama":
+    if args.backend in {"reference-llama", "reference-swift"}:
         _, build = paths(args.backend)
-        command = [str(build / "generation-reference"), str(args.model.resolve()), str(input_path)]
+        binary = build / "generation-reference" if args.backend == "reference-llama" else build / "release/generation-swift-reference"
+        command = [str(binary), str(args.model.resolve()), str(input_path)]
         environment = os.environ
     elif args.backend == "reference-mlx":
         command = ["uv", "run", "--frozen", "--no-sync", "--project", str(Path(__file__).parent),
@@ -147,7 +164,7 @@ def bench(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["prepare", "build", "test", "bench"])
-    parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx"], default="native")
+    parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift"], default="native")
     parser.add_argument("--refresh-lock", action="store_true")
     parser.add_argument("--model", type=Path)
     parser.add_argument("--output", type=Path)

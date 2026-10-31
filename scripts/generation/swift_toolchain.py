@@ -1,0 +1,49 @@
+"""Prepare an isolated Swift compiler for the native MLX comparison."""
+
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import urllib.request
+
+VERSION = "6.3.3"
+URL = "https://download.swift.org/swift-6.3.3-release/xcode/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-osx.pkg"
+
+
+def executable(cache):
+    return cache / ("swift-" + VERSION) / "usr/bin/swift"
+
+
+def prepare(cache):
+    destination = executable(cache).parents[2]
+    if executable(cache).is_file():
+        record = json.loads((destination / "source.json").read_text())
+        if record["url"] != URL:
+            raise ValueError("isolated Swift toolchain identity mismatch")
+        return executable(cache)
+    cache.mkdir(parents=True, exist_ok=True)
+    if shutil.disk_usage(cache).free < 10 << 30:
+        raise ValueError("insufficient space for isolated Swift preparation")
+    with tempfile.TemporaryDirectory(prefix=".swift-", dir=cache) as temporary:
+        temporary = Path(temporary)
+        package = temporary / "swift.pkg"
+        digest, size = hashlib.sha256(), 0
+        with urllib.request.urlopen(URL, timeout=60) as source, package.open("xb") as output:
+            for block in iter(lambda: source.read(1 << 20), b""):
+                size += len(block)
+                if size > 4 << 30:
+                    raise ValueError("Swift toolchain package exceeds its bound")
+                digest.update(block)
+                output.write(block)
+        subprocess.run(["pkgutil", "--check-signature", str(package)], check=True)
+        expanded = temporary / "expanded"
+        subprocess.run(["pkgutil", "--expand-full", str(package), str(expanded)], check=True)
+        candidates = [p.parent.parent.parent for p in expanded.rglob("usr/bin/swift") if p.is_file()]
+        if len(candidates) != 1:
+            raise ValueError("Swift package has an unexpected toolchain layout")
+        (candidates[0] / "source.json").write_text(json.dumps({"url": URL, "sha256": digest.hexdigest(),
+                                                               "package_bytes": size}, indent=2) + "\n")
+        candidates[0].rename(destination)
+    return executable(cache)
