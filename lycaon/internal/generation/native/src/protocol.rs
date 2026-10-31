@@ -42,6 +42,9 @@ pub enum Request {
     Tokenize {
         text: String,
     },
+    Detokenize {
+        tokens: Vec<u32>,
+    },
     Generate(GenerateRequest),
     Cancel {
         request_id: String,
@@ -80,6 +83,8 @@ pub enum Event {
         request_id: String,
         seq: u64,
         token: u32,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        text: String,
     },
     Usage {
         request_id: String,

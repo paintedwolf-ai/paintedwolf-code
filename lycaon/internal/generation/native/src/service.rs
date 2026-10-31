@@ -1,7 +1,6 @@
 //! Generation service loop over length-prefixed stdio frames.
 
 use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -60,14 +59,43 @@ impl Service {
     }
 
     pub fn tokenize(&self, text: &str) -> Result<Vec<u32>> {
-        if let Some(tok) = &self.tokenizer {
-            let enc = tok
-                .encode(text, false)
-                .map_err(|e| Error::Tokenizer(e.to_string()))?;
-            return Ok(enc.get_ids().to_vec());
+        let tok = self
+            .tokenizer
+            .as_ref()
+            .ok_or_else(|| Error::Tokenizer("tokenizer is not loaded".into()))?;
+        let enc = tok
+            .encode(text, false)
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        Ok(enc.get_ids().to_vec())
+    }
+
+    pub fn detokenize(&self, tokens: &[u32]) -> Result<String> {
+        let tok = self
+            .tokenizer
+            .as_ref()
+            .ok_or_else(|| Error::Tokenizer("tokenizer is not loaded".into()))?;
+        tok.decode(tokens, false)
+            .map_err(|e| Error::Tokenizer(e.to_string()))
+    }
+
+    fn incremental_decode(&self, emitted: &[u32], decoded_bytes: &mut usize) -> Result<String> {
+        let Some(tok) = &self.tokenizer else {
+            return Ok(String::new());
+        };
+        let full = tok
+            .decode(emitted, false)
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        let stable = if full.ends_with('\u{FFFD}') {
+            full.trim_end_matches('\u{FFFD}')
+        } else {
+            full.as_str()
+        };
+        if stable.len() < *decoded_bytes || !stable.is_char_boundary(*decoded_bytes) {
+            return Ok(String::new());
         }
-        let vocab = self.decoder.cfg.vocab.max(1) as u32;
-        Ok(text.bytes().map(|b| (b as u32) % vocab).collect())
+        let delta = stable[*decoded_bytes..].to_string();
+        *decoded_bytes = stable.len();
+        Ok(delta)
     }
 
     fn run(
@@ -86,7 +114,7 @@ impl Service {
             .reuse(&req.cache_handle, &req.prompt_tokens)
             .unwrap_or(0);
         if req.cache_handle.is_none() || reuse == 0 {
-            cache.clear_committed();
+            cache.reset_active();
         }
 
         let mut tokens = req.prompt_tokens.clone();
@@ -103,6 +131,7 @@ impl Service {
 
         let fully_cached = tokens.is_empty();
         let mut emitted: Vec<u32> = Vec::new();
+        let mut decoded_bytes: usize = 0;
         let mut latest_logits: Vec<f32> = Vec::new();
 
         out.push(&Event::Accepted {
@@ -143,14 +172,16 @@ impl Service {
                 if stop.contains(&token) {
                     return Ok(StopReason::StopToken);
                 }
+                emitted.push(token);
+                let text = self.incremental_decode(&emitted, &mut decoded_bytes)?;
                 out.push(&Event::Token {
                     request_id: req.request_id.clone(),
                     seq,
                     token,
+                    text,
                 })?;
                 seq += 1;
                 generated += 1;
-                emitted.push(token);
 
                 let (next, kv) = self.decoder.step(&[token], &cache, cache.provisional_len())?;
                 logits = next;
@@ -223,10 +254,13 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
                         }
                     },
                     Err(e) => {
-                        let _ = reader_outbound.push(&Event::Failed {
-                            request_id: String::new(),
-                            error: format!("bad request: {e}"),
-                        });
+                        let (id, request_id) = extract_error_identity(&bytes);
+                        let _ = reader_outbound.push(&serde_json::json!({
+                            "id": id,
+                            "kind": "failed",
+                            "request_id": request_id,
+                            "error": format!("bad request: {e}"),
+                        }));
                     }
                 },
                 Ok(None) => return,
@@ -253,23 +287,16 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
                 weights,
                 device,
                 ..
-            } => match crate::checkpoint::load_decoder(&weights, &device) {
-                Ok(dec) => {
-                    let tok_path = Path::new(&weights).join("tokenizer.json");
-                    let tok = if tok_path.is_file() {
-                        Some(
-                            tokenizers::Tokenizer::from_file(&tok_path)
-                                .map_err(|e| Error::Tokenizer(e.to_string()))?,
-                        )
-                    } else {
-                        None
-                    };
+            } => match crate::checkpoint::load_decoder(&weights, &device)
+                .and_then(|dec| crate::checkpoint::load_tokenizer(&weights).map(|tok| (dec, tok)))
+            {
+                Ok((dec, tok)) => {
                     let generation = next_generation;
                     next_generation += 1;
                     *service
                         .lock()
                         .map_err(|_| Error::Device("service poisoned".into()))? =
-                        Some(Arc::new(Service::with_tokenizer(dec, tok, generation)));
+                        Some(Arc::new(Service::with_tokenizer(dec, Some(tok), generation)));
                     outbound.push(&serde_json::json!({
                         "id": frame_id,
                         "loaded": true,
@@ -306,6 +333,29 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
                     }))?,
                 }
             }
+            Request::Detokenize { tokens } => {
+                let svc = service
+                    .lock()
+                    .map_err(|_| Error::Device("service poisoned".into()))?
+                    .clone();
+                let Some(svc) = svc else {
+                    outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "error": "not loaded"
+                    }))?;
+                    continue;
+                };
+                match svc.detokenize(&tokens) {
+                    Ok(text) => outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "text": text,
+                    }))?,
+                    Err(e) => outbound.push(&serde_json::json!({
+                        "id": frame_id,
+                        "error": e.to_string()
+                    }))?,
+                }
+            }
             Request::Generate(g) => {
                 let svc = service
                     .lock()
@@ -335,6 +385,19 @@ pub fn serve(reader: impl Read + Send + 'static, writer: impl Write + Send + 'st
         }
     }
     Ok(())
+}
+
+fn extract_error_identity(bytes: &[u8]) -> (u64, String) {
+    let Ok(val) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return (0, String::new());
+    };
+    let id = val.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+    let request_id = val
+        .get("request_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    (id, request_id)
 }
 
 fn apply_cancel<W: Write + Send + 'static>(outbound: &Outbound<W>, request_id: &str) {
@@ -460,5 +523,304 @@ mod tests {
             }
         }
         assert_eq!(usages, vec![("r1".into(), 0), ("r2".into(), 4)]);
+    }
+
+    #[test]
+    fn reusing_older_handle_after_extension_matches_direct_reuse() {
+        let svc = tiny_service();
+        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+        struct SharedVec(Arc<Mutex<Vec<u8>>>);
+        impl Write for SharedVec {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let out = Outbound {
+            writer: Mutex::new(BufWriter::new(SharedVec(Arc::clone(&buf)))),
+            active: Mutex::new(None),
+        };
+        let cancel = Arc::new(AtomicU64::new(u64::MAX));
+
+        // 1. Publish handle r1/1 for prompt [1, 2] + 1 generated token (total len 3).
+        let req_a = GenerateRequest {
+            request_id: "r1".into(),
+            prompt_tokens: vec![1, 2],
+            max_new_tokens: 1,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: None,
+        };
+        svc.run(&req_a, &out, &cancel).unwrap();
+
+        // 2. Reuse r1/1 directly to establish expected tokens and usage.
+        let req_direct = GenerateRequest {
+            request_id: "direct".into(),
+            prompt_tokens: vec![1, 2, 0, 3],
+            max_new_tokens: 2,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: Some("r1/1".into()),
+        };
+        svc.run(&req_direct, &out, &cancel).unwrap();
+
+        // 3. Extend further and publish r2/1 so the active cache state moves past r1/1.
+        let req_b = GenerateRequest {
+            request_id: "r2".into(),
+            prompt_tokens: vec![1, 2, 0, 3, 2, 1],
+            max_new_tokens: 2,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: Some("r1/1".into()),
+        };
+        svc.run(&req_b, &out, &cancel).unwrap();
+
+        // 4. Reuse the older handle r1/1 again after r2/1 was published.
+        let req_reused_a = GenerateRequest {
+            request_id: "after_b".into(),
+            prompt_tokens: vec![1, 2, 0, 3],
+            max_new_tokens: 2,
+            seed: 7,
+            temperature: 0.0,
+            top_p: 1.0,
+            stop_tokens: vec![],
+            cache_handle: Some("r1/1".into()),
+        };
+        svc.run(&req_reused_a, &out, &cancel).unwrap();
+
+        let raw = buf.lock().unwrap().clone();
+        let mut cursor = Cursor::new(raw);
+        let mut direct_tokens = Vec::new();
+        let mut after_b_tokens = Vec::new();
+        let mut after_b_reused = 0;
+        while let Some(frame) = protocol::read_frame(&mut cursor).unwrap() {
+            let ev: Event = serde_json::from_slice(&frame).unwrap();
+            match ev {
+                Event::Token {
+                    request_id, token, ..
+                } if request_id == "direct" => direct_tokens.push(token),
+                Event::Token {
+                    request_id, token, ..
+                } if request_id == "after_b" => after_b_tokens.push(token),
+                Event::Usage {
+                    request_id,
+                    reused_prefix,
+                    ..
+                } if request_id == "after_b" => after_b_reused = reused_prefix,
+                _ => {}
+            }
+        }
+        assert_eq!(after_b_reused, 3);
+        assert_eq!(direct_tokens, after_b_tokens);
+    }
+
+    #[test]
+    fn tokenize_without_loaded_tokenizer_fails() {
+        let svc = tiny_service();
+        assert!(svc.tokenize("hello").is_err());
+    }
+
+    #[test]
+    fn extract_error_identity_preserves_request_fields() {
+        let raw = br#"{"id":42,"method":"generate","request_id":"req-42"}"#;
+        assert_eq!(extract_error_identity(raw), (42, "req-42".into()));
+    }
+
+    fn write_tiny_checkpoint_files(dir: &std::path::Path, include_tokenizer: bool) {
+        let cfg = serde_json::json!({
+            "hidden_size": 4,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 2,
+            "full_head_dim": 2,
+            "num_hidden_layers": 1,
+            "rope_theta": 10000.0,
+            "vocab_size": 5,
+            "rms_norm_eps": 1e-5,
+            "sliding_window": 8,
+            "eos_token_id": 4
+        });
+        std::fs::write(dir.join("config.json"), cfg.to_string()).unwrap();
+
+        let specs: &[(&str, &[usize])] = &[
+            ("model.embed_tokens.weight", &[5, 4]),
+            ("model.norm.weight", &[4]),
+            ("model.layers.0.input_layernorm.weight", &[4]),
+            ("model.layers.0.self_attn.q_proj.weight", &[4, 4]),
+            ("model.layers.0.self_attn.k_proj.weight", &[2, 4]),
+            ("model.layers.0.self_attn.v_proj.weight", &[2, 4]),
+            ("model.layers.0.self_attn.o_proj.weight", &[4, 4]),
+            ("model.layers.0.self_attn.q_norm.weight", &[2]),
+            ("model.layers.0.self_attn.k_norm.weight", &[2]),
+            ("model.layers.0.pre_feedforward_layernorm.weight", &[4]),
+            ("model.layers.0.mlp.gate_proj.weight", &[8, 4]),
+            ("model.layers.0.mlp.up_proj.weight", &[8, 4]),
+            ("model.layers.0.mlp.down_proj.weight", &[4, 8]),
+        ];
+        let mut header = serde_json::Map::new();
+        let mut data = Vec::<u8>::new();
+        for (name, shape) in specs {
+            let count: usize = shape.iter().product();
+            let start = data.len();
+            for _ in 0..count {
+                data.extend_from_slice(&0.1f32.to_le_bytes());
+            }
+            let end = data.len();
+            header.insert(
+                (*name).to_string(),
+                serde_json::json!({
+                    "dtype": "F32",
+                    "shape": shape,
+                    "data_offsets": [start, end],
+                }),
+            );
+        }
+        let header_bytes = serde_json::to_vec(&header).unwrap();
+        let mut st = Vec::new();
+        st.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+        st.extend_from_slice(&header_bytes);
+        st.extend_from_slice(&data);
+        std::fs::write(dir.join("model.safetensors"), st).unwrap();
+
+        if include_tokenizer {
+            let tok_json = serde_json::json!({
+                "version": "1.0",
+                "truncation": null,
+                "padding": null,
+                "added_tokens": [],
+                "normalizer": null,
+                "pre_tokenizer": {
+                    "type": "Whitespace"
+                },
+                "post_processor": null,
+                "decoder": null,
+                "model": {
+                    "type": "WordLevel",
+                    "vocab": {
+                        "<unk>": 0,
+                        "hello": 1,
+                        "world": 2,
+                        "test": 3,
+                        "<eos>": 4
+                    },
+                    "unk_token": "<unk>"
+                }
+            });
+            std::fs::write(dir.join("tokenizer.json"), tok_json.to_string()).unwrap();
+        }
+    }
+
+    #[test]
+    fn serve_rejects_load_without_tokenizer_and_decodes_with_tokenizer() {
+        let missing_dir = std::env::temp_dir().join(format!(
+            "nativegen-missing-tok-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&missing_dir);
+        std::fs::create_dir_all(&missing_dir).unwrap();
+        write_tiny_checkpoint_files(&missing_dir, false);
+
+        let valid_dir = std::env::temp_dir().join(format!(
+            "nativegen-valid-tok-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&valid_dir);
+        std::fs::create_dir_all(&valid_dir).unwrap();
+        write_tiny_checkpoint_files(&valid_dir, true);
+
+        let mut req_buf = Vec::new();
+        let push_req = |buf: &mut Vec<u8>, v: serde_json::Value| {
+            let bytes = serde_json::to_vec(&v).unwrap();
+            protocol::write_frame(buf, &bytes).unwrap();
+        };
+        push_req(
+            &mut req_buf,
+            serde_json::json!({
+                "id": 1,
+                "method": "load",
+                "manifest": "",
+                "weights": missing_dir.to_string_lossy(),
+                "device": "cpu"
+            }),
+        );
+        push_req(
+            &mut req_buf,
+            serde_json::json!({
+                "id": 2,
+                "method": "load",
+                "manifest": "",
+                "weights": valid_dir.to_string_lossy(),
+                "device": "cpu"
+            }),
+        );
+        push_req(
+            &mut req_buf,
+            serde_json::json!({
+                "id": 3,
+                "method": "tokenize",
+                "text": "hello world"
+            }),
+        );
+        push_req(
+            &mut req_buf,
+            serde_json::json!({
+                "id": 4,
+                "method": "detokenize",
+                "tokens": [1, 2]
+            }),
+        );
+        push_req(
+            &mut req_buf,
+            serde_json::json!({
+                "id": 5,
+                "method": "shutdown"
+            }),
+        );
+
+        let resp_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+        struct SharedOut(Arc<Mutex<Vec<u8>>>);
+        impl Write for SharedOut {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        serve(Cursor::new(req_buf), SharedOut(Arc::clone(&resp_buf))).unwrap();
+
+        let _ = std::fs::remove_dir_all(&missing_dir);
+        let _ = std::fs::remove_dir_all(&valid_dir);
+
+        let raw = resp_buf.lock().unwrap().clone();
+        let mut cursor = Cursor::new(raw);
+        let mut frames = Vec::new();
+        while let Some(frame) = protocol::read_frame(&mut cursor).unwrap() {
+            frames.push(serde_json::from_slice::<serde_json::Value>(&frame).unwrap());
+        }
+        assert_eq!(frames.len(), 4);
+        assert_eq!(frames[0]["id"], 1);
+        assert_eq!(frames[0]["loaded"], false);
+        assert!(frames[0]["error"].as_str().unwrap_or("").contains("tokenizer.json"));
+
+        assert_eq!(frames[1]["id"], 2);
+        assert_eq!(frames[1]["loaded"], true);
+
+        assert_eq!(frames[2]["id"], 3);
+        assert_eq!(frames[2]["tokens"], serde_json::json!([1, 2]));
+
+        assert_eq!(frames[3]["id"], 4);
+        assert_eq!(frames[3]["text"], "hello world");
     }
 }

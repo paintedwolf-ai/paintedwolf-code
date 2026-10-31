@@ -119,3 +119,15 @@ pub fn load_decoder(dir: &str, device: &str) -> Result<Decoder> {
     let tensors = read_safetensors(&weights_path)?;
     Decoder::load(cfg, Weights { tensors })
 }
+
+/// Load the checkpoint tokenizer from `tokenizer.json`.
+pub fn load_tokenizer(dir: &str) -> Result<tokenizers::Tokenizer> {
+    let tok_path = Path::new(dir).join("tokenizer.json");
+    if !tok_path.is_file() {
+        return Err(Error::Tokenizer(format!(
+            "{}: missing tokenizer.json",
+            tok_path.display()
+        )));
+    }
+    tokenizers::Tokenizer::from_file(&tok_path).map_err(|e| Error::Tokenizer(e.to_string()))
+}

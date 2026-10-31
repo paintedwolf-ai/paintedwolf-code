@@ -19,6 +19,13 @@ impl LayerKv {
     }
 }
 
+#[derive(Clone)]
+struct HandleSnapshot {
+    tokens: Vec<u32>,
+    layers: Vec<LayerKv>,
+    logits: Option<Vec<f32>>,
+}
+
 /// Committed KV state plus one active generation's staged appends.
 /// Each slot has its own full KV width (`kv_heads * head_dim_for(slot)`), supporting
 /// hybrid sliding and full-attention head dimensions.
@@ -27,7 +34,7 @@ pub struct Cache {
     slot_widths: Vec<usize>,
     committed_len: usize,
     staged: Vec<LayerKv>,
-    handles: HashMap<String, Vec<u32>>,
+    handles: HashMap<String, HandleSnapshot>,
     last_logits: Option<Vec<f32>>,
 }
 
@@ -114,31 +121,46 @@ impl Cache {
         if tokens.len() != self.committed_len {
             return;
         }
-        self.handles.insert(handle.to_string(), tokens);
+        self.handles.insert(
+            handle.to_string(),
+            HandleSnapshot {
+                tokens,
+                layers: self.layers.clone(),
+                logits: self.last_logits.clone(),
+            },
+        );
     }
 
-    pub fn reuse(&self, handle: &Option<String>, prompt: &[u32]) -> Option<usize> {
-        let retained = self.handles.get(handle.as_ref()?)?;
-        if retained.is_empty() || retained.len() > prompt.len() {
+    pub fn reuse(&mut self, handle: &Option<String>, prompt: &[u32]) -> Option<usize> {
+        let snap = self.handles.get(handle.as_ref()?)?;
+        if snap.tokens.is_empty()
+            || snap.tokens.len() > prompt.len()
+            || snap.tokens != prompt[..snap.tokens.len()]
+        {
             return None;
         }
-        if *retained == prompt[..retained.len()] {
-            Some(retained.len())
-        } else {
-            None
-        }
+        let reuse_len = snap.tokens.len();
+        self.layers = snap.layers.clone();
+        self.committed_len = reuse_len;
+        self.staged.clear();
+        self.last_logits = snap.logits.clone();
+        Some(reuse_len)
     }
 
     pub fn retained_logits(&self) -> Option<&[f32]> {
         self.last_logits.as_deref()
     }
 
-    pub fn clear_committed(&mut self) {
+    pub fn reset_active(&mut self) {
         self.layers = vec![LayerKv::new(); self.layers.len()];
         self.committed_len = 0;
         self.staged.clear();
-        self.handles.clear();
         self.last_logits = None;
+    }
+
+    pub fn clear_committed(&mut self) {
+        self.reset_active();
+        self.handles.clear();
     }
 
     pub fn committed_kv(&self, slot: usize) -> (&[f32], &[f32]) {
@@ -249,5 +271,32 @@ mod tests {
         let mut c = Cache::new(4, 2);
         assert!(c.stage(&[(0, vec![1.0, 2.0, 3.0], vec![1.0, 2.0, 3.0])]).is_err());
         assert!(c.stage(&[(99, vec![1.0, 2.0], vec![1.0, 2.0])]).is_err());
+    }
+
+    #[test]
+    fn older_handle_restores_its_kv_state_and_logits_after_extension() {
+        let mut c = Cache::new(2, 2);
+        c.stage(&[
+            (0, vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0, 8.0]),
+            (1, vec![0.5, 0.5, 1.5, 1.5], vec![2.5, 2.5, 3.5, 3.5]),
+        ])
+        .unwrap();
+        c.commit(vec![0.1, 0.9]);
+        c.publish("A", vec![10, 20]);
+
+        c.stage(&[
+            (0, vec![9.0, 9.0, 8.0, 8.0], vec![7.0, 7.0, 6.0, 6.0]),
+            (1, vec![4.5, 4.5, 5.5, 5.5], vec![6.5, 6.5, 7.5, 7.5]),
+        ])
+        .unwrap();
+        c.commit(vec![0.8, 0.2]);
+        c.publish("B", vec![10, 20, 30, 40]);
+        assert_eq!(c.committed_len(), 4);
+
+        assert_eq!(c.reuse(&Some("A".into()), &[10, 20, 99]), Some(2));
+        assert_eq!(c.committed_len(), 2);
+        assert_eq!(c.committed_kv(0), (&[1.0, 2.0, 3.0, 4.0][..], &[5.0, 6.0, 7.0, 8.0][..]));
+        assert_eq!(c.committed_kv(1), (&[0.5, 0.5, 1.5, 1.5][..], &[2.5, 2.5, 3.5, 3.5][..]));
+        assert_eq!(c.retained_logits(), Some(&[0.1, 0.9][..]));
     }
 }
