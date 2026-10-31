@@ -3,16 +3,21 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -226,5 +231,102 @@ func TestHTTPRequestDiscardDoesNotBufferResponseBody(t *testing.T) {
 	}
 	if _, present := fields["sha256"]; present {
 		t.Fatalf("discarded response claimed an observed hash: %s", out)
+	}
+}
+
+type stubDirectIPRuntime struct {
+	consumed int
+}
+
+func (*stubDirectIPRuntime) IssuePermit(hitl.EffectPermitIdentity, string, string, string) {}
+func (*stubDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool                  { return false }
+func (*stubDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
+	return true
+}
+func (s *stubDirectIPRuntime) ConsumePermit(hitl.EffectPermitIdentity, string, string, string) (bool, error) {
+	s.consumed++
+	return s.consumed == 1, nil
+}
+func (s *stubDirectIPRuntime) Authorized(hitl.EffectPermitIdentity, string) bool {
+	return s.consumed == 0
+}
+
+func TestDirectIPPolicyAllowsPrivateUnicastAndRespectsDeclaredDestinations(t *testing.T) {
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{
+			"direct_ip": map[string]any{
+				"declared_destinations": []any{"192.0.2.1:8080"},
+			},
+		},
+	})
+	if reject != nil {
+		t.Fatalf("ParseCapabilityRequest: %v", reject)
+	}
+	allow, reject := loopbackPolicy(req, tools.ToolContext{})
+	if reject != nil || allow == nil {
+		t.Fatalf("loopbackPolicy allow=%t, reject=%v", allow != nil, reject)
+	}
+	if !allow(netip.MustParseAddr("192.0.2.1"), 8080) {
+		t.Fatal("declared private destination 192.0.2.1:8080 was denied")
+	}
+	if allow(netip.MustParseAddr("192.0.2.1"), 9090) {
+		t.Fatal("undeclared port 192.0.2.1:9090 was allowed")
+	}
+	if allow(netip.MustParseAddr("192.0.2.2"), 8080) {
+		t.Fatal("undeclared address 192.0.2.2:8080 was allowed")
+	}
+	if allow(netip.MustParseAddr("169.254.169.254"), 8080) {
+		t.Fatal("link-local metadata address was allowed under direct_ip")
+	}
+	if allow(netip.MustParseAddr("127.0.0.1"), 8080) {
+		t.Fatal("loopback address was allowed under direct_ip without loopback_connect")
+	}
+}
+
+func TestHTTPRequestDirectIPConsumesPermitAndRejectsReplay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(server.Close)
+
+	registry := tools.NewDefaultRegistry()
+	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+		t.Fatalf("register http_request: %v", err)
+	}
+	rt := &stubDirectIPRuntime{}
+	var phases []tools.DirectIPLifecyclePhase
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID, SessionID: "s1", ToolCallID: "c1"},
+		Local:    tools.InvocationLocal{LoopbackConnectGranted: true},
+		Direct: tools.InvocationDirect{
+			DirectIPRequested:         true,
+			DirectIPAuthorized:        true,
+			DirectIPDeclared:          []string{"192.0.2.1:8080"},
+			DirectIPActionDigest:      "act",
+			DirectIPRequestDigest:     "req",
+			DirectIPConfineDigest:     "conf",
+			DirectIPCapabilityRuntime: rt,
+			DirectIPLifecycle: func(ev tools.DirectIPLifecycleEvent) {
+				phases = append(phases, ev.Phase)
+			},
+		},
+	}
+	args := map[string]any{
+		"url": server.URL,
+		"capability_request": map[string]any{
+			"direct_ip": map[string]any{"declared_destinations": []any{"192.0.2.1:8080"}},
+		},
+	}
+	if _, err := registry.Run(t.Context(), "http_request", args, tctx); err != nil {
+		t.Fatalf("first direct_ip http_request failed: %v", err)
+	}
+	if rt.consumed != 1 || len(phases) != 2 || phases[0] != tools.DirectIPLifecycleStarted || phases[1] != tools.DirectIPLifecycleCompleted {
+		t.Fatalf("consumed=%d phases=%v", rt.consumed, phases)
+	}
+	_, err := registry.Run(t.Context(), "http_request", args, tctx)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != isolation.CodeDirectIPAuthorizationChanged {
+		t.Fatalf("second run error = %v, want %s", err, isolation.CodeDirectIPAuthorizationChanged)
 	}
 }
