@@ -76,6 +76,9 @@ func (m *Service) retireSessionForProjectDelete(
 		if err := m.DisposeRuntime(ctx, id); err != nil {
 			return fmt.Errorf("dispose session runtime: %w", err)
 		}
+		if m.queue != nil {
+			m.queue.Clear(id)
+		}
 		retired()
 	}
 	if err := m.store.Delete(ctx, sess.ID); err != nil && !errors.Is(err, store.ErrSessionNotFound) {

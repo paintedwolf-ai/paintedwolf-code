@@ -6,8 +6,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -118,4 +124,114 @@ func TestGuardedDetachReturnsRootBusy(t *testing.T) {
 	if !ok || got.Status != wire.WorkerStatusRunning {
 		t.Fatal("guarded detach must not cancel running worker")
 	}
+}
+
+func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep fixture is unix-oriented")
+	}
+	h := wiring.BuildForTest(t)
+	httpSrv := httptest.NewServer(h.Server)
+	t.Cleanup(httpSrv.Close)
+	base := httpSrv.URL
+	ctx := t.Context()
+
+	rootADir := t.TempDir()
+	nestedADir := filepath.Join(rootADir, "nested")
+	testutil.FailErr(t, "mkdir nestedA", os.MkdirAll(nestedADir, 0o755))
+	rootBDir := t.TempDir()
+
+	project := createAPIProjectAtPath(t, base, rootADir)
+	rootAID := project.Roots[0].ID
+
+	attachReq := authedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/roots",
+		strings.NewReader(`{"path":`+ strconvQuote(rootBDir) +`,"label":"secondary"}`))
+	attachReq.Header.Set("Content-Type", "application/json")
+	attachW := httptest.NewRecorder()
+	h.Server.ServeHTTP(attachW, attachReq)
+	if attachW.Code != http.StatusCreated {
+		t.Fatalf("attach second root status = %d body = %s", attachW.Code, attachW.Body.String())
+	}
+
+	idleSess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
+	archivedSess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
+	now := time.Now().UTC()
+	testutil.FailErr(t, "archive session", h.Store.UpdateSession(ctx, archivedSess.ID, func(s *wire.Session) {
+		s.ArchivedAt = &now
+	}))
+
+	runner := hostcmd.NewRunner()
+	bg := h.Sessions.Manager.Processes.Background
+	idleHandleA, err := bg.StartPipeline(ctx, bgprocess.PipelineSpec{
+		SessionID: idleSess.ID, ProjectID: project.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch:     exec.HostLaunch("api idle rootA server"),
+			ProjectDir: nestedADir,
+			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+		},
+	})
+	testutil.FailErr(t, "start idleHandleA", err)
+
+	archivedHandleA, err := bg.StartPipeline(ctx, bgprocess.PipelineSpec{
+		SessionID: archivedSess.ID, ProjectID: project.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch:     exec.HostLaunch("api archived rootA server"),
+			ProjectDir: rootADir,
+			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"29"}}},
+		},
+	})
+	testutil.FailErr(t, "start archivedHandleA", err)
+
+	idleHandleB, err := bg.StartPipeline(ctx, bgprocess.PipelineSpec{
+		SessionID: idleSess.ID, ProjectID: project.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch:     exec.HostLaunch("api idle rootB server"),
+			ProjectDir: rootBDir,
+			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"28"}}},
+		},
+	})
+	testutil.FailErr(t, "start idleHandleB", err)
+
+	// Guarded detach without ?force=true returns 409 root_busy even with no busy turn, worker, or overlay.
+	guardedReq := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID, nil)
+	guardedW := httptest.NewRecorder()
+	h.Server.ServeHTTP(guardedW, guardedReq)
+	if guardedW.Code != http.StatusConflict {
+		t.Fatalf("guarded detach status = %d want 409; body=%s", guardedW.Code, guardedW.Body.String())
+	}
+
+	// Forced detach stops background commands under rootA in both idle and archived chats while preserving rootB.
+	forceReq := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID+"?force=true", nil)
+	forceW := httptest.NewRecorder()
+	h.Server.ServeHTTP(forceW, forceReq)
+	if forceW.Code != http.StatusNoContent {
+		t.Fatalf("forced detach status = %d want 204; body=%s", forceW.Code, forceW.Body.String())
+	}
+
+	for _, item := range []struct {
+		sess   string
+		handle string
+	}{
+		{idleSess.ID, idleHandleA},
+		{archivedSess.ID, archivedHandleA},
+	} {
+		snap, err := bg.Snapshot(ctx, item.sess, item.handle, 0)
+		testutil.FailErr(t, "snapshot "+item.handle, err)
+		if !snap.HasExit || snap.TerminationReason != bgprocess.TerminationRootDetached {
+			t.Fatalf("handle %s after forced detach = (hasExit=%v, reason=%q), want (true, root_detached)", item.handle, snap.HasExit, snap.TerminationReason)
+		}
+	}
+
+	snapB, err := bg.Snapshot(ctx, idleSess.ID, idleHandleB, 0)
+	testutil.FailErr(t, "snapshot idleHandleB", err)
+	if snapB.HasExit {
+		t.Fatal("expected background server under rootB to keep running after detaching rootA")
+	}
+}
+
+func strconvQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

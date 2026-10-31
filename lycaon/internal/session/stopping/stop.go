@@ -195,8 +195,9 @@ const stoppedTurnPoll = 10 * time.Millisecond
 func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string) error {
 	var errs []error
 	defer m.AcquireStoppedTurn(ctx, sess.ID)()
+	isWorkerChild := strings.TrimSpace(sess.ParentSessionID) != ""
 	fallback := bgprocess.TerminationStoppedByUser
-	if strings.TrimSpace(sess.ParentSessionID) != "" {
+	if isWorkerChild {
 		fallback = bgprocess.TerminationWorkerCancelled
 	}
 	ctx = bgprocess.WithTerminationReason(ctx, fallback)
@@ -210,7 +211,11 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 				m.store.InterruptPromptSubmissionsBySession(ctx, sess.ID))
 		}
 	}
-	errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	if isWorkerChild {
+		errs = appendStopError(errs, "dispose runtime", sess.ID, m.chats.DisposeRuntime(ctx, sess.ID))
+	} else {
+		errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	}
 	if m.queue != nil && !preserveQueue {
 		draft := m.queue.CancelAll(sess.ID)
 		m.drafts.Publish(ctx, sess.ID, draft.Revision)

@@ -2,6 +2,8 @@ package bgprocess_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
@@ -267,5 +269,138 @@ func TestConcurrentAndRepeatedStopsKeepFirstReasonAndEmitOneCompletion(t *testin
 	case dup := <-completed:
 		t.Fatalf("unexpected second completion: %+v", dup)
 	default:
+	}
+}
+
+func TestDisposeAwaitedSessionStopsOnlyUnpromotedAwaitedCommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep fixture is unix-oriented")
+	}
+	runner := hostcmd.NewRunner()
+	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	t.Cleanup(func() {
+		_ = reg.Lifecycle.DisposeSession(context.Background(), "sess-1", bgprocess.TerminationChatDeleted)
+	})
+
+	bgHandle, err := reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: "sess-1", ProjectID: "proj-1", Runner: runner, Mode: bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch: exec.HostLaunch("bg survive test"), ProjectDir: t.TempDir(),
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+		},
+	})
+	testutil.FailErr(t, "start background", err)
+
+	promotedHandle, err := reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: "sess-1", ProjectID: "proj-1", Runner: runner, Mode: bgprocess.JobModeAwaited,
+		AllowConcurrent: true,
+		Request: hostcmd.Request{
+			Launch: exec.HostLaunch("promoted survive test"), ProjectDir: t.TempDir(),
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{"29"}}},
+		},
+	})
+	testutil.FailErr(t, "start promoted", err)
+	testutil.FailErr(t, "promote awaited command", reg.Output.Promote(t.Context(), "sess-1", promotedHandle))
+
+	awaitedHandle, err := reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: "sess-1", ProjectID: "proj-1", Runner: runner, Mode: bgprocess.JobModeAwaited,
+		AllowConcurrent: true,
+		Request: hostcmd.Request{
+			Launch: exec.HostLaunch("unpromoted awaited test"), ProjectDir: t.TempDir(),
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{"28"}}},
+		},
+	})
+	testutil.FailErr(t, "start unpromoted awaited", err)
+
+	testutil.FailErr(t, "dispose awaited session", reg.Lifecycle.DisposeAwaitedSession(t.Context(), "sess-1", bgprocess.TerminationStoppedByUser))
+
+	if _, err := reg.Snapshot(t.Context(), "sess-1", awaitedHandle, 0); err == nil {
+		t.Fatal("expected unpromoted awaited handle to be discarded on DisposeAwaitedSession")
+	}
+	for _, keep := range []string{bgHandle, promotedHandle} {
+		snap, err := reg.Snapshot(t.Context(), "sess-1", keep, 0)
+		testutil.FailErr(t, "snapshot surviving handle "+keep, err)
+		if snap.HasExit {
+			t.Fatalf("handle %s stopped during DisposeAwaitedSession", keep)
+		}
+	}
+	active := reg.ActiveJobs("sess-1")
+	if len(active) != 2 {
+		t.Fatalf("active jobs = %+v, want 2 surviving jobs", active)
+	}
+}
+
+func TestProcessesUnderRootAndStopUnderRootCanonicalContainment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep/symlink fixture is unix-oriented")
+	}
+	runner := hostcmd.NewRunner()
+	completed := make(chan bgprocess.Completion, 8)
+	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{
+		Complete: func(_ context.Context, c bgprocess.Completion) { completed <- c },
+	})
+	t.Cleanup(func() {
+		_ = reg.Lifecycle.Close(context.Background())
+	})
+
+	rootA := t.TempDir()
+	nestedA := filepath.Join(rootA, "sub", "nested")
+	testutil.FailErr(t, "mkdir nestedA", os.MkdirAll(nestedA, 0o755))
+	rootB := t.TempDir()
+	symlinkHolder := t.TempDir()
+	symlinkToA := filepath.Join(symlinkHolder, "link-to-a")
+	testutil.FailErr(t, "symlink to rootA", os.Symlink(filepath.Join(rootA, "sub"), symlinkToA))
+
+	hRootA, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
+		ProjectDir: rootA, Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+	}, runner)
+	testutil.FailErr(t, "start rootA", err)
+
+	hNestedA, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
+		ProjectDir: nestedA, Stages: []exec.Stage{{Name: "sleep", Args: []string{"29"}}},
+	}, runner)
+	testutil.FailErr(t, "start nestedA", err)
+
+	hSymlinkA, err := startBackground(t.Context(), reg, "sess-2", "proj-1", hostcmd.Request{
+		ProjectDir: symlinkToA, Stages: []exec.Stage{{Name: "sleep", Args: []string{"28"}}},
+	}, runner)
+	testutil.FailErr(t, "start symlinkA", err)
+
+	hRootB, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
+		ProjectDir: rootB, Stages: []exec.Stage{{Name: "sleep", Args: []string{"27"}}},
+	}, runner)
+	testutil.FailErr(t, "start rootB", err)
+
+	underA := reg.ProcessesUnderRoot("proj-1", nil, rootA)
+	if len(underA) != 3 {
+		t.Fatalf("ProcessesUnderRoot(rootA) = %+v, want 3 processes", underA)
+	}
+	for _, p := range underA {
+		if p.Handle == hRootB {
+			t.Fatalf("ProcessesUnderRoot(rootA) included rootB handle %s", hRootB)
+		}
+	}
+
+	testutil.FailErr(t, "StopUnderRoot(rootA)", reg.Lifecycle.StopUnderRoot(t.Context(), "proj-1", nil, rootA, underA, bgprocess.TerminationRootDetached))
+
+	for _, stoppedHandle := range []struct {
+		sess   string
+		handle string
+	}{
+		{"sess-1", hRootA},
+		{"sess-1", hNestedA},
+		{"sess-2", hSymlinkA},
+	} {
+		snap, err := reg.Snapshot(t.Context(), stoppedHandle.sess, stoppedHandle.handle, 0)
+		testutil.FailErr(t, "snapshot stopped handle", err)
+		if !snap.HasExit || snap.TerminationReason != bgprocess.TerminationRootDetached {
+			t.Fatalf("handle %s state = (hasExit=%v, reason=%q), want (true, root_detached)", stoppedHandle.handle, snap.HasExit, snap.TerminationReason)
+		}
+	}
+
+	snapB, err := reg.Snapshot(t.Context(), "sess-1", hRootB, 0)
+	testutil.FailErr(t, "snapshot rootB handle", err)
+	if snapB.HasExit {
+		t.Fatal("expected process under rootB to keep running after detaching rootA")
 	}
 }
