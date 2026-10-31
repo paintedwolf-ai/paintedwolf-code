@@ -72,9 +72,10 @@ const (
 )
 
 type Boundary struct {
-	ProcessControl bool
-	HostExecution  bool
-	Applied        bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	Applied         bool
 	Network        NetworkMode
 	// EgressOff is why Network is NetworkDeny. Meaningless for any other mode.
 	EgressOff EgressOffCause
@@ -107,8 +108,9 @@ func BoundaryOf(c *Confinement) Boundary {
 		return Boundary{}
 	}
 	return Boundary{
-		ProcessControl: c.ProcessControl,
-		Filesystem:     filesystem,
+		ProcessControl:  c.ProcessControl,
+		CredentialStore: c.CredentialStore,
+		Filesystem:      filesystem,
 		Applied:        true, Network: c.Network, EgressOff: c.EgressOff,
 		SocksProxyEnv:   c.SocksProxyEnv && c.Network == NetworkProxyOnly && c.SocksProxyAddr != "",
 		WriteRoots:      writeRoots,
@@ -124,8 +126,9 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID routes project-scoped grants.
 	ProjectID string
 	// Roots are attached write locations.
@@ -201,6 +204,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 	}
 	c := &Confinement{
 		ProcessControl:              req.ProcessControl,
+		CredentialStore:             req.CredentialStore,
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),

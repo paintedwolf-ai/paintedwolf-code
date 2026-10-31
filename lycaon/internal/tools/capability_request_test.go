@@ -34,7 +34,7 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 		toolcontract.CapabilityHostResource, toolcontract.CapabilitySocket,
 		toolcontract.CapabilityDirectIP, toolcontract.CapabilityLocalListen,
 		toolcontract.CapabilityLoopbackConnect, toolcontract.CapabilityTerminalCapture,
-		toolcontract.CapabilityWriteRoot,
+		toolcontract.CapabilityWriteRoot, toolcontract.CapabilityCredentialStore,
 	} {
 		if !command.Supports(capability) {
 			t.Fatalf("command lacks capability %d", capability)
@@ -289,6 +289,7 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 	payloads := map[string]any{
 		"host_resources":   []any{"docker"},
 		"process_control":  true,
+		"credential_store": true,
 		"host_execution":   true,
 		"socket_paths":     []any{"/tmp/a.sock"},
 		"direct_ip":        map[string]any{},
@@ -307,6 +308,52 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 		})
 		if reject != nil {
 			t.Fatalf("%s reject = %+v", field, reject)
+		}
+	}
+}
+
+func TestParseCapabilityRequestCredentialStore(t *testing.T) {
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{"credential_store": true},
+	})
+	if reject != nil || req == nil || !req.CredentialStore {
+		t.Fatalf("credential_store: true = (%+v, %+v)", req, reject)
+	}
+	for _, invalid := range []any{false, "true", 1, map[string]any{}} {
+		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+			"capability_request": map[string]any{"credential_store": invalid},
+		})
+		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+			t.Fatalf("credential_store: %#v reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", invalid, reject)
+		}
+	}
+	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{"credential_store": true, "host_execution": true},
+	})
+	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+		t.Fatalf("credential_store + host_execution reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", reject)
+	}
+	for _, toolName := range []string{"command", "verify"} {
+		contract, ok := toolcontract.Lookup(toolName)
+		if !ok {
+			t.Fatalf("missing contract %q", toolName)
+		}
+		if reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+			"capability_request": map[string]any{"credential_store": true},
+		}); reject != nil {
+			t.Fatalf("%s credential_store reject = %+v", toolName, reject)
+		}
+	}
+	for _, toolName := range []string{"terminal_open", "http_request"} {
+		contract, ok := toolcontract.Lookup(toolName)
+		if !ok {
+			t.Fatalf("missing contract %q", toolName)
+		}
+		reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+			"capability_request": map[string]any{"credential_store": true},
+		})
+		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+			t.Fatalf("%s credential_store reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", toolName, reject)
 		}
 	}
 }

@@ -20,8 +20,9 @@ schema:
       description: Extra access this call needs.
       properties:
         host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
-        socket_paths: {type: array, minItems: 1, maxItems: 1, items: {type: string}, description: Socket path.}
+        socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: Socket path.}
         process_control: {description: Process access., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
+        credential_store: {type: boolean, enum: [true], description: Read-only access to the OS credential store.}
         host_execution: {description: Unsandboxed., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
         direct_ip:
           description: Direct IP for UDP or clients that ignore proxy variables.
