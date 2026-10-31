@@ -3792,6 +3792,56 @@ type LogDigestTimeSpan struct {
 	EndAt   string `json:"end_at"`
 }
 
+// LoopbackListenerFact Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+type LoopbackListenerFact struct {
+	Kind               string                      `json:"kind,omitempty"`
+	Address            string                      `json:"address,omitempty"`
+	ConnectedAddress   string                      `json:"connected_address,omitempty"`
+	PID                int                         `json:"pid,omitempty"`
+	ProcessName        string                      `json:"process_name,omitempty"`
+	SessionID          string                      `json:"session_id,omitempty"`
+	SessionTitle       string                      `json:"session_title,omitempty"`
+	ProjectID          string                      `json:"project_id,omitempty"`
+	ProjectName        string                      `json:"project_name,omitempty"`
+	Handle             string                      `json:"handle,omitempty"`
+	Command            string                      `json:"command,omitempty"`
+	Background         bool                        `json:"background,omitempty"`
+	ContainerID        string                      `json:"container_id,omitempty"`
+	ContainerName      string                      `json:"container_name,omitempty"`
+	Ambiguous          bool                        `json:"ambiguous,omitempty"`
+	Replaced           bool                        `json:"replaced,omitempty"`
+	Holders            []LoopbackListenerHolder    `json:"holders,omitempty"`
+	ContainerMismatch  bool                        `json:"container_mismatch,omitempty"`
+	PublishedContainer *LoopbackPublishedContainer `json:"published_container,omitempty"`
+	Description        string                      `json:"description,omitempty"`
+}
+
+// LoopbackListenerHolder
+type LoopbackListenerHolder struct {
+	Kind          string `json:"kind"`
+	Address       string `json:"address,omitempty"`
+	PID           int    `json:"pid,omitempty"`
+	ProcessName   string `json:"process_name,omitempty"`
+	SessionID     string `json:"session_id,omitempty"`
+	SessionTitle  string `json:"session_title,omitempty"`
+	ProjectID     string `json:"project_id,omitempty"`
+	ProjectName   string `json:"project_name,omitempty"`
+	Handle        string `json:"handle,omitempty"`
+	Command       string `json:"command,omitempty"`
+	Background    bool   `json:"background,omitempty"`
+	ContainerID   string `json:"container_id,omitempty"`
+	ContainerName string `json:"container_name,omitempty"`
+}
+
+// LoopbackPublishedContainer
+type LoopbackPublishedContainer struct {
+	ContainerID   string `json:"container_id,omitempty"`
+	ContainerName string `json:"container_name,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	HostPort      int    `json:"host_port"`
+	LoopbackOnly  bool   `json:"loopback_only,omitempty"`
+}
+
 // MakeProjectSourceEditableRequest Human request to add owner-write permission to the exact file bytes shown in the editor.
 type MakeProjectSourceEditableRequest struct {
 	// Root-relative path of the existing regular file.
@@ -7987,6 +8037,8 @@ type ToolResult struct {
 	Process *ToolProcessHandle `json:"process,omitempty"`
 	// Set when submit_verdict recorded a review_loop verdict. The card renders these stated facts, never the result prose.
 	Verdict *VerdictOutcome `json:"verdict,omitempty"`
+	// Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+	Listener *LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 // TranscriptOrdBounds Oldest and newest message ordinals a transcript holds at read time

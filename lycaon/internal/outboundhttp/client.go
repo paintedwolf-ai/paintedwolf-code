@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/netip"
@@ -93,9 +94,10 @@ type Request struct {
 	// Resolve maps hostnames to specific target IP and port.
 	Resolve []ResolveMapping
 	// Jar scopes stored cookies to each hop's URL.
-	Jar          http.CookieJar
-	AllowAddress func(netip.Addr, uint16) bool
-	BeforeHop    func(context.Context, *url.URL) error
+	Jar            http.CookieJar
+	AllowAddress   func(netip.Addr, uint16) bool
+	BeforeHop      func(context.Context, *url.URL) error
+	OnFirstHopConn func(local, remote netip.AddrPort)
 }
 
 // Hop records a followed redirect and its destination.
@@ -121,7 +123,9 @@ type Response struct {
 	Timing      *HopTiming `json:"timing_ms,omitempty"`
 	TLS         *TLSInfo   `json:"tls,omitempty"`
 	// BodyObserved excludes HEAD responses and discarded bodies.
-	BodyObserved bool `json:"-"`
+	BodyObserved  bool           `json:"-"`
+	FirstHopLocal netip.AddrPort `json:"-"`
+	FirstHopPeer  netip.AddrPort `json:"-"`
 }
 
 func NormalizeURL(raw string) (*url.URL, error) {
@@ -173,6 +177,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	hopHeaders := prepared.HopHeaders
 	var hops []Hop
 	var ioElapsed time.Duration
+	var firstHopLocal, firstHopPeer netip.AddrPort
 	for hop := 0; ; hop++ {
 		if in.BeforeHop != nil {
 			if err := in.BeforeHop(ctx, current); err != nil {
@@ -192,7 +197,17 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return Response{}, err
 		}
 		client := in.clientForHop(remaining, transport)
-		tracer, trace := newHopTracer()
+		var onConn func(local, remote netip.AddrPort)
+		if hop == 0 {
+			onConn = func(local, remote netip.AddrPort) {
+				firstHopLocal = local
+				firstHopPeer = remote
+				if in.OnFirstHopConn != nil {
+					in.OnFirstHopConn(local, remote)
+				}
+			}
+		}
+		tracer, trace := newHopTracer(onConn)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
@@ -233,6 +248,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			result.DurationMS = ioElapsed.Milliseconds()
 			result.Timing = hopTiming
 			result.TLS = tlsInfo
+			result.FirstHopLocal = firstHopLocal
+			result.FirstHopPeer = firstHopPeer
 			return result, readErr
 		}
 		_ = resp.Body.Close()
@@ -259,8 +276,9 @@ type hopTracer struct {
 	ttfbTime          time.Time
 }
 
-func newHopTracer() (*hopTracer, *httptrace.ClientTrace) {
+func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httptrace.ClientTrace) {
 	t := &hopTracer{}
+	var notified bool
 	trace := &httptrace.ClientTrace{
 		ConnectStart: func(network, addr string) {
 			if t.tcpStart.IsZero() {
@@ -270,6 +288,12 @@ func newHopTracer() (*hopTracer, *httptrace.ClientTrace) {
 		ConnectDone: func(network, addr string, err error) {
 			if t.tcpDone.IsZero() {
 				t.tcpDone = time.Now()
+			}
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			if !notified && onConn != nil && info.Conn != nil {
+				notified = true
+				onConn(netAddrPort(info.Conn.LocalAddr()), netAddrPort(info.Conn.RemoteAddr()))
 			}
 		},
 		TLSHandshakeStart: func() {
@@ -703,4 +727,14 @@ func isRedirect(code int) bool {
 
 func sameOrigin(a, b *url.URL) bool {
 	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
+}
+
+func netAddrPort(addr net.Addr) netip.AddrPort {
+	if addr == nil {
+		return netip.AddrPort{}
+	}
+	if ap, err := netip.ParseAddrPort(addr.String()); err == nil {
+		return netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())
+	}
+	return netip.AddrPort{}
 }

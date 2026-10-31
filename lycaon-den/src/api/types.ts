@@ -7907,6 +7907,8 @@ export interface components {
             process?: components["schemas"]["ToolProcessHandle"];
             /** @description Set when submit_verdict recorded a review_loop verdict. The card renders these stated facts, never the result prose. */
             verdict?: components["schemas"]["VerdictOutcome"];
+            /** @description Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address. */
+            listener?: components["schemas"]["LoopbackListenerFact"];
         };
         ExternalAccess: {
             modes: components["schemas"]["ExternalAccessMode"][];
@@ -10760,6 +10762,53 @@ export interface components {
             phase?: string;
             /** @description Host citation audit of the verdict's cited evidence. */
             grounding?: components["schemas"]["CitationGrounding"];
+        };
+        LoopbackListenerHolder: {
+            /** @enum {string} */
+            kind: "this_session" | "other_session" | "container_forwarder" | "external_process" | "unknown";
+            address?: string;
+            pid?: number;
+            process_name?: string;
+            session_id?: string;
+            session_title?: string;
+            project_id?: string;
+            project_name?: string;
+            handle?: string;
+            command?: string;
+            background?: boolean;
+            container_id?: string;
+            container_name?: string;
+        };
+        LoopbackPublishedContainer: {
+            container_id?: string;
+            container_name?: string;
+            host_ip?: string;
+            host_port: number;
+            loopback_only?: boolean;
+        };
+        /** @description Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address. */
+        LoopbackListenerFact: {
+            /** @enum {string} */
+            kind?: "this_session" | "other_session" | "container_forwarder" | "external_process" | "unknown";
+            address?: string;
+            connected_address?: string;
+            pid?: number;
+            process_name?: string;
+            session_id?: string;
+            session_title?: string;
+            project_id?: string;
+            project_name?: string;
+            handle?: string;
+            command?: string;
+            background?: boolean;
+            container_id?: string;
+            container_name?: string;
+            ambiguous?: boolean;
+            replaced?: boolean;
+            holders?: components["schemas"]["LoopbackListenerHolder"][];
+            container_mismatch?: boolean;
+            published_container?: components["schemas"]["LoopbackPublishedContainer"];
+            description?: string;
         };
         /**
          * @description Navigable project filesystem entry identity.
@@ -29863,6 +29912,9 @@ export type CitationGroundingFinding = components["schemas"]["CitationGroundingF
 export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
 export type CitationVerification = components["schemas"]["CitationVerification"];
 export type VerdictOutcome = components["schemas"]["VerdictOutcome"];
+export type LoopbackListenerHolder = components["schemas"]["LoopbackListenerHolder"];
+export type LoopbackPublishedContainer = components["schemas"]["LoopbackPublishedContainer"];
+export type LoopbackListenerFact = components["schemas"]["LoopbackListenerFact"];
 export type NavigationEntryKind = components["schemas"]["NavigationEntryKind"];
 export type NavigationTarget = components["schemas"]["NavigationTarget"];
 export type SourceContext = components["schemas"]["SourceContext"];

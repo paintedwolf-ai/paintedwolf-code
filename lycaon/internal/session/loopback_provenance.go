@@ -4,16 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,13 +14,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ProvenanceMethod names the structured fact that decided a port's ownership.
@@ -82,6 +73,8 @@ type LoopbackHolder struct {
 type ContainerPortPublication struct {
 	ContainerID   string `json:"container_id,omitempty"`
 	ContainerName string `json:"container_name,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	HostPort      uint16 `json:"host_port,omitempty"`
 	LoopbackOnly  bool   `json:"loopback_only"`
 	IPv4          bool   `json:"ipv4,omitempty"`
 	IPv6          bool   `json:"ipv6,omitempty"`
@@ -189,7 +182,7 @@ type DefaultLoopbackProvenance struct {
 
 	mu                sync.RWMutex
 	sessionContainers map[string][]string
-	sessions          QueryStore
+	sessions          sessiontree.Reader
 	projects          func(ctx context.Context, projectID string) (*project.Project, error)
 	processes         func() *bgprocess.Registry
 	metaOverride      func(ctx context.Context, sessionID, lineageID, owner string) (holderSessionMeta, bool)
@@ -231,7 +224,7 @@ func newLoopbackProvenance(
 
 // SetHostSources connects session, project, and background process lookups for holder attribution.
 func (p *DefaultLoopbackProvenance) SetHostSources(
-	sessions QueryStore,
+	sessions sessiontree.Reader,
 	projects func(ctx context.Context, projectID string) (*project.Project, error),
 	processes func() *bgprocess.Registry,
 ) {
@@ -363,9 +356,6 @@ func (p *DefaultLoopbackProvenance) ownership(
 	held []socketListener,
 ) (bool, ProvenanceEvidence) {
 	pub, hasPub := p.findContainerPublishedPort(ctx, sessionID, workspaceDir, port)
-	if hasPub && targetAddr.IsValid() && !pub.coversAddr(targetAddr) {
-		// Still keep pub for mismatch reporting if the container publishes the port on another family.
-	}
 	var pubPtr *ContainerPortPublication
 	if hasPub {
 		pubCopy := pub
@@ -689,116 +679,6 @@ func (p *DefaultLoopbackProvenance) resolveHolderSessionMeta(ctx context.Context
 	return meta
 }
 
-// isContainerForwarderProcess reports whether procName is a known container engine
-// port-forwarding process.
-func isContainerForwarderProcess(procName string) bool {
-	base := strings.ToLower(strings.TrimSpace(filepath.Base(procName)))
-	switch base {
-	case "docker-proxy", "dockerd",
-		"com.docker.backend", "com.docker.backe",
-		"com.docker.vpnkit", "com.docker.vpnki", "vpnkit-bridge",
-		"gvproxy", "vfkit",
-		"orbstack", "orbstack helper",
-		"limactl", "colima",
-		"podman", "rootlessport", "slirp4netns", "pasta", "conmon":
-		return true
-	default:
-		return false
-	}
-}
-
-// DescribePortHolders formats a human-readable summary of all holders on port,
-// including container publication mismatches when present.
-func DescribePortHolders(port uint16, holders []LoopbackHolder, pub *ContainerPortPublication) string {
-	if len(holders) == 0 {
-		if pub != nil && pub.ContainerName != "" {
-			return fmt.Sprintf("Container %s in this chat publishes port %d, but no host process is listening on it.", pub.ContainerName, port)
-		}
-		return fmt.Sprintf("Port %d has no active listener.", port)
-	}
-	multi := len(holders) > 1
-	parts := make([]string, 0, len(holders)+1)
-	hasContainerHolder := false
-	for _, h := range holders {
-		if h.Kind == HolderContainerForwarder {
-			hasContainerHolder = true
-		}
-		parts = append(parts, describeSingleHolder(port, h, multi))
-	}
-	if pub != nil && pub.ContainerName != "" && !hasContainerHolder {
-		family := ""
-		switch {
-		case pub.IPv4 && !pub.IPv6:
-			family = " on IPv4 (127.0.0.1)"
-		case pub.IPv6 && !pub.IPv4:
-			family = " on IPv6 ([::1])"
-		}
-		parts = append(parts, fmt.Sprintf("Container %s in this chat publishes port %d%s.", pub.ContainerName, port, family))
-	}
-	return strings.Join(parts, " ")
-}
-
-func describeSingleHolder(port uint16, h LoopbackHolder, includeAddr bool) string {
-	loc := fmt.Sprintf("Port %d", port)
-	if includeAddr && h.Addr.IsValid() {
-		loc = fmt.Sprintf("Port %d (%s)", port, h.Addr.Addr())
-	}
-	switch h.Kind {
-	case HolderOtherSession:
-		cmdPart := "a process"
-		if h.Command != "" {
-			cmdPart = "`" + h.Command + "`"
-		} else if h.ProcessName != "" {
-			cmdPart = "`" + h.ProcessName + "`"
-		}
-		rolePart := ""
-		if h.Background {
-			if h.Handle != "" {
-				rolePart = fmt.Sprintf(", a background command (%s)", h.Handle)
-			} else {
-				rolePart = ", a background command"
-			}
-		} else if h.Handle != "" {
-			rolePart = fmt.Sprintf(" (%s)", h.Handle)
-		}
-		chatPart := " in another chat"
-		if h.SessionTitle != "" {
-			chatPart = fmt.Sprintf(" in the chat '%s'", h.SessionTitle)
-		} else if h.SessionID != "" {
-			chatPart = fmt.Sprintf(" in chat %s", h.SessionID)
-		}
-		projPart := ""
-		if h.ProjectName != "" {
-			projPart = fmt.Sprintf(" in the project '%s'", h.ProjectName)
-		} else if h.ProjectID != "" {
-			projPart = fmt.Sprintf(" in project %s", h.ProjectID)
-		}
-		return fmt.Sprintf("%s is served by %s%s%s%s.", loc, cmdPart, rolePart, chatPart, projPart)
-	case HolderExternalProcess:
-		if h.ProcessName != "" && h.PID > 0 {
-			return fmt.Sprintf("%s is held by external process `%s` (PID %d) running outside Painted Wolf Code.", loc, h.ProcessName, h.PID)
-		}
-		if h.PID > 0 {
-			return fmt.Sprintf("%s is held by external process PID %d running outside Painted Wolf Code.", loc, h.PID)
-		}
-		return fmt.Sprintf("%s is held by an external process running outside Painted Wolf Code.", loc)
-	case HolderUnknown:
-		return fmt.Sprintf("%s is held by an uninspectable host process.", loc)
-	case HolderContainerForwarder:
-		if h.ContainerName != "" {
-			return fmt.Sprintf("%s is forwarded for container %s in this chat.", loc, h.ContainerName)
-		}
-		return fmt.Sprintf("%s is forwarded for a container in this chat.", loc)
-	case HolderThisSession:
-		if h.Command != "" {
-			return fmt.Sprintf("%s is served by `%s` in this chat.", loc, h.Command)
-		}
-		return fmt.Sprintf("%s is served by process %d in this chat.", loc, h.PID)
-	default:
-		return fmt.Sprintf("%s has an unverified listener.", loc)
-	}
-}
-
 func onPort(listeners []socketListener, port uint16) []socketListener {
 	var out []socketListener
 	for _, l := range listeners {
@@ -902,299 +782,4 @@ func parseLsofName(name string) (socketListener, bool) {
 		l.Addr = addr
 	}
 	return l, true
-}
-
-// discoverDockerSockets returns container engine sockets named by the
-// environment, the active docker context, and standard runtime paths.
-func discoverDockerSockets() []string {
-	var sockets []string
-	seen := make(map[string]bool)
-	addSocket := func(sock string) {
-		sock = strings.TrimPrefix(sock, "unix://")
-		if sock != "" && !seen[sock] {
-			seen[sock] = true
-			sockets = append(sockets, sock)
-		}
-	}
-	addSocket(os.Getenv("DOCKER_HOST"))
-	addSocket(os.Getenv("CONTAINER_HOST"))
-	if home := os.Getenv("HOME"); home != "" {
-		addSocket(resolveDockerContextSocket(home))
-		for _, c := range []string{
-			".colima/default/docker.sock",
-			".docker/run/docker.sock",
-			".orbstack/run/docker.sock",
-			".rd/docker.sock",
-			".local/share/containers/podman/machine/podman.sock",
-			".local/share/containers/podman/machine/qemu/podman.sock",
-			".local/share/containers/podman/machine/applehv/podman.sock",
-		} {
-			addSocket(filepath.Join(home, c))
-		}
-		addSocket(fmt.Sprintf("/run/user/%d/podman/podman.sock", os.Getuid()))
-	}
-	addSocket("/var/run/docker.sock")
-	addSocket("/run/podman/podman.sock")
-	return sockets
-}
-
-func resolveDockerContextSocket(homeDir string) string {
-	configData, err := os.ReadFile(filepath.Join(homeDir, ".docker", "config.json")) // #nosec G304 G703 -- fixed user docker config path
-	if err != nil {
-		return ""
-	}
-	var cfg struct {
-		CurrentContext string `json:"currentContext"`
-	}
-	if err := json.Unmarshal(configData, &cfg); err != nil || cfg.CurrentContext == "" {
-		return ""
-	}
-	// Docker names a context's metadata directory by the digest of its name.
-	sum := sha256.Sum256([]byte(cfg.CurrentContext))
-	metaDir := filepath.Join(homeDir, ".docker", "contexts", "meta")
-	if sock := readSocketFromMetaJSON(filepath.Join(metaDir, hex.EncodeToString(sum[:]), "meta.json")); sock != "" {
-		return sock
-	}
-	entries, err := os.ReadDir(metaDir)
-	if err != nil {
-		return ""
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		if sock := readSocketFromMetaJSON(filepath.Join(metaDir, e.Name(), "meta.json")); sock != "" {
-			return sock
-		}
-	}
-	return ""
-}
-
-func readSocketFromMetaJSON(metaFile string) string {
-	data, err := os.ReadFile(filepath.Clean(metaFile)) // #nosec G304 G703 -- context metadata file path
-	if err != nil {
-		return ""
-	}
-	var meta struct {
-		Endpoints struct {
-			Docker struct {
-				Host string `json:"Host"`
-			} `json:"docker"`
-		} `json:"Endpoints"`
-	}
-	if err := json.Unmarshal(data, &meta); err == nil && meta.Endpoints.Docker.Host != "" {
-		return strings.TrimPrefix(meta.Endpoints.Docker.Host, "unix://")
-	}
-	return ""
-}
-
-type dockerContainerInfo struct {
-	ID         string
-	Name       string
-	WorkingDir string
-	Ports      []containerPortMapping
-}
-
-type containerPortMapping struct {
-	IP           string
-	PublicPort   uint16
-	LoopbackOnly bool
-}
-
-// RecordSessionContainer records an invocation-launched container ID for a session.
-func (p *DefaultLoopbackProvenance) RecordSessionContainer(sessionID, containerID, socketPath string) {
-	if p == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	containerID = strings.TrimSpace(containerID)
-	if sessionID == "" || len(containerID) != 64 {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.sessionContainers == nil {
-		p.sessionContainers = make(map[string][]string)
-	}
-	for _, id := range p.sessionContainers[sessionID] {
-		if id == containerID {
-			return
-		}
-	}
-	p.sessionContainers[sessionID] = append(p.sessionContainers[sessionID], containerID)
-}
-
-// ForgetSession clears recorded container provenance for a deleted session.
-func (p *DefaultLoopbackProvenance) ForgetSession(sessionID string) {
-	if p == nil || sessionID == "" {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.sessionContainers, sessionID)
-}
-
-func (p *DefaultLoopbackProvenance) sessionContainerIDs(sessionID string) map[string]bool {
-	if p == nil || sessionID == "" {
-		return nil
-	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	ids := p.sessionContainers[sessionID]
-	if len(ids) == 0 {
-		return nil
-	}
-	m := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		m[id] = true
-	}
-	return m
-}
-
-// findContainerPublishedPort matches a workspace or session container publishing port. It
-// is loopback-only when every publication of that port is.
-func (p *DefaultLoopbackProvenance) findContainerPublishedPort(ctx context.Context, sessionID, workspaceDir string, port uint16) (ContainerPortPublication, bool) {
-	if p.containers == nil {
-		return ContainerPortPublication{}, false
-	}
-	canonWorkspace := ""
-	if workspaceDir != "" {
-		if c, err := filepath.EvalSymlinks(workspaceDir); err == nil {
-			canonWorkspace = c
-		} else {
-			canonWorkspace = workspaceDir
-		}
-	}
-	recorded := p.sessionContainerIDs(sessionID)
-	if rootID := p.rootSessionID(ctx, sessionID); rootID != "" && rootID != sessionID {
-		for id := range p.sessionContainerIDs(rootID) {
-			if recorded == nil {
-				recorded = make(map[string]bool)
-			}
-			recorded[id] = true
-		}
-	}
-	match, found := ContainerPortPublication{LoopbackOnly: true}, false
-	for _, c := range p.containers(ctx) {
-		matched := false
-		if recorded[c.ID] {
-			matched = true
-		} else if canonWorkspace != "" && composeProjectMatches(c.WorkingDir, canonWorkspace, workspaceDir) {
-			matched = true
-		}
-		if !matched {
-			continue
-		}
-		for _, pub := range c.Ports {
-			if pub.PublicPort != port {
-				continue
-			}
-			if !found {
-				match.ContainerID = c.ID
-				match.ContainerName = c.Name
-				found = true
-			}
-			match.LoopbackOnly = match.LoopbackOnly && pub.LoopbackOnly
-			ip := strings.TrimSpace(pub.IP)
-			if ip == "" {
-				match.IPv4 = true
-				match.IPv6 = true
-			} else if addr, err := netip.ParseAddr(ip); err == nil {
-				if addr.Unmap().Is4() {
-					match.IPv4 = true
-				} else {
-					match.IPv6 = true
-				}
-			} else {
-				match.IPv4 = true
-				match.IPv6 = true
-			}
-		}
-	}
-	return match, found
-}
-
-func composeProjectMatches(containerDir, canonWorkspace, origWorkspace string) bool {
-	if containerDir == "" {
-		return false
-	}
-	if containerDir == canonWorkspace || containerDir == origWorkspace {
-		return true
-	}
-	canonContainer, err := filepath.EvalSymlinks(containerDir)
-	return err == nil && (canonContainer == canonWorkspace || canonContainer == origWorkspace)
-}
-
-// queryDockerContainers lists containers from every reachable engine socket.
-func queryDockerContainers(ctx context.Context, sockets []string) []dockerContainerInfo {
-	var out []dockerContainerInfo
-	for _, sock := range sockets {
-		if _, err := os.Stat(sock); err != nil {
-			continue
-		}
-		containers, err := queryDockerContainersOverSocket(ctx, sock)
-		if err == nil {
-			out = append(out, containers...)
-		}
-	}
-	return out
-}
-
-func queryDockerContainersOverSocket(ctx context.Context, socketPath string) ([]dockerContainerInfo, error) {
-	tr := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-		},
-	}
-	client := &http.Client{Transport: tr, Timeout: 500 * time.Millisecond}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/v1.41/containers/json", nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("docker API returned status %d", resp.StatusCode)
-	}
-
-	var raw []struct {
-		ID    string   `json:"Id"`
-		Names []string `json:"Names"`
-		Ports []struct {
-			IP         string `json:"IP"`
-			PublicPort uint16 `json:"PublicPort"`
-		} `json:"Ports"`
-		Labels map[string]string `json:"Labels"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
-	}
-
-	out := make([]dockerContainerInfo, 0, len(raw))
-	for _, c := range raw {
-		name := ""
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
-		}
-		var mappings []containerPortMapping
-		for _, port := range c.Ports {
-			if port.PublicPort > 0 {
-				mappings = append(mappings, containerPortMapping{
-					IP:           port.IP,
-					PublicPort:   port.PublicPort,
-					LoopbackOnly: egress.LoopbackLiteral(port.IP),
-				})
-			}
-		}
-		out = append(out, dockerContainerInfo{
-			ID:         c.ID,
-			Name:       name,
-			WorkingDir: c.Labels["com.docker.compose.project.working_dir"],
-			Ports:      mappings,
-		})
-	}
-	return out, nil
 }

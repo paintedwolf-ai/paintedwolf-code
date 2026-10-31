@@ -21,6 +21,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // provenanceFixture is a host whose socket table, launch lineage, and
@@ -629,5 +630,87 @@ func TestStdoutContainerIDAttributesPublishedPort(t *testing.T) {
 	owned, _ = res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
 	if owned {
 		t.Fatal("port should not be chat-owned after session is forgotten")
+	}
+}
+
+func TestSandboxPortBrokersDescribeHoldersOnApprovalCards(t *testing.T) {
+	ctx := t.Context()
+	fixture := &provenanceFixture{
+		now: []socketListener{
+			listenerAt(401, "127.0.0.1:8000"),
+			listenerAt(888, "[::1]:8000"),
+			listenerAt(412, "127.0.0.1:5432"),
+		},
+		sessions: map[int]string{
+			401: "session-other",
+		},
+		processNames: map[int]string{
+			401: "python3",
+			888: "docker-proxy",
+			412: "postgres",
+		},
+		meta: map[string]holderSessionMeta{
+			"session-other": {
+				RootSessionID: "session-other",
+				SessionTitle:  "Tic Tac Toe Game with AI",
+				ProjectID:     "proj-ttt",
+				ProjectName:   "Tic-Tac-Toe",
+				Handle:        "bg-1",
+				Command:       "python3 -m http.server 8000",
+				Background:    true,
+			},
+		},
+		containers: []dockerContainerInfo{
+			{
+				ID:         "container-web-1",
+				Name:       "web-1",
+				WorkingDir: "/workspace/current",
+				Ports: []containerPortMapping{
+					{IP: "127.0.0.1", PublicPort: 8000, LoopbackOnly: true},
+				},
+			},
+		},
+	}
+	res := fixture.resolver(ctx)
+
+	loopbackBroker := &LoopbackCheckpointBroker{Provenance: res}
+	connectCard, err := loopbackBroker.buildCard(tools.LoopbackConnectAsk{
+		ProjectID:  "proj-current",
+		ProjectDir: "/workspace/current",
+		SessionID:  "session-current",
+		ToolName:   "bash",
+		Command:    "python3 client.py",
+		Ports:      []uint16{8000},
+	}, "session-current", "session-current", []uint16{8000})
+	if err != nil {
+		t.Fatalf("build loopback card: %v", err)
+	}
+	wantLead8000 := "Port 8000 (127.0.0.1) is served by `python3 -m http.server 8000`, a background command (bg-1) in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'. Port 8000 (::1) is held by external process `docker-proxy` (PID 888) running outside Painted Wolf Code. Container web-1 in this chat publishes port 8000 on IPv4 (127.0.0.1)."
+	if connectCard.Plan.Presentation.Lead != wantLead8000 {
+		t.Fatalf("loopback card lead = %q, want %q", connectCard.Plan.Presentation.Lead, wantLead8000)
+	}
+	holdersRaw, ok := connectCard.Plan.Subject.Targets[0].Details["holders"].([]any)
+	if !ok || len(holdersRaw) != 2 {
+		t.Fatalf("loopback card holders = %#v, want 2 entries", connectCard.Plan.Subject.Targets[0].Details["holders"])
+	}
+	if connectCard.Plan.Subject.Targets[0].Details["container_mismatch"] != true {
+		t.Fatalf("expected container_mismatch=true on target details, got %#v", connectCard.Plan.Subject.Targets[0].Details)
+	}
+
+	listenBroker := &ListenCheckpointBroker{Provenance: res}
+	listenCard, err := listenBroker.buildListenCard(tools.LocalListenAsk{
+		ProjectID:  "proj-current",
+		ProjectDir: "/workspace/current",
+		SessionID:  "session-current",
+		ToolName:   "bash",
+		Command:    "postgres -D data",
+		Ports:      []uint16{5432},
+	}, "session-current", "session-current", []uint16{5432})
+	if err != nil {
+		t.Fatalf("build listen card: %v", err)
+	}
+	wantLead5432 := "Port 5432 is held by external process `postgres` (PID 412) running outside Painted Wolf Code."
+	if listenCard.Plan.Presentation.Lead != wantLead5432 {
+		t.Fatalf("listen card lead = %q, want %q", listenCard.Plan.Presentation.Lead, wantLead5432)
 	}
 }

@@ -102,6 +102,7 @@ func combinedCapabilityQuiet(plans []*ApprovalPlan, combined []ApprovalOption) [
 }
 
 func mergeCapabilityPresentation(out *ApprovalPresentation, in ApprovalPresentation) {
+	out.Lead = joinCapabilityCopy(out.Lead, in.Lead)
 	out.Impact = joinCapabilityCopy(out.Impact, in.Impact)
 	out.Who = joinCapabilityCopy(out.Who, in.Who)
 	out.IfWrong = joinCapabilityCopy(out.IfWrong, in.IfWrong)
