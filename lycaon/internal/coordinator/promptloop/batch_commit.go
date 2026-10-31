@@ -282,8 +282,7 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 		}
 	}
 	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
-		// Portable source observations come only from confirmed delivered native
-		// mappings. A legacy command fingerprint must not scrape its stdout.
+		// Portable command observations come only from confirmed source deliveries.
 		if len(msg.EvidenceHandles) > 0 {
 			msg.Content = prependEvidenceHandles(msg.Content, msg.EvidenceHandles)
 			msg.ToolResult.Content = prependEvidenceHandles(msg.ToolResult.Content, msg.EvidenceHandles)

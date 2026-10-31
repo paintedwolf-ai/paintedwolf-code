@@ -308,9 +308,24 @@ func patchSummarizePackHandles(obj map[string]any, handles []string) {
 	}
 }
 
-// ExtractEmbeddedHandles returns child evidence handles stamped inside a tool JSON payload.
-func ExtractEmbeddedHandles(content string) []string {
-	_, body, _ := splitToolPayloadEnvelope(content)
+// ExtractEmbeddedHandles returns child evidence handles stamped inside a host-enveloped tool JSON payload.
+func ExtractEmbeddedHandles(content string, parentHandles ...string) []string {
+	prefix, body, _, ok := hostmarker.SplitToolJSONBody(content)
+	if !ok {
+		return nil
+	}
+	parentHandle := leadingEnvelopeHandle(prefix)
+	if parentHandle == "" {
+		return nil
+	}
+	if len(parentHandles) > 0 && !containsHandle(parentHandles, parentHandle) {
+		return nil
+	}
+	parentKind, parentOrd := ParseHandleOrdinal(parentHandle)
+	if parentOrd <= 0 {
+		return nil
+	}
+	parentScope := handleScopePrefix(parentHandle)
 	obj, ok := jsonToolPayload(body)
 	if !ok {
 		return nil
@@ -320,7 +335,7 @@ func ExtractEmbeddedHandles(content string) []string {
 	add := func(raw any) {
 		h, _ := raw.(string)
 		h = strings.TrimSpace(h)
-		if h == "" {
+		if !validEmbeddedChildHandle(parentKind, parentOrd, parentScope, h) {
 			return
 		}
 		if _, ok := seen[h]; ok {
@@ -329,7 +344,7 @@ func ExtractEmbeddedHandles(content string) []string {
 		seen[h] = struct{}{}
 		out = append(out, h)
 	}
-	addItems := func(raw any) {
+	addItems := func(raw any, field string) {
 		items, ok := raw.([]any)
 		if !ok {
 			return
@@ -337,23 +352,92 @@ func ExtractEmbeddedHandles(content string) []string {
 		for _, item := range items {
 			switch v := item.(type) {
 			case map[string]any:
-				add(v["handle"])
-				add(v["evidence_handle"])
+				add(v[field])
 			case string:
-				add(v)
+				if field == "" {
+					add(v)
+				}
 			}
 		}
 	}
-	addItems(obj["anchors"])
-	addItems(obj["highlights"])
-	addItems(obj["frames"])
-	addItems(obj["highlight_handles"])
-	if pack, ok := obj["pack"].(map[string]any); ok {
-		addItems(pack["substance"])
-		addItems(pack["call_sites"])
-		addItems(pack["skeleton"])
+	switch parentKind {
+	case "summarize":
+		addItems(obj["anchors"], "handle")
+		addItems(obj["highlight_handles"], "")
+		if pack, ok := obj["pack"].(map[string]any); ok {
+			addItems(pack["substance"], "handle")
+			addItems(pack["call_sites"], "handle")
+			addItems(pack["skeleton"], "handle")
+		}
+	case "page":
+		addItems(obj["frames"], "evidence_handle")
+	case "read", "list", "grep", "find":
+		addItems(obj["highlights"], "handle")
 	}
 	return out
+}
+
+func leadingEnvelopeHandle(prefix string) string {
+	rest := strings.TrimSpace(prefix)
+	if strings.HasPrefix(rest, hostmarker.CompactionBannerOpen) {
+		end := strings.Index(rest, hostmarker.CompactionBannerClose)
+		if end < 0 {
+			return ""
+		}
+		rest = strings.TrimSpace(rest[end+len(hostmarker.CompactionBannerClose):])
+		if strings.HasPrefix(rest, hostmarker.VerbatimHeadTail) {
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, hostmarker.VerbatimHeadTail))
+		}
+	}
+	var last string
+	for {
+		tag, after := hostmarker.SplitEvidenceHandleTag(rest)
+		if tag == "" {
+			break
+		}
+		last = strings.Trim(strings.TrimSpace(tag), "[]")
+		rest = strings.TrimSpace(after)
+	}
+	return last
+}
+
+func containsHandle(handles []string, want string) bool {
+	for _, h := range handles {
+		if strings.TrimSpace(h) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func handleScopePrefix(handle string) string {
+	handle = strings.TrimSpace(handle)
+	hash := strings.IndexByte(handle, '#')
+	if hash < 0 {
+		return ""
+	}
+	if sep := strings.LastIndexByte(handle[:hash], ':'); sep >= 0 {
+		return handle[:sep+1]
+	}
+	return ""
+}
+
+func validEmbeddedChildHandle(parentKind string, parentOrd int, parentScope, child string) bool {
+	if child == "" || handleScopePrefix(child) != parentScope {
+		return false
+	}
+	childKind, childOrd := ParseHandleOrdinal(child)
+	if childKind != parentKind || childOrd <= 0 {
+		return false
+	}
+	switch parentKind {
+	case "summarize", "page":
+		return childOrd < parentOrd
+	case "read", "list", "grep", "find":
+		return childOrd > parentOrd
+	default:
+		return false
+	}
 }
 
 // splitToolPayloadEnvelope preserves markers around a patched JSON body.

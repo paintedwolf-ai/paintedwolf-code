@@ -83,9 +83,11 @@ func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, r
 			handles = append(handles, h)
 		}
 	}
-	for _, h := range evidence.ExtractEmbeddedHandles(content) {
-		if h = strings.TrimSpace(h); h != "" && !slices.Contains(handles, h) {
-			handles = append(handles, h)
+	if len(handles) > 0 && toolName != "command" && (msg.ToolResult == nil || msg.ToolResult.CommandProgram == nil) {
+		for _, h := range evidence.ExtractEmbeddedHandles(content, handles...) {
+			if h = strings.TrimSpace(h); h != "" && !slices.Contains(handles, h) {
+				handles = append(handles, h)
+			}
 		}
 	}
 	if len(handles) == 0 {
