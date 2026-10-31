@@ -29,6 +29,7 @@ const (
 	ApprovalSubjectSocketSet       ApprovalSubjectKind = "socket_set"
 	ApprovalSubjectDirectIP        ApprovalSubjectKind = "direct_ip"
 	ApprovalSubjectProcessControl  ApprovalSubjectKind = "process_control"
+	ApprovalSubjectCredentialStore ApprovalSubjectKind = "credential_store"
 	ApprovalSubjectHostExecution   ApprovalSubjectKind = "host_execution"
 	ApprovalSubjectLocalListen     ApprovalSubjectKind = "local_listen"
 	ApprovalSubjectLoopbackConnect ApprovalSubjectKind = "loopback_connect"
@@ -41,7 +42,7 @@ const (
 
 // approvalSubjectKinds is the closed reviewed-unit vocabulary.
 var approvalSubjectKinds = []ApprovalSubjectKind{
-	ApprovalSubjectAction, ApprovalSubjectActionSet, ApprovalSubjectSocketSet, ApprovalSubjectDirectIP, ApprovalSubjectProcessControl, ApprovalSubjectHostExecution,
+	ApprovalSubjectAction, ApprovalSubjectActionSet, ApprovalSubjectSocketSet, ApprovalSubjectDirectIP, ApprovalSubjectProcessControl, ApprovalSubjectCredentialStore, ApprovalSubjectHostExecution,
 	ApprovalSubjectLocalListen, ApprovalSubjectLoopbackConnect, ApprovalSubjectDestinationSet,
 	ApprovalSubjectWriteRootSet, ApprovalSubjectReadPathSet, ApprovalSubjectSecret,
 	ApprovalSubjectPackageSet,

@@ -111,6 +111,15 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		presentation.Impact = ProcessControlWhat
 		presentation.IfWrong = ProcessControlIfWrong
 		presentation.AllowLine = ExecutionAllowLine
+	case action.Execution.Contained.CredentialStore:
+		subject = ApprovalSubject{
+			Kind:    ApprovalSubjectCredentialStore,
+			Title:   firstNonEmpty(title, CredentialStoreTitle),
+			Targets: []ApprovalTarget{{Kind: string(ApprovalSubjectCredentialStore), Label: action.Presentation.Command}},
+		}
+		presentation.Impact = CredentialStoreWhat
+		presentation.IfWrong = CredentialStoreIfWrong
+		presentation.AllowLine = ExecutionAllowLine
 	}
 
 	skipQuiet := map[string]struct{}{}

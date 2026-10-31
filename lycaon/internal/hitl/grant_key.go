@@ -55,6 +55,9 @@ func GrantKey(action ProposedAction) string {
 	if action.Execution.Contained.ProcessControl {
 		identity += "\x00process_control"
 	}
+	if action.Execution.Contained.CredentialStore {
+		identity += "\x00credential_store"
+	}
 	if action.Execution.Contained.HostExecution {
 		identity += "\x00host_execution"
 	}

@@ -108,6 +108,9 @@ func packageBoundaryWidening(request *capabilityrequest.CapabilityRequest, socks
 	if request.LoopbackConnect != nil {
 		blocked = append(blocked, "loopback_connect")
 	}
+	if request.CredentialStore {
+		blocked = append(blocked, "credential_store")
+	}
 	sort.Strings(blocked)
 	return blocked
 }

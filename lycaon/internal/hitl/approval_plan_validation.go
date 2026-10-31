@@ -242,7 +242,7 @@ func validApprovalSubjectKind(kind ApprovalSubjectKind) bool {
 
 func approvalSubjectAllowedAtStage(kind ApprovalSubjectKind, stage ApprovalStage) bool {
 	switch kind {
-	case ApprovalSubjectAction, ApprovalSubjectActionSet, ApprovalSubjectSocketSet, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectHostExecution:
+	case ApprovalSubjectAction, ApprovalSubjectActionSet, ApprovalSubjectSocketSet, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectCredentialStore, ApprovalSubjectHostExecution:
 		return stage == ApprovalStagePreSpawn
 	case ApprovalSubjectDirectIP, ApprovalSubjectLocalListen, ApprovalSubjectLoopbackConnect:
 		return stage == ApprovalStagePreSpawn

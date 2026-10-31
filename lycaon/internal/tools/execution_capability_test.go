@@ -79,6 +79,25 @@ func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("missing permit accepted")
 	}
+
+	credReq := confine.Request{CredentialStore: true, Roots: []string{"/tmp/project"}}
+	credTC := ToolContext{
+		Identity:  InvocationIdentity{SessionID: "task", ToolCallID: "call-cred"},
+		Execution: InvocationExecution{CredentialStore: true},
+	}
+	credTC.Execution.executionPermit = &executionPermit{
+		session:         credTC.Identity.SessionID,
+		call:            credTC.Identity.ToolCallID,
+		credentialStore: true,
+		boundary:        ExecutionBoundaryDigest(credReq),
+		arguments:       executionArgumentsDigest(credTC.Effects.CanonicalArgs),
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject != nil {
+		t.Fatalf("matching credential_store permit: %v", reject)
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject == nil {
+		t.Fatal("credential_store permit reused")
+	}
 }
 
 func TestExecutionBoundaryIdentityTreatsGrantsAsSets(t *testing.T) {
