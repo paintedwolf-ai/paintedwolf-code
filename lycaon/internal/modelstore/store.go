@@ -63,7 +63,7 @@ type Readiness struct {
 // SpaceRequirement breaks down the disk bytes needed before mutating the store.
 type SpaceRequirement struct {
 	StagingBytes   int64 `json:"staging_bytes"`
-	UnpackingBytes int64 `json:" unpacking_bytes"`
+	UnpackingBytes int64 `json:"unpacking_bytes"`
 	SeedDuplicate  int64 `json:"seed_duplicate_bytes"`
 	RollbackBytes  int64 `json:"rollback_bytes"`
 }
@@ -78,6 +78,7 @@ var ErrInsufficientSpace = errors.New("modelstore: insufficient disk space")
 
 // Artifact identifies one immutable model payload.
 type Artifact struct {
+	Name   string `json:"name,omitempty"`
 	Digest string `json:"digest"`
 	Format string `json:"format"`
 	Bytes  int64  `json:"bytes"`
@@ -109,7 +110,16 @@ type Lease struct {
 	Manifest   Manifest
 	Owner      string
 	Generation uint64
+	Dir        string
 	once       sync.Once
+}
+
+// CheckpointDir returns the materialized directory for the leased revision.
+func (l *Lease) CheckpointDir() string {
+	if l == nil {
+		return ""
+	}
+	return l.Dir
 }
 
 // Release drops the lease on the pinned revision.
@@ -118,7 +128,7 @@ func (l *Lease) Release() {
 		return
 	}
 	l.once.Do(func() {
-		l.store.releaseLease(l.Manifest.Artifact.Digest)
+		l.store.releaseLease(l.Manifest)
 	})
 }
 
@@ -132,6 +142,17 @@ type Store struct {
 	leases map[string]int
 }
 
+// DefaultRoot returns the host model store directory.
+func DefaultRoot() string {
+	if dir := os.Getenv("LYCAON_MODEL_STORE_DIR"); dir != "" {
+		return dir
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".local", "share", "lycaon", "models")
+	}
+	return filepath.Join(os.TempDir(), "lycaon-models")
+}
+
 func New(root string, signer Signer) *Store {
 	return &Store{
 		root:      root,
@@ -139,6 +160,14 @@ func New(root string, signer Signer) *Store {
 		freeBytes: defaultFreeBytes,
 		leases:    make(map[string]int),
 	}
+}
+
+// Root returns the filesystem root of the store.
+func (s *Store) Root() string {
+	if s == nil {
+		return ""
+	}
+	return s.root
 }
 
 // SetFreeBytesFunc overrides disk-space probing for deterministic testing.
@@ -183,6 +212,9 @@ func validate(m Manifest) error {
 }
 
 func validateArtifact(a Artifact) error {
+	if a.Name != "" && !nameShape.MatchString(a.Name) {
+		return fmt.Errorf("modelstore: artifact name %q is not a safe identity", a.Name)
+	}
 	if !digestShape.MatchString(a.Digest) {
 		return fmt.Errorf("modelstore: digest %q is not a hex sha256", a.Digest)
 	}
@@ -192,8 +224,83 @@ func validateArtifact(a Artifact) error {
 	return nil
 }
 
+func artifactFileName(a Artifact, primary bool) string {
+	if a.Name != "" {
+		return a.Name
+	}
+	switch a.Format {
+	case "safetensors":
+		return "model.safetensors"
+	case "config", "config.json":
+		return "config.json"
+	case "tokenizer", "tokenizer.json":
+		return "tokenizer.json"
+	}
+	if primary {
+		return "model.safetensors"
+	}
+	if nameShape.MatchString(a.Format) {
+		return a.Format
+	}
+	return a.Digest
+}
+
 func (s *Store) artifactRel(digest string) string {
 	return filepath.Join("artifacts", digest[:2], digest)
+}
+
+func (s *Store) revisionRel(m Manifest) string {
+	return filepath.Join("revisions", m.Model, m.Device, m.Revision)
+}
+
+// RevisionDir returns the filesystem directory for a materialized manifest revision.
+func (s *Store) RevisionDir(m Manifest) string {
+	return filepath.Join(s.root, s.revisionRel(m))
+}
+
+func (s *Store) materializeRevision(m Manifest) (string, error) {
+	root, err := s.openRoot()
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+
+	revRel := s.revisionRel(m)
+	if err := root.MkdirAll(revRel, 0o755); err != nil {
+		return "", fmt.Errorf("modelstore: revision mkdir: %w", err)
+	}
+	linkOrCopy := func(a Artifact, primary bool) error {
+		srcPath := filepath.Join(s.root, s.artifactRel(a.Digest))
+		dstRel := filepath.Join(revRel, artifactFileName(a, primary))
+		dstPath := filepath.Join(s.root, dstRel)
+		_ = root.Remove(dstRel)
+		if err := os.Link(srcPath, dstPath); err == nil {
+			return nil
+		}
+		src, err := root.Open(s.artifactRel(a.Digest))
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+		dst, err := root.Create(dstRel)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(dst, src); err != nil {
+			dst.Close()
+			return err
+		}
+		return dst.Close()
+	}
+	if err := linkOrCopy(m.Artifact, true); err != nil {
+		return "", fmt.Errorf("modelstore: materialize primary artifact: %w", err)
+	}
+	for _, f := range m.Files {
+		if err := linkOrCopy(f, false); err != nil {
+			return "", fmt.Errorf("modelstore: materialize supplementary artifact %s: %w", f.Digest, err)
+		}
+	}
+	return filepath.Join(s.root, revRel), nil
 }
 
 // openRoot opens the store directory via os.Root so symlinked components inside the store cannot escape it.
@@ -350,6 +457,12 @@ func (s *Store) Activate(signed SignedManifest) error {
 	if err := validate(m); err != nil {
 		return err
 	}
+	lock, err := s.lockJournal()
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+
 	if !s.Verified(m.Artifact.Digest) {
 		return fmt.Errorf("modelstore: artifact %s is not verified", m.Artifact.Digest)
 	}
@@ -358,13 +471,10 @@ func (s *Store) Activate(signed SignedManifest) error {
 			return fmt.Errorf("modelstore: supplementary artifact %s is not verified", f.Digest)
 		}
 	}
-	lock, err := s.lockJournal()
-	if err != nil {
+	if err := s.recoverJournal(); err != nil {
 		return err
 	}
-	defer lock.Unlock()
-
-	if err := s.recoverJournal(); err != nil {
+	if _, err := s.materializeRevision(m); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(s.journalPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -491,6 +601,12 @@ func (s *Store) Active() (map[string]Manifest, error) {
 
 // AcquireLease pins the currently active manifest for (model, device) for a runtime process generation.
 func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*Lease, error) {
+	lock, err := s.lockJournal()
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Unlock()
+
 	active, err := s.Active()
 	if err != nil {
 		return nil, err
@@ -501,6 +617,15 @@ func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*L
 	}
 	if !s.Verified(m.Artifact.Digest) {
 		return nil, fmt.Errorf("modelstore: active artifact %s is not verified", m.Artifact.Digest)
+	}
+	for _, f := range m.Files {
+		if !s.Verified(f.Digest) {
+			return nil, fmt.Errorf("modelstore: supplementary artifact %s is not verified", f.Digest)
+		}
+	}
+	dir, err := s.materializeRevision(m)
+	if err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	s.leases[m.Artifact.Digest]++
@@ -513,12 +638,20 @@ func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*L
 		Manifest:   m,
 		Owner:      owner,
 		Generation: generation,
+		Dir:        dir,
 	}, nil
 }
 
-func (s *Store) releaseLease(digest string) {
+func (s *Store) releaseLease(m Manifest) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.decrementLeaseLocked(m.Artifact.Digest)
+	for _, f := range m.Files {
+		s.decrementLeaseLocked(f.Digest)
+	}
+}
+
+func (s *Store) decrementLeaseLocked(digest string) {
 	if s.leases[digest] <= 1 {
 		delete(s.leases, digest)
 	} else {
@@ -644,6 +777,25 @@ func (s *Store) Collect() ([]string, error) {
 		}
 	}
 	s.mu.Unlock()
+
+	keepRevisions := map[string]bool{}
+	for _, m := range records {
+		retained := keep[m.Artifact.Digest]
+		for _, f := range m.Files {
+			if !keep[f.Digest] {
+				retained = false
+			}
+		}
+		if retained {
+			keepRevisions[s.revisionRel(m)] = true
+		}
+	}
+	for _, m := range records {
+		rel := s.revisionRel(m)
+		if !keepRevisions[rel] {
+			_ = os.RemoveAll(filepath.Join(s.root, rel))
+		}
+	}
 
 	root, err := s.openRoot()
 	if err != nil {

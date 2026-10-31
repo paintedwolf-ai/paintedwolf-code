@@ -7,7 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func timeAfterMs(ms int) <-chan time.Time {
+	return time.After(time.Duration(ms) * time.Millisecond)
+}
 
 type acceptSigner struct{ fail bool }
 
@@ -380,5 +385,152 @@ func TestReadinessAndRepairStates(t *testing.T) {
 	}
 	if st := s.Status("gemma4-e4b", "mlx"); st.State != StateRepairRequired || st.Repair != RepairRestageArtifact {
 		t.Fatalf("corrupt artifact status: %+v", st)
+	}
+}
+
+func TestCollectReleasesSupplementaryLeasePins(t *testing.T) {
+	s := newStore(t)
+	mainR1 := testArtifact(t, []byte("main-r1"))
+	suppR1 := testArtifact(t, []byte("tokenizer-r1"))
+	suppR1.Format = "tokenizer.json"
+	mainR2 := testArtifact(t, []byte("main-r2"))
+	mainR3 := testArtifact(t, []byte("main-r3"))
+
+	for _, item := range []struct {
+		art  Artifact
+		data []byte
+	}{
+		{mainR1, []byte("main-r1")},
+		{suppR1, []byte("tokenizer-r1")},
+		{mainR2, []byte("main-r2")},
+		{mainR3, []byte("main-r3")},
+	} {
+		if err := s.Stage(newReader(item.data), item.art); err != nil {
+			t.Fatalf("stage %s: %v", item.art.Digest, err)
+		}
+	}
+
+	if err := s.Activate(SignedManifest{Manifest: Manifest{
+		Model:    "gemma4-e4b",
+		Revision: "r1",
+		Device:   "cpu",
+		Artifact: mainR1,
+		Files:    []Artifact{suppR1},
+	}}); err != nil {
+		t.Fatalf("activate r1: %v", err)
+	}
+	lease, err := s.AcquireLease("gemma4-e4b", "cpu", "nativegen", 1)
+	if err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(lease.CheckpointDir(), "model.safetensors")); err != nil {
+		t.Fatalf("materialized model.safetensors: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(lease.CheckpointDir(), "tokenizer.json")); err != nil {
+		t.Fatalf("materialized tokenizer.json: %v", err)
+	}
+
+	for _, item := range []struct {
+		rev string
+		art Artifact
+	}{
+		{"r2", mainR2},
+		{"r3", mainR3},
+	} {
+		if err := s.Activate(SignedManifest{Manifest: Manifest{
+			Model:    "gemma4-e4b",
+			Revision: item.rev,
+			Device:   "cpu",
+			Artifact: item.art,
+		}}); err != nil {
+			t.Fatalf("activate %s: %v", item.rev, err)
+		}
+	}
+
+	lease.Release()
+	lease.Release()
+
+	removed, err := s.Collect()
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("removed = %v, want 2 digests (mainR1 and suppR1)", removed)
+	}
+	if s.Verified(mainR1.Digest) {
+		t.Fatal("retired primary artifact remained verified after lease release and collect")
+	}
+	if s.Verified(suppR1.Digest) {
+		t.Fatal("retired supplementary artifact remained verified after lease release and collect")
+	}
+}
+
+type callbackSigner struct {
+	onVerify func() error
+}
+
+func (c callbackSigner) Verify(SignedManifest) error {
+	if c.onVerify != nil {
+		return c.onVerify()
+	}
+	return nil
+}
+
+func TestActivateHoldsJournalLockAcrossVerificationAndPublication(t *testing.T) {
+	verifiedSig := make(chan struct{})
+	s := New(filepath.Join(t.TempDir(), "models"), callbackSigner{
+		onVerify: func() error {
+			close(verifiedSig)
+			return nil
+		},
+	})
+	payload := []byte("weights-under-concurrent-collect")
+	art := testArtifact(t, payload)
+	if err := s.Stage(newReader(payload), art); err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+
+	lock, err := s.lockJournal()
+	if err != nil {
+		t.Fatalf("lockJournal: %v", err)
+	}
+
+	activateErrCh := make(chan error, 1)
+	go func() {
+		activateErrCh <- s.Activate(SignedManifest{Manifest: Manifest{
+			Model:    "gemma4-e4b",
+			Revision: "r1",
+			Device:   "cpu",
+			Artifact: art,
+		}})
+	}()
+
+	<-verifiedSig
+	// Give Activate a brief window to reach lockJournal (or, if unlocked, run Verified prematurely).
+	select {
+	case err := <-activateErrCh:
+		lock.Unlock()
+		t.Fatalf("Activate completed while journal lock was held: %v", err)
+	case <-timeAfterMs(25):
+	}
+
+	root, err := s.openRoot()
+	if err != nil {
+		lock.Unlock()
+		t.Fatalf("openRoot: %v", err)
+	}
+	if err := root.Remove(s.artifactRel(art.Digest)); err != nil {
+		root.Close()
+		lock.Unlock()
+		t.Fatalf("remove staged artifact under lock: %v", err)
+	}
+	root.Close()
+	lock.Unlock()
+
+	if err := <-activateErrCh; err == nil {
+		t.Fatal("expected Activate to fail when artifact was collected before journal lock acquisition")
+	}
+	if st := s.Status("gemma4-e4b", "cpu"); st.State != StateAbsent {
+		t.Fatalf("status after rejected activation = %+v, want StateAbsent", st)
 	}
 }
