@@ -9,7 +9,7 @@ import type { Accessor, JSX } from "solid-js";
 import { createModalFocusTrap, shellChromeInertTargets } from "../../../platform/interaction/modal-focus-trap.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ProviderMeta } from "../../../api/types.ts";
-import { groupProvidersByKind, providerDiscoveryFailure, providerDisplayName, providerEndpointHost, providerIsReady, providerKindIsCustom, providerKindTemplateGroups, providerShowsApiKeyControls, providerStatusLabel, providerToolCallSupport } from "../../../settings/providers/models-editor-model.ts";
+import { groupProvidersByKind, providerContextWindowState, providerDiscoveryFailure, providerDisplayName, providerEndpointHost, providerIsReady, providerKindIsCustom, providerKindTemplateGroups, providerShowsApiKeyControls, providerStatusLabel, providerToolCallSupport } from "../../../settings/providers/models-editor-model.ts";
 import { ambientAuthCopy, kindIsAmbientOnly, kindOffersCredentialChoice, providerCredentialSource, templateForProvider } from "../../../settings/providers/provider-credential-modes.ts";
 import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-settings-copy.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
@@ -29,7 +29,7 @@ import { ListSurfaceInbox } from "../../list/ListSurfaceInbox.tsx";
 import { SettingsListPanel } from "../SettingsListPanel.tsx";
 import { SettingsListRow } from "../SettingsListRow.tsx";
 import { CloudflareAccountField } from "./CloudflareAccountField.tsx";
-import { PROVIDER_LABEL_MAX, type NewProviderForm, emptyForm, endpointStyle, endpointLabel, parseConfiguredModels, formShowsApiKeyField, toolCallStateCopy, secretScreenTrustEndpointNote, providerFeedStatusHints, flattenGroupedProviders } from "./provider-form-model.ts";
+import { PROVIDER_LABEL_MAX, type NewProviderForm, contextWindowStateCopy, emptyForm, endpointStyle, endpointLabel, filterProviderKindGroups, parseConfiguredModels, formShowsApiKeyField, toolCallStateCopy, secretScreenTrustEndpointNote, providerFeedStatusHints, flattenGroupedProviders } from "./provider-form-model.ts";
 
 type Props = {
   client: LycaonClient;
@@ -94,20 +94,7 @@ export function ProvidersPanel(props: Props) {
 
   const groups = () => groupProvidersByKind(props.providers, kinds());
   const kindGroups = () => providerKindTemplateGroups(kinds());
-  const filteredKindGroups = () => {
-    const q = kindQuery().trim().toLowerCase();
-    if (!q) return kindGroups();
-    return kindGroups()
-      .map((group) => ({
-        ...group,
-        templates: group.templates.filter(
-          (t) =>
-            t.label.toLowerCase().includes(q) ||
-            t.kind.toLowerCase().includes(q),
-        ),
-      }))
-      .filter((group) => group.templates.length > 0);
-  };
+  const filteredKindGroups = () => filterProviderKindGroups(kindGroups(), kindQuery());
   const existingIds = () => new Set(props.providers.map((p) => p.id));
   const selectedTemplate = () => kinds().find((k) => k.kind === form.kind);
   const selectedProvider = () =>
@@ -519,6 +506,10 @@ export function ProvidersPanel(props: Props) {
         >
           {toolCallStateCopy(provider())}
         </p>
+      </Show>
+
+      <Show when={providerContextWindowState(provider()) === "unknown"}>
+        <p class="den-settings-hint" data-testid={`provider-context-window-${provider().id}`} data-context-window="unknown">{contextWindowStateCopy(provider())}</p>
       </Show>
 
       <Show when={endpointStyle(provider().endpoint_style) !== "derived"}>

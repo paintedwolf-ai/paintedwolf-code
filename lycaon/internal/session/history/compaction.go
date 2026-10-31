@@ -202,6 +202,12 @@ func (m *Service) Wait() {
 // ForceCompact compacts session history to target tokens regardless of trigger
 // threshold and stores the result as the session's compacted view.
 func (m *Service) ForceCompact(ctx context.Context, sessionID string) (report compaction.CompactionReport, err error) {
+	if m == nil {
+		return report, fmt.Errorf("history service not configured")
+	}
+	if m.Gate == nil || m.Runner == nil {
+		return m.forceCompact(ctx, sessionID)
+	}
 	turn, err := m.Gate.Capture(ctx, sessionID)
 	if err != nil {
 		return report, err

@@ -556,6 +556,21 @@ export function providerToolCallSupport(
   return allUnsupported ? "unsupported" : "unknown";
 }
 
+export type ProviderContextWindowState = "known" | "unknown";
+
+/** Reports whether the provider's listed models declare a positive context window. */
+export function providerContextWindowState(
+  provider: ProviderMeta,
+): ProviderContextWindowState {
+  if (provider.models.length === 0) return "unknown";
+  for (const model of provider.models) {
+    if (!model.context_length || model.context_length <= 0) {
+      return "unknown";
+    }
+  }
+  return "known";
+}
+
 export type ProviderKindTemplateGroup = {
   group: ProviderPickerGroup;
   label: string;

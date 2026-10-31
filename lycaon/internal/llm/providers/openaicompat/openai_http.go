@@ -41,7 +41,7 @@ func (p *Provider) postChatCompletion(ctx context.Context, model string, body []
 
 // postChatWithHTTPRetry POSTs until a 2xx response or the http_retry budget is spent.
 func (p *Provider) postChatWithHTTPRetry(ctx context.Context, model string, body []byte, client *http.Client, reqHeaders map[string]string) (*http.Response, error) {
-	return providerretry.RunProviderAttempts(ctx, providerretry.ProviderAttempt{
+	resp, err := providerretry.RunProviderAttempts(ctx, providerretry.ProviderAttempt{
 		ProviderID:   p.id,
 		Model:        model,
 		RefusalCodes: providerprofile.ModelRefusalCodesFor(p.Profile()),
@@ -56,6 +56,12 @@ func (p *Provider) postChatWithHTTPRetry(ctx context.Context, model string, body
 			})
 		},
 	})
+	if err != nil {
+		if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+			p.RecordContextWindow(model, tooSmall.MaxContext, tooSmall.Source, true)
+		}
+	}
+	return resp, err
 }
 
 func (p *Provider) postChat(ctx context.Context, model string, body []byte, client *http.Client, reqHeaders map[string]string) (*http.Response, error) {

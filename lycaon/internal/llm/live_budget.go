@@ -13,6 +13,51 @@ type ContextLengthLookup interface {
 	ContextLength(provider, model string) int
 }
 
+// LocalProviderLookup optionally reports whether a provider ID represents a
+// local inference endpoint.
+type LocalProviderLookup interface {
+	IsLocalProvider(provider string) bool
+}
+
+// IsLocalProviderKind reports whether a provider kind or instance ID belongs to
+// a local inference server family.
+func IsLocalProviderKind(idOrKind string) bool {
+	s := strings.ToLower(strings.TrimSpace(idOrKind))
+	for _, kind := range []string{
+		"openai-compatible",
+		"ollama",
+		"lmstudio",
+		"omlx",
+		"litellm-proxy",
+		"litellm",
+		"llamacpp",
+		"llama.cpp",
+		"vllm",
+		"local",
+	} {
+		if s == kind || strings.HasPrefix(s, kind+"-") {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalProvider(provider string, lookup ContextLengthLookup) bool {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return false
+	}
+	if lookup != nil {
+		if r, ok := lookup.(*Registry); ok {
+			return isLocalRegistryProvider(r, provider)
+		}
+		if lp, ok := lookup.(LocalProviderLookup); ok {
+			return lp.IsLocalProvider(provider)
+		}
+	}
+	return IsLocalProviderKind(provider)
+}
+
 // Resolve source labels for ResolveTrueWindow.
 const (
 	WindowResolveExplicit   = "explicit"
@@ -39,6 +84,13 @@ func ResolveTrueWindow(policy ModelPolicy, lookup ContextLengthLookup, windows m
 		if n := lookup.ContextLength(provider, model); n > 0 {
 			return n, WindowResolveModelEntry
 		}
+	}
+	if isLocalProvider(provider, lookup) {
+		fb := windows.LocalFallbackTrueWindow
+		if fb < 1 {
+			fb = modelinfo.DefaultLocalFallbackTrueWindow
+		}
+		return fb, WindowResolveFallback
 	}
 	if n, ok := windows.Lookup(model); ok && n > 0 {
 		return n, WindowResolveMatchTable
