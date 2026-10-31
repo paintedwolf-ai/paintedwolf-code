@@ -201,6 +201,37 @@ describe("activity span membership", () => {
     expect(span.entries).toHaveLength(2);
   });
 
+  it("keeps a workflow activity span unified across mid-run progress deltas", () => {
+    const projected = projectActivitySpans([
+      tool(
+        part("r1", "read", "a.go", {
+          assistantMessageId: "assistant-1",
+          workflowRunId: "workflow-1",
+        }),
+      ),
+      {
+        kind: "progress_update",
+        key: "pu-delta-1",
+        initial: false,
+        steps: [],
+        changes: [{ kind: "done", label: "Read a.go", state: "done" }],
+      },
+      tool(
+        part("r2", "read", "b.go", {
+          assistantMessageId: "assistant-2",
+          workflowRunId: "workflow-1",
+        }),
+      ),
+    ]);
+
+    expect(projected.map((item) => item.kind)).toEqual([
+      "activity_span",
+      "progress_update",
+    ]);
+    const span = projected[0] as Extract<TranscriptItem, { kind: "activity_span" }>;
+    expect(span.entries).toHaveLength(2);
+  });
+
   it("anchors a diff row below the span holding the first write", () => {
     const projected = projectActivitySpans([
       tool(

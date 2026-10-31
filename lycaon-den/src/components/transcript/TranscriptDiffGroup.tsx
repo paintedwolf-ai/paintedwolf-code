@@ -79,6 +79,8 @@ export function TranscriptDiffGroup(props: Props) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
+    collapsedCorpus: () => props.folds.map((fold) => fold.path).join("\n"),
+    collapsedCorpusAnchor: hostEl,
   });
 
   // Folds of several writes are measured here, so the summary does not wait for mounted rows.
