@@ -52,4 +52,21 @@ func TestPortableProgramDoesNotScrapePrintedPathsIntoSourceEvidence(t *testing.T
 	if calls != 1 || len(legacy.EvidenceHandles) != 1 {
 		t.Fatal("existing restricted command evidence behavior disappeared")
 	}
+
+	delivered := api.Message{
+		Content:         `{"program_id":"p1","stdout":"package main\n"}`,
+		EvidenceHandles: []string{"read#1"},
+		ToolResult: &api.ToolResult{
+			Content:        `{"program_id":"p1","stdout":"package main\n"}`,
+			CommandProgram: &api.CommandProgramReceipt{ID: "program-receipt", ParentReceiptID: "actual-model-parent"},
+		},
+	}
+	err = loop.Batch.tagToolHandleOnCommit(t.Context(), "session", &api.Session{ID: "session"}, "command", map[string]any{"command": "cat main.go"}, &delivered, true)
+	if err != nil {
+		t.Fatalf("commit portable source delivery result: %v", err)
+	}
+	wantTagged := "[read#1]\n{\"program_id\":\"p1\",\"stdout\":\"package main\\n\"}"
+	if calls != 1 || delivered.Content != wantTagged || delivered.ToolResult.Content != wantTagged {
+		t.Fatalf("portable confirmed source delivery handle not prepended: calls=%d content=%q", calls, delivered.Content)
+	}
 }

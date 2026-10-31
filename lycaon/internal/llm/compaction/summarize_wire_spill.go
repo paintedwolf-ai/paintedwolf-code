@@ -14,14 +14,11 @@ import (
 
 const summarizeWireSpillStrategy = "spill_summarize"
 
-// summarizeWireEstimateSlackPct absorbs the bytes a pack gains between the two
-// measurements, so a wire-fitted pack stays inline at commit. The wire fit
-// measures the marshalled result; commit measures the tool-result body after the
-// banner, receipt, and evidence handle are attached.
+// summarizeWireEstimateSlackPct absorbs envelope overhead added at commit so
+// a wire-fitted pack remains inline.
 const summarizeWireEstimateSlackPct = 6
 
-// summarizeCommitInlineCeiling is the single inline/spill rail for anchor_residue.
-// SkipOversizedChunk and compactSpillSummarize both use it — no second threshold.
+// summarizeCommitInlineCeiling returns the token ceiling before spilling a summarize pack.
 func summarizeCommitInlineCeiling() int {
 	caps := summarize.DefaultCaps()
 	wb := caps.Pack.WireBudgetTokens
@@ -34,9 +31,8 @@ func summarizeCommitInlineCeiling() int {
 	return wb + wb*summarizeWireEstimateSlackPct/100
 }
 
-// compactSpillSummarize spills the full handle+JSON summarize payload to the
-// project host data dir and returns a pointer residue (wire_spill_path + orientation).
-// No pack substance is trimmed inline — full bytes live in the spill file.
+// compactSpillSummarize spills the full summarize payload to the host data dir
+// and returns a pointer residue.
 func (c *ChunkCompactor) compactSpillSummarize(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string, bool) {
 	if originalTokens <= summarizeCommitInlineCeiling() {
 		return content, "", false
@@ -77,7 +73,7 @@ func summarizeSpillPointer(content, spillRel string) (string, error) {
 	ptr := map[string]any{
 		"wire_spill_path": spillRel,
 	}
-	for _, key := range []string{"task", "selected", "total", "truncated"} {
+	for _, key := range []string{"task", "selected", "total", "truncated", "anchors", "highlight_handles"} {
 		if v, exists := obj[key]; exists {
 			ptr[key] = v
 		}

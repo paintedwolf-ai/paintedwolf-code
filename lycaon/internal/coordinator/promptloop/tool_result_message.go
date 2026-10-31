@@ -53,14 +53,15 @@ func (l *toolInvocations) composeToolResultMessage(
 		result.Content = content
 	}
 	return api.Message{
-		SourceContext: run.captures.sourceContext,
-		ID:            uuid.NewString(),
-		Role:          api.MessageRoleTool,
-		Origin:        origin,
-		Authority:     api.ContentAuthorityNone,
-		TrustTier:     api.ContentTrustTierUntrusted,
-		Content:       content,
-		ToolResult:    result,
+		SourceContext:   run.captures.sourceContext,
+		ID:              uuid.NewString(),
+		Role:            api.MessageRoleTool,
+		Origin:          origin,
+		Authority:       api.ContentAuthorityNone,
+		TrustTier:       api.ContentTrustTierUntrusted,
+		Content:         content,
+		EvidenceHandles: append([]string(nil), run.captures.sourceDeliveryHandles...),
+		ToolResult:      result,
 	}
 }
 

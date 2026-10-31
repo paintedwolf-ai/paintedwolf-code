@@ -91,6 +91,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
+		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
 	}
 	return ending.result, ending.err
 }
