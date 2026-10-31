@@ -14,7 +14,7 @@ copy:
   fix: 'Investigate the reported workspace and policy sources with read-only tools. Retry the operation after the applicable guidance is available and delivered.'
   instead: 'Continue read-only investigation of accessible sources while resolving the reported workspace or policy access problem.'
 x-paintedwolf-category: recoverable
-x-paintedwolf-emit: native
+x-paintedwolf-emit: guard:tool
 x-paintedwolf-message: Project guidance prerequisite
 x-paintedwolf-scenarios:
   - id: reached_operation

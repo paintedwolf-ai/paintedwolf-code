@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/governance"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -162,13 +164,18 @@ func sameWorkspace(bound, supplied string) error {
 	if !filepath.IsAbs(bound) || !filepath.IsAbs(supplied) {
 		return fmt.Errorf("policy workspace must be absolute")
 	}
-	actual, err := filepath.EvalSymlinks(bound)
-	if err != nil {
-		return fmt.Errorf("policy workspace unavailable: %w", err)
+	for _, path := range []string{bound, supplied} {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("policy workspace unavailable: %w", err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("policy workspace must be a directory")
+		}
 	}
-	requested, err := filepath.EvalSymlinks(supplied)
-	if err != nil {
-		return fmt.Errorf("policy workspace unavailable: %w", err)
+	actual, requested := fspath.CanonicalPath(bound), fspath.CanonicalPath(supplied)
+	if actual == "" || requested == "" {
+		return fmt.Errorf("policy workspace identity unavailable")
 	}
 	if actual != requested {
 		return fmt.Errorf("policy workspace does not match the session root")

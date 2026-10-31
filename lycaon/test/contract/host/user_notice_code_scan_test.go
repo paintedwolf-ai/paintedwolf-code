@@ -12,32 +12,39 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func scanWorkerExecuteFailureCodes(t *testing.T, path string) map[string]bool {
+func scanWorkerExecuteFailureCodes(t *testing.T, dir string) map[string]bool {
 	t.Helper()
+	corpus, err := contractcheck.LoadGoASTCorpusMode(dir, parser.SkipObjectResolution)
+	contractcheck.FailErr(t, "load worker failure mapper", err)
 	out := map[string]bool{}
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-	contractcheck.FailErr(t, "parse failure.go", err)
-
-	var inMapper bool
-	ast.Inspect(f, func(n ast.Node) bool {
-		fn, ok := n.(*ast.FuncDecl)
-		if ok {
-			inMapper = fn.Name != nil && fn.Name.Name == "ExecuteFailureCode"
-			return true
+	found := false
+	for _, source := range corpus.Production() {
+		if filepath.Dir(source.Rel) != "." {
+			continue
 		}
-		if !inMapper {
-			return true
+		for _, decl := range source.AST.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil || fn.Name.Name != "ExecuteFailureCode" {
+				continue
+			}
+			if found {
+				t.Fatal("worker package has ambiguous failure mappers")
+			}
+			found = true
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				ret, ok := n.(*ast.ReturnStmt)
+				if ok && len(ret.Results) == 1 {
+					if code := contractcheck.AstStringLit(ret.Results[0]); code != "" && contractcheck.IsErrorCodeShape(code) {
+						out[code] = true
+					}
+				}
+				return true
+			})
 		}
-		ret, ok := n.(*ast.ReturnStmt)
-		if !ok || len(ret.Results) != 1 {
-			return true
-		}
-		if v := contractcheck.AstStringLit(ret.Results[0]); v != "" && contractcheck.IsErrorCodeShape(v) {
-			out[v] = true
-		}
-		return true
-	})
+	}
+	if !found {
+		t.Fatal("worker package has no failure mapper")
+	}
 	return out
 }
 

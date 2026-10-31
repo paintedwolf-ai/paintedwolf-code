@@ -112,6 +112,9 @@ func TestFilmstripArtifactHandleViewsContactSheetPNG(t *testing.T) {
 	if _, err := handler(t.Context(), map[string]any{"handle": corruptFilm.ID}, tc); !errors.As(err, &reject) || reject.Code != "IMAGE_CORRUPTED" {
 		t.Fatalf("expected IMAGE_CORRUPTED for corrupt filmstrip, got %v", err)
 	}
+	if reason, _ := reject.Data["rejection_reason"].(string); reason == "" {
+		t.Fatal("corrupt filmstrip lost its diagnostic reason")
+	}
 
 	tlZip, err := timelinearchive.Pack(timelinearchive.Manifest{Version: 1, Frames: []timelinearchive.Frame{{AtMS: 0}}}, [][]byte{framePNG}, framePNG)
 	testutil.FailErr(t, "timelinearchive.Pack", err)
@@ -130,5 +133,8 @@ func TestFilmstripArtifactHandleViewsContactSheetPNG(t *testing.T) {
 	testutil.FailErr(t, "store corrupt timeline", err)
 	if _, err := handler(t.Context(), map[string]any{"handle": corruptTL.ID}, tc); !errors.As(err, &reject) || reject.Code != "IMAGE_CORRUPTED" {
 		t.Fatalf("expected IMAGE_CORRUPTED for corrupt timeline, got %v", err)
+	}
+	if reason, _ := reject.Data["rejection_reason"].(string); reason == "" {
+		t.Fatal("corrupt timeline lost its diagnostic reason")
 	}
 }

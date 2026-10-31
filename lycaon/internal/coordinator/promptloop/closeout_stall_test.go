@@ -263,8 +263,10 @@ func TestCloseoutRecallPreservesPinnedReportForSubsequentFenceOnlyRepair(t *test
 		Context: ContextDeps{Tools: reg},
 		Closeout: CloseoutDeps{
 			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout { return retained },
-			ResumeCloseoutWork: func(context.Context, string) {
-				retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				ResumeCloseoutWork: func(context.Context, string) {
+					retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+				},
 			},
 		},
 		Projection: ProjectionDeps{
@@ -272,11 +274,10 @@ func TestCloseoutRecallPreservesPinnedReportForSubsequentFenceOnlyRepair(t *test
 		},
 	})
 	st := &promptLoopTurnState{
-		turnToolPlan:     toolsurface.Compile([]string{"recall"}, nil),
-		offeredToolNames: []string{"recall"},
-		turnID:           "turn",
-		attemptID:        "attempt",
-		closeoutRetry:    closeoutRetryState{attempt: 1, prevKey: guidance.InvestHandleNotObservedCode, codes: []string{guidance.InvestHandleNotObservedCode}},
+		turnID: "turn", attemptID: "attempt",
+		turnBatchState:    turnBatchState{turnToolPlan: toolsurface.Compile([]string{"recall"}, nil)},
+		turnStreamState:   turnStreamState{offeredToolNames: []string{"recall"}},
+		turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1, prevKey: guidance.InvestHandleNotObservedCode, codes: []string{guidance.InvestHandleNotObservedCode}}},
 	}
 	sess := &api.Session{ID: "session-recall"}
 	call := api.ToolCall{ID: "recall-1", Name: "recall", Args: map[string]any{"query": "handle:read#1"}}

@@ -3,11 +3,13 @@ package policyindex
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -104,8 +106,12 @@ func policyUnavailable(ctx context.Context, path string) error {
 
 // Policy removal changes the guidance just as a source edit does.
 func policyScopeMatches(delivered, current agentpolicy.Manifest, scope agentpolicy.Scope) bool {
-	root, err := filepath.EvalSymlinks(scope.RootPath)
-	if err != nil {
+	info, err := os.Stat(scope.RootPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	root := fspath.CanonicalPath(scope.RootPath)
+	if root == "" {
 		return false
 	}
 	path := filepath.ToSlash(filepath.Clean(scope.Path))

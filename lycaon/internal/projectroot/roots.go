@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // RootRef is a project folder root exposed to tools, prompts, and the path resolver.
@@ -304,8 +306,8 @@ func MatchRoot(roots []RootRef, candidatePath string) (RootRef, string, bool) {
 	return match, filepath.ToSlash(bestRel), true
 }
 
+// Relative operands are anchored before asking the filesystem identity authority.
 func canonicalizePath(p string) (string, bool) {
-	p = strings.TrimSpace(p)
 	if p == "" {
 		return "", false
 	}
@@ -313,24 +315,6 @@ func canonicalizePath(p string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	abs = filepath.Clean(abs)
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		return filepath.Clean(resolved), true
-	}
-	cur := abs
-	var suffix []string
-	for {
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return abs, true
-		}
-		suffix = append(suffix, filepath.Base(cur))
-		cur = parent
-		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
-			for i := len(suffix) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, suffix[i])
-			}
-			return filepath.Clean(resolved), true
-		}
-	}
+	canonical := fspath.CanonicalPath(abs)
+	return canonical, canonical != ""
 }

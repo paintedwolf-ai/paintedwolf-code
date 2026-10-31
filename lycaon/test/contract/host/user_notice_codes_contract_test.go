@@ -88,7 +88,7 @@ func TestUserNoticeCodesWorkerFailureClosure(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	cfg := loadUserNoticeConfig(t)
 
-	mapped := scanWorkerExecuteFailureCodes(t, filepath.Join(root, "lycaon", "internal", "worker", "failure.go"))
+	mapped := scanWorkerExecuteFailureCodes(t, filepath.Join(root, "lycaon", "internal", "worker"))
 	yamlWorker := usernotice.WorkerFailureCodes(cfg)
 
 	var violations []string

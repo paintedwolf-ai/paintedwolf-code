@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -281,15 +282,17 @@ func TestPolicyBindingUsesTheFinalFittedRequest(t *testing.T) {
 			BuildMessages: func(_ context.Context, _ *api.Session, rows []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return append([]api.Message{{ID: "candidate-policy", Role: api.MessageRoleSystem, Content: "candidate"}}, rows...), nil
 			},
-			PrepareAgentPolicy: func(_ context.Context, _ *api.Session, messages []api.Message) (tools.AgentPolicyBinding, error) {
-				if len(messages) == 0 || messages[0].ID != "candidate-policy" {
-					t.Fatal("policy candidates were not captured before fitting")
-				}
-				prepared = true
-				return func(final []api.Message) tools.AgentPolicyCheck {
-					delivered = append([]api.Message(nil), final...)
-					return func(context.Context, []agentpolicy.Target) error { return nil }
-				}, nil
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				PrepareAgentPolicy: func(_ context.Context, _ *api.Session, messages []api.Message) (tools.AgentPolicyBinding, error) {
+					if len(messages) == 0 || messages[0].ID != "candidate-policy" {
+						t.Fatal("policy candidates were not captured before fitting")
+					}
+					prepared = true
+					return func(final []api.Message) tools.AgentPolicyCheck {
+						delivered = append([]api.Message(nil), final...)
+						return func(context.Context, []agentpolicy.Target) error { return nil }
+					}, nil
+				},
 			},
 		},
 		Model: ModelDeps{FitRequest: func(_ context.Context, _ *api.Session, _ []api.Message, request modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
@@ -461,5 +464,43 @@ func TestLoopAnthropicOmittedThinkingMultiTurnToolContinuation(t *testing.T) {
 	testutil.FailErr(t, "run multi-turn anthropic loop", err)
 	if executed != 1 || turnCount.Load() != 2 || !sawReplayedThinking.Load() || result.LastAssistantContent != "completed after omitted thinking" {
 		t.Fatalf("executed=%d turns=%d replayed=%v content=%q", executed, turnCount.Load(), sawReplayedThinking.Load(), result.LastAssistantContent)
+	}
+}
+
+func TestRequestPolicyRequiresStateOnlyForApplicableBinding(t *testing.T) {
+	for _, mode := range []string{"absent", "no applicable policy", "applicable policy"} {
+		for _, hasState := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/state=%t", mode, hasState), func(t *testing.T) {
+				var prepare func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
+				bound := false
+				if mode != "absent" {
+					prepare = func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error) {
+						if mode == "no applicable policy" {
+							return nil, nil
+						}
+						return func([]api.Message) tools.AgentPolicyCheck {
+							bound = true
+							return func(context.Context, []agentpolicy.Target) error { return nil }
+						}, nil
+					}
+				}
+				loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
+					BuildMessages: func(_ context.Context, _ *api.Session, rows []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+						return rows, nil
+					},
+					ContextSurfaceDeps: ContextSurfaceDeps{PrepareAgentPolicy: prepare},
+				}})
+				var state *promptLoopTurnState
+				if hasState {
+					state = &promptLoopTurnState{}
+				}
+				sess := &api.Session{ID: "policy-state", AgentType: prompts.CoordinatorProfileID}
+				_, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, nil, prompts.CoordinatorProfileID, "inspect", 0, 20, false, state)
+				wantError := mode == "applicable policy" && !hasState
+				if (err != nil) != wantError || bound != (mode == "applicable policy" && hasState) {
+					t.Fatalf("policy state: err=%v bound=%t", err, bound)
+				}
+			})
+		}
 	}
 }
