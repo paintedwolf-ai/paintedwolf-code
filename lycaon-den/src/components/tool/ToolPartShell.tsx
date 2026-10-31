@@ -1,10 +1,11 @@
+import { bindVirtualListFind } from "../../find/virtual-list-find.ts";
 import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { createChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { ToolContentProvider } from "../../chat/tool/tool-content.tsx";
-import { TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
+import { TOOL_CONTENT_REVEAL_EVENT, searchToolPart, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
 import {
@@ -23,6 +24,7 @@ import type {
 import {
   toolCompletionLabel,
   toolSummaryFields,
+  toolPartDisplayStatus,
 } from "../../chat/tool/tool-part-model.ts";
 import {
   bindFindableView,
@@ -79,22 +81,23 @@ export function ToolPartShell(props: Props) {
   );
   const summary = () => {
     processRevision();
-    return toolSummaryFields(props.part, props.sessionId);
+    const activity = props.part.commandActivity;
+    return activity ? { status: toolPartDisplayStatus(props.part, props.sessionId), title: activity.fact.subject + (activity.outputReads ? ` · ${activity.outputReads} output reads` : activity.members.length > 1 ? ` · ${activity.members.length} reads` : "") } : toolSummaryFields(props.part, props.sessionId);
   };
-  const toolName = () => props.name?.trim() || props.part.tool;
+  const toolName = () => props.name?.trim() || props.part.commandActivity?.fact.label || props.part.tool;
   const toolLabel = () => formatToolLabel(toolName());
   const accessibleSummary = () => {
     const title = summary().title;
     const target = title !== toolName() && title !== toolLabel() ? title : "";
-    return [toolLabel(), target, statusDot(summary().status)].filter(Boolean).join(", ");
+    return [toolLabel(), target, props.part.commandActivity ? completion() : undefined, statusDot(summary().status)].filter(Boolean).join(", ");
   };
-  const completion = () => toolCompletionLabel(props.part);
+  const completion = () => { processRevision(); return toolCompletionLabel(props.part, props.sessionId); };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   const [summaryEl, setSummaryEl] = createSignal<HTMLElement | null>(null);
   const findId = () =>
-    `tool-body:${props.part.toolCallId || props.part.id}`;
+    `tool-body:${props.part.id}`;
   const revealId = () =>
-    `tool-reveal:${props.part.toolCallId || props.part.id}`;
+    `tool-reveal:${props.part.id}`;
 
   // Activity-span membership stays fixed for this mount.
   const accordion = useActivitySpanAccordion();
@@ -111,18 +114,21 @@ export function ToolPartShell(props: Props) {
   }
 
   const [outputOffset, setOutputOffset] = createSignal<number>();
+  const [revealedCallId, setRevealedCallId] = createSignal<string>();
   const [argsOffset, setArgsOffset] = createSignal<number>();
   let restoreContentFind: (() => void) | undefined;
   createEffect(() => {
     void findController.query(); void findController.isOpen();
     restoreContentFind?.(); restoreContentFind = undefined;
+    setOutputOffset(undefined); setArgsOffset(undefined); setRevealedCallId(undefined);
   });
   onCleanup(() => restoreContentFind?.());
   createEffect(() => {
     const host = hostEl(); if (!host) return;
     const reveal = (event: Event) => {
-      const match = (event as CustomEvent<{ field?: string; from: number }>).detail;
+      const match = (event as CustomEvent<{ field?: string; from: number; toolCallId?: string }>).detail;
       restoreContentFind?.(); restoreContentFind = revealTemporarily();
+      setRevealedCallId(match.toolCallId ?? props.part.toolCallId);
       if (match.field === "tool_output") setOutputOffset(match.from);
       if (match.field === "tool_args") setArgsOffset(match.from);
     };
@@ -130,6 +136,7 @@ export function ToolPartShell(props: Props) {
     onCleanup(() => host.removeEventListener(TOOL_CONTENT_REVEAL_EVENT, reveal));
   });
   const contentAccess = (field: "output" | "args") => createMemo(() => {
+    if (props.part.commandActivity) return undefined;
     const client = props.client ?? getLycaonClient();
     const reference = field === "output" ? props.part.outputReference : props.part.argsReference;
     if (!client || !props.sessionId || !reference) return undefined;
@@ -147,6 +154,7 @@ export function ToolPartShell(props: Props) {
   bindFindableView({
     id: findId(),
     root: hostEl,
+    enabled: () => !props.part.commandActivity,
     scrollMatchIntoView: (match) => {
       const node = match.range.startContainer;
       const element = node instanceof HTMLElement ? node : node.parentElement;
@@ -158,8 +166,15 @@ export function ToolPartShell(props: Props) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    collapsedCorpus: () => toolPartFindCorpus(props.part),
+    collapsedCorpus: () => props.part.commandActivity ? "" : toolPartFindCorpus(props.part),
     collapsedCorpusAnchor: summaryEl,
+  });
+
+  bindVirtualListFind({
+    items: () => [props.part], host: () => hostEl() ?? undefined,
+    enabled: () => !!props.part.commandActivity,
+    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal),
+    reveal: (_index, match) => hostEl()?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })),
   });
 
   const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (
@@ -180,7 +195,9 @@ export function ToolPartShell(props: Props) {
       class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
       data-testid={props.testId ?? "tool-part-card"}
       data-tool={props.part.tool}
+      data-command-activity={props.part.commandActivity ? "" : undefined}
       data-tool-call-id={props.part.toolCallId}
+      data-tool-part-id={props.part.id}
       data-invocation-owner={props.part.invocation?.owner}
       data-invocation-lifecycle={props.part.invocation?.lifecycle}
       data-invocation-status={props.part.invocation?.status}
@@ -208,10 +225,10 @@ export function ToolPartShell(props: Props) {
             summary().title !== toolLabel()
           }
         >
-          <span class="den-tool-part-title">{summary().title}</span>
+          <span class="den-tool-part-title" data-tip={summary().title} data-tip-when-clipped="">{summary().title}</span>
         </Show>
         <Show when={completion()}>
-          {(label) => <span class="den-tool-part-title">{label()}</span>}
+          {(label) => <span data-tip={label()} data-tip-when-clipped="" class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel
@@ -219,7 +236,7 @@ export function ToolPartShell(props: Props) {
         class="den-tool-part-card-body den-tool-part-body"
         data-testid="tool-part-body"
       >
-        <ToolContentProvider value={{ output: outputAccess, args: argsAccess, outputOffset, argsOffset,
+        <ToolContentProvider value={{ output: outputAccess, args: argsAccess, outputOffset, argsOffset, revealedCallId,
           identity: () => ({ projectId: props.projectId, sessionId: props.sessionId ?? "", messageId: props.part.messageId,
             toolCallId: props.part.toolCallId ?? props.part.id, title: `${toolLabel()} · ${props.part.title ?? ""}` }),
         }}>

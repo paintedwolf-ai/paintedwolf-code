@@ -649,3 +649,13 @@ describe("application testing and title stability", () => {
     expect(spanOf(items).label).toBe("testing the application");
   });
 });
+
+it("keeps consecutive command calls in one stable span across assistant rows", () => {
+ const items = [tool(part("a","command","first"))];
+ const initial=projectActivitySpans(items);
+ items.push(turnLoadItem("decision","assistant-2"),tool(part("b","command","second",{assistantMessageId:"assistant-2"})));
+ const updated=projectActivitySpans(items);
+ expect(updated).toHaveLength(1);
+ expect(updated[0]!.key).toBe(initial[0]!.key);
+ expect(updated[0]!.kind==="activity_span" && updated[0].entries).toHaveLength(3);
+});
