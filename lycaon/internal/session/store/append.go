@@ -90,7 +90,7 @@ func requireWorkflowRunStamp(msg api.Message) error {
 
 // PatchLiveProjection writes streaming prose and in-flight tool_calls without
 // advancing seq or enqueuing an outbox event.
-func (s *sqlTranscript) PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error {
+func (s *sqlSessionViews) PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
