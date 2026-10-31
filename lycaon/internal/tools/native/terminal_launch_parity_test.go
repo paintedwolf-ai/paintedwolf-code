@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -98,6 +99,15 @@ fi
 	testutil.FailErr(t, "terminal process identity", err)
 	pid, err := strconv.Atoi(string(pidBytes))
 	testutil.FailErr(t, "terminal process PID", err)
+	members, err := lineage.SessionMembers(tc.Identity.SessionID)
+	testutil.FailErr(t, "terminal session lineage members", err)
+	if _, ok := members[pid]; !ok {
+		for memberPID := range members {
+			if memberPID > pid {
+				pid = memberPID
+			}
+		}
+	}
 	processes, err := hostprocess.New()
 	testutil.FailErr(t, "session process owner", err)
 	listed, err := processes.List(t.Context(), tc.Identity.SessionID, pid, 0, 1)

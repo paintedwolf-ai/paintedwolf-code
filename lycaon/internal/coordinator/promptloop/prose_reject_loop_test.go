@@ -76,14 +76,14 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 				gateOpen := true
 				registry := tools.NewStubRegistry()
 				calls := 0
-				testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 					calls++
 					gateOpen = false
 					return "required evidence", nil
 				}))
 				acting := &modelcall.Completion{Content: "Still unresolved"}
 				if repaired {
-					acting = &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "repair-read", Name: "read", Args: map[string]any{"path": "a.txt"}}}}
+					acting = &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "repair-read", Name: "command", Args: map[string]any{"command": "cat a.txt"}}}}
 				}
 				client := &sequentialLLMClient{completions: []*modelcall.Completion{{Content: "Premature closeout"}, acting, {Content: "Final report"}}}
 				deps := promptloop.StoreDeps(messages)

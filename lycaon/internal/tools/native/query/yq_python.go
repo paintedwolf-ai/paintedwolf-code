@@ -13,6 +13,9 @@ var pythonYqFlags = []string{
 }
 
 func (inv *invocation) pythonYq() bool {
+	if inv.spec.Name != "yq" {
+		return false
+	}
 	for _, key := range pythonYqFlags {
 		if inv.flag(key) {
 			return true

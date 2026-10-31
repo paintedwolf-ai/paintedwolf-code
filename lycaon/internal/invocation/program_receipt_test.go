@@ -81,10 +81,11 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 	defer release()
 	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ExpandedInputs: expanded, Canonical: "cat input"}))
 	// The fixture child's canonical form is a cat invocation when the
-	// operation attaches cat; other operations bind their first command.
+	// operation attaches cat; other operations bind their primary fixture command.
 	command := definition.Facts().Commands[0]
 	for _, attached := range definition.Facts().Commands {
-		if attached.Name == "cat" {
+		switch attached.Name {
+		case "cat", "tee", "mv", "curl", "grep":
 			command = attached
 		}
 	}

@@ -123,6 +123,7 @@ func TestCommitLeavesUnrelatedStagedWorkUntouchedAndSupportsAmend(t *testing.T) 
 }
 
 func TestConflictAndHookFailureOutcomesReportActualEffects(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
 	h.git("clean", "-fd")
@@ -187,6 +188,7 @@ func TestConflictAndHookFailureOutcomesReportActualEffects(t *testing.T) {
 }
 
 func TestSequenceCommandsCherryPickRevertAndRebase(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
 	h.git("clean", "-fd")
@@ -224,6 +226,7 @@ func TestSequenceCommandsCherryPickRevertAndRebase(t *testing.T) {
 }
 
 func TestStashRetainsIDAndPopConflictKeepsStashEntry(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	stashPush := h.exec("git", "stash", "push", "-u", "-m", "wip-stash")
 	if stashPush.err != nil || stashPush.result.Status != 0 || stashPush.result.EffectCertainty != toolcontract.EffectCompleted {

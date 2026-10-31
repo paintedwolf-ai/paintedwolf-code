@@ -116,8 +116,18 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 		return landing{}, err
 	}
 	preview := previews[0]
+	if tctx.Effects.CheckMutationProgress != nil && resolved.Root.ID != "" {
+		if err := tctx.Effects.CheckMutationProgress(ctx, resolved.Root.ID, resolved.Abs); err != nil {
+			return landing{}, err
+		}
+	}
 	if err := tctx.ReviewFileChanges(ctx, editorFileChange(tctx, resolved, preview)); err != nil {
 		return landing{}, err
+	}
+	if tctx.Effects.CheckMutationProgress != nil && resolved.Root.ID != "" {
+		if err := tctx.Effects.CheckMutationProgress(ctx, resolved.Root.ID, resolved.Abs); err != nil {
+			return landing{}, err
+		}
 	}
 	if err := admitSources(); err != nil {
 		return landing{}, err

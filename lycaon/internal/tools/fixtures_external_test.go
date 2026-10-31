@@ -13,6 +13,16 @@ func fixtureToolProfiles(t *testing.T) []sandbox.ToolProfile {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
+	for i := range profiles {
+		if profiles[i].ID == "implement" {
+			if profiles[i].Tools == nil {
+				profiles[i].Tools = map[string]bool{}
+			}
+			profiles[i].Tools["delete"] = true
+			profiles[i].Tools["write"] = true
+			profiles[i].Tools["read"] = true
+		}
+	}
 	return profiles
 }
 

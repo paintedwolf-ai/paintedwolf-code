@@ -288,9 +288,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 }
 
 func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
-	// Publication reaches the write door after its output is staged. Its
-	// destination, including scratch or output, decides the checklist gate.
-	if bound.Publication() != toolcontract.NoPublication {
+	// Redirect publication reaches the write door after its output is staged.
+	// Its destination, including scratch or output, decides the checklist gate.
+	if bound.Publication() == toolcontract.RedirectPublication {
 		return nil
 	}
 	if provider == nil {

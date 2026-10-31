@@ -248,6 +248,8 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		if err != nil {
 			return err
 		}
+	} else if err := applyProcessAttributes(helperProcessAttributes); err != nil {
+		return err
 	}
 	// Only the target's tree should hold the marker once it runs.
 	releaseMarker := func() {

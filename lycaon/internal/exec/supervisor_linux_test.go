@@ -220,20 +220,22 @@ print(" ".join(open_fds))`
 			cmd, cleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
 			testutil.FailErr(t, "prepare descriptor probe", err)
 			defer cleanup()
+			baseline, baselineCleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
+			testutil.FailErr(t, "prepare direct descriptor probe", err)
+			defer baselineCleanup()
 			if extra > 0 {
 				read, write, err := os.Pipe()
 				testutil.FailErr(t, "open intended descriptor", err)
 				defer func() { _ = read.Close(); _ = write.Close() }()
-				cmd.ExtraFiles = []*os.File{write}
+				cmd.ExtraFiles = append(cmd.ExtraFiles, write)
+				baseline.ExtraFiles = append(baseline.ExtraFiles, write)
 			}
 			// Managed runners intentionally inherit lineage and confinement descriptors.
 			// Compare the supervised launch with the same direct launch to detect leaks.
-			baseline := exec.CommandContext(t.Context(), python, "-c", probe)
-			baseline.Env = cmd.Env
-			baseline.ExtraFiles = cmd.ExtraFiles
-			wantBytes, err := baseline.Output()
-			testutil.FailErr(t, "run direct descriptor probe", err)
-			want := strings.TrimSpace(string(wantBytes))
+			var wantOut strings.Builder
+			baseline.Stdout = &wantOut
+			testutil.FailErr(t, "run direct descriptor probe", RunPrepared(t.Context(), baseline))
+			want := strings.TrimSpace(wantOut.String())
 			var out strings.Builder
 			cmd.Stdout = &out
 			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(t.Context(), cmd))

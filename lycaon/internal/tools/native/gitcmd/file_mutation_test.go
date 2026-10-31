@@ -17,6 +17,7 @@ import (
 )
 
 func TestRemoveTrackedFiles(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name     string
 		args     []string
@@ -33,6 +34,7 @@ func TestRemoveTrackedFiles(t *testing.T) {
 		{"unmatched", []string{"rm", "--ignore-unmatch", "--", "absent"}, 0, true, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			before := h.git("ls-files", "--stage")
 			got := h.exec(append([]string{"git"}, test.args...)...)
@@ -180,6 +182,7 @@ func TestFileMutationDryRunAndPathRefusals(t *testing.T) {
 }
 
 func TestMoveForceAndSymbolicLink(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("destination", "replaced\n")
 	got := h.exec("git", "mv", "-f", "--", "sub/b.txt", "destination")
@@ -231,8 +234,10 @@ func TestRemoveMissingAndGroupedSafety(t *testing.T) {
 }
 
 func TestSelectedMutationPreservesUnrelatedConflict(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "mv"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			_, err := h.owners.Git.Operate(t.Context(), h.root, git.OperationRequest{Kind: "stage", Entries: []git.IndexEntry{{Path: "a.txt", Mode: "100644", Stages: &[3][]byte{[]byte("base\n"), []byte("ours\n"), []byte("theirs\n")}}}})
 			testutil.FailErr(t, "seed unrelated conflict", err)
@@ -268,8 +273,10 @@ func TestCachedRemovalRechecksSavedContentAtIndexReview(t *testing.T) {
 }
 
 func TestFileMutationDefaultCommitLeavesUnrelatedStaging(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "mv"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			args := []string{"git", command, "--", "sub/b.txt"}
 			if command == "mv" {
@@ -400,6 +407,7 @@ func TestRemoveSelectedConflict(t *testing.T) {
 }
 
 func TestRemovePrunesEmptiedDirectoriesUpToTheWorkingDirectory(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	for _, name := range []string{"deep/a/b/leaf", "deep/a/kept/other", "cwd/inner/leaf", "cwd/sibling"} {
 		h.write(name, name+"\n")

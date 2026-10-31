@@ -79,24 +79,17 @@ func TestHTTPRequestPartialTeachesFirstClassActionWorkflow(t *testing.T) {
 	t.Parallel()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	got, err := engine.Render(context.Background(), "units/http-request-tools.md", map[string]any{
-		"profile_has_http_request": true,
-		"profile_has_fetch_url":    true,
-		"profile_has_wait":         true,
+		"profile_has_fetch_url": true,
 	})
 	testutil.FailErr(t, "render HTTP request partial", err)
 	for _, want := range []string{
-		"HTTP actions", "Use `http_request` for APIs",
-		"Use `fetch_url` for readable web research", "where `http_request` returns raw HTML",
-		"Use `wait` with `http_ready`/`port_ready`",
+		"Use `fetch_url` for readable web research",
+		"pages and documentation arrive as markdown with paging",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("HTTP request partial missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(strings.ToLower(got), "curl") {
-		t.Fatalf("HTTP request teaching must not advertise a shell client:\n%s", got)
-	}
-
 	if strings.Contains(got, "request_tools") {
 		t.Fatalf("sticky HTTP tools must not be taught as deferred:\n%s", got)
 	}

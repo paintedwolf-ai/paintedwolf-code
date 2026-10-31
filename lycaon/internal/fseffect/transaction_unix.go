@@ -13,7 +13,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,12 +24,6 @@ import (
 var (
 	tempNonceSeed    [8]byte
 	tempNonceCounter atomic.Uint64
-	parentIDCache    struct {
-		mu       sync.RWMutex
-		dev      uint64
-		ino      uint64
-		identity string
-	}
 )
 
 func init() {
@@ -292,32 +285,7 @@ func verifyReviewedParent(location Location, held *openedParent) error {
 }
 
 func parentDirectoryIdentity(parent *openedParent) (string, error) {
-	fd := parent.fd
-	if parent.ino == 0 {
-		var st unix.Stat_t
-		if unix.Fstat(fd, &st) == nil {
-			parent.dev, parent.ino = deviceID(&st), st.Ino
-		}
-	}
-	if parent.ino != 0 {
-		parentIDCache.mu.RLock()
-		if parentIDCache.dev == parent.dev && parentIDCache.ino == parent.ino && parentIDCache.identity != "" {
-			id := parentIDCache.identity
-			parentIDCache.mu.RUnlock()
-			return id, nil
-		}
-		parentIDCache.mu.RUnlock()
-	}
-	id, err := fspath.EntryIdentityAt(fd, ".")
-	if err != nil {
-		return "", err
-	}
-	if parent.ino != 0 {
-		parentIDCache.mu.Lock()
-		parentIDCache.dev, parentIDCache.ino, parentIDCache.identity = parent.dev, parent.ino, id
-		parentIDCache.mu.Unlock()
-	}
-	return id, nil
+	return fspath.EntryIdentityAt(parent.fd, ".")
 }
 
 // createTempAt holds the staging name before creating it so no listing sees

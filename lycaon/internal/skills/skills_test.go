@@ -264,12 +264,12 @@ var stockSkills = []stockSkill{
 	{
 		packRoot: "platform",
 		name:     "diagnose-performance",
-		desc:     "Investigate slow queries, performance regressions, memory leaks, and disk, memory, or descriptor exhaustion.",
+		desc:     "Find the measured cause of a slow query, build, request, or test suite, a performance regression, a memory leak, or disk, memory, or file-descriptor exhaustion.",
 	},
 	{
 		packRoot: "platform",
 		name:     "design-and-debug-tests",
-		desc:     "Minimize reproductions, diagnose flaky tests, and design property-based or invariant regression tests.",
+		desc:     "Minimize a failing reproduction, fix a flaky or CI-only test, or design property-based and invariant tests that keep a bug class from returning.",
 	},
 	{
 		packRoot: "platform",
@@ -286,7 +286,7 @@ var stockSkills = []stockSkill{
 	{
 		packRoot: "platform",
 		name:     "reach-a-network-service",
-		desc:     "Before network access, local service setup, or bind/listen/connect/DNS/proxy recovery, select the confined route.",
+		desc:     "Pick the confined network route for HTTP calls, database or broker connections, UDP, local servers, or loopback clients, and recover from bind, connect, DNS, or proxy failures.",
 	},
 	{
 		packRoot: "platform",

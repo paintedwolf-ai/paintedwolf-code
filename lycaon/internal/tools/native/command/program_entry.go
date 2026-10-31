@@ -270,6 +270,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	call.ctx = ctx
 	dispatcher, publication, releaseSurface, err := r.bindProgramSurface(ctx, run, owners, paths)
 	if err != nil {
 		return "", err

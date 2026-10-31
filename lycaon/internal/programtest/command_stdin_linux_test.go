@@ -49,6 +49,7 @@ func TestNativeCommandByteInputProcess(t *testing.T) {
 	raw, err := io.ReadAll(os.Stdin)
 	testutil.FailErr(t, "consume complete input through EOF", err)
 	fmt.Printf("byte-input:%s\n", raw)
+	os.Exit(0)
 }
 
 func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {

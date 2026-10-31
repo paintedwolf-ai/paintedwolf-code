@@ -271,7 +271,17 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if err != nil {
 		return exchanged{}, err
 	}
-	// Stored cookies are attached after screening and scoped to their origin.
+	cookieSpec := spec
+	cookieSpec.target, err = outboundhttp.NormalizeURL(screened.url)
+	if err != nil {
+		return exchanged{}, invalid(err)
+	}
+	cookieSpec.hostHeader = screened.hostHeader
+	screened.beforeCookieHop, err = prepareCookieDelivery(ctx, deps, cookieSpec, jar)
+	if err != nil {
+		return exchanged{}, err
+	}
+	// Stored cookies and references use the same reviewed delivery view.
 	outbound, reject := resolveCookieReferences(screened, jar, spec.target)
 	if reject != nil {
 		return exchanged{}, reject

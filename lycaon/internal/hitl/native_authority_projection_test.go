@@ -176,6 +176,13 @@ func (r *nativeInstallRecorder) RollbackApprovalOption(_ context.Context, _ stri
 	return nil
 }
 
+func (r *nativeInstallRecorder) RestoreUnavailableSocketIntent(_ context.Context, grant hitl.ChatGrant) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.installed = append(r.installed, hitl.ApprovalOption{Authority: []hitl.ApprovalAuthorityDelta{grant.Delta}})
+	return nil
+}
+
 func socketPaths(option hitl.ApprovalOption) []string {
 	var paths []string
 	for _, delta := range option.Authority {

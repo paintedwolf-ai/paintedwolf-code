@@ -63,7 +63,7 @@ func pinnedFinalTarget(self string, target []string) (string, []string, []uintpt
 	if len(target) > 0 && strings.ContainsRune(target[0], '/') {
 		entry = target[0]
 	}
-	args := []string{self, helperFlag, pinFinalFlag, pinEntryFlag, entry, pinCwdFDFlag, "3", pinReadyFDFlag, "4", pinReleaseFDFlag, "5", pinExecutableFDFlag, "6"}
+	args := append([]string{self, helperFlag, pinFinalFlag, pinEntryFlag, entry, pinCwdFDFlag, "3", pinReadyFDFlag, "4", pinReleaseFDFlag, "5", pinExecutableFDFlag, "6"}, helperProcessAttributes.arguments()...)
 	if _, err := unix.FcntlInt(uintptr(lineage.ChildFD), unix.F_GETFD, 0); err == nil {
 		files = append(files, uintptr(lineage.ChildFD))
 		args = append(args, lineageFDFlag, "7")

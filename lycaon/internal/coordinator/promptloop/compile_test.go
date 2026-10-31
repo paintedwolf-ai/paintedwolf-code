@@ -23,8 +23,8 @@ func TestCompiledSurfaceOffersCommandOnInvestigateFloor(t *testing.T) {
 		t.Fatalf("investigate must offer command on its floor: %v", plan.AddressableNames())
 	}
 	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
-		if !plan.Deferred(retired) {
-			t.Fatalf("retired routine schema %s must stay loadable by exact name: %v", retired, plan.DeferredNames())
+		if plan.Addressable(retired) {
+			t.Fatalf("retired routine schema %s must not be offered on surface: %v", retired, plan.AddressableNames())
 		}
 	}
 	// Job controls follow a live command job, not the command schema.

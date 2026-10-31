@@ -137,10 +137,12 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory", err)
 	owners.Revisions.Memory = memory
 	tc := nativefixture.Context(root)
+	quota := &spillQuota{maximum: 1 << 30}
 	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary, Memory: memory}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
 		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "mutation owners", err)
+	mutations.Admission = &spillQuota{maximum: 1 << 30}
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
 	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
@@ -148,7 +150,7 @@ func newHarness(t *testing.T) *harness {
 			return apply(ctx, tc)
 		}, Abandon: func(context.Context, error) error { return nil }}, nil
 	}}
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: &Spills{}, quota: &spillQuota{maximum: 1 << 30}, publication: publication}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: &Spills{}, quota: quota, publication: publication}
 }
 
 func (h *harness) seed(name, content string) {
