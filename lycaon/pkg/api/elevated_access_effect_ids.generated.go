@@ -7,16 +7,18 @@ package api
 type ElevatedAccessEffect string
 
 const (
-	ElevatedAccessEffectDirectNetwork  ElevatedAccessEffect = "direct_network"
-	ElevatedAccessEffectHostExecution  ElevatedAccessEffect = "host_execution"
-	ElevatedAccessEffectProcessControl ElevatedAccessEffect = "process_control"
-	ElevatedAccessEffectLocalService   ElevatedAccessEffect = "local_service"
+	ElevatedAccessEffectDirectNetwork   ElevatedAccessEffect = "direct_network"
+	ElevatedAccessEffectHostExecution   ElevatedAccessEffect = "host_execution"
+	ElevatedAccessEffectProcessControl  ElevatedAccessEffect = "process_control"
+	ElevatedAccessEffectCredentialStore ElevatedAccessEffect = "credential_store"
+	ElevatedAccessEffectLocalService    ElevatedAccessEffect = "local_service"
 )
 
 var allElevatedAccessEffectValues = []ElevatedAccessEffect{
 	ElevatedAccessEffectDirectNetwork,
 	ElevatedAccessEffectHostExecution,
 	ElevatedAccessEffectProcessControl,
+	ElevatedAccessEffectCredentialStore,
 	ElevatedAccessEffectLocalService,
 }
 

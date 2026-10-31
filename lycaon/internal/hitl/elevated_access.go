@@ -74,7 +74,7 @@ func elevatedQuietEffects(segment string) []api.ElevatedAccessEffect {
 func ValidateElevatedEffects(effects []api.ElevatedAccessEffect) error {
 	for _, effect := range effects {
 		switch effect {
-		case api.ElevatedAccessEffectDirectNetwork, api.ElevatedAccessEffectHostExecution, api.ElevatedAccessEffectProcessControl, api.ElevatedAccessEffectLocalService:
+		case api.ElevatedAccessEffectDirectNetwork, api.ElevatedAccessEffectHostExecution, api.ElevatedAccessEffectProcessControl, api.ElevatedAccessEffectCredentialStore, api.ElevatedAccessEffectLocalService:
 		default:
 			return fmt.Errorf("unknown elevated effect %q", effect)
 		}

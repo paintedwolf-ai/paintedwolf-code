@@ -121,6 +121,7 @@ func TestProviderCapabilityFieldsMatchExecutionContract(t *testing.T) {
 		"loopback_connect": toolcontract.CapabilityLoopbackConnect,
 		"write_root":       toolcontract.CapabilityWriteRoot,
 		"read_path":        toolcontract.CapabilityReadPath,
+		"credential_store": toolcontract.CapabilityCredentialStore,
 	}
 	for name := range cfg.Tools {
 		contract, ok := toolcontract.Lookup(name)
