@@ -57,3 +57,20 @@ func TestLedgerReaderForWorkerJobIncludesRetryEvidence(t *testing.T) {
 		t.Fatal("retry evidence missing from scoped ledger")
 	}
 }
+
+func TestLedgerReaderForWorkerMessagesIncludesEmbeddedChildHandles(t *testing.T) {
+	source := fixedEvidenceLedger{ledger: evidence.AssembleLedger([]evidence.Record{
+		{Handle: "summarize#1", Kind: "summarize", Path: "a.go"},
+		{Handle: "summarize#2", Kind: "summarize", Path: "a.go"},
+	})}
+	reader := LedgerForMessages(source, []api.Message{{
+		Content:         "[summarize#2]\n{\"anchors\":[{\"handle\":\"summarize#1\",\"path\":\"a.go\",\"line\":10,\"excerpt\":\"func A()\"}]}",
+		EvidenceHandles: []string{"summarize#2"},
+	}})
+
+	ledger, err := reader.LoadLedger(t.Context(), "child")
+	testutil.FailErr(t, "load scoped ledger", err)
+	if _, ok := ledger.Handles["summarize#1"]; !ok {
+		t.Fatal("embedded child anchor handle missing from scoped worker ledger")
+	}
+}

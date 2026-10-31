@@ -67,6 +67,12 @@ func evidenceHandlesForMessages(messages []api.Message) map[string]struct{} {
 				handles[handle] = struct{}{}
 			}
 		}
+		for _, handle := range evidence.ExtractEmbeddedHandles(message.Content) {
+			handle = strings.TrimSpace(handle)
+			if handle != "" {
+				handles[handle] = struct{}{}
+			}
+		}
 	}
 	return handles
 }

@@ -48,9 +48,10 @@ type toolCaptures struct {
 	displaySubject   string
 	skill            *api.SkillActivation
 	process          *api.ToolProcessHandle
-	verdict          *api.VerdictOutcome
-	commandProgram   *api.CommandProgramReceipt
-	sourceRun        *tools.SourceRunCapture
+	verdict               *api.VerdictOutcome
+	commandProgram        *api.CommandProgramReceipt
+	sourceDeliveryHandles []string
+	sourceRun             *tools.SourceRunCapture
 	dispatch         *api.WorkerDispatch
 	completion       *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
@@ -424,8 +425,9 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
 		note: out.AgentNote, externalAccess: out.ExternalAccess,
 		skill: out.Skill, process: out.Process, verdict: out.Verdict,
-		commandProgram: out.CommandProgram,
-		sourceRun:      out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		commandProgram:        out.CommandProgram,
+		sourceDeliveryHandles: append([]string(nil), out.SourceDeliveryHandles...),
+		sourceRun:             out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,
 	}

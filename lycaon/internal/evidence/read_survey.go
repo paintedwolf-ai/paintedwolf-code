@@ -225,10 +225,7 @@ func PatchSummarizeAnchorHandles(content string, handles []string) (string, erro
 	if !ok {
 		return content, nil
 	}
-	rawAnchors, ok := obj["anchors"].([]any)
-	if !ok || len(rawAnchors) == 0 {
-		return content, nil
-	}
+	rawAnchors, _ := obj["anchors"].([]any)
 	hi := 0
 	for i, item := range rawAnchors {
 		m, ok := item.(map[string]any)
@@ -254,7 +251,11 @@ func PatchSummarizeAnchorHandles(content string, handles []string) (string, erro
 		rawAnchors[i] = m
 		hi++
 	}
-	obj["anchors"] = rawAnchors
+	if len(rawAnchors) > 0 {
+		obj["anchors"] = rawAnchors
+	} else if len(handles) > 0 {
+		patchSummarizePackHandles(obj, handles)
+	}
 	var out bytes.Buffer
 	encoder := json.NewEncoder(&out)
 	encoder.SetEscapeHTML(false)
@@ -262,6 +263,97 @@ func PatchSummarizeAnchorHandles(content string, handles []string) (string, erro
 		return content, err
 	}
 	return prefix + strings.TrimSuffix(out.String(), "\n") + suffix, nil
+}
+
+func patchSummarizePackHandles(obj map[string]any, handles []string) {
+	hi := 0
+	if pack, ok := obj["pack"].(map[string]any); ok {
+		if callSites, ok := pack["call_sites"].([]any); ok {
+			for i, item := range callSites {
+				m, ok := item.(map[string]any)
+				if !ok || hi >= len(handles) {
+					continue
+				}
+				if strings.TrimSpace(handles[hi]) != "" {
+					m["handle"] = handles[hi]
+					callSites[i] = m
+					hi++
+				}
+			}
+			pack["call_sites"] = callSites
+		}
+		if skeleton, ok := pack["skeleton"].([]any); ok {
+			for i, item := range skeleton {
+				m, ok := item.(map[string]any)
+				if !ok || hi >= len(handles) {
+					continue
+				}
+				kind, _ := m["kind"].(string)
+				name, _ := m["name"].(string)
+				line, _ := m["line"].(float64)
+				if !summarizeSkeletonCitable(summarizePackSymbolWire{Kind: kind, Name: name, Line: int(line)}) {
+					continue
+				}
+				if strings.TrimSpace(handles[hi]) != "" {
+					m["handle"] = handles[hi]
+					skeleton[i] = m
+					hi++
+				}
+			}
+			pack["skeleton"] = skeleton
+		}
+	}
+	if hi == 0 && len(handles) > 0 {
+		obj["highlight_handles"] = handles
+	}
+}
+
+// ExtractEmbeddedHandles returns child evidence handles stamped inside a tool JSON payload.
+func ExtractEmbeddedHandles(content string) []string {
+	_, body, _ := splitToolPayloadEnvelope(content)
+	obj, ok := jsonToolPayload(body)
+	if !ok {
+		return nil
+	}
+	var out []string
+	seen := make(map[string]struct{})
+	add := func(raw any) {
+		h, _ := raw.(string)
+		h = strings.TrimSpace(h)
+		if h == "" {
+			return
+		}
+		if _, ok := seen[h]; ok {
+			return
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	addItems := func(raw any) {
+		items, ok := raw.([]any)
+		if !ok {
+			return
+		}
+		for _, item := range items {
+			switch v := item.(type) {
+			case map[string]any:
+				add(v["handle"])
+				add(v["evidence_handle"])
+			case string:
+				add(v)
+			}
+		}
+	}
+	addItems(obj["anchors"])
+	addItems(obj["highlights"])
+	addItems(obj["frames"])
+	addItems(obj["highlight_handles"])
+	if pack, ok := obj["pack"].(map[string]any); ok {
+		addItems(pack["substance"])
+		addItems(pack["call_sites"])
+		addItems(pack["skeleton"])
+	}
+	return out
 }
 
 // splitToolPayloadEnvelope preserves markers around a patched JSON body.

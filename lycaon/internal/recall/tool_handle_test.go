@@ -63,3 +63,34 @@ func TestToolAndPathRecallIncludesTheOriginalObservation(t *testing.T) {
 		t.Fatalf("recommended query excluded the observation: %+v", result)
 	}
 }
+
+func TestEmbeddedChildHandleRecallResolvesAnchorAndFrameRecords(t *testing.T) {
+	f := newFixture(t)
+	st := store.NewSQL(f.db)
+	st.SetDataDir(f.dataDir)
+	anchorBody := []string{"12: func Route() {", "13: serve()", "14: }"}
+	testutil.FailErr(t, "store anchor record", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+		Handle: "summarize#1", Kind: "summarize", Path: "source.go", Body: anchorBody,
+	}))
+	parentBody := []string{"Overview of source.go"}
+	testutil.FailErr(t, "store parent record", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+		Handle: "summarize#2", Kind: "summarize", Path: "source.go", Body: parentBody,
+	}))
+	msg := api.Message{
+		ID:              "tool-sum-1",
+		Role:            api.MessageRoleTool,
+		Content:         "[summarize#2]\n{\"anchors\":[{\"handle\":\"summarize#1\",\"path\":\"source.go\",\"line\":12,\"excerpt\":\"func Route() {\"}]}",
+		EvidenceHandles: []string{"summarize#2"},
+		ToolResult:      &api.ToolResult{Tool: "summarize", ToolCallID: "call-sum-1", ToolArgs: map[string]any{"path": "source.go"}},
+		CreatedAt:       time.Now().UTC(),
+	}
+	f.seed(t, search.ProjectToolMessage(projectID, coordinatorSession, msg, "summarize")...)
+
+	byChild := f.answer(t, coordinator(), "handle:summarize#1", recall.WidenDefault)
+	if byChild.Resolution != recall.ResolutionMatched || len(byChild.Hits) != 1 {
+		t.Fatalf("child handle lookup: %+v", byChild)
+	}
+	if byChild.Hits[0].Handle != "summarize#1" || !reflect.DeepEqual(byChild.Hits[0].Body, anchorBody) {
+		t.Fatalf("child handle body mismatch: %+v", byChild.Hits[0])
+	}
+}

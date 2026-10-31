@@ -77,7 +77,7 @@ func summarizeSpillPointer(content, spillRel string) (string, error) {
 	ptr := map[string]any{
 		"wire_spill_path": spillRel,
 	}
-	for _, key := range []string{"task", "selected", "total", "truncated"} {
+	for _, key := range []string{"task", "selected", "total", "truncated", "anchors", "highlight_handles"} {
 		if v, exists := obj[key]; exists {
 			ptr[key] = v
 		}

@@ -100,6 +100,8 @@ type ToolInvocationOut struct {
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
 	CommandProgram *api.CommandProgramReceipt
+	// SourceDeliveryHandles lists confirmed source-delivery handles minted during the call.
+	SourceDeliveryHandles []string
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.

@@ -2,9 +2,11 @@ package search
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -77,7 +79,12 @@ func ProjectToolMessage(projectID, sessionID string, msg api.Message, toolName s
 func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, revealRef, ts, content string) []IndexRow {
 	handles := make([]string, 0, len(msg.EvidenceHandles))
 	for _, h := range msg.EvidenceHandles {
-		if h = strings.TrimSpace(h); h != "" {
+		if h = strings.TrimSpace(h); h != "" && !slices.Contains(handles, h) {
+			handles = append(handles, h)
+		}
+	}
+	for _, h := range evidence.ExtractEmbeddedHandles(content) {
+		if h = strings.TrimSpace(h); h != "" && !slices.Contains(handles, h) {
 			handles = append(handles, h)
 		}
 	}
