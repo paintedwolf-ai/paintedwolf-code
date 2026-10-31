@@ -143,13 +143,13 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 	apitestdeps.Fill(t, &deps)
 	responses := &httpio.Responder{Logger: slog.New(slog.DiscardHandler)}
 	bootstrap := &Bootstrap{Store: deps.Store, responses: responses}
-	transcript := &Transcript{Store: deps.Store, responses: responses}
+	transcript := &Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}
 	lifecycle := &Lifecycle{Sessions: deps.Sessions, responses: responses}
 	navigation := &Navigation{Store: deps.Store, responses: responses}
 	for _, tc := range []struct {
 		handle http.HandlerFunc
 		body   string
-	}{{bootstrap.HandleSessionBootstrap, ""}, {transcript.HandleMarkSessionSeen, ""}, {lifecycle.HandleAbortSession, ""}, {navigation.HandleResolveMessageNavigation, `{"message_id":"missing","content_sha256":"` + strings.Repeat("a", 64) + `"}`}} {
+	}{{bootstrap.HandleSessionBootstrap, ""}, {transcript.HandleMarkSessionSeen, ""}, {transcript.HandleGetCommandProgramReceipt, ""}, {lifecycle.HandleAbortSession, ""}, {navigation.HandleResolveMessageNavigation, `{"message_id":"missing","content_sha256":"` + strings.Repeat("a", 64) + `"}`}} {
 		req := httptest.NewRequest(http.MethodPost, "/v1/sessions/missing", strings.NewReader(tc.body))
 		req.Header.Set("Content-Type", "application/json")
 		route := chi.NewRouteContext()
@@ -158,6 +158,32 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		rec := httptest.NewRecorder()
 		tc.handle(rec, req)
 		assertSessionRefusal(t, rec, wire.ApiErrorCodeSessionNotFound)
+	}
+	sess, err := deps.Store.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: "project", Posture: wire.SessionPostureBuild}, "project", wire.SessionStatusIdle)
+	testutil.FailErr(t, "create session for program receipt refusal", err)
+	for _, tc := range []struct {
+		target      string
+		invocations any
+		wantStatus  int
+	}{
+		{"/v1/sessions/" + sess.ID + "/programs/missing", nil, http.StatusInternalServerError},
+		{"/v1/sessions/" + sess.ID + "/programs/missing?limit=0", deps.Invocations, http.StatusBadRequest},
+		{"/v1/sessions/" + sess.ID + "/programs/missing", deps.Invocations, http.StatusNotFound},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.target, nil)
+		route := chi.NewRouteContext()
+		route.URLParams.Add("id", sess.ID)
+		route.URLParams.Add("program_id", "missing")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+		rec := httptest.NewRecorder()
+		(&Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+		if tc.invocations == nil {
+			rec = httptest.NewRecorder()
+			(&Transcript{Store: deps.Store, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+		}
+		if rec.Code != tc.wantStatus {
+			t.Fatalf("target=%s status=%d want=%d", tc.target, rec.Code, tc.wantStatus)
+		}
 	}
 	workers, checkpoints, err := bootstrap.sessionBootstrapWorkersAndCheckpoints(t.Context(), "project", "session")
 	if err != nil || workers == nil || checkpoints == nil || len(workers) != 0 || len(checkpoints) != 0 {
