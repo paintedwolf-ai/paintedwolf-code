@@ -62,7 +62,7 @@ func TestRunPipelineTimeoutKillsDescendants(t *testing.T) {
 	go func() {
 		defer close(done)
 		_, _ = RunPipeline(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}},
-			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: 500 * time.Millisecond})
+			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: testutil.Timeout(500 * time.Millisecond)})
 	}()
 
 	grandchild := waitForPIDFile(t, pidFile)
