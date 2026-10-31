@@ -521,3 +521,77 @@ func TestRouterOverlayRootsUsesProjectPolicy(t *testing.T) {
 		t.Fatalf("overlay model = %s want gpt-project", projectSel.Model)
 	}
 }
+
+func TestLocalDefaultRoleResolution(t *testing.T) {
+	localRef := DefaultLocalModelRef()
+	if localRef.ProviderID != IncludedProviderID || localRef.Model != IncludedModelID {
+		t.Fatalf("DefaultLocalModelRef() = %+v", localRef)
+	}
+
+	// Both unset: both Coordinator and Lite bind to the bundled local model when available.
+	unsetPolicy := ModelPolicy{}
+	if got := CoordinatorRefWithLocalDefault(unsetPolicy, true); got != localRef {
+		t.Fatalf("unset coordinator with local default = %+v, want %+v", got, localRef)
+	}
+	if got := SummarizerRefWithLocalDefault(unsetPolicy, true); got != localRef {
+		t.Fatalf("unset summarizer with local default = %+v, want %+v", got, localRef)
+	}
+	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, true) {
+		t.Fatal("unset roles should share the bundled local provider")
+	}
+
+	// Remote coordinator + unset summarizer: summarizer resolves to local default while coordinator stays remote.
+	remoteCoord := ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"}
+	hybridPolicy := ModelPolicy{Coordinator: remoteCoord}
+	if got := CoordinatorRefWithLocalDefault(hybridPolicy, true); got != remoteCoord {
+		t.Fatalf("remote coordinator = %+v, want %+v", got, remoteCoord)
+	}
+	if got := SummarizerRefWithLocalDefault(hybridPolicy, true); got != localRef {
+		t.Fatalf("unset summarizer with remote coordinator = %+v, want %+v", got, localRef)
+	}
+	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, true) {
+		t.Fatal("remote coordinator and local default summarizer do not share provider capacity")
+	}
+
+	// Explicit role selections survive when local model is unavailable.
+	explicitLite := ModelRef{ProviderID: "openai", Model: "gpt-5-mini"}
+	explicitPolicy := ModelPolicy{Coordinator: remoteCoord, Lite: explicitLite}
+	if got := CoordinatorRefWithLocalDefault(explicitPolicy, false); got != remoteCoord {
+		t.Fatalf("explicit coordinator without local model = %+v, want %+v", got, remoteCoord)
+	}
+	if got := SummarizerRefWithLocalDefault(explicitPolicy, false); got != explicitLite {
+		t.Fatalf("explicit summarizer without local model = %+v, want %+v", got, explicitLite)
+	}
+
+	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
+	store := NewInMemoryPolicyStore(hybridPolicy)
+	router := NewStaticModelRouter(store).WithLocalDefault(true)
+	coordSel, err := router.Coordinator(t.Context())
+	testutil.FailErr(t, "router coordinator", err)
+	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
+		t.Fatalf("router coordinator = %+v, want %+v", coordSel, remoteCoord)
+	}
+	liteSel, err := router.Lite(t.Context())
+	testutil.FailErr(t, "router lite", err)
+	if liteSel.ProviderID != localRef.ProviderID || liteSel.Model != localRef.Model {
+		t.Fatalf("router lite = %+v, want %+v", liteSel, localRef)
+	}
+}
+
+func TestIncludedProviderCannotBeRemoved(t *testing.T) {
+	cat, err := NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
+	testutil.FailErr(t, "NewProviderCatalogAt", err)
+
+	entry := IncludedProviderEntry()
+	if !IsIncludedProvider(entry.ID) || entry.Label != IncludedProviderLabel {
+		t.Fatalf("IncludedProviderEntry() = %+v", entry)
+	}
+	if len(entry.Models) != 1 || entry.Models[0].ID != IncludedModelID || entry.Models[0].ContextLength != IncludedContextWindowTokens {
+		t.Fatalf("IncludedProviderEntry().Models = %+v", entry.Models)
+	}
+
+	removed, err := cat.Remove(IncludedProviderID)
+	if err != ErrCannotRemoveIncludedProvider || removed {
+		t.Fatalf("Remove(%q) = (%v, %v), want (false, %v)", IncludedProviderID, removed, err, ErrCannotRemoveIncludedProvider)
+	}
+}

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,46 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"gopkg.in/yaml.v3"
 )
+
+const (
+	// IncludedProviderID identifies the bundled local inference provider.
+	IncludedProviderID = "nativegen"
+	// IncludedProviderLabel is the display label for the bundled local provider.
+	IncludedProviderLabel = "Painted Wolf Code (included)"
+	// IncludedModelID is the bundled custom Gemma 4 E4B model identifier.
+	IncludedModelID = "gemma4-e4b-paintedwolf"
+	// IncludedContextWindowTokens is the single fixed context window for the bundled local model.
+	IncludedContextWindowTokens = 65536
+)
+
+// ErrCannotRemoveIncludedProvider rejects deletion of the bundled local provider.
+var ErrCannotRemoveIncludedProvider = errors.New("included provider cannot be removed")
+
+// IsIncludedProvider reports whether id names the bundled local provider.
+func IsIncludedProvider(id string) bool {
+	return strings.TrimSpace(id) == IncludedProviderID
+}
+
+// IncludedProviderEntry returns the catalog definition for the bundled local provider.
+func IncludedProviderEntry() ProviderEntry {
+	requiresKey := false
+	return ProviderEntry{
+		ID:             IncludedProviderID,
+		Kind:           IncludedProviderID,
+		Label:          IncludedProviderLabel,
+		EndpointStyle:  EndpointStyleDerived,
+		RequiresAPIKey: &requiresKey,
+		LocalFree:      true,
+		Platforms:      []string{"darwin/arm64"},
+		Models: []modelinfo.Entry{
+			{
+				ID:            IncludedModelID,
+				ContextLength: IncludedContextWindowTokens,
+				MaxTokens:     4096,
+			},
+		},
+	}
+}
 
 // CatalogEntry is a live AI provider instance (from providers.local.yaml).
 type CatalogEntry struct {
@@ -508,6 +549,9 @@ func cloneProviderEntry(entry ProviderEntry) ProviderEntry {
 
 // Remove deletes a live instance from the local file.
 func (c *ProviderCatalog) Remove(id string) (bool, error) {
+	if IsIncludedProvider(id) {
+		return false, ErrCannotRemoveIncludedProvider
+	}
 	c.mutationMu.Lock()
 	defer c.mutationMu.Unlock()
 	data, err := os.ReadFile(c.localPath)

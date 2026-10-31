@@ -11,12 +11,20 @@ import (
 
 // StaticModelRouter resolves models from model_policy (coordinator, lite, agent pool).
 type StaticModelRouter struct {
-	policy      *PolicyStore
-	pool        *PoolSelector
-	pools       *scopedstore.LRU[*PoolSelector]
-	scope       SettingsScope
-	projectDir  string
-	projectDirs []string
+	policy       *PolicyStore
+	pool         *PoolSelector
+	pools        *scopedstore.LRU[*PoolSelector]
+	scope        SettingsScope
+	projectDir   string
+	projectDirs  []string
+	localDefault bool
+}
+
+// WithLocalDefault enables bundled local-model fallback for unset coordinator and lite roles.
+func (r *StaticModelRouter) WithLocalDefault(localAvailable bool) *StaticModelRouter {
+	cp := *r
+	cp.localDefault = localAvailable
+	return &cp
 }
 
 // NewStaticModelRouter constructs a router bound to the policy store.
@@ -101,7 +109,7 @@ func (r *StaticModelRouter) Coordinator(ctx context.Context) (*ModelSelection, e
 	if err != nil {
 		return nil, err
 	}
-	ref := p.Coordinator
+	ref := CoordinatorRefWithLocalDefault(p, r.localDefault)
 	return selectionFromRef(ref, ModelRoleCoordinator, false), nil
 }
 
@@ -114,7 +122,7 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	if err != nil {
 		return nil, err
 	}
-	ref := SummarizerRef(p)
+	ref := SummarizerRefWithLocalDefault(p, r.localDefault)
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 
