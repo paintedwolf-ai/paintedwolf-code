@@ -7,6 +7,7 @@ import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { DenSelect } from "../primitives/DenSelect.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { openSourceLocation } from "../../platform/navigation/open-source.ts";
+import { openRunningStage } from "../../platform/navigation/open-running.ts";
 import { openChatDestination } from "../../chat/composer/chat-destination.ts";
 import { openSessionFromNotification } from "../../notifications/notification-open.ts";
 import { revealApprovalOrigin } from "../../chat/checkpoint/approval-reveal.ts";
@@ -230,6 +231,28 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
     }
     openSessionFromNotification(holder.sessionId);
   };
+  const hasProjectBackgroundHolder = createMemo(() => {
+    const currentProjectId = (props.projectId ?? "").trim();
+    for (const target of targets()) {
+      const holders = target.details?.holders;
+      if (!Array.isArray(holders)) continue;
+      for (const raw of holders) {
+        if (!raw || typeof raw !== "object") continue;
+        const record = raw as Record<string, unknown>;
+        if (record.background !== true) continue;
+        const holderProjectId =
+          typeof record.project_id === "string" ? record.project_id.trim() : "";
+        if (
+          !holderProjectId ||
+          !currentProjectId ||
+          holderProjectId === currentProjectId
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 
   const joinedWaiterCount = createMemo(() => {
     const count = payload()?.joined_count;
@@ -409,6 +432,16 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
                 </button>
               )}
             </For>
+            <Show when={hasProjectBackgroundHolder()}>
+              <button
+                type="button"
+                class="den-approval-card-location-origin"
+                data-testid="approval-open-running-pane"
+                onClick={() => openRunningStage({ projectId: props.projectId })}
+              >
+                Open Running
+              </button>
+            </Show>
           </>}
         />
 
