@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -66,6 +67,7 @@ func TestProbeDoesNotLeakInheritedDescriptorsToDetachedChildren(t *testing.T) {
 		detachedProbeHelperFDEnv:     strconv.Itoa(inheritedFD),
 		detachedProbeHelperReportEnv: reportPath,
 	}, fakeShell{})
+	p.prepare = execpkg.PrepareCommand
 	p.run = defaultRun
 
 	snap := p.Resolve(context.Background())
@@ -81,12 +83,9 @@ func TestProbeDoesNotLeakInheritedDescriptorsToDetachedChildren(t *testing.T) {
 
 	raw, err := os.ReadFile(reportPath)
 	testutil.FailErr(t, "read detached child report", err)
-	pidText, status, ok := strings.Cut(strings.TrimSpace(string(raw)), ":")
+	_, status, ok := strings.Cut(strings.TrimSpace(string(raw)), ":")
 	if !ok {
 		t.Fatalf("malformed detached child report %q", raw)
-	}
-	if pid, err := strconv.Atoi(pidText); err == nil && pid > 0 {
-		t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
 	}
 	if status != "closed" {
 		t.Fatalf("detached child observed descriptor %d as %q, want closed", inheritedFD, status)
@@ -128,7 +127,6 @@ func TestProbeDetachedChildHelper(t *testing.T) {
 	}
 	report := fmt.Sprintf("%d:%s\n", os.Getpid(), status)
 	testutil.FailErr(t, "write detached report", os.WriteFile(reportPath, []byte(report), 0o600))
-	time.Sleep(30 * time.Second)
 }
 
 func TestCloseOnExecFallbackMarksRangeWhenFDDirectoryUnavailable(t *testing.T) {

@@ -108,14 +108,6 @@ def receipt_state(raw, run, targets):
     }
 
 
-def failed_target(raw, run, targets):
-    """Single-target wrapper retained for unit tests expecting a bare target name."""
-    state = receipt_state(raw, run, targets)
-    if not state or len(state['failed_targets']) != 1 or state['contract_failures'] or state['native_failed']:
-        return ''
-    return state['failed_targets'][0]
-
-
 def previous_plan(event, run_id, targets):
     """Missing or uncertain history leaves the complete lane in its normal order."""
     try:
@@ -159,15 +151,6 @@ def previous_plan(event, run_id, targets):
         return {}
 
 
-def previous_target(event, run_id, targets):
-    """Single-target wrapper retained for unit tests expecting a bare target name."""
-    plan = previous_plan(event, run_id, targets)
-    failed = plan.get('failed_targets', [])
-    if len(failed) != 1 or plan.get('contract_failures') or plan.get('native_failed'):
-        return ''
-    return failed[0]
-
-
 def contract_packages():
     """All contract test packages under lycaon/test/contract (including internal/*) in deterministic order."""
     root = ROOT / "lycaon"
@@ -190,10 +173,10 @@ def ready_commands(targets, native_cmds, history=None):
     """Build wrap-around phases: [Failed] -> [Everything After / Unverified] -> [Previously Passed]."""
     if not history:
         return [*native_cmds, ["./task", *invocation(targets)]]
-    native_by_name = {cmd[1]: cmd for cmd in native_cmds if len(cmd) >= 2}
-    failed_native = [native_by_name[name] for name in history.get("native_failed", []) if name in native_by_name]
-    passed_native = [native_by_name[name] for name in history.get("native_passed", [])
-                     if name in native_by_name and name not in history.get("native_failed", [])]
+    failed_names = set(history.get("native_failed", []))
+    passed_names = set(history.get("native_passed", [])) - failed_names
+    failed_native = [cmd for cmd in native_cmds if len(cmd) >= 2 and cmd[1] in failed_names]
+    passed_native = [cmd for cmd in native_cmds if len(cmd) >= 2 and cmd[1] in passed_names]
     unverified_native = [cmd for cmd in native_cmds if cmd not in failed_native and cmd not in passed_native]
     failed_targets, after_targets, before_targets = rotate_cursor(
         targets, history.get("failed_targets", []), history.get("passed_targets", [])
