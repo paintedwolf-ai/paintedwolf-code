@@ -39,9 +39,16 @@ type RootDependentDocument struct {
 
 // RootDependentBackgroundProcess is a live background command whose working directory is within a folder root.
 type RootDependentBackgroundProcess struct {
-	Handle    string `json:"handle"`
-	SessionID string `json:"session_id"`
-	Cwd       string `json:"cwd"`
+	Handle          string   `json:"handle"`
+	ProcessID       string   `json:"process_id"`
+	SessionID       string   `json:"session_id"`
+	SessionTitle    string   `json:"session_title,omitempty"`
+	SessionArchived bool     `json:"session_archived,omitempty"`
+	Command         string   `json:"command,omitempty"`
+	RootID          string   `json:"root_id,omitempty"`
+	WorkingDir      string   `json:"working_dir,omitempty"`
+	Cwd             string   `json:"cwd"`
+	Ports           []string `json:"ports,omitempty"`
 }
 
 // RootDependents inventories project-scoped sandbox-bound work that breaks when a folder vanishes.
@@ -92,11 +99,25 @@ func (d RootDependents) Details() map[string]any {
 	}
 	backgroundProcesses := make([]map[string]any, 0, len(d.BackgroundProcesses))
 	for _, p := range d.BackgroundProcesses {
-		backgroundProcesses = append(backgroundProcesses, map[string]any{
-			"handle":     p.Handle,
-			"session_id": p.SessionID,
-			"cwd":        p.Cwd,
-		})
+		processID := p.ProcessID
+		if processID == "" {
+			processID = p.Handle
+		}
+		entry := map[string]any{
+			"handle":           p.Handle,
+			"process_id":       processID,
+			"session_id":       p.SessionID,
+			"session_title":    p.SessionTitle,
+			"session_archived": p.SessionArchived,
+			"command":          p.Command,
+			"root_id":          p.RootID,
+			"working_dir":      p.WorkingDir,
+			"cwd":              p.Cwd,
+		}
+		if len(p.Ports) > 0 {
+			entry["ports"] = append([]string(nil), p.Ports...)
+		}
+		backgroundProcesses = append(backgroundProcesses, entry)
 	}
 	return map[string]any{
 		"workers":              workers,
@@ -296,11 +317,24 @@ func (m *Service) rootDependentsFor(ctx context.Context, projectID string, detac
 		}
 	}
 	if m.processes != nil {
-		for _, proc := range m.processes.ProcessesUnderRoot(projectID, projectSessionIDs, detached.Path) {
+		sessionCache := make(map[string]hydratedSessionMeta)
+		for _, proc := range m.processes.ProjectProcessesUnderRoot(ctx, projectID, projectSessionIDs, detached.Path) {
+			hydrated := m.hydrateProjectProcess(ctx, proc, projectRoots, sessionCache)
+			rootID := hydrated.RootID
+			if rootID == "" {
+				rootID = detached.ID
+			}
 			out.BackgroundProcesses = append(out.BackgroundProcesses, RootDependentBackgroundProcess{
-				Handle:    proc.Handle,
-				SessionID: proc.SessionID,
-				Cwd:       proc.Cwd,
+				Handle:          proc.Handle,
+				ProcessID:       proc.Handle,
+				SessionID:       hydrated.SessionID,
+				SessionTitle:    hydrated.SessionTitle,
+				SessionArchived: hydrated.SessionArchived,
+				Command:         hydrated.Command,
+				RootID:          rootID,
+				WorkingDir:      hydrated.WorkingDir,
+				Cwd:             proc.Cwd,
+				Ports:           hydrated.Ports,
 			})
 		}
 	}

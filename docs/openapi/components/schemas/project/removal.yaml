@@ -51,6 +51,12 @@ components:
         extensions:
           type: array
           items: {$ref: '#/components/schemas/ProjectRemovalExtension'}
+        background_processes:
+          type: array
+          description: >-
+            Active background commands running in this project that removing the
+            project will terminate.
+          items: {$ref: '../events.yaml#/components/schemas/ProjectBackgroundProcess'}
     ProjectRemovalRequest:
       x-go-generate: true
       type: object
