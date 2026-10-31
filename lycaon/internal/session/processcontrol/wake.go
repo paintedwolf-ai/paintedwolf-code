@@ -40,6 +40,9 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 	if m == nil || strings.TrimSpace(completion.SessionID) == "" {
 		return
 	}
+	if !completion.TerminationReason.DeliversToSession() {
+		return
+	}
 	sess, err := m.store.Get(ctx, completion.SessionID)
 	if err == nil && sess != nil && len(completion.Stages) > 0 &&
 		(completion.OriginTool == verification.ProducerVerify || completion.OriginTool == verification.ProducerCommand) {
@@ -57,8 +60,14 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		})
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, digest)
-	env := anchor.Envelope{CommandCompletionDigest: digest}
+	env := anchor.Envelope{
+		Subject:                 strings.TrimSpace(completion.Handle),
+		CommandCompletionDigest: digest,
+	}
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
+		return
+	}
+	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
@@ -77,7 +86,10 @@ func (m *Service) HandleCommandRefusal(ctx context.Context, notice bgprocess.Ref
 	}
 	digest := m.withPostToolGuidance(ctx, sess, notice.OriginTool, commandRefusalDigest(notice),
 		guidance.ToolResultFacts{Confine: notice.Observation})
-	env := anchor.Envelope{CommandRefusalDigest: digest}
+	env := anchor.Envelope{
+		Subject:              strings.TrimSpace(notice.Handle),
+		CommandRefusalDigest: digest,
+	}
 	if m.nudgeProcessWait(ctx, notice.SessionID, notice.Handle, anchor.ProcessRefused, env) {
 		return
 	}
@@ -107,7 +119,7 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 		completion.Elapsed().Round(time.Millisecond), finishedAt,
 	)
 	if len(completion.Stages) > 0 {
-		digest += "\ncommand=" + truncateUTF8Head(completion.Stages[0].Command, maxCommandBytes)
+		digest += "\ncommand=" + truncateUTF8Head(hostcmd.CommandLine(completion.Stages), maxCommandBytes)
 	}
 	if completion.Failure != nil {
 		digest += "\nexec_failure=" + string(completion.Failure.Kind) + ": " + truncateUTF8Head(completion.Failure.Detail, maxCommandBytes)

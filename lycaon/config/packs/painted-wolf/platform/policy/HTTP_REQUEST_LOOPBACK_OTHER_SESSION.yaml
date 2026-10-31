@@ -1,0 +1,36 @@
+oar: '1.0'
+id: HTTP_REQUEST_LOOPBACK_OTHER_SESSION
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [http_request]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.http_request_loopback_other_session
+    - paintedwolf.destination
+    - paintedwolf.port
+    - paintedwolf.detail
+when: paintedwolf.http_request_loopback_other_session
+effect: warn
+copy:
+  what: 'http_request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active.'
+  cause: '{{ paintedwolf.detail }}'
+  why: 'The response came from or competed with a listener outside this chat, so its output may belong to another project or session.'
+  fix: >-
+    Report to the user which listener holds port {{ paintedwolf.port }} and let the user decide whether to keep using port {{ paintedwolf.port }} or switch this chat's service to another port.
+  instead: Do not stop, signal, or reconfigure the other listener yourself
+x-paintedwolf-category: advisory
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: http_request reached a loopback port held by another session or competing listener
+x-paintedwolf-scenarios:
+  - id: other_session
+    vars:
+      tool: http_request
+      destination: 127.0.0.1:8000
+      port: '8000'
+      detail: "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'."
+    expect_contains:
+      - 'Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION'
+      - "Port 8000 is served by `python3 -m http.server 8000`"
+      - let the user decide

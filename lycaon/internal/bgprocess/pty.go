@@ -168,6 +168,7 @@ func (r *Terminal) startPTY(
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.workDirs[handle] = projectDir
 	r.jobs.mu.Unlock()
 
 	stage := req.Stages[0]
