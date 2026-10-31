@@ -81,6 +81,9 @@ type Decision struct {
 // turnToolSets lists what a turn offers on every call and what it could load,
 // with the cards the decision reads for the loadable part.
 func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID, surfaceID string, rootCount int) (floor, loadable []string, cards []turnload.ToolCard) {
+	if m == nil || m.policy == nil {
+		return nil, nil, nil
+	}
 	policy := m.policy()
 	if policy == nil {
 		return nil, nil, nil
