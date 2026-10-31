@@ -1,4 +1,4 @@
-"""Durable attempt receipts and operational progress, separate from public scores."""
+"""Durable attempt receipts, provider backoff state, and operational progress."""
 from collections import Counter
 from datetime import datetime, timezone
 import json
@@ -6,7 +6,16 @@ import os
 import pathlib
 import tempfile
 import time
-from provider_backoff import observations
+
+
+def observations(root):
+    buckets = []
+    for path in sorted((root / 'provider-rate-state').glob('*.json')):
+        state = json.loads(path.read_text())
+        if not isinstance(state, dict) or state.get('version') != 1:
+            raise ValueError(f'unsupported provider rate state: {path.name}')
+        buckets.append({'bucket': path.stem, **state})
+    return buckets
 
 
 def timestamp():
