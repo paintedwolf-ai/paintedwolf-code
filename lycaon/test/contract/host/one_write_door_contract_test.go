@@ -39,6 +39,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/blueprint/manager_impl.go": "append-only critic evidence log",
 	"lycaon/internal/debugretention/writer.go":  "bounded append stream truncates in place at a configured diagnostic cap",
 	"lycaon/internal/inspector/jsonl_store.go":  "append-only evidence journal",
+	"lycaon/internal/modelstore/store.go":       "append-only model activation journal",
 
 	// O_EXCL reports collisions without replacing existing bytes.
 	"lycaon/cmd/pw-vault-identity/store.go":               "O_EXCL staging file published with link(2), so a stored identity is never replaced",
