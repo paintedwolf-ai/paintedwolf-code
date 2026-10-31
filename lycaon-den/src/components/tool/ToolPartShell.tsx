@@ -59,10 +59,6 @@ function statusDot(status: ToolPartStatus): "done" | "error" | "running" {
 }
 
 export function ToolPartShell(props: Props) {
-  createEffect(() => {
-    const client = props.client ?? getLycaonClient(); const sessionId = props.sessionId; const handle = props.part.process?.handle;
-    if (client && sessionId && handle) void prepareBackgroundProcessOutput(client, sessionId, handle).catch(() => {});
-  });
   const viewport = useTranscriptViewport();
   const { bindTranscriptEntry } = useTranscriptEntry(() => ({
     sessionId: props.sessionId,
@@ -70,6 +66,11 @@ export function ToolPartShell(props: Props) {
   }));
   const disclosure = useTranscriptDisclosure(() => transcriptDisclosureKey.tool(props.part.id));
   const { open, onToggleClick, applyOpen, revealTemporarily } = disclosure;
+  createEffect(() => {
+    if (!open()) return;
+    const client = props.client ?? getLycaonClient(); const sessionId = props.sessionId; const handle = props.part.process?.handle;
+    if (client && sessionId && handle) void prepareBackgroundProcessOutput(client, sessionId, handle).catch(() => {});
+  });
   // Process-exit SSE updates the mirror without rewriting the tool_result row.
   const [processRevision, setProcessRevision] = createSignal(0);
   onCleanup(

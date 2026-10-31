@@ -22,3 +22,14 @@ it("sizes progress snapshots from their displayed checklist", () => {
   expect(height).toBeGreaterThan(190);
   expect(transcriptRowContentEstimate({ kind: "progress_complete", key: "p", steps: steps.slice(0, 1) }, metrics, [])).toBeLessThan(height!);
 });
+
+it("accounts for wider inline code spans and CJK glyphs when estimating line wraps", () => {
+  const plain = "a".repeat(36);
+  const inlineCode = "`" + "a".repeat(36) + "`";
+  const cjk = "漢".repeat(36);
+  const plainHeight = markdownHeightEstimate(plain, 280, 14);
+  const codeHeight = markdownHeightEstimate(inlineCode, 280, 14);
+  const cjkHeight = markdownHeightEstimate(cjk, 280, 14);
+  expect(codeHeight).toBeGreaterThan(plainHeight);
+  expect(cjkHeight).toBeGreaterThan(plainHeight);
+});

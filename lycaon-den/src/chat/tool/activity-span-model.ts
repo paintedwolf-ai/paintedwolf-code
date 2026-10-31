@@ -408,9 +408,15 @@ export function projectActivitySpans(
     });
   };
 
+  let deferredAfterRun: DisplayTranscriptItem[] = [];
+
   const flushRun = () => {
     if (run.length > 0 && runHasWork(run)) out.push(emitActivitySpan(run));
     emitAnchoredFolds();
+    if (deferredAfterRun.length > 0) {
+      out.push(...deferredAfterRun);
+      deferredAfterRun = [];
+    }
     scope = null;
     run = [];
     runAnchorPartIds = [];
@@ -429,6 +435,10 @@ export function projectActivitySpans(
     }
     flushWorkerRun();
     if (item.kind !== "tool" && item.kind !== "index_warming" && item.kind !== "turn_load") {
+      if (item.kind === "progress_update" && !item.initial && run.length > 0) {
+        deferredAfterRun.push(item);
+        continue;
+      }
       flushRun();
       // Flush pending folds before the next user segment.
       if (item.kind === "user") {

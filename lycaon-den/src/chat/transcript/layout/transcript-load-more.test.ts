@@ -496,6 +496,154 @@ describe("createTranscriptPaging", () => {
     }
   });
 
+  it("seeks by ordinal when the scrollport lands inside an unloaded after-runway", async () => {
+    const appStore = createAppStore();
+    const prepareLanding = vi.fn();
+    const { el } = mockStreamHost({
+      scrollTop: 45_000,
+      clientHeight: 500,
+      scrollHeight: () => 50_000,
+    });
+    appStore.actions.installTranscriptBaseline(
+      "s-seek-after",
+      Array.from({ length: 100 }, (_, i) => older(400 + i)),
+      500,
+      {
+        hasMoreBefore: true,
+        hasMoreAfter: false,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+    );
+    appStore.actions.loadTranscriptPage(
+      { edge: "seek", afterOrd: 0 },
+      {
+        messages: Array.from({ length: 100 }, (_, i) => older(i)),
+        watermark: 500,
+        turn_clocks: {},
+        turn_loads: {},
+        before_cursor: undefined,
+        after_cursor: "newer",
+        ord_bounds: { first_ord: 1, last_ord: 500 },
+      },
+    );
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: Array.from({ length: 100 }, (_, i) => older(350 + i)),
+      turn_clocks: {},
+      turn_loads: {},
+      before_cursor: "older",
+      after_cursor: "newer",
+      ord_bounds: { first_ord: 1, last_ord: 500 },
+    });
+    const client = stubClient({ listSessionMessages });
+
+    const stop = createTranscriptPaging(el, {
+      client: () => client,
+      appStore,
+      sessionId: () => "s-seek-after",
+      geometry: () => ({
+        residentStartPx: 0,
+        residentEndPx: 10_000,
+        afterPx: 40_000,
+        residentSpan: { firstOrd: 1, lastOrd: 100 },
+        unloaded: { before: 0, after: 400 },
+        prepareLanding,
+      }),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(listSessionMessages).toHaveBeenCalledTimes(1);
+      });
+      expect(prepareLanding).toHaveBeenCalledWith(45_000);
+      expect(listSessionMessages).toHaveBeenCalledWith(
+        "s-seek-after",
+        expect.objectContaining({ afterOrd: 399 }),
+      );
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
+  it("does not flip to a newer sweep after a before-runway seek lands at the top of history", async () => {
+    const appStore = createAppStore();
+    const prepareLanding = vi.fn();
+    let scrollTop = 500;
+    const { el } = mockStreamHost({
+      scrollTop: 500,
+      clientHeight: 500,
+      scrollHeight: () => 50_000,
+    });
+    Object.defineProperty(el, "scrollTop", {
+      get: () => scrollTop,
+      set: (v: number) => {
+        scrollTop = v;
+      },
+      configurable: true,
+    });
+    appStore.actions.installTranscriptBaseline(
+      "s-seek-top",
+      Array.from({ length: 100 }, (_, i) => older(400 + i)),
+      500,
+      {
+        hasMoreBefore: true,
+        hasMoreAfter: false,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+    );
+    const listSessionMessages = vi.fn().mockImplementation(async () => {
+      scrollTop = 0;
+      return {
+        messages: Array.from({ length: 100 }, (_, i) => older(i)),
+        turn_clocks: {},
+        turn_loads: {},
+        before_cursor: undefined,
+        after_cursor: "newer",
+        ord_bounds: { first_ord: 1, last_ord: 500 },
+      };
+    });
+    const client = stubClient({ listSessionMessages });
+
+    const stop = createTranscriptPaging(el, {
+      client: () => client,
+      appStore,
+      sessionId: () => "s-seek-top",
+      geometry: () => {
+        const span =
+          appStore.state.messages[0]?.ord === 1
+            ? { firstOrd: 1, lastOrd: 100 }
+            : { firstOrd: 401, lastOrd: 500 };
+        return span.firstOrd === 1
+          ? {
+              residentStartPx: 0,
+              residentEndPx: 800,
+              afterPx: 40_000,
+              residentSpan: span,
+              unloaded: { before: 0, after: 400 },
+              prepareLanding,
+            }
+          : {
+              residentStartPx: 40_000,
+              residentEndPx: 50_000,
+              afterPx: 0,
+              residentSpan: span,
+              unloaded: { before: 400, after: 0 },
+              prepareLanding,
+            };
+      },
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(listSessionMessages).toHaveBeenCalledTimes(1);
+      });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(listSessionMessages).toHaveBeenCalledTimes(1);
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
   it("protects older pages in the reader's reach during live appends and reclaims them after scrolling away", async () => {
     const appStore = createAppStore();
     const rows = (from: number, to: number) =>

@@ -72,6 +72,8 @@ function splitProgressColumns<T>(items: readonly T[]): [T[], T[]] {
   return [items.slice(0, mid), items.slice(mid)];
 }
 
+const INLINE_MARKDOWN_SYNTAX_RE = /[*_`~[\]\\<>#&]|^\s*(?:[-+>]|\d+\.)\s/;
+
 function PlanRow(props: { item: DisplayRow; embedded?: boolean }) {
   return (
     <li
@@ -89,7 +91,12 @@ function PlanRow(props: { item: DisplayRow; embedded?: boolean }) {
         {stateGlyph(props.item.state)}
       </span>
       <div class="progress-strip__label">
-        <MarkdownBody inline literalHtml source={props.item.label} />
+        <Show
+          when={INLINE_MARKDOWN_SYNTAX_RE.test(props.item.label)}
+          fallback={<div class="markdown-body">{props.item.label}</div>}
+        >
+          <MarkdownBody inline literalHtml source={props.item.label} />
+        </Show>
       </div>
     </li>
   );
