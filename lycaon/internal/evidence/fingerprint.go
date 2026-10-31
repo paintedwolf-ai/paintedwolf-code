@@ -70,16 +70,19 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		}
 	case "write", "edit", "replace_lines", "restore_version":
 		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		captureRecordBody(&rec, content)
 	case "jq_edit":
 		target := stringArg(args, "dest")
 		if target == "" {
 			target = stringArg(args, "path")
 		}
 		addRecordPath(projectDir, &rec, target, FidelityStructured)
+		captureRecordBody(&rec, content)
 	case "code_rewrite":
 		for _, p := range declaredPathsFromArgs(args) {
 			addRecordPath(projectDir, &rec, p, FidelityStructured)
 		}
+		captureRecordBody(&rec, content)
 	case "delete":
 		for _, p := range declaredPathsFromArgs(args) {
 			addRecordPath(projectDir, &rec, p, FidelityStructured)
@@ -87,6 +90,7 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		for _, p := range deleteResultPaths(content) {
 			addRecordPath(projectDir, &rec, p, FidelityStructured)
 		}
+		captureRecordBody(&rec, content)
 	case "stat", "wc":
 		// Counts and metadata verify against the captured result body.
 		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
