@@ -54,7 +54,7 @@ func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
 	testutil.FailErr(t, "observe existing plan", err)
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err = exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": "## Progress\n- [x] open step\n", "expected_revision": observed.Revision,
+		"content": "## Progress\n- [x] open step\n", "expected_revision": observed.Revision, "item_ids": observed.ItemIDs,
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
@@ -109,7 +109,7 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 
 	observed, err := store.Snapshot(t.Context(), "sess-1")
 	testutil.FailErr(t, "observe replay revision", err)
-	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content, "expected_revision": observed.Revision}, tools.ToolContext{
+	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content, "expected_revision": observed.Revision, "item_ids": observed.ItemIDs}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress replay", err)
@@ -209,7 +209,11 @@ func TestProgressHandlerPublishesAdvancementFromTheCommittedResult(t *testing.T)
 		before, err := store.Snapshot(t.Context(), "session")
 		testutil.FailErr(t, "observe current checklist", err)
 		out := &tools.ToolInvocationOut{}
-		body, err := handler(t.Context(), map[string]any{"content": tc.content, "expected_revision": before.Revision}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
+		args := map[string]any{"content": tc.content, "expected_revision": before.Revision}
+		if len(before.ItemIDs) > 0 {
+			args["item_ids"] = before.ItemIDs
+		}
+		body, err := handler(t.Context(), args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
 		testutil.FailErr(t, "publish checklist", err)
 		var result progress.AuthorUpdateResult
 		testutil.FailErr(t, "decode display for comparison", json.Unmarshal([]byte(body), &result))

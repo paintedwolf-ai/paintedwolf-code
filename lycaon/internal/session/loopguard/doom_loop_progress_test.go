@@ -94,27 +94,27 @@ func TestHostIssuedRevisionRecoversAnExhaustedTerminalBucket(t *testing.T) {
 				_, err = update.ExpectRevision(attemptedRevision).Apply(t.Context(), store, "session", nil)
 				var rejected *progress.AuthorUpdateRejection
 				if !errors.As(err, &rejected) {
-					t.Fatalf("owner did not refuse missing/stale basis: %v", err)
+					t.Fatalf("progress store did not refuse missing/stale basis: %v", err)
 				}
 				code = rejected.Code
-				testutil.FailErr(t, "retain actual owner failure", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n), "update_progress", args, &api.InvocationFailure{Code: code, Details: rejected.Data}, false))
+				testutil.FailErr(t, "retain actual progress failure", guard.RecordAttempt(t.Context(), "session", fmt.Sprint(n), "update_progress", args, &api.InvocationFailure{Code: code, Details: rejected.Data}, false))
 			}
-			wrong := map[string]any{"content": "- [x] Reworded", "expected_revision": strings.Repeat("f", 64)}
+			wrong := map[string]any{"content": "- [x] Reworded", "expected_revision": strings.Repeat("f", 64), "item_ids": current.ItemIDs}
 			allowed, _, _, err := guard.Check(t.Context(), "session", "wrong", "update_progress", wrong, true, nil)
 			testutil.FailErr(t, "check unoffered basis", err)
 			if allowed {
 				t.Fatal("invented revision cleared host rejection")
 			}
-			corrected := map[string]any{"content": "- [x] Deliver", "expected_revision": current.Revision}
+			corrected := map[string]any{"content": "- [x] Deliver", "expected_revision": current.Revision, "item_ids": current.ItemIDs}
 			allowed, count, _, err := guard.Check(t.Context(), "session", "recovered", "update_progress", corrected, true, nil)
 			testutil.FailErr(t, "check host-issued remedy", err)
 			if !allowed || count != 0 {
 				t.Fatalf("trusted remedy remained blocked: %v count=%d", allowed, count)
 			}
-			result, err := update.ExpectRevision(current.Revision).Apply(t.Context(), store, "session", nil)
-			testutil.FailErr(t, "retry real progress owner", err)
+			result, err := update.ExpectRevision(current.Revision).ExpectItemIDs(current.ItemIDs...).Apply(t.Context(), store, "session", nil)
+			testutil.FailErr(t, "retry real progress update", err)
 			if !result.StateChanged || !result.DeliverableClosed {
-				t.Fatalf("owner retry lost transition: %+v", result)
+				t.Fatalf("progress retry lost transition: %+v", result)
 			}
 			if guard.CodeRejectResponses("session", "update_progress", code) != DoomLoopMaxCodeRepeats {
 				t.Fatal("recovery erased diagnostic history")
@@ -140,7 +140,7 @@ func TestProgressRecoveryUsesOnlyStructuredHostRemedies(t *testing.T) {
 	}
 	for _, failure := range []*api.InvocationFailure{nil, {Code: "UNRELATED", Details: map[string]any{"snapshot": snapshot}}, {Code: "PROGRESS_REVISION_CHANGED", Details: map[string]any{"snapshot": make(chan int)}}, {Code: "PROGRESS_REVISION_CHANGED", Details: map[string]any{"snapshot": "not a snapshot"}}, {Code: "PROGRESS_REVISION_CHANGED"}} {
 		if progressRecoveryFromFailure(failure).matches(map[string]any{"expected_revision": revision}) {
-			t.Fatalf("missing owner remedy authorized recovery: %+v", failure)
+			t.Fatalf("missing snapshot remedy authorized recovery: %+v", failure)
 		}
 	}
 	recovery := progressRecoveryFromFailure(&api.InvocationFailure{Code: "PROGRESS_RECONCILIATION_CHANGED", Details: map[string]any{"snapshot": progress.Snapshot{Revision: revision}}})

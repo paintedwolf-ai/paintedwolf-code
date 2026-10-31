@@ -15,23 +15,23 @@ type unsettledProgressStore struct {
 	cancel  context.CancelFunc
 }
 
-func (s unsettledProgressStore) Update(ctx context.Context, id string, change func(Snapshot) (string, error)) (Snapshot, error) {
+func (s unsettledProgressStore) Update(ctx context.Context, id string, change func(Snapshot) (Document, error)) (Snapshot, error) {
 	if s.cancel != nil {
-		return s.Store.Update(ctx, id, func(current Snapshot) (string, error) {
-			content, err := change(current)
+		return s.Store.Update(ctx, id, func(current Snapshot) (Document, error) {
+			doc, err := change(current)
 			s.cancel()
-			return content, err
+			return doc, err
 		})
 	}
 	current, err := s.Store.Snapshot(ctx, id)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	content, err := change(current)
+	doc, err := change(current)
 	if err != nil {
 		return current, err
 	}
-	return snapshotVersion(current.RunID, content, "uncommitted"), s.failure
+	return snapshotVersion(current.RunID, doc.Content, doc.ItemIDs, "uncommitted", current.documentVersion+1), s.failure
 }
 
 type unsettledReconciliation struct {
@@ -69,7 +69,7 @@ func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 			reconciliation := &unsettledReconciliation{token: strings.Repeat("a", 64)}
 			update, err := PrepareAuthorUpdate("- [x] Deliver")
 			testutil.FailErr(t, "prepare completion", err)
-			result, err := update.ExpectRevision(before.Revision).ExpectReconciliation(reconciliation.token).Apply(ctx, writer, "unsettled", reconciliation)
+			result, err := update.ExpectRevision(before.Revision).ExpectItemIDs(before.ItemIDs...).ExpectReconciliation(reconciliation.token).Apply(ctx, writer, "unsettled", reconciliation)
 			if !errors.Is(err, sentinel) {
 				t.Fatalf("unsettled result error: %v", err)
 			}
@@ -81,7 +81,7 @@ func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 			}
 			after, err := store.Snapshot(t.Context(), "unsettled")
 			testutil.FailErr(t, "read preserved snapshot", err)
-			if before != after {
+			if !before.Equal(after) {
 				t.Fatal("unsettled publication changed stored progress")
 			}
 		})

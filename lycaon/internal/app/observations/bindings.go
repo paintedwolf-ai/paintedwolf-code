@@ -46,8 +46,8 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 			return
 		}
 		publisher.PublishProgress(ctx, ev.SessionID, progress.BumpRevision(ev.SessionID))
-		coalescer.Record(ev.SessionID, ev.Prev, progressStore.Get(ctx, ev.SessionID))
-		emitProgressCompletion(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID)
+		coalescer.Record(ev.SessionID, ev.Before, ev.After)
+		emitProgressCompletionFromContent(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID, ev.After.Content)
 	}))
 	return func(ctx context.Context) error {
 		work.Stop()

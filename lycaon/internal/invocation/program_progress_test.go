@@ -32,7 +32,7 @@ type progressFacts struct{ store progress.Store }
 func (f progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: f.store.Get(ctx, id)}, nil
 }
-func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.T) {
+func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.T) {
 	for _, mode := range []string{"committed", "closed-plan", "invalid-update"} {
 		t.Run(mode, func(t *testing.T) {
 			submitted := map[string]any{"command": "${op} arg", "progress_update": map[string]any{"content": "- [ ] Create fixture"}}
@@ -63,7 +63,7 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 				return "", nil
 			}))
 			executor := toolexecution.NewExecutor(nil, registry, "fixture")
-			owner := progress.NewSQLStore(f.database)
+			store := progress.NewSQLStore(f.database)
 			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 			update := &toolexecution.ProgramProgressUpdate{ExecutionID: uuid.NewString(), Arguments: map[string]any{"content": "- [ ] Create fixture"}}
@@ -82,13 +82,13 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 				if mode == "closed-plan" {
 					testutil.FailErr(t, "close plan before application", plan.Close())
 				}
-				result, applyErr := executor.ApplyProgramProgress(t.Context(), prepared, owner, progressFacts{owner}, nil, observer, tc)
+				result, applyErr := executor.ApplyProgramProgress(t.Context(), prepared, store, progressFacts{store}, nil, observer, tc)
 				if mode == "closed-plan" {
 					if applyErr == nil || result.OwnerInvoked {
-						t.Fatal("closed plan reached progress owner")
+						t.Fatal("closed plan reached progress store")
 					}
 				} else {
-					testutil.FailErr(t, "apply actual SQL progress owner", applyErr)
+					testutil.FailErr(t, "apply actual SQL progress store", applyErr)
 					if !result.OwnerInvoked || !result.Outcome.Updated {
 						t.Fatalf("missing actual update: %+v", result)
 					}
@@ -102,10 +102,10 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			page, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
 			testutil.FailErr(t, "read durable progress attribution", err)
 			if mode == "committed" {
-				if owner.Get(t.Context(), f.session) != "- [ ] Create fixture" || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
+				if store.Get(t.Context(), f.session) != "- [ ] Create fixture" || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
 					t.Fatalf("later refusal erased progress: %+v", page)
 				}
-			} else if owner.Get(t.Context(), f.session) != "" || page.Progress != nil {
+			} else if store.Get(t.Context(), f.session) != "" || page.Progress != nil {
 				t.Fatal("rejected envelope committed progress or receipt")
 			}
 		})

@@ -60,7 +60,7 @@ func TestProgressCreationCannotBlindlyReplaceAnExistingDocument(t *testing.T) {
 			if _, err := update.Apply(t.Context(), store, "session", nil); err == nil {
 				t.Fatal("identical bytes bypassed revision requirement")
 			}
-			result, err := update.ExpectRevision(snapshot.Revision).Apply(t.Context(), store, "session", nil)
+			result, err := update.ExpectRevision(snapshot.Revision).ExpectItemIDs(snapshot.ItemIDs...).Apply(t.Context(), store, "session", nil)
 			testutil.FailErr(t, "submit observed no-op", err)
 			if result.Updated || result.Snapshot.Revision != snapshot.Revision {
 				t.Fatal("observed no-op changed revision")

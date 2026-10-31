@@ -1923,16 +1923,16 @@
       "summary": "Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
     },
     "PROGRESS_REVISION_CHANGED": {
-      "branch_instruction": "Reconcile the replacement against the current snapshot and submit its expected_revision.",
+      "branch_instruction": "Reconcile the replacement against the current snapshot and submit its expected_revision and item_ids.",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "The checklist changed after the supplied revision."
+      "summary": "The checklist revision or row item_ids did not match the current snapshot."
     },
     "PROGRESS_REVISION_REQUIRED": {
-      "branch_instruction": "Use the current snapshot revision as expected_revision when replacing the checklist.",
+      "branch_instruction": "Use the current snapshot revision as expected_revision and pass aligned item_ids when replacing the checklist.",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "Replacing an existing checklist requires its current revision."
+      "summary": "Replacing an existing checklist requires its current revision and row item_ids."
     },
     "PROGRESS_SYNTHESIS_RECONCILE_ONLY": {
       "branch_instruction": "Reconcile the existing **`## Progress`** in place — close or N/A rows only — then deliver the final report",

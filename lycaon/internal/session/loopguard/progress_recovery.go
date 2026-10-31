@@ -13,6 +13,7 @@ import (
 type progressRecovery struct {
 	revision       string
 	token          string
+	itemIDs        map[string]struct{}
 	reconciliation bool
 }
 
@@ -33,7 +34,16 @@ func progressRecoveryFromFailure(failure *api.InvocationFailure) progressRecover
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
 		return progressRecovery{}
 	}
-	recovery := progressRecovery{revision: snapshot.Revision, reconciliation: failure.Code == "PROGRESS_RECONCILIATION_CHANGED"}
+	var itemIDs map[string]struct{}
+	if len(snapshot.ItemIDs) > 0 {
+		itemIDs = make(map[string]struct{}, len(snapshot.ItemIDs))
+		for _, id := range snapshot.ItemIDs {
+			if id != "" {
+				itemIDs[id] = struct{}{}
+			}
+		}
+	}
+	recovery := progressRecovery{revision: snapshot.Revision, itemIDs: itemIDs, reconciliation: failure.Code == "PROGRESS_RECONCILIATION_CHANGED"}
 	if snapshot.Reconciliation != nil {
 		recovery.token = snapshot.Reconciliation.Token
 	}
@@ -45,8 +55,44 @@ func (r progressRecovery) matches(args map[string]any) bool {
 	if r.revision == "" || revision != r.revision {
 		return false
 	}
+	if len(r.itemIDs) > 0 && !recoveryItemIDsMatch(args["item_ids"], r.itemIDs) {
+		return false
+	}
 	token, _ := args["reconciliation_token"].(string)
 	return !r.reconciliation || token == r.token
+}
+
+func recoveryItemIDsMatch(raw any, allowed map[string]struct{}) bool {
+	switch v := raw.(type) {
+	case []string:
+		for _, id := range v {
+			if id == "" {
+				continue
+			}
+			if _, ok := allowed[id]; !ok {
+				return false
+			}
+		}
+		return true
+	case []any:
+		for _, item := range v {
+			switch s := item.(type) {
+			case nil:
+			case string:
+				if s == "" {
+					continue
+				}
+				if _, ok := allowed[s]; !ok {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // SetProgressPrerequisiteResolver connects current prerequisites from the root session.

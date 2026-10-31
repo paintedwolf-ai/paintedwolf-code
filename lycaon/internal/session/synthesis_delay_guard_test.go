@@ -143,7 +143,11 @@ func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	for attempt := 0; attempt < 2; attempt++ {
 		snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
 		testutil.FailErr(t, "observe pending checklist", err)
-		_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": pending, "expected_revision": snapshot.Revision}, tctx)
+		args := map[string]any{"content": pending, "expected_revision": snapshot.Revision}
+		if len(snapshot.ItemIDs) > 0 {
+			args["item_ids"] = snapshot.ItemIDs
+		}
+		_, err = exec.Invoke(t.Context(), "update_progress", args, tctx)
 		testutil.FailErr(t, "record pending work", err)
 		refusal, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true)
 		if !blocked || refusal == nil || refusal.Code() != "PROGRESS_OPEN_BEFORE_CLOSEOUT" {
@@ -158,7 +162,7 @@ func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	}
 	snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
 	testutil.FailErr(t, "observe completed checklist revision", err)
-	_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature", "expected_revision": snapshot.Revision}, tctx)
+	_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature", "expected_revision": snapshot.Revision, "item_ids": snapshot.ItemIDs}, tctx)
 	testutil.FailErr(t, "record completed work", err)
 	if _, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true); blocked {
 		t.Fatal("completed work still blocks closeout")

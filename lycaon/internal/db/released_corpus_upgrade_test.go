@@ -165,6 +165,7 @@ var reshapedByRegisteredSteps = map[string]string{
 var queuedByRegisteredSteps = map[string]string{
 	"schema_migrations":         "each applied step records its ledger row",
 	"source_blob_reclaim_queue": "SourceManifestLayout queues the blobs retired manifest entries named for the reclaimer to re-check",
+	"store_meta":                "upgrade commits the pending background integrity audit obligation",
 }
 
 // retiredColumnsByRegisteredSteps names released columns a registered step

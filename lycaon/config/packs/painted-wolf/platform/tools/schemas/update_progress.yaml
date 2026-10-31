@@ -12,6 +12,13 @@ schema:
       description: Current snapshot revision. Required when a checklist exists; omitted only for first creation.
       minLength: 64
       maxLength: 64
+    item_ids:
+      type: array
+      maxItems: 48
+      items:
+        type: [string, 'null']
+        maxLength: 64
+      description: 'Checklist row identities aligned with content rows. Required when replacing an existing checklist: pass each retained row''s snapshot item_ids entry, null or "" for newly added rows, and omit removed rows.'
     content:
       type: string
       maxLength: 8000

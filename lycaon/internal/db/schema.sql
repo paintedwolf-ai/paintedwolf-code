@@ -2776,7 +2776,9 @@ CREATE TABLE IF NOT EXISTS session_progress (
     session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
     workflow_run_id TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    item_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(item_ids_json) AND json_type(item_ids_json) = 'array'),
+    document_version INTEGER NOT NULL DEFAULT 1 CHECK (document_version >= 1)
 ) STRICT, WITHOUT ROWID;
 
 -- Project-attributed search projection (retention-exempt).

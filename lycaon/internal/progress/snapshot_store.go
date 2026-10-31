@@ -3,8 +3,10 @@ package progress
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -18,10 +20,10 @@ func (s *MemoryStore) Snapshot(ctx context.Context, sessionID string) (Snapshot,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record := s.bySess[normalizeKey(sessionID)]
-	return snapshotVersion(record.runID, record.content, strconv.FormatUint(record.revision, 10)), nil
+	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
 }
 
-func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (string, error)) (Snapshot, error) {
+func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
@@ -32,31 +34,38 @@ func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(
 	}
 	key := normalizeKey(sessionID)
 	record := s.bySess[key]
-	current := snapshotVersion(record.runID, record.content, strconv.FormatUint(record.revision, 10))
-	content, err := change(current)
+	current := snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision)
+	doc, err := change(current)
 	if err != nil {
 		return current, err
 	}
 	if err := ctx.Err(); err != nil {
 		return current, err
 	}
-	if record.content != clampContent(content) {
+	content := clampContent(doc.Content)
+	nextIDs := resolveDocumentItemIDs(current, Document{Content: content, ItemIDs: doc.ItemIDs})
+	if record.content != content || !slices.Equal(record.itemIDs, nextIDs) {
 		record.revision++
 	}
-	record.content = clampContent(content)
+	record.content = content
+	record.itemIDs = nextIDs
 	s.bySess[key] = record
-	return snapshotVersion(record.runID, record.content, strconv.FormatUint(record.revision, 10)), nil
+	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
 }
 
 func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapshot, error) {
 	row, err := queries.GetSessionProgressSnapshot(ctx, key)
 	if errors.Is(err, sql.ErrNoRows) {
-		return snapshotVersion("", "", ""), nil
+		return snapshotVersion("", "", nil, "", 0), nil
 	}
 	if err != nil {
 		return Snapshot{}, err
 	}
-	return snapshotVersion(row.WorkflowRunID, row.Content, row.UpdatedAt), nil
+	var itemIDs []string
+	if row.ItemIdsJson != "" {
+		_ = json.Unmarshal([]byte(row.ItemIdsJson), &itemIDs)
+	}
+	return snapshotVersion(row.WorkflowRunID, row.Content, itemIDs, row.UpdatedAt, uint64(row.DocumentVersion)), nil
 }
 
 func (s *SQLStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, error) {
@@ -66,7 +75,7 @@ func (s *SQLStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, er
 	return querySnapshot(ctx, s.queries, normalizeKey(sessionID))
 }
 
-func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (string, error)) (Snapshot, error) {
+func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
 	key := normalizeKey(sessionID)
 	if key == "" {
 		return Snapshot{}, fmt.Errorf("session id required")
@@ -78,19 +87,34 @@ func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Sna
 		if err != nil {
 			return err
 		}
-		content, err := change(snapshot)
+		doc, err := change(snapshot)
 		if err != nil {
 			return err
 		}
-		content = clampContent(content)
-		if content == snapshot.Content {
+		content := clampContent(doc.Content)
+		nextIDs := resolveDocumentItemIDs(snapshot, Document{Content: content, ItemIDs: doc.ItemIDs})
+		if content == snapshot.Content && slices.Equal(nextIDs, snapshot.ItemIDs) {
 			return nil
 		}
-		stamp := db.FormatTime(nextSnapshotTime(snapshot.version))
-		if err := q.UpsertSessionProgressContent(ctx, db.UpsertSessionProgressContentParams{SessionID: key, WorkflowRunID: snapshot.RunID, Content: content, UpdatedAt: stamp}); err != nil {
+		itemIDsJSON, err := json.Marshal(nextIDs)
+		if err != nil {
 			return err
 		}
-		snapshot = snapshotVersion(snapshot.RunID, content, stamp)
+		stamp := db.FormatTime(nextSnapshotTime(snapshot.version))
+		if err := q.UpsertSessionProgressContent(ctx, db.UpsertSessionProgressContentParams{
+			SessionID:     key,
+			WorkflowRunID: snapshot.RunID,
+			Content:       content,
+			UpdatedAt:     stamp,
+			ItemIdsJson:   string(itemIDsJSON),
+		}); err != nil {
+			return err
+		}
+		nextVer := snapshot.documentVersion + 1
+		if nextVer == 0 {
+			nextVer = 1
+		}
+		snapshot = snapshotVersion(snapshot.RunID, content, nextIDs, stamp, nextVer)
 		return nil
 	})
 	return snapshot, err

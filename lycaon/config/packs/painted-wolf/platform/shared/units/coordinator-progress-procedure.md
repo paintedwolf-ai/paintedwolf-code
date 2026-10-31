@@ -7,7 +7,7 @@ order: 5
 attaches: [update_progress, task, delegate_dispatch, delegate_decompose, command, edit, replace_lines, restore_version, jq_edit]
 hosts: [coordinator]
 ---
-Store the checklist with `update_progress(content=…, expected_revision=…)`, copying the current host snapshot revision (required for every replacement; first creation may omit it); checklist text in an assistant reply does not update it.
+Store the checklist with `update_progress(content=…, expected_revision=…, item_ids=…)`, copying the current host snapshot revision and row `item_ids` (`null` for newly added rows, omitting removed rows; first creation may omit both); checklist text in an assistant reply does not update it.
 
 Establish the checklist once before the first {% if progress_gated_tools %}{% for tool in progress_gated_tools %}{% if not forloop.First %}{% if forloop.Last %}{% if forloop.Counter > 2 %}, or {% else %} or {% endif %}{% else %}, {% endif %}{% endif %}`{{ tool }}`{% endfor %}{% else %}creating or editing files or dispatching a worker{% endif %}. Use `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, explanations, and commands that only write session scratch or saved output files need none.
 

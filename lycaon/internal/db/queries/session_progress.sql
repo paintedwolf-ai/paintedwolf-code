@@ -7,22 +7,28 @@ SELECT content FROM session_progress WHERE session_id = ?;
 SELECT workflow_run_id FROM session_progress WHERE session_id = ?;
 
 -- name: UpsertSessionProgressContent :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(session_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at;
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, ?, ?, ?, 1)
+ON CONFLICT(session_id) DO UPDATE SET
+    content = excluded.content,
+    updated_at = excluded.updated_at,
+    item_ids_json = excluded.item_ids_json,
+    document_version = session_progress.document_version + 1;
 
 -- name: BindSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, '', ?)
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, '', ?, '[]', 1)
 ON CONFLICT(session_id) DO UPDATE SET workflow_run_id = excluded.workflow_run_id;
 
 -- name: EnsureSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, ?, ?, '[]', 1)
 ON CONFLICT(session_id) DO UPDATE SET
     workflow_run_id = excluded.workflow_run_id,
     content = excluded.content,
-    updated_at = excluded.updated_at;
+    updated_at = excluded.updated_at,
+    item_ids_json = '[]',
+    document_version = session_progress.document_version + 1;
 
 -- name: GetSessionProgressSnapshot :one
-SELECT content, workflow_run_id, updated_at FROM session_progress WHERE session_id = ?;
+SELECT content, workflow_run_id, updated_at, item_ids_json, document_version FROM session_progress WHERE session_id = ?;

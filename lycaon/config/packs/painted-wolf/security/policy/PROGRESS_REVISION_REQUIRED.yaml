@@ -10,11 +10,11 @@ requires:
 when: paintedwolf.rejection_code == "PROGRESS_REVISION_REQUIRED"
 effect: block
 copy:
-  what: Replacing an existing checklist requires its current revision.
-  cause: This replacement omitted expected_revision.
-  why: The observed revision binds the replacement to the checklist it was prepared from.
-  fix: Use the returned snapshot to prepare the replacement, then submit its revision as expected_revision.
-  instead: Use the current snapshot revision as expected_revision when replacing the checklist.
+  what: Replacing an existing checklist requires its current revision and row item_ids.
+  cause: This replacement omitted expected_revision or item_ids.
+  why: The observed revision and row identities bind the replacement to the checklist it was prepared from.
+  fix: Use the returned snapshot to prepare the replacement, then submit its revision as expected_revision and its row identities as item_ids.
+  instead: Use the current snapshot revision as expected_revision and pass aligned item_ids when replacing the checklist.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
 x-paintedwolf-message: Progress snapshot revision required

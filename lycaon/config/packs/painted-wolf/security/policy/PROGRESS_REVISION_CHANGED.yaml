@@ -10,11 +10,11 @@ requires:
 when: paintedwolf.rejection_code == "PROGRESS_REVISION_CHANGED"
 effect: block
 copy:
-  what: The checklist changed after the supplied revision.
-  cause: This replacement was prepared from an older progress snapshot.
-  why: A stale replacement would overwrite newer deliverable state.
-  fix: Use the returned current content and revision, reconcile the proposed changes, and submit the updated checklist with expected_revision.
-  instead: Reconcile the replacement against the current snapshot and submit its expected_revision.
+  what: The checklist revision or row item_ids did not match the current snapshot.
+  cause: This replacement was prepared from an older progress snapshot or carried misaligned item_ids.
+  why: A stale or misaligned replacement would overwrite newer deliverable state.
+  fix: Use the returned current content and revision, reconcile the proposed changes, and submit the updated checklist with expected_revision and aligned item_ids.
+  instead: Reconcile the replacement against the current snapshot and submit its expected_revision and item_ids.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
 x-paintedwolf-message: Progress snapshot revision changed

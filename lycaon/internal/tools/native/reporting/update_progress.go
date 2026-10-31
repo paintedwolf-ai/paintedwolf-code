@@ -33,7 +33,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 		}
 		expected, _ := args["expected_revision"].(string)
 		token, _ := args["reconciliation_token"].(string)
-		result, err := prepared.ExpectRevision(expected).ExpectReconciliation(token).Apply(ctx, store, root, reconciliation)
+		result, err := prepared.ExpectRevision(expected).ExpectItemIDsFromArgs(args).ExpectReconciliation(token).Apply(ctx, store, root, reconciliation)
 		if err != nil {
 			var rejected *progress.AuthorUpdateRejection
 			if errors.As(err, &rejected) {

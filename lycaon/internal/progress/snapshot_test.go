@@ -1,11 +1,13 @@
 package progress
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -56,7 +58,11 @@ func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
 		testutil.FailErr(t, "prepare checklist", err)
 		observed, err := store.Snapshot(t.Context(), "session")
 		testutil.FailErr(t, "observe checklist", err)
-		result, err := update.ExpectRevision(observed.Revision).Apply(t.Context(), store, "session", nil)
+		update = update.ExpectRevision(observed.Revision)
+		if len(observed.ItemIDs) > 0 {
+			update = update.ExpectItemIDs(observed.ItemIDs...)
+		}
+		result, err := update.Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "apply checklist", err)
 		return result
 	}
@@ -103,18 +109,40 @@ func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
 }
 
 func TestDeliverableTransitionsAreInvariantUnderRowPermutation(t *testing.T) {
-	initial := "- [ ] Same label\n- [x] Same label\n- [ ] Other"
-	permuted := "- [ ] Other\n- [x] Same label\n- [ ] Same label"
+	initial := NewSnapshot("run", "- [ ] Same label\n- [x] Same label\n- [ ] Other", "id-1", "id-2", "id-3")
+	permuted := NewSnapshot("run", "- [ ] Other\n- [x] Same label\n- [ ] Same label", "id-3", "id-2", "id-1")
 	if result := ClassifyTransitions(initial, permuted); result.Changed || result.Closed {
 		t.Fatalf("permutation invented a transition: %+v", result)
 	}
 	for _, extra := range []string{"- [ ] Same label", "- [x] Same label", "- [ ] New scope"} {
-		if result := ClassifyTransitions(initial, permuted+"\n"+extra); result.Changed || result.Closed {
+		withExtra := NewSnapshot("run", permuted.Content+"\n"+extra, "id-3", "id-2", "id-1", "id-4")
+		if result := ClassifyTransitions(initial, withExtra); result.Changed || result.Closed {
 			t.Fatalf("new row invented a transition: %+v", result)
 		}
 	}
-	completed := "- [x] Same label\n- [ ] Other\n- [x] Same label"
+	completed := NewSnapshot("run", "- [x] Same label\n- [ ] Other\n- [x] Same label", "id-1", "id-3", "id-2")
 	if result := ClassifyTransitions(initial, completed); !result.Changed || !result.Closed {
 		t.Fatalf("terminal transition lost: %+v", result)
+	}
+}
+
+func TestSnapshotMaxLegalChecklistAndItemIDsBudget(t *testing.T) {
+	var rows []string
+	var ids []string
+	label := strings.Repeat("x", MaxLabelRunes)
+	for i := 0; i < MaxAuthorProgressLines; i++ {
+		rows = append(rows, "- [ ] "+label)
+		ids = append(ids, uuid.NewString())
+	}
+	snap := NewSnapshot(uuid.NewString(), "## Progress\n"+strings.Join(rows, "\n"), ids...)
+	snap.Reconciliation = &Reconciliation{
+		Token: strings.Repeat("a", 64),
+		Jobs:  []string{"worker-1", "worker-2", "worker-3", "worker-4"},
+	}
+	raw, err := json.Marshal(snap)
+	testutil.FailErr(t, "marshal max legal snapshot", err)
+	const maxSnapshotPromptBytes = 12288
+	if len(raw) > maxSnapshotPromptBytes {
+		t.Fatalf("serialized snapshot size = %d, exceeds prompt budget %d", len(raw), maxSnapshotPromptBytes)
 	}
 }

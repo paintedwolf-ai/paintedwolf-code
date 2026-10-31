@@ -14,6 +14,7 @@ type MemoryStore struct {
 type runRecord struct {
 	runID    string
 	content  string
+	itemIDs  []string
 	revision uint64
 }
 
@@ -36,6 +37,7 @@ func (s *MemoryStore) Set(sessionID, content string) error {
 	defer s.mu.Unlock()
 	rec := s.bySess[key]
 	rec.content = clampContent(content)
+	rec.itemIDs = mintItemIDs(rec.content)
 	rec.revision++
 	s.bySess[key] = rec
 	return nil

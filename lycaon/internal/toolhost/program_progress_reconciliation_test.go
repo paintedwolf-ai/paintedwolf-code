@@ -12,22 +12,22 @@ import (
 )
 
 type reconciledProgramProgress struct {
-	store progress.Store
-	owner *progressclosure.Service
+	store   progress.Store
+	closure *progressclosure.Service
 }
 
 func (p reconciledProgramProgress) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id), Reconciliation: p.owner.Reconciliation(id)}, nil
+	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id), Reconciliation: p.closure.Reconciliation(id)}, nil
 }
 
 func TestComposedMutationRequiresAcknowledgementOfKnownWorkerFinishes(t *testing.T) {
 	fixture := newComposedProgramFixture(t)
 	store := progress.NewMemoryStore()
 	testutil.FailErr(t, "seed valid pending plan", store.Set(fixture.Session, "- [ ] Deliver\n- [ ] Verify"))
-	owner := progressclosure.New()
-	owner.SetProgress(store)
-	owner.Arm(t.Context(), fixture.Session, "worker-one")
-	fixture.Runtime.Progress = reconciledProgramProgress{store, owner}
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.Arm(t.Context(), fixture.Session, "worker-one")
+	fixture.Runtime.Progress = reconciledProgramProgress{store, closure}
 	outcome := callComposedProgram(t, fixture, "printf 'payload\\n' > result.txt")
 	if outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("pending finish admitted mutation: %+v", outcome)
@@ -43,7 +43,7 @@ func TestComposedMutationRequiresAcknowledgementOfKnownWorkerFinishes(t *testing
 	testutil.FailErr(t, "observe current checklist", err)
 	update, err := progress.PrepareAuthorUpdate(snapshot.Content)
 	testutil.FailErr(t, "prepare current checklist", err)
-	result, err := update.ExpectRevision(snapshot.Revision).ExpectReconciliation(owner.Reconciliation(fixture.Session).Token).Apply(t.Context(), store, fixture.Session, owner)
+	result, err := update.ExpectRevision(snapshot.Revision).ExpectItemIDs(snapshot.ItemIDs...).ExpectReconciliation(closure.Reconciliation(fixture.Session).Token).Apply(t.Context(), store, fixture.Session, closure)
 	testutil.FailErr(t, "acknowledge reviewed finish", err)
 	if result.ReconciliationStatus != "acknowledged" || result.Updated {
 		t.Fatalf("acknowledgement rewrote pending work: %+v", result)
