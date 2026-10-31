@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,7 +28,97 @@ import (
 
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	os.Exit(m.Run())
+	code := m.Run()
+	cleanupFixtureTemplates()
+	os.Exit(code)
+}
+
+var (
+	emptyFixtureOnce  sync.Once
+	emptyFixtureDir   string
+	seededFixtureOnce sync.Once
+	seededFixtureDir  string
+	bisectFixtureOnce sync.Once
+	bisectFixtureDir  string
+)
+
+func cleanupFixtureTemplates() {
+	for _, dir := range []string{emptyFixtureDir, seededFixtureDir, bisectFixtureDir} {
+		if dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+	}
+}
+
+func copyFixtureDir(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, raw, info.Mode().Perm()); err != nil {
+			return err
+		}
+		return os.Chtimes(target, info.ModTime(), info.ModTime())
+	})
+	testutil.FailErr(t, "copy fixture", err)
+}
+
+func ensureEmptyFixture(t *testing.T, bin string) string {
+	t.Helper()
+	emptyFixtureOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "gitcmd-empty-*")
+		testutil.FailErr(t, "empty fixture dir", err)
+		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
+		testutil.FailErr(t, "empty template dir", err)
+		defer func() { _ = os.RemoveAll(tmpl) }()
+		h := &harness{t: t, root: dir, bin: bin, template: tmpl}
+		h.git("init", "-q", "-b", "main")
+		h.git("config", "user.name", "Ann Author")
+		h.git("config", "user.email", "ann@example.test")
+		emptyFixtureDir = dir
+	})
+	return emptyFixtureDir
+}
+
+func ensureSeededFixture(t *testing.T, bin string) string {
+	t.Helper()
+	empty := ensureEmptyFixture(t, bin)
+	seededFixtureOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "gitcmd-seeded-*")
+		testutil.FailErr(t, "seeded fixture dir", err)
+		copyFixtureDir(t, empty, dir)
+		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
+		testutil.FailErr(t, "seeded template dir", err)
+		defer func() { _ = os.RemoveAll(tmpl) }()
+		h := &harness{t: t, root: dir, bin: bin, template: tmpl}
+		h.write("a.txt", "one\ntwo\n")
+		h.write("sub/b.txt", "bee\n")
+		h.git("add", ".")
+		h.git("commit", "-q", "-m", "first commit")
+		h.git("tag", "v1")
+		h.write("a.txt", "one\ntwo\nthree\n")
+		h.git("commit", "-q", "-am", "second commit")
+		h.git("branch", "topic")
+		seededFixtureDir = dir
+	})
+	return seededFixtureDir
 }
 
 // fixtureEnv pins identities and dates so every repository is reproducible.
@@ -55,27 +146,19 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	h.write("a.txt", "one\ntwo\n")
+	h := newUninitializedHarness(t)
+	copyFixtureDir(t, ensureSeededFixture(t, h.bin), h.root)
 	h.write("sub/b.txt", "bee\n")
-	h.git("add", ".")
-	h.git("commit", "-q", "-m", "first commit")
-	h.git("tag", "v1")
-	h.write("a.txt", "one\ntwo\nthree\n")
-	h.git("commit", "-q", "-am", "second commit")
-	h.git("branch", "topic")
 	h.write("a.txt", "one\nTWO\nthree\n")
 	h.write("staged.txt", "s\n")
-	h.git("add", "staged.txt")
+	h.git("add", "sub/b.txt", "staged.txt")
 	h.write("new.txt", "untracked\n")
 	return h
 }
 
 func newEmptyHarness(t *testing.T) *harness {
 	h := newUninitializedHarness(t)
-	h.git("init", "-q", "-b", "main")
-	h.git("config", "user.name", "Ann Author")
-	h.git("config", "user.email", "ann@example.test")
+	copyFixtureDir(t, ensureEmptyFixture(t, h.bin), h.root)
 	return h
 }
 

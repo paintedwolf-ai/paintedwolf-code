@@ -54,6 +54,9 @@ func (p *preparedOperation) copyNestedRepo(ctx context.Context, root, scratch, p
 
 func (p *preparedOperation) indexContent(ctx context.Context, scratch, path string, entry operationIndexEntry) (RestoreContent, error) {
 	if p.request.metadataStage() && entry.oid != "" {
+		if kind, body, ok := readLooseGitObject(scratch, entry.oid); ok && kind == "blob" {
+			return RestoreContent{Exists: true, Mode: entry.mode, Size: int64(len(body)), ObjectID: entry.oid}, nil
+		}
 		out, code, err := gitexec.Run(ctx, scratch, []string{"--no-replace-objects", "cat-file", "-s", entry.oid}, hermeticOpts(0))
 		if err != nil {
 			return RestoreContent{}, err

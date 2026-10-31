@@ -151,20 +151,12 @@ func TestConflictAndHookFailureOutcomesReportActualEffects(t *testing.T) {
 	h.git("reset", "--hard", "HEAD")
 	h.git("clean", "-fd")
 
-	if r := h.exec("git", "switch", "topic"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("switch topic: %+v %v", r.result, r.err)
-	}
+	h.git("switch", "topic")
 	h.write("a.txt", "topic conflict line\n")
-	if r := h.exec("git", "commit", "-a", "-m", "topic change"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("commit topic: %+v %v %s", r.result, r.err, r.stderr)
-	}
-	if r := h.exec("git", "switch", "main"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("switch main: %+v %v", r.result, r.err)
-	}
+	h.git("commit", "-q", "-a", "-m", "topic change")
+	h.git("switch", "main")
 	h.write("a.txt", "main conflict line\n")
-	if r := h.exec("git", "commit", "-a", "-m", "main change"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("commit main: %+v %v", r.result, r.err)
-	}
+	h.git("commit", "-q", "-a", "-m", "main change")
 
 	merge := h.exec("git", "merge", "topic")
 	if merge.err != nil || merge.result.Status == 0 || merge.result.EffectCertainty != toolcontract.EffectCompleted {
@@ -242,9 +234,7 @@ func TestStashRetainsIDAndPopConflictKeepsStashEntry(t *testing.T) {
 		t.Fatalf("stash show: %+v %q %v", show.result, show.stdout, show.err)
 	}
 	h.write("a.txt", "conflicting local edit\n")
-	if r := h.exec("git", "commit", "-a", "-m", "conflict base"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("commit conflict base: %+v %v", r.result, r.err)
-	}
+	h.git("commit", "-q", "-a", "-m", "conflict base")
 	popConflict := h.exec("git", "stash", "pop")
 	if popConflict.err != nil || popConflict.result.Status == 0 || popConflict.result.EffectCertainty != toolcontract.EffectCompleted {
 		t.Fatalf("stash pop conflict: %+v %v", popConflict.result, popConflict.err)
@@ -252,12 +242,8 @@ func TestStashRetainsIDAndPopConflictKeepsStashEntry(t *testing.T) {
 	if list := strings.TrimSpace(h.git("stash", "list")); list == "" {
 		t.Fatal("stash entry was dropped despite pop conflict")
 	}
-	if r := h.exec("git", "reset", "--hard", "HEAD~1"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("reset --hard: %+v %v", r.result, r.err)
-	}
-	if r := h.exec("git", "clean", "-fd"); r.err != nil || r.result.Status != 0 {
-		t.Fatalf("clean -fd: %+v %v", r.result, r.err)
-	}
+	h.git("reset", "--hard", "HEAD~1")
+	h.git("clean", "-fd")
 	popOK := h.exec("git", "stash", "pop")
 	if popOK.err != nil || popOK.result.Status != 0 {
 		t.Fatalf("stash pop clean: %+v %v %s", popOK.result, popOK.err, popOK.stderr)

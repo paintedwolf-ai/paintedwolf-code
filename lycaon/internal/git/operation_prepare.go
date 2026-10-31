@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -84,7 +85,8 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 
 func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) error {
 	replaceEntries, _ := os.ReadDir(filepath.Join(repo.CommonDir, "refs", "replace"))
-	if _, packedErr := os.Lstat(filepath.Join(repo.CommonDir, "packed-refs")); len(replaceEntries) > 0 || packedErr == nil {
+	packedBytes, _ := os.ReadFile(filepath.Join(repo.CommonDir, "packed-refs"))
+	if len(replaceEntries) > 0 || bytes.Contains(packedBytes, []byte("refs/replace/")) {
 		replacements, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "for-each-ref", "--count=1", "--format=%(refname)", "refs/replace/")
 		if err != nil {
 			return err
@@ -330,29 +332,35 @@ func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Rep
 	if p.result.Status == "failed" {
 		return nil
 	}
-	if !p.request.indexOnly() {
-		// Conflicting operations are reviewed too: conflict markers are file effects.
-		candidates := append([]string{}, dirty...)
-		if p.result.Before.Head != "" && after.Head != "" && p.result.Before.Head != after.Head {
-			changed, err := gitPaths(ctx, scratch, "diff", "--name-only", "--no-renames", "-z", p.result.Before.Head, after.Head, "--")
-			if err != nil {
-				return err
-			}
-			candidates = append(candidates, changed...)
-		}
-		changedArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
-		changed, err := gitPaths(ctx, scratch, changedArgs...)
-		if err != nil {
-			return err
-		}
-		candidates = append(candidates, changed...)
-		if err := p.prepareFiles(repo.Root, scratch, uniquePaths(candidates)); err != nil {
-			return err
-		}
-	}
 	indexAfter, err := readOperationIndex(ctx, scratch, hermeticOpts(0))
 	if err != nil {
 		return err
+	}
+	if !p.request.indexOnly() {
+		// Conflicting operations are reviewed too: conflict markers are file effects.
+		candidates := append([]string{}, dirty...)
+		if !p.result.Before.Dirty && len(dirty) == 0 && !after.Dirty {
+			candidates = append(candidates, diffOperationIndexPaths(indexBefore, indexAfter)...)
+		} else {
+			if p.result.Before.Head != "" && after.Head != "" && p.result.Before.Head != after.Head {
+				changed, err := gitPaths(ctx, scratch, "diff", "--name-only", "--no-renames", "-z", p.result.Before.Head, after.Head, "--")
+				if err != nil {
+					return err
+				}
+				candidates = append(candidates, changed...)
+			}
+			if after.Dirty {
+				changedArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
+				changed, err := gitPaths(ctx, scratch, changedArgs...)
+				if err != nil {
+					return err
+				}
+				candidates = append(candidates, changed...)
+			}
+		}
+		if err := p.prepareFiles(repo.Root, scratch, uniquePaths(candidates)); err != nil {
+			return err
+		}
 	}
 	if err := p.prepareIndexFiles(ctx, scratch, indexBefore, indexAfter); err != nil {
 		return err

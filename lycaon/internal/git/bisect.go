@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -91,6 +92,9 @@ func ReadBisect(ctx context.Context, dir string) (BisectState, error) {
 	if state.Log, _, err = readBisectFile(ctx, dir, "BISECT_LOG"); err != nil {
 		return state, err
 	}
+	if readBisectRefsFast(dir, &state) {
+		return state, nil
+	}
 	err = bisectLines(ctx, dir, []string{"for-each-ref", "--format=%(refname) %(objectname)", "refs/bisect/"}, func(line string) error {
 		name, oid, _ := strings.Cut(line, " ")
 		switch {
@@ -104,6 +108,47 @@ func ReadBisect(ctx context.Context, dir string) (BisectState, error) {
 		return nil
 	})
 	return state, err
+}
+
+func readBisectRefsFast(dir string, state *BisectState) bool {
+	repo, ok := gitrepo.Discover(dir)
+	if !ok || repo.CommonDir == "" {
+		return false
+	}
+	if packed, err := os.ReadFile(filepath.Join(repo.CommonDir, "packed-refs")); err == nil && bytes.Contains(packed, []byte("refs/bisect/")) {
+		return false
+	}
+	refsDir := filepath.Join(repo.CommonDir, "refs", "bisect")
+	entries, err := os.ReadDir(refsDir)
+	if os.IsNotExist(err) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return false
+		}
+		raw, err := os.ReadFile(filepath.Join(refsDir, entry.Name()))
+		if err != nil {
+			return false
+		}
+		oid := strings.TrimSpace(string(raw))
+		if !validObjectID(oid) {
+			return false
+		}
+		name := "refs/bisect/" + entry.Name()
+		switch {
+		case name == "refs/bisect/"+state.New:
+			state.Bad = oid
+		case strings.HasPrefix(name, "refs/bisect/"+state.Old+"-"):
+			state.Good = append(state.Good, oid)
+		case strings.HasPrefix(name, "refs/bisect/skip-"):
+			state.Skip = append(state.Skip, oid)
+		}
+	}
+	return true
 }
 
 // WriteBisect records the session files and refs under the repository lease.
@@ -140,7 +185,13 @@ func WriteBisect(ctx context.Context, dir string, files map[string]string, appen
 			return err
 		}
 	}
+	repo, hasRepo := gitrepo.Discover(dir)
 	for ref, oid := range refs {
+		if hasRepo && repo.CommonDir != "" && strings.HasPrefix(ref, "refs/bisect/") && !strings.Contains(ref, "..") && validObjectID(oid) {
+			if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: repo.CommonDir, Rel: filepath.FromSlash(ref)}, Source: strings.NewReader(oid + "\n"), Mode: 0o644, DirMode: 0o755, PreserveMode: true}); err == nil {
+				continue
+			}
+		}
 		if _, err := restoreGit(ctx, dir, hermeticOpts(0), "update-ref", "--no-deref", ref, oid); err != nil {
 			return err
 		}
@@ -155,16 +206,18 @@ func ClearBisect(ctx context.Context, dir string) error {
 		return err
 	}
 	defer release()
-	var refs []string
-	if err := bisectLines(ctx, dir, []string{"for-each-ref", "--format=%(refname)", "refs/bisect/"}, func(line string) error {
-		refs = append(refs, line)
-		return nil
-	}); err != nil {
-		return err
-	}
-	for _, ref := range refs {
-		if _, err := restoreGit(ctx, dir, hermeticOpts(0), "update-ref", "--no-deref", "-d", ref); err != nil {
+	if !clearBisectRefsFast(dir) {
+		var refs []string
+		if err := bisectLines(ctx, dir, []string{"for-each-ref", "--format=%(refname)", "refs/bisect/"}, func(line string) error {
+			refs = append(refs, line)
+			return nil
+		}); err != nil {
 			return err
+		}
+		for _, ref := range refs {
+			if _, err := restoreGit(ctx, dir, hermeticOpts(0), "update-ref", "--no-deref", "-d", ref); err != nil {
+				return err
+			}
 		}
 	}
 	for _, name := range bisectFiles {
@@ -177,6 +230,33 @@ func ClearBisect(ctx context.Context, dir string) error {
 		}
 	}
 	return nil
+}
+
+func clearBisectRefsFast(dir string) bool {
+	repo, ok := gitrepo.Discover(dir)
+	if !ok || repo.CommonDir == "" {
+		return false
+	}
+	if packed, err := os.ReadFile(filepath.Join(repo.CommonDir, "packed-refs")); err == nil && bytes.Contains(packed, []byte("refs/bisect/")) {
+		return false
+	}
+	refsDir := filepath.Join(repo.CommonDir, "refs", "bisect")
+	entries, err := os.ReadDir(refsDir)
+	if os.IsNotExist(err) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return false
+		}
+		if err := os.Remove(filepath.Join(refsDir, entry.Name())); err != nil && !os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
 }
 
 // NextBisect chooses the next commit with Git's own bisection order. A
@@ -314,9 +394,27 @@ func QuoteBisectWords(words []string) string {
 	return strings.Join(quoted, " ")
 }
 
+var commitSubjectCache sync.Map // string -> string
+
 // BisectStart names what a session returns to: the current branch, or the
 // commit HEAD is detached at.
 func BisectStart(ctx context.Context, dir string) (string, error) {
+	if ctx.Err() == nil {
+		if repo, ok := gitrepo.Discover(dir); ok && repo.GitDir != "" {
+			if raw, err := os.ReadFile(filepath.Join(repo.GitDir, "HEAD")); err == nil {
+				line := strings.TrimSpace(string(raw))
+				if ref, ok := strings.CutPrefix(line, "ref:"); ok {
+					if branch, ok := strings.CutPrefix(strings.TrimSpace(ref), "refs/heads/"); ok && branch != "" {
+						return branch, nil
+					}
+				} else if validObjectID(line) {
+					if kind, _, ok := readLooseGitObject(dir, line); ok && kind == "commit" {
+						return line, nil
+					}
+				}
+			}
+		}
+	}
 	out, code, err := gitexec.Run(ctx, dir, []string{"symbolic-ref", "-q", "--short", "HEAD"}, hermeticOpts(0))
 	if err != nil {
 		return "", err
@@ -329,8 +427,17 @@ func BisectStart(ctx context.Context, dir string) (string, error) {
 
 // CommitSubject is a commit's subject line as bisect prints it.
 func CommitSubject(ctx context.Context, dir, oid string) (string, error) {
+	if validObjectID(oid) && ctx.Err() == nil {
+		if cached, ok := commitSubjectCache.Load(oid); ok {
+			return cached.(string), nil
+		}
+	}
 	out, err := restoreGit(ctx, dir, hermeticOpts(0), "log", "-1", "--format=%s", oid, "--")
-	return strings.TrimSuffix(string(out), "\n"), err
+	subject := strings.TrimSuffix(string(out), "\n")
+	if err == nil && validObjectID(oid) {
+		commitSubjectCache.Store(oid, subject)
+	}
+	return subject, err
 }
 
 // ResolveBisectCommit resolves a bisect operand to its commit.

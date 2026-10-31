@@ -102,14 +102,12 @@ func identityCacheKey(bin string, prefix []string, globalPath, repoDir string) s
 	sum.Write([]byte{0})
 	sum.Write([]byte(strings.Join(prefix, "\x00")))
 	sum.Write([]byte{0})
-	sum.Write([]byte(globalPath))
-	sum.Write([]byte{0})
 	if !hashIdentityConfigFile(sum, globalPath) {
 		return ""
 	}
-	for _, path := range files {
+	for i, path := range files {
 		sum.Write([]byte{0})
-		sum.Write([]byte(path))
+		sum.Write([]byte(strconv.Itoa(i)))
 		sum.Write([]byte{0})
 		if !hashIdentityConfigFile(sum, path) {
 			return ""

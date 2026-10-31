@@ -109,15 +109,17 @@ func repoAuditCacheKey(repo gitrepo.Repo) (string, bool) {
 		return "", true
 	}
 	sum := sha256.New()
-	sum.Write([]byte(repo.Root))
 	needsAudit := false
-	for _, path := range files {
+	for i, path := range files {
 		sum.Write([]byte{0})
-		sum.Write([]byte(path))
+		sum.Write([]byte(strconv.Itoa(i)))
 		sum.Write([]byte{0})
 		raw, err := os.ReadFile(path)
 		switch {
 		case err == nil:
+			if strings.Contains(strings.ToLower(string(raw)), "include") {
+				return "", true
+			}
 			sum.Write([]byte(strconv.Itoa(len(raw))))
 			sum.Write([]byte{0})
 			sum.Write(raw)
@@ -137,7 +139,7 @@ func mayContainUnsafeRepoConfig(raw []byte) bool {
 	lower := strings.ToLower(string(raw))
 	return strings.Contains(lower, "gitproxy") ||
 		strings.Contains(lower, "filter") ||
-		strings.Contains(lower, "merge") ||
+		(strings.Contains(lower, "merge") && strings.Contains(lower, "driver")) ||
 		strings.Contains(lower, "include")
 }
 

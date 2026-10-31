@@ -68,10 +68,9 @@ func repoConversionConfigCacheKey(repo gitrepo.Repo) string {
 		return ""
 	}
 	sum := sha256.New()
-	sum.Write([]byte(repo.Root))
-	for _, path := range files {
+	for i, path := range files {
 		sum.Write([]byte{0})
-		sum.Write([]byte(path))
+		sum.Write([]byte(strconv.Itoa(i)))
 		sum.Write([]byte{0})
 		raw, err := os.ReadFile(path)
 		switch {
@@ -112,8 +111,10 @@ func (p *preparedOperation) copyStashes(ctx context.Context, source, scratch str
 	if p.result.Before.Stash == "" {
 		return nil
 	}
-	if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", "refs/stash", p.result.Before.Stash); err != nil {
-		return err
+	if err := writeScratchRef(scratch, "refs/stash", p.result.Before.Stash); err != nil {
+		if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", "refs/stash", p.result.Before.Stash); err != nil {
+			return err
+		}
 	}
 	repo, ok := gitrepo.Discover(source)
 	if !ok {
@@ -234,7 +235,7 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 	var bytes int64
 	entries := 0
 	for _, ref := range uniquePaths(refs) {
-		if validObjectID(ref) && ctx.Err() == nil {
+		if cacheableTreeBudgetRef(ref) && ctx.Err() == nil {
 			if cached, ok := treeBudgetCache.Load(ref); ok {
 				summary := cached.(treeBudgetSummary)
 				recordOperationVisits(ctx, summary.visits)
@@ -276,11 +277,16 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 		}
 		bytes += refBytes
 		entries += refEntries
-		if validObjectID(ref) {
+		if cacheableTreeBudgetRef(ref) {
 			treeBudgetCache.Store(ref, treeBudgetSummary{bytes: refBytes, entries: refEntries, visits: refVisits})
 		}
 	}
 	return nil
+}
+
+func cacheableTreeBudgetRef(ref string) bool {
+	base, _, _ := strings.Cut(ref, "^")
+	return validObjectID(base)
 }
 
 func writeScratchRef(scratch, ref, value string) error {
