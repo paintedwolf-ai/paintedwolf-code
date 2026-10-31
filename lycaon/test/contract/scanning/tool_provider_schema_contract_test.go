@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -132,9 +133,15 @@ func TestProviderCapabilityFieldsMatchExecutionContract(t *testing.T) {
 		request, _ := properties["capability_request"].(map[string]any)
 		capabilities, _ := request["properties"].(map[string]any)
 		for field, capability := range fields {
-			_, offered := capabilities[field]
+			raw, offered := capabilities[field]
 			if offered != contract.Supports(capability) {
 				t.Errorf("%s capability_request.%s offered=%v, execution supports=%v", name, field, offered, contract.Supports(capability))
+			}
+			if field == "socket_paths" && offered {
+				socketSchema, _ := raw.(map[string]any)
+				if socketSchema["maxItems"] != confine.MaxSocketGrants {
+					t.Errorf("%s capability_request.socket_paths maxItems = %v, want %d", name, socketSchema["maxItems"], confine.MaxSocketGrants)
+				}
 			}
 		}
 	}

@@ -195,6 +195,11 @@ func TestNetworkAndProcessRefusalsRouteToTheirCapability(t *testing.T) {
 		grant, port       string
 	}{
 		{"network-outbound", "/var/run/docker.sock", RecoverSocketPath, "/var/run/docker.sock", ""},
+		{"network-outbound", "/var/run/mDNSResponder", RecoverNone, "", ""},
+		{"network-outbound", "/private/var/run/mDNSResponder", RecoverNone, "", ""},
+		{"network-outbound", "/Users/p/repo/.git/fsmonitor--daemon.ipc", RecoverNone, "", ""},
+		{"network-outbound", "/Users/p/repo/.git/worktrees/w1/fsmonitor--daemon.ipc", RecoverNone, "", ""},
+		{"network-outbound", "fsmonitor--daemon.ipc", RecoverNone, "", ""},
 		{"network-outbound", "remote:*:5432", RecoverOutboundPort, "", "5432"},
 		{"network-bind", "local:*:8080", RecoverLocalListen, "", "8080"},
 		{"network-bind", "/Users/p/.colima/_lima/_networks/user-v2/user-v2_fd.sock", RecoverHostExecution, "", ""},

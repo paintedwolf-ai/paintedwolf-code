@@ -122,6 +122,7 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 	if opts.Launch.Confinement != nil {
 		confinement := opts.Launch.Confinement
 		cmd.Env = confine.ProcessEnvironment(cmd.Env, *confinement)
+		cmd.Env = withoutConfinedGitFsmonitor(cmd.Env, *confinement)
 		if confinement.Network != confine.NetworkDeny {
 			if self, err := os.Executable(); err == nil {
 				cmd.Env = overlayProcessEnv(cmd.Env,
