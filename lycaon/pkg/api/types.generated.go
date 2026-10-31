@@ -1276,6 +1276,39 @@ type CodeScanPage struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// CommandActivity
+type CommandActivity struct {
+	ID      string `json:"id"`
+	Group   string `json:"group"`
+	Label   string `json:"label"`
+	Subject string `json:"subject"`
+	// Registered session-owned background job started by this activity.
+	JobHandle  string `json:"job_handle,omitempty"`
+	Directory  string `json:"directory,omitempty"`
+	Outcome    string `json:"outcome"`
+	State      string `json:"state"`
+	StatusCode *int   `json:"status_code,omitempty"`
+	// Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
+	MergeKey     string                `json:"merge_key,omitempty"`
+	ExecutionIDs []string              `json:"execution_ids"`
+	Spans        []CommandActivitySpan `json:"spans"`
+}
+
+// CommandActivityExecution
+type CommandActivityExecution struct {
+	ID         string `json:"id"`
+	State      string `json:"state"`
+	Outcome    string `json:"outcome"`
+	StatusCode *int   `json:"status_code,omitempty"`
+}
+
+// CommandActivitySpan
+type CommandActivitySpan struct {
+	SourceRef string `json:"source_ref"`
+	StartByte int    `json:"start_byte"`
+	EndByte   int    `json:"end_byte"`
+}
+
 // CommandExecutionOutput
 type CommandExecutionOutput struct {
 	Stream string `json:"stream"`
@@ -1456,6 +1489,14 @@ type CommandProgramReceipt struct {
 	ProgressRef     string     `json:"progress_ref,omitempty"`
 	StartedAt       time.Time  `json:"started_at"`
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
+	// Initial host activity identities. Details loading must not regroup these rows.
+	Activities []CommandActivity `json:"activities,omitempty"`
+	// Bounded live execution outcomes for rows whose presentation membership is already established.
+	ActivityExecutions []CommandActivityExecution `json:"activity_executions,omitempty"`
+	// Monotonic receipt trace revision for live snapshot reconciliation.
+	ActivityRevision  int64  `json:"activity_revision,omitempty"`
+	ActivitiesCursor  string `json:"activities_cursor,omitempty"`
+	ActivitiesOmitted int    `json:"activities_omitted,omitempty"`
 	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
 	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
 }
@@ -1466,10 +1507,12 @@ type CommandProgramReceiptPage struct {
 	Progress   *CommandProgramProgressReceipt `json:"progress,omitempty"`
 	Executions []CommandExecutionReceipt      `json:"executions"`
 	// Known static nodes only; never speculative future loop iterations.
-	Nodes             []CommandProgramNode `json:"nodes"`
-	ExecutionsOmitted int                  `json:"executions_omitted"`
-	NodesOmitted      int                  `json:"nodes_omitted"`
-	NextCursor        string               `json:"next_cursor,omitempty"`
+	Nodes []CommandProgramNode `json:"nodes"`
+	// Host-composed work for this bounded execution page, in first-touch order. Supporting operations retain their execution identities.
+	Activities        []CommandActivity `json:"activities,omitempty"`
+	ExecutionsOmitted int               `json:"executions_omitted"`
+	NodesOmitted      int               `json:"nodes_omitted"`
+	NextCursor        string            `json:"next_cursor,omitempty"`
 }
 
 // CommandRevisionConflict Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
@@ -8101,10 +8144,11 @@ type ToolProcessHandle struct {
 
 // ToolProgress Measured discovery work. Counts are observations, not a completion estimate.
 type ToolProgress struct {
-	Phase         string `json:"phase"`
-	FilesSearched int    `json:"files_searched"`
-	FilesSkipped  int    `json:"files_skipped"`
-	Matches       int    `json:"matches"`
+	CommandProgram *CommandProgramReceipt `json:"command_program,omitempty"`
+	Phase          string                 `json:"phase"`
+	FilesSearched  int                    `json:"files_searched"`
+	FilesSkipped   int                    `json:"files_skipped"`
+	Matches        int                    `json:"matches"`
 }
 
 // ToolResult
