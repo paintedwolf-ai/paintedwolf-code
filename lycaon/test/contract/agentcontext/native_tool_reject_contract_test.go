@@ -3,48 +3,24 @@ package contract
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolexecution"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
-	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
-
-func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	configRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
-	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
-	testutil.FailErr(t, "toolhost.NewRuntime", err)
-	testutil.FailErr(t, "register http_request", httpaction.Register(rt.Registry, httpaction.Deps{Boundary: rt.Boundary}))
-	hints, err := guidance.LoadHintConfigStock()
-	testutil.FailErr(t, "LoadHintConfig", err)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
-	toolfixture.WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "LoadSchemaDir", err)
-	rt.Executor.Metadata.SetToolSchemas(schemas)
-	return rt.Executor
-}
 
 func assertStructuredRejectCode(t *testing.T, err error, code string) {
 	t.Helper()
@@ -113,18 +89,16 @@ func TestNativeListDirScopeFieldsRemainStructuredE2E(t *testing.T) {
 	}
 }
 
-func TestNativeGrepInvalidRegexStructuredRejectE2E(t *testing.T) {
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "grep", map[string]any{
-		"pattern": "[unclosed",
-	}, tools.ToolContext{
+func TestNativeGrepUnsupportedRegexStructuredRejectE2E(t *testing.T) {
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "rg -P '(?R)' .", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID:       "r1",
 			RepoFileCount:      100,
 			RepoFileCountKnown: true},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "GREP_REGEX_INVALID")
+	assertProgramRefusal(t, outcome, err, "GREP_REGEX_UNSUPPORTED")
 }
 
 func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
@@ -145,16 +119,13 @@ func TestNativeChmod777StructuredRejectE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "run.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write script", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "chmod", map[string]any{
-		"paths": []any{"run.sh"},
-		"mode":  "777",
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "chmod 777 -- run.sh", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "CHMOD_MODE_DENIED")
+	assertProgramRefusal(t, outcome, err, "CHMOD_MODE_DENIED")
 }
 
 func TestNativeChmodPlusXOnScriptSuccessE2E(t *testing.T) {
@@ -167,18 +138,15 @@ func TestNativeChmodPlusXOnScriptSuccessE2E(t *testing.T) {
 	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write script", err)
 	}
-	exec := securityNativeExecutor(t)
-	out, err := exec.Invoke(context.Background(), "chmod", map[string]any{
-		"paths": []any{"scripts/foo.sh"},
-		"mode":  "+x",
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "chmod +x -- scripts/foo.sh", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	testutil.FailErr(t, "chmod +x", err)
-	if !strings.Contains(out, "mode_after") {
-		t.Fatalf("chmod output = %q", out)
+	if outcome.Status != 0 || outcome.Refusal != nil {
+		t.Fatalf("chmod outcome = %+v", outcome)
 	}
 	info, err := os.Stat(scriptPath)
 	testutil.FailErr(t, "stat script", err)
@@ -187,7 +155,7 @@ func TestNativeChmodPlusXOnScriptSuccessE2E(t *testing.T) {
 	}
 }
 
-func TestNativeDeleteNonEmptyDirStructuredRejectE2E(t *testing.T) {
+func TestNativeDeleteNonEmptyDirPreservesContentsE2E(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "pkg")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -196,34 +164,32 @@ func TestNativeDeleteNonEmptyDirStructuredRejectE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "keep.go"), []byte("package pkg\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
-		"paths": []any{"pkg"},
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "rm -- pkg", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "DELETE_NOT_EMPTY")
+	testutil.FailErr(t, "run nonrecursive directory removal", err)
+	if outcome.Status == 0 || outcome.Refusal != nil {
+		t.Fatalf("nonrecursive removal outcome=%+v", outcome)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "keep.go"))
+	testutil.FailErr(t, "retained directory content", err)
+	if string(data) != "package pkg\n" {
+		t.Fatal("failed removal changed directory content")
+	}
 }
 
 func TestNativeDeleteOutsideWriteScopeStructuredRejectE2E(t *testing.T) {
 	root := t.TempDir()
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
-		"paths": []any{"../outside.txt"},
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "rm -- ../outside.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	if err == nil {
-		t.Fatal("expected delete path denial")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "DELETE_PATH_DENIED") && !strings.Contains(msg, "path escape") {
-		t.Fatalf("error = %q want DELETE_PATH_DENIED or path escape", msg)
-	}
+	assertProgramRefusal(t, outcome, err, "DELETE_PATH_DENIED")
 }
 
 func TestNativeDeleteGitPathStructuredRejectE2E(t *testing.T) {
@@ -234,34 +200,39 @@ func TestNativeDeleteGitPathStructuredRejectE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write HEAD", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
-		"paths": []any{".git/HEAD"},
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "rm -- .git/HEAD", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "GIT_INTERNALS_WRITE_DENIED")
+	assertProgramRefusal(t, outcome, err, "GIT_INTERNALS_WRITE_DENIED")
 }
 
 func TestNativeCopySizeExceededStructuredRejectE2E(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "big.txt"), []byte(strings.Repeat("x", 200)), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	testutil.FailErr(t, "read native copy cap", err)
+	var maximum int64
+	for _, limit := range catalog.Language.Limits {
+		if limit.ID == "recursive_mutation_bytes" {
+			maximum = limit.Maximum
+		}
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "copy", map[string]any{
-		"copies": []any{
-			map[string]any{"from": "big.txt", "to": "copy.txt"},
-		},
-		"max_file_bytes": 100,
-	}, tools.ToolContext{
+	if maximum <= 0 {
+		t.Fatal("copy byte cap missing")
+	}
+	file, err := os.Create(filepath.Join(root, "big.txt"))
+	testutil.FailErr(t, "create sparse oversized copy source", err)
+	testutil.FailErr(t, "size sparse source above catalog bound", file.Truncate(maximum+1))
+	testutil.FailErr(t, "close sparse source", file.Close())
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "cp -- big.txt copy.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "COPY_SIZE_EXCEEDED")
+	assertProgramRefusal(t, outcome, err, "COPY_SIZE_EXCEEDED")
 }
 
 func TestNativeMoveOverwriteSuccessE2E(t *testing.T) {
@@ -272,17 +243,16 @@ func TestNativeMoveOverwriteSuccessE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "dst.txt"), []byte("old"), 0o644); err != nil {
 		testutil.FailErr(t, "write dst", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "move", map[string]any{
-		"moves": []any{
-			map[string]any{"from": "src.txt", "to": "dst.txt"},
-		},
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "mv -- src.txt dst.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	testutil.FailErr(t, "move overwrite", err)
+	if outcome.Status != 0 || outcome.Refusal != nil {
+		t.Fatalf("move outcome=%+v", outcome)
+	}
 	data, err := os.ReadFile(filepath.Join(root, "dst.txt"))
 	testutil.FailErr(t, "read dst", err)
 	if string(data) != "new" {
@@ -290,33 +260,26 @@ func TestNativeMoveOverwriteSuccessE2E(t *testing.T) {
 	}
 }
 
-func TestNativeMkdirFileExistsStructuredRejectE2E(t *testing.T) {
+func TestNativeMkdirFileExistsPreservesContentsE2E(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("x"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "mkdir", map[string]any{
-		"paths": []any{"file.txt"},
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "mkdir -- file.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "MKDIR_FILE_EXISTS")
-}
-
-func TestNativeCommandCpHabitRedirectMatcher(t *testing.T) {
-	t.Parallel()
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "cp src.txt dst.txt"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "copy"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_COPY_NATIVE")
+	testutil.FailErr(t, "run existing-file mkdir", err)
+	if outcome.Status == 0 || outcome.Refusal != nil {
+		t.Fatalf("mkdir outcome=%+v", outcome)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "file.txt"))
+	testutil.FailErr(t, "read preserved file", err)
+	if string(data) != "x" {
+		t.Fatal("mkdir changed existing file")
+	}
 }
 
 func TestNativeChownForeignUIDStructuredRejectE2E(t *testing.T) {
@@ -327,16 +290,13 @@ func TestNativeChownForeignUIDStructuredRejectE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("a"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "chown", map[string]any{
-		"paths": []any{"a.txt"},
-		"owner": "65534",
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, "chown 65534 -- a.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "CHOWN_TARGET_DENIED")
+	assertProgramRefusal(t, outcome, err, "CHOWN_TARGET_DENIED")
 }
 
 func TestNativeChownGitPathStructuredRejectE2E(t *testing.T) {
@@ -347,49 +307,13 @@ func TestNativeChownGitPathStructuredRejectE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write HEAD", err)
 	}
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "chown", map[string]any{
-		"paths": []any{".git/HEAD"},
-		"owner": "current",
-	}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	outcome, err := program.Invoke(t, fmt.Sprintf("chown %d -- .git/HEAD", os.Getuid()), tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "GIT_INTERNALS_WRITE_DENIED")
-}
-
-func TestNativeCommandChownExactRedirect(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("chown is unavailable on Windows")
-	}
-	account, err := user.Current()
-	testutil.FailErr(t, "resolve current account", err)
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err = exec.Invoke(context.Background(), "command", map[string]any{"command": "chown " + account.Uid + ":" + account.Gid + " scripts/run.sh"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "chown"}},
-	})
-	assertStructuredRejectCode(t, err, "USE_CHOWN_NATIVE")
-}
-
-func TestNativeCommandFindHabitRedirectE2E(t *testing.T) {
-	exec := securityNativeExecutor(t)
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{
-		"command": "find . -name '*.go'",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"find"}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "USE_FIND_NOT_COMMAND") {
-		t.Fatalf("err = %v want USE_FIND_NOT_COMMAND redirect", err)
-	}
+	assertProgramRefusal(t, outcome, err, "GIT_INTERNALS_WRITE_DENIED")
 }
 
 func TestNativeReadRejectsDirectoryE2E(t *testing.T) {
@@ -408,5 +332,16 @@ func TestNativeReadRejectsDirectoryE2E(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
 		t.Fatalf("read on directory err = %v want READ_IS_DIRECTORY", err)
+	}
+}
+
+func assertProgramRefusal(t *testing.T, outcome command.ProgramOutcome, err error, code string) {
+	t.Helper()
+	if err != nil {
+		assertStructuredRejectCode(t, err, code)
+		return
+	}
+	if outcome.Refusal == nil || outcome.Refusal.Code != code || outcome.Status == 0 {
+		t.Fatalf("expected typed program refusal %s, got %+v", code, outcome)
 	}
 }

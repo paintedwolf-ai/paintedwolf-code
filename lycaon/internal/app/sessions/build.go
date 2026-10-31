@@ -127,12 +127,14 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		return nil, fmt.Errorf("init progress-gated tools: %w", err)
 	}
 	mgr.Coordinator.Guards.SetToolMetadata(deps.Execution.Host.Executor.Metadata)
+	mgr.Profiles.SetCommandExternalHidden(deps.Execution.Host.Executor.Metadata.CommandExternalHidden)
 	if deps.Settings.Service != nil {
 		if deps.TestSessionLimits == nil {
 			mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits})
 		}
 		mgr.SetEffectiveCatalogDeps(deps.Catalog.ModuleRoot, deps.Catalog.Effective, deps.Settings.Service.TrustSurfaces)
 		mgr.Profiles.SetSkillsGate(deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceSkills, deps.Storage.Projects))
+		mgr.Profiles.SetApprovals(deps.Settings.Service.Approvals)
 	}
 	if deps.Catalog.ViewCache != nil {
 		mgr.Catalog.SetCatalogViewCache(deps.Catalog.ViewCache)
@@ -174,7 +176,7 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			if view == nil {
 				return nil
 			}
-			return view.ToolProfiles
+			return mgr.Profiles.ConstrainCommandProfiles(ctx, sessionID, view.ToolProfiles)
 		})
 		if host.Executor != nil {
 			host.Executor.Metadata.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {

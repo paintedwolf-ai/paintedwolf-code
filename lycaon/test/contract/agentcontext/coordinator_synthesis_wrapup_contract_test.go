@@ -25,7 +25,7 @@ func TestCoordinatorSynthesisWrapupPromptAssembly(t *testing.T) {
 	for _, want := range []string{
 		"Read-only report",
 		"read-only",
-		"`write`",
+		"command mutations",
 		"`edit`",
 		"`task`",
 		"Do not narrate fixes",
@@ -61,7 +61,7 @@ func TestCoordinatorSynthesisSurfaceReadOnlyTools(t *testing.T) {
 	surfaces := loadImplementSurfaces(t)
 	synthesis := surfaces["implement_synthesis"]
 	for _, forbidden := range []string{
-		"write", "edit", "command", "task", "pack_board", "wait",
+		"write", "edit", "task", "pack_board", "wait",
 		"worker_cancel", "answer_decision", "extend_worker_budget", "decline_worker_budget",
 		"promote_overlay", "reject_overlay", "preview_overlay",
 	} {
@@ -72,7 +72,7 @@ func TestCoordinatorSynthesisSurfaceReadOnlyTools(t *testing.T) {
 	if !contractcheck.ContainsString(synthesis, "update_progress") {
 		t.Fatal("implement_synthesis must expose update_progress for checklist reconciliation")
 	}
-	for _, required := range []string{"read", "grep", "find", "list_dir", "scan_pack", "render_view"} {
+	for _, required := range []string{"command", "scan_pack", "render_view"} {
 		if !contractcheck.ContainsString(synthesis, required) {
 			t.Fatalf("implement_synthesis missing survey tool %q", required)
 		}

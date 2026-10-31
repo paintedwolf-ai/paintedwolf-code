@@ -15,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// expandCommandOperands resolves unquoted @scratch arguments to their paths in
-// the session's scratch folder, then expands unquoted glob patterns within the
+// expandCommandOperands resolves unquoted session addresses to their host
+// folders, then expands unquoted glob patterns within the
 // working directory. The new arguments match the call's pre-grant read
 // boundaries, and the call keeps the arguments as written for display.
 func (e *Boundary) expandCommandOperands(
@@ -43,9 +43,9 @@ func (e *Boundary) expandPlanOperands(
 	plan commandsurface.Plan,
 	tc *tools.ToolContext,
 ) (map[string]any, error) {
-	stages, addressed, err := commandsurface.ResolveScratchOperands(plan.Stages, tc.Host.SessionScratchDir)
+	stages, addressed, err := commandsurface.ResolveSessionOperands(plan.Stages, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 	if err != nil {
-		if reject := scratchOperandReject(err); reject != nil {
+		if reject := sessionOperandReject(err); reject != nil {
 			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 		}
 		return nil, err
@@ -96,16 +96,20 @@ func withStages(args map[string]any, stages []exec.Stage) map[string]any {
 	return out
 }
 
-// scratchOperandReject names an @scratch argument the model can correct; any
+// sessionOperandReject names a session operand the model can correct; any
 // other failure is the host's.
-func scratchOperandReject(err error) *toolrejection.ToolReject {
+func sessionOperandReject(err error) *toolrejection.ToolReject {
 	operand := ""
-	var operandErr *commandsurface.ScratchOperandError
+	var operandErr *commandsurface.SessionOperandError
 	if errors.As(err, &operandErr) {
 		operand = operandErr.Operand
 	}
-	if errors.Is(err, commandsurface.ErrScratchUnavailable) {
-		return &toolrejection.ToolReject{Code: tools.SessionScratchUnavailableCode, Data: map[string]any{"path": operand}}
+	if errors.Is(err, commandsurface.ErrSessionUnavailable) {
+		code := tools.SessionScratchUnavailableCode
+		if operandErr != nil && operandErr.Area == projectroot.VirtualOutputLabel {
+			code = tools.SessionOutputUnavailableCode
+		}
+		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": operand}}
 	}
 	if errors.Is(err, projectroot.ErrPathEscape) {
 		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": operand, "reason": err.Error()}}
@@ -118,7 +122,7 @@ func globReadable(confReq confine.Request) func(string) bool {
 	confinement, _ := confine.DefaultConfinement(confReq)
 	rules := confine.BoundaryOf(confinement).Filesystem
 	return func(abs string) bool {
-		return !confine.ControlPlanePathDenied(abs, false, confReq.SessionScratchRoot) &&
+		return !confine.ControlPlanePathDenied(abs, false, confReq.SessionScratchRoot, confReq.SessionOutputRoot) &&
 			rules.Verdict(confine.AccessRead, abs).Allowed
 	}
 }

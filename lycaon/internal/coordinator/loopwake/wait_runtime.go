@@ -30,6 +30,8 @@ type sessionSleep struct {
 	workerHandles    []string
 	// mover identifies who may end the sleep.
 	mover SleepMover
+	// caller is the tool call that parked the session, if one did.
+	caller waitCaller
 	// activityID is non-empty exactly while an awaiting_wake lease is open.
 	activityID        string
 	activityStartedAt time.Time
@@ -63,6 +65,13 @@ type sleepArm struct {
 	processHandles []string
 	workerHandles  []string
 	mover          SleepMover
+	caller         waitCaller
+}
+
+// waitCaller is the tool call whose park armed a sleep.
+type waitCaller struct {
+	tool       string
+	toolCallID string
 }
 
 func cancelSleepTimerLocked(st *sessionSleep) {

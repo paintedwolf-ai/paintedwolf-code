@@ -4,15 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
+	"syscall"
 )
 
 // AsyncPipeline runs a command plan without blocking the caller.
 type AsyncPipeline struct {
-	run    *sequenceRun
-	done   chan struct{}
-	result *PipelineResult
-	err    error
-	cancel context.CancelFunc
+	run          *sequenceRun
+	done         chan struct{}
+	result       *PipelineResult
+	err          error
+	cancel       context.CancelFunc
+	completionMu sync.Mutex
+	completed    bool
+	waiters      map[*pipelineWaiter]bool
 }
 
 // StartPipelineAsync launches stages and returns immediately. stdout/stderr receive
@@ -70,12 +75,15 @@ func StartPipelineAsync(
 		done:   make(chan struct{}),
 		cancel: cancel,
 	}
+	if opts.Started != nil {
+		opts.Started(async.PID())
+	}
 	go async.wait(runCtx, opts, stdinReader, redirect)
 	return async, nil
 }
 
 func (a *AsyncPipeline) wait(runCtx context.Context, opts ExecOpts, stdinReader io.ReadCloser, redirect redirectFiles) {
-	defer close(a.done)
+	defer a.complete()
 	defer a.cancel()
 	defer redirect.close()
 	if stdinReader != nil {
@@ -106,6 +114,15 @@ func (a *AsyncPipeline) Kill() {
 	}
 }
 
+// Signal delivers sig to the running tree without terminating it; SIGKILL
+// ends it at once. It reports whether a running stage received it.
+func (a *AsyncPipeline) Signal(sig syscall.Signal) bool {
+	if a == nil {
+		return false
+	}
+	return a.run.signal(sig)
+}
+
 // Wait blocks until the pipeline finishes and returns its result.
 func (a *AsyncPipeline) Wait() (*PipelineResult, error) {
 	if a == nil {
@@ -123,4 +140,51 @@ func (a *AsyncPipeline) Done() <-chan struct{} {
 		return ch
 	}
 	return a.done
+}
+
+// PID returns the OS process ID of the launched stage, or 0.
+func (a *AsyncPipeline) PID() int {
+	if a == nil || a.run == nil {
+		return 0
+	}
+	return a.run.pid()
+}
+
+type pipelineWaiter struct{ unblock func() }
+
+// ObserveWait publishes blocking only while this pipeline is incomplete.
+// Completion wakes observers before making its terminal result available.
+func (a *AsyncPipeline) ObserveWait(block func() (func(), error)) (func(), error) {
+	a.completionMu.Lock()
+	defer a.completionMu.Unlock()
+	if a.completed {
+		return func() {}, nil
+	}
+	unblock, err := block()
+	if err != nil {
+		return nil, err
+	}
+	waiter := &pipelineWaiter{unblock: unblock}
+	if a.waiters == nil {
+		a.waiters = map[*pipelineWaiter]bool{}
+	}
+	a.waiters[waiter] = true
+	return func() {
+		a.completionMu.Lock()
+		defer a.completionMu.Unlock()
+		if a.waiters[waiter] {
+			unblock()
+			delete(a.waiters, waiter)
+		}
+	}, nil
+}
+func (a *AsyncPipeline) complete() {
+	a.completionMu.Lock()
+	defer a.completionMu.Unlock()
+	a.completed = true
+	for waiter := range a.waiters {
+		waiter.unblock()
+		delete(a.waiters, waiter)
+	}
+	close(a.done)
 }

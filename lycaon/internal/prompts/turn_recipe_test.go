@@ -14,11 +14,11 @@ func TestTurnRecipeSelectsAvailableSurveyRoutes(t *testing.T) {
 	for _, available := range []bool{false, true} {
 		out, err := engine.Render(context.Background(), "partials/coordinator-turn-recipe.md", map[string]any{
 			"profile_has_summarize": available,
-			"profile_has_list_dir":  available,
+			"profile_has_command":   available,
 			"visual_show_available": available,
 		})
 		testutil.FailErr(t, "render turn recipe capability selection", err)
-		for _, guidance := range []string{"start with `summarize(path=…)`", "returns the map; omit depth and pagination fields"} {
+		for _, guidance := range []string{"start with `summarize(path=…)`", "find . -maxdepth 2 -type d"} {
 			if strings.Contains(out, guidance) != available {
 				t.Fatalf("available=%t: selection rule %q in %s", available, guidance, out)
 			}
@@ -28,9 +28,9 @@ func TestTurnRecipeSelectsAvailableSurveyRoutes(t *testing.T) {
 
 func TestTurnRecipeMapDoesNotRequireSummarize(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	out, err := engine.Render(context.Background(), "partials/coordinator-turn-recipe.md", map[string]any{"profile_has_list_dir": true})
+	out, err := engine.Render(context.Background(), "partials/coordinator-turn-recipe.md", map[string]any{"profile_has_command": true})
 	testutil.FailErr(t, "render map-only selection", err)
-	if !strings.Contains(out, "returns the map") || strings.Contains(out, "summarize") {
+	if !strings.Contains(out, "find . -maxdepth 2 -type d") || strings.Contains(out, "summarize") {
 		t.Fatalf("map-only surface has incorrect discovery routes: %s", out)
 	}
 }

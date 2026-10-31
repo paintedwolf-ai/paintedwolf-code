@@ -65,6 +65,13 @@ func (t *ReplaceLinesTool) Run(ctx context.Context, args map[string]any, tctx to
 		if err := validateLineOperations(path, operations, totalLines); err != nil {
 			return "", err
 		}
+		if st.Editor != nil && !st.Editor.ReadWhole {
+			for _, op := range operations {
+				if !st.Editor.CoversLines(op.StartLine, op.EndLine) {
+					return "", &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": path, "document_id": st.Editor.ID}}
+				}
+			}
+		}
 		replaced, err := applyLineOperations(path, old, operations)
 		if err != nil {
 			return "", err
@@ -89,7 +96,20 @@ func (t *ReplaceLinesTool) Run(ctx context.Context, args map[string]any, tctx to
 		if err := rejectIfSyntaxUnhealthy(ctx, "replace_lines", path, &old, finalContent, seam); err != nil {
 			return "", err
 		}
-		landed, err := landEditedText(ctx, tctx, "replace_lines", resolved, st, finalContent)
+		if st.Editor != nil && !st.Editor.ReadWhole {
+			sorted := append([]lineOperation(nil), operations...)
+			sort.Slice(sorted, func(i, j int) bool { return sorted[i].StartLine > sorted[j].StartLine })
+			intermediate := old
+			for _, op := range sorted {
+				if op.Kind != "replace" {
+					continue
+				}
+				next := spliceLineRange(intermediate, op.StartLine, op.EndLine, op.NewContent)
+				advanceReadSpans(st.Editor, op.StartLine, op.EndLine, toolkit.CountLines(next)-toolkit.CountLines(intermediate))
+				intermediate = next
+			}
+		}
+		landed, err := landEditedText(ctx, tctx, "replace_lines", resolved, st, editorTextProposal{Authored: replaced, Reviewed: finalContent})
 		if err != nil {
 			return "", err
 		}
@@ -386,4 +406,20 @@ func replaceLinesBeyondEOF(path string, startLine, endLine, totalLines int) erro
 			"total_lines": totalLines,
 		},
 	}
+}
+
+// ReplaceLineRange validates and applies a single 1-based inclusive line replacement.
+func ReplaceLineRange(path, content string, startLine, endLine int, newContent string) (string, error) {
+	ops := []lineOperation{{Kind: "replace", StartLine: startLine, EndLine: endLine, NewContent: newContent}}
+	if err := validateLineOperations(path, ops, toolkit.CountLines(content)); err != nil {
+		return "", err
+	}
+	replaced, err := applyLineOperations(path, content, ops)
+	if err != nil {
+		return "", err
+	}
+	if err := guardMutationContent("replace_lines", path, replaced); err != nil {
+		return "", err
+	}
+	return replaced, nil
 }

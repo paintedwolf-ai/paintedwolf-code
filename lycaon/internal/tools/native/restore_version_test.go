@@ -251,3 +251,23 @@ func TestRestoreVersionRecreatesDeletedFile(t *testing.T) {
 		t.Fatalf("disk content = %q, want %q", string(diskBytes), v1Content)
 	}
 }
+
+// A deleted file has no live head; its history is found through the deletion.
+func TestRestoreVersionDefaultsToTheContentBeforeADeletion(t *testing.T) {
+	dir := t.TempDir()
+	ledger := &fakeSourceLedger{
+		deleted:      map[string]sourceledger.DeletedPath{"r1/gone.txt": {FileID: "f_gone", VersionID: "v2"}},
+		fileVersions: map[string][]sourceledger.Version{"f_gone": {{ID: "v2"}, {ID: "v1"}}},
+		versions: map[string]sourceledger.RestorableVersion{
+			"v1": {ID: "v1", FileID: "f_gone", ProjectID: "p1", RootID: "r1", Path: "gone.txt", State: "content", Content: []byte("kept\n")},
+			"v2": {ID: "v2", FileID: "f_gone", ProjectID: "p1", RootID: "r1", Path: "gone.txt", State: "absent"},
+		},
+	}
+	_, err := (&RestoreVersionTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{"path": "gone.txt"}, provenanceCtx(dir, ledger))
+	testutil.FailErr(t, "restore deleted file", err)
+	data, err := os.ReadFile(filepath.Join(dir, "gone.txt"))
+	testutil.FailErr(t, "read restored file", err)
+	if string(data) != "kept\n" {
+		t.Fatalf("restored %q", data)
+	}
+}

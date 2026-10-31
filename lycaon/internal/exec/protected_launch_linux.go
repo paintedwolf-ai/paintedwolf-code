@@ -52,7 +52,7 @@ func init() {
 	// the protected launch, outside its namespace through the broker.
 	confine.SetHelperProbeRunner(func(cmd *exec.Cmd) error {
 		if protectedState().protected {
-			return RunInOwnGroup(cmd)
+			return runHelperProbeGroup(cmd)
 		}
 		return cmd.Run()
 	})

@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -45,8 +47,10 @@ while not os.path.exists(path):
 
 func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
 	t.Helper()
-	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
-	cmd, cleanup, err := superviseCommand(cmd, cleanup, ProcessPriorityNormal)
+	cmd, releaseInputs, path := detachedDaemonCommand(t, context.Background(), true)
+	// Captured inputs outlive the supervisor; closing its engine pipe is the EOF under test.
+	t.Cleanup(releaseInputs)
+	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
 	testutil.FailErr(t, "supervise daemon fixture", err)
 	return cmd, cleanup, path
 }
@@ -54,7 +58,7 @@ func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
 func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T) {
 	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), false)
 	defer cleanup()
-	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(t.Context(), cmd))
 	pid := waitForPIDFile(t, path)
 	testutil.FailErr(t, "detached daemon survived completion", waitForProcessGone(t.Context(), pid))
 }
@@ -62,7 +66,7 @@ func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T)
 func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T) {
 	other, otherCleanup, otherPath := supervisedDaemonCommand(t)
 	defer otherCleanup()
-	testutil.FailErr(t, "start independent supervisor", other.Start())
+	testutil.FailErr(t, "start independent supervisor", StartPreparedWith(t.Context(), other, other.Start, TrackProcessGroup))
 	otherPID := waitForPIDFile(t, otherPath)
 	defer func() { otherCleanup(); _ = other.Wait() }()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -70,7 +74,7 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 	cmd, cleanup, path := detachedDaemonCommand(t, ctx, true)
 	defer cleanup()
 	done := make(chan error, 1)
-	go func() { done <- RunInOwnGroup(cmd) }()
+	go func() { done <- RunInOwnGroup(t.Context(), cmd) }()
 	pid := waitForPIDFile(t, path)
 	cancel()
 	select {
@@ -87,17 +91,27 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
-	testutil.FailErr(t, "start supervisor", cmd.Start())
+	testutil.FailErr(t, "start supervisor", StartPreparedWith(t.Context(), cmd, cmd.Start, TrackProcessGroup))
 	pid := waitForPIDFile(t, path)
+	owned := commandDescendants(cmd.Process.Pid)
+	t.Cleanup(func() { killFixtureDescendants(owned) })
 	cleanup()
-	_ = cmd.Wait()
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		<-done
+		t.Fatal("engine lifetime EOF did not settle the supervisor before fixture expiry")
+	}
 	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(t.Context(), pid))
 }
 
 func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
 	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
-	testutil.FailErr(t, "start supervised command", cmd.Start())
+	testutil.FailErr(t, "start supervised command", StartPreparedWith(t.Context(), cmd, cmd.Start, TrackProcessGroup))
 	pid := waitForPIDFile(t, path)
 	reapLines(fmt.Sprintf("+s%d\n", cmd.Process.Pid))
 	_ = cmd.Wait()
@@ -191,6 +205,16 @@ func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
 }
 
 func TestSupervisedCommandSeesOnlyItsIntendedDescriptors(t *testing.T) {
+	for fd := 3; fd < 64; fd++ {
+		flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+		if err != nil || flags&unix.FD_CLOEXEC != 0 {
+			continue
+		}
+		_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags|unix.FD_CLOEXEC)
+		t.Cleanup(func() {
+			_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags)
+		})
+	}
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "locate descriptor fixture runtime", err)
 	// fstat probes descriptors without opening one, unlike listing /proc/self/fd.
@@ -208,23 +232,25 @@ print(" ".join(open_fds))`
 			cmd, cleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
 			testutil.FailErr(t, "prepare descriptor probe", err)
 			defer cleanup()
+			baseline, baselineCleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
+			testutil.FailErr(t, "prepare direct descriptor probe", err)
+			defer baselineCleanup()
 			if extra > 0 {
 				read, write, err := os.Pipe()
 				testutil.FailErr(t, "open intended descriptor", err)
 				defer func() { _ = read.Close(); _ = write.Close() }()
-				cmd.ExtraFiles = []*os.File{write}
+				cmd.ExtraFiles = append(cmd.ExtraFiles, write)
+				baseline.ExtraFiles = append(baseline.ExtraFiles, write)
 			}
 			// Managed runners intentionally inherit lineage and confinement descriptors.
 			// Compare the supervised launch with the same direct launch to detect leaks.
-			baseline := exec.CommandContext(t.Context(), python, "-c", probe)
-			baseline.Env = cmd.Env
-			baseline.ExtraFiles = cmd.ExtraFiles
-			wantBytes, err := baseline.Output()
-			testutil.FailErr(t, "run direct descriptor probe", err)
-			want := strings.TrimSpace(string(wantBytes))
+			var wantOut strings.Builder
+			baseline.Stdout = &wantOut
+			testutil.FailErr(t, "run direct descriptor probe", RunPrepared(t.Context(), baseline))
+			want := strings.TrimSpace(wantOut.String())
 			var out strings.Builder
 			cmd.Stdout = &out
-			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(cmd))
+			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(t.Context(), cmd))
 			if got := strings.TrimSpace(out.String()); got != want {
 				t.Fatalf("supervised command descriptors = %q, want %q", got, want)
 			}

@@ -29,12 +29,12 @@ type Location struct {
 	Rel  string
 }
 
-// Result identifies the byte stream staged and committed by Replace.
+// Result identifies staged bytes and the publication state actually reached.
+// An error does not imply that the destination remained unchanged.
 type Result struct {
-	// Committed distinguishes publication from later durability failures.
-	Committed bool
-	Bytes     int64
-	SHA256    string
+	Bytes       int64
+	SHA256      string
+	Publication PublicationState
 }
 
 // Target exposes the destination through its held parent.
@@ -47,7 +47,9 @@ type Target interface {
 type ReplaceRequest struct {
 	Location
 	Source io.Reader
-	Mode   os.FileMode
+	// CopyBuffer is caller-admitted stream scratch, retained through Commit.
+	CopyBuffer []byte
+	Mode       os.FileMode
 	// PreserveMode resolves the destination mode under the target lock.
 	PreserveMode bool
 	// DirMode applies to created parents; zero uses defaultDirMode.
@@ -63,16 +65,31 @@ type ReplaceRequest struct {
 type RemoveRequest struct {
 	Location
 	BeforeCommit func(Target) error
+	// LinkSHA256 pins the text of a symbolic link removed as an entry.
+	LinkSHA256 string
 }
 
-// ModeUpdateRequest describes a guarded permission change on one held file.
+// LinkRequest publishes a symbolic link as an entry. Target is stored exactly
+// as supplied; callers must admit its resolved address before publication.
+type LinkRequest struct {
+	Location
+	Target       string
+	Replace      bool
+	BeforeCommit func(Target) error
+}
+
+// Link creates or atomically replaces a symbolic link through a held parent.
+func Link(req LinkRequest) error { return platformLink(req) }
+
+// ModeUpdateRequest describes a guarded permission change on one held entry.
+
 type ModeUpdateRequest struct {
 	Location
 	Update       func(os.FileMode) os.FileMode
 	BeforeCommit func(*os.File, os.FileInfo) error
 }
 
-// ModeUpdateResult reports the permission transition applied to the held file.
+// ModeUpdateResult reports the permission transition applied to the held entry.
 type ModeUpdateResult struct {
 	Before os.FileMode
 	After  os.FileMode
@@ -172,7 +189,7 @@ func lockTarget(loc Location) func() {
 
 // Replace atomically commits a stream through one held parent.
 func Replace(req ReplaceRequest) (Result, error) {
-	return platformReplace(req)
+	return replace(req, nil)
 }
 
 // PathLocation scopes an effect to a file's immediate parent.

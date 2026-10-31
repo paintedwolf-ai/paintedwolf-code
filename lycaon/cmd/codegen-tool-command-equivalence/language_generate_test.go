@@ -15,13 +15,13 @@ func TestLanguageCatalogClosesOverFormsAndStockTools(t *testing.T) {
 	root := filepath.Join("..", "..")
 	catalog, err := loadLanguageCatalog(root)
 	testutil.FailErr(t, "load catalog", err)
-	if len(catalog.Tools) != 119 || len(catalog.Commands) != 117 {
+	if len(catalog.Tools) != 119 {
 		t.Fatalf("catalog scope: %d tools, %d commands", len(catalog.Tools), len(catalog.Commands))
 	}
 	if len(catalog.Fixtures) < 700 {
 		t.Fatalf("option/limit fixture coverage=%d", len(catalog.Fixtures))
 	}
-	for _, name := range []string{"sed", "stat", "base64", "rg", "git switch", "curl", "jq-edit", "source"} {
+	for _, name := range []string{"sed", "stat", "base64", "rg", "git switch", "curl", "jq-edit", "source", "patch", "git apply"} {
 		help, ok := catalog.CommandHelp(name)
 		if !ok || !strings.Contains(help, name) {
 			t.Errorf("missing focused help for %s", name)

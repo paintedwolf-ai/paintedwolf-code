@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // MaxSocketGrants is the hard cap on applied AF_UNIX literals per execution.
@@ -36,6 +37,7 @@ const (
 type SocketGrant struct {
 	ApprovedPath string
 	ResolvedPath string
+	Binding      socketref.Binding `json:"socket_binding,omitempty,omitzero"`
 }
 
 // SocketGrantDropReason is a stable machine reason a grant was not applied.
@@ -67,6 +69,8 @@ type Request struct {
 	Roots []string
 	// SessionScratchRoot is the session-owned scratch root for this execution.
 	SessionScratchRoot string
+	// SessionOutputRoot is a host-owned read capability, never a write root.
+	SessionOutputRoot string
 	// GrantedWriteRoots are reviewed write-root leases for this action. They
 	// expand the write profile without becoming attached jail identity.
 	GrantedWriteRoots []string
@@ -136,7 +140,7 @@ func prepareRequest(req Request) (preparedRequest, error) {
 	if err := ValidateGrantedWriteRoots(grantedWriteRoots); err != nil {
 		return preparedRequest{}, err
 	}
-	readRoots := normalizePathList(req.ReadRoots)
+	readRoots := normalizePathList(append(append([]string(nil), req.ReadRoots...), req.SessionOutputRoot))
 	readDenyPaths := normalizePathList(req.ReadDenyPaths)
 	grants, err := normalizeSocketGrantList(req.SocketGrants)
 	if err != nil {
@@ -239,7 +243,7 @@ func normalizeSocketGrantList(in []SocketGrant) ([]SocketGrant, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
-	byApproved := map[string]string{}
+	byApproved := map[string]SocketGrant{}
 	order := make([]string, 0, len(in))
 	for _, g := range in {
 		approved := strings.TrimSpace(g.ApprovedPath)
@@ -248,18 +252,19 @@ func normalizeSocketGrantList(in []SocketGrant) ([]SocketGrant, error) {
 			continue
 		}
 		if prev, ok := byApproved[approved]; ok {
-			if prev != resolved {
+			if prev.ResolvedPath != resolved || prev.Binding.Key() != g.Binding.Key() {
 				return nil, fmt.Errorf("%w: %q", ErrSocketGrantConflict, approved)
 			}
 			continue
 		}
-		byApproved[approved] = resolved
+		g.ApprovedPath, g.ResolvedPath = approved, resolved
+		byApproved[approved] = g
 		order = append(order, approved)
 	}
 	sort.Strings(order)
 	out := make([]SocketGrant, 0, len(order))
 	for _, approved := range order {
-		out = append(out, SocketGrant{ApprovedPath: approved, ResolvedPath: byApproved[approved]})
+		out = append(out, byApproved[approved])
 	}
 	return out, nil
 }
@@ -293,7 +298,19 @@ func validateSocketGrants(grants []SocketGrant) ([]SocketGrant, []SocketGrantDro
 			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropNotSocket})
 			continue
 		}
-		applied = append(applied, SocketGrant{ApprovedPath: g.ApprovedPath, ResolvedPath: now})
+		if g.Binding.Mode() != socketref.KernelPathname && g.Binding.Mode() != socketref.RetainedObject {
+			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropRepointed})
+			continue
+		}
+		if g.Binding.Mode() == socketref.RetainedObject {
+			lease, err := g.Binding.Acquire()
+			if err != nil {
+				dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropRepointed})
+				continue
+			}
+			lease.Close()
+		}
+		applied = append(applied, g)
 	}
 	if len(applied) > MaxSocketGrants {
 		return nil, nil, fmt.Errorf("%w: %d > %d", ErrSocketGrantCap, len(applied), MaxSocketGrants)
@@ -324,7 +341,7 @@ func SocketPathsDigest(grants []SocketGrant) string {
 	}
 	parts := make([]string, 0, len(grants))
 	for _, g := range grants {
-		parts = append(parts, g.ApprovedPath+"\x00"+g.ResolvedPath)
+		parts = append(parts, g.ApprovedPath+"\x00"+g.ResolvedPath+"\x00"+g.Binding.Key())
 	}
 	sort.Strings(parts)
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x01")))

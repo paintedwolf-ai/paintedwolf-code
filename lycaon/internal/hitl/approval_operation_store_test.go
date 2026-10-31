@@ -35,7 +35,7 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	}
 	testutil.FailErr(t, "insert checkpoint", store.Insert(t.Context(), checkpoint))
 	option := CurrentActionOption()
-	testutil.FailErr(t, "prepare operation", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, option))
+	testutil.FailErr(t, "prepare operation", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, approvedAuthority{display: option}))
 	installer := &recoveryApprovalInstaller{}
 	manager := NewCheckpoints(store, nil, &fakeAuthzRecorder{})
 	manager.Authority.SetApprovalAuthorityInstaller(installer)
@@ -48,7 +48,7 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	if status != "rolled_back" {
 		t.Fatalf("status = %q", status)
 	}
-	testutil.FailErr(t, "prepare retry", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, option))
+	testutil.FailErr(t, "prepare retry", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, approvedAuthority{display: option}))
 	testutil.FailErr(t, "read retried operation", sqlDB.QueryRowContext(t.Context(), `SELECT status FROM approval_operations WHERE checkpoint_id = ?`, checkpoint.ID).Scan(&status))
 	if status != "prepared" {
 		t.Fatalf("retried status = %q", status)

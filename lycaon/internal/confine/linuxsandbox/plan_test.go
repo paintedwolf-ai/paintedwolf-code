@@ -60,7 +60,8 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		{"unknown mode", Network{Mode: "tunnel"}, UnsupportedNetworkMode},
 		{"proxy without endpoint", Network{Mode: NetworkProxyOnly}, UnsupportedNetworkGrant},
 		{"direct sctp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "sctp", Port: 53}}}, UnsupportedNetworkGrant},
-		{"relative socket", Network{Mode: NetworkDeny, SocketPaths: []string{"run/x.sock"}}, UnsupportedNetworkGrant},
+		{"relative socket", Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "run/x.sock", FD: SocketReferenceFD}}}, UnsupportedNetworkGrant},
+		{"unknown delegated grant", Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "/run/x.sock", FD: SocketReferenceFD, Delegated: "container_engine"}}}, UnsupportedNetworkGrant},
 	}
 	for _, tc := range cases {
 		err := Plan{Version: PlanVersion, Network: tc.net}.Validate()
@@ -77,7 +78,7 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 	}
 	for _, n := range []Network{
 		{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1", LoopbackConnect: true, LoopbackConnectPorts: []uint16{5432}},
-		{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}, SocketPaths: []string{"/run/x.sock"}},
+		{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}, SocketGrants: []SocketGrant{{Path: "/run/x.sock", FD: SocketReferenceFD}}},
 		{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}},
 		{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: 443}}},
 		{Mode: NetworkDirectIP},

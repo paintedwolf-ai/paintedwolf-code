@@ -135,13 +135,13 @@ func (r *Registry) HasRunningHandles(sessionID string, handles []string) bool {
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	for handle, proc := range r.jobs.sessions[trim(sessionID)] {
+	for handle, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
 		if len(wanted) > 0 {
 			if _, ok := wanted[handle]; !ok {
 				continue
 			}
 		}
-		if proc.running {
+		if proc.running || proc.pendingDrainLocked() {
 			return true
 		}
 	}
@@ -306,7 +306,7 @@ func (r *Registry) HasPipelineHandles(sessionID string) bool {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	for _, proc := range r.jobs.sessions[trim(sessionID)] {
-		if proc.kind == processKindPipeline && !proc.silent {
+		if (proc.kind == processKindPipeline || proc.kind == processKindProgram) && !proc.silent {
 			return true
 		}
 	}
@@ -322,7 +322,7 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	defer r.jobs.mu.Unlock()
 	var out []JobSnapshot
 	for _, proc := range r.jobs.sessions[trim(sessionID)] {
-		if !proc.running || proc.kind != processKindPipeline || proc.silent {
+		if !proc.running || (proc.kind != processKindPipeline && proc.kind != processKindProgram) || proc.silent {
 			continue
 		}
 		out = append(out, JobSnapshot{
@@ -343,8 +343,8 @@ func (r *Registry) CountLivePTYs(sessionID string) int {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	n := 0
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
-		if proc.running && proc.kind == processKindPTY {
+	for _, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
+		if (proc.running || proc.pendingDrainLocked()) && proc.kind == processKindPTY {
 			n++
 		}
 	}

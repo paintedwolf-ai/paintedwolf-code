@@ -38,58 +38,44 @@ func (s *sourceSettlement) commit(ctx context.Context, row *sourceMutationRow) e
 
 // commitOnce closes its transaction before failure tracking.
 func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRow) (*sourcefeed.StagedDelivery, error) {
-	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan)
+	deliveries, err := s.commitRowsOnce(ctx, []*sourceMutationRow{row})
 	if err != nil {
 		return nil, err
 	}
-	var prepared sourceledger.PreparedRecording
-	if row.Plan.Changed && s.recorder != nil {
-		prepared, err = s.recorder.Prepare(ctx, row.Plan.ledgerInputs(row.ID))
-		if err != nil {
-			return nil, err
-		}
-		defer prepared.Close()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	response := append(json.RawMessage(nil), row.Plan.Response...)
-	updatedAt := time.Now().UTC()
-	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, prepared)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	row.Status, row.Response, row.Error, row.UpdatedAt = sourceMutationCommitted, response, "", updatedAt
-	return delivery, nil
+	return deliveries[0], nil
 }
 
-func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
+func commitSourceMutationTxWithCache(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, completedPlan any, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording, cache *sourceledger.TxBatchCache, emitEvent, deferJournalUpdate bool) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {
 		if prepared != nil {
-			if _, err := prepared.CommitTx(ctx, tx); err != nil {
+			if cache != nil {
+				if batchRec, ok := prepared.(sourceledger.BatchPreparedRecording); ok {
+					if _, err := batchRec.CommitTxWithCache(ctx, tx, cache); err != nil {
+						return nil, err
+					}
+				} else if _, err := prepared.CommitTx(ctx, tx); err != nil {
+					return nil, err
+				}
+			} else if _, err := prepared.CommitTx(ctx, tx); err != nil {
 				return nil, err
 			}
 		}
-		var err error
-		delivery, err = sourcefeed.EmitBatchTx(ctx, tx, row.Plan.sourceChanges())
-		if err != nil {
-			return nil, err
+		if emitEvent {
+			var err error
+			delivery, err = sourcefeed.EmitBatchTx(ctx, tx, row.Plan.sourceChanges())
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	if err := commitSourceHistoryTx(ctx, tx, row.Plan, history, updatedAt); err != nil {
+	if err := commitSourceHistoryTx(ctx, tx, row.Plan, history, quotaBytes, updatedAt); err != nil {
 		return nil, err
 	}
-	completedPlan, err := committedAgentEffectPlan(row.Plan)
-	if err != nil {
-		return nil, err
+	if deferJournalUpdate {
+		return delivery, nil
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE source_mutations SET status=?, response_json=?, error=?, updated_at=?, plan_json=COALESCE(?,plan_json) WHERE id=?`,
+	_, err := tx.ExecContext(ctx, `UPDATE source_mutations SET status=?, response_json=?, error=?, updated_at=?, plan_json=COALESCE(?,plan_json) WHERE id=?`,
 		sourceMutationCommitted, nullableSourceResponse(response), "", updatedAt.Format(time.RFC3339Nano), completedPlan, row.ID)
 	return delivery, err
 }
@@ -105,7 +91,7 @@ func (s *sourceSettlement) noteCommitFailure(ctx context.Context, row *sourceMut
 
 // commitWithoutStore orders writes for the in-memory service.
 func (s *sourceSettlement) commitWithoutStore(ctx context.Context, row *sourceMutationRow) error {
-	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan)
+	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan, row.memory)
 	if err != nil {
 		return err
 	}
@@ -147,11 +133,15 @@ func notifySourceMutation(ctx context.Context, plan sourceMutationPlan) {
 	}
 	collect(plan)
 	for root, paths := range byRoot {
-		repochange.Notify(ctx, repochange.Event{
-			ProjectDir: root, Kind: repochange.WorktreeChanged,
-			Paths: paths, Source: repochange.SourceMutation,
-		})
+		notifySourceRootPaths(ctx, root, paths)
 	}
+}
+
+func notifySourceRootPaths(ctx context.Context, root string, paths []string) {
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: root, Kind: repochange.WorktreeChanged,
+		Paths: paths, Source: repochange.SourceMutation,
+	})
 }
 
 func sourceMutationPaths(plan sourceMutationPlan) []string {

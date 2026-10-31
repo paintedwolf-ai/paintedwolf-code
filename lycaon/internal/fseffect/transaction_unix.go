@@ -5,6 +5,7 @@ package fseffect
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,150 +13,43 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
 
 	"golang.org/x/sys/unix"
 )
 
-type openedRoot struct {
-	path string
-	file *os.File
+var (
+	tempNonceSeed    [8]byte
+	tempNonceCounter atomic.Uint64
+)
+
+func init() {
+	_, _ = rand.Read(tempNonceSeed[:])
 }
 
-type openedParent struct {
-	root *openedRoot
-	file *os.File
-	name string
-	rel  string
-}
+type fdWriter int
 
-type targetAt struct{ parent *openedParent }
-
-func openRoot(path string) (*openedRoot, error) {
-	canonical, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve effect root: %w", err)
-	}
-	fd, err := unix.Open(string(filepath.Separator), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open effect root: %w", err)
-	}
-	for _, component := range strings.Split(strings.TrimPrefix(canonical, string(filepath.Separator)), string(filepath.Separator)) {
-		if component == "" {
-			continue
+func (w fdWriter) Write(p []byte) (int, error) {
+	total := 0
+	for total < len(p) {
+		n, err := unix.Write(int(w), p[total:])
+		if n > 0 {
+			total += n
 		}
-		next, openErr := unix.Openat(fd, component,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		_ = unix.Close(fd)
-		if openErr != nil {
-			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
-				return nil, fmt.Errorf("%w: effect root component %q", ErrSymlink, component)
+		if err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
 			}
-			return nil, fmt.Errorf("open effect root component %q: %w", component, openErr)
+			return total, err
 		}
-		fd = next
-	}
-	return &openedRoot{path: canonical, file: os.NewFile(uintptr(fd), canonical)}, nil
-}
-
-func (r *openedRoot) close() { _ = r.file.Close() }
-
-func openParent(loc Location, create bool, mode os.FileMode) (*openedParent, error) {
-	clean, err := cleanLocation(loc)
-	if err != nil {
-		return nil, err
-	}
-	root, err := openRoot(clean.Root)
-	if err != nil {
-		return nil, err
-	}
-	parts := strings.Split(filepath.ToSlash(clean.Rel), "/")
-	name := parts[len(parts)-1]
-	currentFD, err := unix.Dup(int(root.file.Fd()))
-	if err != nil {
-		root.close()
-		return nil, fmt.Errorf("duplicate effect root: %w", err)
-	}
-	current := os.NewFile(uintptr(currentFD), root.path)
-	parentRel := ""
-	for _, component := range parts[:len(parts)-1] {
-		if component == "" || component == "." || component == ".." {
-			_ = current.Close()
-			root.close()
-			return nil, fmt.Errorf("%w: component %q", ErrInvalidPath, component)
+		if n == 0 {
+			return total, io.ErrShortWrite
 		}
-		created := false
-		nextFD, openErr := unix.Openat(int(current.Fd()), component,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		if openErr != nil && create && errors.Is(openErr, unix.ENOENT) {
-			mkdirErr := unix.Mkdirat(int(current.Fd()), component, uint32(mode.Perm()))
-			if mkdirErr == nil {
-				created = true
-			} else if !errors.Is(mkdirErr, unix.EEXIST) {
-				_ = current.Close()
-				root.close()
-				return nil, fmt.Errorf("create effect directory %q: %w", component, mkdirErr)
-			}
-			nextFD, openErr = unix.Openat(int(current.Fd()), component,
-				unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		}
-		if openErr != nil {
-			_ = current.Close()
-			root.close()
-			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
-				return nil, fmt.Errorf("%w: %q", ErrSymlink, component)
-			}
-			// PathError so os.IsNotExist recognizes a missing component.
-			return nil, &fs.PathError{Op: "open effect directory", Path: component, Err: openErr}
-		}
-		if created {
-			if syncErr := fsyncFD(int(current.Fd())); syncErr != nil {
-				_ = unix.Close(nextFD)
-				_ = current.Close()
-				root.close()
-				return nil, fmt.Errorf("sync effect directory parent: %w", syncErr)
-			}
-		}
-		_ = current.Close()
-		parentRel = filepath.Join(parentRel, component)
-		current = os.NewFile(uintptr(nextFD), filepath.Join(root.path, parentRel))
 	}
-	return &openedParent{root: root, file: current, name: name, rel: parentRel}, nil
-}
-
-func (p *openedParent) close() {
-	_ = p.file.Close()
-	p.root.close()
-}
-
-func (t targetAt) Open() (*os.File, error) {
-	fd, err := unix.Openat(int(t.parent.file.Fd()), t.parent.name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	if err != nil {
-		if errors.Is(err, unix.ELOOP) {
-			return nil, fmt.Errorf("%w: %s", ErrSymlink, t.parent.name)
-		}
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), filepath.Join(t.parent.root.path, t.parent.rel, t.parent.name)), nil
-}
-
-func (t targetAt) Lstat() (os.FileInfo, error) {
-	var st unix.Stat_t
-	if err := unix.Fstatat(int(t.parent.file.Fd()), t.parent.name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return nil, err
-	}
-	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
-		return nil, fmt.Errorf("%w: %s", ErrSymlink, t.parent.name)
-	}
-	f, err := t.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	return f.Stat()
+	return total, nil
 }
 
 // OpenWrite opens a target for command redirection without following symlinks.
@@ -171,161 +65,248 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 	} else {
 		flags |= unix.O_TRUNC
 	}
-	fd, err := unix.Openat(int(parent.file.Fd()), parent.name, flags, uint32(mode.Perm()))
+	fd, err := unix.Openat(parent.fd, parent.name, flags, uint32(mode.Perm()))
 	if err != nil {
 		if errors.Is(err, unix.ELOOP) {
 			return nil, fmt.Errorf("%w: %s", ErrSymlink, parent.name)
 		}
 		return nil, err
 	}
-	return os.NewFile(uintptr(fd), filepath.Join(parent.root.path, parent.rel, parent.name)), nil
+	return os.NewFile(uintptr(fd), filepath.Join(parent.rootPath, parent.rel, parent.name)), nil
 }
 
-func platformReplace(req ReplaceRequest) (Result, error) {
-	return replace(req, nil)
-}
-
-func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
+func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
 	if req.Source == nil {
-		return Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
+		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}
 	parent, err := openParent(req.Location, true, req.dirMode())
 	if err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
-	defer parent.close()
-	tmpName, tmp, held, err := createTempAt(parent, 0o600)
+	initialMode := os.FileMode(0o600)
+	if !req.PreserveMode && req.Mode != 0 {
+		initialMode = chmodMode(req.Mode)
+	}
+	tmpName, tmpFD, held, err := createTempAt(parent, initialMode)
 	if err != nil {
-		return Result{}, err
+		parent.close()
+		return nil, Result{}, err
 	}
-	defer held.retire()
 	closed := false
 	committed := false
-	defer func() {
+	cleanup := func() {
 		if !closed {
-			_ = tmp.Close()
+			_ = unix.Close(tmpFD)
 		}
 		if !committed {
-			_ = unix.Unlinkat(int(parent.file.Fd()), tmpName, 0)
+			_ = unix.Unlinkat(parent.fd, tmpName, 0)
+		}
+		held.retire()
+		parent.close()
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			cleanup()
 		}
 	}()
 	if err := injectAt(inject, stageCreated); err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
 	hasher := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, hasher), req.Source)
+	copyBuf := req.CopyBuffer
+	if len(copyBuf) == 0 {
+		var stackBuf [32 << 10]byte
+		copyBuf = stackBuf[:]
+	}
+	n, err := io.CopyBuffer(io.MultiWriter(fdWriter(tmpFD), hasher), req.Source, copyBuf)
 	result := Result{Bytes: n, SHA256: hex.EncodeToString(hasher.Sum(nil))}
 	if err != nil {
-		return result, fmt.Errorf("write replacement: %w", err)
+		return nil, result, fmt.Errorf("write replacement: %w", err)
 	}
+	var stagedStat unix.Stat_t
+	stagedStatOK := inject == nil && unix.Fstat(tmpFD, &stagedStat) == nil
 	if err := injectAt(inject, stageWritten); err != nil {
-		return result, err
+		return nil, result, err
 	}
 	if req.ReviewStaged != nil {
 		if err := req.ReviewStaged(targetAt{parent: parent}, result); err != nil {
+			return nil, result, err
+		}
+	}
+	ready = true
+	staged := &Replacement{result: result, close: cleanup}
+	staged.publish = func() (Result, error) {
+		unlock := lockTarget(req.Location)
+		defer unlock()
+		if req.ReviewStaged != nil {
+			if err := verifyReviewedParent(req.Location, parent); err != nil {
+				return result, err
+			}
+		}
+		mode, err := req.resolvedMode(targetAt{parent: parent})
+		if err != nil {
 			return result, err
 		}
-	}
-	unlock := lockTarget(req.Location)
-	defer unlock()
-	if req.ReviewStaged != nil {
-		if err := verifyReviewedParent(req.Location, parent); err != nil {
+		targetMode := posixChmodMode(chmodMode(mode))
+		if !stagedStatOK || uint32(stagedStat.Mode)&0o7777 != targetMode {
+			if err := unix.Fchmod(tmpFD, targetMode); err != nil {
+				return result, fmt.Errorf("chmod replacement: %w", err)
+			}
+			stagedStatOK = false
+		}
+		if err := injectAt(inject, stageModeSet); err != nil {
 			return result, err
 		}
-	}
-	mode, err := req.resolvedMode(targetAt{parent: parent})
-	if err != nil {
-		return result, err
-	}
-	if err := tmp.Chmod(chmodMode(mode)); err != nil {
-		return result, fmt.Errorf("chmod replacement: %w", err)
-	}
-	if err := injectAt(inject, stageModeSet); err != nil {
-		return result, err
-	}
-	if err := fssync.File(tmp); err != nil {
-		return result, fmt.Errorf("sync replacement: %w", err)
-	}
-	if err := injectAt(inject, stageFileSynced); err != nil {
-		return result, err
-	}
-	if err := tmp.Close(); err != nil {
-		return result, fmt.Errorf("close replacement: %w", err)
-	}
-	closed = true
-	if err := injectAt(inject, stageFileClosed); err != nil {
-		return result, err
-	}
-	if err := req.precondition(targetAt{parent: parent}, result); err != nil {
-		return result, err
-	}
-	if err := injectAt(inject, stageValidated); err != nil {
-		return result, err
-	}
-	if req.ReviewStaged != nil {
-		stagedParent := *parent
-		stagedParent.name = tmpName
-		if err := verifyTarget(targetAt{parent: &stagedParent}, result); err != nil {
-			return result, fmt.Errorf("reviewed staging changed: %w", err)
+		if err := fsyncFD(tmpFD); err != nil {
+			return result, fmt.Errorf("sync replacement: %w", err)
 		}
+		if err := injectAt(inject, stageFileSynced); err != nil {
+			return result, err
+		}
+		if err := unix.Close(tmpFD); err != nil {
+			return result, fmt.Errorf("close replacement: %w", err)
+		}
+		closed = true
+		if err := injectAt(inject, stageFileClosed); err != nil {
+			return result, err
+		}
+		if err := req.precondition(targetAt{parent: parent}, result); err != nil {
+			return result, err
+		}
+		if err := injectAt(inject, stageValidated); err != nil {
+			return result, err
+		}
+		stagingUnchanged := false
+		if stagedStatOK {
+			var currentStat unix.Stat_t
+			if err := unix.Fstatat(parent.fd, tmpName, &currentStat, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+				stagingUnchanged = currentStat.Dev == stagedStat.Dev &&
+					currentStat.Ino == stagedStat.Ino &&
+					currentStat.Mode == stagedStat.Mode &&
+					currentStat.Nlink == 1 &&
+					currentStat.Size == result.Bytes &&
+					currentStat.Mtim == stagedStat.Mtim &&
+					currentStat.Ctim == stagedStat.Ctim
+			}
+		}
+		if req.ReviewStaged != nil && !stagingUnchanged {
+			stagedParent := *parent
+			stagedParent.name = tmpName
+			if err := verifyTarget(targetAt{parent: &stagedParent}, result, req.CopyBuffer); err != nil {
+				return result, fmt.Errorf("reviewed staging changed: %w", err)
+			}
+		}
+		if err := unix.Renameat(parent.fd, tmpName, parent.fd, parent.name); err != nil {
+			return result, fmt.Errorf("commit replacement: %w", err)
+		}
+		committed = true
+		result.Publication = PublicationReplaced
+		if err := injectAt(inject, stageRenamed); err != nil {
+			return result, err
+		}
+		if err := fsyncFD(parent.fd); err != nil {
+			return result, fmt.Errorf("sync replacement directory: %w", err)
+		}
+		result.Publication = PublicationDurable
+		if err := injectAt(inject, stageDirSynced); err != nil {
+			return result, err
+		}
+		verifiedFast := false
+		if stagingUnchanged {
+			var postStat unix.Stat_t
+			if err := unix.Fstatat(parent.fd, parent.name, &postStat, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+				verifiedFast = postStat.Dev == stagedStat.Dev &&
+					postStat.Ino == stagedStat.Ino &&
+					postStat.Mode == stagedStat.Mode &&
+					postStat.Size == result.Bytes &&
+					postStat.Mtim == stagedStat.Mtim
+			}
+		}
+		if !verifiedFast {
+			if err := verifyTarget(targetAt{parent: parent}, result, req.CopyBuffer); err != nil {
+				return result, err
+			}
+		}
+		result.Publication = PublicationVerified
+		return result, injectAt(inject, stageVerified)
 	}
-	if err := unix.Renameat(int(parent.file.Fd()), tmpName, int(parent.file.Fd()), parent.name); err != nil {
-		return result, fmt.Errorf("commit replacement: %w", err)
+	return staged, result, nil
+}
+
+func posixChmodMode(mode os.FileMode) uint32 {
+	out := uint32(mode.Perm())
+	if mode&os.ModeSetuid != 0 {
+		out |= unix.S_ISUID
 	}
-	committed = true
-	result.Committed = true
-	if err := injectAt(inject, stageRenamed); err != nil {
-		return result, err
+	if mode&os.ModeSetgid != 0 {
+		out |= unix.S_ISGID
 	}
-	if err := fsyncFD(int(parent.file.Fd())); err != nil {
-		return result, fmt.Errorf("sync replacement directory: %w", err)
+	if mode&os.ModeSticky != 0 {
+		out |= unix.S_ISVTX
 	}
-	if err := injectAt(inject, stageDirSynced); err != nil {
-		return result, err
-	}
-	if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
-		return result, err
-	}
-	return result, injectAt(inject, stageVerified)
+	return out
 }
 
 func verifyReviewedParent(location Location, held *openedParent) error {
+	if held.dev != 0 && held.ino != 0 {
+		targetPath := held.rootPath
+		if held.rel != "" {
+			targetPath = filepath.Join(held.rootPath, held.rel)
+		}
+		var after unix.Stat_t
+		if err := unix.Fstatat(unix.AT_FDCWD, targetPath, &after, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			return fmt.Errorf("reviewed directory changed: %w", err)
+		}
+		if held.dev != deviceID(&after) || held.ino != after.Ino {
+			return fmt.Errorf("reviewed directory changed: %s", location.Rel)
+		}
+		return nil
+	}
 	current, err := openParent(location, false, 0)
 	if err != nil {
 		return fmt.Errorf("reviewed directory changed: %w", err)
 	}
 	defer current.close()
-	for _, pair := range [][2]*os.File{{held.root.file, current.root.file}, {held.file, current.file}} {
-		before, err := pair[0].Stat()
-		if err != nil {
-			return err
-		}
-		after, err := pair[1].Stat()
-		if err != nil {
-			return err
-		}
-		if !os.SameFile(before, after) {
-			return fmt.Errorf("reviewed directory changed: %s", location.Rel)
-		}
+	if held.rootDev != current.rootDev || held.rootIno != current.rootIno {
+		return fmt.Errorf("reviewed directory changed: %s", location.Rel)
+	}
+	var before, after unix.Stat_t
+	if err := unix.Fstat(held.fd, &before); err != nil {
+		return err
+	}
+	if err := unix.Fstat(current.fd, &after); err != nil {
+		return err
+	}
+	if before.Dev != after.Dev || before.Ino != after.Ino {
+		return fmt.Errorf("reviewed directory changed: %s", location.Rel)
 	}
 	return nil
 }
 
+func parentDirectoryIdentity(parent *openedParent) (string, error) {
+	return fspath.EntryIdentityAt(parent.fd, ".")
+}
+
 // createTempAt holds the staging name before creating it so no listing sees
 // the entry unregistered; the caller retires the hold after the entry is gone.
-func createTempAt(parent *openedParent, mode os.FileMode) (string, *os.File, stagingHold, error) {
-	directory, err := fspath.EntryIdentityAt(int(parent.file.Fd()), ".")
+func createTempAt(parent *openedParent, mode os.FileMode) (string, int, stagingHold, error) {
+	directory, err := parentDirectoryIdentity(parent)
 	if err != nil {
-		return "", nil, stagingHold{}, fmt.Errorf("identify replacement parent: %w", err)
+		return "", -1, stagingHold{}, fmt.Errorf("identify replacement parent: %w", err)
 	}
-	for range 64 {
+	for attempt := range 64 {
 		var nonce [12]byte
-		if _, err := rand.Read(nonce[:]); err != nil {
-			return "", nil, stagingHold{}, fmt.Errorf("randomize replacement: %w", err)
+		if attempt == 0 {
+			copy(nonce[:8], tempNonceSeed[:])
+			//nolint:gosec // Wrapping 32-bit counter suffix is intentional for temp-name uniqueness.
+			binary.LittleEndian.PutUint32(nonce[8:], uint32(tempNonceCounter.Add(1)))
+		} else if _, err := rand.Read(nonce[:]); err != nil {
+			return "", -1, stagingHold{}, fmt.Errorf("randomize replacement: %w", err)
 		}
 		name := "." + parent.name + "." + hex.EncodeToString(nonce[:]) + ".tmp"
 		held := holdStaging(directory, name)
-		fd, err := unix.Openat(int(parent.file.Fd()), name,
+		fd, err := unix.Openat(parent.fd, name,
 			unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW, uint32(mode.Perm()))
 		if err != nil {
 			held.abandon()
@@ -334,21 +315,75 @@ func createTempAt(parent *openedParent, mode os.FileMode) (string, *os.File, sta
 			continue
 		}
 		if err != nil {
-			return "", nil, stagingHold{}, fmt.Errorf("create replacement: %w", err)
+			return "", -1, stagingHold{}, fmt.Errorf("create replacement: %w", err)
 		}
-		return name, os.NewFile(uintptr(fd), filepath.Join(parent.root.path, parent.rel, name)), held, nil
+		return name, fd, held, nil
 	}
-	return "", nil, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
+	return "", -1, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
 }
 
-func verifyTarget(target Target, want Result) error {
+func verifyTarget(target Target, want Result, buffer []byte) error {
+	if ta, ok := target.(targetAt); ok {
+		fd, err := unix.Openat(ta.parent.fd, ta.parent.name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if err != nil {
+			if errors.Is(err, unix.ELOOP) {
+				err = fmt.Errorf("%w: %s", ErrSymlink, ta.parent.name)
+			}
+			return fmt.Errorf("%w: open destination: %w", ErrPostcondition, err)
+		}
+		defer func() { _ = unix.Close(fd) }()
+		buf := buffer
+		if len(buf) == 0 {
+			var stackBuf [32 << 10]byte
+			buf = stackBuf[:]
+		}
+		if want.Bytes >= 0 && want.Bytes < int64(len(buf)) {
+			n, readErr := unix.Read(fd, buf[:want.Bytes+1])
+			if readErr == nil && int64(n) == want.Bytes {
+				sum := sha256.Sum256(buf[:n])
+				if hex.EncodeToString(sum[:]) != want.SHA256 {
+					return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
+				}
+				return nil
+			}
+			if readErr != nil && !errors.Is(readErr, unix.EINTR) {
+				return fmt.Errorf("%w: read destination: %w", ErrPostcondition, readErr)
+			}
+			if int64(n) > want.Bytes {
+				return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
+			}
+			_, _ = unix.Seek(fd, 0, io.SeekStart)
+		}
+		hasher := sha256.New()
+		var total int64
+		for {
+			n, readErr := unix.Read(fd, buf)
+			if errors.Is(readErr, unix.EINTR) {
+				continue
+			}
+			if n > 0 {
+				total += int64(n)
+				_, _ = hasher.Write(buf[:n])
+			}
+			if readErr != nil {
+				return fmt.Errorf("%w: read destination: %w", ErrPostcondition, readErr)
+			}
+			if n == 0 {
+				break
+			}
+		}
+		if total != want.Bytes || hex.EncodeToString(hasher.Sum(nil)) != want.SHA256 {
+			return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
+		}
+		return nil
+	}
 	f, err := target.Open()
 	if err != nil {
 		return fmt.Errorf("%w: open destination: %w", ErrPostcondition, err)
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.Copy(hasher, f)
+	n, err := io.CopyBuffer(hasher, struct{ io.Reader }{f}, buffer)
 	if err != nil {
 		return fmt.Errorf("%w: read destination: %w", ErrPostcondition, err)
 	}
@@ -356,89 +391,6 @@ func verifyTarget(target Target, want Result) error {
 		return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
 	}
 	return nil
-}
-
-// Remove unlinks a file or empty directory without following symlinks.
-func Remove(req RemoveRequest) error {
-	parent, err := openParent(req.Location, false, 0)
-	if err != nil {
-		return err
-	}
-	defer parent.close()
-	info, err := (targetAt{parent: parent}).Lstat()
-	if err != nil {
-		return err
-	}
-	flags := 0
-	if info.IsDir() {
-		flags = unix.AT_REMOVEDIR
-	}
-	if req.BeforeCommit != nil {
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("conditional remove requires a regular file")
-		}
-		return removeRegularConditionally(parent, req)
-	}
-	if err := unix.Unlinkat(int(parent.file.Fd()), parent.name, flags); err != nil {
-		return err
-	}
-	return fsyncFD(int(parent.file.Fd()))
-}
-
-func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
-	quarantine, err := unusedRemoveName(parent)
-	if err != nil {
-		return err
-	}
-	parentFD := int(parent.file.Fd())
-	directory, err := fspath.EntryIdentityAt(parentFD, ".")
-	if err != nil {
-		return fmt.Errorf("identify removal parent: %w", err)
-	}
-	held := holdStaging(directory, quarantine)
-	if err := unix.Renameat(parentFD, parent.name, parentFD, quarantine); err != nil {
-		held.abandon()
-		return fmt.Errorf("stage removal: %w", err)
-	}
-	defer held.retire()
-	stagedParent := *parent
-	stagedParent.name = quarantine
-	if err := req.BeforeCommit(targetAt{parent: &stagedParent}); err != nil {
-		// A hard-link restore cannot replace a concurrent writer's entry.
-		if restoreErr := unix.Linkat(parentFD, quarantine, parentFD, parent.name, 0); restoreErr != nil {
-			return errors.Join(err, fmt.Errorf("preserve refused removal at %q: %w", quarantine, restoreErr))
-		}
-		if unlinkErr := unix.Unlinkat(parentFD, quarantine, 0); unlinkErr != nil {
-			return errors.Join(err, fmt.Errorf("finish refused removal restore: %w", unlinkErr))
-		}
-		if syncErr := fsyncFD(parentFD); syncErr != nil {
-			return errors.Join(err, syncErr)
-		}
-		return err
-	}
-	if err := unix.Unlinkat(parentFD, quarantine, 0); err != nil {
-		return fmt.Errorf("commit removal: %w", err)
-	}
-	return fsyncFD(parentFD)
-}
-
-func unusedRemoveName(parent *openedParent) (string, error) {
-	for range 64 {
-		var nonce [12]byte
-		if _, err := rand.Read(nonce[:]); err != nil {
-			return "", fmt.Errorf("randomize removal: %w", err)
-		}
-		name := "." + parent.name + "." + hex.EncodeToString(nonce[:]) + ".remove"
-		var st unix.Stat_t
-		err := unix.Fstatat(int(parent.file.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW)
-		if errors.Is(err, unix.ENOENT) {
-			return name, nil
-		}
-		if err != nil {
-			return "", fmt.Errorf("inspect removal staging name: %w", err)
-		}
-	}
-	return "", fmt.Errorf("stage removal: exhausted unique names")
 }
 
 // Rename atomically moves a target beneath one verified root.
@@ -483,11 +435,11 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 	}
 	defer to.close()
 	var sourceStat unix.Stat_t
-	if err := unix.Fstatat(int(from.file.Fd()), from.name, &sourceStat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.Fstatat(from.fd, from.name, &sourceStat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
 	if expected != "" {
-		identity, err := fspath.EntryIdentityAt(int(from.file.Fd()), from.name)
+		identity, err := fspath.EntryIdentityAt(from.fd, from.name)
 		if err != nil {
 			return err
 		}
@@ -499,14 +451,14 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 	if !replace {
 		rename = renameNoReplace
 	}
-	if err := rename(int(from.file.Fd()), from.name, int(to.file.Fd()), to.name); err != nil {
+	if err := rename(from.fd, from.name, to.fd, to.name); err != nil {
 		return err
 	}
-	if err := fsyncFD(int(from.file.Fd())); err != nil {
+	if err := fsyncFD(from.fd); err != nil {
 		return err
 	}
-	if int(from.file.Fd()) != int(to.file.Fd()) {
-		return fsyncFD(int(to.file.Fd()))
+	if from.fd != to.fd {
+		return fsyncFD(to.fd)
 	}
 	return nil
 }
@@ -514,7 +466,7 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 // refuseSymlinkTarget rejects a target entry that is itself a symlink.
 func refuseSymlinkTarget(parent *openedParent) error {
 	var st unix.Stat_t
-	if err := unix.Fstatat(int(parent.file.Fd()), parent.name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.Fstatat(parent.fd, parent.name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return &fs.PathError{Op: "stat effect target", Path: parent.name, Err: err}
 	}
 	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
@@ -544,7 +496,7 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	if err != nil {
 		return ModeUpdateResult{}, err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() && !info.IsDir() {
 		return ModeUpdateResult{}, &fs.PathError{Op: "chmod effect target", Path: parent.name, Err: unix.EINVAL}
 	}
 	if req.BeforeCommit != nil {
@@ -561,8 +513,8 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	return result, nil
 }
 
-// Chown applies ownership to a target reached without symlink traversal.
-func Chown(loc Location, uid, gid int) error {
+// platformChown applies ownership to a target reached without symlink traversal.
+func platformChown(loc Location, uid, gid int) error {
 	parent, err := openParent(loc, false, 0)
 	if err != nil {
 		return err
@@ -571,62 +523,31 @@ func Chown(loc Location, uid, gid int) error {
 	if err := refuseSymlinkTarget(parent); err != nil {
 		return err
 	}
-	if err := unix.Fchownat(int(parent.file.Fd()), parent.name, uid, gid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.Fchownat(parent.fd, parent.name, uid, gid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return &fs.PathError{Op: "chown effect target", Path: parent.name, Err: err}
 	}
 	return nil
 }
 
-// MkdirAll creates every missing component without traversing symlinks.
-func MkdirAll(loc Location, mode os.FileMode) error {
-	clean, err := cleanLocation(loc)
+// platformTimes sets times on a target reached without symlink traversal.
+func platformTimes(loc Location, access, modify *time.Time) error {
+	parent, err := openParent(loc, false, 0)
 	if err != nil {
 		return err
 	}
-	root, err := openRoot(clean.Root)
-	if err != nil {
+	defer parent.close()
+	if err := refuseSymlinkTarget(parent); err != nil {
 		return err
 	}
-	defer root.close()
-	fd, err := unix.Dup(int(root.file.Fd()))
-	if err != nil {
-		return err
-	}
-	current := os.NewFile(uintptr(fd), root.path)
-	defer func() { _ = current.Close() }()
-	anyCreated := false
-	for _, component := range strings.Split(filepath.ToSlash(clean.Rel), "/") {
-		created := false
-		next, openErr := unix.Openat(int(current.Fd()), component,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		if errors.Is(openErr, unix.ENOENT) {
-			mkdirErr := unix.Mkdirat(int(current.Fd()), component, uint32(mode.Perm()))
-			if mkdirErr == nil {
-				created = true
-			} else if !errors.Is(mkdirErr, unix.EEXIST) {
-				return mkdirErr
-			}
-			next, openErr = unix.Openat(int(current.Fd()), component,
-				unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	spec := func(t *time.Time) unix.Timespec {
+		if t == nil {
+			return unix.Timespec{Nsec: utimeOmit}
 		}
-		if openErr != nil {
-			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
-				return fmt.Errorf("%w: %q", ErrSymlink, component)
-			}
-			return openErr
-		}
-		if created {
-			anyCreated = true
-			if err := fsyncFD(int(current.Fd())); err != nil {
-				_ = unix.Close(next)
-				return err
-			}
-		}
-		_ = current.Close()
-		current = os.NewFile(uintptr(next), component)
+		return unix.NsecToTimespec(t.UnixNano())
 	}
-	if !anyCreated {
-		return nil
+	times := []unix.Timespec{spec(access), spec(modify)}
+	if err := unix.UtimesNanoAt(parent.fd, parent.name, times, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return &fs.PathError{Op: "timestamp effect target", Path: parent.name, Err: err}
 	}
-	return fsyncFD(int(current.Fd()))
+	return nil
 }

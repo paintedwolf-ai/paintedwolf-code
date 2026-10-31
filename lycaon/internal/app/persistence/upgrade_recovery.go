@@ -20,17 +20,17 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 		return nil, err
 	}
 	hooks := db.UpgradeHooks{
-		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
+		Before: func(ctx context.Context, source db.UpgradeSource, plan migrations.Plan) error {
 			var sourcePath string
-			if err := source.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&sourcePath); err != nil {
+			if err := source.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&sourcePath); err != nil {
 				return err
 			}
-			previous, _, err := db.ReadAppVersion(ctx, source)
+			previous, _, err := db.ReadAppVersion(ctx, source.DB)
 			if err != nil {
 				return err
 			}
 			return backup.CaptureUpgradeRecovery(ctx, backup.CreateOpts{ConfigDir: filepath.Dir(path), DBPath: sourcePath,
-				SQLDB: source, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
+				SQLDB: source.DB, SharedOriginal: source.SharedOriginal, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
 		},
 		Progress: func(phase migrations.Phase) {
 			b.logger.InfoContext(ctx, "store upgrade", "phase", phase)
@@ -82,7 +82,11 @@ func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Stor
 	}
 	if _, err := os.Stat(recoveryDir); err == nil {
 		b.UpgradeReady = func() error {
-			err := backup.CompleteUpgradeRecovery(dataDir, version.Version)
+			pending, err := database.IntegrityAuditPending(context.WithoutCancel(ctx))
+			if err != nil || pending {
+				return err
+			}
+			err = backup.CompleteUpgradeRecovery(dataDir, version.Version)
 			var prune *backup.RecoveryPruneError
 			if errors.As(err, &prune) {
 				b.logger.WarnContext(ctx, "could not remove older recovery snapshots; cleanup deferred", "error", err)
@@ -107,7 +111,7 @@ func (b *Runtime) captureVersionRecovery(ctx context.Context, source *sql.DB, pl
 		return err
 	}
 	hooks.Progress(migrations.Snapshotting)
-	if err := hooks.Before(ctx, source, plan); err != nil {
+	if err := hooks.Before(ctx, db.UpgradeSource{DB: source}, plan); err != nil {
 		return recoveryStateFailure(err, plan.Source.Revision, "Could not preserve history before the application update.")
 	}
 	return nil

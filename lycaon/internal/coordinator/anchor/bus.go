@@ -90,11 +90,19 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	if !reg.WhenMatches(binding, gc) {
 		return
 	}
-	if id == PhaseEntered {
+	if id == PhaseEntered || id == ProjectRootsChanged || id == ProjectPostureChanged {
 		b.kicks.QueueDeferredLatest(sessionID, id.String(), binding.Render, partial.KickOptions()...)
 		return
 	}
 	b.kicks.QueueDeferred(sessionID, binding.Render, partial.KickOptions()...)
+}
+
+// HasLatest reports whether a latest-lifecycle inform is still queued or staged for sessionID.
+func (b *Bus) HasLatest(sessionID string, id ID) bool {
+	if b == nil || b.kicks == nil {
+		return false
+	}
+	return b.kicks.HasLatest(sessionID, id.String())
 }
 
 // registryFor resolves session bindings before device bindings.

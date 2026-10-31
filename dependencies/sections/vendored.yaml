@@ -20,6 +20,22 @@ rows:
       rationale and update procedure are in
       [`third_party/README.md`](../../third_party/README.md).
 
+  - id: goawk
+    name: '`third_party/goawk`'
+    pins:
+      - go-require lycaon/go.mod github.com/benhoyt/goawk
+    upstream:
+      - go-module github.com/benhoyt/goawk
+    urgency: moderate
+    urgency_reason: |
+      Interprets model-authored `awk` programs inside `command`; execution, environment and
+      file doors are disabled by the host.
+    friction: high
+    friction_reason: |
+      `third_party/goawk.patch` adds program inspection for refused constructs and the work and
+      allocation budget. The rationale and update procedure are in
+      [`third_party/README.md`](../../third_party/README.md).
+
   - id: vulndb
     name: Go vulnerability database (`lycaon/vulndb`)
     pins:

@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/query/query.invocation",
+  "kind": "runtime_service",
+  "workstream": "portable-command-streaming-inputs",
+  "disposition": "retain",
+  "reason": "Retain the measured 348 receiver lines, 18 methods and 14 fields as one query invocation over its actual context, bound arguments, source pins, output and pinned publication lifetime. JSON and YAML interpreters remain in their existing execution owners. The per-file Python yq rewrite holds one admitted output buffer through that file publication and releases it before the next rewrite; it does not add path or publication authority or a second accountant. Passing actual JSON/YAML forms, revision-conflict and in-place publication, resource refusal and cancellation contracts support this bounded decision. Further dependency, signature or measured growth requires renewed review.",
+  "reviewed_commit": "cd89253086b6716de34843ecd06c1a3d516b24e3",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/internal/tools/native/query/forms_test.go": "9f82da6b625eead864759e003608caf3da14b0515eea7ec3d1c633ac5e1eb4f1",
+    "lycaon/internal/tools/native/query/edit_test.go": "51ecee85a5c87ab38fb66da6187f8c76a338bca0127318b59b920f4da3b7759d",
+    "lycaon/internal/tools/native/query/yq_test.go": "735e35f6c52d47b90a196dfa75aeb9df10ec21b4138a8dcf99bbda1347f24e1f",
+    "lycaon/internal/tools/native/query/yq_stream_test.go": "231ecd85c1c807b5366f604ee02d540b1944c4ba2eb853a1a320296486d7b5ce"
+  },
+  "reviewed_shape": "ffab845c97ea06537628b6d0741824ebb67866f60ef9c582848454115e8c2654"
+}

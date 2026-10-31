@@ -5,6 +5,8 @@ import "github.com/lycaon/lycaon/internal/protectedpath"
 // repositoryMetadataGlobs identify repository metadata native tools read but never write.
 var repositoryMetadataGlobs = []string{
 	".git/**",
+	".paintedwolf/recovery",
+	".paintedwolf/recovery/**",
 }
 
 // IsSensitivePath reports credential files and repository metadata, which

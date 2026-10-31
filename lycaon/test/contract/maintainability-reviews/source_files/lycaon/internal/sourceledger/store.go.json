@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/sourceledger/store.go",
+  "kind": "construction",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The 356 code lines retain source-ledger construction, lifetime and private row identity generation beside the existing store. The identity change keeps the opaque UUID representation and all stored references, without adding collaborators, a second recorder, altered authorization or a second allocator. Actual namespace, recovery, attribution and replay suites pass192 sourceledger tests and the related operation suites. Retain this measured ceiling; new dependencies or growth require renewed review. Scale performance remains a separate unqualified requirement.",
+  "reviewed_commit": "41f303d1aab5d4bda48205698fdf1f029ad41f31",
+  "ceiling": 356,
+  "boundaries": {
+    "lycaon/internal/sourceledger/namespace_test.go": "c81b4b257b6329689406b6400f6ac535736c927bf2f0db45b22f265fd106d6cf",
+    "lycaon/internal/sourceledger/recovery_test.go": "05d9a9be569fd10f9fa2ed77b14224b9f35b18a6b6dfdfee2474297527265492",
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54"
+  }
+}

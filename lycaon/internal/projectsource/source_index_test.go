@@ -320,6 +320,20 @@ func TestSourceIndexResolvesCodeHostLinksInTheirCheckout(t *testing.T) {
 	}
 }
 
+func TestCodeHostPathPreferencePreservesCaseOnCaseSensitiveRoots(t *testing.T) {
+	search := sourceIndexSearch{preferred: "src/A.go"}
+	other := rankedSourceFile{entry: SourceIndexEntry{Path: "src/a.go"}, tier: 1, score: 4}
+	search.prefer(&other)
+	if other.tier != 1 {
+		t.Fatalf("case-distinct path received exact preference: %+v", other)
+	}
+	exact := rankedSourceFile{entry: SourceIndexEntry{Path: "src/A.go"}, tier: 1, score: 4}
+	search.prefer(&exact)
+	if exact.tier != -1 {
+		t.Fatalf("exact path lost preference: %+v", exact)
+	}
+}
+
 func TestSourceIndexReportsExistingPathsOutsideEveryRoot(t *testing.T) {
 	catalog := sourceIndexTestCatalog(t)
 	root := t.TempDir()

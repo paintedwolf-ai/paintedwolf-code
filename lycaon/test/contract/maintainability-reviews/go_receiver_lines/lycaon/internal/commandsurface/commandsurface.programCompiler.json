@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/commandsurface/commandsurface.programCompiler",
+  "kind": "algorithm",
+  "workstream": "portable-command-parser",
+  "disposition": "retain",
+  "reason": "Retain exactly the reviewed 746 lines, 34 methods and 14 fields without growth. This compiler owns one bounded pure syntax-validation and typed-lowering algorithm with shared AST, source spans, allocation pool and admitted arithmetic-index context. It owns no operation authority, I/O dispatch or effect lifecycle. Extracting a forwarding context would obscure admission ordering without separating a domain responsibility. Independent review and the complete 157-test commandsurface package, including complete-unit rejection, mutable versus read-only arithmetic indexes, semantic/scratch boundaries and aggregate-state/snapshot lifetimes, support retaining this cohesive shape. Growth, structural changes or changed boundary contracts require renewed review; these ceilings provide no additional headroom.",
+  "reviewed_commit": "23865ec969410486cdd477403303af6631fc060a",
+  "ceiling": 746,
+  "boundaries": {
+    "lycaon/internal/commandsurface/program_parse_test.go": "0c937c8e0e0bc957b982880f275fcf7d9eb01fbb0f559660342903bf447db66f",
+    "lycaon/internal/commandsurface/program_scratch_test.go": "208f5e0f7177f3ff990f6436f60680e5afad84b497ac80753b853eb9eb5f8095",
+    "lycaon/internal/commandsurface/program_retention_test.go": "516f89c235845fd14a56ac37774982b6d1cfe3b39830d74de973a1eeff8c730f"
+  },
+  "reviewed_shape": "c02e59fbeda0d5a0068f374fdf2747f49d5a0aa5125924572ec52be2086c7a81"
+}

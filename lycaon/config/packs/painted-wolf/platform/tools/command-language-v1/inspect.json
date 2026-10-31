@@ -86,7 +86,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cat [OPTIONS] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -178,6 +178,7 @@
           "value_role": "count",
           "fixture_id": "head-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -219,7 +220,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. head [-n COUNT|-COUNT|-c BYTES] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -308,6 +309,7 @@
           "value_role": "count-or-plus-start",
           "fixture_id": "tail-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -349,7 +351,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tail [-n COUNT|+START|-COUNT|-c BYTES] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -479,7 +481,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. nl [-ba|-bt] [-v START] [-w WIDTH] [-s SEP] [--] [PATH]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -507,7 +509,7 @@
       ],
       "example": {
         "program": "nl -ba -w 1 -s ':' -- ./input",
-        "stdout": "1:alpha\n2:beta",
+        "stdout": "1:alpha\n2:beta\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -583,7 +585,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. file [-b] [-i|--mime] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -611,7 +613,7 @@
       ],
       "example": {
         "program": "file -b -- ./input",
-        "stdout": "UTF-8 Unicode text\n",
+        "stdout": "ASCII text\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -709,7 +711,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xxd [-l BYTES] [-s OFFSET] [-p] [-g GROUP] [--] [PATH]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -825,7 +827,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. hexdump -C [-n BYTES] [-s OFFSET] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -929,7 +931,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. shasum [-c] [-a 1|256|512] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1020,7 +1022,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha256sum [-c] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1110,7 +1112,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha1sum [-c] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1200,7 +1202,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha512sum [-c] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1290,7 +1292,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. md5sum [-c] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1406,7 +1408,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. base64 [-d|--decode|-D] [-w WIDTH|-b WIDTH] [--] [PATH]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1513,7 +1515,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. repo-map [--path PATH] [--depth N]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1560,7 +1562,7 @@
           }
         }
       },
-      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "notes": "Report root metadata at --depth 0. Positive depth limits observed descendants relative to --path; omitted depth keeps full subtree rollups. A warming inventory can return immediate children with its state shown.",
       "reuse": {
         "implementation": "lycaon/internal/survey/repo_tool.go",
         "tests": [
@@ -1617,7 +1619,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. summarize --path PATH [--focus TEXT]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1709,7 +1711,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. outline --path PATH",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1777,6 +1779,374 @@
         "outline-operands-valid",
         "outline-rejection",
         "outline-option-path"
+      ]
+    },
+    {
+      "name": "od",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "od [-A d|o|x|n] [-t TYPE]... [-N BYTES] [-j BYTES] [-v] [-bcdosx] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-A",
+            "--address-radix"
+          ],
+          "arity": 1,
+          "value_role": "radix",
+          "fixture_id": "od-option-A-addressradix",
+          "consumption": "fixed",
+          "sample_values": [
+            "x"
+          ]
+        },
+        {
+          "spellings": [
+            "-t",
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "type",
+          "fixture_id": "od-option-t-format",
+          "consumption": "fixed",
+          "sample_values": [
+            "x1"
+          ]
+        },
+        {
+          "spellings": [
+            "-N",
+            "--read-bytes"
+          ],
+          "arity": 1,
+          "value_role": "bytes",
+          "fixture_id": "od-option-N-readbytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "16"
+          ]
+        },
+        {
+          "spellings": [
+            "-j",
+            "--skip-bytes"
+          ],
+          "arity": 1,
+          "value_role": "offset",
+          "fixture_id": "od-option-j-skipbytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--output-duplicates"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-v-outputduplicates",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-b",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-d",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "od-option-s",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. od [-A d|o|x|n] [-t TYPE]... [-N BYTES] [-j BYTES] [-v] [-bcdosx] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf A | od -A x -t x1",
+        "stdout": "000000 41\n000001\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU od over concatenated pinned inputs, 16 bytes per line, little-endian. TYPE is a (named characters), c (escaped characters) or d, o, u, x with an optional size 1, 2, 4 or 8 (C, S, I, L); several -t accumulate in order and align their columns as GNU does. Traditional -b, -c, -d, -o, -s and -x are -t o1, c, u2, o2, d2 and x2; the default is -t o2. -A selects decimal, octal (default), hex or no offsets; -j skips and -N limits bytes, with 0x, leading-zero octal and b/K/M/G suffixes. Repeated lines collapse to * unless -v. Floating point types refuse.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/literal/od.go",
+        "tests": [
+          "lycaon/internal/tools/native/literal/od_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "od-operands-valid",
+        "od-rejection",
+        "od-option-A-addressradix",
+        "od-option-t-format",
+        "od-option-N-readbytes",
+        "od-option-j-skipbytes",
+        "od-option-v-outputduplicates",
+        "od-option-c",
+        "od-option-x",
+        "od-option-b",
+        "od-option-d",
+        "od-option-o",
+        "od-option-s"
+      ]
+    },
+    {
+      "name": "strings",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "strings [-afo] [-n MIN|-MIN] [-t d|o|x] [-e s|S] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--bytes"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "strings-option-n-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "8"
+          ],
+          "shorthand": "numeric"
+        },
+        {
+          "spellings": [
+            "-a",
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "strings-option-a-all",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--print-file-name"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "strings-option-f-printfilename",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--radix"
+          ],
+          "arity": 1,
+          "value_role": "radix",
+          "fixture_id": "strings-option-t-radix",
+          "consumption": "fixed",
+          "sample_values": [
+            "x"
+          ]
+        },
+        {
+          "spellings": [
+            "-e",
+            "--encoding"
+          ],
+          "arity": 1,
+          "value_role": "encoding",
+          "fixture_id": "strings-option-e-encoding",
+          "consumption": "fixed",
+          "sample_values": [
+            "s"
+          ]
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "strings-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. strings [-afo] [-n MIN|-MIN] [-t d|o|x] [-e s|S] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'ab\\0hello\\0' | strings",
+        "stdout": "hello\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU strings over whole pinned inputs: runs of at least MIN (default 4) printable ASCII bytes or tabs, each on its own line; -e S also counts bytes above 127. -t prints each run's offset in a 7-column decimal, octal or hex field and -o is -t o; -f prefixes the file name. -a is the default whole-file scan. Output is screened like every stream.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/literal/strings.go",
+        "tests": [
+          "lycaon/internal/tools/native/literal/strings_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "strings-operands-valid",
+        "strings-rejection",
+        "strings-option-n-bytes",
+        "strings-option-a-all",
+        "strings-option-f-printfilename",
+        "strings-option-t-radix",
+        "strings-option-e-encoding",
+        "strings-option-o"
       ]
     }
   ]

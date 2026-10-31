@@ -42,7 +42,7 @@ func TestSecurityFloorForbidsInsecureDemoShortcuts(t *testing.T) {
 	contractcheck.FailErr(t, "render secure-by-default-run partial", err)
 	for _, want := range []string{
 		"Secrets on command lines",
-		"recorded verbatim in the session, approval card, and any grant",
+		"recorded verbatim in the session, approval card, and access record",
 		"a value you compose may evade screening",
 		"Use a managed secret reference when the host should generate the value",
 		"Logging secrets",

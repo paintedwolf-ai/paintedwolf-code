@@ -9,7 +9,7 @@ import (
 )
 
 // ValidateCapabilityPathAuthority uses the same session boundary as execution.
-func ValidateCapabilityPathAuthority(args map[string]any, scratch string) *toolrejection.ToolReject {
+func ValidateCapabilityPathAuthority(args map[string]any, scratch, output string) *toolrejection.ToolReject {
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil || request == nil {
 		return reject
@@ -20,7 +20,7 @@ func ValidateCapabilityPathAuthority(args map[string]any, scratch string) *toolr
 	}{
 		{"read_path", request.ReadPath, false}, {"write_root", request.WriteRoot, true},
 	} {
-		if capability.path != "" && confine.ControlPlanePathDenied(capability.path, capability.write, scratch) {
+		if capability.path != "" && confine.ControlPlanePathDenied(capability.path, capability.write, scratch, output) {
 			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": capability.path, "capability": capability.name}}
 		}
 	}

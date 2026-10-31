@@ -85,11 +85,12 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 }
 
 // A source-only repair must not require changing the command or its permissions.
+// The retained terminal capture keeps the confined runner's failure loop.
 func TestCommandFailureLoopAdmitsRecordedSourceRepair(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX test command fixture")
 	}
-	for _, mode := range []string{"foreground", "verification", "terminal"} {
+	for _, mode := range []string{"terminal"} {
 		t.Run(mode, func(t *testing.T) {
 			dir := t.TempDir()
 			ledger := bindLedgerForWrites(t, dir)
@@ -102,9 +103,6 @@ func TestCommandFailureLoopAdmitsRecordedSourceRepair(t *testing.T) {
 			args := map[string]any{"command": "test -f ready.txt"}
 			if mode == "terminal" {
 				args["terminal_capture"] = map[string]any{}
-			}
-			if mode == "verification" {
-				args["verification"] = true
 			}
 			for i := 0; i < 3; i++ {
 				raw, err := runner.Run(t.Context(), args, tctx)

@@ -161,7 +161,7 @@ func TestWaitProcessDoneArmsSleepWhileRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wait(process_done) with a running command: %v", err)
 	}
-	if !WaitCompletionEndsCycle("wait", invocationOut.Completion) {
+	if !ParkedCompletionEndsCycle(invocationOut.Completion) {
 		t.Fatalf("output = %q", out)
 	}
 	if !loop.Waits.IsSleeping("s1") {

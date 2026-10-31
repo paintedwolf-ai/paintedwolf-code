@@ -415,9 +415,16 @@ components:
           format: date-time
         tool_name:
           type: string
+          description: >-
+            The running tool, or on awaiting_wake the tool call that parked
+            the session (`wait`, or `command` whose program waits). Absent on
+            a host-armed awaiting_wake lease.
         tool_call_id:
           type: string
           pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >-
+            The call tool_name names. On awaiting_wake it binds the lease to the
+            parked call, whose result carries completion state parked.
         progress:
           x-go-pointer: true
           $ref: events.yaml#/components/schemas/ToolProgress
@@ -429,7 +436,8 @@ components:
             Subscriptions that will end an awaiting_wake lease, in the host's own
             vocabulary (timer, next_worker_done, process_done, …). Present only on
             awaiting_wake, and what the client names rather than inferring a
-            subject from the sleep reason.
+            subject from the sleep reason. A parked command's lease subscribes
+            to program_done, which only the host arms.
         decision_trigger:
           $ref: turn-load.yaml#/components/schemas/TurnLoadTrigger
           description: >-

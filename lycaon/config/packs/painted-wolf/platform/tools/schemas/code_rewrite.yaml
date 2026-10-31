@@ -1,5 +1,5 @@
 tags: [edit, refactor]
-description: "Rewrite a code shape across path or paths[]. $VAR matches one node; $$$VAR a sequence. Narrow bare `$A | $B` patterns (CODE_REWRITE_PATTERN_TOO_BROAD). Parse-breaking rewrites are refused (MUTATION_BROKE_PARSE). For search, use grep structural: true. Track changed, blocked (code/details), failed, unobserved_files and truncated separately: blocked is not no-match, and successful siblings may already be saved. Address each cause without repeating saved mutations; report uncovered scope. dry_run previews without writing. Replaces command: ast-grep / comby / gofmt -r structural rewrite."
+description: "Rewrite a code shape across path or paths[]. $VAR matches one node; $$$VAR a sequence. Narrow bare `$A | $B` patterns (CODE_REWRITE_PATTERN_TOO_BROAD). Parse-breaking rewrites are refused (MUTATION_BROKE_PARSE). For search, use grep structural: true. Track changed, blocked (code/details), failed, unobserved_files and truncated separately: blocked is not no-match, and successful siblings may already be saved. Address each cause without repeating saved mutations; report uncovered scope. dry_run previews without writing."
 schema:
   type: object
   properties:

@@ -85,7 +85,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 	durableContent := projection.content
 	limit := agentpresence.OutputLimit{}
 	if tool == "git_diff" {
-		fitted, reject := projectGitDiff(hostDataDir, tooloutput.Screened(durableContent), maxSpillBytes)
+		fitted, reject := projectGitDiff(ctx, hostDataDir, tooloutput.Screened(durableContent), maxSpillBytes)
 		if reject != nil {
 			return toolResultProjection{reject: reject}
 		}
@@ -120,7 +120,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 		rel := tooloutput.PromoteSpillRelPath(extractOverlayIDFromToolOutput(durableContent))
 		out = tooloutput.WireSpillOverlayPromote(hostDataDir, rel, screened, inline, maxBytes, maxSpillBytes)
 	} else {
-		out = tooloutput.WireSpillToolOutput(hostDataDir, screened, maxBytes, maxSpillBytes)
+		out = tooloutput.WireSpillToolOutput(ctx, hostDataDir, screened, maxBytes, maxSpillBytes)
 	}
 	if out.RejectCode != "" {
 		rejectData := out.RejectData

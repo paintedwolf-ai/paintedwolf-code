@@ -45,29 +45,33 @@ func (c *LRU[T]) ensure() {
 
 // Store inserts or refreshes one key, evicting the least recently touched
 // entries past capacity.
-func (c *LRU[T]) Store(key string, value T) {
+func (c *LRU[T]) Store(key string, value T) []T {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensure()
 	if el, ok := c.entries[key]; ok {
+		prior := el.Value.(*node[T]).value
 		el.Value.(*node[T]).value = value
 		c.order.MoveToFront(el)
-		return
+		return []T{prior}
 	}
 	c.entries[key] = c.order.PushFront(&node[T]{key: key, value: value})
-	c.evictLocked()
+	return c.evictLocked()
 }
 
 // evictLocked drops least-recently-used entries past capacity.
-func (c *LRU[T]) evictLocked() {
+func (c *LRU[T]) evictLocked() []T {
+	var evicted []T
 	for c.order.Len() > c.capacity {
 		oldest := c.order.Back()
 		if oldest == nil {
-			return
+			return evicted
 		}
 		c.order.Remove(oldest)
+		evicted = append(evicted, oldest.Value.(*node[T]).value)
 		delete(c.entries, oldest.Value.(*node[T]).key)
 	}
+	return evicted
 }
 
 // Load returns a value and refreshes its recency.

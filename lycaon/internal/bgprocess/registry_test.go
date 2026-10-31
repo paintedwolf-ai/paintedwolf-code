@@ -498,16 +498,19 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
 	})
 	runner := hostcmd.NewRunner()
+	// The execution deadline includes supervised process startup.
+	executionTimeout := testutil.Timeout(time.Second)
 	handle, err := reg.StartPipeline(context.Background(), bgprocess.PipelineSpec{
 		SessionID: "sess-1", Runner: runner, Mode: bgprocess.JobModeBackground,
-		OriginTool: "verify", Timeout: 50 * time.Millisecond,
+		// The execution deadline covers native launch handoff as well as payload time.
+		OriginTool: "verify", Timeout: time.Second,
 		Request: hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
 			ProjectDir: t.TempDir(),
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 		},
 	})
 	testutil.FailErr(t, "start deadline command", err)
-	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, executionTimeout+testutil.Timeout(5*time.Second))
 	testutil.FailErr(t, "await deadline command", err)
 	if !finished {
 		t.Fatal("deadline command did not finish")

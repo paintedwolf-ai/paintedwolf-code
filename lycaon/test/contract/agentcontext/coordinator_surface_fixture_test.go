@@ -43,7 +43,6 @@ var orchestrationPinnedSurfaces = []string{
 // implementPromptToolsNotOnWire explains prompt-only tool references.
 var implementPromptToolsNotOnWire = map[string]string{
 	"summarize":                      "survey-first-pass partial (tool name in backticks); investigate/synthesis/overlay-promote read surfaces own the tool",
-	"write":                          "product mutations via task() — not coordinator wire",
 	"edit":                           "product mutations via task() — not coordinator wire",
 	"replace_lines":                  "product mutations via task() — not coordinator wire",
 	"restore_version":                "product mutations via task() — not coordinator wire",
@@ -53,23 +52,13 @@ var implementPromptToolsNotOnWire = map[string]string{
 	"held_result":                    "resource-implied control; a held call makes it callable on every surface",
 	"held_stop":                      "resource-implied control; a held call makes it callable on every surface",
 	"verify":                         "host-side test runner — surface override at invoke on investigate/overlay_promote",
-	"git_status":                     "host/repo orientation — not on implement surface SSOT",
-	"git_diff":                       "host/repo orientation — not on implement surface SSOT",
 	"preview_overlay":                "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
 	"reject_overlay":                 "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
-	"delete":                         "orchestrate surfaces delegate destructive I/O via task()",
-	"wc":                             "orchestrate surfaces delegate via task() — investigate has native wc",
-	"stat":                           "orchestrate surfaces delegate via task() — investigate has native stat",
 	"chmod":                          "orchestrate surfaces delegate via task()",
 	"code_rewrite":                   "orchestrate surfaces delegate via task()",
 	"git_commit":                     "orchestrate surfaces delegate commits via task()",
 	"git_restore":                    "orchestrate surfaces delegate via task()",
-	"git_log":                        "orchestrate surfaces delegate git history via task()",
-	"git_show":                       "orchestrate surfaces delegate via task()",
-	"git_blame":                      "orchestrate surfaces delegate via task()",
 	"source_history":                 "orchestrate surfaces delegate via task()",
-	"git_ref":                        "orchestrate surfaces delegate via task()",
-	"git_branches":                   "orchestrate surfaces delegate via task()",
 	"delegate_dispatch":              "workflow delegation legs only (plan_execute) — ambient implement dispatch is task()",
 	"workflow_advance":               "workflow runtime visibility",
 	"workflow_transition":            "workflow runtime visibility",
@@ -100,11 +89,8 @@ func loadImplementSurfaces(t *testing.T) map[string][]string {
 
 // routingPromptToolsAllowedOffWire documents shared prompt references.
 var routingPromptToolsAllowedOffWire = map[string]string{
-	"read":            "synthesis surface only — routing uses list_dir for repo orientation",
-	"grep":            "Lane S sync tools in surface-build; routing wire is list_dir subset",
 	"survey_repo":     "survey-first-pass partial; investigate/synthesis surfaces own bundle survey",
 	"summarize":       "survey-first-pass partial; investigate/synthesis/overlay-promote surfaces own the briefing tool",
-	"find":            "Lane S sync tools in surface-build; routing wire is list_dir subset",
 	"scan_pack":       "core scan policy; routing uses native scan_* drill-down",
 	"reject_overlay":  "overlay-promote / synthesis surfaces own reject; routing prompts describe the model but routing itself dispatches via promote_overlay or task()",
 	"preview_overlay": "overlay-promote / synthesis surfaces own preview; routing prompts describe the model but routing itself doesn't pre-flight overlays",
@@ -114,11 +100,7 @@ var routingPromptToolsAllowedOffWire = map[string]string{
 // orchestrateSharedPromptToolsAllowedOffWire documents shared prompt references.
 var orchestrateSharedPromptToolsAllowedOffWire = map[string]string{
 	"fetch_url":   "coordinator-core external-facts invariant; Lane S surfaces own fetch",
-	"find":        "coordinator-core / surface-build Lane S copy; pinned surfaces stay lean",
-	"grep":        "coordinator-core / surface-build Lane S copy; pinned surfaces stay lean",
 	"survey_repo": "survey-first-pass partial; investigate/synthesis surfaces own bundle survey",
-	"list_dir":    "routing/synthesis survey; overlay_promote uses list_dir/read",
-	"read":        "Lane S spot-check on overlay-promote; park is lifecycle-only",
 	"scan_pack":   "core scan policy; orchestrate surfaces use native scan_* drill-down",
 	"web_search":  "coordinator-core external-facts invariant; Lane S surfaces own search",
 }

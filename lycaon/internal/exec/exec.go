@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // ProcessPriority selects OS scheduling priority for a child process.
@@ -48,11 +49,15 @@ type ExecOpts struct {
 	// Stdout streams complete output to a host-owned consumer instead of capture.
 	// Stderr remains bounded diagnostics. The consumer must not block indefinitely.
 	Stdout io.Writer
+	// HostConsumer marks the final stage's stdout as read by a host consumer
+	// that may stop early, so its SIGPIPE death is an expected closure too.
+	HostConsumer bool
 	// ProcessPriority applies ScanProcessPolicy / engine below-normal posture when set.
 	ProcessPriority ProcessPriority
-	// Started observes each stage's process once it has started, so a service
-	// that answers only that invocation can bind to its kernel identity.
+	// Started observes the launched process before any waiter can reap it.
 	Started func(pid int)
+	// Child sets resource limits and signal dispositions each stage starts with.
+	Child confine.ProcessAttributes
 }
 
 // DefaultVerifyTimeout is the default verify subprocess timeout.

@@ -12,7 +12,8 @@ Use this workflow to give a task a real service it can safely break. The contain
 ## Workflow
 
 1. Name what the task needs — engine, version, and configuration matching the target environment (the Postgres major matters; a mismatched version proves nothing).
-2. Run it detached with a task-scoped container name and the service port published on a loopback high port. Never bind to all interfaces and never reuse a port a real instance may occupy.
+2. Run it detached with a task-scoped container name and the service port published on a loopback high port. Never bind to all interfaces and never reuse a port a real instance may occupy; `lsof -i :PORT` shows whether something already holds it. A service that runs as a local process instead of a container starts as a background job, `nohup CMD &`; read its output with `command_output`.
+
 3. Wait for readiness before touching it: `wait` with `port_ready` on the published loopback port, or `http_ready` on an HTTP health path, settles when the service answers and needs no retry loop. A service-specific probe (`pg_isready`, `redis-cli ping`) runs once under `command` after that. Starting work before ready produces phantom failures.
 4. Seed the minimum schema or fixture data the task needs, and point the code under test at the loopback address through its normal configuration route.
 5. This is the safe substrate for destructive rehearsal — run the migration, load test, or failure drill against the throwaway first, capture the result as evidence, and hand the decision about any real environment back to the user.

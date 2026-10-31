@@ -18,7 +18,7 @@ type OfferedOperations struct {
 func Offer(definitions ...toolcontract.OperationDefinition) OfferedOperations {
 	digests := make(map[string]string, len(definitions))
 	for _, definition := range definitions {
-		digests[definition.Facts().Identity] = definition.Digest()
+		digests[definition.ReadOnlyFacts().Identity] = definition.Digest()
 	}
 	return OfferedOperations{digests: digests, catalogDigest: toolcontract.LanguageCatalogDigest()}
 }
@@ -33,21 +33,31 @@ type Binding[Input, Result any] struct {
 
 func Invoke[Input, Result any](ctx context.Context, offered OfferedOperations, binding Binding[Input, Result], invocation toolcontract.OperationInvocation, input Input) (Result, error) {
 	var zero Result
-	definition := binding.Definition
-	facts := definition.Facts()
-	if definition.Digest() == "" || offered.digests[facts.Identity] != definition.Digest() {
-		return zero, &AdmissionError{Code: "TOOL_NOT_OFFERED", Operation: facts.Identity}
-	}
-	if err := invocation.Validate(); err != nil {
+	if err := offered.Validate(binding.Definition, invocation); err != nil {
 		return zero, err
 	}
-	if invocation.CatalogDigest != offered.catalogDigest || facts.CatalogDigest != offered.catalogDigest {
-		return zero, fmt.Errorf("invocation and offered operation catalog mismatch")
-	}
+	facts := binding.Definition.ReadOnlyFacts()
+
 	if binding.InvokeOwner == nil {
 		return zero, fmt.Errorf("operation %s has no runtime binding", facts.Identity)
 	}
 	return binding.InvokeOwner(ctx, invocation, input)
+}
+
+// Validate checks frozen exposure and invocation identity without invoking an
+// owner. Effect admission uses this same check before any authority request.
+func (offered OfferedOperations) Validate(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
+	facts := definition.ReadOnlyFacts()
+	if definition.Digest() == "" || offered.digests[facts.Identity] != definition.Digest() {
+		return &AdmissionError{Code: "TOOL_NOT_OFFERED", Operation: facts.Identity}
+	}
+	if err := invocation.Validate(); err != nil {
+		return err
+	}
+	if invocation.CatalogDigest != offered.catalogDigest || facts.CatalogDigest != offered.catalogDigest {
+		return fmt.Errorf("invocation and offered operation catalog mismatch")
+	}
+	return nil
 }
 
 // AdmissionError carries an existing public rejection meaning without prose inference.

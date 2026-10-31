@@ -9,8 +9,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -96,7 +98,7 @@ func (m *Service) PromptSurface(
 	surfaces []hostresources.ExecutionSurface,
 	mutationCapable bool,
 ) prompts.AgentPromptSurface {
-	out := prompts.AgentPromptSurface{}
+	out := prompts.AgentPromptSurface{Posture: gate.PostureStrict}
 	if m == nil || sess == nil {
 		return out
 	}
@@ -108,8 +110,36 @@ func (m *Service) PromptSurface(
 	})
 	out.HostResources = hostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
+	out.Posture = m.EffectiveApprovalPosture(ctx, sess)
+	if m.commandExternalHidden != nil {
+		out.CommandExternalHidden = m.commandExternalHidden()
+		if m.externalObserver != nil && strings.TrimSpace(sess.ID) != "" {
+			m.externalObserver(ctx, sess.ID, out.Posture, out.CommandExternalHidden)
+		}
+	}
 	out.Fingerprint = promptSurfaceFingerprint(out)
 	return out
+}
+
+// EffectiveApprovalPosture resolves the session's effective approval posture
+// through settings.ApprovalStore.EffectivePosture, notifying the posture
+// observer when the effective posture changes.
+func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Session) gate.Posture {
+	if m == nil || sess == nil {
+		return gate.PostureStrict
+	}
+	var projectDir string
+	if m.workspace != nil {
+		projectDir, _ = m.workspace.ActivePath(ctx, sess)
+	}
+	if strings.TrimSpace(projectDir) == "" {
+		projectDir = sess.WorkspacePath
+	}
+	posture := m.approvals.EffectivePosture(settings.ProjectRef{ID: sess.ProjectID, Dir: projectDir})
+	if m.postureObserver != nil && strings.TrimSpace(sess.ID) != "" {
+		m.postureObserver(ctx, sess.ID, posture)
+	}
+	return posture
 }
 
 func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {
@@ -136,10 +166,20 @@ func hostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResour
 // stay out of the prompt.
 func promptSurfaceFingerprint(surface prompts.AgentPromptSurface) string {
 	payload, err := json.Marshal(struct {
-		HasSkills            bool
-		HostResources        []prompts.AgentHostResourceView
-		HostResourcesOmitted int
-	}{len(surface.Skills) > 0, surface.HostResources, surface.HostResourcesOmitted})
+		HasSkills             bool
+		HostResources         []prompts.AgentHostResourceView
+		HostResourcesOmitted  int
+		SessionScratchDir     string
+		ReviewsConfinedWrites bool
+		CommandExternalHidden bool
+	}{
+		len(surface.Skills) > 0,
+		surface.HostResources,
+		surface.HostResourcesOmitted,
+		surface.SessionScratchDir,
+		surface.Posture.ReviewsConfinedWrites(),
+		surface.CommandExternalHidden,
+	})
 	if err != nil {
 		return surface.Fingerprint
 	}

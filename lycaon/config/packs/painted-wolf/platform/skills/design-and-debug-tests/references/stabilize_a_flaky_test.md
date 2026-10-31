@@ -4,7 +4,7 @@ Use this workflow when the same code produces different test results. The discip
 
 ## Workflow
 
-1. **Get it to fail on demand first.** Run it repeatedly (`-count=100` or the runner's equivalent), with randomised order, and at the parallelism CI uses. If it will not fail locally, that is itself the finding: the difference between your machine and CI is the lead — usually core count, load, or a slower disk.
+1. **Get it to fail on demand first.** Run it repeatedly (`-count=100` or the runner's equivalent), with randomised order, and at the parallelism CI uses. Bound each run with `timeout DURATION CMD` so a hang ends with status 124 instead of stalling the loop. If it will not fail locally, that is itself the finding: the difference between your machine and CI is the lead — usually core count, load, or a slower disk.
 2. **Bisect the conditions, not the code.** Does it fail alone? Only with the rest of its package? Only in a specific order? Only under `-race` or high parallelism? Each answer eliminates whole categories below, and it is far faster than reading the test.
 3. **Name the category before proposing a fix** — the table below covers nearly all of them. A fix that does not name the mechanism is a guess.
 4. **Fix the mechanism at its root**, in the test or in the code under test, whichever actually holds the nondeterminism. If the *code* is racy, the test is doing its job and the fix belongs in the code.

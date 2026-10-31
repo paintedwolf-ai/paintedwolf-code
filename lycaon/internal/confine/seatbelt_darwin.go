@@ -23,6 +23,9 @@ import "C"
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -64,4 +67,31 @@ func attestConfined() error {
 			"(sandbox_check) — refusing to run unconfined")
 	}
 	return nil
+}
+
+var darwinUserRootsOnce = sync.OnceValue(func() []string {
+	var out []string
+	for _, name := range []C.int{C._CS_DARWIN_USER_TEMP_DIR, C._CS_DARWIN_USER_CACHE_DIR} {
+		n := C.confstr(name, nil, 0)
+		if n == 0 {
+			continue
+		}
+		buf := make([]byte, int(n))
+		if C.confstr(name, (*C.char)(unsafe.Pointer(&buf[0])), n) == 0 {
+			continue
+		}
+		if dir := strings.TrimSpace(strings.TrimRight(string(buf), "\x00")); dir != "" {
+			out = append(out, filepath.Clean(dir))
+		}
+	}
+	return out
+})
+
+// darwinUserRoots returns the per-user Darwin temporary and cache directories
+// reported by confstr(_CS_DARWIN_USER_TEMP_DIR) and confstr(_CS_DARWIN_USER_CACHE_DIR).
+// System shims such as xcrun resolve their scratch state through confstr rather
+// than $TMPDIR, so these OS-convention roots remain writable even when TMPDIR
+// points elsewhere.
+func darwinUserRoots() []string {
+	return darwinUserRootsOnce()
 }

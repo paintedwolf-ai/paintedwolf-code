@@ -1,0 +1,117 @@
+id: plan
+version: 1.0.0
+name: Plan
+description: Research, expand, approve, then build. Optional critique from approve.
+surface_profile: plan
+trigger: /plan
+request:
+  question: What would you like to plan?
+icon: route
+featured: true
+initial_posture: spec
+agents:
+  - { id: coordinator, tools: all, spawn: false }
+  - { id: plan-writer, tools: profile }
+  - { id: repo-researcher, tools: profile }
+  - { id: path-explorer, tools: profile }
+  - { id: plan-reviewer, tools: profile }
+  - { id: plan-reviewer-alt, tools: profile }
+parameters:
+  research_depth:
+    type: depth
+    default: light
+  review_depth:
+    type: depth
+    default: light
+  auto_approve:
+    type: boolean
+    default: "false"
+blueprint:
+  id: plan
+  frontmatter:
+    - scope
+    - breaking
+    - research_depth
+injects:
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: review
+      workflow: plan
+    effect: inform
+    render: coordinator-plan-critique
+    tier: workflow
+phases:
+  - id: research
+    activity_label: Researching the project
+    depth_param: research_depth
+    complete_when: gates_satisfied
+    gates: [research_satisfied]
+    advance:
+      when_gate_met: coordinator
+    controls:
+      closeout: gated
+    next: expand
+  - id: expand
+    activity_label: Writing the plan
+    blueprint_write: true
+    complete_when: gates_satisfied
+    gates: [plan_stub_valid]
+    controls:
+      closeout: gated
+    next: approve
+  - id: approve
+    activity_label: Waiting for your approval
+    human_approval:
+      readiness: plan_stub_valid
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    next: execute
+    transitions:
+      - id: critique
+        to: review
+        actors: [human, coordinator]
+        label: Run critique
+  - id: review
+    activity_label: Reviewing the plan
+    blueprint_write: true
+    depth_param: review_depth
+    on_enter:
+      prompt_coordinator: true
+    review_loop:
+      evidence_key: plan_review
+      iteration_cap: 3
+      verdict_schema:
+        verdict: APPROVED|NEEDS_REVISION
+        bullets: string
+    complete_when: gates_satisfied
+    gates: [evidence_passed:plan_review]
+    next: approve
+  - id: execute
+    activity_label: Building the changes
+    invoke_workflow:
+      workflow_id: implement
+      version: "1.0.0"
+      blueprint: inherit
+    invoke_trigger: phase_enter
+    complete_when: gates_satisfied
+    gates: [child_run_complete]
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+# Content review is host-driven.
+# Critique returns to approval through review.
+controls:
+  phase_advance: host
+  on_pause:
+    hold_pending: true
+    cancel_running: false
+  on_stop:
+    cancel_workers: true
+    abort_delegation: true
+    session_abort: true
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+  - config/packs/painted-wolf/platform/host/posture-rules/spec.yaml

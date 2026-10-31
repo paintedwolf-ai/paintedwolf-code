@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/copy.go",
+  "kind": "algorithm",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The 306 code lines retain one operation-wide copy owner: aggregate admission, source/read lifetime, scalar publication, retained results and draining already-published pages on every return. Traversal and publication pages already have genuine file boundaries. Cancellation, aggregate limits and committed-error contracts support this measured ceiling; outstanding scale timing requirements remain unqualified.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 306,
+  "boundaries": {
+    "lycaon/internal/tools/native/mutation/copy_batch_test.go": "7667086cbfb76723dce85396f1367e4bd428dbfe4155f538e701bfc1419b0452"
+  }
+}

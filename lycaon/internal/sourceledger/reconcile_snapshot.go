@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -84,6 +86,51 @@ func (s *Inventory) reconcileSnapshot(
 		if !known {
 			continue
 		}
+		if head.State == "link" {
+			observed, err := observedLink(rootPath, head.Path)
+			if err != nil {
+				return out, err
+			}
+			if observed != nil && observed.sha == head.ContentSha256 {
+				continue
+			}
+			cause := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[head.RootID], window: window}
+			landed, err := s.recordObservation(ctx, projectID, head, observed, newID(), cause)
+			if err != nil {
+				return out, err
+			}
+			if landed {
+				out.recorded++
+			}
+			// A regular file may have replaced the link. The old link identity
+			// must close before the new file receives its own identity.
+			if landed && observed == nil {
+				entry, found, err := s.snapshots.Identify(ctx, rootPath, head.Path)
+				if err != nil {
+					return out, err
+				}
+				if found {
+					file, err := s.observedVersion(ctx, head.RootID, entry)
+					if errors.Is(err, errVersionMovedOn) {
+						continue
+					}
+					if err != nil {
+						return out, err
+					}
+					created := cause.apply(RecordInput{
+						RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path, EntryKind: EntryKindFile},
+						ProjectID:      projectID, BranchID: sourcebranch.ID(head.BranchID), Op: api.SourceChangeOpCreate,
+						AfterSHA256: file.sha, After: file.bytes, AfterSize: file.size, OperationID: newID(),
+					})
+					recorded, err := s.recordObservedBatch(ctx, []RecordInput{created})
+					if err != nil {
+						return out, err
+					}
+					out.recorded += recorded
+				}
+			}
+			continue
+		}
 		entry, found, err := s.snapshots.Lookup(ctx, snapshot.ID, rootPath, head.Path)
 		if err != nil {
 			return out, err
@@ -143,6 +190,33 @@ func (s *Inventory) reconcileSnapshot(
 	recorded, err := s.recordWindowAdmissions(ctx, admitted)
 	out.recorded += recorded
 	return out, err
+}
+
+func observedLink(rootPath, rel string) (*observedFile, error) {
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	info, err := root.Lstat(rel)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return nil, nil
+	}
+	text, err := root.Readlink(rel)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	raw := []byte(text)
+	return &observedFile{path: rel, kind: EntryKindLink, sha: sourceblob.ContentSHA(raw), bytes: raw, size: int64(len(raw))}, nil
 }
 
 // Compare raw digests, then retained object IDs, then file bytes.

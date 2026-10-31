@@ -8,7 +8,7 @@
       "argv": "jobs",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jobs",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -85,7 +85,7 @@
       "argv": "wait [JOB ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. wait [JOB ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -170,13 +170,14 @@
           "value_role": "signal",
           "fixture_id": "kill-option-s",
           "consumption": "fixed",
+          "shorthand": "word",
           "sample_values": [
             "TERM"
           ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. kill [-s SIGNAL|-SIGNAL] [--] JOB ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -251,10 +252,74 @@
       "aliases": [],
       "family": "process",
       "owner": "processes",
-      "argv": "ps",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ps",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "argv": "ps [-ef|-aux|aux] [-o FORMAT]",
+      "forms": [
+        {
+          "spellings": [
+            "-e",
+            "-A"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ps-option-e",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ps-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ps-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ps-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ps-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "ps-option-o",
+          "consumption": "fixed",
+          "sample_values": [
+            "pid,command"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ps [aux]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -301,7 +366,7 @@
           }
         }
       },
-      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "notes": "Read-only inspection of processes visible to the session, marking session-owned jobs.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/process_tools.go",
         "tests": [
@@ -320,7 +385,293 @@
       },
       "fixture_ids": [
         "ps-operands-valid",
-        "ps-rejection"
+        "ps-rejection",
+        "ps-option-e",
+        "ps-option-f",
+        "ps-option-a",
+        "ps-option-u",
+        "ps-option-x",
+        "ps-option-o"
+      ]
+    },
+    {
+      "name": "pgrep",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "pgrep [-f] [-l] [-a] [-x] [-n] [-o] [--] PATTERN",
+      "forms": [
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-l",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pgrep-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pgrep [-f] [-l] [-a] [-x] [-n] [-o] [--] PATTERN",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-resource-read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "pgrep -f -- server",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Read-only matching of processes visible to the session.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "pgrep-operands-valid",
+        "pgrep-rejection",
+        "pgrep-option-f",
+        "pgrep-option-l",
+        "pgrep-option-a",
+        "pgrep-option-x",
+        "pgrep-option-n",
+        "pgrep-option-o"
+      ]
+    },
+    {
+      "name": "pkill",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "pkill [-s SIGNAL|-SIGNAL] [-f] [-x] [-n] [-o] [--] PATTERN",
+      "forms": [
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "signal",
+          "fixture_id": "pkill-option-s",
+          "consumption": "fixed",
+          "shorthand": "word",
+          "sample_values": [
+            "TERM"
+          ]
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pkill-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pkill-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pkill-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pkill-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pkill [-s SIGNAL|-SIGNAL] [-f] [-x] [-n] [-o] [--] PATTERN",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-owned-process-control"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "pkill -f -- job-fixture",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Signals session-owned processes only; refuses unowned processes with PROCESS_NOT_OWNED.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "pkill-operands-valid",
+        "pkill-rejection",
+        "pkill-option-s",
+        "pkill-option-f",
+        "pkill-option-x",
+        "pkill-option-n",
+        "pkill-option-o"
       ]
     },
     {
@@ -328,7 +679,7 @@
       "aliases": [],
       "family": "process",
       "owner": "processes",
-      "argv": "lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
+      "argv": "lsof [-nPt] [-i :PORT|-iTCP:PORT|-iUDP:PORT] [-sTCP:LISTEN]",
       "forms": [
         {
           "spellings": [
@@ -353,10 +704,40 @@
           "sample_values": [
             "TCP:LISTEN"
           ]
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "lsof-option-t",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "lsof-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "lsof-option-P",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-nPt] [-i :PORT|-iTCP:PORT|-iUDP:PORT] [-sTCP:LISTEN]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -403,13 +784,15 @@
           }
         }
       },
-      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "notes": "Listening TCP sockets and bound, unconnected UDP sockets from the kernel socket tables. Rows print COMMAND PID USER TYPE NAME (-t prints PIDs only; -n and -P are accepted, output is always numeric). This session's listeners are always listed and carry their job identity. For a named port, listeners held outside the session are listed after the host process inspection approval process_list uses; without it, stderr says those holders were not inspected. A holder the host cannot read shows its port with PID unknown. Read-only: kill and pkill still refuse processes this session did not start.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/hostprocess/listeners.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/hostprocess/listeners_test.go",
+          "lycaon/internal/lineage/proc_listeners_test.go",
+          "lycaon/internal/tools/native/command/program_lsof_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "extension": "Reuse the hostprocess port-holder owner behind process_list over the lineage kernel socket tables; no lsof binary, no host-global signal authority.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
@@ -424,18 +807,240 @@
         "lsof-operands-valid",
         "lsof-rejection",
         "lsof-option-i",
-        "lsof-option-s"
+        "lsof-option-s",
+        "lsof-option-t",
+        "lsof-option-n",
+        "lsof-option-P"
+      ]
+    },
+    {
+      "name": "timeout",
+      "operands_end_options": true,
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "timeout [-s SIGNAL] [-k DURATION] [--preserve-status] [--foreground] [-v] DURATION COMMAND [ARG ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--signal"
+          ],
+          "arity": 1,
+          "value_role": "signal",
+          "fixture_id": "timeout-option-s-signal",
+          "consumption": "fixed",
+          "sample_values": [
+            "TERM"
+          ]
+        },
+        {
+          "spellings": [
+            "-k",
+            "--kill-after"
+          ],
+          "arity": 1,
+          "value_role": "seconds",
+          "fixture_id": "timeout-option-k-killafter",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "--preserve-status"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "timeout-option-preservestatus",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--foreground"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "timeout-option-foreground",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "timeout-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "DURATION is decimal seconds with an optional s, m, h or d suffix; 0 disables the timer. COMMAND and its arguments dispatch as a reached command: native names bind natively, other programs launch confined, each with its own receipt.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "COMMAND completed with status 0.",
+        "124": "DURATION expired before COMMAND finished.",
+        "125": "timeout itself failed (missing operand, invalid interval or signal).",
+        "126": "COMMAND was found but could not run.",
+        "127": "COMMAND was not found."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "timeout 5 printf 'alpha\\n'",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Expiry sends SIGNAL (TERM by default) to the external process the command started, through program supervision, and KILL after -k; a native operation is interrupted. Status is 124 unless --preserve-status, which keeps the command's own status (128 plus the signal when a signal ended it). The command envelope's timeout_ms stays the outer bound and always wins. --foreground is accepted; program streams are never a terminal. Waiting for the supervised child or its deadline can park the command call.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/timeout.go",
+        "tests": [
+          "lycaon/internal/commandprogram/timeout_test.go"
+        ],
+        "extension": "Dispatch prefix over the nested-command port with supervision expiry.",
+        "evidence_kind": "Supervision tests with an injected clock"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "timeout-operands-valid",
+        "timeout-rejection",
+        "timeout-option-s-signal",
+        "timeout-option-k-killafter",
+        "timeout-option-preservestatus",
+        "timeout-option-foreground",
+        "timeout-option-v-verbose"
+      ]
+    },
+    {
+      "name": "nohup",
+      "operands_end_options": true,
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "nohup COMMAND [ARG ...]",
+      "forms": [],
+      "operands": "COMMAND and its arguments dispatch as a reached command with SIGHUP ignored for its external process.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "COMMAND completed with status 0.",
+        "125": "nohup itself failed (missing operand).",
+        "126": "COMMAND was found but could not run.",
+        "127": "COMMAND was not found."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "nohup printf 'alpha\\n'",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Program streams are not a terminal, so nothing is written to nohup.out; stdout and stderr stay the program's streams and nohup COMMAND & is an ordinary session job read with command_output. A redirect to nohup.out on the statement is refused.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/command/program_prefixes.go",
+        "tests": [
+          "lycaon/internal/tools/native/command/program_prefixes_test.go"
+        ],
+        "extension": "Dispatch prefix over the nested-command port.",
+        "evidence_kind": "Program entry tests through confined launch"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "nohup-operands-valid",
+        "nohup-rejection"
       ]
     },
     {
       "name": "external",
+      "operands_end_options": true,
       "aliases": [],
       "family": "process",
       "owner": "processes",
       "argv": "external -- PROGRAM [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. external -- PROGRAM [ARG ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

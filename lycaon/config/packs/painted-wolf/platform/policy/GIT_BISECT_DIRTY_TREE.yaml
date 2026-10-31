@@ -1,0 +1,31 @@
+oar: '1.0'
+id: GIT_BISECT_DIRTY_TREE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "GIT_BISECT_DIRTY_TREE"
+effect: block
+copy:
+  what: git bisect start needs a working tree without tracked changes.
+  cause: 'Tracked changes are present{% if paintedwolf.path %}, starting with {{ paintedwolf.path }}{% endif %}.'
+  why: Each bisect step checks out another commit, which would mix those changes into every test.
+  fix: Run the bisect in a separate worktree, for example `git worktree add @scratch/bisect HEAD`, then `cd @scratch/bisect` and start the bisect there.
+  instead: Leave the current changes in place; commit or stash them only if that is part of the task.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_bisect_dirty_tree
+x-paintedwolf-message: Git bisect needs a clean working tree
+x-paintedwolf-scenarios:
+- id: dirty
+  vars:
+    tool: command
+    profile: coordinator
+    path: src/main.go
+  expect_contains:
+  - 'Code: GIT_BISECT_DIRTY_TREE'
+  - git worktree add @scratch/bisect HEAD
+  - src/main.go

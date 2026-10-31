@@ -1,0 +1,20 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/sourcecatalog",
+  "kind": "test_suite",
+  "workstream": "command-content-filters",
+  "disposition": "retain",
+  "reason": "The 71 measured catalog test members combine the published filter-bit equivalence, scope reuse and capture transaction contracts. Keep them beside the private catalog lifetime owner: complete capture acceptance, fixed-storage folding, invalidation and concurrency share these fixtures. The combined suite adds no index fields, cache capacity or production authority; the retained ceiling reflects the union of the independently reviewed suites.",
+  "reviewed_commit": "78d197750fcd15f5cd3cfc790775fdabff2b5001",
+  "ceiling": 71,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/literal_scope_reuse_test.go": "5719daa39b1ca436c7af38b2fc5cf35ddd79d31902864c7c2b5077f58dca73d0",
+    "lycaon/internal/sourcecatalog/literal_matcher_test.go": "a8f2c1b6981ba0d9c0321431431f9c943fc14940e58f77dc19c7d45d9fcbc973",
+    "lycaon/internal/sourcecatalog/literal_stream_test.go": "c745d81a354727a16aff7f52eaa941f6d252f6ef04d4bcacbcbc382e64cadcb5",
+    "lycaon/internal/sourcecatalog/literal_builder_test.go": "b4a93ca6772302c61f3cba58b95b987a33906693d3f8eae0919e8252a2a4e0a4",
+    "lycaon/internal/sourcecatalog/literal_capture_test.go": "decb619f05e92be736423cf5e7dcc63cf7da54af4baa727c0bb6d29fa0466c3a",
+    "lycaon/internal/sourcecatalog/literal_capture_commit_test.go": "2d300d11dd039ba173a239d4445d6f8eae6ba3f403c1c5201389ed8ed54acc00",
+    "lycaon/internal/sourcecatalog/literal_fixture_test.go": "d362e6170db804a08a91e4f26d138225d40d439c384fb271bec7c486f24e45c7"
+  },
+  "reviewed_shape": "4924ec9eafc55aa6f680e0dfb7df133cba7613d199679c6ad7c7476f59283e89"
+}

@@ -41,6 +41,9 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Local.ContainerRecorder = m.loopbackProv
 	}
 	if m != nil && m.projects != nil && tctx.Identity.ProjectID != "" {
+		// The view precedes the roots it qualifies, so a change between them
+		// reads as later than this context.
+		tctx.Source.RootHistory = m.workspace.RootHistory().View(tctx.Identity.ProjectID)
 		roots, err := m.workspace.Roots(ctx, sess)
 		if err != nil {
 			return tools.ToolContext{}, err
@@ -71,6 +74,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 	}
 	if m != nil {
 		tctx.Host.MaxToolSpillBytes = m.limits.Effective(ctx, sess).MaxToolSpillBytes
+		tctx.Host.ModelContextWindow = m.limits.Compaction(ctx, sess).ModelContextWindow
 		tctx.Source.MutationRecorder = m.captures
 		tctx.Source.SourceLedger = m.SourceLedger
 		tctx.Source.History = m.history
@@ -80,7 +84,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Source.SourceMutations = m.sourceMutations
 		tctx.Source.EditorDocuments = m.editorDocuments
 		tctx.Effects.CredentialFiles = m.CredentialFiles
-		tctx.Host.SessionScratchDir = m.execution.ScratchDir(ctx, sess)
+		directories := m.execution.SessionDirectories(ctx, sess)
+		tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir = directories.Scratch, directories.Output
 	}
 	m.attachRepoSizeFact(ctx, &tctx)
 	m.AttachSkillReadRoots(ctx, sess, profileID, machine, &tctx)

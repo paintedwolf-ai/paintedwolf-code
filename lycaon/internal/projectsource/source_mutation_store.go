@@ -61,6 +61,10 @@ func (s *SourceMutationJournal) insert(ctx context.Context, row *sourceMutationR
 		s.memory[row.ID] = &copy
 		return nil
 	}
+	return s.insertWith(ctx, s.db, row)
+}
+
+func (s *SourceMutationJournal) insertWith(ctx context.Context, executor db.DBTX, row *sourceMutationRow) error {
 	if row.Plan.AgentEffect == nil && row.Plan.Agent == nil {
 		person, err := people.Acting(ctx, s.people)
 		if err != nil {
@@ -72,7 +76,7 @@ func (s *SourceMutationJournal) insert(ctx context.Context, row *sourceMutationR
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO source_mutations(id, project_id, kind, input_digest, plan_json, status, error, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+	_, err = executor.ExecContext(ctx, `INSERT INTO source_mutations(id, project_id, kind, input_digest, plan_json, status, error, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
 		row.ID, row.ProjectID, row.Kind, row.InputDigest, string(planJSON), row.Status, row.Error,
 		row.CreatedAt.Format(time.RFC3339Nano), row.UpdatedAt.Format(time.RFC3339Nano))
 	return err
@@ -87,11 +91,15 @@ func (s *SourceMutationJournal) update(ctx context.Context, row *sourceMutationR
 		s.memory[row.ID] = &copy
 		return nil
 	}
+	return updateSourceMutation(ctx, s.db, row)
+}
+
+func updateSourceMutation(ctx context.Context, executor db.DBTX, row *sourceMutationRow) error {
 	planJSON, err := json.Marshal(row.Plan)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE source_mutations SET status=?, response_json=?, error=?, updated_at=?, plan_json=? WHERE id=?`,
+	_, err = executor.ExecContext(ctx, `UPDATE source_mutations SET status=?, response_json=?, error=?, updated_at=?, plan_json=? WHERE id=?`,
 		row.Status, nullableSourceResponse(row.Response), row.Error, row.UpdatedAt.Format(time.RFC3339Nano), string(planJSON), row.ID)
 	return err
 }

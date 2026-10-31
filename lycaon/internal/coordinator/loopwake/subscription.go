@@ -20,10 +20,13 @@ const (
 	WaitTriggerProcessDone    WaitTrigger = "process_done"
 	WaitTriggerHTTPReady      WaitTrigger = "http_ready"
 	WaitTriggerPortReady      WaitTrigger = "port_ready"
+	// WaitTriggerProgramDone ends a parked command call's wait. Only the host
+	// arms it; a wait call cannot subscribe to it.
+	WaitTriggerProgramDone WaitTrigger = "program_done"
 )
 
-// AllWaitTriggers is every trigger the host recognizes. Profile wait_conditions
-// and the conditions.kind schema publish the role-specific subset.
+// AllWaitTriggers is every trigger a wait call may subscribe to. Profile
+// wait_conditions and the conditions.kind schema publish the role-specific subset.
 func AllWaitTriggers() []WaitTrigger {
 	return []WaitTrigger{
 		WaitTriggerTimer,

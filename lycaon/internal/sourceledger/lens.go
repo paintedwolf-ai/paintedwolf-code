@@ -169,7 +169,7 @@ func (s *Walk) QueryWalk(
 				switch state.state {
 				case "absent":
 					group.Tip.State = api.SourceTipStateAbsent
-				case "content":
+				case "content", "link":
 					group.Tip = Tip{State: api.SourceTipStateContent, SHA256: state.contentSHA256}
 				}
 				group.PresentationEffectID = state.presentationEffectID

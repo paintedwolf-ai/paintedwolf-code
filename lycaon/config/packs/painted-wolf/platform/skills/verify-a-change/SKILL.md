@@ -1,6 +1,6 @@
 ---
 name: verify-a-change
-description: Choose useful validation for a change and report outcomes and unchecked areas.
+description: Choose and run the right checks after a code change, triage failing tests or builds, and report what passed and what stayed unverified.
 ---
 
 # Verify a change
@@ -12,4 +12,4 @@ description: Choose useful validation for a change and report outcomes and unche
 5. Validate the material you will deliver. Recheck behavior affected by later edits, but do not chase unrelated concurrent changes merely to refresh a receipt.
 6. A running handle has no verdict. Wait for it instead of duplicating the command. Failed, stopped, timed-out, or boundary-refused runs do not pass. Both execution tools accept the same reviewed capabilities. A stop request is not proof of termination.
 7. Report work delivered separately from validation: checks, outcomes, scope, and limitations. Completed work can have blocked validation. Optional assessment metadata helps explain the decision but is not permission to finish or promote. Explicit workflow test gates remain unmet without current passing evidence.
-8. For a changed user-facing interface, follow visual evidence guidance. For runnable local services or APIs with an available harness, actively exercise changed endpoints with `http_request`, inspect responses, and fix issues before reporting; hermetic unit/integration tests remain primary when no live service is run. Containers are an option when authorized, available, and useful—not a compulsory detour after a failed test.
+8. For a changed user-facing interface, follow visual evidence guidance. For runnable local services or APIs with an available harness, actively exercise changed endpoints with native `curl` in `command` (`-v` shows the request and response headers, `--fail-with-body` keeps an error body, `-w '%{http_code} %{time_total}'` reports the result), inspect responses, and fix issues before reporting; hermetic unit/integration tests remain primary when no live service is run. Containers are an option when authorized, available, and useful—not a compulsory detour after a failed test.

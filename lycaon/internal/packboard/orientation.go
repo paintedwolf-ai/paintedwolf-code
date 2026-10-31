@@ -611,10 +611,10 @@ func FormatDelegationLine(delegations []api.Delegation) string {
 	return ""
 }
 
-// Unknown workspaces retain the file-survey suggestion.
-const GitNoneOrientationLine = "Git: none · verify with read/grep"
+// Unknown workspaces retain the inspection suggestion.
+const GitNoneOrientationLine = "Git: none · verify with command"
 
-// Measured empty workspaces omit the file-survey suggestion.
+// Measured empty workspaces omit the inspection suggestion.
 const GitNoneEmptyRepoOrientationLine = "Git: none"
 
 // RepoEmptyOrientationLine applies only to measured empty workspaces.

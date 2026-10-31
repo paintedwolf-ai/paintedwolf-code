@@ -2,6 +2,7 @@ package projectsource
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -40,9 +41,11 @@ func beginSourceEffect(ctx context.Context) error {
 
 // Each phase reports bounded updates, including within a single large file.
 type sourceWorkProgress struct {
+	mu             sync.Mutex
 	ctx            context.Context
 	phase          string
 	entries, bytes int64
+	files          int64
 	last           time.Time
 }
 
@@ -53,16 +56,26 @@ func newSourceWorkProgress(ctx context.Context, phase string) *sourceWorkProgres
 }
 
 func (p *sourceWorkProgress) noteBytes(n int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.bytes += int64(n)
-	p.report(false)
+	p.reportLocked(false)
 }
 
 func (p *sourceWorkProgress) entry() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.entries++
-	p.report(false)
+	p.reportLocked(false)
 }
 
 func (p *sourceWorkProgress) report(force bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reportLocked(force)
+}
+
+func (p *sourceWorkProgress) reportLocked(force bool) {
 	if force || time.Since(p.last) >= 200*time.Millisecond {
 		reportSourceProgress(p.ctx, p.phase, p.entries, p.bytes)
 		p.last = time.Now()

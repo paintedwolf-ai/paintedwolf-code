@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -39,11 +43,27 @@ type sourceInventory struct {
 	revision uint64
 	// stale marks the last complete generation served while a newer one builds.
 	stale bool
+	// live is used when no complete generation can answer this scope yet.
+	live bool
 }
 
 // walk visits the scope depth-first. A skipped directory costs one visit, so
 // pruning keeps a walk proportional to what it admits.
 func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
+	if inv.live {
+		err := inv.walkLive(ctx, inv.base, visit)
+		if errors.Is(err, errInventoryStop) {
+			return nil
+		}
+		return err
+	}
+	if inv.stale || inv.snapshot.RootBoundary || !repochange.Coverage(inv.rootPath).Complete {
+		err := inv.walkMerged(ctx, inv.base, visit)
+		if errors.Is(err, errInventoryStop) {
+			return nil
+		}
+		return err
+	}
 	var expansionErr error
 	stopped := false
 	err := inv.snapshot.Walk(ctx, inv.catalogRoot, inv.catalogDir, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
@@ -54,6 +74,13 @@ func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.En
 			entry.Depth = catalogPathDepth(entry.Path)
 		}
 		action := visit(entry)
+		if action == sourcecatalog.WalkContinue && entry.Boundary {
+			expansionErr = inv.walkLive(ctx, entry.Path, visit)
+			if expansionErr != nil {
+				return sourcecatalog.WalkStop
+			}
+			return sourcecatalog.WalkSkip
+		}
 		if action != sourcecatalog.WalkContinue || !entry.IsDir || entry.IsSymlink || inv.catalog == nil || inv.catalog.BoundaryPath(ctx, inv.rootPath, entry.Path, true) == "" {
 			return action
 		}
@@ -78,7 +105,105 @@ func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.En
 		}
 		return sourcecatalog.WalkSkip
 	})
-	return errors.Join(err, expansionErr)
+	err = errors.Join(err, expansionErr)
+	if errors.Is(err, errInventoryStop) {
+		return nil
+	}
+	return err
+}
+
+var errInventoryStop = errors.New("inventory walk stopped")
+
+// walkMerged uses catalog entries for known paths and live directory listings for
+// paths the generation cannot prove complete. The live listing also removes
+// deleted indexed entries before a query can present them.
+func (inv sourceInventory) walkMerged(ctx context.Context, dir string, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
+	full := filepath.Join(inv.rootPath, filepath.FromSlash(dir))
+	live, err := sandbox.SurveyReadDir(full, dir, sandbox.SurveyOptions{IncludeHidden: true})
+	if err != nil {
+		return err
+	}
+	catalogDir := dir
+	if inv.rebased {
+		if dir == inv.base {
+			catalogDir = "."
+		} else {
+			catalogDir = catalogRelativePath(dir, inv.base)
+		}
+	}
+	indexed, _ := inv.snapshot.Listing(inv.catalogRoot, catalogDir)
+	byName := make(map[string]sourcecatalog.Entry, len(indexed))
+	for _, entry := range indexed {
+		byName[entry.Name] = entry
+	}
+	for _, child := range live {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		info, err := child.DirEntry.Info()
+		if err != nil {
+			return err
+		}
+		rel := child.Rel
+		entry, indexed := byName[child.DirEntry.Name()]
+		if inv.rebased && indexed {
+			entry.Path = path.Join(inv.base, entry.Path)
+			entry.Parent = normalizeCatalogPath(path.Dir(entry.Path))
+			entry.Depth = catalogPathDepth(entry.Path)
+		}
+		if !indexed || entry.Size != info.Size() || entry.Mode != uint32(info.Mode()) || !entry.Modified.Equal(info.ModTime().UTC()) {
+			entry = sourcecatalog.Entry{RootID: inv.rootID, Path: rel, Parent: normalizeCatalogPath(path.Dir(rel)), Name: child.DirEntry.Name(),
+				Depth: catalogPathDepth(rel), IsDir: child.IsDir, IsSymlink: info.Mode()&os.ModeSymlink != 0,
+				Size: info.Size(), Mode: uint32(info.Mode()), Modified: info.ModTime().UTC()}
+			if entry.IsDir {
+				entry.IsVCSRoot = gitrepo.IsRoot(child.Abs)
+			}
+		}
+		switch visit(entry) {
+		case sourcecatalog.WalkStop:
+			return errInventoryStop
+		case sourcecatalog.WalkSkip:
+			continue
+		case sourcecatalog.WalkContinue:
+		}
+		if entry.IsDir && !entry.IsSymlink {
+			if err := inv.walkMerged(ctx, rel, visit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (inv sourceInventory) walkLive(ctx context.Context, base string, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
+	full := filepath.Join(inv.rootPath, filepath.FromSlash(base))
+	stopped := false
+	err := sandbox.SurveyWalk(ctx, full, sandbox.SurveyOptions{IncludeHidden: true}, func(item sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+		info, err := item.DirEntry.Info()
+		if err != nil {
+			return sandbox.SurveyContinue, err
+		}
+		rel := path.Join(base, item.Rel)
+		entry := sourcecatalog.Entry{RootID: inv.rootID, Path: rel, Parent: normalizeCatalogPath(path.Dir(rel)), Name: path.Base(rel),
+			Depth: catalogPathDepth(rel), IsDir: item.IsDir, IsSymlink: item.IsSymlink,
+			Size: info.Size(), Mode: uint32(info.Mode()), Modified: info.ModTime().UTC()}
+		if item.IsDir {
+			entry.IsVCSRoot = gitrepo.IsRoot(item.Abs)
+		}
+		switch visit(entry) {
+		case sourcecatalog.WalkStop:
+			stopped = true
+			return sandbox.SurveyStop, nil
+		case sourcecatalog.WalkSkip:
+			return sandbox.SurveySkipDir, nil
+		default:
+			return sandbox.SurveyContinue, nil
+		}
+	})
+	if stopped {
+		return errInventoryStop
+	}
+	return err
 }
 
 // depth is an entry's depth below the scope; the scope's children are depth 1.
@@ -137,9 +262,8 @@ func snapshotInventory(
 			if current.State == sourcecatalog.StateReady {
 				return reportedInventory(ctx, scope, current, true), nil
 			}
-			return sourceInventory{}, safecmd.Reject("SURVEY_INVENTORY_WARMING", map[string]any{
-				"timeout_ms": safecmd.SurveyCatalogJoin.Milliseconds(),
-			})
+			scope.live = true
+			return scope, nil
 		}
 		return sourceInventory{}, err
 	}

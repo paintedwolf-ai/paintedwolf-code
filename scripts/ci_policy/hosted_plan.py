@@ -24,6 +24,8 @@ CONTAINER_TARGET = "den:webkit:atspi"
 BROWSER_TARGET = "test:confine:linux"
 # Drives the native repository tools against committed distribution fixtures.
 REPOSITORY_TOOLS_TARGET = "test:runner"
+# Runs the reference userland images, which an offline lane must find already built and verified.
+USERLANDS_TARGET = "test:userlands"
 # The protected launch leg builds and runs a GTK desktop under a display.
 LAUNCH_PACKAGE = "./internal/launchguard"
 # Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
@@ -202,6 +204,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
+                           "userlands": USERLANDS_TARGET in lane["targets"],
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
                            or "scripts:coverage:changes" in lane["targets"] and scripts_python_in_scope(scope),

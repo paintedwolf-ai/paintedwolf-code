@@ -75,7 +75,7 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", toolkit.MissingArg("new_string")
 	}
 	if oldString == newString {
-		return "", editArgsConflict("old_string and new_string must differ")
+		return "", EditArgsConflict("old_string and new_string must differ")
 	}
 	if err := assertProfileWriteScope(ctx, t.Boundary, tctx, path, "edit"); err != nil {
 		return "", writeScopeReject(ctx, t.Boundary, path, tctx.ProfileID(), "edit", err)
@@ -108,6 +108,9 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", editOldStringNotFound(path, old, oldString, newString)
 		case occurrences > 1 && !replaceAll:
 			return "", editOldStringAmbiguous(path, occurrences)
+		}
+		if err := checkAndAdvanceReadSpans(&st, old, oldString, newString, replaceAll, path); err != nil {
+			return "", err
 		}
 		replaced := 1
 		newContent := strings.Replace(old, oldString, newString, 1)

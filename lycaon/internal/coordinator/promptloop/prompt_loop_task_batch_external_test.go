@@ -182,7 +182,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
 	})
-	reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
+	reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file-body", nil
 	})
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
@@ -190,7 +190,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 			Pattern: ".*", FollowUpText: "continued",
 			ToolCalls: []llm.MockToolCall{
 				{ID: "tc1", Name: "task", Args: taskCallArgs("implementer", "work")},
-				{ID: "tc2", Name: "read", Args: map[string]any{"path": "README.md"}},
+				{ID: "tc2", Name: "command", Args: map[string]any{"command": "cat README.md"}},
 			},
 		},
 	}})

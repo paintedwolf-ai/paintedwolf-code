@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/httpaction/httpaction.requestSpec",
+  "kind": "data_record",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "One parsed native HTTP request carries its reviewed recipient through final secret screening and dispatch. The private binding is the authority consumed by the Unix transport; it cannot be reconstructed from either pathname. Retain the request shape so recipient and connection cannot diverge. Freeze this reviewed shape at 16 fields; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/httpaction/unix_socket_test.go": "7f6c3cd6c52357e88d12ff4e54a9e30ed953c84cf0ad053cc3345553214e0335"
+  },
+  "reviewed_shape": "73ac1c0b4667319d360e0f5b37f5f10fafb30027c629e9cd630aac41de72dea4"
+}

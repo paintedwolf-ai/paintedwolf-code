@@ -176,6 +176,8 @@ func (m *Loop) PublishWaitLease(ctx context.Context, sessionID string, lease loo
 		Kind:         api.ActivityKindAwaitingWake,
 		Status:       status,
 		StartedAt:    lease.StartedAt,
+		ToolName:     lease.Tool,
+		ToolCallID:   lease.ToolCallID,
 		WaitTriggers: triggers,
 	})
 }

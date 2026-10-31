@@ -21,20 +21,30 @@ type preparedOperation struct {
 	status        string
 	copied        int64
 	previewBytes  int64
+	nestedHeads   map[string]string
 	expectedIndex operationIndex
 	expectedState RepositoryState
 }
 
+type operationVisitKey struct{}
+
+func recordOperationVisits(ctx context.Context, count int) {
+	if observe, ok := ctx.Value(operationVisitKey{}).(func(int)); ok {
+		observe(count)
+	}
+}
+
 func (p *preparedOperation) close() { _ = os.RemoveAll(p.scratch) }
 
-func (m *Manager) prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
+func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
 	plan, err := planOperation(ctx, repo.Root, req)
 	if err != nil {
 		return nil, err
 	}
-	p := &preparedOperation{operationPlan: plan, inputs: map[string]RestoreContent{}}
+	p := &preparedOperation{operationPlan: plan, inputs: map[string]RestoreContent{}, nestedHeads: map[string]string{}}
 	p.result = OperationResult{Available: true, Paths: []string{}}
-	p.result.Before, err = readRepositoryState(ctx, repo.Root)
+	var rawStatus string
+	p.result.Before, rawStatus, err = readRepositoryStateAndStatus(ctx, repo.Root)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +57,16 @@ func (m *Manager) prepareOperation(ctx context.Context, repo gitrepo.Repo, req O
 	if err := p.captureMetadata(repo); err != nil {
 		return nil, err
 	}
-	raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if err != nil {
-		return nil, err
+	if len(p.addPaths()) == 0 && p.inputs[filepath.Join(repo.GitDir, "index")].SHA256 == p.result.Before.Index {
+		p.status = rawStatus
+	} else {
+		raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), p.statusArgs()...)
+		if err != nil {
+			return nil, err
+		}
+		p.status = string(raw)
 	}
-	p.status = string(raw)
+	recordOperationVisits(ctx, strings.Count(p.status, "\x00"))
 	p.scratch, err = os.MkdirTemp("", "git-operation-*")
 	if err != nil {
 		return nil, err
@@ -68,12 +83,15 @@ func (m *Manager) prepareOperation(ctx context.Context, repo gitrepo.Repo, req O
 }
 
 func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) error {
-	replacements, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "for-each-ref", "--count=1", "--format=%(refname)", "refs/replace/")
-	if err != nil {
-		return err
-	}
-	if len(replacements) != 0 {
-		return operationRefusal("replacement_history_unsupported")
+	replaceEntries, _ := os.ReadDir(filepath.Join(repo.CommonDir, "refs", "replace"))
+	if _, packedErr := os.Lstat(filepath.Join(repo.CommonDir, "packed-refs")); len(replaceEntries) > 0 || packedErr == nil {
+		replacements, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "for-each-ref", "--count=1", "--format=%(refname)", "refs/replace/")
+		if err != nil {
+			return err
+		}
+		if len(replacements) != 0 {
+			return operationRefusal("replacement_history_unsupported")
+		}
 	}
 	if _, err := os.Lstat(filepath.Join(repo.CommonDir, "info", "grafts")); err == nil {
 		return operationRefusal("replacement_history_unsupported")
@@ -92,15 +110,22 @@ func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) e
 			return operationRefusal("merge_in_progress")
 		}
 	}
-	if len(state.Conflicts) > 0 && !(r.Kind == "merge" && (r.Action == "continue" || r.Action == "abort")) {
+	_, sequenceKind := sequenceKinds[r.Kind]
+	if len(state.Conflicts) > 0 && !(r.Kind == "merge" && (r.Action == "continue" || r.Action == "abort")) && !(sequenceKind && r.continuing()) && !r.indexOnly() && !(r.Kind == "reset" && r.Mode == "hard") {
 		return operationRefusal("unresolved_conflicts", state.Conflicts...)
 	}
-	for _, name := range []string{"rebase-merge", "rebase-apply", "sequencer", "CHERRY_PICK_HEAD", "REVERT_HEAD"} {
-		if _, err := os.Lstat(filepath.Join(repo.GitDir, name)); err == nil {
-			return operationRefusal("operation_in_progress", name)
-		} else if !os.IsNotExist(err) {
-			return err
+	inProgress, err := sequenceInProgress(repo)
+	if err != nil {
+		return err
+	}
+	_, sequence := sequenceKinds[r.Kind]
+	switch {
+	case sequence && r.continuing():
+		if inProgress != r.Kind {
+			return operationRefusal("no_" + strings.ReplaceAll(r.Kind, "-", "_") + "_in_progress")
 		}
+	case inProgress != "" && !r.indexOnly() && !(r.Kind == "reset" && r.Mode == "hard"):
+		return operationRefusal("operation_in_progress", inProgress)
 	}
 	return nil
 }
@@ -140,8 +165,10 @@ func (p *preparedOperation) capture(path string) error {
 
 func (p *preparedOperation) rehearse(ctx context.Context, repo gitrepo.Repo) error {
 	scratch := filepath.Join(p.scratch, "repository")
-	if err := p.checkTreeBudget(ctx, repo.Root); err != nil {
-		return err
+	if len(p.addPaths()) == 0 {
+		if err := p.checkTreeBudget(ctx, repo.Root); err != nil {
+			return err
+		}
 	}
 	if err := p.prepareScratch(ctx, repo, scratch); err != nil {
 		return err
@@ -164,30 +191,45 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 		return err
 	}
 	// Materialize the baseline before copying the live index and dirty files.
-	if _, err := restoreGit(ctx, scratch, p.opts, "checkout", "--detach", p.result.Before.Head, "--"); err != nil {
-		return err
+	if p.result.Before.Head != "" && len(p.addPaths()) == 0 {
+		if _, err := restoreGit(ctx, scratch, p.opts, "checkout", "--detach", p.result.Before.Head, "--"); err != nil {
+			return err
+		}
 	}
 	if p.result.Before.Branch != "" {
 		ref := "refs/heads/" + p.result.Before.Branch
-		if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, p.result.Before.Head); err != nil {
-			return err
+		if p.result.Before.Head != "" {
+			if err := writeScratchRef(scratch, ref, p.result.Before.Head); err != nil {
+				if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, p.result.Before.Head); err != nil {
+					return err
+				}
+			}
 		}
-		if _, err := restoreGit(ctx, scratch, p.opts, "symbolic-ref", "HEAD", ref); err != nil {
-			return err
+		if err := writeScratchRef(scratch, "HEAD", "ref: "+ref); err != nil {
+			if _, err := restoreGit(ctx, scratch, p.opts, "symbolic-ref", "HEAD", ref); err != nil {
+				return err
+			}
 		}
 	}
 	for ref, oid := range p.refs {
 		if strings.HasPrefix(ref, "refs/heads/") && oid != "" {
-			if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, oid); err != nil {
-				return err
+			if err := writeScratchRef(scratch, ref, oid); err != nil {
+				if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, oid); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	if err := p.copyIndex(ctx, repo, scratch); err != nil {
 		return err
 	}
-	// Preserve merge control state only for the named continuation or abort.
-	if p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort") {
+	if _, sequence := sequenceKinds[p.request.Kind]; sequence && p.request.continuing() {
+		if err := p.copySequenceState(repo, scratch); err != nil {
+			return err
+		}
+	}
+	// Preserve merge control state only for the named continuation, abort, or staging.
+	if (p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort")) || p.request.indexOnly() {
 		for _, name := range []string{"MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "ORIG_HEAD", "MERGE_AUTOSTASH", "AUTO_MERGE"} {
 			if err := p.copyFile(filepath.Join(repo.GitDir, name), filepath.Join(scratch, ".git", name)); err != nil {
 				return err
@@ -198,14 +240,39 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 }
 
 func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.Repo, scratch string) ([]string, error) {
-	dirty, err := gitPaths(ctx, repo.Root, "ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z")
+	if p.request.Kind == "stage" || (p.status == "" && len(p.addPaths()) == 0) {
+		return nil, nil
+	}
+	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
+	if paths := p.addPaths(); len(paths) > 0 {
+		dirtyArgs = append(dirtyArgs, "--")
+		dirtyArgs = append(dirtyArgs, paths...)
+	}
+	dirty, err := gitPaths(ctx, repo.Root, dirtyArgs...)
 	if err != nil {
 		return nil, err
 	}
-	staged, err := gitPaths(ctx, repo.Root, "diff", "--name-only", "--no-renames", "-z", "HEAD", "--")
+	recordOperationVisits(ctx, len(dirty))
+	if paths := p.addPaths(); len(paths) > 0 {
+		trackedArgs := append([]string{"ls-files", "--cached", "-z", "--"}, paths...)
+		tracked, err := gitPaths(ctx, repo.Root, trackedArgs...)
+		if err != nil {
+			return nil, err
+		}
+		recordOperationVisits(ctx, len(tracked))
+		dirty = append(dirty, tracked...)
+	}
+	var staged []string
+	stagedArgs := []string{"diff", "--name-only", "--no-renames", "-z", "HEAD", "--"}
+	if p.result.Before.Head == "" {
+		stagedArgs = []string{"ls-files", "--cached", "-z", "--"}
+	}
+	stagedArgs = append(stagedArgs, p.addPaths()...)
+	staged, err = gitPaths(ctx, repo.Root, stagedArgs...)
 	if err != nil {
 		return nil, err
 	}
+	recordOperationVisits(ctx, len(staged))
 	dirty = uniquePaths(append(dirty, staged...))
 	for _, path := range dirty {
 		if err := assertOperationParents(repo.Root, path); err != nil {
@@ -213,6 +280,14 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 		}
 	}
 	for _, path := range dirty {
+		if p.request.Kind == "add" {
+			if info, err := os.Lstat(filepath.Join(repo.Root, path)); err == nil && info.IsDir() {
+				if err := p.copyNestedRepo(ctx, repo.Root, scratch, path); err != nil {
+					return nil, err
+				}
+				continue
+			}
+		}
 		if err := p.captureWorkspace(repo.Root, path); err != nil {
 			return nil, err
 		}
@@ -224,7 +299,13 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 }
 
 func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Repo, scratch string, dirty []string) error {
-	before, err := readRepositoryState(ctx, scratch)
+	var before RepositoryState
+	var err error
+	if !p.result.Before.Dirty && len(p.result.Before.Conflicts) == 0 && len(p.addPaths()) == 0 && len(dirty) == 0 {
+		before, err = readRepositoryMetadata(ctx, scratch)
+	} else {
+		before, err = readRepositoryState(ctx, scratch)
+	}
 	if err != nil {
 		return err
 	}
@@ -249,20 +330,25 @@ func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Rep
 	if p.result.Status == "failed" {
 		return nil
 	}
-	// Conflicting operations are reviewed too: conflict markers are file effects.
-	candidates := append([]string{}, dirty...)
-	changed, err := gitPaths(ctx, scratch, "diff", "--name-only", "--no-renames", "-z", p.result.Before.Head, after.Head, "--")
-	if err != nil {
-		return err
-	}
-	candidates = append(candidates, changed...)
-	changed, err = gitPaths(ctx, scratch, "ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z")
-	if err != nil {
-		return err
-	}
-	candidates = append(candidates, changed...)
-	if err := p.prepareFiles(repo.Root, scratch, uniquePaths(candidates)); err != nil {
-		return err
+	if !p.request.indexOnly() {
+		// Conflicting operations are reviewed too: conflict markers are file effects.
+		candidates := append([]string{}, dirty...)
+		if p.result.Before.Head != "" && after.Head != "" && p.result.Before.Head != after.Head {
+			changed, err := gitPaths(ctx, scratch, "diff", "--name-only", "--no-renames", "-z", p.result.Before.Head, after.Head, "--")
+			if err != nil {
+				return err
+			}
+			candidates = append(candidates, changed...)
+		}
+		changedArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
+		changed, err := gitPaths(ctx, scratch, changedArgs...)
+		if err != nil {
+			return err
+		}
+		candidates = append(candidates, changed...)
+		if err := p.prepareFiles(repo.Root, scratch, uniquePaths(candidates)); err != nil {
+			return err
+		}
 	}
 	indexAfter, err := readOperationIndex(ctx, scratch, hermeticOpts(0))
 	if err != nil {
@@ -272,6 +358,9 @@ func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Rep
 		return err
 	}
 	p.result.Paths = uniquePaths(p.result.Paths)
+	if !hasOperationAttributes(repo, scratch, p.result.Paths, indexBefore, indexAfter) {
+		return nil
+	}
 	if err := checkOperationFilters(ctx, repo.Root, p.result.Paths); err != nil {
 		return err
 	}
@@ -347,21 +436,28 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 			return operationRefusal("repository_changed_during_review", path)
 		}
 	}
+	for path, expected := range p.nestedHeads {
+		actual, err := ResolveOptionalObject(ctx, filepath.Join(repo.Root, path), "HEAD^{commit}")
+		if err != nil || actual != expected {
+			return operationRefusal("repository_changed_during_review", path)
+		}
+	}
 
-	state, err := readRepositoryState(ctx, repo.Root)
+	state, err := readRepositoryMetadata(ctx, repo.Root)
 	if err != nil {
 		return err
 	}
 	if state.Head != p.result.Before.Head || state.Branch != p.result.Before.Branch || state.Stash != p.result.Before.Stash || state.MergeHead != p.result.Before.MergeHead {
 		return operationRefusal("repository_changed_during_review")
 	}
-	raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), p.statusArgs()...)
 	if err != nil {
 		return err
 	}
 	if string(raw) != p.status {
 		return operationRefusal("repository_changed_during_review")
 	}
+	recordOperationVisits(ctx, strings.Count(string(raw), "\x00"))
 	for _, file := range p.files {
 		if file.IndexOnly {
 			continue

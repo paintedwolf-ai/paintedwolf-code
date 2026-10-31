@@ -24,3 +24,75 @@ retired:
     kind: hint_code
     summary: Peer observations do not prevent another worker from recording independent evidence or corrections.
     date: 2026-09-30
+  - id: USE_CHMOD_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; chmod runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_CHOWN_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; chown runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_COPY_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; cp runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_DELETE_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; rm runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_FIND_NOT_COMMAND
+    kind: hint_code
+    summary: Retired command-to-schema redirect; find and rg --files run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_GIT_DIFF_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; git diff runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_GIT_STATUS_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; git status runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_GREP_REGEX
+    kind: hint_code
+    summary: Retired command-to-schema redirect; grep and rg run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_HTTP_REQUEST_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; curl runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_JQ_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; jq and yq run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_LIST_DIR_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; ls runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_MKDIR_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; mkdir runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_MOVE_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; mv runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_NATIVE_TOOL
+    kind: hint_code
+    summary: Retired generic command-to-schema redirect; catalog utilities run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_READ_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; cat, head, tail, and sed print run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_STAT_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; stat, file, and du run natively inside command programs.
+    date: 2026-10-21
+  - id: USE_WC_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; wc runs natively inside command programs.
+    date: 2026-10-21
+  - id: USE_WRITE_NATIVE
+    kind: hint_code
+    summary: Retired command-to-schema redirect; stream redirects and tee write natively inside command programs.
+    date: 2026-10-21

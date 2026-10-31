@@ -30,7 +30,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			err := reg.Register(tt.tool, func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 				if tt.tool == "wait" && tctx.Effects.Out != nil {
-					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 				}
 				return tt.toolOutput, nil
 			})

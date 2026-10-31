@@ -45,6 +45,8 @@ func StartEgressBroker(stateRoot string) (egressproxy.Addrs, error) {
 	b.SetDialReporter(egressBroker.reportDialOutcome)
 	b.SetHTTPReporter(egressBroker.reportHTTPOutcome)
 	b.SetLoopbackConnectAuthority(egressBroker.loopbackFor)
+	b.SetOwnedLoopbackAuthority(egressBroker.ownedLoopbackFor)
+	b.SetLoopbackRefusalReporter(egressBroker.reportLoopbackOwnershipRefusal)
 	b.SetLeaseCheck(egressBroker.leased)
 	b.SetRefusalReporter(egressBroker.reportRefusal)
 

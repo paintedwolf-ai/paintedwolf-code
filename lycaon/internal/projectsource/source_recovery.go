@@ -1,15 +1,18 @@
 package projectsource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -22,15 +25,31 @@ type sourceRecovery struct {
 	db              db.Handle
 	objects         RecoveryStorage
 	stateMu         sync.Mutex
+	lifecycle       sync.RWMutex
+	quota           func() int64
 	recoveryBytes   map[string][]byte
 	recoveryEntries map[string][]sourceledger.RecoveryEntry
+	reclaim         *recoveryReclaimer
 }
+
+type recoveryReclaimer struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	cancel  context.CancelFunc
+	reqSeq  uint64
+	doneSeq uint64
+	running bool
+	closed  bool
+	fgCount int
+}
+
+var ErrSourceRecoveryQuota = errors.New("source recovery content exceeds the history byte quota")
 
 var ErrSourceRecoveryFailed = errors.New("could not preserve file recovery data")
 
 // captureRecovery keeps exact entries, including ignored files and empty folders.
 // Unsupported special files stop the operation before any entry moves.
-func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutationPlan, abs string) error {
+func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutationPlan, abs string, memory sourceeffect.Memory) error {
 	rel, err := sourceRelativePath(plan.RootPath, abs)
 	if err != nil || !filepath.IsLocal(rel) {
 		return ErrSourcePathDenied
@@ -46,18 +65,11 @@ func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutati
 	}
 	defer retained.close()
 
-	capture := func(current string, _ fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	capture := func(current string, info fs.FileInfo) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(base, filepath.FromSlash(current))
-		if err != nil {
-			return err
-		}
-		info, err := scope.Lstat(current)
 		if err != nil {
 			return err
 		}
@@ -80,9 +92,13 @@ func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutati
 		return nil
 	}
 	if base == "." {
-		err = fs.WalkDir(scope.FS(), ".", capture)
+		err = walkSourceTree(ctx, scope, ".", memory, capture)
 	} else {
-		err = capture(base, nil, nil)
+		info, statErr := scope.Lstat(base)
+		if statErr != nil {
+			return statErr
+		}
+		err = capture(base, info)
 	}
 
 	if err == nil {
@@ -120,7 +136,7 @@ func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutat
 		if err := requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA, row.memory)
 	}
 	if plan.RecoveryCount == 0 {
 		return ErrSourceRecoveryFailed
@@ -135,7 +151,7 @@ func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutat
 		return fmt.Errorf("%w: %w", ErrSourceRecoveryFailed, err)
 	}
 	reportSourceProgress(ctx, "verifying", plan.RecoveryCount, 0)
-	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA); err != nil {
+	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA, row.memory); err != nil {
 		return err
 	}
 	plan.DestinationIdentity, err = fspath.EntryIdentity(target)
@@ -286,10 +302,11 @@ type sourceRecoveryCapture struct {
 	progress *sourceWorkProgress
 	root     sourceHistoryBuffer
 	rootSHA  string
+	quota    int64
 }
 
 func (s *sourceRecovery) beginRecoveryCapture(ctx context.Context, plan *sourceMutationPlan, phase string) (*sourceRecoveryCapture, error) {
-	capture := &sourceRecoveryCapture{service: s, plan: plan, digest: newSourceTreeDigest(), progress: newSourceWorkProgress(ctx, phase)}
+	capture := &sourceRecoveryCapture{service: s, plan: plan, quota: s.quota(), digest: newSourceTreeDigest(), progress: newSourceWorkProgress(ctx, phase)}
 	if s.objects != nil {
 		writer, err := s.objects.BeginRecovery(ctx, plan.ProjectID, plan.RecoveryID)
 		if err != nil {
@@ -314,7 +331,7 @@ func (c *sourceRecoveryCapture) close() {
 }
 
 func (c *sourceRecoveryCapture) append(ctx context.Context, entry sourceledger.RecoveryEntry, root *os.Root, path string, destination io.Writer) (sourceledger.RecoveryEntry, error) {
-	writers := []io.Writer{c.progress}
+	writers := []io.Writer{c}
 	if destination != nil {
 		writers = append(writers, destination)
 	}
@@ -336,24 +353,58 @@ func (c *sourceRecoveryCapture) append(ctx context.Context, entry sourceledger.R
 	}
 	if entry.Path == "." {
 		c.rootSHA = entry.SHA
+		if os.FileMode(entry.Mode)&os.ModeSymlink != 0 {
+			_, _ = c.root.Write([]byte(entry.Link))
+			c.rootSHA = sourceblob.ContentSHA([]byte(entry.Link))
+		}
 	}
 	c.progress.entry()
 	return entry, nil
 }
 
+// Write admits bytes before either capture storage or a copied destination.
+func (c *sourceRecoveryCapture) Write(p []byte) (int, error) {
+	if int64(len(p)) > c.quota-c.progress.bytes {
+		return 0, ErrSourceRecoveryQuota
+	}
+	return c.progress.Write(p)
+}
+
 func (c *sourceRecoveryCapture) appendMemory(entry sourceledger.RecoveryEntry, root *os.Root, path string, destination io.Writer) (sourceledger.RecoveryEntry, error) {
 	if os.FileMode(entry.Mode).IsRegular() {
-		content, err := root.ReadFile(path)
+		file, err := root.Open(path)
 		if err != nil {
 			return entry, err
 		}
+		defer func() { _ = file.Close() }()
+		before, err := file.Stat()
+		if err != nil {
+			return entry, err
+		}
+		remaining := c.quota - c.progress.bytes
+		if before.Size() > remaining {
+			return entry, ErrSourceRecoveryQuota
+		}
+		if before.Mode() != os.FileMode(entry.Mode) {
+			return entry, ErrSourceMutationDiverged
+		}
+		var body bytes.Buffer
+		n, err := io.Copy(io.MultiWriter(destination, &body), contextio.Reader{Context: c.progress.ctx, Source: io.LimitReader(file, remaining+1)})
+		if err != nil {
+			return entry, err
+		}
+		after, err := file.Stat()
+		if err != nil {
+			return entry, err
+		}
+		if n != before.Size() || !sameSourceFileVersion(before, after) {
+			return entry, ErrSourceMutationDiverged
+		}
+		content := body.Bytes()
 		entry.SHA = sourceblob.ContentSHA(content)
 		c.service.stateMu.Lock()
 		c.service.recoveryBytes[entry.SHA] = content
 		c.service.stateMu.Unlock()
-		if _, err := destination.Write(content); err != nil {
-			return entry, err
-		}
 	}
 	c.service.stateMu.Lock()
 	c.service.recoveryEntries[c.plan.RecoveryID] = append(c.service.recoveryEntries[c.plan.RecoveryID], entry)
@@ -392,6 +443,10 @@ func (c *sourceRecoveryCapture) finish(ctx context.Context) error {
 		} else {
 			plan.After, plan.AfterSHA, plan.AfterSize = c.root.body, c.rootSHA, c.root.size
 		}
+	} else if plan.Kind == "delete" {
+		plan.BeforeSize = c.progress.bytes
+	} else {
+		plan.AfterSize = c.progress.bytes
 	}
 	c.progress.report(true)
 	return nil

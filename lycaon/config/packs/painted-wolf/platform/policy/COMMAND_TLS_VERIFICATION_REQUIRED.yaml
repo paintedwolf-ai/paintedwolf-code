@@ -1,0 +1,32 @@
+oar: '1.0'
+id: COMMAND_TLS_VERIFICATION_REQUIRED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "COMMAND_TLS_VERIFICATION_REQUIRED"
+effect: block
+copy:
+  what: The request asked to skip TLS certificate verification.
+  cause: curl -k or --insecure turns off server certificate checks.
+  why: The egress policy has no unverified TLS mode. A connection whose certificate is not checked cannot establish which host received the request or its credentials. No request was sent.
+  fix: Remove -k. For a local development server, use http:// on its loopback port or a certificate the system trusts.
+  instead: Send the request without -k; do not retry through an external program.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: TLS verification cannot be disabled
+x-paintedwolf-scenarios:
+- id: insecure_option
+  vars:
+    tool: command
+  expect_contains:
+  - 'Code: COMMAND_TLS_VERIFICATION_REQUIRED'
+  - No request was sent
+  - Remove -k

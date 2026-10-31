@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -17,9 +19,8 @@ const (
 
 // preventiveRejectEmitters surface recoverable codes before tool use.
 var preventiveRejectEmitters = map[string]bool{
-	"guard:command_habit_redirect": true,
-	"guard:write_scope":            true,
-	"guard:command_surface":        true,
+	"guard:write_scope":     true,
+	"guard:command_surface": true,
 }
 
 // PreventiveRejectEmitters returns preflight rejection guards.
@@ -56,10 +57,13 @@ type AgentHostResourceView struct {
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
 	// Skills supply availability and named reference checks; they are not listed.
-	Skills               []AgentSkillView
-	HostResources        []AgentHostResourceView
-	HostResourcesOmitted int // rows the ambient budget dropped
-	Fingerprint          string
+	Skills                []AgentSkillView
+	HostResources         []AgentHostResourceView
+	HostResourcesOmitted  int // rows the ambient budget dropped
+	Fingerprint           string
+	SessionScratchDir     string
+	Posture               gate.Posture
+	CommandExternalHidden bool
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -76,6 +80,9 @@ type AgentToolSurfaceData struct {
 	Skills      []AgentSkillView
 	RejectCodes []AgentRejectCodeView
 	WriteGlobs  []string
+	// CommandEffects bounds what command may do on this profile.
+	CommandEffects  toolcontract.CommandEffects
+	CommandDeferred bool
 }
 
 // AgentPromptSurfaceTemplateVars maps the prompt surface to template vars.
@@ -92,6 +99,10 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
+		"session_scratch_dir":          surface.SessionScratchDir,
+		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
+		"command_external_hidden":      surface.CommandExternalHidden,
+		"command_external_shown":       !surface.CommandExternalHidden,
 	}
 }
 
@@ -176,6 +187,9 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		Requestable: roster,
 		RejectCodes: recoverableRejectCodes(hintCodes, toolNames),
 		WriteGlobs:  append([]string(nil), profile.WriteGlobs...),
+		// Read-only profiles offer command for inspection only.
+		CommandEffects:  profile.CommandEffects,
+		CommandDeferred: profile.ToolDeferred("command"),
 	}, nil
 }
 
@@ -313,10 +327,43 @@ func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hint
 		data.Skills = skills
 	}
 	for k, v := range AgentToolSurfaceTemplateVars(data) {
+		if isPreservedEnvironmentFact(k, into) {
+			continue
+		}
 		into[k] = v
 	}
+	syncCommandExternalFacts(into)
 	mergeVisualShowVarsFromSurface(data, into)
 	return nil
+}
+
+func isPreservedEnvironmentFact(key string, into map[string]any) bool {
+	switch key {
+	case "reviews_confined_writes", "command_external_hidden", "command_external_shown":
+		_, ok := into[key].(bool)
+		return ok
+	case "platform_os", "session_scratch_dir":
+		s, ok := into[key].(string)
+		return ok && strings.TrimSpace(s) != ""
+	default:
+		return false
+	}
+}
+
+func syncCommandExternalFacts(into map[string]any) {
+	if into == nil {
+		return
+	}
+	if hidden, ok := into["command_external_hidden"].(bool); ok {
+		into["command_external_shown"] = !hidden
+		return
+	}
+	if shown, ok := into["command_external_shown"].(bool); ok {
+		into["command_external_hidden"] = !shown
+		return
+	}
+	into["command_external_hidden"] = false
+	into["command_external_shown"] = true
 }
 
 func agentSkillViewsFromVars(into map[string]any) []AgentSkillView {

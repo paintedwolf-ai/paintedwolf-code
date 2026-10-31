@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Unified diff between two repo-relative file paths (read-scope only; never use command diff). Replaces command: diff(1)."
+description: "Unified diff between two repo-relative file paths (read-scope only)."
 schema:
   type: object
   properties:

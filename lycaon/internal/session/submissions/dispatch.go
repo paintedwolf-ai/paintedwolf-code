@@ -41,7 +41,7 @@ func (m *Service) PromptWorker(ctx context.Context, id, jobID, text string) (*pr
 
 func (m *Service) PromptWorkerResume(ctx context.Context, id, jobID, leaseID string, winner awaitstore.Condition, onAdmitted func() error) (*promptresult.Result, error) {
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
-		SubmissionID: strings.TrimSpace(leaseID), WorkerJobID: strings.TrimSpace(jobID), Text: WaitWinnerText(winner),
+		SubmissionID: strings.TrimSpace(leaseID), WorkerJobID: strings.TrimSpace(jobID), Text: loopwake.WaitEndedText(winner),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
 	}, onAdmitted)
 }
@@ -57,23 +57,9 @@ func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.W
 		return nil, nil
 	}
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
-		SubmissionID: strings.TrimSpace(delivery.LeaseID), Text: WaitWinnerText(delivery.Condition),
+		SubmissionID: strings.TrimSpace(delivery.LeaseID), Text: loopwake.WaitEndedText(delivery.Condition),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
 	}, delivery.Admitted)
-}
-
-func WaitWinnerText(winner awaitstore.Condition) string {
-	text := "Wait ended: " + strings.TrimSpace(winner.Kind)
-	if outcome := strings.TrimSpace(winner.Outcome); outcome != "" {
-		text += " (" + outcome + ")"
-	}
-	if code := strings.TrimSpace(winner.Code); code != "" {
-		text += ". Code: " + code
-	}
-	if report := strings.TrimSpace(winner.Report); report != "" {
-		text += "\n\n" + report
-	}
-	return text
 }
 
 func (m *Service) LoopWake(ctx context.Context, id string) (*promptresult.Result, error) {

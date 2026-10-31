@@ -25,7 +25,7 @@ var (
 )
 
 // SchemaVersion identifies the baseline schema.
-const SchemaVersion = 6
+const SchemaVersion = 11
 
 const cleanShutdownMetaKey = "clean_shutdown"
 
@@ -128,11 +128,11 @@ func stageSnapshotPath(destPath string) (string, func(), error) {
 	if err := tmp.Close(); err != nil {
 		return "", nil, fmt.Errorf("create snapshot: close staging path: %w", err)
 	}
-	if err := os.Remove(tmpPath); err != nil {
+	if err := os.Remove(tmpPath); err != nil { // #nosec G703
 		return "", nil, fmt.Errorf("create snapshot: prepare staging path: %w", err)
 	}
 	return tmpPath, func() {
-		_ = os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // #nosec G703
 		_ = RemoveStoreSidecars(tmpPath)
 	}, nil
 }
@@ -146,10 +146,10 @@ func installSnapshot(ctx context.Context, tmpPath, destPath string, version int)
 }
 
 func publishSnapshot(tmpPath, destPath string) error {
-	if err := os.Chmod(tmpPath, defaultDBFileMode); err != nil {
+	if err := os.Chmod(tmpPath, defaultDBFileMode); err != nil { // #nosec G703
 		return fmt.Errorf("create snapshot: chmod: %w", err)
 	}
-	// #nosec G304 -- the caller staged tmpPath beside destPath.
+	// #nosec G304,G703 -- the caller staged tmpPath beside destPath.
 	file, err := os.Open(tmpPath)
 	if err != nil {
 		return fmt.Errorf("create snapshot: open for sync: %w", err)
@@ -161,10 +161,10 @@ func publishSnapshot(tmpPath, destPath string) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("create snapshot: close: %w", err)
 	}
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	if err := os.Rename(tmpPath, destPath); err != nil { // #nosec G703
 		return fmt.Errorf("create snapshot: install: %w", err)
 	}
-	dir, err := os.Open(filepath.Dir(destPath))
+	dir, err := os.Open(filepath.Dir(destPath)) // #nosec G304,G703
 	if err != nil {
 		return fmt.Errorf("create snapshot: open destination directory: %w", err)
 	}
@@ -416,7 +416,7 @@ func RemoveStoreSidecars(dbPath string) error {
 		return nil
 	}
 	for _, suffix := range storeSidecarSuffixes {
-		if err := os.Remove(dbPath + suffix); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(dbPath + suffix); err != nil && !os.IsNotExist(err) { // #nosec G703
 			return fmt.Errorf("remove sidecar %s: %w", dbPath+suffix, err)
 		}
 	}

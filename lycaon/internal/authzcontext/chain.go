@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 )
@@ -74,7 +75,7 @@ func chainPayloadFromContext(c Context) chainPayload {
 
 // ComputeRowHash implements D2 row_hash for hash_version=1.
 func ComputeRowHash(hashVersion int, sessionID string, seq int, ts string, payload chainPayload, prevHash string) (string, error) {
-	canonical, err := CanonicalJSON(payload)
+	canonical, err := jsonvalue.CanonicalJSON(payload)
 	if err != nil {
 		return "", err
 	}

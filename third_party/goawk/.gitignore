@@ -1,0 +1,16 @@
+.DS_Store
+goawk
+orig
+fuzz/interp/corpus
+fuzz/parser/corpus
+fuzz/interp/workdir
+fuzz/parser/workdir
+fuzz-fuzz.zip
+posix_spec.html
+goawk_*.zip
+goawk_*.tar.gz
+.idea
+scripts/csvbench/bin
+scripts/csvbench/count.csv
+/default.pgo
+/goawk-versions

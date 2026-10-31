@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -168,6 +169,34 @@ func (t *ListDirTool) listRootCatalog(
 		children, ok := current.Listing(root.ID, scopeRel)
 		if !ok {
 			return nil, false
+		}
+		if current.RootBoundary || current.Moving || current.Refreshing || !repochange.Coverage(root.Path).Complete {
+			live, err := sandbox.SurveyReadDir(fullPath, scopeRel, sandbox.SurveyOptions{IncludeHidden: includeHidden})
+			if err != nil {
+				return nil, false
+			}
+			indexed := make(map[string]sourcecatalog.Entry, len(children))
+			for _, child := range children {
+				indexed[child.Name] = child
+			}
+			out := make([]listDirEntry, 0, len(live))
+			for _, child := range live {
+				absPath := child.Abs
+				if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, absPath), tctx.ProfileID()) != nil {
+					continue
+				}
+				info, err := child.DirEntry.Info()
+				if err != nil {
+					continue
+				}
+				displayPath := projectpaths.QualifyAbs(tctx, root, absPath)
+				if known, ok := indexed[child.DirEntry.Name()]; ok && known.Size == info.Size() && known.Mode == uint32(info.Mode()) && known.Modified.Equal(info.ModTime().UTC()) {
+					out = append(out, makeListDirCatalogEntry(ctx, t.Boundary, tctx, root, child.DirEntry.Name(), displayPath, absPath, known))
+				} else {
+					out = append(out, makeListDirEntry(ctx, t.Boundary, tctx, root, child.DirEntry.Name(), displayPath, absPath, info))
+				}
+			}
+			return out, true
 		}
 		out := make([]listDirEntry, 0, len(children))
 		for _, child := range children {

@@ -7,9 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/editorturn"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-func TestEditorFileToolSurface_NoShellNetworkOrMCP(t *testing.T) {
+func TestEditorFileToolSurface_NoExternalExecutionNetworkOrMCP(t *testing.T) {
 	t.Parallel()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
@@ -26,7 +27,7 @@ func TestEditorFileToolSurface_NoShellNetworkOrMCP(t *testing.T) {
 	}
 
 	forbidden := []string{
-		"command", "web_search", "fetch_url",
+		"web_search", "fetch_url",
 		"terminal_open", "page_open",
 	}
 	for _, name := range forbidden {
@@ -46,10 +47,35 @@ func TestEditorFileToolSurface_NoShellNetworkOrMCP(t *testing.T) {
 		}
 	}
 
-	required := []string{"read", "edit", "replace_lines", "code_rewrite", "summarize", "write"}
+	required := []string{"command", "edit", "replace_lines", "code_rewrite", "summarize"}
 	for _, name := range required {
 		if !prof.Tools[name] {
 			t.Fatalf("%s must grant %q", editorturn.ToolProfileID, name)
 		}
 	}
+}
+
+func TestEditorFileCommandEffectsStayWithinFileOperations(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load editor effect boundary", err)
+	for _, profile := range profiles {
+		if profile.ID != editorturn.ToolProfileID {
+			continue
+		}
+		for _, c := range []struct {
+			class   toolcontract.CommandEffectClass
+			allowed bool
+		}{
+			{toolcontract.CommandReadOnly, true}, {toolcontract.CommandMutation, true},
+			{toolcontract.CommandExternalExec, false}, {toolcontract.CommandNetworkEgress, false},
+		} {
+			required, err := toolcontract.NewCommandEffects(c.class)
+			testutil.FailErr(t, "compile effect requirement", err)
+			if got := profile.CommandEffects.Allows(required); got != c.allowed {
+				t.Errorf("editor effect %s allowed=%v, want %v", c.class, got, c.allowed)
+			}
+		}
+		return
+	}
+	t.Fatal("editor file profile is missing")
 }

@@ -137,7 +137,7 @@ func TestCoordinatorImplementTripartiteWithAmbientRun(t *testing.T) {
 		"`implementer`",
 		"`plan-writer`",
 		"DISALLOWED_AGENT",
-		"(no command)",
+		"(command)",
 		"Budget:",
 		"omit `max_tool_loops`",
 	} {

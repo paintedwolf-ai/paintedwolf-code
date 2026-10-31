@@ -48,7 +48,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 		t.Fatalf("Render coordinator-surface-investigate: %v", err)
 	}
 	for _, want := range []string{
-		"summarize(", "list_dir(", "summarize#N",
+		"summarize(", "find . -maxdepth 2 -type d", "summarize#N",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("investigate surface missing floor survey route %q:\n%s", want, rendered)
@@ -65,8 +65,18 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
-	if !vars["profile_has_list_dir"].(bool) {
-		t.Fatalf("profile_has_list_dir = %v want true on implement_investigate", vars["profile_has_list_dir"])
+	if !vars["profile_has_command"].(bool) {
+		t.Fatalf("profile_has_command = %v want true on implement_investigate", vars["profile_has_command"])
+	}
+	if vars["profile_has_list_dir"].(bool) {
+		t.Fatalf("profile_has_list_dir = %v want false on implement_investigate floor", vars["profile_has_list_dir"])
+	}
+	vars = map[string]any{}
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"jq_edit": true}}); err != nil {
+		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
+	}
+	if !vars["profile_has_jq_edit"].(bool) {
+		t.Fatalf("profile_has_jq_edit = %v want true when jq_edit is loaded", vars["profile_has_jq_edit"])
 	}
 }
 
@@ -75,23 +85,23 @@ func TestMergeCoordinatorSurfacePathVarsTeachesLoadedHTTPRequest(t *testing.T) {
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
-	if vars["profile_has_http_request"] != false || vars["more_tools_loadable"] != true {
-		t.Fatalf("investigate floor must not teach the unloaded http_request: has=%v loadable=%v",
-			vars["profile_has_http_request"], vars["more_tools_loadable"])
+	if vars["profile_has_fetch_url"] != false || vars["more_tools_loadable"] != true {
+		t.Fatalf("investigate floor must not teach the unloaded fetch_url: has=%v loadable=%v",
+			vars["profile_has_fetch_url"], vars["more_tools_loadable"])
 	}
 	vars = map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"fetch_url": true}}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
-	if vars["profile_has_http_request"] != true {
-		t.Fatalf("a loaded http_request must be taught: %#v", vars["profile_has_http_request"])
+	if vars["profile_has_fetch_url"] != true {
+		t.Fatalf("a loaded fetch_url must be taught: %#v", vars["profile_has_fetch_url"])
 	}
 	vars = map[string]any{}
 	if err := prompts.MergeCoordinatorSurfacePathVars("implement_overlay_promote", nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
-	if vars["profile_has_http_request"] != true {
-		t.Fatalf("overlay promote carries http_request on the floor: has=%v", vars["profile_has_http_request"])
+	if vars["profile_has_command"] != true {
+		t.Fatalf("overlay promote carries command on the floor: has=%v", vars["profile_has_command"])
 	}
 }
 
@@ -116,16 +126,16 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 	for _, row := range rows {
 		byName[row["name"].(string)] = row["summary"].(string)
 	}
-	if summary, ok := byName["http_request"]; !ok || summary == "" {
-		t.Fatalf("the investigate floor leaves http_request requestable with a summary: %+v", rows)
+	if summary, ok := byName["fetch_url"]; !ok || summary == "" {
+		t.Fatalf("the investigate floor leaves fetch_url requestable with a summary: %+v", rows)
 	}
-	if _, ok := byName["read"]; ok {
+	if _, ok := byName["command"]; ok {
 		t.Fatalf("a floor tool is offered, not requestable: %+v", rows)
 	}
 	vars = map[string]any{}
-	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars loaded", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}, Schemas: schemas}))
+	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars loaded", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"fetch_url": true}, Schemas: schemas}))
 	for _, row := range vars["requestable_tools"].([]map[string]any) {
-		if row["name"] == "http_request" {
+		if row["name"] == "fetch_url" {
 			t.Fatal("a loaded tool leaves the requestable roster")
 		}
 	}

@@ -102,7 +102,9 @@ func readWantsOutline(mode string, args map[string]any, totalLines int) bool {
 	return totalLines > readcaps.AutoOutlineThreshold
 }
 
-func buildReadOutlineResponse(path string, outline fileoutline.Result) ReadResponse {
+// OutlineResponse is the outline presentation shared by the read tool and
+// the outline command built-in.
+func OutlineResponse(path string, outline fileoutline.Result) ReadResponse {
 	var symbols []readOutlineSymbol
 	var summary string
 	large := outline.TotalLines > readcaps.AutoOutlineThreshold

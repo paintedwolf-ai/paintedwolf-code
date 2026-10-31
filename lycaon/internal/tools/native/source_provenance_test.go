@@ -34,6 +34,7 @@ type fakeSourceLedger struct {
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
+	deleted      map[string]sourceledger.DeletedPath
 }
 
 func (f *fakeSourceLedger) Record(context.Context, sourceledger.RecordInput) error { return nil }
@@ -357,6 +358,13 @@ func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger
 	return p(ctx, tx)
 }
 func (p preparedCapture) Close() {}
+func (f *fakeSourceLedger) ResolveDeletedPath(_ context.Context, _ string, _ sourcebranch.ID, rootID, path string) (sourceledger.DeletedPath, error) {
+	if deleted, ok := f.deleted[rootID+"/"+path]; ok {
+		return deleted, nil
+	}
+	return sourceledger.DeletedPath{}, sourceledger.ErrHistoryNotFound
+}
+
 func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
 	return sourceledger.BranchHead{}, sourceledger.ErrHistoryNotFound
 }

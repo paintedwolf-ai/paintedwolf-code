@@ -389,6 +389,8 @@ func (a *argumentTrace) fromParameter(v ssa.Value) bool {
 		return a.allBindings(value, a.fromParameter)
 	case *ssa.ChangeType:
 		return a.fromParameter(value.X)
+	case *ssa.Field:
+		return a.fromParameter(value.X)
 	case *ssa.UnOp:
 		return value.Op == token.MUL && a.cellHoldsParameters(value.X)
 	case *ssa.Phi:
@@ -405,6 +407,8 @@ func (a *argumentTrace) fromParameter(v ssa.Value) bool {
 // cellHoldsParameters reports a variable cell whose every store is a parameter.
 func (a *argumentTrace) cellHoldsParameters(addr ssa.Value) bool {
 	switch cell := addr.(type) {
+	case *ssa.FieldAddr:
+		return a.fromParameter(cell.X) || a.cellHoldsParameters(cell.X)
 	case *ssa.Alloc:
 		stored := false
 		for _, ref := range *cell.Referrers() {

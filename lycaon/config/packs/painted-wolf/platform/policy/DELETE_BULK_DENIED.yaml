@@ -3,12 +3,13 @@ id: DELETE_BULK_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - delete
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.max_paths
   - paintedwolf.requested

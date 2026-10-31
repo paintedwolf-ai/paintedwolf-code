@@ -32,7 +32,7 @@ func readSessionContext(t *testing.T) (tools.ToolContext, string) {
 
 func readThroughSession(t *testing.T, s *projectpaths.ReadSession, resolved projectpaths.Resolved) (string, error) {
 	t.Helper()
-	f, err := s.Open(resolved)
+	f, err := s.Open(t.Context(), resolved)
 	if err != nil {
 		return "", err
 	}

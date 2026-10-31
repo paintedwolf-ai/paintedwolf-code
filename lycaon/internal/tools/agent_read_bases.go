@@ -1,43 +1,27 @@
 package tools
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lycaon/lycaon/internal/documentcore"
+)
 
 // AgentReadBases is the set of document revisions one model response may
 // edit from: frozen from reads completed before its tools run, advanced by
 // its own writes whose result is exactly the proposed text.
 type AgentReadBases struct {
 	mu        sync.Mutex
-	revisions map[string]int64
+	revisions map[string]documentcore.ReadBasis
 }
 
 // NewAgentReadBases freezes the given document revisions.
-func NewAgentReadBases(revisions map[string]int64) *AgentReadBases {
-	frozen := make(map[string]int64, len(revisions))
+func NewAgentReadBases(revisions map[string]documentcore.ReadBasis) *AgentReadBases {
+	frozen := make(map[string]documentcore.ReadBasis, len(revisions))
 	for id, revision := range revisions {
+		revision.Spans = append([]documentcore.LineSpan(nil), revision.Spans...)
 		frozen[id] = revision
 	}
 	return &AgentReadBases{revisions: frozen}
-}
-
-// Lookup answers the revision the response may edit the document from.
-func (b *AgentReadBases) Lookup(documentID string) (int64, bool) {
-	if b == nil {
-		return 0, false
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	revision, ok := b.revisions[documentID]
-	return revision, ok
-}
-
-// Advance records a basis the response established itself.
-func (b *AgentReadBases) Advance(documentID string, revision int64) {
-	if b == nil || revision <= 0 {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.revisions[documentID] = revision
 }
 
 // Forget withdraws the response's basis for a document.
@@ -48,4 +32,28 @@ func (b *AgentReadBases) Forget(documentID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.revisions, documentID)
+}
+
+func (b *AgentReadBases) Basis(documentID string) (documentcore.ReadBasis, bool) {
+	if b == nil {
+		return documentcore.ReadBasis{}, false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	basis, ok := b.revisions[documentID]
+	basis.Spans = append([]documentcore.LineSpan(nil), basis.Spans...)
+	return basis, ok
+}
+func (b *AgentReadBases) AdvanceBasis(documentID string, basis documentcore.ReadBasis) {
+	if b == nil || basis.Revision <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !basis.Whole && len(basis.Spans) == 0 {
+		delete(b.revisions, documentID)
+		return
+	}
+	basis.Spans = append([]documentcore.LineSpan(nil), basis.Spans...)
+	b.revisions[documentID] = basis
 }

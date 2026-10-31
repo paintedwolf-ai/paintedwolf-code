@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 var privateTrees = struct {
@@ -46,6 +47,9 @@ func IsPrivatePath(path string) bool {
 	if fseffect.IsStaging(filepath.Dir(path), filepath.Base(path)) {
 		return true
 	}
+	if settingsoverlay.HasRecoverySegment(path) || settingsoverlay.IsRecoveryOnlyDir(path) {
+		return true
+	}
 	privateTrees.RLock()
 	defer privateTrees.RUnlock()
 	if len(privateTrees.paths) == 0 {
@@ -77,6 +81,10 @@ func NewPrivateDirectoryFilter(directory string) *PrivateDirectoryFilter {
 // Contains reports whether the named direct child is currently private.
 func (f *PrivateDirectoryFilter) Contains(name string) bool {
 	if fseffect.IsStaging(f.directory, name) {
+		return true
+	}
+	candidate := filepath.Join(f.directory, name)
+	if settingsoverlay.HasRecoverySegment(candidate) || settingsoverlay.IsRecoveryOnlyDir(candidate) {
 		return true
 	}
 	privateTrees.RLock()

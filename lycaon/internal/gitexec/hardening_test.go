@@ -415,6 +415,7 @@ func TestRemoteNameFromArgs(t *testing.T) {
 		{[]string{"fetch", "--all"}, ""},
 		{[]string{"pull", "--ff-only"}, ""},
 		{[]string{"ls-remote", "--heads", "origin", "main"}, "origin"},
+		{[]string{"ls-remote", "--", "git@github.com:org/repo.git"}, "git@github.com:org/repo.git"},
 		{[]string{"clone", "--depth", "1", "--branch", "main", "--", "https://example.com/r.git", "dest"}, "https://example.com/r.git"},
 		{[]string{"clone", "--", "/local/path/repo", "dest"}, ""},
 		{[]string{"status"}, ""},
@@ -428,7 +429,7 @@ func TestRemoteNameFromArgs(t *testing.T) {
 }
 
 func TestLooksLikeURL(t *testing.T) {
-	for _, s := range []string{"https://example.com/r.git", "git@github.com:owner/repo.git", "ssh://host/x"} {
+	for _, s := range []string{"https://example.com/r.git", "git@github.com:owner/repo.git", "git@[::1]:owner/repo.git", "ssh://host/x"} {
 		if !looksLikeURL(s) {
 			t.Fatalf("looksLikeURL(%q) = false", s)
 		}

@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/toolexecution",
+  "kind": "test_suite",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Tool execution composes validation, typed capabilities, approval, secret screening and dispatch for one operation. Socket-specific helpers stay in the existing capability concern and socketref owns platform resources; no forwarding controller or alternate executor is introduced. Retain the platform and real-owner contracts beside their shared fixtures; moving tests only to reduce membership would expose internal setup without narrowing responsibility. Freeze this reviewed shape at 76 files; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 76,
+  "boundaries": {
+    "lycaon/internal/toolexecution/socket_resource_binding_test.go": "fec6c227b583c070eabfd6005a55657fc43fe24ee1874b1519cab414439bad90",
+    "lycaon/internal/toolexecution/socket_platform_refusal_test.go": "25bb98b03aaa8833675a01a839052627c70b87483edfca57dbdc9b0475bdef65",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac"
+  },
+  "reviewed_shape": "9790e49e6ab14424ec90a08fb9fc6c1ce0dbffa4746f4f867c4c0f3e50604f66"
+}

@@ -51,11 +51,11 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 	if !contractcheck.ContainsString(surfaces["implement_routing"], "scan_query") {
 		t.Fatal("implement_routing must expose scan query for host scan on project open")
 	}
-	if !contractcheck.ContainsString(surfaces["implement_routing"], "list_dir") {
-		t.Fatal("implement_routing must expose list_dir for repo-root orientation")
+	if !contractcheck.ContainsString(surfaces["implement_routing"], "command") {
+		t.Fatal("implement_routing must expose command for repo-root orientation")
 	}
 	if contractcheck.ContainsString(surfaces["implement_routing"], "read") {
-		t.Fatal("implement_routing must not expose read — use list_dir on routing turns; read is synthesis-only")
+		t.Fatal("implement_routing must not expose read on the floor")
 	}
 	if !contractcheck.ContainsString(surfaces["implement_routing"], "promote_overlay") {
 		t.Fatal("implement_routing must expose promote_overlay for pending overlay promotion")
@@ -98,7 +98,7 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 		}
 	}
 	synthesis := surfaces["implement_synthesis"]
-	for _, forbidden := range []string{"task", "write", "edit", "command", "wait", "pack_board"} {
+	for _, forbidden := range []string{"task", "write", "edit", "wait", "pack_board"} {
 		if contractcheck.ContainsString(synthesis, forbidden) {
 			t.Fatalf("implement_synthesis must not expose %q", forbidden)
 		}
@@ -120,13 +120,13 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 		}
 	}
 	investigate := surfaces["implement_investigate"]
-	for _, tool := range []string{"read", "grep", "list_dir", "skills_read", "request_tools", "ask_user"} {
+	for _, tool := range []string{"command", "summarize", "skills_read", "request_tools", "ask_user"} {
 		if !contractcheck.ContainsString(investigate, tool) {
 			t.Fatalf("implement_investigate floor must carry %q", tool)
 		}
 	}
-	// Everything that mutates, runs, or delegates loads per turn.
-	for _, loadable := range []string{"write", "command", "git_status", "task", "capture_page"} {
+	// Everything that mutates, delegates, or uses retired routine schemas loads per turn.
+	for _, loadable := range []string{"write", "read", "grep", "list_dir", "git_status", "task", "capture_page"} {
 		if contractcheck.ContainsString(investigate, loadable) {
 			t.Fatalf("implement_investigate floor must not carry loadable tool %q", loadable)
 		}

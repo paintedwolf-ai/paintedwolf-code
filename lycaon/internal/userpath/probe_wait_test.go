@@ -3,6 +3,7 @@ package userpath
 import (
 	"context"
 	"errors"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -62,9 +63,10 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 	p := providerWith(t, cfg, "/bin/sh", map[string]string{
 		"SHELL": "/bin/sh", "PATH": "/usr/bin",
 	}, fakeShell{})
+	p.prepare = execpkg.PrepareCommand
 	var runErr error
-	p.run = func(cmd *osexec.Cmd) error {
-		runErr = defaultRun(cmd)
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
+		runErr = defaultRun(ctx, cmd)
 		return runErr
 	}
 	snap := p.Resolve(context.Background())

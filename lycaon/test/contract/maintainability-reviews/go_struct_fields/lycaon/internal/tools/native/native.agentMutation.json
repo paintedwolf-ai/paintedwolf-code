@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/native.agentMutation",
+  "kind": "data_record",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "These fifteen fields describe one reviewed file effect: captured before/after facts, target identity, recovery decision and actual operation memory. Review, publication and attribution consume the same record. Splitting it into independent intent records would risk divergent evidence; retain the measured shape and renew for new facts.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/tools/native/source_write_evidence_test.go": "07cb5c1f59afd8c929fe6ce7724641bd3a8a3a342a002df6072713982af296de",
+    "lycaon/internal/tools/native/mutation/copy_batch_test.go": "7667086cbfb76723dce85396f1367e4bd428dbfe4155f538e701bfc1419b0452"
+  },
+  "reviewed_shape": "dfdac4f82a12a0830c03fadceebdd30a6bff35a692e21a09220bafbe3d069b3f"
+}

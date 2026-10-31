@@ -12,7 +12,7 @@ import (
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 2
+const PlanVersion = 3
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -102,12 +102,28 @@ type Network struct {
 	ProxyAddr            string           `json:"proxy_addr,omitempty"`
 	SocksProxyAddr       string           `json:"socks_proxy_addr,omitempty"`
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
-	// SocketPaths are exact AF_UNIX connect grants.
-	SocketPaths []string `json:"socket_paths,omitempty"`
+	// SocketGrants connect through retained descriptors owned by the outer helper.
+	SocketGrants []SocketGrant `json:"socket_grants,omitempty"`
+	// beforeSocketConnect is an in-process synchronization seam; it is never
+	// read from a plan or configuration and carries no authorization.
+	beforeSocketConnect func() `json:"-"`
 	// Resolvers are the host's resolvers, in order, that direct IP reaches
 	// names through.
 	Resolvers []string `json:"resolvers,omitempty"`
 	Browser   bool     `json:"browser,omitempty"`
+}
+
+// SocketReferenceFD is the first inherited destination descriptor. The earlier
+// slots carry the profile, lineage marker, refusal report and inner control.
+const SocketReferenceFD = 7
+
+// SocketGrant associates an approved selector with its retained destination.
+type SocketGrant struct {
+	Path string `json:"path"`
+	FD   int    `json:"fd"`
+	// Delegated is set when the retained object is a delegated service's
+	// endpoint socket, however the grant named it.
+	Delegated DelegatedService `json:"delegated,omitempty"`
 }
 
 // DirectIPPermit narrows direct IP by transport and port.
@@ -205,10 +221,19 @@ func (p Plan) Validate() error {
 			return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "protected name " + named.Name + " below " + named.Below}
 		}
 	}
-	for _, path := range n.SocketPaths {
-		if !filepath.IsAbs(path) {
-			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket path " + path + " is not absolute"}
+	if len(n.SocketGrants) > 8 {
+		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "too many socket references"}
+	}
+	seenSockets := make(map[string]bool)
+	seenFDs := make(map[int]bool)
+	for _, grant := range n.SocketGrants {
+		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
 		}
+		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "unknown delegated service " + string(grant.Delegated)}
+		}
+		seenSockets[grant.Path], seenFDs[grant.FD] = true, true
 	}
 	return nil
 }

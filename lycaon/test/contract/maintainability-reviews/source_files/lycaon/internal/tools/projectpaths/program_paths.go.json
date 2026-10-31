@@ -1,0 +1,17 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/projectpaths/program_paths.go",
+  "kind": "runtime_service",
+  "workstream": "portable-command-paths",
+  "disposition": "retain",
+  "reason": "Retain the measured 374 source lines for path-frame construction and exact operand binding with their admission callbacks. Root attachment, current directory identity, actual-path read and mutation scope, and recovery exclusions stay in one binding operation. Moving a callback into another authority would duplicate its root and context dependencies. The complete projectpaths suite and focused physical-path, root-replacement, native-spelling, and held-parent recovery contracts support this exact ceiling; further growth requires review.",
+  "reviewed_commit": "e25e60380643ade0100d500a04e2c253feee052f",
+  "ceiling": 374,
+  "boundaries": {
+    "lycaon/internal/tools/projectpaths/program_paths_test.go": "0fc0d2578f696831883df193d061d75cab978b258bff4dafb2e20a90be676148",
+    "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
+    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "93a5811868e649849387eae8b780b11b3a28c07e6cd55c23563d96abb25fd9b3",
+    "lycaon/test/wiring/command_native_outside_approval_e2e_test.go": "babff54e955d8f8011fa95410f7c8b6323657ac42ba21fb761890744f00f58ed",
+    "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "a437c18f5cb946bfba0b5c672081b56040d2e0cad910d59d1913d772533b07cf"
+  }
+}

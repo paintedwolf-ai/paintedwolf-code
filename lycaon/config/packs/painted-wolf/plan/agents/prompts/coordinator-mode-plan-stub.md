@@ -24,6 +24,6 @@ Approval status is host-set. Never write `approved`, `implementing`, or `done`.
 4. `## Plan breaking changes`
 5. `## Approach`
 
-Satisfy **`plan_stub_valid`** in one `write`/`edit` with that frontmatter and those headings. Fold intake answers and research facts into them.
+Satisfy **`plan_stub_valid`** in one command redirect or `edit` with that frontmatter and those headings. Fold intake answers and research facts into them.
 
 Do not `task(repo-researcher|path-explorer, …)` or `delegate_dispatch` in stub.

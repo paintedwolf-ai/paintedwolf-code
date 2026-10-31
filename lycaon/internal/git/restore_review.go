@@ -25,9 +25,11 @@ type RestoreFile struct {
 }
 
 type RestoreContent struct {
-	Bytes  []byte
-	SHA256 string
-	Size   int64
+	// ObjectID identifies metadata-only index content whose bytes were not read.
+	ObjectID string
+	Bytes    []byte
+	SHA256   string
+	Size     int64
 	// Mode is a Git file mode; see gitFileMode.
 	Mode   os.FileMode
 	Exists bool
@@ -292,7 +294,7 @@ func (r *restoreReview) validate(ctx context.Context, dir string) error {
 			return err
 		}
 		if current.Exists != expected.Exists || current.SHA256 != expected.SHA256 {
-			return fmt.Errorf("git restore configuration changed during review")
+			return operationRefusal("repository_changed_during_review", path)
 		}
 	}
 	tree, err := restoreGit(ctx, dir, hermeticOpts(0), "write-tree")
@@ -300,7 +302,7 @@ func (r *restoreReview) validate(ctx context.Context, dir string) error {
 		return err
 	}
 	if strings.TrimSpace(string(tree)) != r.indexTree {
-		return fmt.Errorf("git index changed during restore review")
+		return operationRefusal("repository_changed_during_review")
 	}
 	for _, file := range r.files {
 		if file.IndexOnly {
@@ -311,7 +313,7 @@ func (r *restoreReview) validate(ctx context.Context, dir string) error {
 			return err
 		}
 		if current.Exists != file.Before.Exists || current.Mode != file.Before.Mode || current.SHA256 != file.Before.SHA256 {
-			return fmt.Errorf("file changed during restore review: %s", file.Path)
+			return operationRefusal("repository_changed_during_review", file.Path)
 		}
 	}
 	return nil

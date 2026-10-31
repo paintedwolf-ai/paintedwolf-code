@@ -1,6 +1,7 @@
 package compaction
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -36,7 +37,7 @@ func summarizeCommitInlineCeiling() int {
 // compactSpillSummarize spills the full handle+JSON summarize payload to the
 // project host data dir and returns a pointer residue (wire_spill_path + orientation).
 // No pack substance is trimmed inline — full bytes live in the spill file.
-func (c *ChunkCompactor) compactSpillSummarize(chunk ContentChunk, content string, originalTokens int) (string, string, bool) {
+func (c *ChunkCompactor) compactSpillSummarize(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string, bool) {
 	if originalTokens <= summarizeCommitInlineCeiling() {
 		return content, "", false
 	}
@@ -44,7 +45,7 @@ func (c *ChunkCompactor) compactSpillSummarize(chunk ContentChunk, content strin
 	if hostDataDir == "" {
 		return content, "", false
 	}
-	out := tooloutput.SpillWholeToolOutput(hostDataDir, tooloutput.Screened(content), chunk.MaxToolSpillBytes)
+	out := tooloutput.SpillWholeToolOutput(ctx, hostDataDir, tooloutput.Screened(content), chunk.MaxToolSpillBytes)
 	if out.RejectCode != "" || out.SpillPath == "" {
 		return content, "", false
 	}

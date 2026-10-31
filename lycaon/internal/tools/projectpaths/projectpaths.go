@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -41,12 +42,12 @@ func (r Resolved) EffectLocation() fseffect.Location {
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
 func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
-	abs := strings.TrimSpace(modelPath)
+	abs := modelPath
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
 	}
 	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir) {
+	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil
 	}
 	mode := "read"
@@ -104,13 +105,39 @@ func resolveMutationScope(ctx context.Context, b *sandbox.Boundary, tctx tools.T
 	return resolved, nil
 }
 
+// ChildResolved derives a child path under an already-resolved directory.
+func ChildResolved(tctx tools.ToolContext, parent Resolved, rel string) Resolved {
+	abs := filepath.Join(parent.Abs, rel)
+	scopeRel := projectroot.ScopeRel(parent.Root, abs)
+	return Resolved{
+		Abs:         abs,
+		DisplayPath: QualifyAbs(tctx, parent.Root, abs),
+		ScopeRel:    scopeRel,
+		Root:        parent.Root,
+		External:    parent.External,
+	}
+}
+
+// RecordResolvedMutation records a primary-tree write for an already-resolved path.
+func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
+	recordPrimaryMutation(ctx, tctx, resolved)
+}
+
+// IsSpecialMutationRel reports whether rel names repository metadata or recovery paths.
+func IsSpecialMutationRel(rel string) bool {
+	if _, denied := repositoryMetadataClass(rel); denied {
+		return true
+	}
+	return settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel)
+}
+
 // recordPrimaryMutation records a primary-tree write for the open rewind checkpoint.
 // Worker-branch writes are skipped; promote records those touches.
 func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
 	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
-	rel := strings.TrimSpace(resolved.ScopeRel)
+	rel := resolved.ScopeRel
 	if rel == "" {
 		return
 	}
@@ -167,7 +194,7 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	}
 	// Scratch is the session's own folder, not project state, so a worker
 	// without a branch writes there too.
-	if scratchResolved, ok, err := resolveSessionScratch(ctx, b, tctx, modelPath, op); ok || err != nil {
+	if scratchResolved, ok, err := resolveSessionArea(ctx, b, tctx, modelPath, op); ok || err != nil {
 		if err != nil {
 			return Resolved{}, mapResolveErr(err, modelPath)
 		}
@@ -198,6 +225,9 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	}
 	abs, root, err := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 	if err != nil {
+		if reject := declinedRootReject(tctx, modelPath, err); reject != nil {
+			return Resolved{}, reject
+		}
 		// Grants are consulted only after attached roots decline the path.
 		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
 			return granted, nil
@@ -211,7 +241,16 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	if err != nil {
 		return Resolved{}, noRootsReject()
 	}
+	if reject := currentRootReject(tctx, root, abs); reject != nil {
+		return Resolved{}, reject
+	}
 	scopeRel := projectroot.ScopeRel(root, abs)
+	if settingsoverlay.IsRecoveryRelPath(scopeRel) || settingsoverlay.HasRecoverySegment(abs) {
+		return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
+	}
+	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
+		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
+	}
 	if b != nil {
 		switch op {
 		case sandbox.PathOpRead:
@@ -288,11 +327,6 @@ func mapResolveErr(err error, modelPath string) error {
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
-	case errors.Is(err, projectroot.ErrUnknownRootLabel):
-		return &toolrejection.ToolReject{
-			Code: "UNKNOWN_ROOT_LABEL",
-			Data: map[string]any{"path": modelPath, "reason": err.Error()},
-		}
 	case errors.Is(err, projectroot.ErrPathEscape):
 		return &toolrejection.ToolReject{
 			Code: "SURVEY_PATH_ESCAPE",
@@ -361,8 +395,8 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if reject := tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)); reject != nil {
 		return "", "", reject
 	}
-	cwdClean := strings.TrimSpace(cwdArg)
-	if _, scratch := scratchRel(tctx, cwdClean); scratch {
+	cwdClean := cwdArg
+	if area, _, _, session := sessionRel(tctx, cwdClean); session && area == projectroot.VirtualScratchLabel {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
@@ -400,7 +434,7 @@ func commandCwdInScratch(ctx context.Context, tctx tools.ToolContext, cwdArg str
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
-	res, _, err := resolveSessionScratch(ctx, nil, tctx, cwdArg, sandbox.PathOpRead)
+	res, _, err := resolveSessionArea(ctx, nil, tctx, cwdArg, sandbox.PathOpRead)
 	if err != nil {
 		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) && reject.Code == tools.SessionScratchUnavailableCode {
@@ -421,31 +455,36 @@ func commandCwdInScratch(ctx context.Context, tctx tools.ToolContext, cwdArg str
 	return res.Abs, res.DisplayPath, nil
 }
 
-// resolveSessionScratch answers a path in the invoking session's own scratch
-// folder: an @scratch address, or an absolute path inside the folder. Both
-// spellings reach one scope check, and a link out of the folder is an escape.
-func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool, error) {
-	rel, addressed := scratchRel(tctx, modelPath)
+// resolveSessionArea answers virtual and absolute names under the current
+// session's host directories. Output is a read namespace, never a write root.
+func resolveSessionArea(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool, error) {
+	area, rel, dir, addressed := sessionRel(tctx, modelPath)
 	if !addressed {
 		return Resolved{}, false, nil
 	}
-	dir := strings.TrimSpace(tctx.Host.SessionScratchDir)
 	if dir == "" {
-		return Resolved{}, false, sessionScratchUnavailableReject(modelPath)
+		code := tools.SessionScratchUnavailableCode
+		if area == projectroot.VirtualOutputLabel {
+			code = tools.SessionOutputUnavailableCode
+		}
+		return Resolved{}, false, &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": modelPath}}
 	}
-	abs, err := projectroot.ScratchPath(dir, rel)
+	if area == projectroot.VirtualOutputLabel && op != sandbox.PathOpRead {
+		return Resolved{}, false, projectroot.ErrPathEscape
+	}
+	abs, err := projectroot.SessionPath(dir, rel)
 	if err != nil {
 		return Resolved{}, false, err
 	}
 	if !confine.PathAtOrUnder(fspath.CanonicalPath(abs), fspath.CanonicalPath(dir)) {
-		return Resolved{}, false, fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath)
+		return Resolved{}, false, projectroot.ErrPathEscape
 	}
 	scopeRel, err := filepath.Rel(filepath.Clean(dir), abs)
 	if err != nil {
 		return Resolved{}, false, err
 	}
 	scopeRel = filepath.ToSlash(scopeRel)
-	display := "@" + projectroot.VirtualScratchLabel
+	display := "@" + area
 	if scopeRel == "." {
 		scopeRel = ""
 	} else {
@@ -461,28 +500,30 @@ func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.
 			return Resolved{}, false, err
 		}
 	}
-	return Resolved{
-		Abs:         abs,
-		DisplayPath: display,
-		ScopeRel:    scopeRel,
-		Root:        projectroot.RootRef{ID: projectroot.VirtualScratchLabel, Label: projectroot.VirtualScratchLabel, Path: filepath.Clean(dir)},
-		External:    true,
-	}, true, nil
+	return Resolved{Abs: abs, DisplayPath: display, ScopeRel: scopeRel, Root: projectroot.RootRef{ID: area, Label: area, Path: filepath.Clean(dir)}, External: true, ToolOutput: area == projectroot.VirtualOutputLabel}, true, nil
 }
 
-// scratchRel reports whether path names the session's scratch folder, by
-// address or by an absolute path inside it, and its place in that folder.
-func scratchRel(tctx tools.ToolContext, path string) (string, bool) {
-	if rel, ok := projectroot.ScratchAddress(path); ok {
-		return rel, true
+// sessionRel selects the host directory that owns an operand's exact path.
+func sessionRel(tc tools.ToolContext, path string) (area, rel, dir string, ok bool) {
+	if area, rel, ok = projectroot.SessionAddress(path); ok {
+		dir = tc.Host.SessionScratchDir
+		if area == projectroot.VirtualOutputLabel {
+			dir = tc.Host.SessionOutputDir
+		}
+		return
 	}
-	return scratchRelOfAbs(strings.TrimSpace(tctx.Host.SessionScratchDir), path)
+	for _, entry := range []struct{ area, dir string }{{projectroot.VirtualOutputLabel, tc.Host.SessionOutputDir}, {projectroot.VirtualScratchLabel, tc.Host.SessionScratchDir}} {
+		if rel, ok = sessionRelOfAbs(strings.TrimSpace(entry.dir), path); ok {
+			return entry.area, rel, entry.dir, true
+		}
+	}
+	return "", "", "", false
 }
 
-// scratchRelOfAbs returns an absolute path's place inside the scratch folder,
+// sessionRelOfAbs returns an absolute path's place inside the scratch folder,
 // comparing canonical forms so an alias of the folder still resolves there.
-func scratchRelOfAbs(dir, raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
+func sessionRelOfAbs(dir, raw string) (string, bool) {
+	// Operand whitespace is filename data.
 	if dir == "" || !filepath.IsAbs(raw) {
 		return "", false
 	}
@@ -491,11 +532,4 @@ func scratchRelOfAbs(dir, raw string) (string, bool) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
-}
-
-func sessionScratchUnavailableReject(path string) error {
-	return &toolrejection.ToolReject{
-		Code: tools.SessionScratchUnavailableCode,
-		Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))},
-	}
 }

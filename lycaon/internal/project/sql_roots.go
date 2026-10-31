@@ -279,7 +279,9 @@ func (r *SQLRegistry) PatchRoot(ctx context.Context, id, rootID string, params P
 				}
 				return nil, err
 			}
+			// A rename retires the old @label spelling, so it is a new generation.
 			changed = true
+			rootContextChanged = true
 		}
 	}
 	if params.IsPrimary != nil && *params.IsPrimary && !current.IsPrimary {

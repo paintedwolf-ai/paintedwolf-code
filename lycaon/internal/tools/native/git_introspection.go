@@ -100,31 +100,6 @@ func (t *GitBlameTool) Run(ctx context.Context, args map[string]any, tctx tools.
 	return git.MarshalBlameToolResponse(lines, err)
 }
 
-// GitRefTool resolves refs to SHAs.
-type GitRefTool struct {
-	Git git.GitManager
-}
-
-func (t *GitRefTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	refs := stringSliceFromArg(args, "refs")
-	if len(refs) == 0 {
-		return "", toolkit.MissingArg("refs")
-	}
-	out, err := t.Git.RevParse(ctx, tctx.ActiveRootPath(), refs)
-	return git.MarshalRefToolResponse(out, err)
-}
-
-// GitBranchesTool lists local branches.
-type GitBranchesTool struct {
-	Git git.GitManager
-}
-
-func (t *GitBranchesTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	max := intArg(args, "max_branches", git.DefaultGitBranchesMax)
-	branches, err := t.Git.Branches(ctx, tctx.ActiveRootPath(), max)
-	return git.MarshalBranchesToolResponse(branches, err)
-}
-
 // GitRestoreTool restores explicit paths in the index, worktree, or both.
 type GitRestoreTool struct {
 	Git      git.GitManager
@@ -136,38 +111,49 @@ func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tool
 	if err != nil {
 		return "", err
 	}
-	prof := tctx.ProfileID()
-	gitRoot := tools.HostWriteRoot(tctx)
-	gitPaths := make([]string, 0, len(opts.Paths))
-	restored := make([]string, 0, len(opts.Paths))
-	for _, relPath := range opts.Paths {
-		if err := assertGitRestorePath(ctx, t.Boundary, tctx, relPath, prof); err != nil {
-			return "", err
-		}
-		resolved, err := projectpaths.ResolveWrite(ctx, t.Boundary, tctx, relPath)
-		if err != nil {
-			return "", err
-		}
-		gitPath, err := filepath.Rel(gitRoot, resolved.Abs)
-		if err != nil || sandbox.HasParentTraversal(gitPath) {
-			return "", &toolrejection.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": relPath}}
-		}
-		gitPaths = append(gitPaths, filepath.ToSlash(gitPath))
-		restored = append(restored, filepath.ToSlash(relPath))
-	}
-	opts.Paths = gitPaths
-	opts.Review = func(ctx context.Context, files []git.RestoreFile) error { return t.reviewRestore(ctx, tctx, files) }
-	if err := t.Git.Restore(ctx, gitRoot, opts); err != nil {
+	restored, err := GitMutations{Git: t.Git, Boundary: t.Boundary}.Restore(ctx, tctx, opts)
+	if err != nil {
 		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) || toolrejection.HostRefusal(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return "", err
 		}
 		return git.MarshalRestoreToolResponse(nil, err)
 	}
+	return git.MarshalRestoreToolResponse(restored, nil)
+}
+
+// Restore restores explicit active-root paths in the index, the work tree or
+// both after host review, returning the restored paths.
+func (m GitMutations) Restore(ctx context.Context, tctx tools.ToolContext, opts git.GitRestoreOpts) ([]string, error) {
+	gitRoot := tools.HostWriteRoot(tctx)
+	gitPaths := make([]string, 0, len(opts.Paths))
+	restored := make([]string, 0, len(opts.Paths))
+	for _, relPath := range opts.Paths {
+		if err := assertGitRestorePath(ctx, m.Boundary, tctx, relPath, tctx.ProfileID()); err != nil {
+			return nil, err
+		}
+		resolved, err := projectpaths.ResolveWrite(ctx, m.Boundary, tctx, relPath)
+		if err != nil {
+			return nil, err
+		}
+		gitPath, err := filepath.Rel(gitRoot, resolved.Abs)
+		if err != nil || sandbox.HasParentTraversal(gitPath) {
+			return nil, &toolrejection.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": relPath}}
+		}
+		gitPaths = append(gitPaths, filepath.ToSlash(gitPath))
+		restored = append(restored, filepath.ToSlash(relPath))
+	}
+	opts.Paths = gitPaths
+	opts.Review = func(ctx context.Context, files []git.RestoreFile) error {
+		return reviewGitFiles(ctx, tctx, m.Boundary, "git_restore", files)
+	}
+	if err := m.Git.Restore(ctx, gitRoot, opts); err != nil {
+		return nil, err
+	}
 	for _, path := range restored {
 		tctx.RecordSourcePath(path, api.NavigationEntryKindFile)
 	}
-	return git.MarshalRestoreToolResponse(restored, nil)
+	return restored, nil
 }
 
 func parseGitRestoreOpts(args map[string]any) (git.GitRestoreOpts, error) {
@@ -237,30 +223,67 @@ func (t *GitCommitTool) Run(ctx context.Context, args map[string]any, tctx tools
 	if message == "" {
 		return "", toolkit.MissingArg("message")
 	}
-	cwd := tctx.ActiveRootPath()
-	staging, err := resolveCommitStaging(ctx, args, t.Git, tctx, cwd)
-	if err != nil {
+	request := GitCommitRequest{Message: message}
+	request.Amend, _ = args["amend"].(bool)
+	if raw, ok := args["paths"].([]any); ok && len(raw) > 0 {
+		paths, err := parseBoundedPaths(args, git.DefaultGitCommitMaxPaths, commitBulkDenied)
+		if err != nil {
+			return "", err
+		}
+		request.Paths = paths
+	}
+	hash, staging, err := GitMutations{Git: t.Git, Boundary: t.Boundary}.Commit(ctx, tctx, request)
+	if hash == "" && staging.Paths == nil && err != nil {
 		return "", err
 	}
-	prof := tctx.ProfileID()
+	return git.MarshalCommitToolResponse(hash, staging, err)
+}
+
+// GitCommitRequest is one commit: explicit paths stay explicit; without
+// them the session's authored paths, plus any it staged itself, are
+// committed and unrelated staged work is left as it is.
+type GitCommitRequest struct {
+	Message string
+	Paths   []string
+	// Staged are paths this session staged through git add.
+	Staged []string
+	Amend  bool
+	// IdentityName and IdentityEmail override the recorded author and
+	// committer for this commit, as git -c user.name/user.email does.
+	IdentityName, IdentityEmail string
+}
+
+// Commit admits, records and creates or amends one commit.
+func (m GitMutations) Commit(ctx context.Context, tc tools.ToolContext, request GitCommitRequest) (string, git.CommitStaging, error) {
+	cwd := tc.ActiveRootPath()
+	var staging git.CommitStaging
+	switch {
+	case len(request.Paths) > 0:
+		staging = git.CommitStaging{Paths: request.Paths}
+	case request.Amend && len(request.Staged) == 0:
+		// A message-only amend commits no paths.
+	default:
+		var err error
+		staging, err = sessionCommitStaging(ctx, m.Git, tc, cwd, request.Staged)
+		if err != nil {
+			return "", git.CommitStaging{}, err
+		}
+	}
 	staged := make([]string, 0, len(staging.Paths))
 	for _, relPath := range staging.Paths {
-		if err := assertGitCommitPath(ctx, t.Boundary, tctx, relPath, prof); err != nil {
-			return "", err
+		if err := assertGitCommitPath(ctx, m.Boundary, tc, relPath, tc.ProfileID()); err != nil {
+			return "", git.CommitStaging{}, err
 		}
 		staged = append(staged, filepath.ToSlash(relPath))
 	}
 	staging.Paths = staged
-	amend, _ := args["amend"].(bool)
-	ctx, historyErr := tools.GitHistoryContext(ctx, tctx)
+	ctx, historyErr := tools.GitHistoryContext(ctx, tc)
 	if historyErr != nil {
-		return "", historyErr
+		return "", git.CommitStaging{}, historyErr
 	}
-	hash, err := t.Git.Commit(ctx, cwd, git.GitCommitOpts{Message: message, Paths: staged, Amend: amend})
-	if err != nil {
-		return git.MarshalCommitToolResponse(hash, staging, err)
-	}
-	return git.MarshalCommitToolResponse(hash, staging, nil)
+	hash, err := m.Git.Commit(ctx, cwd, git.GitCommitOpts{Message: request.Message, Paths: staged, Amend: request.Amend,
+		IdentityName: request.IdentityName, IdentityEmail: request.IdentityEmail})
+	return hash, staging, err
 }
 
 func assertGitCommitPath(
@@ -283,20 +306,6 @@ func assertGitCommitPath(
 		return writePathReject(ctx, boundary, filepath.ToSlash(relPath), profileID, "git_commit", err, deny)
 	}
 	return err
-}
-
-func stringSliceFromArg(args map[string]any, key string) []string {
-	raw, ok := args[key].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-			out = append(out, strings.TrimSpace(s))
-		}
-	}
-	return out
 }
 
 func intArg(args map[string]any, key string, defaultVal int) int {

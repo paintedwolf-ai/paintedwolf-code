@@ -24,7 +24,7 @@ func TestPageCompactionWalksWholeInventory(t *testing.T) {
 		}
 		raw, err := json.Marshal(page)
 		testutil.FailErr(t, "marshal page", err)
-		spilled := WireSpillToolOutput(t.TempDir(), Screened(string(raw)), 1800, 0)
+		spilled := WireSpillToolOutput(t.Context(), t.TempDir(), Screened(string(raw)), 1800, 0)
 		if spilled.RejectCode != "" {
 			t.Fatalf("spill rejected: %s", spilled.RejectCode)
 		}

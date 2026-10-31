@@ -26,15 +26,26 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		return nil, fmt.Errorf("gate decision required")
 	}
 	action := *req.ProposedAction
-	displayAction := redactedApprovalAction(action)
-	title := observability.RedactCaptureText(req.Title)
+	displayAction, err := redactedApprovalAction(action)
+	if err != nil {
+		return nil, err
+	}
+	fileChanges := displayAction.Mutations.FileChanges
+	if action.Invocation.NativeInputs == nil {
+		fileChanges = redactedFileChanges(fileChanges)
+	}
+	text, err := checkpointPresentationText(req)
+	if err != nil {
+		return nil, err
+	}
+	title := text.title
 	stage := ApprovalStagePreSpawn
 	subject := genericApprovalSubject(displayAction, title)
 	primaryGate, cited, reasons := PresentDecision(req.Decision)
 	presentation := ApprovalPresentation{
-		FileChanges: redactedFileChanges(action.Mutations.FileChanges),
+		FileChanges: fileChanges,
 		Action:      actionLabel(displayAction), Tool: firstNonEmpty(displayAction.Presentation.PresentationTool, displayAction.Invocation.Tool), Command: displayAction.Presentation.Command,
-		Impact: firstNonEmpty(observability.RedactCaptureText(action.Presentation.EstimatedImpact), "Allow the agent to perform this exact action."),
+		Impact: firstNonEmpty(displayAction.Presentation.EstimatedImpact, "Allow the agent to perform this exact action."),
 		Lead:   leadFact(primaryGate, cited),
 		Gate:   primaryGate, Cited: cited, GrantDelta: req.GrantDelta,
 		ConsequenceBand: string(req.ConsequenceBand), ConsequenceCode: string(req.ConsequenceCode),
@@ -42,10 +53,10 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		ApprovalRules: append([]ApprovalRuleMatch(nil), req.ApprovalMatches...),
 	}
 	if req.Explanation != nil {
-		presentation.Impact = observability.RedactCaptureText(req.Explanation.What)
-		presentation.Who = observability.RedactCaptureText(req.Explanation.Who)
-		presentation.IfWrong = observability.RedactCaptureText(req.Explanation.IfWrong)
-		presentation.AllowLine = observability.RedactCaptureText(req.Explanation.AllowLine)
+		presentation.Impact = text.explanation.What
+		presentation.Who = text.explanation.Who
+		presentation.IfWrong = text.explanation.IfWrong
+		presentation.AllowLine = text.explanation.AllowLine
 	}
 
 	options := approvalOptionsFromOffers(req.GrantOffers, true)
@@ -170,7 +181,10 @@ func sentenceCase(s string) string {
 	return string(unicode.ToUpper(r)) + s[size:]
 }
 
-func redactedApprovalAction(action ProposedAction) ProposedAction {
+func redactedApprovalAction(action ProposedAction) (ProposedAction, error) {
+	if action.Invocation.NativeInputs != nil {
+		return action.Invocation.NativeInputs.inspectAction(action)
+	}
 	action.Invocation.Tool = observability.RedactCaptureText(action.Invocation.Tool)
 	action.Presentation.PresentationTool = observability.RedactCaptureText(action.Presentation.PresentationTool)
 	action.Presentation.Command = observability.RedactCaptureText(action.Presentation.Command)
@@ -187,7 +201,7 @@ func redactedApprovalAction(action ProposedAction) ProposedAction {
 	if scrubbed, ok := observability.RedactCaptureValue(action.Invocation.Args).(map[string]any); ok {
 		action.Invocation.Args = scrubbed
 	}
-	return action
+	return action, nil
 }
 
 // redactedFileChanges screens the text and paths a person reads. Sizes and
@@ -273,11 +287,11 @@ func socketApprovalOptions(req CheckpointRequest, action ProposedAction) []Appro
 	for _, target := range req.SocketCapability.Targets {
 		targets = append(targets, ApprovalSocketTarget{
 			ApprovedPath: target.ApprovedPath,
-			ResolvedPath: target.ResolvedPath,
+			ResolvedPath: target.ResolvedPath, Binding: target.Binding,
 		})
 	}
 	permit := ApprovalAuthorityDelta{
-		Kind: AuthoritySocketPermit, SessionID: req.SessionID, ToolCallID: req.ToolCallID,
+		Kind: AuthoritySocketPermit, ChatSessionID: action.ChatSession(), SessionID: req.SessionID, ToolCallID: req.ToolCallID,
 		ActionDigest: GrantKey(action), Sockets: targets,
 	}
 	once := ApprovalOption{
@@ -385,8 +399,9 @@ func genericApprovalSubject(action ProposedAction, title string) ApprovalSubject
 func socketApprovalSubject(title string, sockets []SocketCapabilityTarget) ApprovalSubject {
 	targets := make([]ApprovalTarget, 0, len(sockets))
 	for _, socket := range sockets {
-		targets = append(targets, ApprovalTarget{Kind: "socket", Label: socket.ApprovedPath, Details: map[string]any{
-			"approved_path": socket.ApprovedPath, "resolved_path": socket.ResolvedPath,
+		// Subject paths are display; the authority deltas keep the exact bytes.
+		targets = append(targets, ApprovalTarget{Kind: "socket", Label: reviewDisplayText(socket.ApprovedPath), Details: map[string]any{
+			"approved_path": reviewDisplayText(socket.ApprovedPath), "resolved_path": reviewDisplayText(socket.ResolvedPath),
 			"already_chat_granted": socket.AlreadyChatGranted,
 		}})
 	}

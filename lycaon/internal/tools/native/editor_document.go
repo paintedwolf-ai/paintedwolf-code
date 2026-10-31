@@ -34,6 +34,9 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	if err != nil && base.ID == "" {
 		return sourceview.Text{}, err
 	}
+	if !base.ReadWhole && tool != "edit" && tool != "replace_lines" {
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath, "document_id": base.ID}}
+	}
 	return sourceview.Text{Content: base.Text, Editor: &base}, nil
 }
 
@@ -51,6 +54,11 @@ type landing struct {
 	// publicationError is why the file could not be written; nil when the
 	// edit is withheld for a diverged file.
 	publicationError error
+	// documentID, acceptedRevision and publishedSHA256 identify a pinned
+	// write's accepted document revision and the bytes the file holds.
+	documentID       string
+	acceptedRevision int64
+	publishedSHA256  string
 }
 
 // note is the receipt line stating the landing when it was not a plain file
@@ -81,10 +89,13 @@ func (l landing) publicationNote() string {
 	return note
 }
 
+type editorTextProposal struct{ Authored, Reviewed string }
+
 // landEditedText updates the source document or file. It is the final
 // content guard: review gates can change the text a tool proposed.
 // A changed document returns ErrEditorDocumentMoved before writing.
-func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, resolved projectpaths.Resolved, st sourceview.Text, newContent string) (landing, error) {
+func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, resolved projectpaths.Resolved, st sourceview.Text, proposal editorTextProposal) (landing, error) {
+	newContent := proposal.Reviewed
 	if err := guardMutationContent(tool, resolved.DisplayPath, newContent); err != nil {
 		return landing{}, err
 	}
@@ -141,7 +152,14 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 		return landing{}, err
 	}
 	delivery.Commit(ctx)
-	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, edit, applied.Document)
+	applied.Document.ReadWhole = true
+	if tool != "write" {
+		applied.Document.ReadWhole = st.Editor.ReadWhole
+		applied.Document.ReadSpans = st.Editor.ReadSpans
+	}
+	readEdit := edit
+	readEdit.Content = proposal.Authored
+	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, readEdit, applied.Document)
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
 	reportLanded(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)

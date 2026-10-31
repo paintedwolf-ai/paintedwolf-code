@@ -49,9 +49,6 @@ func TestFormatGitLineNoneEmptyRepoDropsSurveySteer(t *testing.T) {
 	if got != packboard.GitNoneEmptyRepoOrientationLine {
 		t.Fatalf("got %q, want %q", got, packboard.GitNoneEmptyRepoOrientationLine)
 	}
-	if strings.Contains(got, "read/grep") {
-		t.Fatalf("known-empty repo should not steer to a survey: %q", got)
-	}
 }
 
 func TestFormatGitLineRepository(t *testing.T) {

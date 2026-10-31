@@ -14,9 +14,15 @@ import (
 //go:embed released-baselines.json
 var releasedBaselinesJSON []byte
 
+// UpgradeSource identifies the held recovery reader and immutable block sharing.
+type UpgradeSource struct {
+	DB             *sql.DB
+	SharedOriginal bool
+}
+
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {
-	Before func(context.Context, *sql.DB, migrations.Plan) error
+	Before func(context.Context, UpgradeSource, migrations.Plan) error
 	// BeforeCurrentOpen captures application-version recovery using the existing reader.
 	BeforeCurrentOpen func(context.Context, *sql.DB, migrations.Plan) error
 	After             func(context.Context, migrations.Plan) error
@@ -32,13 +38,19 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	away := migrations.VaultUnlockAway(current)
+	linkKind := migrations.SourceLinkKind(current)
+	inlineInputs := migrations.ProgramInlineInputs(linkKind.From)
+	nativeGaps := migrations.ProgramNativeGap(inlineInputs.From)
+	programs := migrations.ProgramReceipts(nativeGaps.From)
+	effectPermits := migrations.EffectPermitIdentity(programs.From)
+	away := migrations.VaultUnlockAway(effectPermits.From)
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.SourceManifestLayout(away.From), away,
+		migrations.SourceManifestLayout(away.From), away, effectPermits, programs, nativeGaps, inlineInputs, linkKind,
 	}
-	return migrations.New(current, released, steps)
+	// Registered intermediate shapes are supported sources, not released baselines.
+	return migrations.New(current, append(released, effectPermits.From, programs.From, nativeGaps.From, inlineInputs.From, linkKind.From), steps)
 }
 
 // CurrentBaseline identifies the fresh-install schema.
@@ -92,7 +104,20 @@ func planUpgrade(ctx context.Context, database DBTX, registry *migrations.Regist
 // UpgradeStaged upgrades only a caller-owned extracted database, before restore publication.
 // The original archive and live installation remain the caller's recovery material.
 func UpgradeStaged(ctx context.Context, path string) error {
-	return upgradeExisting(ctx, path, UpgradeHooks{}, true)
+	if err := upgradeExisting(ctx, path, UpgradeHooks{}, true); err != nil {
+		return err
+	}
+	// Even a current-schema archive may have unaudited secondary indexes.
+	// Seal the obligation into the staged bytes before their manifest is updated.
+	writer, err := openRetainedUpgradeWriter(ctx, path)
+	if err != nil {
+		return err
+	}
+	err = prepareAuditState(ctx, writer, true)
+	if err := errors.Join(err, writer.Close()); err != nil {
+		return err
+	}
+	return sealRebuiltStore(ctx, path)
 }
 
 func upgradeExisting(ctx context.Context, path string, hooks UpgradeHooks, staged bool) (err error) {
@@ -130,7 +155,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	}
 	if !plan.Required() {
 		if staged {
-			return validateStoreIntegrity(ctx, reader)
+			return validateUpgradeStructure(ctx, reader)
 		}
 		if hooks.BeforeCurrentOpen != nil {
 			return hooks.BeforeCurrentOpen(ctx, reader, plan)
@@ -156,7 +181,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		if hooks.Progress != nil {
 			hooks.Progress(migrations.Snapshotting)
 		}
-		if err := hooks.Before(ctx, reader, plan); err != nil {
+		if err := hooks.Before(ctx, UpgradeSource{DB: reader}, plan); err != nil {
 			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Source.Revision, "capture upgrade recovery")
 		}
 	}

@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -13,17 +14,20 @@ func (e *Boundary) preInvokePolicyContext(
 	confReq confine.Request,
 ) platform.PolicyContext {
 	policyEval := platform.PolicyContext{
+		NativeInputs:            tc.Invocation.NativeInputs,
 		ProfileID:               profileID,
 		ToolAccess:              tc.Turn.ToolAccess,
 		ToolName:                tool,
 		ToolArgs:                args,
 		ResolvedFiles:           ResolvedApprovalFiles(tool, args, tc),
+		NativePathTargets:       nativePathTargetsFromArgs(args),
+		ApprovedFileAccess:      append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
 		HostResources:           append([]string(nil), tc.Host.HostResources...),
 		HostResourceFamilies:    append([]string(nil), tc.Host.HostResourceFamilies...),
 		ProjectID:               tc.Identity.ProjectID,
 		ProjectDir:              tc.ActiveRootPath(),
 		SessionID:               tc.Identity.SessionID,
-		ActionID:                tc.Identity.ToolCallID,
+		ActionID:                tc.EffectActionID(),
 		ParentSessionID:         tc.Identity.ParentSessionID,
 		RootSessionID:           tc.ChatSessionID(),
 		ConfineRequest:          confReq,
@@ -36,6 +40,10 @@ func (e *Boundary) preInvokePolicyContext(
 		DirectIPVisibility:      directIPVisibility(tc.Direct.DirectIPRequested),
 		DeclaredDestinations:    append([]string(nil), tc.Direct.DirectIPDeclared...),
 		PackageExecution:        tc.Files.PackageExecution,
+	}
+	if tc.Invocation.NativeOperation != nil {
+		policyEval.NativeOperation = tc.Invocation.NativeOperation
+		policyEval.BoundStages = tc.Invocation.NativeStages
 	}
 	if e.Metadata.registry != nil {
 		if meta, ok := e.Metadata.registry.Meta(tool); ok {

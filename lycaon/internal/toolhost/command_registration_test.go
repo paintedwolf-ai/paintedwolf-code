@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -20,7 +23,7 @@ func TestRegisteredProcessListReturnsStructuredInventory(t *testing.T) {
 	var verify *native.VerifyTool
 	var output *command.CommandOutputTool
 	var stop *command.CommandStopTool
-	if err := registerCommandTools(reg, nil, nil, &cmd, &verify, &output, &stop); err != nil {
+	if err := registerCommandTools(reg, nil, sandbox.NewBoundary(sandbox.Config{}, nil), &cmd, &verify, &output, &stop); err != nil {
 		testutil.FailErr(t, "register process and command tools", err)
 	}
 	reviewed := false
@@ -66,7 +69,7 @@ func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T)
 			var verify *native.VerifyTool
 			var output *command.CommandOutputTool
 			var stop *command.CommandStopTool
-			if err := registerCommandTools(reg, nil, nil, &cmd, &verify, &output, &stop); err == nil {
+			if err := registerCommandTools(reg, nil, sandbox.NewBoundary(sandbox.Config{}, nil), &cmd, &verify, &output, &stop); err == nil {
 				t.Fatal("undeclared command tool registered")
 			}
 			if len(reg.List()) != missing {
@@ -78,5 +81,35 @@ func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T)
 				}
 			}
 		})
+	}
+}
+
+func TestComposedProgramOwnersRunNativeProcessSubstitutions(t *testing.T) {
+	f := newComposedProgramFixture(t)
+	testutil.FailErr(t, "seed a.txt", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("beta\nalpha\ngamma\n"), 0o600))
+	testutil.FailErr(t, "seed b.txt", os.WriteFile(filepath.Join(f.Dir, "b.txt"), []byte("beta\nalpha\ndelta\n"), 0o600))
+
+	raw, err := f.Call(t, t.Context(), `
+comm -12 <(sort a.txt) <(sort b.txt)
+paste <(printf 'k1\nk2\n') <(printf 'v1\nv2\n')
+diff -u <(sort a.txt) <(sort b.txt) || printf 'diff_status=%d\n' "$?"
+printf 'hello\n' > >(tr 'a-z' 'A-Z')
+`)
+	testutil.FailErr(t, "run composed process substitutions", err)
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(raw), &outcome))
+	if outcome.Status != 0 || outcome.State != "completed" {
+		t.Fatalf("unexpected outcome: %+v", outcome)
+	}
+	for _, want := range []string{
+		"alpha\nbeta\n",
+		"k1\tv1\nk2\tv2\n",
+		"-gamma\n+delta\n",
+		"diff_status=1\n",
+		"HELLO\n",
+	} {
+		if !strings.Contains(outcome.Stdout, want) {
+			t.Fatalf("stdout %q missing %q", outcome.Stdout, want)
+		}
 	}
 }

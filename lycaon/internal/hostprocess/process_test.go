@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -140,5 +140,49 @@ func TestProcessSignalRefusesAProcessTheSessionDidNotStart(t *testing.T) {
 				t.Fatalf("unowned process is gone: %v", err)
 			}
 		})
+	}
+}
+
+func TestVisibleProcessesAndProcessExists(t *testing.T) {
+	self := os.Getpid()
+	if !ProcessExists(self) {
+		t.Fatalf("expected current process %d to exist", self)
+	}
+	if ProcessExists(0) || ProcessExists(-1) || ProcessExists(9999999) {
+		t.Fatal("expected invalid or out-of-range PID not to exist")
+	}
+
+	child := exec.Command("/bin/sleep", "30")
+	if err := child.Start(); err != nil {
+		t.Fatalf("start /bin/sleep: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = child.Process.Kill()
+		_ = child.Wait()
+	})
+	childPID := child.Process.Pid
+	if !ProcessExists(childPID) {
+		t.Fatalf("expected child process %d to exist", childPID)
+	}
+
+	procs, err := VisibleProcesses(t.Context())
+	if err != nil {
+		t.Fatalf("VisibleProcesses: %v", err)
+	}
+	if len(procs) == 0 {
+		t.Fatal("expected non-empty visible process list")
+	}
+	foundChild := false
+	for _, p := range procs {
+		if p.PID == childPID {
+			foundChild = true
+			if p.Command == "" || p.Name == "" || p.Instance == "" || p.StartOrder == 0 {
+				t.Fatalf("expected non-empty Command and Name for child: %+v", p)
+			}
+			break
+		}
+	}
+	if !foundChild {
+		t.Fatalf("expected child PID %d in VisibleProcesses", childPID)
 	}
 }

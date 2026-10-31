@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"os"
 	"strings"
 
@@ -18,7 +19,7 @@ type SourceVersions struct {
 	recovery *sourceRecovery
 	heads    SourceHeadReader
 	recorder SourceMutationRecorder
-	execute  func(context.Context, string, string, string, func() (*sourceMutationPlan, error)) (json.RawMessage, error)
+	execute  func(context.Context, string, string, string, sourceeffect.Memory, func() (*sourceMutationPlan, error)) (json.RawMessage, error)
 }
 
 // SourceVersionRestoreRequest selects the state to make current.
@@ -53,6 +54,11 @@ func (s *SourceVersions) Restore(
 	p ProjectSource,
 	req SourceVersionRestoreRequest,
 ) (*SourceVersionRestoreResult, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
@@ -84,8 +90,8 @@ func (s *SourceVersions) Restore(
 	if err != nil {
 		return nil, err
 	}
-	response, err := s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
-		return s.prepareSourceVersionRestore(ctx, operationID, p, req)
+	response, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
+		return s.prepareSourceVersionRestore(ctx, operationID, p, req, memory)
 	})
 	if err != nil {
 		return nil, err
@@ -102,6 +108,7 @@ func (s *SourceVersions) prepareSourceVersionRestore(
 	operationID string,
 	p ProjectSource,
 	req SourceVersionRestoreRequest,
+	memory sourceeffect.Memory,
 ) (*sourceMutationPlan, error) {
 	baseState := req.Base.State
 	if baseState != api.SourceTipStateContent && baseState != api.SourceTipStateAbsent {
@@ -116,13 +123,13 @@ func (s *SourceVersions) prepareSourceVersionRestore(
 	if baseState == api.SourceTipStateAbsent {
 		plan, err = prepareRestoreOverAbsent(p, req)
 	} else {
-		plan, err = prepareRestoreOverContent(ctx, operationID, p, req)
+		plan, err = prepareRestoreOverContent(ctx, operationID, p, req, memory)
 	}
 	if err != nil {
 		return nil, err
 	}
 	if plan.Kind == "delete" {
-		if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath); err != nil {
+		if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath, memory); err != nil {
 			return nil, err
 		}
 	}
@@ -264,6 +271,7 @@ func prepareRestoreOverContent(
 	operationID string,
 	p ProjectSource,
 	req SourceVersionRestoreRequest,
+	memory sourceeffect.Memory,
 ) (*sourceMutationPlan, error) {
 	root, abs, rel, err := locateLifecycleSource(p, req.RootID, req.Path)
 	if errors.Is(err, ErrSourceNotFound) {
@@ -284,7 +292,7 @@ func prepareRestoreOverContent(
 		return nil, ErrSourceWriteConflict
 	}
 	if req.Version.State == string(api.SourceTipStateAbsent) {
-		treeSHA, fingerprintErr := sourceTreeFingerprint(ctx, abs)
+		treeSHA, _, fingerprintErr := sourceTreeFingerprint(ctx, abs, memory)
 		if fingerprintErr != nil {
 			return nil, fingerprintErr
 		}

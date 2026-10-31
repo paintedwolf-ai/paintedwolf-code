@@ -6,6 +6,8 @@ import (
 	"os"
 	osexec "os/exec"
 	"sync"
+
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
 // Provider resolves one immutable process PATH.
@@ -18,7 +20,8 @@ type Provider struct {
 	lookupEnv    func(string) (string, bool)
 	environ      func() []string
 	stat         func(string) (fs.FileInfo, error)
-	run          func(*osexec.Cmd) error
+	run          func(context.Context, *osexec.Cmd) error
+	prepare      func(context.Context, string, []string, execpkg.ExecOpts) (*osexec.Cmd, func(), error)
 	accountShell func(context.Context) (string, error)
 }
 
@@ -30,6 +33,7 @@ func NewProvider(cfg Config) *Provider {
 		environ:      os.Environ,
 		stat:         defaultStat,
 		run:          defaultRun,
+		prepare:      execpkg.PrepareCommand,
 		accountShell: defaultAccountShell,
 	}
 }

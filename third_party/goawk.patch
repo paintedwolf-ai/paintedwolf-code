@@ -1,0 +1,1276 @@
+--- /dev/null
++++ b/interp/budget.go
+@@ -0,0 +1,112 @@
++package interp
++
++import "strings"
++
++// Budget meters an embedding host's work and allocation ceilings. Step is
++// called before each backward jump, for-in iteration and user function call,
++// which bounds every unbounded execution path; Allocate is called before a
++// program builds a new string or array element of n bytes. A non-nil error
++// stops execution and is returned by Execute.
++type Budget interface {
++	Step() error
++	Allocate(n int) error
++	Retain(n int) error
++}
++
++func (p *interp) step() error {
++	if p.budget == nil {
++		return nil
++	}
++	return p.budget.Step()
++}
++
++func (p *interp) allocate(n int) error {
++	if p.budget == nil {
++		return nil
++	}
++	return p.budget.Allocate(n)
++}
++
++// assignElement charges a new element's key and value before storing it.
++func (p *interp) assignElement(array map[string]value, key string, v value) error {
++	n := len(key)
++	if _, exists := array[key]; !exists {
++		n += elementOverhead + len(v.s) + len(v.backing)
++	}
++	if err := p.allocate(n); err != nil {
++		return err
++	}
++	array[strings.Clone(key)] = v
++	return nil
++}
++
++func (p *interp) arrayGet(array map[string]value, key string) (value, error) {
++	v, exists := array[key]
++	if !exists {
++		if err := p.assignElement(array, key, v); err != nil {
++			return value{}, err
++		}
++	}
++	return v, nil
++}
++
++// elementOverhead covers one map entry and value header beyond its bytes.
++const elementOverhead = 192
++
++// formatBound is an upper bound on the bytes fmt.Sprintf produces for a
++// parsed format: its literal bytes, every width and precision (including *
++// arguments) and each argument's own size.
++func formatBound(format string, args []any) int {
++	bound, arg := 0, 0
++	argSize := func() int {
++		if arg >= len(args) {
++			return 0
++		}
++		switch v := args[arg].(type) {
++		case string:
++			return len(v)
++		case []byte:
++			return len(v)
++		}
++		return 32
++	}
++	for i := 0; i < len(format); i++ {
++		if format[i] != '%' {
++			bound++
++			continue
++		}
++		i++
++		number := 0
++		for i < len(format) && strings.IndexByte(" .-+*#0123456789", format[i]) >= 0 {
++			switch c := format[i]; {
++			case c >= '0' && c <= '9':
++				number = number*10 + int(c-'0')
++				if number > 1<<30 {
++					number = 1 << 30
++				}
++			case c == '*':
++				if arg < len(args) {
++					if width, ok := args[arg].(int64); ok && width > 0 {
++						if width > 1<<30 {
++							width = 1 << 30
++						}
++						bound += int(width)
++					}
++				}
++				arg++
++			default:
++				bound += number
++				number = 0
++			}
++			i++
++		}
++		bound += number
++		if i < len(format) && format[i] == '%' {
++			bound++
++			continue
++		}
++		bound += argSize()
++		arg++
++	}
++	return bound
++}
+--- /dev/null
++++ b/interp/budget_test.go
+@@ -0,0 +1,140 @@
++package interp_test
++
++import (
++	"errors"
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/benhoyt/goawk/interp"
++	"github.com/benhoyt/goawk/parser"
++)
++
++type countingBudget struct {
++	steps, bytes, maxSteps, maxBytes int
++}
++
++var errBudget = errors.New("budget exhausted")
++
++func (b *countingBudget) Step() error {
++	b.steps++
++	if b.steps > b.maxSteps {
++		return errBudget
++	}
++	return nil
++}
++
++func (b *countingBudget) Retain(n int) error { b.bytes = 0; return b.Allocate(n) }
++
++func (b *countingBudget) Allocate(n int) error {
++	b.bytes += n
++	if b.bytes > b.maxBytes {
++		return errBudget
++	}
++	return nil
++}
++
++func run(t *testing.T, src string, budget *countingBudget) (string, error) {
++	t.Helper()
++	program, err := parser.ParseProgram([]byte(src), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var out strings.Builder
++	_, err = interp.ExecProgram(program, &interp.Config{Stdin: strings.NewReader("a b\n"), Output: &out, Environ: []string{}, Budget: budget})
++	return out.String(), err
++}
++
++func TestBudgetMetersBackwardJumpsCallsAndIterations(t *testing.T) {
++	for _, c := range []struct {
++		src   string
++		steps int
++	}{
++		// Loops test their condition at the bottom: n iterations jump back n-1 times.
++		{"BEGIN { for (i = 0; i < 5; i++) ; }", 4},
++		{"BEGIN { i = 0; while (i < 3) i++ }", 2},
++		{"BEGIN { i = 0; do i++; while (i < 4) }", 3},
++		{"BEGIN { a[1]; a[2]; for (k in a) ; }", 2},
++		{"function f() { return 1 } BEGIN { f(); f() }", 2},
++		{"BEGIN { print 1 }", 0},
++	} {
++		budget := &countingBudget{maxSteps: 1 << 20, maxBytes: 1 << 20}
++		if _, err := run(t, c.src, budget); err != nil || budget.steps != c.steps {
++			t.Errorf("%s: steps %d err %v, want %d", c.src, budget.steps, err, c.steps)
++		}
++	}
++	if _, err := run(t, "BEGIN { while (1) ; }", &countingBudget{maxSteps: 10, maxBytes: 1 << 20}); !errors.Is(err, errBudget) {
++		t.Fatalf("unbounded loop: %v", err)
++	}
++}
++
++func TestBudgetMetersCreatedValues(t *testing.T) {
++	budget := &countingBudget{maxSteps: 1 << 20, maxBytes: 1 << 20}
++	out, err := run(t, `{ s = $1 "-" $2; t = toupper(s); n = split("x,yy", parts, ","); gsub(/a/, "AA", s); printf "%s %s %d\n", s, t, n; a["k"] = "v" }`, budget)
++	if err != nil || out != "AA-b A-B 2\n" {
++		t.Fatalf("out %q err %v", out, err)
++	}
++	// ConcatMulti 3, toupper 3, split 1+2+128 overhead, gsub 4, sprintf bound, element 1+1+64.
++	if budget.bytes < 3+3+3+128+4+65 {
++		t.Fatalf("metered %d bytes", budget.bytes)
++	}
++	if _, err := run(t, `BEGIN { printf "%100000d", 1 }`, &countingBudget{maxSteps: 1, maxBytes: 1000}); !errors.Is(err, errBudget) {
++		t.Fatalf("wide format: %v", err)
++	}
++}
++
++func TestBudgetReconcilesOnlyDeadRecordTemporaries(t *testing.T) {
++	cases := []struct {
++		source string
++		limit  int
++		refuse bool
++	}{
++		{`{ x=toupper($0) } END {print NR}`, 32768, false},
++		{`function temporary(s,a){split(s,a,"");return 1} {temporary($0)} END {print NR}`, 524288, false},
++		{`{ x=$0; gsub(/^./,"yyy",x) } END {print NR}`, 32768, false},
++		{`function tiny(s){return substr(s,1,4)} { a[NR]=tiny($0) } END {print NR}`, 32768, true},
++		{`{ a[NR]=$1 } END {print NR}`, 32768, true},
++		{`{ a[NR]=tolower($1) } END {print NR}`, 32768, true},
++		{`{ x=x $0 } END {print length(x)}`, 32768, true},
++		{`{ a[substr($0,1,4)]++ } END {print length(a)}`, 262144, false},
++		{`function tiny(s){return substr(s,1,4)} { a[NR]=tiny($0) "!" } END {print length(a)}`, 262144, false},
++	}
++	var input strings.Builder
++	for i := 0; i < 1000; i++ {
++		fmt.Fprintf(&input, "%04d %s\n", i, strings.Repeat("x", 994))
++	}
++	for _, test := range cases {
++		t.Run(test.source, func(t *testing.T) {
++			program, err := parser.ParseProgram([]byte(test.source), nil)
++			if err != nil {
++				t.Fatal(err)
++			}
++			budget := &countingBudget{maxSteps: 1 << 20, maxBytes: test.limit}
++			var out strings.Builder
++			_, err = interp.ExecProgram(program, &interp.Config{Stdin: strings.NewReader(input.String()), Output: &out, Environ: []string{}, Budget: budget, MaxInputRecord: 4096})
++			if test.refuse {
++				if !errors.Is(err, errBudget) {
++					t.Fatalf("retained storage accepted: %v", err)
++				}
++			} else if err != nil || out.String() != "1000\n" {
++				t.Fatalf("stream=%q err=%v", out.String(), err)
++			}
++		})
++	}
++}
++
++func TestBudgetRefusesReplacementBeforeAssigningPartialArrayValue(t *testing.T) {
++	program, err := parser.ParseProgram([]byte(`BEGIN { a[1]="aaa"; r=sprintf("%2000s","x"); print "before"; gsub(/a/,r,a[1]); print "after" }`), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	machine, err := interp.New(program)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var out strings.Builder
++	_, err = machine.Execute(&interp.Config{Output: &out, Environ: []string{}, Budget: &countingBudget{maxSteps: 1 << 20, maxBytes: 8192}})
++	if !errors.Is(err, errBudget) || out.String() != "before\n" || machine.Array("a")["1"] != "aaa" {
++		t.Fatalf("err %v output %q values %v", err, out.String(), machine.Array("a"))
++	}
++}
+--- a/interp/functions.go
++++ b/interp/functions.go
+@@ -276,54 +276,23 @@
+ 		}
+ 		parts = re.Split(s, -1)
+ 	}
++	size := 0
++	for _, part := range parts {
++		size += len(part) + elementOverhead
++	}
++	if err := p.allocate(size); err != nil {
++		return 0, err
++	}
+ 	array := make(map[string]value, len(parts))
+ 	for i, part := range parts {
+-		array[strconv.Itoa(i+1)] = numStr(part)
+-	}
+-	p.arrays[p.arrayIndex(scope, index)] = array
++		array[strconv.Itoa(i+1)] = numStr(strings.Clone(part))
++	}
++	arrayIndex := p.arrayIndex(scope, index)
++	p.arrays[arrayIndex] = array
++	if arrayIndex < len(p.arrayHighWater) {
++		p.arrayHighWater[arrayIndex] = len(array)
++	}
+ 	return len(array), nil
+-}
+-
+-// Guts of the sub() and gsub() functions
+-func (p *interp) sub(regex, repl, in string, global bool) (out string, num int, err error) {
+-	re, err := p.compileRegex(regex)
+-	if err != nil {
+-		return "", 0, err
+-	}
+-	count := 0
+-	out = re.ReplaceAllStringFunc(in, func(s string) string {
+-		// Only do the first replacement for sub(), or all for gsub()
+-		if !global && count > 0 {
+-			return s
+-		}
+-		count++
+-		// Handle & (ampersand) properly in replacement string
+-		r := make([]byte, 0, 64) // Up to 64 byte replacement won't require heap allocation
+-		for i := 0; i < len(repl); i++ {
+-			switch repl[i] {
+-			case '&':
+-				r = append(r, s...)
+-			case '\\':
+-				i++
+-				if i < len(repl) {
+-					switch repl[i] {
+-					case '&':
+-						r = append(r, '&')
+-					case '\\':
+-						r = append(r, '\\')
+-					default:
+-						r = append(r, '\\', repl[i])
+-					}
+-				} else {
+-					r = append(r, '\\')
+-				}
+-			default:
+-				r = append(r, repl[i])
+-			}
+-		}
+-		return string(r)
+-	})
+-	return out, count, nil
+ }
+ 
+ type cachedFormat struct {
+@@ -515,6 +484,9 @@
+ 		}
+ 		converted = append(converted, v)
+ 	}
++	if err := p.allocate(formatBound(format, converted)); err != nil {
++		return "", err
++	}
+ 	return fmt.Sprintf(format, converted...), nil
+ }
+ 
+--- a/interp/interp.go
++++ b/interp/interp.go
+@@ -70,25 +70,28 @@
+ 
+ type interp struct {
+ 	// Input/output
+-	output        io.Writer
+-	errorOutput   io.Writer
+-	scanner       *bufio.Scanner
+-	scanners      map[string]*bufio.Scanner
+-	stdin         io.Reader
+-	filenameIndex int
+-	hadFiles      bool
+-	input         io.Reader
+-	inputBuffer   []byte
+-	inputStreams  map[string]inputStream
+-	outputStreams map[string]outputStream
+-	noExec        bool
+-	noFileWrites  bool
+-	noFileReads   bool
+-	shellCommand  []string
+-	csvOutput     *bufio.Writer
+-	noArgVars     bool
+-	splitBuffer   []byte
+-	fileSystem    fs.FS
++	output         io.Writer
++	errorOutput    io.Writer
++	scanner        *bufio.Scanner
++	scanners       map[string]*bufio.Scanner
++	stdin          io.Reader
++	filenameIndex  int
++	hadFiles       bool
++	input          io.Reader
++	inputBuffer    []byte
++	inputStreams   map[string]inputStream
++	outputStreams  map[string]outputStream
++	noExec         bool
++	budget         Budget
++	maxInputRecord int
++	arrayHighWater []int
++	noFileWrites   bool
++	noFileReads    bool
++	shellCommand   []string
++	csvOutput      *bufio.Writer
++	noArgVars      bool
++	splitBuffer    []byte
++	fileSystem     fs.FS
+ 
+ 	// Scalars, arrays, and function state
+ 	globals       []value
+@@ -109,6 +112,7 @@
+ 	lineNum         value
+ 	fileLineNum     value
+ 	fields          []string
++	fieldBacking    string
+ 	fieldsIsTrueStr []bool
+ 	numFields       value
+ 	haveFields      bool
+@@ -258,6 +262,11 @@
+ 	NoExec       bool
+ 	NoFileWrites bool
+ 	NoFileReads  bool
++
++	// Budget, when set, meters work and allocation for an embedding host.
++	Budget Budget
++	// MaxInputRecord bounds one record; zero retains the upstream default.
++	MaxInputRecord int
+ 
+ 	// Exec args used to run system shell. Typically, this will
+ 	// be {"/bin/sh", "-c"}
+@@ -576,6 +585,11 @@
+ 
+ 	// Set up I/O structures
+ 	p.noExec = config.NoExec
++	p.budget = config.Budget
++	p.maxInputRecord = config.MaxInputRecord
++	if p.maxInputRecord <= 0 {
++		p.maxInputRecord = maxRecordLength
++	}
+ 	p.noFileWrites = config.NoFileWrites
+ 	p.noFileReads = config.NoFileReads
+ 	p.stdin = config.Stdin
+@@ -704,6 +718,9 @@
+ 	var inRange []bool
+ lineLoop:
+ 	for {
++		if err := p.retainLiveValues(); err != nil {
++			return err
++		}
+ 		// Read and setup next line of input
+ 		line, err := p.nextLine()
+ 		if err == io.EOF {
+@@ -842,6 +859,13 @@
+ 
+ // Set special variable by index to given value
+ func (p *interp) setSpecial(index int, v value) error {
++	if v.backing != "" {
++		if err := p.allocate(len(v.s)); err != nil {
++			return err
++		}
++		v.s = strings.Clone(v.s)
++		v.backing = ""
++	}
+ 	switch index {
+ 	case ast.V_NF:
+ 		numFields := int(v.num())
+@@ -854,6 +878,9 @@
+ 		p.ensureFields()
+ 		p.numFields = v
+ 		if numFields < len(p.fields) {
++			for i := numFields; i < len(p.fields); i++ {
++				p.fields[i] = ""
++			}
+ 			p.fields = p.fields[:numFields]
+ 			p.fieldsIsTrueStr = p.fieldsIsTrueStr[:numFields]
+ 		}
+@@ -999,9 +1026,12 @@
+ 		return str("")
+ 	}
+ 	if p.fieldsIsTrueStr[index-1] {
+-		return str(p.fields[index-1])
++		v := borrowedString(p.fields[index-1], str(p.fieldBacking))
++		return v
+ 	} else {
+-		return numStr(p.fields[index-1])
++		v := borrowedString(p.fields[index-1], str(p.fieldBacking))
++		v.typ = typeNumStr
++		return v
+ 	}
+ }
+ 
+@@ -1026,6 +1056,10 @@
+ 
+ // Sets a single field, equivalent to "$index = value"
+ func (p *interp) setField(index int, value string) error {
++	if err := p.allocate(len(value)); err != nil {
++		return err
++	}
++	value = strings.Clone(value)
+ 	if index == 0 {
+ 		p.setLine(value, true)
+ 		return nil
+@@ -1112,7 +1146,7 @@
+ 	re.Longest() // other awks use leftmost-longest matching
+ 	// Dumb, non-LRU cache: just cache the first N regexes
+ 	if len(p.regexCache) < maxCachedRegexes {
+-		p.regexCache[regex] = re
++		p.regexCache[strings.Clone(regex)] = re
+ 	}
+ 	return re, nil
+ }
+--- a/interp/io.go
++++ b/interp/io.go
+@@ -319,6 +319,7 @@
+ 			comment:       p.csvInputConfig.Comment,
+ 			header:        p.csvInputConfig.Header,
+ 			fields:        &p.fields,
++			backing:       &p.fieldBacking,
+ 			setFieldNames: p.setFieldNames,
+ 		}
+ 		scanner.Split(splitter.scan)
+@@ -336,7 +337,7 @@
+ 		splitter := regexSplitter{re: &p.recordSepRegex, terminator: &p.recordTerminator}
+ 		scanner.Split(splitter.scan)
+ 	}
+-	scanner.Buffer(buffer, maxRecordLength)
++	scanner.Buffer(buffer, p.maxInputRecord+2)
+ 	return scanner
+ }
+ 
+@@ -488,6 +489,7 @@
+ 	noBOMCheck   bool
+ 
+ 	fields        *[]string
++	backing       *string
+ 	setFieldNames func(names []string)
+ 	rowNum        int
+ }
+@@ -662,6 +664,9 @@
+ 	// Normal row, set fields and return a line (token).
+ 	s.rowNum++
+ 	*s.fields = fields
++	if s.backing != nil {
++		*s.backing = strBuf
++	}
+ 	token = origData[skip:advance]
+ 	token = token[:len(token)-lenNewline(token)]
+ 	if tokenHasCR {
+@@ -730,6 +735,9 @@
+ // Ensure that the current line is parsed into fields, splitting it
+ // into fields if it hasn't been already
+ func (p *interp) ensureFields() {
++	if !p.haveFields && p.inputMode == DefaultMode {
++		p.fieldBacking = p.line
++	}
+ 	if p.haveFields {
+ 		return
+ 	}
+@@ -746,6 +754,7 @@
+ 				sepLen:    utf8.RuneLen(p.csvInputConfig.Separator),
+ 				comment:   p.csvInputConfig.Comment,
+ 				fields:    &p.fields,
++				backing:   &p.fieldBacking,
+ 			}
+ 			scanner.Split(splitter.scan)
+ 			if !scanner.Scan() {
+@@ -761,7 +770,10 @@
+ 		// 1-char FS is handled as plain split (not regex)
+ 		p.fields = strings.Split(p.line, p.savedFieldSep)
+ 	default:
+-		// Split on FS as a regex
++		// Split on FS as a regex. Drop obsolete backing references before reuse.
++		for i := range p.fields {
++			p.fields[i] = ""
++		}
+ 		p.fields = p.splitOnFieldSepRegex(p.fields[:0], p.line)
+ 	}
+ 
+@@ -861,10 +873,16 @@
+ 		}
+ 		p.recordTerminator = p.recordSep // will be overridden if RS is "" or multiple chars
+ 		if p.scanner.Scan() {
++			if len(p.scanner.Bytes()) > p.maxInputRecord {
++				return "", &RecordLimitError{Maximum: p.maxInputRecord, Observed: len(p.scanner.Bytes())}
++			}
+ 			// We scanned some input, break and return it
+ 			break
+ 		}
+ 		err := p.scanner.Err()
++		if err == bufio.ErrTooLong {
++			return "", &RecordLimitError{Maximum: p.maxInputRecord, Observed: p.maxInputRecord + 1}
++		}
+ 		if err != nil {
+ 			return "", fmt.Errorf("error reading from input: %s", err)
+ 		}
+--- /dev/null
++++ b/interp/live_budget.go
+@@ -0,0 +1,64 @@
++package interp
++
++import "fmt"
++
++// RecordLimitError identifies a record that cannot fit the configured scanner.
++type RecordLimitError struct{ Maximum, Observed int }
++
++func (e *RecordLimitError) Error() string {
++	return fmt.Sprintf("input record exceeds %d bytes", e.Maximum)
++}
++
++// retainLiveValues runs between completed records, when user calls have
++// unwound. It discards dead stack references, then reconciles the same budget
++// with reachable value storage. Backing strings are actual retained owners;
++// shared backing may be charged more than once, never inferred from GC state.
++func (p *interp) retainLiveValues() error {
++	if p.budget == nil {
++		return nil
++	}
++	for i := p.sp; i < len(p.stack); i++ {
++		p.stack[i] = value{}
++	}
++	if len(p.arrayHighWater) < len(p.arrays) {
++		if err := p.allocate(len(p.arrays) * 8); err != nil {
++			return err
++		}
++		high := make([]int, len(p.arrays))
++		copy(high, p.arrayHighWater)
++		p.arrayHighWater = high
++	}
++	bytes := cap(p.arrays)*8 + cap(p.localArrays)*24 + cap(p.globals)*48 + cap(p.stack)*48 + cap(p.fields)*16 + cap(p.fieldsIsTrueStr) + cap(p.arrayHighWater)*8
++	count := func(values []value) {
++		for _, v := range values {
++			bytes += len(v.s) + len(v.backing)
++		}
++	}
++	count(p.globals)
++	count(p.stack[:p.sp])
++	count(p.frame)
++	bytes += len(p.line) + len(p.fieldBacking)
++	for _, field := range p.fields {
++		bytes += len(field)
++	}
++	for i, array := range p.arrays {
++		if len(array) > p.arrayHighWater[i] {
++			p.arrayHighWater[i] = len(array)
++		}
++		bytes += p.arrayHighWater[i] * elementOverhead
++		for key, v := range array {
++			bytes += len(key) + len(v.s) + len(v.backing)
++		}
++	}
++	// Special strings and cache keys can outlive the input record too.
++	for _, text := range []string{p.filename.s, p.fieldSep, p.savedFieldSep, p.recordSep, p.recordTerminator, p.outputFieldSep, p.outputRecordSep, p.subscriptSep, p.convertFormat.format, p.outputFormat.format} {
++		bytes += len(text)
++	}
++	for key := range p.regexCache {
++		bytes += len(key)
++	}
++	for key := range p.formatCache {
++		bytes += len(key)
++	}
++	return p.budget.Retain(bytes)
++}
+--- a/interp/newexecute.go
++++ b/interp/newexecute.go
+@@ -107,6 +107,8 @@
+ 	p.lineNum = num(0)
+ 	p.fileLineNum = num(0)
+ 	p.fields = nil
++	p.fieldBacking = ""
++	p.arrayHighWater = nil
+ 	p.fieldsIsTrueStr = nil
+ 	p.numFields = num(0)
+ 	p.haveFields = false
+--- /dev/null
++++ b/interp/replacement.go
+@@ -0,0 +1,86 @@
++package interp
++
++type replacementAbort struct{ cause error }
++
++// Guts of the sub() and gsub() functions
++func (p *interp) sub(regex, repl, in string, global bool) (out string, num int, err error) {
++	// Only this callback's admission abort is recovered. No result is assigned
++	// by the VM until this complete replacement returns successfully.
++	defer func() {
++		if stopped := recover(); stopped != nil {
++			if refused, ok := stopped.(replacementAbort); ok {
++				out, num, err = "", 0, refused.cause
++				return
++			}
++			panic(stopped)
++		}
++	}()
++	admit := func(n int) {
++		if err := p.allocate(n); err != nil {
++			panic(replacementAbort{err})
++		}
++	}
++	// Unmatched bytes and old/new result growth overlap; callback-local small
++	// replacement scratch is reused. Expansion is admitted at each match.
++	admit(4*len(in) + 64)
++	re, err := p.compileRegex(regex)
++	if err != nil {
++		return "", 0, err
++	}
++	count := 0
++	out = re.ReplaceAllStringFunc(in, func(s string) string {
++		// Only do the first replacement for sub(), or all for gsub()
++		if !global && count > 0 {
++			return s
++		}
++		if err := p.step(); err != nil {
++			panic(replacementAbort{err})
++		}
++		count++
++		size := 0
++		for i := 0; i < len(repl); i++ {
++			switch repl[i] {
++			case '&':
++				size += len(s)
++			case '\\':
++				i++
++				if i < len(repl) && repl[i] != '&' && repl[i] != '\\' {
++					size += 2
++				} else {
++					size++
++				}
++			default:
++				size++
++			}
++		}
++		// Replacement builder capacity, conversion and aggregate result growth
++		// may overlap. This conservative charge precedes every such allocation.
++		admit(8 * size)
++		// Handle & (ampersand) properly in replacement string
++		r := make([]byte, 0, 64) // Up to 64 byte replacement won't require heap allocation
++		for i := 0; i < len(repl); i++ {
++			switch repl[i] {
++			case '&':
++				r = append(r, s...)
++			case '\\':
++				i++
++				if i < len(repl) {
++					switch repl[i] {
++					case '&':
++						r = append(r, '&')
++					case '\\':
++						r = append(r, '\\')
++					default:
++						r = append(r, '\\', repl[i])
++					}
++				} else {
++					r = append(r, '\\')
++				}
++			default:
++				r = append(r, repl[i])
++			}
++		}
++		return string(r)
++	})
++	return out, count, nil
++}
+--- a/interp/value.go
++++ b/interp/value.go
+@@ -20,9 +20,10 @@
+ 
+ // An AWK value (these are passed around by value)
+ type value struct {
+-	typ valueType // Type of value
+-	s   string    // String value (for typeStr and typeNumStr)
+-	n   float64   // Numeric value (for typeNum)
++	typ     valueType // Type of value
++	s       string    // String value (for typeStr and typeNumStr)
++	backing string    // Full backing retained by a field or substring
++	n       float64   // Numeric value (for typeNum)
+ }
+ 
+ // Create a new null value
+@@ -304,3 +305,22 @@
+ func isHexDigit(c byte) bool {
+ 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+ }
++
++// borrowedString retains the actual source allocation, including nested slices.
++// Value copies through assignments, calls and returns keep this owner intact.
++func borrowedString(text string, source value) value {
++	backing := source.backing
++	if backing == "" {
++		backing = source.s
++	}
++	v := str(text)
++	v.backing = backing
++	return v
++}
++
++func transformedString(text string, source value) value {
++	if text == source.s {
++		return borrowedString(text, source)
++	}
++	return str(text)
++}
+--- a/interp/vm.go
++++ b/interp/vm.go
+@@ -115,7 +115,10 @@
+ 			ip++
+ 			array := p.arrays[arrayIndex]
+ 			index := p.toString(p.peekTop())
+-			v := arrayGet(array, index)
++			v, err := p.arrayGet(array, index)
++			if err != nil {
++				return err
++			}
+ 			p.replaceTop(v)
+ 
+ 		case compiler.ArrayLocal:
+@@ -123,7 +126,10 @@
+ 			ip++
+ 			array := p.localArray(int(arrayIndex))
+ 			index := p.toString(p.peekTop())
+-			v := arrayGet(array, index)
++			v, err := p.arrayGet(array, index)
++			if err != nil {
++				return err
++			}
+ 			p.replaceTop(v)
+ 
+ 		case compiler.InGlobal:
+@@ -184,14 +190,18 @@
+ 			ip++
+ 			array := p.arrays[arrayIndex]
+ 			v, index := p.popTwo()
+-			array[p.toString(index)] = v
++			if err := p.assignElement(array, p.toString(index), v); err != nil {
++				return err
++			}
+ 
+ 		case compiler.AssignArrayLocal:
+ 			arrayIndex := code[ip]
+ 			ip++
+ 			array := p.localArray(int(arrayIndex))
+ 			v, index := p.popTwo()
+-			array[p.toString(index)] = v
++			if err := p.assignElement(array, p.toString(index), v); err != nil {
++				return err
++			}
+ 
+ 		case compiler.Delete:
+ 			arrayScope := code[ip]
+@@ -248,7 +258,9 @@
+ 			ip += 2
+ 			array := p.arrays[arrayIndex]
+ 			index := p.toString(p.pop())
+-			array[index] = num(array[index].num() + float64(amount))
++			if err := p.assignElement(array, index, num(array[index].num()+float64(amount))); err != nil {
++				return err
++			}
+ 
+ 		case compiler.IncrArrayLocal:
+ 			amount := code[ip]
+@@ -256,7 +268,9 @@
+ 			ip += 2
+ 			array := p.localArray(int(arrayIndex))
+ 			index := p.toString(p.pop())
+-			array[index] = num(array[index].num() + float64(amount))
++			if err := p.assignElement(array, index, num(array[index].num()+float64(amount))); err != nil {
++				return err
++			}
+ 
+ 		case compiler.AugAssignField:
+ 			operation := compiler.AugOp(code[ip])
+@@ -316,7 +330,9 @@
+ 			if err != nil {
+ 				return err
+ 			}
+-			array[index] = v
++			if err := p.assignElement(array, index, v); err != nil {
++				return err
++			}
+ 
+ 		case compiler.AugAssignArrayLocal:
+ 			operation := compiler.AugOp(code[ip])
+@@ -329,7 +345,9 @@
+ 			if err != nil {
+ 				return err
+ 			}
+-			array[index] = v
++			if err := p.assignElement(array, index, v); err != nil {
++				return err
++			}
+ 
+ 		case compiler.Regex:
+ 			// Stand-alone /regex/ is equivalent to: $0 ~ /regex/
+@@ -442,16 +460,29 @@
+ 
+ 		case compiler.Concat:
+ 			l, r := p.peekPop()
+-			p.replaceTop(str(p.toString(l) + p.toString(r)))
++			ls, rs := p.toString(l), p.toString(r)
++			if err := p.allocate(len(ls) + len(rs)); err != nil {
++				return err
++			}
++			p.replaceTop(str(ls + rs))
+ 
+ 		case compiler.ConcatMulti:
+ 			numValues := int(code[ip])
+ 			ip++
+ 			values := p.popSlice(numValues)
++			parts := make([]string, len(values))
++			size := 0
++			for i, v := range values {
++				parts[i] = p.toString(v)
++				size += len(parts[i])
++			}
++			if err := p.allocate(size); err != nil {
++				return err
++			}
+ 			var sb strings.Builder
+-
+-			for _, v := range values {
+-				sb.WriteString(p.toString(v))
++			sb.Grow(size)
++			for _, part := range parts {
++				sb.WriteString(part)
+ 			}
+ 			p.push(str(sb.String()))
+ 
+@@ -487,6 +518,11 @@
+ 
+ 		case compiler.Jump:
+ 			offset := code[ip]
++			if offset < 0 {
++				if err := p.step(); err != nil {
++					return err
++				}
++			}
+ 			ip += 1 + int(offset)
+ 
+ 		case compiler.JumpFalse:
+@@ -494,6 +530,11 @@
+ 			ip++
+ 			v := p.pop()
+ 			if !v.boolean() {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -502,6 +543,11 @@
+ 			ip++
+ 			v := p.pop()
+ 			if v.boolean() {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -518,6 +564,11 @@
+ 				b = ln == rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -534,6 +585,11 @@
+ 				b = ln != rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -550,6 +606,11 @@
+ 				b = ln < rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -566,6 +627,11 @@
+ 				b = ln > rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -582,6 +648,11 @@
+ 				b = ln <= rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -598,6 +669,11 @@
+ 				b = ln >= rn
+ 			}
+ 			if b {
++				if offset < 0 {
++					if err := p.step(); err != nil {
++						return err
++					}
++				}
+ 				ip += int(offset)
+ 			}
+ 
+@@ -636,6 +712,9 @@
+ 						return err
+ 					}
+ 				}
++				if err := p.step(); err != nil {
++					return err
++				}
+ 				err := p.execute(loopCode)
+ 				if err == errBreak {
+ 					break
+@@ -728,6 +807,9 @@
+ 			p.localArrays = append(p.localArrays, arrays)
+ 
+ 			// Execute the function!
++			if err := p.step(); err != nil {
++				return err
++			}
+ 			p.callDepth++
+ 			err := p.execute(f.Body)
+ 			p.callDepth--
+@@ -735,7 +817,14 @@
+ 			// Pop the locals off the stack
+ 			p.popSlice(f.NumScalars)
+ 			p.frame = oldFrame
++			p.localArrays[len(p.localArrays)-1] = nil
+ 			p.localArrays = p.localArrays[:len(p.localArrays)-1]
++			for i := oldArraysLen; i < len(p.arrays); i++ {
++				p.arrays[i] = nil
++				if i < len(p.arrayHighWater) {
++					p.arrayHighWater[i] = 0
++				}
++			}
+ 			p.arrays = p.arrays[:oldArraysLen]
+ 
+ 			if r, ok := err.(returnValue); ok {
+@@ -913,7 +1002,9 @@
+ 			index := p.toString(p.peekTop())
+ 			if ret == 1 {
+ 				array := p.array(resolver.Scope(arrayScope), int(arrayIndex))
+-				array[index] = numStr(line)
++				if err := p.assignElement(array, index, numStr(line)); err != nil {
++					return err
++				}
+ 			}
+ 			p.replaceTop(num(ret))
+ 		}
+@@ -982,10 +1073,13 @@
+ 	case compiler.BuiltinGsub:
+ 		regex, repl, in := p.peekPeekPop()
+ 		out, n, err := p.sub(p.toString(regex), p.toString(repl), p.toString(in), true)
++		if err == nil {
++			err = p.allocate(len(out))
++		}
+ 		if err != nil {
+ 			return err
+ 		}
+-		p.replaceTwo(num(float64(n)), str(out))
++		p.replaceTwo(num(float64(n)), transformedString(out, in))
+ 
+ 	case compiler.BuiltinIndex:
+ 		sValue, substr := p.peekPop()
+@@ -1070,10 +1164,13 @@
+ 	case compiler.BuiltinSub:
+ 		regex, repl, in := p.peekPeekPop()
+ 		out, n, err := p.sub(p.toString(regex), p.toString(repl), p.toString(in), false)
++		if err == nil {
++			err = p.allocate(len(out))
++		}
+ 		if err != nil {
+ 			return err
+ 		}
+-		p.replaceTwo(num(float64(n)), str(out))
++		p.replaceTwo(num(float64(n)), transformedString(out, in))
+ 
+ 	case compiler.BuiltinSubstr:
+ 		sValue, posValue := p.peekPop()
+@@ -1092,13 +1189,14 @@
+ 			length := len(s) - pos + 1
+ 			substr = s[pos-1 : pos-1+length]
+ 		}
+-		p.replaceTop(str(substr))
++		p.replaceTop(borrowedString(substr, sValue))
+ 
+ 	case compiler.BuiltinSubstrLength:
+ 		posValue, lengthValue := p.popTwo()
+ 		length := int(lengthValue.num())
+ 		pos := int(posValue.num())
+-		s := p.toString(p.peekTop())
++		sValue := p.peekTop()
++		s := p.toString(sValue)
+ 		var substr string
+ 		if p.chars {
+ 			substr = substrLengthChars(s, pos, length)
+@@ -1118,7 +1216,7 @@
+ 			}
+ 			substr = s[pos-1 : pos-1+length]
+ 		}
+-		p.replaceTop(str(substr))
++		p.replaceTop(borrowedString(substr, sValue))
+ 
+ 	case compiler.BuiltinSystem:
+ 		if p.noExec {
+@@ -1147,25 +1245,21 @@
+ 		p.replaceTop(num(float64(exitCode)))
+ 
+ 	case compiler.BuiltinTolower:
+-		p.replaceTop(str(strings.ToLower(p.toString(p.peekTop()))))
++		text := p.toString(p.peekTop())
++		if err := p.allocate(len(text)); err != nil {
++			return err
++		}
++		p.replaceTop(transformedString(strings.ToLower(text), p.peekTop()))
+ 
+ 	case compiler.BuiltinToupper:
+-		p.replaceTop(str(strings.ToUpper(p.toString(p.peekTop()))))
++		text := p.toString(p.peekTop())
++		if err := p.allocate(len(text)); err != nil {
++			return err
++		}
++		p.replaceTop(transformedString(strings.ToUpper(text), p.peekTop()))
+ 	}
+ 
+ 	return nil
+-}
+-
+-// Fetch the value at the given index from array. This handles the strange
+-// POSIX behavior of creating a null entry for non-existent array elements.
+-// Per the POSIX spec, "Any other reference to a nonexistent array element
+-// [apart from "in" expressions] shall automatically create it."
+-func arrayGet(array map[string]value, index string) value {
+-	v, ok := array[index]
+-	if !ok {
+-		array[index] = v
+-	}
+-	return v
+ }
+ 
+ // Stack operations follow. These should be inlined. Instead of just push and
+--- /dev/null
++++ b/parser/inspect.go
+@@ -0,0 +1,86 @@
++package parser
++
++import (
++	"github.com/benhoyt/goawk/internal/ast"
++	"github.com/benhoyt/goawk/lexer"
++)
++
++// Construct is one program feature an embedding host may refuse before
++// execution, at the start of the statement that contains it.
++type Construct struct {
++	// Kind is "system", "output-pipe", "input-pipe", "getline-file",
++	// "output-file" or "regex".
++	Kind string
++	// Regex is the literal pattern text of a "regex" construct.
++	Regex  string
++	Line   int
++	Column int
++}
++
++// Constructs lists every system() call, command pipe in either direction,
++// getline from a file, print or printf redirection to a file, and regex
++// literal, in source order. It inspects the parsed program only.
++func (p *Program) Constructs() []Construct {
++	v := &inspector{}
++	for _, stmts := range p.Begin {
++		ast.WalkStmtList(v, stmts)
++	}
++	for _, action := range p.Actions {
++		ast.WalkExprList(v, action.Pattern)
++		ast.WalkStmtList(v, action.Stmts)
++	}
++	for _, stmts := range p.End {
++		ast.WalkStmtList(v, stmts)
++	}
++	for _, function := range p.Functions {
++		v.at = function.Pos
++		ast.WalkStmtList(v, function.Body)
++	}
++	return v.found
++}
++
++type inspector struct {
++	at    lexer.Position
++	found []Construct
++}
++
++func (v *inspector) add(kind, regex string) {
++	v.found = append(v.found, Construct{Kind: kind, Regex: regex, Line: v.at.Line, Column: v.at.Column})
++}
++
++func (v *inspector) Visit(node ast.Node) ast.Visitor {
++	if stmt, ok := node.(ast.Stmt); ok {
++		v.at = stmt.StartPos()
++	}
++	switch n := node.(type) {
++	case *ast.CallExpr:
++		if n.Func == lexer.F_SYSTEM {
++			v.add("system", "")
++		}
++	case *ast.GetlineExpr:
++		if n.Command != nil {
++			v.add("input-pipe", "")
++		}
++		if n.File != nil {
++			v.add("getline-file", "")
++		}
++	case *ast.PrintStmt:
++		v.redirect(n.Redirect, n.Dest)
++	case *ast.PrintfStmt:
++		v.redirect(n.Redirect, n.Dest)
++	case *ast.RegExpr:
++		v.add("regex", n.Regex)
++	}
++	return v
++}
++
++func (v *inspector) redirect(redirect lexer.Token, dest ast.Expr) {
++	if dest == nil {
++		return
++	}
++	if redirect == lexer.PIPE {
++		v.add("output-pipe", "")
++		return
++	}
++	v.add("output-file", "")
++}
+--- /dev/null
++++ b/parser/inspect_test.go
+@@ -0,0 +1,33 @@
++package parser_test
++
++import (
++	"reflect"
++	"testing"
++
++	"github.com/benhoyt/goawk/parser"
++)
++
++func TestConstructsListsRefusableFeaturesInSourceOrder(t *testing.T) {
++	src := `BEGIN { system("x") }
++/re+/ { print > "f"; printf "%s" | "sort"; "cmd" | getline; getline v < "file" }
++function g() { print >> "f" }`
++	program, err := parser.ParseProgram([]byte(src), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var kinds []string
++	for _, c := range program.Constructs() {
++		kinds = append(kinds, c.Kind+":"+c.Regex)
++		if c.Line < 1 || c.Column < 1 {
++			t.Fatalf("construct without a position: %+v", c)
++		}
++	}
++	want := []string{"system:", "regex:re+", "output-file:", "output-pipe:", "input-pipe:", "getline-file:", "output-file:"}
++	if !reflect.DeepEqual(kinds, want) {
++		t.Fatalf("constructs %q, want %q", kinds, want)
++	}
++	plain, _ := parser.ParseProgram([]byte(`{ print $1 } END { getline; print }`), nil)
++	if got := plain.Constructs(); len(got) != 0 {
++		t.Fatalf("plain program constructs %+v", got)
++	}
++}

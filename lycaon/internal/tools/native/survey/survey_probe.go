@@ -177,7 +177,7 @@ func scanLiteralFileWithAutomaton(
 	if err != nil {
 		return err
 	}
-	f, err := reads.Open(resolved)
+	f, err := reads.Open(ctx, resolved)
 	if err != nil {
 		return err
 	}

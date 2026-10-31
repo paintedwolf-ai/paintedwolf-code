@@ -50,6 +50,8 @@ test_run_export_isolation() {
   export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
   export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
   export GOPATH="${GOPATH:-$(go env GOPATH)}"
+  # The container client's configuration selects the daemon that holds the reference images.
+  export DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
   export HOME="${run_dir}/home"
   export TMPDIR="${run_dir}/tmp"
   export XDG_CACHE_HOME="${run_dir}/xdg-cache"

@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/search/search.walker",
+  "kind": "algorithm",
+  "workstream": "held-directory-traversal",
+  "disposition": "retain",
+  "reason": "Retain the measured 305 receiver lines for one invocation traversal. The walker owns visit accounting, admitted roots, read filters, bounded directory lifetimes, fresh membership, and lazy metadata. These facts share one close boundary and traversal order; extracting a second directory owner would obscure their lifetime and permission relationship. Catalog publication remains with sourcecatalog, expression/action order with findRun, and content scanning with grepRun. Cold/warm sibling-count proxies, current physical admission, deep scratch bounds, consumer-close cleanup, and action ordering support this exact ceiling; further growth requires review.",
+  "reviewed_commit": "e25e60380643ade0100d500a04e2c253feee052f",
+  "ceiling": 305,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/held_walk_test.go": "ffffda3be9e83b7b901f9b2d3d2e681d6b7bf41bf3b78a5eaabc454d5fd8f2de",
+    "lycaon/internal/tools/native/search/discovery_test.go": "94fdf89e35d935d69b2731f8770c24884c759557f29caf8af3f7e2c7639781fc",
+    "lycaon/internal/tools/projectpaths/bound_traversal_test.go": "a437c18f5cb946bfba0b5c672081b56040d2e0cad910d59d1913d772533b07cf"
+  },
+  "reviewed_shape": "a25d737303fb1830bde3e4c77379fe7baa3aa150044c1d8b1c8037125cf7eee2"
+}

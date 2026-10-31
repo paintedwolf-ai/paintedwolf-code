@@ -59,6 +59,60 @@ func TestUserConfigDirOverride(t *testing.T) {
 	}
 }
 
+func TestRootDoesNotCreateOrRestrictStorage(t *testing.T) {
+	for _, exists := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing", true: "existing"}[exists], func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "state")
+			if exists {
+				testutil.FailErr(t, "create root", os.Mkdir(root, 0o755))
+				testutil.FailErr(t, "set root mode", os.Chmod(root, 0o755))
+			}
+			t.Setenv(configdir.EnvConfigDir, root)
+			got, err := configdir.Root()
+			testutil.FailErr(t, "Root", err)
+			if got != root {
+				t.Fatalf("Root() = %q, want %q", got, root)
+			}
+			info, err := os.Stat(root)
+			if !exists {
+				if !os.IsNotExist(err) {
+					t.Fatalf("root lookup changed missing storage: info=%v err=%v", info, err)
+				}
+			} else {
+				testutil.FailErr(t, "stat root", err)
+				if runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
+					t.Fatalf("root lookup changed mode to %o", info.Mode().Perm())
+				}
+			}
+			created, err := configdir.UserConfigDir()
+			testutil.FailErr(t, "UserConfigDir", err)
+			if created != got {
+				t.Fatalf("lookup %q and storage %q disagree", got, created)
+			}
+			assertOwnerOnly(t, created)
+		})
+	}
+}
+
+func TestRootTracksSelectedChannelAndHome(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, "")
+	for _, dev := range []string{"", "1"} {
+		t.Setenv(configdir.EnvDev, dev)
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		root, err := configdir.Root()
+		testutil.FailErr(t, "Root", err)
+		want := filepath.Join(home, ".config", configdir.ChannelDirName())
+		if root != want {
+			t.Fatalf("Root() = %q, want %q", root, want)
+		}
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Fatalf("lookup changed home-derived storage: %v", err)
+		}
+	}
+}
+
 func TestUserConfigDirUsesSelectedHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

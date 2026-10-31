@@ -9,7 +9,7 @@ Use this workflow to write schema changes that cannot strand a deploy or eat dat
 
 ## Workflow
 
-1. Read the project's migration setup first — which tool (Prisma, Drizzle, Alembic, Flyway, goose, golang-migrate, or plain SQL), where migrations live, and what has already been applied. The tool's `status`, `validate`, and `diff` verbs are read-only and always safe to run.
+1. Read the project's migration setup first — which tool (Prisma, Drizzle, Alembic, Flyway, goose, golang-migrate, or plain SQL), where migrations live, and what has already been applied. The tool's status, validation, and comparison verbs are read-only and always safe to run.
 2. Split every breaking change into expand and contract. Expand adds the new column, table, or index alongside the old; the application migrates to use it; contract drops the old shape in a later migration once nothing reads it. A rename is an add, a backfill, and a much later drop — never one statement.
 3. Keep backfills out of schema migrations. Data backfills run separately, in bounded batches, written to be resumable; a single giant `UPDATE` inside a migration holds locks for exactly as long as the DDL you were avoiding.
 4. Write lock-safe DDL for live databases. On Postgres, set a short `lock_timeout` so a blocked `ALTER` fails fast instead of queueing every query behind it, and build indexes with `CREATE INDEX CONCURRENTLY` (noting it cannot run inside a transaction). Know which changes rewrite the table and say so in the plan.

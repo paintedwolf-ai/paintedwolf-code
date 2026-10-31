@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -23,7 +24,7 @@ func TestRecoveryLinkedBodySurvivesLiveCollection(t *testing.T) {
 	source := archiveSource{path: live, kind: fileKindRegular, mode: 0o400, shareBody: true}
 	sum, size, err := sourceDigest(t.Context(), source)
 	testutil.FailErr(t, "digest live body", err)
-	cloneable, err := recoveryCloneAvailable(root)
+	cloneable, err := fileclone.SupportedAt(root)
 	testutil.FailErr(t, "probe clone support", err)
 
 	shared, err := copySnapshotRegular(t.Context(), source, filepath.Join(recovery, "ab", "cdef.zst"))

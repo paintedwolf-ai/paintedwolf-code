@@ -30,6 +30,28 @@ func (m *agentSourceMutation) ID() string { return m.row.ID }
 
 // PrepareEffect records intent before the caller applies the file change.
 func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect sourceeffect.Plan) (sourceeffect.Pending, error) {
+	pending, err := s.prepareAgentEffect(ctx, effect)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Journal.insert(ctx, pending.row); err != nil {
+		pending.release()
+		return nil, fmt.Errorf("prepare file change journal: %w", err)
+	}
+	notePreparedAgentEffect(pending.row)
+	return pending, nil
+}
+
+func notePreparedAgentEffect(row *sourceMutationRow) {
+	sourcefeed.NoteHostWrite(row.Plan.AgentEffect.Change.AbsPath)
+	sourcefeed.NoteHostWrite(row.Plan.AgentEffect.Change.FromAbsPath)
+}
+
+func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect sourceeffect.Plan) (*agentSourceMutation, error) {
+	return s.prepareAgentEffectOpt(ctx, effect, true)
+}
+
+func (s *SourceMutationService) prepareAgentEffectOpt(ctx context.Context, effect sourceeffect.Plan, reservePath bool) (*agentSourceMutation, error) {
 	if s == nil || s.Journal.db == nil || s.recorder == nil || effect.Record.ProjectID == "" {
 		return nil, fmt.Errorf("durable source mutation service required")
 	}
@@ -47,8 +69,9 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 	}
 	now := time.Now().UTC()
 	id := effect.Record.OperationID
-	if id == "" {
-		id = uuid.NewString()
+	freshID := id == ""
+	if freshID {
+		id = uuid.Must(uuid.NewV7()).String()
 	}
 	unlock, err := s.operationLocks.Acquire(ctx, id)
 	if err != nil {
@@ -70,30 +93,38 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 		}
 		unlock()
 	}
-	claim := sourceMutationPlan{AgentEffect: &effect}
-	releasePath, err = s.Paths.reserveSourcePlan(claim)
-	if err != nil {
-		return nil, err
+	if reservePath {
+		claim := sourceMutationPlan{AgentEffect: &effect}
+		releasePath, err = s.Paths.reserveSourcePlan(claim)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// The operation ID identifies one admitted filesystem effect.
 	effect.Record.OperationID = id
-	digestEffect := effect
-	digestEffect.Record.TS = time.Time{}
-	digestEffect.Change.TS = time.Time{}
-	input, err := json.Marshal(digestEffect)
-	if err != nil {
-		return nil, err
-	}
-	digest := sha256.Sum256(input)
-	existing, found, err := s.Journal.load(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		if existing.InputDigest != hex.EncodeToString(digest[:]) {
-			return nil, ErrSourceMutationConflict
+	var digestHex string
+	if !freshID || reservePath {
+		digestEffect := effect
+		digestEffect.Record.TS = time.Time{}
+		digestEffect.Change.TS = time.Time{}
+		input, err := json.Marshal(digestEffect)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("%w: operation %s already admitted", ErrSourceMutationConflict, id)
+		digest := sha256.Sum256(input)
+		digestHex = hex.EncodeToString(digest[:])
+		if !freshID {
+			existing, found, err := s.Journal.load(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				if existing.InputDigest != digestHex {
+					return nil, ErrSourceMutationConflict
+				}
+				return nil, fmt.Errorf("%w: operation %s already admitted", ErrSourceMutationConflict, id)
+			}
+		}
 	}
 	effect.Record.OperationID = id
 	effect.Record.TS = now
@@ -105,15 +136,9 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 		AgentEffect:               &effect,
 		Response:                  json.RawMessage(`{}`),
 	}
-	row := &sourceMutationRow{ID: id, ProjectID: plan.ProjectID, Kind: kind,
-		InputDigest: hex.EncodeToString(digest[:]), Plan: plan, Status: sourceMutationPrepared,
+	row := &sourceMutationRow{freshOperation: true, ID: id, ProjectID: plan.ProjectID, Kind: kind,
+		InputDigest: digestHex, Plan: plan, Status: sourceMutationPrepared,
 		CreatedAt: now, UpdatedAt: now}
-	if err := s.Journal.insert(ctx, row); err != nil {
-		return nil, fmt.Errorf("prepare file change journal: %w", err)
-	}
-	// Watchers can see the file effect before its attribution transaction.
-	sourcefeed.NoteHostWrite(effect.Change.AbsPath)
-	sourcefeed.NoteHostWrite(effect.Change.FromAbsPath)
 	retained = true
 	return &agentSourceMutation{service: s, row: row, release: release}, nil
 }
@@ -166,6 +191,22 @@ func (s *SourceMutationService) recoverAgentEffect(ctx context.Context, row *sou
 func observeAgentEffect(effect *sourceeffect.Plan) error {
 	if effect.MetadataOnly {
 		return fmt.Errorf("metadata effect has no durable completion marker")
+	}
+	if effect.Record.EntryKind == sourceledger.EntryKindLink && effect.Record.Op != api.SourceChangeOpDelete {
+		root, err := os.OpenRoot(effect.Target.Root)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = root.Close() }()
+		target, err := root.Readlink(effect.Target.Rel)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256([]byte(target))
+		if hex.EncodeToString(digest[:]) != effect.Record.AfterSHA256 {
+			return fmt.Errorf("link target differs from the prepared effect")
+		}
+		return nil
 	}
 	if effect.Record.Op == api.SourceChangeOpDelete {
 		file, err := fseffect.OpenRead(effect.Target)

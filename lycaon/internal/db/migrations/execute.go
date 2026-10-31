@@ -57,7 +57,28 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 	if !planned.Required() {
 		return nil
 	}
-	tx, err := database.BeginTx(ctx, nil)
+	conn, err := database.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open schema upgrade connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	rebuildTables := false
+	for _, step := range planned.steps {
+		if step.RebuildTables {
+			rebuildTables = true
+			break
+		}
+	}
+	if rebuildTables {
+		if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+			return fmt.Errorf("prepare table rebuild: %w", err)
+		}
+		defer func() {
+			_, restoreErr := conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys=ON`)
+			err = errors.Join(err, restoreErr)
+		}()
+	}
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema upgrade: %w", err)
 	}
@@ -86,10 +107,17 @@ func (r *Registry) Execute(ctx context.Context, database *sql.DB, planned Plan, 
 			return fmt.Errorf("migration %s: %w", step.ID, err)
 		}
 	}
-	if err := checkIntegrity(ctx, tx); err != nil {
-		return err
+	// Commit the unfinished audit obligation with the new schema, so even a
+	// clean shutdown cannot lose the deferred exhaustive check.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO store_meta(key,value) VALUES('integrity_audit_failed','integrity audit pending') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+		return fmt.Errorf("record deferred integrity audit: %w", err)
 	}
-	if err := checkForeignKeys(ctx, tx); err != nil {
+	if err := WithIntegrityCache(ctx, conn, func() error {
+		if err := checkStructure(ctx, tx); err != nil {
+			return err
+		}
+		return checkForeignKeys(ctx, tx)
+	}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -135,7 +163,7 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 	}
 	defer func() { _ = rows.Close() }()
 	if rows.Next() {
-		return fmt.Errorf("upgraded store contains a foreign key violation")
+		return fmt.Errorf("%w: upgraded store contains a foreign key violation", ErrIntegrity)
 	}
 	return rows.Err()
 }
@@ -143,10 +171,10 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 // ErrIntegrity means SQLite found damaged data, rather than an interrupted check.
 var ErrIntegrity = errors.New("upgraded store failed integrity verification")
 
-// Check the final state while rollback is still possible. Obsolete tables do
-// not need an expensive index audit before the migration removes them.
-func checkIntegrity(ctx context.Context, tx *sql.Tx) error {
-	rows, err := tx.QueryContext(ctx, `PRAGMA integrity_check`)
+// Check structural validity while rollback is possible. Exhaustive secondary
+// index correspondence is deferred until the application can serve normally.
+func checkStructure(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA quick_check`)
 	if err != nil {
 		return err
 	}

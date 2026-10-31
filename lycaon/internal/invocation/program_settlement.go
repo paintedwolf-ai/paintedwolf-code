@@ -1,0 +1,144 @@
+package invocation
+
+import (
+	"context"
+	"database/sql"
+	"encoding/hex"
+	"fmt"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
+
+func validDigest(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	var target [32]byte
+	_, err := hex.Decode(target[:], []byte(s))
+	return err == nil
+}
+
+// WaitChild preserves one execution identity while approval or an owned job waits.
+func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalReference string) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	if approvalReference == "" {
+		return fmt.Errorf("waiting child requires authoritative wait reference")
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var programID string
+	if err := tx.QueryRowContext(ctx, `SELECT program_id FROM invocation_program_executions WHERE id=? AND state='prepared'`, executionID).Scan(&programID); err != nil {
+		return err
+	}
+	if err := chargeProgramTrace(ctx, tx, programID, 1, int64(len(approvalReference)), traceChargeNonTerminal); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='waiting',approval_ref=? WHERE id=? AND state='prepared'`, approvalReference, executionID)
+	if err != nil {
+		return err
+	}
+	if err := oneProgramTransition(result); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SettleChild retains the owner outcome separately from a later authority stop.
+func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in toolcontract.ProgramChildSettlement) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var programID, owner, state string
+	var started bool
+	if err := tx.QueryRowContext(ctx, `SELECT program_id,owner,state,owner_started FROM invocation_program_executions WHERE id=?`, executionID).Scan(&programID, &owner, &state, &started); err != nil {
+		return err
+	}
+	result := in.Result
+	if result.Evidence.Owner != "" && result.Evidence.Owner != owner {
+		return fmt.Errorf("child settlement cannot replace subsystem owner")
+	}
+	if in.OwnerInvoked && !started {
+		return fmt.Errorf("invoked child lacks durable start marker")
+	}
+	if !in.OwnerInvoked && result.EffectCertainty == toolcontract.EffectCompleted {
+		return fmt.Errorf("uninvoked child cannot claim completed owner effects")
+	}
+	if started && !in.OwnerInvoked {
+		return fmt.Errorf("started child requires explicit owner outcome or recovery reconciliation")
+	}
+	evidence := result.Evidence
+	var conflict toolcontract.RevisionConflict
+	if in.Conflict != nil {
+		conflict = *in.Conflict
+	}
+	settleBytes := int64(len(result.Terminal) + len(result.StopCode) + len(in.HostStopCode) + len(result.EffectCertainty) + len(evidence.Kind) + len(evidence.EvidenceRef) + len(evidence.OwnerRef) + len(evidence.RecoveryRef) + len(evidence.HeldVersionID) + len(in.AcceptedRevision) + len(in.PublishedRevision) + len(in.DetailReference) + len(in.JobHandle) + len(conflict.Path) + len(conflict.ExpectedRevision) + len(conflict.ObservedRevision) + 32)
+	if err := chargeProgramTrace(ctx, tx, programID, 1, settleBytes, traceChargeChildSettlement); err != nil {
+		return err
+	}
+	transition, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state=?,owner_invoked=?,status_code=?,stop_code=?,host_stop_code=?,output_publishable=?,complete=?,publication_eligible=?,publication_basis=?,effect_certainty=?,evidence_kind=?,evidence_ref=?,owner_ref=?,recovery_ref=?,held_version_id=?,accepted_revision=?,published_revision=?,detail_ref=?,job_handle=?,conflict_path=?,conflict_expected_revision=?,conflict_observed_revision=?,settled_at=? WHERE id=? AND state IN ('prepared','waiting','running')`, string(result.Terminal), in.OwnerInvoked, result.Status, result.StopCode, in.HostStopCode, in.OutputPublishable, result.Complete, result.PublicationEligible, int(result.PublicationBasis), string(result.EffectCertainty), evidence.Kind, evidence.EvidenceRef, evidence.OwnerRef, evidence.RecoveryRef, evidence.HeldVersionID, in.AcceptedRevision, in.PublishedRevision, in.DetailReference, in.JobHandle, conflict.Path, conflict.ExpectedRevision, conflict.ObservedRevision, time.Now().UTC().Format(time.RFC3339Nano), executionID)
+	if err != nil {
+		return err
+	}
+	if err := oneProgramTransition(transition); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in toolcontract.ProgramSettlement) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	if err := in.Validate(); err != nil {
+		return err
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Outstanding children require owner reconciliation before program settlement.
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running'))+(SELECT count(*) FROM invocation_program_progress WHERE program_id=? AND state='running')`, programID, programID).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return fmt.Errorf("program has %d unsettled children", count)
+	}
+	if err := chargeProgramTrace(ctx, tx, programID, 1, int64(len(in.State)+len(in.StopCode)+len(in.DetailReference)+32), traceChargeProgramSettlement); err != nil {
+		return err
+	}
+	transition, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state=?,status_code=?,stop_code=?,detail_ref=?,settled_at=? WHERE id=? AND state IN ('running','waiting')`, in.State, in.Status, in.StopCode, in.DetailReference, time.Now().UTC().Format(time.RFC3339Nano), programID)
+	if err != nil {
+		return err
+	}
+	if err := oneProgramTransition(transition); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func oneProgramTransition(result sql.Result) error {
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("program receipt transition refused")
+	}
+	return nil
+}

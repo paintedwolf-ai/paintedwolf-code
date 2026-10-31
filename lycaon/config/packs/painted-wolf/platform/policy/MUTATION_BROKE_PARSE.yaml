@@ -3,7 +3,7 @@ id: MUTATION_BROKE_PARSE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - edit
     - replace_lines
     - code_rewrite
@@ -13,6 +13,7 @@ requires:
     - filesystem
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.parse_errors
     - paintedwolf.python_indent_lines
@@ -34,9 +35,9 @@ copy:
     The reported locations refer to the rejected candidate, not saved file contents.
     {% if paintedwolf.mutation_new_path %}This path was absent before this mutation;
     the rejected candidate was not created. Correct the candidate and retry a complete
-    `write`. If the path has since been created, read its current contents before replacing it.
+    staged command redirect. If the path has since been created, read its current contents before replacing it.
     {% else %}Read the current file before repairing it; rejected candidate text is not
-    a saved edit base. Correct the candidate with an exact `edit`, a complete `write`,
+    a saved edit base. Correct the candidate with an exact `edit`, a complete staged command redirect,
     or one atomic `replace_lines.operations` batch.{% endif %}
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,

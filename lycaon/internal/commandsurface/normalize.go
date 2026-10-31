@@ -410,7 +410,7 @@ func joinCwd(cwd, p string) string {
 	if cwd == "" || cwd == "." || strings.HasPrefix(p, "/") {
 		return p
 	}
-	if _, scratch := projectroot.ScratchAddress(p); scratch {
+	if _, _, session := projectroot.SessionAddress(p); session {
 		return p
 	}
 	return strings.TrimSuffix(cwd, "/") + "/" + p

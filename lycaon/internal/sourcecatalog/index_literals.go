@@ -15,12 +15,13 @@ type LiteralSearch struct {
 
 // contentBuild fills per-file literal filters to reduce content reads.
 type contentBuild struct {
-	revision uint64
-	started  time.Time
-	cancel   context.CancelFunc
-	done     chan struct{}
-	complete bool
-	finished time.Time
+	revision    uint64
+	invalidated bool
+	started     time.Time
+	cancel      context.CancelFunc
+	done        chan struct{}
+	complete    bool
+	finished    time.Time
 }
 
 type LiteralPage struct {
@@ -37,11 +38,12 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 		result.Candidates = entries
 		return result
 	}
-	result.Warming = c.prepareIndexLiterals(ctx, reader, query)
 	folded := foldRequirement(query.Require)
 
+	stale := false
 	for _, entry := range entries {
-		bloom, searchable, cached := c.cache.cachedBloom(reader.store.root.Path, entry)
+		bloom, searchable, cached, changed := c.cache.probeBloom(reader.store.root.Path, entry)
+		stale = stale || changed
 		if cached {
 			result.CachedFiles++
 		}
@@ -49,6 +51,12 @@ func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *Inde
 			result.Candidates = append(result.Candidates, entry)
 		}
 	}
+	if stale {
+		reader.store.mu.Lock()
+		reader.store.invalidateContentLocked()
+		reader.store.mu.Unlock()
+	}
+	result.Warming = c.prepareIndexLiterals(ctx, reader, query)
 	return result
 }
 
@@ -57,7 +65,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	key := indexLiteralScopeKey(query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.retired {
+	if s.retired || s.pins.drained {
 		return false
 	}
 	if s.content == nil {
@@ -66,7 +74,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	if build := s.content[key]; build != nil {
 		select {
 		case <-build.done:
-			if build.revision == reader.Status.Revision && build.complete {
+			if build.revision == reader.Status.Revision && build.complete && !build.invalidated {
 				return false
 			}
 			if !build.complete && time.Since(build.finished) < 5*time.Second {
@@ -76,7 +84,7 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 			return true
 		}
 	}
-	if len(s.content) >= literalIndexCacheCap {
+	if len(s.content) >= literalPreparationScopeCap {
 		var oldest string
 		for key, build := range s.content {
 			select {
@@ -150,16 +158,12 @@ func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, q
 		if err != nil {
 			return false
 		}
-		indices := make([]int, len(misses))
-		for i := range indices {
-			indices[i] = i
-		}
-		results := make([]literalFileResult, len(misses))
-		err = c.cache.readBlooms(ctx, s.root.Path, misses, indices, results, query.Open)
+		err = c.cache.readBlooms(ctx, s.root.Path, misses, query.Open)
 		release()
 		if err != nil {
 			return false
 		}
+
 	}
 	return false
 }

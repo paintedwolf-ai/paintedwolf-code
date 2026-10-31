@@ -14,8 +14,6 @@ agents:
       - "Stale-training check"
       - "web_search"
       - "fetch_url"
-      - "mode: outline"
-      - "Declare required resources on each invocation"
     delta:
       role_title: Implementer
       focus: "Ship the assigned change surface completely; stay inside the brief's paths."

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -60,7 +61,12 @@ func providerWith(t *testing.T, cfg Config, shell string, env map[string]string,
 		}
 		return executableStub{name: filepath.Base(path)}, nil
 	}
-	p.run = func(cmd *osexec.Cmd) error {
+	p.prepare = func(ctx context.Context, name string, args []string, opts execpkg.ExecOpts) (*osexec.Cmd, func(), error) {
+		cmd := osexec.CommandContext(ctx, name, args...)
+		cmd.Env = opts.Env
+		return cmd, func() {}, nil
+	}
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
 		if cmd.Stdout != nil && shellOut.stdout != "" {
 			if _, err := cmd.Stdout.Write([]byte(shellOut.stdout)); err != nil {
 				return err
@@ -83,13 +89,18 @@ func TestProbeUsesAccountShellWhenGUIEnvironmentHasNoShell(t *testing.T) {
 	}
 	var childShell string
 	inner := p.run
-	p.run = func(cmd *osexec.Cmd) error {
+	p.prepare = func(ctx context.Context, name string, args []string, opts execpkg.ExecOpts) (*osexec.Cmd, func(), error) {
+		cmd := osexec.CommandContext(ctx, name, args...)
+		cmd.Env = opts.Env
+		return cmd, func() {}, nil
+	}
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
 		for _, entry := range cmd.Env {
 			if strings.HasPrefix(entry, "SHELL=") {
 				childShell = strings.TrimPrefix(entry, "SHELL=")
 			}
 		}
-		return inner(cmd)
+		return inner(ctx, cmd)
 	}
 
 	snap := p.Resolve(context.Background())
@@ -213,7 +224,12 @@ func TestSnapshotIsFixedForTheProcess(t *testing.T) {
 	env := map[string]string{"SHELL": "/bin/zsh", "PATH": "/usr/bin"}
 	calls := 0
 	p := providerWith(t, cfg, "/bin/zsh", env, fakeShell{})
-	p.run = func(cmd *osexec.Cmd) error {
+	p.prepare = func(ctx context.Context, name string, args []string, opts execpkg.ExecOpts) (*osexec.Cmd, func(), error) {
+		cmd := osexec.CommandContext(ctx, name, args...)
+		cmd.Env = opts.Env
+		return cmd, func() {}, nil
+	}
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
 		calls++
 		if calls == 1 {
 			return errors.New("first probe fails")
@@ -241,9 +257,14 @@ func TestProbeChildSeesOnlyAllowlistedEnv(t *testing.T) {
 	var childEnv []string
 	p := providerWith(t, cfg, "/bin/zsh", env, fakeShell{stdout: framed(cfg.Probe.Marker, "/usr/bin")})
 	inner := p.run
-	p.run = func(cmd *osexec.Cmd) error {
+	p.prepare = func(ctx context.Context, name string, args []string, opts execpkg.ExecOpts) (*osexec.Cmd, func(), error) {
+		cmd := osexec.CommandContext(ctx, name, args...)
+		cmd.Env = opts.Env
+		return cmd, func() {}, nil
+	}
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
 		childEnv = append([]string(nil), cmd.Env...)
-		return inner(cmd)
+		return inner(ctx, cmd)
 	}
 	p.Resolve(context.Background())
 

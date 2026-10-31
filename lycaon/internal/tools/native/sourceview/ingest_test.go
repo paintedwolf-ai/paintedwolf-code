@@ -12,9 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
+	"syscall"
 )
 
 func TestContentIngestionEnforcesObservedBytes(t *testing.T) {
@@ -86,6 +88,69 @@ func TestBinaryReadRecoveryUsesWorkspaceViewerFormats(t *testing.T) {
 		_, want := attachmentformat.WorkspaceImageMIME(ext)
 		if reject.Data["workspace_image_supported"] != want {
 			t.Fatalf("%s viewer eligibility = %v, want %v", name, reject.Data, want)
+		}
+	}
+}
+
+func TestReadContentCappedFromRootCoversSmallLargeAndGrowingInputs(t *testing.T) {
+	root := t.TempDir()
+	small := "small-body"
+	large := strings.Repeat("L", (64<<10)+128)
+	testutil.FailErr(t, "write small", os.WriteFile(filepath.Join(root, "small.txt"), []byte(small), 0600))
+	testutil.FailErr(t, "write large", os.WriteFile(filepath.Join(root, "large.txt"), []byte(large), 0600))
+
+	readRoot, err := fseffect.OpenReadRoot(root)
+	testutil.FailErr(t, "open read root", err)
+	defer func() { _ = readRoot.Close() }()
+
+	gotSmall, err := ReadContentCappedFromRoot("read", AccessRead, readRoot, fseffect.Location{Root: root, Rel: "small.txt"}, "small.txt", false, 1024)
+	testutil.FailErr(t, "read small from held root", err)
+	if string(gotSmall) != small {
+		t.Fatalf("small body = %q, want %q", gotSmall, small)
+	}
+
+	gotLarge, err := ReadContentCapped("read", AccessRead, fseffect.Location{Root: root, Rel: "large.txt"}, "large.txt", false, int64(len(large)+10))
+	testutil.FailErr(t, "read large", err)
+	if string(gotLarge) != large {
+		t.Fatalf("large body len = %d, want %d", len(gotLarge), len(large))
+	}
+
+	if _, err := ReadContentCappedFromRoot("read", AccessRead, readRoot, fseffect.Location{Root: root, Rel: "large.txt"}, "large.txt", false, 16); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("expected size rejection for oversized file, got %v", err)
+	}
+
+	fifoOK := filepath.Join(root, "stream-ok.fifo")
+	if err := syscall.Mkfifo(fifoOK, 0600); err == nil {
+		rHold, err := os.OpenFile(fifoOK, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+		testutil.FailErr(t, "open fifo reader hold", err)
+		defer func() { _ = rHold.Close() }()
+		w, err := os.OpenFile(fifoOK, os.O_WRONLY|syscall.O_NONBLOCK, 0)
+		testutil.FailErr(t, "open fifo writer", err)
+		_, err = w.WriteString("hello-fifo")
+		testutil.FailErr(t, "write fifo", err)
+		testutil.FailErr(t, "close fifo writer", w.Close())
+
+		gotFIFO, err := ReadContentCappedFromRoot("read", AccessRead, readRoot, fseffect.Location{Root: root, Rel: "stream-ok.fifo"}, "stream-ok.fifo", false, 64)
+		testutil.FailErr(t, "read fifo within cap", err)
+		if string(gotFIFO) != "hello-fifo" {
+			t.Fatalf("fifo body = %q, want hello-fifo", gotFIFO)
+		}
+	}
+
+	fifoBig := filepath.Join(root, "stream-big.fifo")
+	if err := syscall.Mkfifo(fifoBig, 0600); err == nil {
+		rHold, err := os.OpenFile(fifoBig, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+		testutil.FailErr(t, "open big fifo reader hold", err)
+		defer func() { _ = rHold.Close() }()
+		w, err := os.OpenFile(fifoBig, os.O_WRONLY|syscall.O_NONBLOCK, 0)
+		testutil.FailErr(t, "open big fifo writer", err)
+		_, err = w.WriteString("0123456789abcdef")
+		testutil.FailErr(t, "write big fifo", err)
+		testutil.FailErr(t, "close big fifo writer", w.Close())
+
+		_, err = ReadContentCappedFromRoot("read", AccessRead, readRoot, fseffect.Location{Root: root, Rel: "stream-big.fifo"}, "stream-big.fifo", false, 5)
+		if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "READ_FILE_TOO_LARGE" {
+			t.Fatalf("oversized fifo reject = %v", err)
 		}
 	}
 }

@@ -26,7 +26,7 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	})
 	_ = reg.Register("wait", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 		}
 		return `{"status":"sleeping","wake_at":"2099-01-01T00:00:00Z"}`, nil
 	})

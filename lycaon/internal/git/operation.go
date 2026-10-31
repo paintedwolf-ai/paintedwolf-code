@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,11 +19,13 @@ import (
 
 // OperationRequest describes a local repository effect, never arbitrary argv.
 type OperationRequest struct {
-	Kind             string
-	Action           string
-	Branch           string
-	Create           bool
-	Ref              string
+	Kind   string
+	Action string
+	Branch string
+	Create bool
+	Ref    string
+	// Refs are further commits a cherry-pick or revert applies in order.
+	Refs             []string
 	Mode             string
 	Message          string
 	Paths            []string
@@ -30,7 +33,9 @@ type OperationRequest struct {
 	ReinstateIndex   bool
 	// NoCommit stops a started merge before its commit, leaving it active.
 	NoCommit bool
-	Review   func(context.Context, []RestoreFile) error
+	// Entries are a "stage" operation's exact index changes.
+	Entries []IndexEntry
+	Review  func(context.Context, []RestoreFile) error
 }
 
 // RepositoryState is observed even when Git reports a failed or partial effect.
@@ -85,7 +90,7 @@ func (m *Manager) Operate(ctx context.Context, root string, req OperationRequest
 	if err != nil {
 		return result, err
 	}
-	prepared, err := m.prepareOperation(ctx, repo, req)
+	prepared, err := prepareOperation(ctx, repo, req)
 	release()
 	if err != nil {
 		return result, err
@@ -172,19 +177,31 @@ func operationStatus(before, after RepositoryState, code int, err error) string 
 	return "completed"
 }
 
-func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+func readRepositoryMetadata(ctx context.Context, dir string) (RepositoryState, error) {
 	state := RepositoryState{Conflicts: []string{}}
-	var err error
-	state.Head, err = resolveCommit(ctx, dir, "HEAD")
+	repo, _ := gitrepo.Discover(dir)
+	headContent, err := readRestoreContent(filepath.Join(repo.GitDir, "HEAD"))
 	if err != nil {
 		return state, err
 	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"symbolic-ref", "--quiet", "HEAD"}, hermeticOpts(0))
-	if err != nil || code > 1 {
-		return state, fmt.Errorf("read symbolic HEAD: %w", err)
+	headLine := strings.TrimSpace(string(headContent.Bytes))
+	if ref, ok := strings.CutPrefix(headLine, "ref:"); ok {
+		ref = strings.TrimSpace(ref)
+		state.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		loose, _ := readRestoreContent(filepath.Join(repo.CommonDir, filepath.FromSlash(ref)))
+		if oid := strings.TrimSpace(string(loose.Bytes)); validObjectID(oid) {
+			state.Head = oid
+		} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); loose.Exists || packed.Exists {
+			state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
+		}
+	} else if validObjectID(headLine) {
+		state.Head = headLine
+	} else {
+		state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
 	}
-	state.Branch = strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/heads/")
-	repo, _ := gitrepo.Discover(dir)
+	if err != nil {
+		return state, err
+	}
 	index, err := readRestoreContent(filepath.Join(repo.GitDir, "index"))
 	if err != nil {
 		return state, err
@@ -200,22 +217,58 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 		return state, err
 	}
 	state.StashLog = stashLog.SHA256
-	state.Stash, err = optionalObject(ctx, dir, "refs/stash")
-	if err != nil {
-		return state, err
+	stashRef, _ := readRestoreContent(filepath.Join(repo.CommonDir, "refs", "stash"))
+	if oid := strings.TrimSpace(string(stashRef.Bytes)); validObjectID(oid) {
+		state.Stash = oid
+	} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); stashLog.Exists || stashRef.Exists || packed.Exists {
+		state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
+		if err != nil {
+			return state, err
+		}
 	}
-	conflicts, err := gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
-	if err != nil {
-		return state, err
-	}
-	state.Conflicts = conflicts
-	_, entries, err := readPorcelainStatus(ctx, dir, false)
-	state.Dirty = len(entries) > 0
+	return state, nil
+}
+
+func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+	state, _, err := readRepositoryStateAndStatus(ctx, dir)
 	return state, err
 }
 
-// optionalObject distinguishes missing selectors by exit code; diagnostics are never parsed.
-func optionalObject(ctx context.Context, dir, ref string) (string, error) {
+func readRepositoryStateAndStatus(ctx context.Context, dir string) (RepositoryState, string, error) {
+	state, err := readRepositoryMetadata(ctx, dir)
+	if err != nil {
+		return state, "", err
+	}
+	raw, err := restoreGit(ctx, dir, hermeticOpts(0), "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return state, "", err
+	}
+	var parser porcelainParser
+	for _, record := range bytes.Split(raw, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		if err := parser.record(record); err != nil {
+			return state, "", err
+		}
+	}
+	_, entries, err := parser.finish()
+	if err != nil {
+		return state, "", err
+	}
+	state.Dirty = len(entries) > 0
+	for _, entry := range entries {
+		if entry.status[0] == 'U' || entry.status[1] == 'U' || entry.status == "AA" || entry.status == "DD" {
+			state.Conflicts, err = gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
+			break
+		}
+	}
+	return state, string(raw), err
+}
+
+// ResolveOptionalObject reads an object selector. An absent selector returns
+// an empty identity; failures other than Git's exact absence status remain errors.
+func ResolveOptionalObject(ctx context.Context, dir, ref string) (string, error) {
 	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--verify", "--quiet", "--end-of-options", ref}, hermeticOpts(0))
 	if err != nil {
 		return "", err

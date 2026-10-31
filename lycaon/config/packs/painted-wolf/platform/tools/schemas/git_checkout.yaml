@@ -1,5 +1,5 @@
 tags: [git, mutation]
-description: "Switch to an existing local branch, or explicitly create and switch to a new one. Rehearses and reviews file changes before applying. Preserves unrelated local edits; refuses conflicting edits. Reports the actual branch and HEAD even after failure. Replaces command: git checkout."
+description: "Switch to an existing local branch, or explicitly create and switch to a new one. Rehearses and reviews file changes before applying. Preserves unrelated local edits; refuses conflicting edits. Reports the actual branch and HEAD even after failure."
 schema:
   type: object
   properties:

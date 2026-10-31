@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -122,13 +121,13 @@ func TestCommandCompletionDigestIncludesRefusalsAndTimeout(t *testing.T) {
 	}
 }
 
-func TestWaitWinnerTextRetainsTheProcessReport(t *testing.T) {
+func TestWaitEndedTextRetainsTheProcessReport(t *testing.T) {
 	for _, tc := range []struct{ outcome, report string }{
 		{"satisfied", "handle=command-1 termination=timed_out exit_code=-1"},
 		{"refused", "handle=command-1 state=running\nsandbox_refusals:\n- network-bind /tmp/user.sock"},
 	} {
 		t.Run(tc.outcome, func(t *testing.T) {
-			text := submissions.WaitWinnerText(awaitstore.Condition{Kind: "process_done", Outcome: tc.outcome, Report: tc.report})
+			text := loopwake.WaitEndedText(awaitstore.Condition{Kind: "process_done", Outcome: tc.outcome, Report: tc.report})
 			if !strings.Contains(text, tc.report) {
 				t.Fatalf("resumed prompt lost the process report: %s", text)
 			}

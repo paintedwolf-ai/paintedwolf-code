@@ -7,7 +7,6 @@ type InvocationFacts struct {
 	ToolArgs              map[string]any
 	ToolArgsFingerprint   string
 	ToolAllowedForProfile bool
-	HabitRedirectMatch    string
 	PatternParseOK        bool
 	ArgValidationErrors   []string
 	ArgValidationReason   string

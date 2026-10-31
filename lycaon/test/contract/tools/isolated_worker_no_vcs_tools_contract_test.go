@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -62,18 +63,23 @@ func TestMutationCapableWorkersAreAlwaysIsolated(t *testing.T) {
 	}
 }
 
-// A primary-tree profile keeps the complete Git tool group.
+// A primary-tree profile keeps Git command effects and remaining RPC operations.
 func TestSomeNonIsolatedProfileKeepsEveryGitTool(t *testing.T) {
 	t.Parallel()
 	gitTools := manifestGitTools(t)
+	language, err := toolcontract.LanguageV1()
+	contractcheck.FailErr(t, "load native Git command forms", err)
+	replaced := language.ReplacedRoutineSchemas()
+	effects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	contractcheck.FailErr(t, "compile Git command effects", err)
 	isolated := isolatedLegProfiles(t)
 	for id, profile := range toolProfilesByID(t) {
 		if _, runsIsolated := isolated[id]; runsIsolated {
 			continue
 		}
-		complete := true
+		complete := profile.ToolAllowed("command") && profile.CommandEffects.Allows(effects)
 		for _, tool := range gitTools {
-			if !profile.ToolAllowed(tool) {
+			if _, native := replaced[tool]; !native && !profile.ToolAllowed(tool) {
 				complete = false
 				break
 			}

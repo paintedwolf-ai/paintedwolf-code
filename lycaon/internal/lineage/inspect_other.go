@@ -15,6 +15,8 @@ func pipeHolders([]uint64) ([][]int, error) { return nil, ErrUnsupported }
 
 func peerPID(netip.AddrPort, netip.AddrPort) (int, bool) { return 0, false }
 
-func listeners() ([]Listener, error) { return nil, ErrUnsupported }
+func listeners(ListenerQuery) ([]Listener, error) { return nil, ErrUnsupported }
+
+func livePIDs() ([]int, error) { return nil, ErrUnsupported }
 
 const supported = false

@@ -17,7 +17,7 @@ Write legs run their own build/test/lint and any external-state shell the brief 
 ### Dispatch-only
 
 - `task()` with `scope.mode: write`; optional `scope.paths` guide the worker's focus — may dispatch while read scouts still run.
-- One theme per write leg across concurrent legs.{% if profile_has_code_rewrite %} Before a repo-wide codemod, run **`grep`** (`structural: true`, no rewrite) over the target subtree and use the match count to size the leg — do not guess blast radius from one file.{% endif %}
+- One theme per write leg across concurrent legs.{% if profile_has_code_rewrite %} Before a repo-wide codemod, run **`structural-grep`** in `command` (no rewrite) over the target subtree and use the match count to size the leg — do not guess blast radius from one file.{% endif %}
 - After implementer batch: verifier or re-dispatch **partial** legs; synthesis after follow-up settle.
 - {% if profile_has_verify %}Run **`verify()`** (the project's tests) when useful. {% endif %}Use `task` to pipeline `code-reviewer` with the next leg when useful.
 - No `pack_board` here; routing/synthesis/overlay-promote do.

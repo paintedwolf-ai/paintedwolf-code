@@ -30,7 +30,7 @@ func TestRunInOwnGroupEndsWhatTheCommandLeftBehind(t *testing.T) {
 	testutil.FailErr(t, "prepare", err)
 	defer cleanup()
 
-	testutil.FailErr(t, "run", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run", RunInOwnGroup(t.Context(), cmd))
 	helper := waitForPIDFile(t, pidFile)
 	if err := waitForProcessGone(t.Context(), helper); err != nil {
 		_ = syscall.Kill(helper, syscall.SIGKILL)
@@ -49,7 +49,7 @@ func TestRunInOwnGroupCancellationKillsAShellIgnoringTerm(t *testing.T) {
 	testutil.FailErr(t, "prepare", err)
 	defer cleanup()
 
-	err = RunInOwnGroup(cmd)
+	err = RunInOwnGroup(t.Context(), cmd)
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("run error = %v, want the killed shell's exit", err)
@@ -105,7 +105,7 @@ func TestRunInOwnGroupTerminalHelperProcess(t *testing.T) {
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 
-	err = RunInOwnGroup(cmd)
+	err = RunInOwnGroup(t.Context(), cmd)
 	outcome := strings.TrimSpace(stdout.String())
 	switch {
 	case ctx.Err() != nil:

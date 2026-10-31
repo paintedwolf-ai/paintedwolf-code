@@ -97,64 +97,35 @@ func (c *Directories) observeDirectory(ctx context.Context, store *indexStore, d
 	if err != nil && !errors.Is(err, pagedview.ErrMissing) {
 		return cached, err
 	}
-	observation := DirectoryObservation{Path: dir, baseSequence: cached.Sequence, Invalidation: store.observationMark(dir), Epoch: repochange.CurrentEpoch(store.root.Path)}
-	root, release, err := store.navigation.Acquire(ctx, store.root.Path)
-	if err != nil {
-		return observation, err
-	}
-	defer release()
 	pin, err := store.retainGeneration(headGeneration, true)
 	if err != nil {
-		return observation, err
+		return cached, err
 	}
-	defer pin.Release()
-	builder, err := newStructuralBuilder(store, pin.value)
+	var builder *structuralBuilder
+	defer func() {
+		if builder != nil {
+			builder.close()
+		}
+		if pin != nil {
+			pin.Release()
+		}
+	}()
+	observation, reused, err := collectDirectoryObservation(ctx, store, dir, cached, nil, demand, func(listing directoryDiscovery) error {
+		if builder == nil {
+			var err error
+			builder, err = newStructuralBuilder(store, pin.value)
+			if err != nil {
+				return err
+			}
+		}
+		return builder.observe(ctx, listing)
+	})
 	if err != nil {
 		return observation, err
 	}
-	defer builder.close()
-	directory, err := c.openObservationDirectory(ctx, store, root, dir)
-	if err != nil {
-		return observation, err
-	}
-	defer directory.close()
-	observation.Stamp = directory.stamp
-	// Unwatched membership is reusable only after its directory has been re-statted.
-	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation == observation.Invalidation && cached.Epoch == observation.Epoch {
-		publish(cached)
-		return cached, nil
-	}
-	reader := directoryBatch{file: directory.entries}
-	for {
-		finish, err := c.trees.broker.Acquire(ctx, store.observationRequest(dir))
-		if err != nil {
-			return observation, err
-		}
-		quantum := indexBatchSize
-		if maximum := demand(); maximum > 0 {
-			quantum = min(quantum, maximum-observation.Entries)
-		}
-		if quantum <= 0 {
-			finish()
-			break
-		}
-		batch, complete, readErr := reader.read(quantum)
-		var nodes []indexNode
-		if readErr == nil {
-			nodes = readObservationNodes(root, directory, dir, batch)
-		}
-		finish()
-		if readErr != nil {
-			return observation, readErr
-		}
-		observation.Entries += len(batch)
-		observation.Complete = complete
-		if err := builder.observe(ctx, directoryDiscovery{nodes: nodes, observation: observation}); err != nil {
-			return observation, err
-		}
-		if complete {
-			break
-		}
+	if reused {
+		publish(observation)
+		return observation, nil
 	}
 	if err := store.publishStructure(ctx, builder, pin.Generation); err != nil {
 		return observation, err
@@ -258,15 +229,6 @@ func (d *observationDirectory) close() {
 	if d.handle != nil {
 		_ = d.handle.Close()
 	}
-}
-
-func (c *Directories) openObservationDirectory(ctx context.Context, store *indexStore, root *os.Root, dir string) (*observationDirectory, error) {
-	release, err := c.trees.broker.Acquire(ctx, store.observationRequest(dir))
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	return openConfinedDirectory(root, dir)
 }
 
 func openConfinedDirectory(root *os.Root, dir string) (*observationDirectory, error) {

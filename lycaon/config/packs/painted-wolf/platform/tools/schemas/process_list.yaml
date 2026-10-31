@@ -3,8 +3,10 @@ description: >-
   Inspect host processes after approval. Returns names, executable paths, UID,
   and parent PID; no argv or environment. Only processes this session started
   are owned and carry an opaque instance reference. Use pid for a known target. Use next_after_pid for another page of the changing
-  snapshot. Unavailable metadata does not mean exited. Use command_output
-  and command_stop for jobs you launched with command.
+  snapshot. Unavailable metadata does not mean exited. Use listening_port to
+  find which process holds a port: matching processes carry their listeners,
+  and unattributed_listeners lists held sockets whose process could not be
+  read. Use command_output and command_stop for jobs you launched with command.
 schema:
   type: object
   properties:
@@ -24,4 +26,13 @@ schema:
       maximum: 500
       default: 100
       description: Maximum entries to return in one page of results.
+    listening_port:
+      type: integer
+      minimum: 1
+      maximum: 65535
+      description: Only processes holding a TCP listener or bound UDP socket on this port.
+    protocol:
+      type: string
+      enum: [tcp, udp]
+      description: Only listeners of this protocol; alone, lists every process holding one.
   additionalProperties: false

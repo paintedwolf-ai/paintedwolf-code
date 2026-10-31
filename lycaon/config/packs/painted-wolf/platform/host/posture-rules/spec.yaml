@@ -89,8 +89,8 @@ rules:
         code: SPEC_POSTURE_STUB_REQUIRED
         phase_required: "1"
         phase_required_name: Research depth (stub blueprint)
-        min_required: "Phase 1: use native `write` on `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
-        message: "Phase 1: use native `write` on `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
+        min_required: "Phase 1: use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
+        message: "Phase 1: use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
 
   - id: spec_posture_research_stub_required
     when:
@@ -128,8 +128,8 @@ rules:
         code: SPEC_POSTURE_STUB_REQUIRED
         phase_required: "1"
         phase_required_name: Research depth (stub blueprint)
-        min_required: "native `write` on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
-        message: "native `write` on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
+        min_required: "a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
+        message: "a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
 
   - id: spec_posture_pack_runner_forbidden
     when:

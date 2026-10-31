@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -215,8 +216,15 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 	}
 	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
 	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
+		if isPreservedEnvironmentFact(k, into) {
+			continue
+		}
 		into[k] = v
 	}
+	into["is_coordinator"] = true
+	into["command_on_floor"] = slices.Contains(floor, "command")
+	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
+	syncCommandExternalFacts(into)
 	roster, err := RequestableTools(requestable, turn.Schemas)
 	if err != nil {
 		return err

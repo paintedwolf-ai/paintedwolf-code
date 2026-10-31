@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/literal/ls.go",
+  "kind": "algorithm",
+  "workstream": "command-listing-work",
+  "disposition": "retain",
+  "reason": "The file owns option interpretation, ordering, recursion and presentation for one listing invocation. Held-directory membership, selected metadata and work accounting live in ls_directory.go. Retain the listing algorithm below 525 lines; formatting contracts and selection/admission work invariants cover this boundary.",
+  "reviewed_commit": "a63e80211f771b58f2888c8fcb25c6d8750389a3",
+  "ceiling": 525,
+  "boundaries": {
+    "lycaon/internal/tools/native/literal/forms_test.go": "909dcb64c71e9b129830bdac4252624c9d45c9b62f20b1baaf5d82ee53d1f75d",
+    "lycaon/internal/tools/native/literal/ls_work_test.go": "f6a37a0b84205dd98a1049f7cca89e93149a71ed23951d7e38127b62fce422dd",
+    "lycaon/internal/tools/projectpaths/directory_selection_test.go": "a77df82cdf5502d36bf718603369e1c3ce559111936c8f19735ae9daf8e1d538",
+    "lycaon/internal/tools/projectpaths/bound_child_test.go": "6f15f262c082bc6ed49f3d06cc10f5b1aa68972c3ff716da22cb2d9fac00a69e"
+  }
+}

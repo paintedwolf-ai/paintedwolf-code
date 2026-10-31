@@ -2,255 +2,257 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
-type toolCommandEquivalenceFile struct {
-	Entries []toolCommandEquivalenceEntry `yaml:"entries"`
+// retiredRoutineSchemas are the structured file and search schemas command
+// replaces on the routine floor. They stay loadable by exact name.
+var retiredRoutineSchemas = []string{"read", "grep", "find", "list_dir", "jq"}
+
+// retiredRedirectCodes told a model to leave command for a structured schema.
+// Their meanings are retired, never reused.
+var retiredRedirectCodes = []string{
+	"USE_CHMOD_NATIVE", "USE_CHOWN_NATIVE", "USE_COPY_NATIVE", "USE_DELETE_NATIVE", "USE_FIND_NOT_COMMAND",
+	"USE_GIT_DIFF_NATIVE", "USE_GIT_STATUS_NATIVE", "USE_GREP_REGEX", "USE_HTTP_REQUEST_NATIVE", "USE_JQ_NATIVE",
+	"USE_LIST_DIR_NATIVE", "USE_MKDIR_NATIVE", "USE_MOVE_NATIVE", "USE_NATIVE_TOOL", "USE_READ_NATIVE",
+	"USE_STAT_NATIVE", "USE_WC_NATIVE", "USE_WRITE_NATIVE",
 }
 
-type toolCommandEquivalenceEntry struct {
-	Native             string   `yaml:"native"`
-	RedirectCode       string   `yaml:"redirect_code"`
-	ReplacementExample string   `yaml:"replacement_example"`
-	Profiles           []string `yaml:"profiles"`
-	CommandGrammar     []struct {
-		Program string `yaml:"program"`
-		Grammar string `yaml:"grammar"`
-	} `yaml:"command_grammar"`
+func TestRoutineFloorsOfferCommandInPlaceOfRetiredSchemas(t *testing.T) {
+	t.Parallel()
+	catalog, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "load coordinator surfaces", err)
+	for _, id := range catalog.SurfaceIDs() {
+		surface, err := catalog.Surface(id)
+		contractcheck.FailErr(t, "read surface "+id, err)
+		floor := surface.FloorTools()
+		for _, retired := range retiredRoutineSchemas {
+			if slices.Contains(floor, retired) {
+				t.Errorf("%s still offers retired routine schema %s on its floor", id, retired)
+			}
+		}
+		if slices.Contains(floor, "command") && slices.Contains(surface.LoadableTools(), "command") {
+			t.Errorf("%s lists command on both its floor and its loadable set", id)
+		}
+	}
+	for _, id := range []string{"implement_investigate", "observe_investigate", "plan_review", "await_host"} {
+		surface, err := catalog.Surface(id)
+		if err != nil || !slices.Contains(surface.FloorTools(), "command") {
+			t.Errorf("%s does not offer command on its floor", id)
+		}
+	}
 }
 
-func loadToolCommandEquivalenceYAML(t *testing.T) toolCommandEquivalenceFile {
-	t.Helper()
+func TestToolProfilesDeferRetiredSchemasAndOfferReadOnlyCommand(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"coordinator", "implement", "worker_readonly", "explore_readonly", "plan_review_readonly"} {
+		profile := loadToolProfileByID(t, id)
+		for _, retired := range retiredRoutineSchemas {
+			if profile.StickyTools[retired] {
+				t.Errorf("%s loads retired routine schema %s up front", id, retired)
+			}
+		}
+		if !profile.ToolAllowed("command") || !profile.StickyTools["command"] {
+			t.Errorf("%s does not offer command up front", id)
+		}
+	}
+	for _, id := range []string{"worker_readonly", "explore_readonly", "plan_review_readonly"} {
+		if classes := loadToolProfileByID(t, id).CommandEffects.Classes(); !slices.Equal(classes, []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly}) {
+			t.Errorf("%s command is not read-only", id)
+		}
+	}
+}
+
+func TestRetiredCommandRedirectsAreGone(t *testing.T) {
+	t.Parallel()
+	entries, err := hintregistry.ListEffective()
+	contractcheck.FailErr(t, "list effective policy", err)
+	for _, entry := range entries {
+		if slices.Contains(retiredRedirectCodes, entry.Code) {
+			t.Errorf("retired command redirect %s is still a policy unit", entry.Code)
+		}
+	}
 	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "tool-command-equivalence.yaml"))
-	contractcheck.FailErr(t, "read tool-command-equivalence.yaml", err)
-	var eq toolCommandEquivalenceFile
-	contractcheck.FailErr(t, "unmarshal tool-command-equivalence.yaml", yaml.Unmarshal(data, &eq))
-	if len(eq.Entries) == 0 {
-		t.Fatal("tool-command-equivalence.yaml: expected entries")
-	}
-	return eq
-}
-
-func TestToolCommandEquivalenceYAMLMatchesNativeManifest(t *testing.T) {
-	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	manifest := loadNativeToolsManifestFlat(t)
-	manifestSet := map[string]bool{}
-	for _, name := range manifest {
-		manifestSet[name] = true
-	}
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	for _, entry := range eq.Entries {
-		if manifestSet[entry.Native] {
-			continue
-		}
-		if _, ok := schemas.ToolMeta(entry.Native); ok {
-			continue
-		}
-		t.Fatalf("equivalence native %q missing from native-tools.yaml and tools/schemas", entry.Native)
-	}
-}
-
-func TestToolCommandEquivalenceRedirectCodesRegistered(t *testing.T) {
-	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	cfg, err := guidance.LoadValidatedHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
-	contractcheck.FailErr(t, "LoadValidatedHintConfig", err)
-	for _, entry := range eq.Entries {
-		if entry.RedirectCode == "" {
-			continue // Advisory equivalences do not redirect command execution.
-		}
-		h, ok := cfg.HintCodes[entry.RedirectCode]
-		if !ok {
-			t.Fatalf("hint registry missing redirect %q for native %q", entry.RedirectCode, entry.Native)
-		}
-		view := guidance.NormalizeRejectCodeView(entry.RedirectCode, h)
-		if strings.TrimSpace(view.What) == "" || strings.TrimSpace(view.Fix) == "" {
-			t.Fatalf("hint %q missing enriched what/fix", entry.RedirectCode)
-		}
-		if len(h.Scenarios) == 0 {
-			t.Fatalf("hint %q missing scenarios", entry.RedirectCode)
+	for _, unit := range []string{"native-read-tool", "native-grep-tool", "native-find-tool", "native-list-dir-tool", "native-jq-tool"} {
+		if _, err := os.Stat(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "units", unit+".md")); !os.IsNotExist(err) {
+			t.Errorf("retired routine tutorial %s remains", unit)
 		}
 	}
 }
 
-func TestToolCommandEquivalenceGeneratedMatcherPresent(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	genPath := filepath.Join(root, "lycaon", "internal", "toolcommand", "command_equivalence_gen.go")
-	data, err := os.ReadFile(genPath)
-	contractcheck.FailErr(t, "read command_equivalence_gen.go", err)
-	text := string(data)
-	if !strings.Contains(text, "Code generated by cmd/codegen-tool-command-equivalence") {
-		t.Fatal("command_equivalence_gen.go missing codegen header")
-	}
-	eq := loadToolCommandEquivalenceYAML(t)
-	for _, entry := range eq.Entries {
-		if !strings.Contains(text, entry.RedirectCode) {
-			t.Fatalf("generated matcher missing redirect code %q", entry.RedirectCode)
-		}
-	}
-}
+func TestCommandGuidanceDebugCaptureInLLMRequestsJSONL(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "llm-requests.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	observability.CloseLLMDebug()
+	t.Cleanup(observability.CloseLLMDebug)
 
-func TestToolCommandEquivalenceMatchFindRedirect(t *testing.T) {
-	t.Parallel()
-	assertExactCommandReplacement(t, "tree -L 2 src", "USE_FIND_NOT_COMMAND", "find")
-}
-
-func TestToolCommandEquivalenceExactReplacementData(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		command string
-		code    string
-		tool    string
-	}{
-		{"cp source.txt destination.txt", "USE_COPY_NATIVE", "copy"},
-		{"curl -X POST -d payload https://api.example.test/v1", "USE_HTTP_REQUEST_NATIVE", "http_request"},
-		{"cat <<'EOF' > index.html\n<h1>Hello</h1>\nEOF", "USE_WRITE_NATIVE", "write"},
-	}
-	for _, c := range cases {
-		assertExactCommandReplacement(t, c.command, c.code, c.tool)
-	}
-}
-
-func TestHTTPRequestEquivalenceFeedbackIsFirstClass(t *testing.T) {
-	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	for _, entry := range eq.Entries {
-		if entry.Native != "http_request" {
-			continue
-		}
-		if entry.RedirectCode != "USE_HTTP_REQUEST_NATIVE" {
-			t.Fatalf("http_request redirect code = %q", entry.RedirectCode)
-		}
-		if !strings.Contains(entry.ReplacementExample, "http_request") || strings.Contains(strings.ToLower(entry.ReplacementExample), "curl") {
-			t.Fatalf("http_request replacement example is not first-class: %q", entry.ReplacementExample)
-		}
-		return
-	}
-	t.Fatal("missing http_request equivalence entry")
-}
-
-// A redirection has no native form, so the command keeps its own execution.
-func TestExactReplacementLeavesRedirectedCommandsToCommand(t *testing.T) {
-	t.Parallel()
-	exec := securityNativeExecutor(t)
-	for _, command := range []string{"cp source.txt destination.txt 2> copy.log", "ls > listing.txt"} {
-		_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
-			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-				ActiveRootID: "r1"},
-			Identity: tools.InvocationIdentity{Agent: "implement"},
-		})
-		if refusal, ok := guidance.RefusalFromError(err); ok && strings.HasPrefix(refusal.Code(), "USE_") {
-			t.Fatalf("command %q redirected to %s despite its redirection", command, refusal.Code())
-		}
-	}
-}
-
-func assertExactCommandReplacement(t *testing.T, command, code, tool string) {
-	t.Helper()
-	exec := securityNativeExecutor(t)
-	root := t.TempDir()
-	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", tool}},
+	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
+		ProfileID:             prompts.CoordinatorProfileID,
+		SurfaceID:             "implement_investigate",
+		IsCoordinator:         true,
+		OfferedTools:          []string{"command", "command_output", "command_stop", "wait", "process_list", "process_signal", "request_tools"},
+		DeferredTools:         []string{"read", "edit", "grep", "find", "list_dir", "jq"},
+		RootCount:             2,
+		ProjectDir:            "/workspace/app",
+		SessionScratchDir:     "/scratch/sess-debug",
+		Posture:               gate.PostureStrict,
+		CommandExternalHidden: false,
 	})
-	refusal, ok := guidance.RefusalFromError(err)
-	if err == nil || !ok {
-		t.Fatalf("command %q error = %v, want structured replacement %q", command, err, code)
+	observability.LogLLMRequest(
+		"mock", "mock-model", "stream",
+		[]api.Message{{Role: api.MessageRoleUser, Content: "inspect repo"}},
+		nil,
+		observability.LLMRequestTiming{DurationMs: 10, TTFTMs: 4},
+		observability.LLMUsageCapture{PromptTokens: 100, CompletionTokens: 10},
+		observability.LLMRequestDebug{
+			SessionID: "sess-debug",
+			ProfileID: prompts.CoordinatorProfileID,
+			Surface:   "implement_investigate",
+			Iteration: 1,
+			CommandGuidance: &observability.LLMCommandGuidanceCapture{
+				Templates: templates,
+				Facts:     facts,
+			},
+		},
+		nil, "",
+	)
+
+	raw, err := os.ReadFile(logPath)
+	contractcheck.FailErr(t, "read llm-requests.jsonl", err)
+	var row struct {
+		CommandGuidance *observability.LLMCommandGuidanceCapture `json:"command_guidance"`
 	}
-	var details map[string]any
-	if len(refusal.Facts.Feedback) > 0 {
-		details = refusal.Facts.Feedback[0].Details
+	contractcheck.FailErr(t, "unmarshal capture row", json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &row))
+	if row.CommandGuidance == nil {
+		t.Fatal("capture row missing command_guidance")
 	}
-	if refusal.Code() != code || details["suggested_tool"] != tool {
-		t.Fatalf("command %q refusal = %+v, want code=%q tool=%q", command, refusal.Facts, code, tool)
+	for _, wantTmpl := range []string{
+		"tools/schemas/command.yaml",
+		"partials/command-surface.md",
+		"units/coordinator-host-runner.md",
+		"units/secure-by-default-run.md",
+		"units/runner-operating-procedure.md",
+		"partials/capability-request-grammar.md",
+	} {
+		if !slices.Contains(row.CommandGuidance.Templates, wantTmpl) {
+			t.Errorf("command_guidance.templates = %v, missing %q", row.CommandGuidance.Templates, wantTmpl)
+		}
+	}
+	if row.CommandGuidance.Facts["command_output_files"] != true {
+		t.Fatalf("debug output capability differs from offered command: %#v", row.CommandGuidance.Facts["command_output_files"])
+	}
+	for _, key := range prompts.CommandGuidanceFactKeys() {
+		if key == "workspace_roots" {
+			continue
+		}
+		if _, ok := row.CommandGuidance.Facts[key]; !ok {
+			t.Errorf("command_guidance.facts missing key %q", key)
+		}
 	}
 }
 
-// commandEquivalenceExceptions lists native tools exempt from command redirects.
-var commandEquivalenceExceptions = map[string]string{
-	"git_compare":       "composite graph comparison with frozen tips, counts and all merge bases; no single command redirect",
-	"replace_lines":     "line-range edit; line addressing redirects via edit",
-	"jq_edit":           "structured document rewrite; in-place jq/yq habits have no exact native form",
-	"request_tools":     "meta tool; no command analog",
-	"secret_generate":   "host-generated opaque value; no safe command analog",
-	"secret_list":       "host capability metadata; no command analog",
-	"secret_revoke":     "host capability lifecycle; no command analog",
-	"complete_leg":      "worker closeout envelope; no command analog",
-	"verify":            "host-side test runner with host-managed verdict; not a command-habit redirect",
-	"survey_repo":       "composite catalog probes; no single command habit",
-	"skills_read":       "catalog read; no command analog",
-	"surface_note":      "transcript communication; no command analog",
-	"recall":            "reads the recorded index, not the filesystem; no command analog",
-	"source_history":    "reads host source ledger; distinct from commit history",
-	"restore_version":   "restores retained file version from source ledger",
-	"summarize":         "off-hot-path lite briefing over gathered material; no command analog",
-	"render_view":       "host-rasterized visual mockup; no command analog",
-	"view_image":        "host visual perception tool; no command analog",
-	"view_video":        "host visual perception tool; no command analog",
-	"capture_page":      "host-driven page capture; no command analog",
-	"measure_page":      "host-driven page geometry probe; no command analog",
-	"page_open":         "host-driven persistent page open; no command analog",
-	"page_act":          "host-driven persistent page act; no command analog",
-	"page_snapshot":     "host-driven persistent page snapshot; no command analog",
-	"page_close":        "host-driven persistent page close; no command analog",
-	"terminal_open":     "pty interactive open; command-class floor but not a habit redirect",
-	"terminal_send":     "pty handle send; no command habit redirect",
-	"terminal_read":     "pty handle read; no command habit redirect",
-	"terminal_snapshot": "pty vt grid snapshot; no command habit redirect",
-	"terminal_close":    "pty handle close; no command habit redirect",
-	"process_list":      "host process discovery; command-class floor but not a habit redirect",
-	"process_signal":    "host process signaling; command-class floor but not a habit redirect",
-}
-
-// TestToolCommandEquivalenceCoversEveryNativeTool asserts every native tool
-// is either mapped to a redirect or explicitly excepted without overlap.
-func TestToolCommandEquivalenceCoversEveryNativeTool(t *testing.T) {
+func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
 	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	manifest := loadNativeToolsManifestFlat(t)
+	root := contractcheck.RepoRoot(t)
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+	renderer := prompts.NewInjectRenderer(engine)
+	schemaCfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "load schemas", err)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load profiles", err)
 
-	mapped := map[string]bool{}
-	for _, entry := range eq.Entries {
-		mapped[entry.Native] = true
-	}
-	manifestSet := map[string]bool{}
-	for _, name := range manifest {
-		manifestSet[name] = true
-	}
-
-	for _, name := range manifest {
-		_, excepted := commandEquivalenceExceptions[name]
-		if !mapped[name] && !excepted {
-			t.Errorf("native tool %q has no command-equivalence mapping and is not in commandEquivalenceExceptions — add a tool-command-equivalence.yaml entry or except it with a reason", name)
+	schemaBytesForTools := func(names []string, readOnly bool) int {
+		total := 0
+		for _, name := range names {
+			if meta, ok := schemaCfg.ToolMeta(name); ok {
+				if readOnly && name == "command" {
+					meta.ArgsSchema = tools.PruneCommandReadOnlySchema(meta.ArgsSchema)
+				}
+				raw, _ := json.Marshal(meta)
+				total += len(raw)
+			}
 		}
-		if mapped[name] && excepted {
-			t.Errorf("native tool %q is both mapped and excepted — drop it from commandEquivalenceExceptions", name)
-		}
+		return total
 	}
 
-	for name := range commandEquivalenceExceptions {
-		if !manifestSet[name] {
-			t.Errorf("commandEquivalenceExceptions lists %q which is not in native-tools.yaml — remove the stale exception", name)
+	measureCoordinatorSurface := func(surfaceID string) int {
+		prompt := renderCoordinatorTripartiteForRunContext(
+			t, root, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
+			"Inspect the project", nil, surfaceID,
+		)
+		floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID)
+		contractcheck.FailErr(t, "load floor "+surfaceID, err)
+		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-size", surfaceID, floor, nil)
+		contractcheck.FailErr(t, "render procedures "+surfaceID, err)
+		return len(prompt) + len(proc) + schemaBytesForTools(floor, !prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID))
+	}
+
+	measureWorkerProfile := func(agentPromptRef, profileID string) int {
+		vars := map[string]any{}
+		contractcheck.FailErr(t, "merge worker surface "+profileID, prompts.MergeAgentToolSurfaceVars(profileID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+		var offered []string
+		for _, p := range profiles {
+			if p.ID == profileID {
+				for tool, sticky := range p.StickyTools {
+					if sticky && p.ToolAllowed(tool) {
+						offered = append(offered, tool)
+					}
+				}
+			}
+		}
+		sortStrings := append([]string(nil), offered...)
+		slices.Sort(sortStrings)
+		catalog, err := prompts.UnitCatalogForEngine(engine)
+		contractcheck.FailErr(t, "unit catalog", err)
+		sel := prompts.UnitSelectionVars(promptunit.HostWorker, "", sortStrings, sortStrings, nil)
+		blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)
+		contractcheck.FailErr(t, "render worker units", err)
+		prompts.MergeUnitVars(vars, blocks)
+		sysPrompt, err := engine.Render(context.Background(), agentPromptRef, vars)
+		contractcheck.FailErr(t, "render worker prompt "+agentPromptRef, err)
+		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-worker-size", profileID, sortStrings, nil)
+		contractcheck.FailErr(t, "render worker procedures "+profileID, err)
+		mutating, _ := vars["profile_command_mutation"].(bool)
+		return len(sysPrompt) + len(proc) + schemaBytesForTools(sortStrings, !mutating)
+	}
+
+	// Prompt sizes measured before command replaced the routine read, grep,
+	// find, list_dir and jq schemas and their tool units.
+	baselines := map[string]struct {
+		before int
+		after  int
+	}{
+		"coordinator/implement_investigate":        {before: 57652, after: measureCoordinatorSurface("implement_investigate")},
+		"coordinator_readonly/observe_investigate": {before: 45158, after: measureCoordinatorSurface("observe_investigate")},
+		"worker/implementer":                       {before: 100704, after: measureWorkerProfile("agents/implementer.md", "implement")},
+		"worker_readonly/path-explorer":            {before: 52693, after: measureWorkerProfile("agents/path-explorer.md", "explore_readonly")},
+	}
+
+	for name, row := range baselines {
+		t.Logf("SIZE_COMPARISON %s: main=%d branch=%d delta=%d", name, row.before, row.after, row.after-row.before)
+		if row.after >= row.before {
+			t.Errorf("%s total rendered size %d is not strictly smaller than main baseline %d", name, row.after, row.before)
 		}
 	}
 }

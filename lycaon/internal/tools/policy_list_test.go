@@ -52,7 +52,7 @@ func TestListToolsForProfileOmitsRuntimeDeniedWebResearch(t *testing.T) {
 	})
 	invoker := &listPolicyInvoker{
 		metas:  []tools.ToolMeta{{Name: "read"}, {Name: "web_search"}, {Name: "fetch_url"}},
-		policy: toolprofiles.NewGuidanceRejectPolicy(engine),
+		policy: engine,
 	}
 	got := tools.ListToolsForProfile(context.Background(), invoker, platform.ToolFilter{ProfileID: "implement"})
 	if len(got) != 1 || got[0].Name != "read" {

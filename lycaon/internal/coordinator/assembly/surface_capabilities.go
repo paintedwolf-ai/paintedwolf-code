@@ -84,6 +84,8 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 			if value > 0 {
 				vars[key] = value
 			}
+		case bool:
+			vars[key] = value
 		}
 	}
 }

@@ -30,7 +30,8 @@ class AdmissionTests(unittest.TestCase):
 
     def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
-        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'webkit-gtk', 'confinement-arm64'})
+        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']}
+                         | {'webkit-gtk', 'confinement-arm64', 'reference-userlands'})
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
@@ -39,6 +40,19 @@ class AdmissionTests(unittest.TestCase):
             self.assertTrue(impact.broad_scope([path])[0], path)
         backend = dict(full=False, paths=['lycaon/internal/a/a.go'])
         self.assertNotIn('webkit-gtk', {row['lane'] for row in ci.matrix('integration', scope=backend)['include']})
+
+    def test_command_language_changes_run_the_live_differential(self):
+        for path in ['lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/sed.json',
+                     'lycaon/internal/commandsurface/program_parse.go', 'lycaon/internal/commandprogram/evaluate_simple.go',
+                     'lycaon/internal/tools/native/search/grep.go', 'lycaon/test/commandconformance/corpus_live.go',
+                     'lycaon/test/wiring/conformance/differential_test.go']:
+            with self.subTest(path=path):
+                lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
+                self.assertIn('reference-userlands', lanes)
+        for path in ['lycaon/internal/commandsurfaces/a.go', 'lycaon/internal/tools/web/a.go', 'lycaon/internal/commandline/a.go']:
+            with self.subTest(path=path):
+                lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
+                self.assertNotIn('reference-userlands', lanes)
 
     def test_prose_runs_only_the_scope_every_change_runs(self):
         paths = ['docs/test-strategy.md', 'docs/operations/runbook.md', 'AGENTS.md', 'lycaon/AGENTS.md',

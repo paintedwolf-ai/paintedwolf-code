@@ -2,8 +2,10 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"os/exec"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/argv"
@@ -87,7 +89,7 @@ func runCommandTerminalCapture(
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
 	request := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement, bound.lease, commandLine),
 		ProjectDir: cwd, ProfileID: tctx.ProfileID(), Stages: stages, IOParams: ioParams,
 		PathExtra: append([]string(nil), tctx.Host.HostResourcePathExtra...),
 	}
@@ -125,11 +127,18 @@ func runCommandTerminalCapture(
 	}
 	refusals := bound.lease.SettledRefusals(ctx)
 	if runErr != nil {
-		return RunOutcome{}, runErr
+		if !errors.Is(runErr, exec.ErrNotFound) && !confine.IsCommandNotFound(runErr) {
+			return RunOutcome{}, runErr
+		}
+		line := fmt.Sprintf("bash: %s: command not found", stages[0].Name)
+		captured = bgprocess.PTYCaptureResult{
+			Screen:   bgprocess.ScreenSnapshot{Cols: max(80, len(line)), Rows: 1, Lines: []string{line}},
+			ExitCode: 127, Boundary: confine.BoundaryOf(bound.confinement),
+		}
 	}
 	tools.CaptureExternalAccess(tctx, network, directIPApplied)
 	tail := terminalScreenText(captured.Screen)
-	tracker.record(failureAttempt, captured.ExitCode == 0 && !captured.TimedOut)
+	tracker.record(failureAttempt, captured.ExitCode == 0 || captured.TimedOut)
 	return RunOutcome{
 		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
@@ -164,11 +173,15 @@ func terminalScreenText(screen bgprocess.ScreenSnapshot) string {
 
 func TerminalCaptureSnapshot(captured bgprocess.PTYCaptureResult, command, tail string) bgprocess.Snapshot {
 	reason := bgprocess.TerminationExited
+	status := captured.ExitCode
+	hasExit := true
+	stageExit := &status
 	if captured.TimedOut {
 		reason = bgprocess.TerminationTimedOut
+		status, hasExit, stageExit = 0, false, nil
 	}
 	return bgprocess.Snapshot{
-		HasExit: true, ExitCode: captured.ExitCode, Tail: tail, TerminationReason: reason,
-		Stages: []hostcmd.StageResult{{Command: command, ExitCode: &captured.ExitCode, Failed: captured.ExitCode != 0}},
+		HasExit: hasExit, ExitCode: status, Tail: tail, TerminationReason: reason,
+		Stages: []hostcmd.StageResult{{Command: command, ExitCode: stageExit, Failed: hasExit && status != 0}},
 	}
 }

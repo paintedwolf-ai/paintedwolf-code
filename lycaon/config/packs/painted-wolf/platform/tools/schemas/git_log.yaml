@@ -1,5 +1,5 @@
 tags: [git, inspection]
-description: "Read paged commit history from a branch, tag, commit, or revision range. Use ref for revisions and path only for a file. main..feature lists commits unique to feature; main...feature lists both sides. Follow next_offset to continue. Replaces command: git log."
+description: "Read paged commit history from a branch, tag, commit, or revision range. Use ref for revisions and path only for a file. main..feature lists commits unique to feature; main...feature lists both sides. Follow next_offset to continue."
 schema:
   type: object
   properties:

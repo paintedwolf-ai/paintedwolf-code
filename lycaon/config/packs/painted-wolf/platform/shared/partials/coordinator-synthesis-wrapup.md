@@ -20,16 +20,16 @@ Then draft once.
 
 | Tool | Why |
 |------|-----|
-| `write`, `edit`, `replace_lines`, `restore_version`, `code_rewrite`, `chmod`, `delete` | Product mutations — done on investigate/dispatch via workers |
-| `command` | Shell — not on this report turn |
+| command mutations, `edit`, `replace_lines`, `restore_version`, `code_rewrite`, `chmod` | Product mutations — done on investigate/dispatch via workers |
+| `verify` | Execution checks — done before wrapup |
 | `task`, `worker_cancel`, `wait` | Delegation and orchestration — workers are idle |
 | `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
 | `promote_overlay`, `reject_overlay`, `preview_overlay`, `pack_board` | Overlay/integration — not on this report turn |
 | `answer_decision`, `extend_worker_budget`, `decline_worker_budget` | Worker lifecycle — workers are idle |
 
-**Do not narrate fixes.** Do not say "I'll edit…", "I'll run `task()`…", or loop `grep`/`read` hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
+**Do not narrate fixes.** Do not say "I'll edit…", "I'll run `task()`…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
 
-**Survey tools** (`read`, `grep`, `find`, `list_dir`{% if profile_has_summarize %}, `summarize`{% endif %}{% if profile_has_survey_repo %}, `survey_repo`{% endif %}, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative; paths they return may go in `cited_evidence`.
+**Survey tools** (`command`{% if profile_has_summarize %}, `summarize`{% endif %}{% if profile_has_survey_repo %}, `survey_repo`{% endif %}, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative; paths they return may go in `cited_evidence`.
 {% if profile_has_recall %}
 **Need a detail a leg's report did not carry?** `recall` it now — a finished leg's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
 {% endif %}

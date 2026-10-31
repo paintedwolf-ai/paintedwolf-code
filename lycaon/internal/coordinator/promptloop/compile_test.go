@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -15,12 +16,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestCompiledSurfaceExpandsCommandFamily(t *testing.T) {
+func TestCompiledSurfaceOffersCommandOnInvestigateFloor(t *testing.T) {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	for _, name := range []string{"command", "command_output", "command_stop"} {
-		if !plan.Deferred(name) {
-			t.Fatalf("investigate compile missing deferred %s: %v", name, plan.AddressableNames())
+	if plan.Deferred("command") || !slices.Contains(plan.AddressableNames(), "command") {
+		t.Fatalf("investigate must offer command on its floor: %v", plan.AddressableNames())
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if plan.Addressable(retired) {
+			t.Fatalf("retired routine schema %s must not be offered on surface: %v", retired, plan.AddressableNames())
+		}
+	}
+	// Job controls follow a live command job, not the command schema.
+	for _, control := range []string{"command_output", "command_stop"} {
+		if slices.Contains(plan.AddressableNames(), control) && !plan.Deferred(control) {
+			t.Fatalf("%s offered without a live job: %v", control, plan.AddressableNames())
 		}
 	}
 }

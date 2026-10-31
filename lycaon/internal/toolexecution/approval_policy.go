@@ -2,7 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -12,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -30,6 +31,14 @@ func (p *ApprovalPolicyEngine) WaitConditions(profileID string) []string {
 		return nil
 	}
 	return p.profile.WaitConditions(profileID)
+}
+
+// CommandEffects delegates to the underlying profile policy engine.
+func (p *ApprovalPolicyEngine) CommandEffects(ctx context.Context, profileID string) (toolcontract.CommandEffects, error) {
+	if p == nil || p.profile == nil {
+		return 0, nil
+	}
+	return p.profile.CommandEffects(ctx, profileID)
 }
 
 // EvaluateForList returns tools allowed by the sandbox profile only (not approval ask/deny).
@@ -99,6 +108,13 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if args == nil {
 		return nil
 	}
+	if targets := nativePathTargetsFromArgs(args); targets != nil {
+		files := make([]string, 0, len(targets))
+		for _, target := range targets {
+			files = append(files, target.Path)
+		}
+		return files
+	}
 	if commandStreamTools[tool] {
 		return commandStreamFiles(args)
 	}
@@ -146,6 +162,26 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	}
 	files = append(files, pairFilesFromArgs(args)...)
 	return files
+}
+
+// nativePathTargetsFromArgs consumes the owner-bound projection. It never
+// guesses file operands from an argv word or a command's help prose.
+func nativePathTargetsFromArgs(args map[string]any) []hitl.NativePathTarget {
+	raw, present := args["path_targets"]
+	if !present {
+		return nil
+	}
+	targets := []hitl.NativePathTarget{}
+	groups, _ := raw.(map[string]any)
+	for _, direction := range []string{"read", "write"} {
+		paths, _ := groups[direction].([]any)
+		for _, item := range paths {
+			if path, _ := item.(string); path != "" {
+				targets = append(targets, hitl.NativePathTarget{Path: path, Write: direction == "write"})
+			}
+		}
+	}
+	return targets
 }
 
 // commandStreamFiles reads redirection and stream-field paths from the plan.
@@ -199,46 +235,51 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 		confReq.SocksProxyEnv = false
 	}
 	return hitl.ProposedAction{
-Mutations: hitl.ActionMutations{
-AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
-},
-Invocation: hitl.ActionInvocation{
-Tool: eval.ToolName,
-Args: eval.ToolArgs,
-Files: append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-ResolvedFiles: append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-ActionID: eval.ActionID,
-},
-Resources: hitl.ActionResources{
-ApprovalCategory: eval.ApprovalCategory,
-ApprovalSubject: eval.ApprovalSubject,
-HostResources: append([]string(nil), eval.HostResources...),
-HostResourceFamilies: append([]string(nil), eval.HostResourceFamilies...),
-},
-Scope: hitl.ActionScope{
-ProjectID: eval.ProjectID,
-ProjectDir: eval.ProjectDir,
-SessionID: eval.SessionID,
-RootSessionID: eval.ChatSessionID(),
-SessionScratchRoot: confReq.SessionScratchRoot,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForRequest(confReq),
-PackageExecution: eval.PackageExecution,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), eval.SocketGrants...),
-SocketScopes: append([]string(nil), eval.SocketScopes...),
-SocketGrantStates: append([]string(nil), eval.SocketGrantStates...),
-AuthorizedSocketDigests: append([]string(nil), eval.AuthorizedSocketDigests...),
-},
-Egress: hitl.ActionEgress{
-AuthorizedDirectIP: eval.AuthorizedDirectIP,
-DirectIPRequested: eval.DirectIPRequested,
-Visibility: eval.DirectIPVisibility,
-DeclaredDestinations: append([]string(nil), eval.DeclaredDestinations...),
-},
-}
+		Mutations: hitl.ActionMutations{
+			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
+		},
+		Invocation: hitl.ActionInvocation{
+			NativeInputs:       eval.NativeInputs,
+			Tool:               eval.ToolName,
+			BoundStages:        toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:               eval.ToolArgs,
+			Files:              append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:      append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets:  append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
+			ActionID:           eval.ActionID,
+		},
+		Resources: hitl.ActionResources{
+			ApprovalCategory:     eval.ApprovalCategory,
+			ApprovalSubject:      eval.ApprovalSubject,
+			HostResources:        append([]string(nil), eval.HostResources...),
+			HostResourceFamilies: append([]string(nil), eval.HostResourceFamilies...),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          eval.ProjectID,
+			ProjectDir:         eval.ProjectDir,
+			SessionID:          eval.SessionID,
+			RootSessionID:      eval.ChatSessionID(),
+			SessionScratchRoot: confReq.SessionScratchRoot,
+			SessionOutputRoot:  confReq.SessionOutputRoot,
+		},
+		Execution: hitl.ActionExecution{
+			Contained:        hitl.ContainedForRequest(confReq),
+			PackageExecution: eval.PackageExecution,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            append([]confine.SocketGrant(nil), eval.SocketGrants...),
+			SocketScopes:            append([]string(nil), eval.SocketScopes...),
+			SocketGrantStates:       append([]string(nil), eval.SocketGrantStates...),
+			AuthorizedSocketDigests: append([]string(nil), eval.AuthorizedSocketDigests...),
+		},
+		Egress: hitl.ActionEgress{
+			AuthorizedDirectIP:   eval.AuthorizedDirectIP,
+			DirectIPRequested:    eval.DirectIPRequested,
+			Visibility:           eval.DirectIPVisibility,
+			DeclaredDestinations: append([]string(nil), eval.DeclaredDestinations...),
+		},
+	}
 }
 
 // denyRejectData is the denied path and first matched rule plus tool and profile.

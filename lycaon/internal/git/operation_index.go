@@ -92,11 +92,11 @@ func (p *preparedOperation) prepareIndexFiles(ctx context.Context, scratch strin
 			if before[key] == after[key] {
 				continue
 			}
-			old, err := readOperationBlob(ctx, scratch, before[key])
+			old, err := p.indexContent(ctx, scratch, path, before[key])
 			if err != nil {
 				return err
 			}
-			next, err := readOperationBlob(ctx, scratch, after[key])
+			next, err := p.indexContent(ctx, scratch, path, after[key])
 			if err != nil {
 				return err
 			}

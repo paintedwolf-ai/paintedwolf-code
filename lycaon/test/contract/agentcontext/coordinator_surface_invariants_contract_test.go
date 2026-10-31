@@ -168,13 +168,13 @@ func TestCoordinatorSurfaceInvariants_listDirOnImplementReadSurfaces(t *testing.
 		surfaceImplementOverlayPromote,
 		"implement_investigate",
 	} {
-		if !contractcheck.ContainsString(surfaces[id], "list_dir") {
-			t.Fatalf("%s must include list_dir (read-only symbol survey)", id)
+		if !contractcheck.ContainsString(surfaces[id], "command") {
+			t.Fatalf("%s must include command on the floor", id)
 		}
 	}
 	for _, id := range []string{surfaceImplementDispatch, surfaceImplementPark} {
-		if contractcheck.ContainsString(surfaces[id], "list_dir") {
-			t.Fatalf("%s must not include list_dir — dispatch/park surfaces are orchestration-only", id)
+		if contractcheck.ContainsString(surfaces[id], "command") {
+			t.Fatalf("%s must not include command — dispatch/park surfaces are orchestration-only", id)
 		}
 	}
 }

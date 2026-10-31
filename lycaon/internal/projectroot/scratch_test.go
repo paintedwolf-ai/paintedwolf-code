@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestScratchAddress(t *testing.T) {
+func TestSessionAddress(t *testing.T) {
 	cases := []struct {
 		raw     string
 		wantRel string
@@ -15,7 +15,8 @@ func TestScratchAddress(t *testing.T) {
 		{raw: "@scratch", wantRel: "", wantOK: true},
 		{raw: "@scratch/", wantRel: "", wantOK: true},
 		{raw: "@scratch/notes.md", wantRel: "notes.md", wantOK: true},
-		{raw: "  @Scratch/a/b.txt ", wantRel: "a/b.txt", wantOK: true},
+		{raw: "  @Scratch/a/b.txt ", wantOK: false},
+		{raw: "@Scratch/a/b.txt ", wantRel: "a/b.txt ", wantOK: true},
 		{raw: "@SCRATCH/../x", wantRel: "../x", wantOK: true},
 		{raw: "@scratchpad/x", wantOK: false},
 		{raw: "@ scratch/x", wantOK: false},
@@ -25,14 +26,17 @@ func TestScratchAddress(t *testing.T) {
 		{raw: "", wantOK: false},
 	}
 	for _, tc := range cases {
-		rel, ok := ScratchAddress(tc.raw)
+		area, rel, ok := SessionAddress(tc.raw)
+		if ok && area != "scratch" {
+			t.Fatalf("unexpected session area %q", area)
+		}
 		if ok != tc.wantOK || rel != tc.wantRel {
-			t.Errorf("ScratchAddress(%q) = (%q, %v), want (%q, %v)", tc.raw, rel, ok, tc.wantRel, tc.wantOK)
+			t.Errorf("SessionAddress(%q) = (%q, %v), want (%q, %v)", tc.raw, rel, ok, tc.wantRel, tc.wantOK)
 		}
 	}
 }
 
-func TestScratchPath(t *testing.T) {
+func TestSessionPath(t *testing.T) {
 	dir := filepath.FromSlash("/state/scratch/chat-1")
 	cases := []struct {
 		rel     string
@@ -49,18 +53,30 @@ func TestScratchPath(t *testing.T) {
 		{rel: "/etc/passwd", escapes: true},
 	}
 	for _, tc := range cases {
-		got, err := ScratchPath(dir, tc.rel)
+		got, err := SessionPath(dir, tc.rel)
 		if tc.escapes {
 			if !errors.Is(err, ErrPathEscape) {
-				t.Errorf("ScratchPath(%q) err = %v, want ErrPathEscape", tc.rel, err)
+				t.Errorf("SessionPath(%q) err = %v, want ErrPathEscape", tc.rel, err)
 			}
 			continue
 		}
 		if err != nil || got != tc.want {
-			t.Errorf("ScratchPath(%q) = (%q, %v), want %q", tc.rel, got, err, tc.want)
+			t.Errorf("SessionPath(%q) = (%q, %v), want %q", tc.rel, got, err, tc.want)
 		}
 	}
-	if _, err := ScratchPath("relative/dir", "x"); err == nil {
-		t.Error("ScratchPath with a relative folder: want error")
+	if _, err := SessionPath("relative/dir", "x"); err == nil {
+		t.Error("SessionPath with a relative folder: want error")
+	}
+}
+
+func TestOutputNamespaceIsReservedAndPreservesNames(t *testing.T) {
+	for _, raw := range []string{"@output/a.stdout", "@OUTPUT/a.stdout"} {
+		area, rel, ok := SessionAddress(raw)
+		if !ok || area != VirtualOutputLabel || rel != "a.stdout" {
+			t.Fatalf("address=%q/%q/%v", area, rel, ok)
+		}
+	}
+	if !IsVirtualRootLabel("output") {
+		t.Fatal("output could shadow a host namespace")
 	}
 }

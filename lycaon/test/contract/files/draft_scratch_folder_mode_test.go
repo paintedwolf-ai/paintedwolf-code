@@ -34,9 +34,12 @@ func TestDraftScratchUnlocksFolderModeCapabilities(t *testing.T) {
 	if len(folderTools) <= len(noFolderTools) {
 		t.Fatalf("folder tool count %d must exceed no-folder %d", len(folderTools), len(noFolderTools))
 	}
+	if !toolInList(folderTools, "command") {
+		t.Fatal("folder mode missing command")
+	}
 	for _, name := range []string{"read", "grep"} {
-		if !toolInList(folderTools, name) {
-			t.Fatalf("folder mode missing tool %q", name)
+		if folderPlan.Addressable(name) {
+			t.Fatalf("folder mode exposes retired standalone tool %q instead of command", name)
 		}
 	}
 	if !folderPlan.Addressable("pack_board") {

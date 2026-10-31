@@ -42,25 +42,26 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 	ctx = authzledger.WithInvocation(ctx, cmd.SessionID, cmd.RootSessionID, cmd.ToolCallID)
 	subject := egressAskFor(cmd, ep, detection)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: networkEgressTool,
-Args: subject.Args,
-},
-Presentation: hitl.ActionPresentation{
-PresentationTool: strings.TrimSpace(cmd.ToolName),
-Command: strings.TrimSpace(cmd.CommandLine),
-EstimatedImpact: subject.Impact,
-},
-Scope: hitl.ActionScope{
-ProjectID: cmd.ProjectID,
-ProjectDir: cmd.ProjectDir,
-SessionID: cmd.SessionID,
-RootSessionID: cmd.RootSessionID,
-},
-Execution: hitl.ActionExecution{
-Contained: subject.Contained,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:     networkEgressTool,
+			Args:     subject.Args,
+			ActionID: cmd.EffectActionID(),
+		},
+		Presentation: hitl.ActionPresentation{
+			PresentationTool: strings.TrimSpace(cmd.ToolName),
+			Command:          strings.TrimSpace(cmd.CommandLine),
+			EstimatedImpact:  subject.Impact,
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     cmd.ProjectID,
+			ProjectDir:    cmd.ProjectDir,
+			SessionID:     cmd.SessionID,
+			RootSessionID: cmd.RootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: subject.Contained,
+		},
+	}
 
 	facts := gate.Facts{
 		Stage: gate.StagePreDial,

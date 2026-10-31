@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -148,14 +148,7 @@ func TestSummarize_PatternBloomFilterPruning(t *testing.T) {
 	snapshot, err := catalog.Observe(context.Background(), "test-proj", []sourcecatalog.Root{{ID: "r1", Path: dir}})
 	testutil.FailErr(t, "observe", err)
 
-	// Populate Bloom filters.
-	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
-	}
-	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
-		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("UniqueBloomTargetToken"), Open: opener,
-	})
-	testutil.FailErr(t, "populate blooms", err)
+	warmSurveyContent(t, catalog, dir, snapshot.Entries)
 
 	tool := testSummarizeTool(t, dir)
 	tool.Catalog = catalog
@@ -165,4 +158,27 @@ func TestSummarize_PatternBloomFilterPruning(t *testing.T) {
 	if res.Coverage.MatchesObserved != 1 {
 		t.Fatalf("matches=%d want 1", res.Coverage.MatchesObserved)
 	}
+}
+
+func warmSurveyContent(t *testing.T, catalog *sourcecatalog.Catalog, root string, entries []sourcecatalog.Entry) bool {
+	t.Helper()
+	observable := true
+	for _, entry := range entries {
+		if entry.IsDir || entry.IsSymlink {
+			continue
+		}
+		file, err := os.Open(filepath.Join(root, filepath.FromSlash(entry.Path)))
+		testutil.FailErr(t, "open fixture content", err)
+		info, err := file.Stat()
+		testutil.FailErr(t, "stat fixture content", err)
+		version := fspath.ObserveFile(info)
+		observable = observable && version.Known && version.Links > 0
+		observation := catalog.Literals.BeginRead(root, entry, version)
+		_, err = io.Copy(io.Discard, observation.Wrap(t.Context(), file))
+		testutil.FailErr(t, "observe fixture stream", err)
+		testutil.FailErr(t, "close fixture stream", file.Close())
+		observation.Commit()
+		observation.Close()
+	}
+	return observable
 }

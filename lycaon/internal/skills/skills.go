@@ -27,8 +27,8 @@ type Skill struct {
 	AllowedTools  string // display metadata only
 	// OptionalTools names tools mentioned in the body that are not required dependencies.
 	OptionalTools []string
-	UnitID   string
-	PackID   string
+	UnitID        string
+	PackID        string
 	// Dir is a display-only provenance path.
 	Dir              string
 	Resources        []string
@@ -50,6 +50,13 @@ const (
 	// RosterDescriptionBudget is the rune budget a bundled skill's
 	// description spends on every roster line and engine card.
 	RosterDescriptionBudget = 180
+	// BundledBodyBudget is the byte budget of a bundled skill body. A
+	// preloaded body rides every call of its turn beside the standing
+	// prompt, so it must stay small for local models.
+	BundledBodyBudget = 4 << 10
+	// BundledResourceBudget is the byte budget of one bundled resource,
+	// which a read places in the same context.
+	BundledResourceBudget = 8 << 10
 
 	BodyMax         = 64 << 10 // host resource limit
 	CatalogMax      = 128      // host resource limit
@@ -279,4 +286,3 @@ func splitLines(b []byte) []string {
 func joinLines(lines []string) []byte {
 	return []byte(strings.Join(lines, "\n"))
 }
-

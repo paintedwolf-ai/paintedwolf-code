@@ -81,13 +81,15 @@ func canonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
 // commandEgressIdentity supplies the shared subject for posture, leases, and attribution.
 func commandEgressIdentity(tctx tools.ToolContext, toolName, commandLine string) confine.EgressCommand {
 	identity := confine.EgressCommand{
-		SessionID:     tctx.Identity.SessionID,
-		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.Identity.ProjectID,
-		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.Identity.ToolCallID,
-		ToolName:      toolName,
-		CommandLine:   commandLine,
+		OwnedLoopbackPorts: append([]uint16(nil), tctx.Local.OwnedLoopbackPorts...),
+		SessionID:          tctx.Identity.SessionID,
+		RootSessionID:      tctx.ChatSessionID(),
+		ProjectID:          tctx.Identity.ProjectID,
+		ProjectDir:         tctx.ActiveRootPath(),
+		ToolCallID:         tctx.Identity.ToolCallID,
+		ActionID:           tctx.EffectActionID(),
+		ToolName:           toolName,
+		CommandLine:        commandLine,
 	}
 	if tctx.Files.PackageExecution != nil {
 		identity.DeclaredHosts = append([]string(nil), tctx.Files.PackageExecution.AllowedHosts...)
@@ -215,7 +217,7 @@ func runCommandForeground(
 		return RunOutcome{}, fmt.Errorf("background registry not configured")
 	}
 	req := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, confinement, bound.lease, cmdKey),
 		ProjectDir: cwd,
 		ProfileID:  profile,
 		Stages:     stages,
@@ -235,6 +237,7 @@ func runCommandForeground(
 		sourceRevision, sourceRootDigest = source.Revision, source.Root
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		bound.close(ctx)
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	index := watchIndex(tctx, confinement)
@@ -287,7 +290,7 @@ func runCommandForeground(
 		out.Network = networkLife.complete(ctx)
 		out.Refusals = bound.lease.SettledRefusals(ctx)
 		out.LeftRunning = networkLife.leftBehind()
-		out.SpillPath = spillCommandOutput(tctx, snap)
+		out.SpillPath = spillCommandOutput(ctx, tctx, snap)
 		ft.record(failureAttempt, out.Snapshot.ExitCode == 0)
 		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.Identity.SessionID, handle)
 		registry.Lifecycle.Discard(tctx.Identity.SessionID, handle)
@@ -354,7 +357,7 @@ func isHex64(s string) bool {
 
 // spillCommandOutput persists the whole screened output when the tail dropped
 // some of it; the result names the file, readable by line.
-func spillCommandOutput(tctx tools.ToolContext, snap bgprocess.Snapshot) string {
+func spillCommandOutput(ctx context.Context, tctx tools.ToolContext, snap bgprocess.Snapshot) string {
 	if !snap.OutputScreened || len(snap.Output) <= len(snap.Tail) {
 		return ""
 	}
@@ -362,7 +365,7 @@ func spillCommandOutput(tctx tools.ToolContext, snap bgprocess.Snapshot) string 
 	if host == "" {
 		return ""
 	}
-	return tooloutput.SpillWholeRaw(host, tooloutput.Screened(snap.Output), tctx.Host.MaxToolSpillBytes).SpillPath
+	return tooloutput.SpillWholeRaw(ctx, host, tooloutput.Screened(snap.Output), tctx.Host.MaxToolSpillBytes).SpillPath
 }
 
 func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessionID, handle string) error {

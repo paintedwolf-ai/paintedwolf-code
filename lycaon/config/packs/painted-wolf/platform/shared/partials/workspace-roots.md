@@ -1,8 +1,8 @@
 {% if root_count == 0 %}
 No folder is attached. File and shell tools stay off until the user attaches one (Folders button); chat and web research still work.
 {% elif root_count == 1 %}
-Workspace: {{ project_dir }}
-Use workspace-relative paths in this folder (`src/main.py` for files, `.` for root).
+Project folder: {{ project_dir }}
+Use paths relative to this folder (`src/main.py` for files, `.` for the folder).
 {% else %}
 This project spans {{ root_count }} folders:
 {% for r in workspace_roots %}
@@ -14,5 +14,5 @@ This project spans {{ root_count }} folders:
 {% include "partials/multi-root-addressing.md" %}
 {% endif %}
 {% if root_count > 0 %}
-User absolute paths: call `read`/`list_dir`/`grep` with them — expect an Approvals card or `Code:`; never refuse in prose or ask them to paste the file.
+For a path the person gives you, use it in `command`. The host will either allow access, ask the person, or return a refusal with `Code:`. Do not ask them to paste the file.
 {% endif %}

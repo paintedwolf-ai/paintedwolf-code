@@ -26,13 +26,13 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			root := t.TempDir()
 			response := llm.MockResponseEntry{Pattern: ".", Text: "ok"}
 			if anchor == oar.AnchorCoordinatorPreInvoke {
-				response.ToolCalls = []llm.MockToolCall{{ID: "call-directory", Name: "list_dir", Args: map[string]any{"path": root}}}
+				response.ToolCalls = []llm.MockToolCall{{ID: "call-directory", Name: "command", Args: map[string]any{"command": "ls " + root}}}
 				response.FollowUpText = "complete"
 			}
 			recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{response}}))
 			registry := tools.NewStubRegistry()
-			testutil.FailErr(t, "register directory tool", registry.Register("list_dir", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-				return "[]", nil
+			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				return "", nil
 			}))
 			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 			projects := project.NewMemoryRegistry()

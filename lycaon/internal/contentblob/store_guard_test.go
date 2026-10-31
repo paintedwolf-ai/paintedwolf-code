@@ -27,7 +27,7 @@ func TestRunGCBatchRefusesWhenTheStoreClaimIsLost(t *testing.T) {
 	projectID := testdbseed.DefaultProjectID
 	testdbseed.InsertSession(t, database, "session-gc-lost", projectID)
 	store := contentblob.StoreFor(dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(store, []byte("queued but the store is not ours"))
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, []byte("queued but the store is not ours"))
 	testutil.FailErr(t, "write blob", err)
 	q := db.New(database)
 	testutil.FailErr(t, "upsert object", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{

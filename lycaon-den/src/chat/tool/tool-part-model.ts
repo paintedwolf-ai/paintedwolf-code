@@ -10,6 +10,7 @@ import type {
   ToolProcessHandle,
   ToolCompletion,
   InvocationReceipt,
+  CommandProgramReceipt,
   VerdictOutcome,
   HostSecretRedactionMeta,
   ToolFeedback,
@@ -100,6 +101,8 @@ export interface ToolPartView {
   verdict?: VerdictOutcome | null;
   /** Contract receipt for the action shown by this card. */
   invocation?: InvocationReceipt | null;
+  /** Host program receipt; present only for portable command programs. */
+  commandProgram?: CommandProgramReceipt | null;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */
@@ -337,6 +340,7 @@ export function toolPartFromCall(
     completion: resultMsg?.tool_result?.completion ?? null,
     process: resultMsg?.tool_result?.process ?? null,
     invocation: resultMsg?.tool_result?.invocation ?? null,
+    commandProgram: resultMsg?.tool_result?.command_program ?? null,
     verdict: resultMsg?.tool_result?.verdict ?? null,
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,

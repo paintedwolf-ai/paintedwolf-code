@@ -1,13 +1,10 @@
 package session
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/egress"
-	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
 
@@ -84,6 +80,7 @@ type DefaultLoopbackProvenance struct {
 	listeners func(ctx context.Context) ([]socketListener, error)
 	// lineageSession names the session whose action launched pid.
 	lineageSession func(pid int) (string, bool)
+	observeNative  nativeListenerObserver
 	// containers lists running containers from every reachable engine.
 	containers        func(ctx context.Context) []dockerContainerInfo
 	mu                sync.RWMutex
@@ -95,7 +92,7 @@ func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 	sockets := discoverDockerSockets()
 	return newLoopbackProvenance(ctx, hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
 		return queryDockerContainers(ctx, sockets)
-	})
+	}, lineage.ObserveSessionListener)
 }
 
 func newLoopbackProvenance(
@@ -103,8 +100,9 @@ func newLoopbackProvenance(
 	listeners func(context.Context) ([]socketListener, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
+	observeNative nativeListenerObserver,
 ) *DefaultLoopbackProvenance {
-	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers}
+	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers, observeNative: observeNative}
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	if current, err := listeners(ctx); err == nil {
@@ -131,7 +129,10 @@ func (p *DefaultLoopbackProvenance) IsSessionOwned(ctx context.Context, sessionI
 	}
 	current, err := p.listeners(ctx)
 	if err != nil {
-		current = nil
+		return false, ProvenanceEvidence{
+			Method:      ProvenanceUnverified,
+			Description: fmt.Sprintf("port %d cannot be attributed: the current listener table is unavailable", port),
+		}
 	}
 	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current, port))
 }
@@ -154,6 +155,14 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 }
 
 func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, workspaceDir string, port uint16, held []socketListener) (bool, ProvenanceEvidence) {
+	for _, l := range held {
+		if l.PID <= 0 || !l.Addr.IsValid() {
+			return false, ProvenanceEvidence{
+				Method:      ProvenanceUnverified,
+				Description: fmt.Sprintf("port %d has a listener with incomplete holder observation", port),
+			}
+		}
+	}
 	if owner, ok := p.lineageOwner(sessionID, held); ok {
 		for _, l := range held {
 			if !l.loopbackBound() {
@@ -166,6 +175,16 @@ func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, wo
 		return true, ProvenanceEvidence{
 			Method: ProvenanceLineage, OwnerID: strconv.Itoa(owner),
 			Description: fmt.Sprintf("listener process %d on port %d was launched by session %s", owner, port, sessionID),
+		}
+	}
+	if p.lineageSession != nil {
+		for _, l := range held {
+			if _, ok := p.lineageSession(l.PID); ok {
+				return false, ProvenanceEvidence{
+					Method:      ProvenanceUnverified,
+					Description: fmt.Sprintf("port %d is not verified as owned by this chat", port),
+				}
+			}
 		}
 	}
 
@@ -227,99 +246,22 @@ func onPort(listeners []socketListener, port uint16) []socketListener {
 	return out
 }
 
-// hostListeners reads the kernel socket table where the engine has one, and
-// lsof elsewhere.
-func hostListeners(ctx context.Context) ([]socketListener, error) {
-	table, err := lineage.Listeners()
-	if err == nil {
-		var out []socketListener
-		for _, l := range table {
-			if len(l.PIDs) == 0 {
-				out = append(out, socketListener{Port: l.Addr.Port(), Addr: l.Addr.Addr()})
-			}
-			for _, pid := range l.PIDs {
-				out = append(out, socketListener{PID: pid, Port: l.Addr.Port(), Addr: l.Addr.Addr()})
-			}
-		}
-		return out, nil
-	}
-	if !errors.Is(err, lineage.ErrUnsupported) {
-		return nil, err
-	}
-	return lsofListeners(ctx)
-}
-
-// lsofListeners exits 1 with no output when nothing listens; any other
-// failure leaves the table unknown.
-func lsofListeners(ctx context.Context) ([]socketListener, error) {
-	lsof, err := exec.LookPath("lsof")
-	if err != nil {
-		return nil, fmt.Errorf("lsof: %w", err)
-	}
-	stdout, stderr, code, err := exec.RunSeparate(ctx, lsof,
-		[]string{"-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pn"},
-		exec.ExecOpts{Launch: exec.HostLaunch("loopback_listener_probe")})
+// hostListeners reads the kernel's listening TCP sockets.
+func hostListeners(context.Context) ([]socketListener, error) {
+	table, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}})
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case code == 0:
-		return parseLsofListeners(stdout), nil
-	case code == 1 && len(bytes.TrimSpace(stdout)) == 0 && len(bytes.TrimSpace(stderr)) == 0:
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("lsof exited %d", code)
-	}
-}
-
-// parseLsofListeners pairs each name record with the process record before it.
-func parseLsofListeners(out []byte) []socketListener {
-	var listeners []socketListener
-	pid := 0
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
+	var out []socketListener
+	for _, l := range table {
+		if len(l.Holders) == 0 {
+			out = append(out, socketListener{Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
-		switch line[0] {
-		case 'p':
-			pid = 0
-			if v, err := strconv.Atoi(line[1:]); err == nil && v > 0 {
-				pid = v
-			}
-		case 'n':
-			if pid == 0 {
-				continue
-			}
-			if l, ok := parseLsofName(line[1:]); ok {
-				l.PID = pid
-				listeners = append(listeners, l)
-			}
+		for _, holder := range l.Holders {
+			out = append(out, socketListener{PID: holder.PID, Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
 	}
-	return listeners
-}
-
-// parseLsofName reads a numeric listen address: "127.0.0.1:3000",
-// "[::1]:3000", or "*:3000" for every interface.
-func parseLsofName(name string) (socketListener, bool) {
-	idx := strings.LastIndex(name, ":")
-	if idx < 0 {
-		return socketListener{}, false
-	}
-	port, err := strconv.ParseUint(name[idx+1:], 10, 16)
-	if err != nil || port == 0 {
-		return socketListener{}, false
-	}
-	l := socketListener{Port: uint16(port)}
-	host := strings.TrimSuffix(strings.TrimPrefix(name[:idx], "["), "]")
-	if host == "*" {
-		l.Addr = netip.IPv6Unspecified()
-	} else if addr, err := netip.ParseAddr(host); err == nil {
-		l.Addr = addr
-	}
-	return l, true
+	return out, nil
 }
 
 // discoverDockerSockets returns container engine sockets named by the

@@ -98,6 +98,8 @@ type ToolInvocationOut struct {
 	Process *api.ToolProcessHandle
 	// Verdict is Den UI metadata for a recorded review_loop verdict.
 	Verdict *api.VerdictOutcome
+	// CommandProgram is the settled command program receipt for a portable command call.
+	CommandProgram *api.CommandProgramReceipt
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.
@@ -165,8 +167,11 @@ type InvocationSource struct {
 	ModelSourceContext *api.SourceContext
 	// EditorReadBases freezes reads known before this response executes tools;
 	// the response's own accepted writes advance it.
-	EditorReadBases     *AgentReadBases
-	Roots               []projectroot.RootRef
+	EditorReadBases *AgentReadBases
+	Roots           []projectroot.RootRef
+	// RootHistory is the project's attachment generation when Roots was
+	// captured; it answers stale spellings and later removals from facts.
+	RootHistory         projectroot.HistoryView
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
@@ -237,8 +242,12 @@ type InvocationHost struct {
 	HostDataDir string
 	// SessionScratchDir contains writable session-scoped scratch data.
 	SessionScratchDir string
+	// SessionOutputDir contains host-published session output, never a command write root.
+	SessionOutputDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.
 	MaxToolSpillBytes int
+	// ModelContextWindow is the active model's context window in tokens.
+	ModelContextWindow int
 	// HostResources are exact catalog ids attached to the structured action.
 	HostResources        []string
 	HostResourceFamilies []string
@@ -307,6 +316,8 @@ type InvocationExecution struct {
 
 // InvocationLocal carries local network grants and audit.
 type InvocationLocal struct {
+	// OwnedLoopbackPorts requires fresh exact listener proof at every mediated write.
+	OwnedLoopbackPorts []uint16
 	// ContainerRecorder records container launches for session loopback provenance.
 	ContainerRecorder ContainerRecorder
 	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
@@ -325,6 +336,9 @@ type InvocationLocal struct {
 
 // InvocationEffects carries invocation results and observations.
 type InvocationEffects struct {
+	// CheckMutationProgress admits a reached project file creation or edit.
+	// Command programs install this at their native write boundary.
+	CheckMutationProgress func(context.Context, string, string) error
 	// ReportProgress publishes host-measured work on this invocation's activity.
 	ReportProgress func(api.ToolProgress)
 	// ArgsTruncated marks arguments cut before parsing.
@@ -444,15 +458,19 @@ func (m ToolMeta) IsMCP() bool {
 
 // Invocation is the immutable action envelope passed to a subsystem owner.
 type Invocation struct {
-	ID             string
-	ProjectID      string
-	SessionID      string
-	MessageID      string
-	ToolCallID     string
-	ToolName       string
-	ArgsDigest     string
-	ContractDigest string
-	Contract       toolcontract.Contract
+	NativeReview    *hitl.NativeActionReview
+	NativeInputs    *hitl.NativeActionInputs
+	NativeOperation *toolcontract.BoundOperation
+	NativeStages    []toolcontract.ExecutionStage
+	ID              string
+	ProjectID       string
+	SessionID       string
+	MessageID       string
+	ToolCallID      string
+	ToolName        string
+	ArgsDigest      string
+	ContractDigest  string
+	Contract        toolcontract.Contract
 }
 
 // Definition is one atomically published registry entry.

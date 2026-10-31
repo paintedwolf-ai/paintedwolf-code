@@ -40,7 +40,7 @@ func TestRunDensityPassRecompressesShrinksAndFlipsColdRoundTrip(t *testing.T) {
 
 	store := contentblob.StoreFor(dataDir, projectID)
 	plaintext := compressiblePayload(42)
-	sha, byteSize, storedSize, err := contentblob.Write(store, plaintext)
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, plaintext)
 	testutil.FailErr(t, "write blob", err)
 
 	q := db.New(database)
@@ -106,7 +106,7 @@ func TestRunDensityPassSkipsProjectsNotIdle(t *testing.T) {
 	ctx := t.Context()
 
 	store := contentblob.StoreFor(dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(store, compressiblePayload(7))
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, compressiblePayload(7))
 	testutil.FailErr(t, "write blob", err)
 	q := db.New(database)
 	testutil.FailErr(t, "upsert content blob object", q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{

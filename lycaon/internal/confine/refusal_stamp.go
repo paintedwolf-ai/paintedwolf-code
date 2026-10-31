@@ -8,6 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 )
 
+// FailureAttribution identifies the resource named by a host observation; empty names none.
+type FailureAttribution string
+
+const AttributionSubject FailureAttribution = "subject"
+
 // RefusalContext carries spawn facts needed for refusal guidance.
 type RefusalContext struct {
 	// MediatedNetwork includes allowed and denied broker observations.

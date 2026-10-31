@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/projectsource/projectsource.SourceMutationService",
+  "kind": "runtime_service",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The 1170 receiver lines and thirty-one methods coordinate keyed replay, path/history holds, prepared-to-file_applied-to-committed transitions and recovery under one operation identity. Bounded publication records preserve durable file_applied facts before the existing ledger/sourcefeed transaction; approvals and revision checks remain outside it. Paths, History, Effects, Journal and settlement are existing distinct collaborators. Partial ledger failure/restart, immutable attribution, cancellation and memory cleanup support retention at this measured ceiling and shape; growth requires renewed review. The one-entry nonrecursive emptiness check uses the existing descriptor-relative effect reader after State admission and preserves selected/opened identity; its direct refusal and zero-leak fixture supports the current io dependency shape.",
+  "reviewed_commit": "41f303d1aab5d4bda48205698fdf1f029ad41f31",
+  "ceiling": 1170,
+  "boundaries": {
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54",
+    "lycaon/internal/projectsource/source_mutation_commit_failure_test.go": "31cf2f967c622b4cd63ea98d16cff21f86cd70ff7f27cc65232a32f839b51916",
+    "lycaon/internal/toolhost/command_mutation_entry_test.go": "5d69f968d160f11470051fecb1ca0ab3d352cefd491ee563f317b9a915d41cab",
+    "lycaon/internal/projectsource/agent_source_removal_test.go": "c7535766c355dd0f00370ebf8aff4d0acd6d7cfa6418aa35dfbb15938b7db752"
+  },
+  "reviewed_shape": "c5ead001e1a58e7545e5ea92d3d52c18e813ccfc20e578a71637677e0781689b"
+}

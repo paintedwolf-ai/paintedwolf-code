@@ -29,7 +29,7 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 		return out, nil
 	}
 	// Control-plane reads are denied without prompting.
-	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot) {
+	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return command.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
 	}
 	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) || !b.readPathNeedsApproval(proposed, in.ReadDenyPaths) {

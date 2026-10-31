@@ -7,9 +7,11 @@ import (
 	"io"
 	osexec "os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // sequenceRun drives pipe groups and sequenced stages in order.
@@ -29,12 +31,15 @@ type sequenceRun struct {
 	commitErr error
 
 	waitErrs []error
-	skipped  []bool
-	started  time.Time
-	timeout  *TimeoutError
+	// cpu is each waited stage's user and system processor time.
+	cpu     [][2]time.Duration
+	skipped []bool
+	started time.Time
+	timeout *TimeoutError
 
 	// lastExit is the exit code of the most recently executed group.
 	lastExit int
+	lastPID  int
 }
 
 func newSequenceRun(
@@ -56,6 +61,7 @@ func newSequenceRun(
 		stdin:     stdin,
 		waitDelay: waitDelay,
 		waitErrs:  make([]error, len(stages)),
+		cpu:       make([][2]time.Duration, len(stages)),
 		skipped:   skipped,
 	}
 }
@@ -139,7 +145,7 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	s.live, s.liveFiles = wired, files
 	s.mu.Unlock()
 
-	if err := startWiredStages(wired, s.opts.Started); err != nil {
+	if err := startWiredStages(ctx, wired, s.opts.Started); err != nil {
 		s.mu.Lock()
 		s.live, s.liveFiles = nil, nil
 		s.mu.Unlock()
@@ -150,7 +156,18 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	for i := group.Start; i < group.End; i++ {
 		s.skipped[i] = false
 	}
+	if len(wired) > 0 && wired[len(wired)-1].cmd != nil && wired[len(wired)-1].cmd.Process != nil {
+		s.mu.Lock()
+		s.lastPID = wired[len(wired)-1].cmd.Process.Pid
+		s.mu.Unlock()
+	}
 	return nil
+}
+
+func (s *sequenceRun) pid() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPID
 }
 
 // wireStdin feeds each stage its own redirection, the previous stage's pipe,
@@ -186,6 +203,11 @@ func (s *sequenceRun) waitGroup(ctx context.Context, group StageGroup) {
 
 	timedOut, waitErrs := waitWiredStages(ctx, wired)
 	copy(s.waitErrs[group.Start:group.End], waitErrs)
+	for i, stage := range wired {
+		if state := stage.cmd.ProcessState; state != nil {
+			s.cpu[group.Start+i] = [2]time.Duration{state.UserTime(), state.SystemTime()}
+		}
+	}
 	if timedOut {
 		s.timeout = commandTimeout(ctx, s.started)
 	}
@@ -215,29 +237,71 @@ func (s *sequenceRun) recordLaunchFailure(group StageGroup, err error) {
 	s.lastExit = -1
 }
 
-// groupExit returns the exit code of the group's first failed stage.
+// groupExit returns the rightmost nonzero status after executor-classified
+// expected consumer closure, independently of redirect publication.
 func (s *sequenceRun) groupExit(group StageGroup) int {
+	statuses := make([]int, 0, group.End-group.Start)
 	for i := group.Start; i < group.End; i++ {
 		if s.stageFailed(group, i) {
-			return exitCodeFromWait(s.waitErrs[i])
+			statuses = append(statuses, exitCodeFromWait(s.waitErrs[i]))
 		}
 	}
-	return 0
+	return toolcontract.RightmostNonzeroStatus(statuses)
 }
 
 // stageFailed reports a non-zero status, except SIGPIPE ending a stage whose
 // reader finished first: that is a successful early-consumer exit.
 func (s *sequenceRun) stageFailed(group StageGroup, i int) bool {
-	if !group.Final(i) && killedBySIGPIPE(s.waitErrs[i]) {
+	if s.expectedConsumerClosure(group, i) {
 		return false
 	}
 	return exitCodeFromWait(s.waitErrs[i]) != 0
+}
+
+func (s *sequenceRun) expectedConsumerClosure(group StageGroup, i int) bool {
+	if !group.Final(i) {
+		return killedBySIGPIPE(s.waitErrs[i])
+	}
+	if !s.opts.HostConsumer {
+		return false
+	}
+	if closed, ok := s.call.stdout.(interface{ ConsumerClosed() bool }); ok && !closed.ConsumerClosed() {
+		return false
+	}
+	return killedBySIGPIPE(s.waitErrs[i]) || isConsumerClosedError(s.waitErrs[i])
+}
+
+func isConsumerClosedError(err error) bool {
+	var closed interface{ ConsumerClosed() bool }
+	return errors.As(err, &closed) && closed.ConsumerClosed()
 }
 
 func (s *sequenceRun) stopped() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.killed
+}
+
+// signal delivers sig to the running group's process trees without
+// terminating them; SIGKILL ends them at once. It reports whether a live
+// stage received it.
+func (s *sequenceRun) signal(sig syscall.Signal) bool {
+	s.mu.Lock()
+	wired := s.live
+	s.mu.Unlock()
+	delivered := false
+	for i := range wired {
+		if wired[i].guard == nil {
+			continue
+		}
+		if sig == syscall.SIGKILL {
+			wired[i].guard.kill(wired[i].cmd)
+			delivered = true
+			continue
+		}
+		delivered = wired[i].guard.relay(wired[i].cmd, sig) || delivered
+	}
+	return delivered
 }
 
 // terminate tears down the running group and prevents subsequent groups from starting.
@@ -270,8 +334,13 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 			}
 			if !s.skipped[i] {
 				code := exitCodeFromWait(s.waitErrs[i])
+				if s.expectedConsumerClosure(group, i) && isConsumerClosedError(s.waitErrs[i]) {
+					code = 0
+				}
 				stageRuns[i].ExitCode = &code
+				stageRuns[i].UserTime, stageRuns[i].SystemTime = s.cpu[i][0], s.cpu[i][1]
 				stageRuns[i].Failed = s.stageFailed(group, i)
+				stageRuns[i].expectedConsumerClosure = s.expectedConsumerClosure(group, i)
 			}
 		}
 	}
@@ -299,15 +368,18 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 	if res.ExitCode != 0 {
 		return res, nil
 	}
-	for i, err := range s.waitErrs {
-		if s.skipped[i] || err == nil || errors.Is(err, osexec.ErrWaitDelay) {
-			continue
+	for _, group := range s.groups {
+		for i := group.Start; i < group.End; i++ {
+			err := s.waitErrs[i]
+			if s.skipped[i] || err == nil || errors.Is(err, osexec.ErrWaitDelay) || s.expectedConsumerClosure(group, i) {
+				continue
+			}
+			var exitErr *osexec.ExitError
+			if errors.As(err, &exitErr) {
+				continue
+			}
+			return res, err
 		}
-		var exitErr *osexec.ExitError
-		if errors.As(err, &exitErr) {
-			continue
-		}
-		return res, err
 	}
 	return res, nil
 }

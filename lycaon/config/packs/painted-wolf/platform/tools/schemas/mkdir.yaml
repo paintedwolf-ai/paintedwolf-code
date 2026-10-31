@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Create directories within write scope (never use command mkdir). Replaces command: mkdir(1)."
+description: "Create directories within write scope."
 schema:
   type: object
   properties:

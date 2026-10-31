@@ -53,11 +53,11 @@ func TestNixStoreAccountShellPreservesProfilePathWithoutProjectHooks(t *testing.
 	provider := providerWith(t, cfg, shell, map[string]string{"HOME": "/home/person", "PATH": "/usr/bin"}, fakeShell{stdout: framed(cfg.Probe.Marker, path)})
 	provider.accountShell = func(context.Context) (string, error) { return shell, nil }
 	inner := provider.run
-	provider.run = func(command *osexec.Cmd) error {
+	provider.run = func(ctx context.Context, command *osexec.Cmd) error {
 		if command.Path != shell || command.Dir != "" || strings.Contains(strings.Join(command.Args, " "), "nix develop") || strings.Contains(strings.Join(command.Args, " "), "direnv") {
 			t.Fatalf("account discovery launched a project environment: path=%s dir=%s args=%v", command.Path, command.Dir, command.Args)
 		}
-		return inner(command)
+		return inner(ctx, command)
 	}
 	snapshot := provider.Resolve(t.Context())
 	if snapshot.Source() != SourceProbe || snapshot.Value() != path {

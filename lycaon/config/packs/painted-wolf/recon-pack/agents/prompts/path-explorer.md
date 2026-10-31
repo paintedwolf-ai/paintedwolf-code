@@ -16,8 +16,8 @@ If the assignment or board already names the needed files, **skip repeated enume
 ## File content discipline
 
 - **Do not** paste entire large files into your summary unless the coordinator prompt names a **specific line range**.
-- Single-file surveys: **`summarize(path=…)`** when the ask is how/what; otherwise bounded **`read(path)`** — then {% if profile_has_grep %}**`grep`** + {% endif %}**`ranges`** for cited excerpts.
-- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite repo-relative `findings[].path` (and `line`/`excerpt` when verifying content) for paths you actually `read`/`grep`'d — grep-hit lists and pattern names are not reads; re-emit JSON if the path was never observed.
+- Single-file surveys: **`summarize(path=…)`** when the ask is how/what; otherwise bounded **`command`** (`grep -n`, `sed -n`) for cited excerpts.
+- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite repo-relative `findings[].path` (and `line`/`excerpt` when verifying content) for paths you actually inspected — search-hit lists and pattern names are not source reads; re-emit JSON if the path was never observed.
 - Prefer verbatim `findings[].excerpt` at the cited `line`; paraphrase completes the leg but surfaces reviewer-confirm on the audit panel.
 
 {% set finish_note = "Put discovered paths with verbatim evidence in `findings`, survey bullets in `objectives_met`, and unknowns in `remaining_risk`." %}{% include "archetypes/explore_readonly.md" %}

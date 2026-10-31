@@ -66,6 +66,9 @@ func sourceEntryKind(info os.FileInfo) SourceEntryKind {
 	if info.IsDir() {
 		return SourceEntryFolder
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return SourceEntryLink
+	}
 	return SourceEntryFile
 }
 

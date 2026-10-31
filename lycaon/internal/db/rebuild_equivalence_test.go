@@ -22,7 +22,7 @@ func TestRetainedCopyRejectsLossOutsideFilteredTables(t *testing.T) {
 	before, err := os.ReadFile(source)
 	testutil.FailErr(t, "read original", err)
 	plan.CopyPlan().Sources["source_snapshots"] = `FROM original.source_snapshots e WHERE 0`
-	if err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "copy.db"), plan); err == nil {
+	if _, err := copyRetainedStore(t.Context(), source, filepath.Join(t.TempDir(), "copy.db"), plan, nil); err == nil {
 		t.Fatal("accepted dropped durable rows")
 	}
 	after, err := os.ReadFile(source)
@@ -62,7 +62,7 @@ func TestSkippedReleasesUseRetainedRebuild(t *testing.T) {
 			reader, err := OpenReadOnly(t.Context(), path)
 			testutil.FailErr(t, "open migrated fixture", err)
 			defer reader.Close()
-			testutil.FailErr(t, "verify migrated fixture", validateStoreIntegrity(t.Context(), reader))
+			testutil.FailErr(t, "verify migrated fixture", auditSnapshot(t.Context(), reader, nil))
 		})
 	}
 }

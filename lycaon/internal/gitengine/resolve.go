@@ -93,7 +93,8 @@ func assertPinnedVersion(bin string) error {
 }
 
 func versionOf(bin string) (string, error) {
-	cmd, cleanup, err := execpkg.PrepareCommand(context.Background(), bin, []string{"--version"}, execpkg.ExecOpts{
+	ctx := context.Background()
+	cmd, cleanup, err := execpkg.PrepareCommand(ctx, bin, []string{"--version"}, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("git_version_probe"),
 	})
 	if err != nil {
@@ -103,7 +104,7 @@ func versionOf(bin string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := execpkg.RunPrepared(ctx, cmd); err != nil {
 		return "", fmt.Errorf("git --version: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
 	return parseGitVersion(stdout.String())

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -36,6 +37,11 @@ func reviewedSocket(t *testing.T, root, path string) tools.ToolContext {
 	t.Helper()
 	grant, err := confine.ResolveSocketRequest(path)
 	testutil.FailErr(t, "resolve socket", err)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(filepath.Dir(path), "state"))
+	owner, err := socketref.Capture(grant.ApprovedPath)
+	testutil.FailErr(t, "retain reviewed socket", err)
+	t.Cleanup(owner.Close)
+	grant.Binding = owner.Binding()
 	tctx := sessionContext(root, "call-sock")
 	tctx.Socket.SocketGrants = []confine.SocketGrant{grant}
 	tctx.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
@@ -91,5 +97,19 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" || !strings.Contains(reject.Data["reason"].(string), "unix socket") {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
+	}
+}
+
+func TestHTTPRequestKernelPathnameGrantCannotAuthorizeNativeDial(t *testing.T) {
+	path := serveUnixSocket(t, func(http.ResponseWriter, *http.Request) { t.Error("kernel-pathname grant reached a native listener") })
+	tc := reviewedSocket(t, t.TempDir(), path)
+	legacy := tc.Socket.SocketGrants[0]
+	legacy.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+	tc.Socket.SocketGrants = []confine.SocketGrant{legacy}
+	tc.Socket.DurableSocketGrants = []confine.SocketGrant{legacy}
+	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{"url": "http://service.invalid/", "unix_socket": path}, tc)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != isolation.CodeSocketPathChanged || reject.Data["state"] != "retained_reference_required" {
+		t.Fatalf("pathname native authority = %v", err)
 	}
 }

@@ -10,6 +10,11 @@ import (
 )
 
 func (s *SourceMutationService) Write(ctx context.Context, operationID string, p ProjectSource, req SourceWriteRequest) (*SourceWriteResult, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
@@ -20,7 +25,7 @@ func (s *SourceMutationService) Write(ctx context.Context, operationID string, p
 	if err != nil {
 		return nil, err
 	}
-	response, err := s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	response, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		writePlan, planErr := planProjectSourceWrite(p, req)
 		if planErr != nil {
 			return nil, planErr
@@ -78,6 +83,11 @@ type SourceBatchWriteRequest struct {
 
 // BatchWrite commits one recoverable multi-file mutation.
 func (s *SourceMutationService) BatchWrite(ctx context.Context, operationID string, p ProjectSource, req SourceBatchWriteRequest) (json.RawMessage, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
@@ -90,7 +100,7 @@ func (s *SourceMutationService) BatchWrite(ctx context.Context, operationID stri
 	if err != nil {
 		return nil, err
 	}
-	return s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	return s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		if req.Prepare == nil {
 			return nil, fmt.Errorf("source batch prepare required")
 		}
@@ -131,6 +141,11 @@ func (s *SourceMutationService) BatchWrite(ctx context.Context, operationID stri
 }
 
 func (s *SourceMutationService) Create(ctx context.Context, operationID string, p ProjectSource, req SourceEntryCreateRequest) (string, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return "", err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return "", ErrSourceNoRoot
 	}
@@ -147,7 +162,7 @@ func (s *SourceMutationService) Create(ctx context.Context, operationID string, 
 	if err != nil {
 		return "", err
 	}
-	response, err := s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	response, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		if req.Kind != SourceEntryFile && req.Kind != SourceEntryFolder {
 			return nil, ErrSourceKindInvalid
 		}

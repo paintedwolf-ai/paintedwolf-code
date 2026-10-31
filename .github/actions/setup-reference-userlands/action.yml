@@ -1,0 +1,61 @@
+name: Set up reference userland images
+description: Restore, or build on a miss, the verified GNU, BSD and busybox reference userland images, so a lane that runs test:userlands offline finds every image
+inputs:
+  save:
+    description: Publish images built on a miss (main only); every other run restores without saving
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Read image cache identity
+      id: identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        printf 'archive=%s/reference-userland-images.tar\n' "${RUNNER_TEMP}" >> "${GITHUB_OUTPUT}"
+        printf 'prefix=reference-userland-images-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" >> "${GITHUB_OUTPUT}"
+
+    # Each image is tagged by its own pins and recorded digest, so an older set still supplies
+    # every userland a change left alone. Main looks up only the exact set it would publish.
+    - name: Restore images
+      id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.identity.outputs.archive }}
+        key: ${{ steps.identity.outputs.prefix }}${{ hashFiles('lycaon/test/referenceuserland/userlands.json', 'lycaon/test/referenceuserland/*.Containerfile') }}
+        restore-keys: ${{ inputs.save != 'true' && steps.identity.outputs.prefix || '' }}
+        lookup-only: ${{ inputs.save == 'true' }}
+
+    - name: Load restored images
+      if: inputs.save != 'true' && steps.cache.outputs.cache-matched-key != ''
+      shell: bash
+      env:
+        ARCHIVE: ${{ steps.identity.outputs.archive }}
+      run: |
+        set -euo pipefail
+        docker load --quiet --input "${ARCHIVE}"
+        rm -f "${ARCHIVE}"
+
+    # Builds the missing images from their pins while the runner still has a network, and
+    # verifies every image by its recorded digest, restored ones included.
+    - name: Build and verify images
+      if: inputs.save != 'true' || steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: ./task userlands:build
+
+    - name: Archive built images
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ARCHIVE: ${{ steps.identity.outputs.archive }}
+      run: |
+        set -euo pipefail
+        mapfile -t images < <(docker images --filter reference=paintedwolf-reference-userland --format '{{.Repository}}:{{.Tag}}')
+        docker save --output "${ARCHIVE}" "${images[@]}"
+
+    - name: Cache built images
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.identity.outputs.archive }}
+        key: ${{ steps.identity.outputs.prefix }}${{ hashFiles('lycaon/test/referenceuserland/userlands.json', 'lycaon/test/referenceuserland/*.Containerfile') }}

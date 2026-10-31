@@ -20,12 +20,13 @@ func TestFileBloomCannotPublishAcrossAnObservedWrite(t *testing.T) {
 			testutil.FailErr(t, "stat observation", err)
 			entry := Entry{Path: "a.txt", Size: info.Size(), Mode: uint32(info.Mode()), Modified: info.ModTime()}
 			cache := newLiteralIndexCache()
+			cache.versionOf = fixtureFileVersion
 			entered, resume := make(chan struct{}), make(chan struct{})
 			var release sync.Once
 			defer release.Do(func() { close(resume) })
 			done := make(chan error, 1)
 			go func() {
-				_, _, readErr := cache.fileBloom(t.Context(), root, entry, func(Entry) (io.ReadCloser, error) {
+				readErr := cache.fileBloom(t.Context(), root, entry, func(Entry) (io.ReadCloser, error) {
 					close(entered)
 					<-resume
 					return io.NopCloser(strings.NewReader("old text")), nil

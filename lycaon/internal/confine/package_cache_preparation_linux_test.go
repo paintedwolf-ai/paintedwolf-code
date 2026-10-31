@@ -25,7 +25,10 @@ func cachePreparationFixture(t *testing.T) Confinement {
 func TestPackageCachePreparationCreatesOnlyAuthorizedStoreDirectories(t *testing.T) {
 	c := cachePreparationFixture(t)
 	data := os.Getenv("XDG_DATA_HOME")
-	testutil.FailErr(t, "render a pure profile", func() error { _, err := BuildProfile(c); return err }())
+	validated, err := validateProfileInputs(c)
+	testutil.FailErr(t, "validate pure profile inputs", err)
+	_, err = renderProfile(validated)
+	testutil.FailErr(t, "render a pure profile", err)
 	if _, err := os.Stat(data); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("pure profile rendering materialized package directories: %v", err)
 	}
@@ -78,7 +81,7 @@ func TestPackageCachePreparationRefusesSymlinksBeforeAndAfterItsVerdict(t *testi
 				installLink()
 			}
 			first := true
-			mkdir := func(location fseffect.Location, mode os.FileMode) error {
+			mkdir := func(location fseffect.Location, mode os.FileMode) (int, error) {
 				if replace && first {
 					first = false
 					installLink()

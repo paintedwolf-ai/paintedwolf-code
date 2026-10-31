@@ -92,6 +92,11 @@ func MergeForTurn(
 	for k, v := range prompts.CoordinatorPolicyTemplateVars(surf.ResolvedTools, surf.DeferredTools) {
 		into[k] = v
 	}
+	prompts.ApplyCoordinatorSurfaceCommandEffects(surf.SurfaceID, surf.ResolvedTools, surf.DeferredTools, into)
+	if len(surf.DeferredTools) == 0 || !toolNameSet(surf.ResolvedTools)["request_tools"] {
+		into["requestable_tools"] = nil
+		into["requestable_capabilities"] = nil
+	}
 	label, rule, err := prompts.LoadCoordinatorSurfaceCard(surf.SurfaceID)
 	if err != nil {
 		return err

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
 	"strings"
 	"time"
 
@@ -40,11 +39,7 @@ const BlockedLoopRejectCap = 6
 const BlockedLoopAbsoluteCap = 12
 
 func schemaRejectExemptFromBlockedLoop(code string) bool {
-	code = strings.TrimSpace(code)
-	if toolcommand.IsNativeCommandRedirectCode(code) {
-		return true
-	}
-	switch code {
+	switch strings.TrimSpace(code) {
 	case "TOOL_ARGS_INVALID", "TOOL_ARGS_MALFORMED", "TOOL_ARGS_TRUNCATED":
 		return true
 	default:

@@ -293,6 +293,7 @@ func (e *Approvals) recordToolDenied(
 			SessionID:          eval.SessionID,
 			RootSessionID:      eval.ChatSessionID(),
 			SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
+			SessionOutputRoot:  eval.ConfineRequest.SessionOutputRoot,
 		},
 	}
 	record := authzledger.ToolDeniedRecord{

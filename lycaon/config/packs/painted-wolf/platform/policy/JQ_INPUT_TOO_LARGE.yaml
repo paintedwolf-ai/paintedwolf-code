@@ -3,12 +3,13 @@ id: JQ_INPUT_TOO_LARGE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - jq
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.bytes
     - paintedwolf.max_bytes
@@ -17,11 +18,11 @@ requires:
 when: paintedwolf.rejection_code == "JQ_INPUT_TOO_LARGE"
 effect: block
 copy:
-  what: 'jq could not load {{ paintedwolf.path }} within the {{ paintedwolf.max_bytes }}-byte input budget.{% if paintedwolf.bytes %} Measured input is at least {{ paintedwolf.bytes }} bytes.{% endif %}'
-  cause: jq parses the complete document before running a query or paging results; compressed input must also fit the decoder memory budget.
-  why: The cap bounds memory; structured rejects let agents branch without parsing free-form errors.
-  fix: Obtain a smaller, valid structured document from the source owner, preserving its syntax and the original file. A narrower query or result page does not reduce input ingestion; report the size dependency if no bounded source is available.
-  instead: Branch on Code; reduce the input before retrying jq
+  what: 'jq: input limit exceeded for {{ paintedwolf.path }} (maximum {{ paintedwolf.max_bytes }} bytes).{% if paintedwolf.bytes %} Input is at least {{ paintedwolf.bytes }} bytes.{% endif %}'
+  cause: The input exceeded its byte limit before the query could finish.
+  why: A narrower query or result page does not reduce the bytes consumed from the source.
+  fix: Reduce the input while preserving valid syntax, then retry the query.
+  instead: Use a streaming filter to select a smaller input first.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:jq
 x-paintedwolf-message: jq document exceeds the input size cap

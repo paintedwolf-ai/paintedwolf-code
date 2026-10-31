@@ -10,6 +10,7 @@ run:
   build-tags:
     - integration
     - budgets
+    - referenceuserland
   # Concurrent lint processes share the checkout cache.
   allow-parallel-runners: true
 

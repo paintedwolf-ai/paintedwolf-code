@@ -2,6 +2,7 @@ package editordoc
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"testing"
 
 	"github.com/google/uuid"
@@ -28,7 +29,7 @@ func TestAgentReadBasisIsChatScopedAndNeverRefreshesItself(t *testing.T) {
 	if _, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-b", read.ID, nil); !errors.Is(err, ErrAgentReadRequired) {
 		t.Fatalf("another chat borrowed the read: %v", err)
 	}
-	result, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(basis, "FIRST\nsecond\n"))
+	result, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(basis.Document, "FIRST\nsecond\n"))
 	testutil.FailErr(t, "rebase whole-file proposal", err)
 	if result.Document.Draft != "FIRST\nsecond\nhuman typing\n" || f.disk(t, "a.txt") != result.Document.Draft {
 		t.Fatalf("lost typing: %+v", result)
@@ -46,7 +47,7 @@ func TestAgentReadBasisRequiresRereadAfterPinExpiryOrRestart(t *testing.T) {
 	testutil.FailErr(t, "type on agent line", err)
 	basis, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-a", read.ID, nil)
 	testutil.FailErr(t, "load agent read", err)
-	if _, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(basis, "fetchBar\n")); !errors.Is(err, ErrRevisionConflict) {
+	if _, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(basis.Document, "fetchBar\n")); !errors.Is(err, ErrRevisionConflict) {
 		t.Fatalf("merged unseen identifier: %v", err)
 	}
 	_, err = f.store.db.ExecContext(t.Context(), `DELETE FROM editor_document_snapshots WHERE document_id=? AND revision=?`, read.ID, read.Revision)
@@ -91,9 +92,27 @@ func TestToolBatchCannotAdoptItsOwnRead(t *testing.T) {
 }
 
 // frozenBases answers a response's frozen read set the way the tool layer does.
-func frozenBases(revisions map[string]int64) ReadBasisLookup {
-	return func(documentID string) (int64, bool) {
+func frozenBases(revisions map[string]documentcore.ReadBasis) ReadBasisLookup {
+	return func(documentID string) (documentcore.ReadBasis, bool) {
 		revision, ok := revisions[documentID]
 		return revision, ok
+	}
+}
+
+func TestFrozenPartialReadNeverWidensToLaterCoverage(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
+	doc := f.open(t, "a.txt")
+	f.service.RememberAgentReadSpans(f.project.ID, "chat-a", doc.ID, doc.Revision, []documentcore.LineSpan{{StartLine: 2, EndLine: 2}})
+	frozen := frozenBases(f.service.FreezeAgentReads(f.project.ID, "chat-a"))
+	f.service.RememberAgentRead(f.project.ID, "chat-a", doc.ID, doc.Revision)
+	basis, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-a", doc.ID, frozen)
+	testutil.FailErr(t, "frozen partial read", err)
+	if basis.ReadWhole || len(basis.ReadSpans) != 1 || basis.ReadSpans[0].StartLine != 2 || basis.ReadSpans[0].EndLine != 2 {
+		t.Fatalf("frozen coverage widened=%+v", basis)
+	}
+	current, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-a", doc.ID, nil)
+	testutil.FailErr(t, "current read", err)
+	if !current.ReadWhole {
+		t.Fatal("completed whole read was lost")
 	}
 }

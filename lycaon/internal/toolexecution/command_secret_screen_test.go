@@ -3,13 +3,13 @@ package toolexecution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 const plantAWS = "AKIAQYJK5TXV4NZR7SGB"

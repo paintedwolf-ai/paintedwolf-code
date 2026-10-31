@@ -2,7 +2,7 @@
 
 ## Follow the assigned review method
 
-**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. Start with `summarize` for named scope, or `survey_repo` for a matching bundle when no destination is known. Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded `list_dir` / `grep`.
+**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. Start with `summarize` for named scope, or `survey_repo` for a matching bundle when no destination is known. Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded `ls` / `grep` programs.
 
 **Scanner triage:** follow this procedure before native discovery:
 

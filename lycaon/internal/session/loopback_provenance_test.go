@@ -26,12 +26,13 @@ import (
 // provenanceFixture is a host whose socket table, launch lineage, and
 // container engine the test states outright.
 type provenanceFixture struct {
-	atStart    []socketListener
-	startErr   error
-	now        []socketListener
-	nowErr     error
-	sessions   map[int]string
-	containers []dockerContainerInfo
+	atStart        []socketListener
+	startErr       error
+	now            []socketListener
+	nowErr         error
+	sessions       map[int]string
+	containers     []dockerContainerInfo
+	nativeObserver nativeListenerObserver
 }
 
 func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProvenance {
@@ -50,6 +51,7 @@ func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProven
 			return s, ok
 		},
 		func(context.Context) []dockerContainerInfo { return f.containers },
+		f.nativeObserver,
 	)
 }
 
@@ -100,12 +102,45 @@ func TestLoopbackOwnershipIgnoresListenersThatMerelyAppeared(t *testing.T) {
 // Every holder must descend from the chat; one foreign holder on the same port
 // keeps it foreign.
 func TestLoopbackOwnershipNeedsEveryHolder(t *testing.T) {
-	f := &provenanceFixture{
-		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(900, "[::1]:9999")},
-		sessions: map[int]string{4242: "chat-1"},
+	workspace := "/workspace/my-app"
+	converged := &provenanceFixture{
+		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(4243, "[::1]:9999")},
+		sessions: map[int]string{4242: "chat-1", 4243: "chat-1"},
 	}
-	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999); owned {
+	if owned, evidence := converged.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); !owned || evidence.Method != ProvenanceLineage {
+		t.Fatalf("all-holder session convergence rejected: owned=%v evidence=%+v", owned, evidence)
+	}
+
+	f := &provenanceFixture{
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(900, "[::1]:9999")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned {
 		t.Fatalf("a port shared with a foreign process was owned: %+v", evidence)
+	}
+	if !f.resolver(t.Context()).HeldByOther(context.Background(), "chat-1", workspace, 9999) {
+		t.Fatal("a port shared with a foreign process reported not held by other")
+	}
+
+	incompleteHolder := &provenanceFixture{
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(0, "[::1]:9999")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := incompleteHolder.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned || evidence.Method != ProvenanceUnverified {
+		t.Fatalf("incomplete holder PID observation granted ownership: owned=%v evidence=%+v", owned, evidence)
+	}
+	if !incompleteHolder.resolver(t.Context()).HeldByOther(context.Background(), "chat-1", workspace, 9999) {
+		t.Fatal("incomplete holder PID observation reported not held by other")
+	}
+
+	nowUnavailable := &provenanceFixture{
+		nowErr:     errors.New("socket table unavailable"),
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := nowUnavailable.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned || evidence.Method != ProvenanceUnverified {
+		t.Fatalf("unreadable current listener table granted ownership: owned=%v evidence=%+v", owned, evidence)
 	}
 }
 
@@ -197,24 +232,6 @@ func TestHeldByOtherSeparatesFreeOwnedAndForeignPorts(t *testing.T) {
 	}
 }
 
-// lsof emits a process record followed by that process's files; each name
-// belongs to the process record before it.
-func TestParseLsofListenersPairsNamesWithTheirProcess(t *testing.T) {
-	out := []byte("p100\nf5\nn127.0.0.1:3000\np200\nf7\nn*:3000\nf8\nn[::1]:3001\n")
-	got := parseLsofListeners(out)
-	want := []socketListener{
-		listenerAt(100, "127.0.0.1:3000"),
-		{PID: 200, Port: 3000, Addr: netip.IPv6Unspecified()},
-		listenerAt(200, "[::1]:3001"),
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseLsofListeners = %+v, want %+v", got, want)
-	}
-	if got[1].loopbackBound() {
-		t.Fatal("a wildcard bind must not read as loopback")
-	}
-}
-
 func TestHostListenersSeesALiveListener(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen", err)
@@ -226,8 +243,9 @@ func TestHostListenersSeesALiveListener(t *testing.T) {
 	if err != nil {
 		t.Skipf("host socket table unavailable: %v", err)
 	}
-	if len(onPort(all, port)) == 0 {
-		t.Fatalf("listener on %d missing from the host table", port)
+	held := onPort(all, port)
+	if len(held) != 1 || held[0].PID != os.Getpid() || held[0].Addr != netip.MustParseAddr("127.0.0.1") {
+		t.Fatalf("listener on %d from the host table = %+v, want this process on 127.0.0.1", port, held)
 	}
 }
 
@@ -270,7 +288,7 @@ func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
 		t.Fatalf("helper never reported its port: %v", lines.Err())
 	}
 
-	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil)
+	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil, lineage.ObserveSessionListener)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port)); !owned {

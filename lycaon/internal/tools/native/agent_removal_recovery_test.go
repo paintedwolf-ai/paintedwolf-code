@@ -24,6 +24,7 @@ func recoverableToolFixture(t *testing.T) (tools.ToolContext, *projectsource.Sou
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
 	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	t.Cleanup(func() { testutil.FailErr(t, "close service", service.Close()) })
 	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
 		t.Fatal("an agent tool reached the system Trash")
 		return desktoptrash.Receipt{}, nil
@@ -90,6 +91,22 @@ func TestMoveOntoAnExistingFileKeepsTheReplacedFile(t *testing.T) {
 	testutil.FailErr(t, "clear the moved file for the restore", os.Remove(filepath.Join(dir, "b.bin")))
 	undoLatest(t, service, p, "delete")
 	assertFileBytes(t, filepath.Join(dir, "b.bin"), replaced)
+}
+
+// A move onto an existing directory sets that directory aside before the rename lands.
+func TestMoveOntoAnExistingDirectoryKeepsTheReplacedDirectory(t *testing.T) {
+	tctx, service, p, dir := recoverableToolFixture(t)
+	testutil.FailErr(t, "seed destination dir", os.MkdirAll(filepath.Join(dir, "dst", "sub"), 0o750))
+	testutil.FailErr(t, "seed destination file", os.WriteFile(filepath.Join(dir, "dst", "sub", "old.txt"), []byte("old-dir"), 0o640))
+	testutil.FailErr(t, "seed source dir", os.MkdirAll(filepath.Join(dir, "src"), 0o750))
+	testutil.FailErr(t, "seed source file", os.WriteFile(filepath.Join(dir, "src", "new.txt"), []byte("new-dir"), 0o640))
+	_, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(),
+		MoveInput{Pairs: []FilePair{{From: "src", To: "dst"}}, Directories: true}, tctx)
+	testutil.FailErr(t, "move dir onto existing dir", err)
+	assertFileBytes(t, filepath.Join(dir, "dst", "new.txt"), []byte("new-dir"))
+	testutil.FailErr(t, "clear the moved dir for the restore", os.RemoveAll(filepath.Join(dir, "dst")))
+	undoLatest(t, service, p, "delete")
+	assertFileBytes(t, filepath.Join(dir, "dst", "sub", "old.txt"), []byte("old-dir"))
 }
 
 // A copy over a file too large for history keeps the overwritten file.

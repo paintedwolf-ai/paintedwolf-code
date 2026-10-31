@@ -1,0 +1,120 @@
+tool,surface_disposition,runtime_authority,command_forms,structured_surface,schema_source
+answer_decision,retain-domain-structured,worker_decisions,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/answer_decision.yaml
+ask_user,retain-domain-structured,checkpoints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/ask_user.yaml
+capture_page,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/capture_page.yaml
+chmod,retain-structured-and-command,filesystem,chmod,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/chmod.yaml
+chown,retain-structured-and-command,filesystem,chown,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/chown.yaml
+code_rewrite,retain-structured-and-command,filesystem,code-rewrite,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/code_rewrite.yaml
+command,primary-routine-command,processes,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/command.yaml
+command_output,retain-domain-structured,processes,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/command_output.yaml
+command_stop,retain-domain-structured,processes,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/command_stop.yaml
+complete_leg,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/complete_leg.yaml
+copy,replace-routine-schema,filesystem,cp,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/copy.yaml
+decline_worker_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/decline_worker_budget.yaml
+delegate_decompose,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_decompose.yaml
+delegate_dispatch,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_dispatch.yaml
+delegate_init,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_init.yaml
+delegate_status,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_status.yaml
+delete,replace-routine-schema,filesystem,rm | rmdir,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/delete.yaml
+diff,replace-routine-schema,filesystem,diff,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/diff.yaml
+edit,retain-structured-and-command,filesystem,edit,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/edit.yaml
+extend_worker_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/extend_worker_budget.yaml
+extract_archive,replace-routine-schema,filesystem,tar | unzip | zip | gzip | gunzip | zcat,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/extract_archive.yaml
+fanout_plan,retain-domain-structured,blueprints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/fanout_plan.yaml
+fetch_url,retain-domain-structured,web_research,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/fetch_url.yaml
+find,replace-routine-schema,filesystem,find,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/find.yaml
+git_blame,replace-routine-schema,git,git blame,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_blame.yaml
+git_branches,replace-routine-schema,git,git branch,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_branches.yaml
+git_checkout,retain-structured-and-command,git,git checkout,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_checkout.yaml
+git_commit,retain-structured-and-command,git,git commit,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_commit.yaml
+git_compare,replace-routine-schema,git,,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_compare.yaml
+git_diff,replace-routine-schema,git,git diff,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_diff.yaml
+git_log,replace-routine-schema,git,git log,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_log.yaml
+git_merge,retain-structured-and-command,git,git merge,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_merge.yaml
+git_ref,replace-routine-schema,git,git rev-parse,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_ref.yaml
+git_restore,retain-structured-and-command,git,git restore,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_restore.yaml
+git_show,replace-routine-schema,git,git show,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_show.yaml
+git_stash,retain-structured-and-command,git,git stash,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_stash.yaml
+git_stash_list,replace-routine-schema,git,git stash list,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_stash_list.yaml
+git_status,replace-routine-schema,git,git status,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_status.yaml
+grep,replace-routine-schema,filesystem,grep | rg,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/grep.yaml
+handoff_health,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_health.yaml
+handoff_init,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_init.yaml
+handoff_release,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_release.yaml
+handoff_release_all,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_release_all.yaml
+handoff_reserve,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_reserve.yaml
+held_result,retain-domain-structured,held_calls,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/held_result.yaml
+held_stop,retain-domain-structured,held_calls,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/held_stop.yaml
+http_request,replace-routine-schema,outbound_http,curl,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/http_request.yaml
+jq,replace-routine-schema,filesystem,jq | yq,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/jq.yaml
+jq_edit,retain-structured-and-command,filesystem,jq-edit,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/jq_edit.yaml
+list_dir,replace-routine-schema,filesystem,ls,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/list_dir.yaml
+measure_page,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/measure_page.yaml
+mkdir,replace-routine-schema,filesystem,mkdir,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/mkdir.yaml
+move,replace-routine-schema,filesystem,mv,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/move.yaml
+pack_board,retain-domain-structured,board,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/pack_board.yaml
+page_act,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_act.yaml
+page_close,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_close.yaml
+page_open,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_open.yaml
+page_snapshot,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_snapshot.yaml
+parse_decomposition,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_decomposition.yaml
+parse_delegation_plan,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_delegation_plan.yaml
+parse_evaluation,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_evaluation.yaml
+parse_extract_json,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_extract_json.yaml
+parse_validate,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_validate.yaml
+plan_append_review_evidence,retain-domain-structured,blueprints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/plan_append_review_evidence.yaml
+preview_overlay,retain-domain-structured,worker_merge,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/preview_overlay.yaml
+process_list,retain-structured-and-command,processes,ps | pgrep | lsof,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/process_list.yaml
+process_signal,retain-structured-and-command,processes,kill | pkill,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/process_signal.yaml
+promote_overlay,retain-domain-structured,worker_merge,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/promote_overlay.yaml
+read,replace-routine-schema,filesystem,cat | head | tail | nl | outline | file | xxd | hexdump | shasum | sha256sum | sha1sum | sha512sum | md5sum | base64,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/read.yaml
+recall,retain-domain-structured,sessions,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/recall.yaml
+record_finding,retain-domain-structured,findings,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/record_finding.yaml
+reject_overlay,retain-domain-structured,worker_merge,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/reject_overlay.yaml
+render_view,retain-domain-structured,visual,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/render_view.yaml
+replace_lines,retain-structured-and-command,filesystem,replace-lines,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/replace_lines.yaml
+request_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_budget.yaml
+request_decision,retain-domain-structured,checkpoints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_decision.yaml
+request_tools,retain-domain-structured,tool_surface,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_tools.yaml
+restore_version,retain-domain-structured,filesystem,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/restore_version.yaml
+scan_compare,retain-domain-structured,scans,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/scan_compare.yaml
+scan_list,retain-domain-structured,scans,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/scan_list.yaml
+scan_pack,retain-domain-structured,scans,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/scan_pack.yaml
+scan_query,retain-domain-structured,scans,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/scan_query.yaml
+scan_summary,retain-domain-structured,scans,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/scan_summary.yaml
+secret_generate,retain-domain-structured,secrets,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/secret_generate.yaml
+secret_list,retain-domain-structured,secrets,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/secret_list.yaml
+secret_revoke,retain-domain-structured,secrets,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/secret_revoke.yaml
+skills_read,retain-domain-structured,skills,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/skills_read.yaml
+source_history,retain-domain-structured,source_ledger,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/source_history.yaml
+stat,replace-routine-schema,filesystem,stat,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/stat.yaml
+state_close,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_close.yaml
+state_query,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_query.yaml
+state_start,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_start.yaml
+state_update,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_update.yaml
+submit_verdict,retain-domain-structured,workflow_verdicts,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/submit_verdict.yaml
+summarize,retain-structured-and-command,summarization,summarize,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/summarize.yaml
+surface_note,retain-domain-structured,sessions,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/surface_note.yaml
+survey_repo,retain-structured-and-command,survey,repo-map,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/survey_repo.yaml
+task,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/task.yaml
+terminal_close,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_close.yaml
+terminal_open,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_open.yaml
+terminal_read,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_read.yaml
+terminal_send,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_send.yaml
+terminal_snapshot,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_snapshot.yaml
+update_progress,retain-domain-structured,progress,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/update_progress.yaml
+verify,retain-domain-structured,processes,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/verify.yaml
+view_image,retain-domain-structured,visual,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/view_image.yaml
+view_video,retain-domain-structured,visual,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/view_video.yaml
+wait,retain-domain-structured,loop_wake,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/wait.yaml
+wc,replace-routine-schema,filesystem,wc,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/wc.yaml
+web_search,retain-domain-structured,web_research,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/web_search.yaml
+worker_cancel,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/worker_cancel.yaml
+workflow_advance,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_advance.yaml
+workflow_catalog_summaries,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_catalog_summaries.yaml
+workflow_compose,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_compose.yaml
+workflow_compose_from_template,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_compose_from_template.yaml
+workflow_persist,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_persist.yaml
+workflow_transition,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_transition.yaml
+workflow_user_feedback,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_user_feedback.yaml
+write,replace-routine-schema,filesystem,tee | ln,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/write.yaml

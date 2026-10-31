@@ -15,7 +15,7 @@ hosts: [coordinator, worker]
 
 | Claim | Required receipt{% if has_claim_evidence_skill %} | Available skill{% endif %} |
 |---|---{% if has_claim_evidence_skill %}|---{% endif %}|
-{% if has_file_tools %}| How code behaves | Implementing source at `path:line` from `read`/`grep`{% if profile_has_summarize %} or `summarize` `pack.substance`{% endif %}. Names or memory alone do not prove behavior{% if has_claim_evidence_skill %} | —{% endif %} |
+{% if has_file_tools %}| How code behaves | Implementing source at `path:line` from file output such as `grep -n` or `sed -n`{% if profile_has_summarize %} or `summarize` `pack.substance`{% endif %}. Names or memory alone do not prove behavior{% if has_claim_evidence_skill %} | —{% endif %} |
 | Components connect or feed | Cite connecting call site or data transfer, not separate definitions. Say unestablished if unobserved in source{% if has_claim_evidence_skill %} | —{% endif %} |
 {% endif %}
 {% if profile_has_render_view %}| Authored design intent (mock, diagram, data viz) | `render_view` — shows intent, never observed runtime behavior{% if has_claim_evidence_skill %} | {% if agent_has_skill_mock_before_build %}mock-before-build{% endif %}{% if agent_has_skill_verify_visual_change %}{% if agent_has_skill_mock_before_build %}; {% endif %}verify with verify-visual-change{% endif %}{% if not agent_has_skill_mock_before_build and not agent_has_skill_verify_visual_change %}—{% endif %}{% endif %} |

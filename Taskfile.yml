@@ -399,6 +399,39 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/test-confine-linux.sh {{.CLI_ARGS}}
 
+  test:userlands:
+    desc: 'Reference userland runner contract in the verified GNU, BSD and busybox images (Docker)'
+    cmds:
+      - task: userlands:build
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags referenceuserland --name test:userlands -- ./test/referenceuserland/... -count=1
+
+  userlands:build:
+    desc: 'Build the missing pinned GNU, BSD and busybox reference userland images and verify every image by its recorded tree digest (Docker; optional userlands, e.g. -- bsd)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/referenceuserland/cmd/userlands build {{.CLI_ARGS}}
+
+  userlands:record:
+    desc: 'Rebuild the reference userland images from their pins without cache and record each tree digest in userlands.json (Docker; optional -arch and userlands)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/referenceuserland/cmd/userlands record {{.CLI_ARGS}}
+
+  test:conformance:live:
+    desc: 'Corpus and seeded programs against the verified reference userlands (Docker; --generated-only --seed N --programs N selects generated cases)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/commandconformance/cmd/conformance live --validate {{.CLI_ARGS}}
+      - task: userlands:build
+        vars: {CLI_ARGS: ''}
+      - go run ./test/commandconformance/cmd/conformance live {{.CLI_ARGS}}
+
+  conformance:capture:
+    desc: 'Run the command conformance corpus in its verified reference userlands and store the snapshots (Docker; optional -git-seed and case IDs)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/commandconformance/cmd/conformance capture {{.CLI_ARGS}}
+
   test:fuzz:
     desc: 'Run Go native fuzz targets briefly (FUZZTIME=20s default; e.g. task test:fuzz -- ./internal/parse/...)'
     dir: '{{.GO_DIR}}'
@@ -1101,10 +1134,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/bundle-openapi.sh check
 
   codegen:tool-command-equivalence:
-    desc: Generate exact command equivalence tables and sync tool-schema replaces suffixes
+    desc: Generate the frozen command language catalog
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
@@ -1112,25 +1144,20 @@ tasks:
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
   codegen:tool-command-equivalence:check:
-    desc: Fail if command equivalence codegen outputs are stale
+    desc: Fail if the generated command language catalog is stale
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check

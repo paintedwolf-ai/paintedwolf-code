@@ -73,7 +73,7 @@ func (p *recordingToolPolicy) EvaluateInvoke(ctx context.Context, sess *api.Sess
 }
 
 func promptLoopFixtureTools() []tools.ToolMeta {
-	names := []string{"read", "write", "state_update", "task", "summarize"}
+	names := []string{"command", "edit", "read", "write", "state_update", "task", "summarize"}
 	metas := make([]tools.ToolMeta, len(names))
 	for i, name := range names {
 		metas[i] = tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}}

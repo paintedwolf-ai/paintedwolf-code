@@ -1,0 +1,25 @@
+oar: '1.0'
+id: GREP_REGEX_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "GREP_REGEX_UNSUPPORTED"
+effect: block
+copy:
+  what: The search pattern uses a construct outside its declared regex dialect.
+  cause: Each search dialect accepts only its declared grammar; -P is the bounded pcre-common-v1 subset, and constructs outside it are refused rather than reinterpreted.
+  why: Running the pattern under another engine or reading it as literal text would change what matches.
+  fix: Rewrite the pattern within the dialect's grammar, for example a fixed-width lookbehind or a numbered group instead of a named one, or choose the dialect that defines the construct.
+  instead: Branch on Code; rewrite the pattern within the declared grammar
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: search pattern construct is outside the declared dialect
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+    expect_contains:
+      - 'Code: GREP_REGEX_UNSUPPORTED'
+      - outside its declared regex dialect

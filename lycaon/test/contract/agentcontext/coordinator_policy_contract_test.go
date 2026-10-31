@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -25,9 +24,8 @@ func TestCoordinatorReadLineLimitInSurfaceRender(t *testing.T) {
 	mergeWidestUnitBlocks(t, engine, "implement_synthesis", vars)
 	rendered, err := engine.Render(context.Background(), "agents/coordinator-surface-build.md", vars)
 	contractcheck.FailErr(t, "render surface", err)
-	want := readcaps.LineLimit
-	if !strings.Contains(rendered, strconv.Itoa(want)) {
-		t.Fatalf("rendered surface missing read line limit %d", want)
+	if !strings.Contains(rendered, "summarize(path=…, task=…)") {
+		t.Fatalf("rendered surface missing survey orientation ladder:\n%s", rendered)
 	}
 }
 

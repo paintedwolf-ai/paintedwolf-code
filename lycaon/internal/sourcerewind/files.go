@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func location(root, path string) (fseffect.Location, error) {
@@ -33,6 +34,22 @@ func matchState(root string, v sourceledger.RestorableVersion) error {
 	}
 	defer func() { _ = rootHandle.Close() }()
 	info, statErr := rootHandle.Lstat(loc.Rel)
+	if v.State == "link" {
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return fmt.Errorf("rewind expected a symbolic link: %s", v.Path)
+		}
+		text, err := rootHandle.Readlink(loc.Rel)
+		if err != nil {
+			return err
+		}
+		if textfile.SHA256([]byte(text)) != v.SHA256 {
+			return fmt.Errorf("rewind link changed: %s", v.Path)
+		}
+		return nil
+	}
 	if statErr == nil && info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("rewind refuses a replaced symlink: %s", v.Path)
 	}
@@ -78,6 +95,9 @@ func removeState(root string, v sourceledger.RestorableVersion) error {
 	if err != nil {
 		return err
 	}
+	if v.State == "link" {
+		return fseffect.Remove(fseffect.RemoveRequest{Location: loc, LinkSHA256: v.SHA256})
+	}
 	return fseffect.Remove(fseffect.RemoveRequest{Location: loc, BeforeCommit: func(target fseffect.Target) error {
 		// The descriptor held by fseffect confines the last check and unlink.
 		file, err := target.Open()
@@ -96,13 +116,24 @@ func removeState(root string, v sourceledger.RestorableVersion) error {
 	}})
 }
 
-func replaceState(root string, before, after sourceledger.RestorableVersion, mode uint32) error {
+func replaceState(root string, before, after sourceledger.RestorableVersion, mode uint32, allowedRoots []string) error {
 	loc, err := location(root, after.Path)
 	if err != nil {
 		return err
 	}
 	if textfile.SHA256(after.Content) != after.SHA256 {
 		return fmt.Errorf("rewind retained content failed integrity verification")
+	}
+	if after.State == "link" {
+		if len(allowedRoots) == 0 {
+			allowedRoots = []string{root}
+		}
+		if err := projectpaths.AdmitLinkTargetRoots(filepath.Join(root, filepath.FromSlash(after.Path)), string(after.Content), allowedRoots); err != nil {
+			return err
+		}
+		return fseffect.Link(fseffect.LinkRequest{Location: loc, Target: string(after.Content), Replace: before.State != "absent", BeforeCommit: func(fseffect.Target) error {
+			return matchState(root, before)
+		}})
 	}
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location: loc, Source: bytes.NewReader(after.Content), Mode: os.FileMode(mode), DirMode: 0o755,
@@ -124,9 +155,9 @@ func transition(f File, before, after sourceledger.RestorableVersion) error {
 		if after.State == "absent" {
 			return removeState(f.RootPath, before)
 		}
-		return replaceState(f.RootPath, before, after, f.Mode)
+		return replaceState(f.RootPath, before, after, f.Mode, f.AllowedRoots)
 	}
-	if before.State != "content" || after.State != "content" {
+	if before.State != after.State || (before.State != "content" && before.State != "link") {
 		return fmt.Errorf("rewind location transition requires content at both endpoints")
 	}
 	absent := after
@@ -137,7 +168,7 @@ func transition(f File, before, after sourceledger.RestorableVersion) error {
 		if err := matchState(f.RootPath, before); err != nil {
 			return err
 		}
-		if err := replaceState(f.RootPath, absent, after, f.Mode); err != nil {
+		if err := replaceState(f.RootPath, absent, after, f.Mode, f.AllowedRoots); err != nil {
 			return err
 		}
 	}

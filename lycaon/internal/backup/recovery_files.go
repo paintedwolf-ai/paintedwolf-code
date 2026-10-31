@@ -162,26 +162,3 @@ func verifySnapshotFile(ctx context.Context, root string, entry FileEntry) error
 	}
 	return nil
 }
-
-func recoveryCloneAvailable(root string) (bool, error) {
-	source, err := os.CreateTemp(root, ".recovery-clone-probe-")
-	if err != nil {
-		return false, err
-	}
-	path := source.Name()
-	defer func() { _ = os.Remove(path); _ = os.Remove(path + ".clone") }()
-	probe := make([]byte, 4096)
-	probe[0] = 1
-	if _, err := source.Write(probe); err != nil {
-		_ = source.Close()
-		return false, err
-	}
-	if err := fssync.File(source); err != nil {
-		_ = source.Close()
-		return false, err
-	}
-	if err := source.Close(); err != nil {
-		return false, err
-	}
-	return fileclone.Clone(path, path+".clone")
-}

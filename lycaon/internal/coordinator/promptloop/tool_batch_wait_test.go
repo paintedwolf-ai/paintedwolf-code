@@ -57,7 +57,7 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 			waitRuns := 0
 			testutil.FailErr(t, "register wait", reg.Register("wait", func(_ context.Context, _ map[string]any, ctx tools.ToolContext) (string, error) {
 				waitRuns++
-				ctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+				ctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 				return `{"status":"sleeping"}`, nil
 			}))
 			testutil.FailErr(t, "register note", reg.Register("surface_note", func(_ context.Context, _ map[string]any, ctx tools.ToolContext) (string, error) {

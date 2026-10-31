@@ -31,10 +31,10 @@ func parseWaitResumeArg(v any) bool {
 	return resume
 }
 
-// WaitCompletionEndsCycle reads the host-stamped lifecycle outcome.
-func WaitCompletionEndsCycle(toolName string, completion *api.ToolCompletion) bool {
-	return strings.EqualFold(strings.TrimSpace(toolName), "wait") && completion != nil &&
-		completion.Operation == "wait" && completion.State == "parked"
+// ParkedCompletionEndsCycle reports a call that parked its turn on the
+// session's wait lease, as the host stamped it.
+func ParkedCompletionEndsCycle(completion *api.ToolCompletion) bool {
+	return completion != nil && completion.State == parkedState && completion.ResourceKind == waitResourceKind
 }
 
 // AskUserEndsCycle reports a pending successful ask.

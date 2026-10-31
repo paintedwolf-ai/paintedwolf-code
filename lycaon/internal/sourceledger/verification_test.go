@@ -19,12 +19,14 @@ func TestVerificationStateTracksContentNotWatcherNoise(t *testing.T) {
 		t.Fatal("source state was unavailable for a stable tree")
 	}
 	repochange.Advance(root)
+	deliverWrites(ctx, root, "input.txt")
 	after, afterIdentity := VerificationState(ctx, ledger.Inventory, root)
 	if after != before || afterIdentity != identity {
 		t.Fatal("watcher activity invalidated unchanged source content")
 	}
 	testutil.FailErr(t, "change input", os.WriteFile(path, []byte("second revision"), 0o600))
 	repochange.Advance(root)
+	deliverWrites(ctx, root, "input.txt")
 	changed, changedIdentity := VerificationState(ctx, ledger.Inventory, root)
 	if changed == "" || changed == before || changedIdentity != identity {
 		t.Fatal("changed content did not produce a new revision of the same root")

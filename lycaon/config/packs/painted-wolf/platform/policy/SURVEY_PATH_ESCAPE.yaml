@@ -14,8 +14,7 @@ when: paintedwolf.rejection_code == "SURVEY_PATH_ESCAPE"
 effect: block
 copy:
   what: '{{ tool }} could not establish path authority for {{ paintedwolf.path }}.'
-  cause: The path resolver could not place this request within an attached or currently authorized scope. This
-    does not establish whether an approval card was shown.
+  cause: This path is outside the attached folders and current access grants.
   why: Structured rejects keep sandbox enforcement consistent across read-only survey tools.
   fix: If you meant a project file, use a path inside an attached folder (list_dir from "." / "@label/sub/path").
     If the user named this exact path, say it is outside the attached folders and ask them to attach that folder;

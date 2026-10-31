@@ -33,12 +33,12 @@ func TestListForPromptMarksDeferredMetas(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"copy", "move", "scan_query", "source_history", "page_open", "page_close", "http_request", "secret_generate", "handoff_reserve"} {
+	for _, name := range []string{"copy", "move", "scan_query", "source_history", "page_open", "page_close", "http_request", "secret_generate", "handoff_reserve", "read", "grep", "find", "list_dir", "jq"} {
 		if !deferred[name] {
 			t.Fatalf("%s must be marked deferred for implement; deferred set = %v", name, deferred)
 		}
 	}
-	if deferred["read"] || deferred["write"] {
+	if deferred["command"] || deferred["write"] {
 		t.Fatalf("hot tools must not be deferred: %v", deferred)
 	}
 	if !hasRequestTools {

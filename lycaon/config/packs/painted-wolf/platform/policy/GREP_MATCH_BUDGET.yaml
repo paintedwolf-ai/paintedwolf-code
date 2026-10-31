@@ -3,27 +3,27 @@ id: GREP_MATCH_BUDGET
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - grep
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
-  - paintedwolf.max_len
+  - paintedwolf.limit_id
+  - paintedwolf.maximum
+  - paintedwolf.observed
   - paintedwolf.grep_nested_repeat
+  - paintedwolf.max_len
 when: paintedwolf.rejection_code == "GREP_MATCH_BUDGET"
 effect: block
 copy:
-  what: '{% if paintedwolf.grep_nested_repeat %}grep rejected nested repetition in the regex pattern.{% else
-    %}grep pattern length exceeds the {{ paintedwolf.max_len }}-byte limit.{% endif %}'
-  cause: '{% if paintedwolf.grep_nested_repeat %}The parsed regex contains nested repeat operators.{% else
-    %}Pattern length is measured as UTF-8 bytes before search execution.{% endif %}'
-  why: Pattern admission happens before file scanning; a smaller search scope or output page cannot repair
-    this rejection.
-  fix: Shorten an overlong pattern or simplify nested repetition while preserving the intended match. Changing
-    path, path_glob, or max_matches does not change the rejected pattern.
-  instead: Repair the pattern itself before retrying
+  what: '{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}'
+  cause: The pattern or matching operation exceeded an admitted search limit.
+  why: The search stops at the limit instead of treating unfinished work as no match.
+  fix: Simplify the pattern or search smaller inputs before retrying.
+  instead: Use a fixed string search when regular expressions are unnecessary.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grep
 x-paintedwolf-message: grep pattern exceeds safe search budget

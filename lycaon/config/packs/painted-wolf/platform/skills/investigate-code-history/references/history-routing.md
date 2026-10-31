@@ -1,27 +1,27 @@
 # Code history routing reference
 
-Maintained sources of truth: the live native Git tool schemas. This workflow uses only read tools. Repository mutation tools belong to an explicitly requested change workflow.
-
-An isolated write leg works in a copy that carries no repository metadata, so no Git tool is on its roster. Only the `source_history` rows below apply there.
+Native Git commands in `command` provide committed history. `source_history` provides the live source ledger. Write-leg overlays contain no Git metadata; use `source_history` there.
 
 ## Choose the evidence
 
-| Question | First evidence | Follow-up |
-|---|---|---|
-| Is the change only local? | `git_status`, then path-scoped `git_diff` | Read the changed source |
-| Who changed this file during live work — me, another agent, the user? | `source_history(path)` (ledger record, covers uncommitted state) | Read the current bytes before acting on them |
-| How do I revert or undo an edit to an earlier version? | `restore_version(path)` (reverts to previous retained version) or with `version_id` | Read restored file to verify |
-| What did a historical uncommitted version look like? | `source_history(path, mode=version, version_id=…)` | Inspect exact retained code at that point |
-| What did an uncommitted edit/version change? | `source_history(path, mode=diff, version_id=…)` | Unified diff against parent or base version |
-| Who wrote these uncommitted lines? | `source_history(path, mode=lines, start_line, end_line)` | `git_blame` for the committed layer beneath |
-| What has this session itself changed? | `source_history(mode=mine)` | Path-scoped `git_diff` for the byte-level view |
-| Which commit last touched these lines? | Bounded `git_blame(path, start_line, end_line)` | `git_show(ref=<commit>)` |
-| How did one file evolve? | `git_log(path=…)` | Show the relevant commits and current file |
-| Which commits differ between branches? | `git_compare(base_ref=…, head_ref=…)` | `git_log(ref="base..head", limit=…, offset=…)` for commits; `git_diff(base_ref=…, head_ref=…)` for contents |
-| What does a branch or tag name resolve to? | `git_ref(refs=[…])` | Show the resolved commit |
-| What did a known commit change? | `git_show(ref=…)` | Read current code before claiming present behavior |
+| Question | Evidence |
+|---|---|
+| Is the change only local? | `git status --short` and `git diff -- path` in `command` |
+| Who changed this file during live work? | `source_history(path)` |
+| What did an uncommitted version contain or change? | `source_history(path, mode=version, version_id=…)` or `mode=diff` |
+| Who wrote these uncommitted lines? | `source_history(path, mode=lines, start_line, end_line)` |
+| What has this session changed? | `source_history(mode=mine)` |
+| Which commit last touched these lines? | `git blame -L A,B -- path`, then `git show ref -- path` in `command` |
+| How did a file evolve? | `git log -- path` in `command` |
+| Which commits differ between branches? | `git rev-list --left-right --count base...head`, `git log base..head`, and `git diff base head -- paths` in `command` |
+| What does a ref resolve to? | `git rev-parse ref` in `command` |
+| How do I undo a retained file change? | `restore_version(path)` or with `version_id`, only when requested |
+| Where did text exist at an older revision? | `command`: `git grep -n PATTERN REV -- PATH`; `git show REV:PATH` for the whole file |
+| Which release contains a commit? | `command`: `git describe --tags --always REV`; `git log` between the named tags |
+| Where did a branch point before a reset or rebase? | `command`: `git reflog -n 20 [REF]`; `git show` the earlier entry before restoring anything |
+| Which files or objects exist at a revision? | `command`: `git ls-tree -r --name-only REV`, `git cat-file -t`/`-p REV:PATH`; Read the current file before comparing |
 
-Use `git_branches` only to discover local branch names. Do not infer remote state, PR status, review intent, or CI state from local refs; use the GitHub workflow when that is the question.
+Discover local branches with `git branch --list` in `command`. Local refs do not establish remote state, PR status or CI results.
 
 ## Attribution traps
 

@@ -78,8 +78,11 @@ func New(sqlDB db.Handle, blobs *sourceblob.Store, observationPath string, broke
 		jobs:   make(map[string]*buildJob),
 		scopes: defaultScopes(), deltas: newDeltaTracker(), pins: newPinSet(),
 	}
-	s.deltas.admit = func(ctx context.Context, root, rel string) bool {
-		return s.scopeFor(ctx, Request{}, Root{Path: root}).AdmitPath(rel, false)
+	s.deltas.admit = func(ctx context.Context, root string) func(string) bool {
+		scope := s.scopeFor(ctx, Request{}, Root{Path: root})
+		return func(rel string) bool {
+			return scope.AdmitPath(rel, false)
+		}
 	}
 	s.unobserve = repochange.RegisterObserver(s.deltas.observe)
 	return s

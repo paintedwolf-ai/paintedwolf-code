@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync"
 	"testing"
@@ -41,7 +42,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 					return "", false, refusal()
 				}
 			} else {
-				testutil.FailErr(t, "register rejecting tool", deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", refusal() }))
+				testutil.FailErr(t, "register rejecting tool", deps.Context.Tools.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", refusal() }))
 			}
 			var mu sync.Mutex
 			var counts []int
@@ -72,18 +73,19 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 	messages := store.NewMemory()
 	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	args := map[string]any{"path": "portrait.svg"}
+	args := map[string]any{"path": "portrait.svg", "old_string": "a", "new_string": "b"}
 	for response := range loopguard.DoomLoopMaxAttempts {
-		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "read", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
+		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "edit", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
 	}
 	deps := promptloop.StoreDeps(messages)
 	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+	deps.Context.LoadedTools = workersLoaded
 	invoked := 0
-	testutil.FailErr(t, "register loaded tool", deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+	testutil.FailErr(t, "register loaded tool", deps.Context.Tools.Register("edit", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		invoked++
 		return "SVG source", nil
 	}))
-	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "read", Args: args}}}}})
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "edit", Args: args}}}}})
 	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 	testutil.FailErr(t, "run after loading", err)
 	if invoked != 1 {
@@ -93,10 +95,12 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 
 type retryReadDocuments struct {
 	tools.EditorDocuments
-	reads map[string]int64
+	reads map[string]documentcore.ReadBasis
 }
 
-func (d retryReadDocuments) FreezeAgentReads(string, string) map[string]int64 { return d.reads }
+func (d retryReadDocuments) FreezeAgentReads(string, string) map[string]documentcore.ReadBasis {
+	return d.reads
+}
 
 func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 	for _, document := range []string{"required", "other", ""} {
@@ -117,13 +121,13 @@ func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 			invoked := 0
 			testutil.FailErr(t, "register edit", deps.Context.Tools.Register("edit", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 				invoked++
-				if revision, ok := tctx.Source.EditorReadBases.Lookup("required"); !ok || revision != 2 {
+				if basis, ok := tctx.Source.EditorReadBases.Basis("required"); !ok || basis.Revision != 2 || !basis.Whole || len(basis.Spans) != 0 {
 					t.Fatal("edit received no matching frozen read")
 				}
 				return "Edited.", nil
 			}))
 			deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Finished.", ToolCalls: []llm.MockToolCall{{ID: "retry-edit", Name: "edit", Args: args}}}}})
-			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("retry the edit after reading"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{EditorDocuments: retryReadDocuments{reads: map[string]int64{document: 2}}}}})
+			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("retry the edit after reading"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{EditorDocuments: retryReadDocuments{reads: map[string]documentcore.ReadBasis{document: {Revision: 2, Whole: true}}}}}})
 			testutil.FailErr(t, "run recovered invocation", err)
 			want := 0
 			if document == "required" {

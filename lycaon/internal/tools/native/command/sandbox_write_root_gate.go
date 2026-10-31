@@ -16,6 +16,7 @@ type SandboxWriteRootAsk struct {
 	// SessionScratchRoot is the invoking session's scratch folder, the same
 	// fact its confinement and control-plane verdict carry.
 	SessionScratchRoot string
+	SessionOutputRoot  string
 }
 
 // SandboxWriteRootResult is the gate outcome after optional HITL.
@@ -44,6 +45,7 @@ type SandboxReadPathAsk struct {
 	Command            string
 	ProposedReadPath   string
 	SessionScratchRoot string
+	SessionOutputRoot  string
 	// ReadDenyPaths are additional host-resolved exclusions for this action.
 	ReadDenyPaths []string
 }

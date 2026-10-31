@@ -182,6 +182,23 @@ func (g *unixGuard) kill(cmd *exec.Cmd) {
 	g.signal(cmd, syscall.SIGKILL)
 }
 
+// relay delivers sig to the tree without arming the kill that terminate
+// does. A supervisor would treat its own termination signals as a stop, so
+// supervised trees receive sig on every member except the supervisor.
+func (g *unixGuard) relay(cmd *exec.Cmd, sig syscall.Signal) bool {
+	pgid := int(g.pgid.Load())
+	if !g.supervised || pgid <= 0 {
+		return g.signal(cmd, sig)
+	}
+	delivered := false
+	for _, pid := range osprocess.SessionMembers(pgid) {
+		if pid != pgid && syscall.Kill(pid, sig) == nil {
+			delivered = true
+		}
+	}
+	return delivered
+}
+
 // signal delivers sig to the leader's process group and then to every process
 // still in the session the leader started: a shell with job control moves each
 // job into its own group, and only the session ties those back to the command.

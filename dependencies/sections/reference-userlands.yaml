@@ -1,0 +1,53 @@
+title: Reference userlands (`lycaon/test/referenceuserland`)
+intro: |
+  Test-only container images that command conformance compares with; nothing here ships. Base
+  images are pinned by digest, packages by exact version from one Debian archive snapshot, and
+  source archives by SHA-256, all in `userlands.json`. `./task userlands:build` tags an image only
+  when its file tree hashes to the digest recorded there for its architecture. See
+  [Reference userlands](../test-strategy.md#reference-userlands).
+
+rows:
+  - id: reference-debian
+    name: Debian base image and archive snapshot (GNU and BSD userlands)
+    pins:
+      - label: Snapshot
+        from: json lycaon/test/referenceuserland/userlands.json userlands.gnu.snapshot
+      - label: Image
+        from: json lycaon/test/referenceuserland/userlands.json userlands.gnu.base
+    urgency: low
+    friction: moderate
+    friction_reason: |
+      A new snapshot moves every package version in both userlands. Update the base digest, the
+      snapshot and each package version (with its per-architecture rebuilds), run
+      `./task userlands:record` natively on amd64 and arm64, and regenerate the conformance
+      snapshots that compare against these userlands.
+
+  - id: chimerautils
+    name: chimerautils (FreeBSD userland on Linux)
+    pins:
+      - json lycaon/test/referenceuserland/userlands.json userlands.bsd.sources.chimerautils.version
+    upstream:
+      - 'github-tag chimera-linux/chimerautils ^v\d+\.\d+\.\d+$'
+    urgency: low
+    friction: moderate
+    friction_reason: |
+      Each release follows a FreeBSD release, so a bump changes BSD reference behavior. Update
+      the URL and SHA-256, record both architectures, and regenerate the conformance snapshots.
+
+  - id: libxo
+    name: libxo (linked statically into chimerautils)
+    pins:
+      - json lycaon/test/referenceuserland/userlands.json userlands.bsd.sources.libxo.version
+    upstream:
+      - github-release Juniper/libxo
+    urgency: low
+    friction: low
+
+  - id: reference-busybox
+    name: busybox reference image
+    pins:
+      - json lycaon/test/referenceuserland/userlands.json userlands.busybox.base
+    urgency: low
+    friction: low
+    notes: |
+      The upstream `busybox` image (musl build), pinned by digest.

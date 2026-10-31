@@ -96,7 +96,7 @@ func TestPatternBriefingWorkBoundIncludesDiscovery(t *testing.T) {
 			var observed summarize.Result
 			tool.Observe = func(result summarize.Result) { observed = result }
 			args := map[string]any{"path": ".", "pattern": "Needle"}
-			var result summarizeResponse
+			var result SummarizeResponse
 			for page := 0; page < size; page++ {
 				raw, err := tool.Run(t.Context(), args, nativefixture.Context(dir))
 				testutil.FailErr(t, "pattern work page", err)

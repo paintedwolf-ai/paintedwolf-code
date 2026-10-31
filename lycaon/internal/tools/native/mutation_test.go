@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -192,8 +195,8 @@ func TestDeleteToolRejectsNonEmptyDir(t *testing.T) {
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		testutil.FailErr(t, "mkdir", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "keep.go"), []byte("x"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
+	for i := range 257 {
+		testutil.FailErr(t, "write child", os.WriteFile(filepath.Join(dir, fmt.Sprintf("keep-%03d.go", i)), []byte("x"), 0o644))
 	}
 	tool := &DeleteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
@@ -202,6 +205,40 @@ func TestDeleteToolRejectsNonEmptyDir(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "DELETE_NOT_EMPTY" {
 		t.Fatalf("err = %v want DELETE_NOT_EMPTY", err)
+	}
+	if reject.Data["entries"] != 257 {
+		t.Fatalf("directory count = %v, want 257 across multiple pages", reject.Data["entries"])
+	}
+	remaining, err := os.ReadDir(dir)
+	testutil.FailErr(t, "read rejected directory", err)
+	if len(remaining) != 257 {
+		t.Fatalf("rejected deletion changed children: %d", len(remaining))
+	}
+}
+
+func TestDeleteChildCountKeepsRootAndReleasesMemory(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "seed outside directory", os.WriteFile(filepath.Join(outside, "private"), []byte("fixture"), 0o600))
+	testutil.FailErr(t, "replace directory with escaping alias", os.Symlink(outside, filepath.Join(root, "alias")))
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "memory limits", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "operation memory", err)
+	count, err := countMutationChildren(t.Context(), fseffect.Location{Root: root, Rel: "alias"}, memory)
+	if !errors.Is(err, fseffect.ErrSymlink) || count != 0 {
+		t.Fatalf("escaping count=%d err=%v", count, err)
+	}
+	if used := memory.InUse(); used != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("failed count retained memory: %+v", used)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = countMutationChildren(ctx, fseffect.Location{Root: root, Rel: "."}, memory)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled count error=%v", err)
+	}
+	if used := memory.InUse(); used != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("canceled count retained memory: %+v", used)
 	}
 }
 

@@ -91,7 +91,7 @@ func (c *ChunkCompactor) CompactChunk(ctx context.Context, chunk ContentChunk, c
 		meta.CompactedTokens = meta.OriginalTokens
 		return content, meta, nil
 	case evidence.TranscriptDietAnchorResidue:
-		spillOut, strategy, ok := c.compactSpillSummarize(chunk, content, meta.OriginalTokens)
+		spillOut, strategy, ok := c.compactSpillSummarize(ctx, chunk, content, meta.OriginalTokens)
 		if ok {
 			meta.Strategy = strategy
 			out = spillOut
@@ -139,7 +139,7 @@ func (c *ChunkCompactor) CompactChunk(ctx context.Context, chunk ContentChunk, c
 // compactSpillPointer spills full bytes and keeps a handle/spill-path residue.
 func (c *ChunkCompactor) compactSpillPointer(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string) {
 	if tooloutput.IsStructuredToolJSON(content) {
-		out, strategy := c.compactStructuredTool(chunk, content, originalTokens)
+		out, strategy := c.compactStructuredTool(ctx, chunk, content, originalTokens)
 		if strategy != "" {
 			strategy = "spill_pointer"
 		}
@@ -151,11 +151,11 @@ func (c *ChunkCompactor) compactSpillPointer(ctx context.Context, chunk ContentC
 // compactSpillIndex retains an outline and verbatim excerpts; lists use bounded windows.
 func (c *ChunkCompactor) compactSpillIndex(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string) {
 	if tooloutput.IsStructuredToolJSON(content) {
-		return c.compactStructuredTool(chunk, content, originalTokens)
+		return c.compactStructuredTool(ctx, chunk, content, originalTokens)
 	}
 	retained := chunk.recallPointer()
 	if strings.TrimSpace(chunk.HostDataDir) != "" {
-		spill := tooloutput.SpillWholeRaw(chunk.HostDataDir, tooloutput.Screened(content), chunk.MaxToolSpillBytes)
+		spill := tooloutput.SpillWholeRaw(ctx, chunk.HostDataDir, tooloutput.Screened(content), chunk.MaxToolSpillBytes)
 		if spill.SpillPath == "" || spill.SpillCapped || spill.RejectCode != "" {
 			return content, ""
 		}
@@ -206,8 +206,8 @@ func toolOutputIndex(ctx context.Context, content string, maxBytes int) string {
 }
 
 // compactStructuredTool retains a complete structured observation and fits its model view.
-func (c *ChunkCompactor) compactStructuredTool(chunk ContentChunk, content string, originalTokens int) (string, string) {
-	out := tooloutput.SpillWholeToolOutput(strings.TrimSpace(chunk.HostDataDir), tooloutput.Screened(content), chunk.MaxToolSpillBytes)
+func (c *ChunkCompactor) compactStructuredTool(ctx context.Context, chunk ContentChunk, content string, originalTokens int) (string, string) {
+	out := tooloutput.SpillWholeToolOutput(ctx, strings.TrimSpace(chunk.HostDataDir), tooloutput.Screened(content), chunk.MaxToolSpillBytes)
 	if out.SpillPath == "" || out.SpillCapped || out.RejectCode != "" {
 		return content, ""
 	}

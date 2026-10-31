@@ -336,22 +336,22 @@ func TestControlPlanePathDeniedIsOneVerdictForBothLanes(t *testing.T) {
 	draft := filepath.Join(enginepaths.DraftsRootUnder(configDir), "p", "notes.md")
 	ordinary := filepath.Join(t.TempDir(), "notes.md")
 
-	if !ControlPlanePathDenied(sessions, false, "") || !ControlPlanePathDenied(sessions, true, "") {
+	if !ControlPlanePathDenied(sessions, false, "", "") || !ControlPlanePathDenied(sessions, true, "", "") {
 		t.Fatalf("state tree path %q must be denied in both lanes", sessions)
 	}
-	if ControlPlanePathDenied(draft, false, "") || ControlPlanePathDenied(draft, true, "") {
+	if ControlPlanePathDenied(draft, false, "", "") || ControlPlanePathDenied(draft, true, "", "") {
 		t.Fatalf("agent workspace %q is not the control plane", draft)
 	}
-	if ControlPlanePathDenied(ordinary, false, "") || ControlPlanePathDenied(ordinary, true, "") {
+	if ControlPlanePathDenied(ordinary, false, "", "") || ControlPlanePathDenied(ordinary, true, "", "") {
 		t.Fatalf("ordinary path %q must not be control-plane denied", ordinary)
 	}
 
 	t.Run("read floor off keeps writes denied", func(t *testing.T) {
 		t.Setenv("LYCAON_SANDBOX_DENY_READ", "off")
-		if ControlPlanePathDenied(sessions, false, "") {
+		if ControlPlanePathDenied(sessions, false, "", "") {
 			t.Fatalf("the read-floor switch must remove the read verdict for %q", sessions)
 		}
-		if !ControlPlanePathDenied(sessions, true, "") || !ControlPlaneWriteDenied(sessions) {
+		if !ControlPlanePathDenied(sessions, true, "", "") || !ControlPlaneWriteDenied(sessions) {
 			t.Fatalf("no switch removes the write verdict for %q", sessions)
 		}
 	})
@@ -372,30 +372,30 @@ func TestControlPlanePathDeniedLeavesOnlyTheInvocationsScratch(t *testing.T) {
 	}
 
 	for _, write := range []bool{false, true} {
-		if ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, own) {
+		if ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, own, "") {
 			t.Fatalf("own scratch denied (write=%v)", write)
 		}
-		if ControlPlanePathDenied(own, write, own) {
+		if ControlPlanePathDenied(own, write, own, "") {
 			t.Fatalf("own scratch root denied (write=%v)", write)
 		}
-		if !ControlPlanePathDenied(filepath.Join(other, "flow.sh"), write, own) {
+		if !ControlPlanePathDenied(filepath.Join(other, "flow.sh"), write, own, "") {
 			t.Fatalf("another session's scratch allowed (write=%v)", write)
 		}
-		if !ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, "") {
+		if !ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, "", "") {
 			t.Fatalf("scratch allowed without the invocation's scratch root (write=%v)", write)
 		}
 		// A worker's scratch is a sibling of its coordinator's; each reaches only its own.
-		if !ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, worker) {
+		if !ControlPlanePathDenied(filepath.Join(own, "flow.sh"), write, worker, "") {
 			t.Fatalf("worker reached its coordinator's scratch (write=%v)", write)
 		}
-		if !ControlPlanePathDenied(filepath.Join(worker, "flow.sh"), write, own) {
+		if !ControlPlanePathDenied(filepath.Join(worker, "flow.sh"), write, own, "") {
 			t.Fatalf("coordinator reached its worker's scratch (write=%v)", write)
 		}
-		if ControlPlanePathDenied(filepath.Join(worker, "flow.sh"), write, worker) {
+		if ControlPlanePathDenied(filepath.Join(worker, "flow.sh"), write, worker, "") {
 			t.Fatalf("worker scratch denied (write=%v)", write)
 		}
 	}
-	if !ControlPlanePathDenied(filepath.Join(own+"-sibling", "flow.sh"), true, own) {
+	if !ControlPlanePathDenied(filepath.Join(own+"-sibling", "flow.sh"), true, own, "") {
 		t.Fatal("a sibling sharing the scratch root's prefix is not inside it")
 	}
 }
@@ -493,5 +493,24 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 	testutil.FailErr(t, "admit write roots", err)
 	if !PathWithinWriteRoots(scratchDir, roots) {
 		t.Fatalf("session scratch root %q not unioned into write roots: %v", scratchDir, roots)
+	}
+}
+
+func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin confstr user roots only")
+	}
+	userRoots := darwinUserRoots()
+	if len(userRoots) == 0 {
+		t.Fatal("darwinUserRoots() returned no confstr roots on darwin")
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
+	for _, root := range userRoots {
+		probe := filepath.Join(root, "xcrun_db-probe")
+		if !PathWithinWriteRoots(probe, roots) {
+			t.Fatalf("darwin confstr root child %q not within WriteRootsForBoundary when TMPDIR is overridden: %v", probe, roots)
+		}
 	}
 }

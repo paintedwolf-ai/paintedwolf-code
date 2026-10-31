@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
+      "argv": "tar (-x|-t|-c) [-v] [-z|-j|-J|--zstd|-a] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--exclude PATTERN ...] [-X FILE] [--exclude-vcs] [-T FILE] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -99,10 +99,101 @@
           "sample_values": [
             "1"
           ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-J",
+            "--xz"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-J-xz",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--zstd"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-zstd",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--auto-compress"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-a-autocompress",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "tar-option-exclude",
+          "consumption": "fixed",
+          "sample_values": [
+            "node_modules"
+          ]
+        },
+        {
+          "spellings": [
+            "-X",
+            "--exclude-from"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "tar-option-X-excludefrom",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude-vcs"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-excludevcs",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-T",
+            "--files-from"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "tar-option-T-filesfrom",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -159,7 +250,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. -v prints member names for -c and -x and a GNU long listing for -t; member operands select named entries and the entries beneath named directories. tar -J/--xz and --zstd read and write .tar.xz and .tar.zst (xz dictionaries above 64 MiB and zstd windows above 8 MiB refuse); extraction and listing sniff all four codecs. -a picks the codec from the archive suffix. --exclude PATTERN, -X FILE lines and --exclude-vcs are globs whose * matches /, tested against every run of whole name components; an excluded directory is not descended. -T FILE adds one name per line. Exclusion and name files are read through read authority; the archive never contains itself.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -186,7 +277,15 @@
         "tar-option-j-bzip2",
         "tar-option-f-file",
         "tar-option-C-directory",
-        "tar-option-stripcomponents"
+        "tar-option-stripcomponents",
+        "tar-option-v-verbose",
+        "tar-option-J-xz",
+        "tar-option-zstd",
+        "tar-option-a-autocompress",
+        "tar-option-exclude",
+        "tar-option-X-excludefrom",
+        "tar-option-excludevcs",
+        "tar-option-T-filesfrom"
       ]
     },
     {
@@ -194,7 +293,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
+      "argv": "unzip [-l|-p] [-d DIR] [-o|-n] [-q] [-j] [--] ARCHIVE [MEMBER ...] [-x MEMBER ...]",
       "forms": [
         {
           "spellings": [
@@ -247,10 +346,42 @@
           "fixture_id": "unzip-option-q",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": -2,
+          "value_role": "glob",
+          "fixture_id": "unzip-option-x",
+          "consumption": "through-next-option",
+          "sample_values": [
+            "docs/*"
+          ]
+        },
+        {
+          "spellings": [
+            "-j"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-j",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o|-n] [-q] [-j] [--] ARCHIVE [MEMBER ...] [-x MEMBER ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -307,7 +438,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. unzip MEMBER operands and -x MEMBER ... are wildcards over the stored name (* matches /); -x leaves members out. -j extracts files under their base names. -n never replaces an existing file and reports nothing; without -o or -n a kept file is reported.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -331,7 +462,10 @@
         "unzip-option-p",
         "unzip-option-d",
         "unzip-option-o",
-        "unzip-option-q"
+        "unzip-option-q",
+        "unzip-option-x",
+        "unzip-option-j",
+        "unzip-option-n"
       ]
     },
     {
@@ -339,7 +473,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "zip [-r] [-q] [--] ARCHIVE PATH ...",
+      "argv": "zip [-r] [-q] [-j] [--] ARCHIVE PATH ... [-x PATTERN ...]",
       "forms": [
         {
           "spellings": [
@@ -360,10 +494,34 @@
           "fixture_id": "zip-option-q",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--exclude"
+          ],
+          "arity": -2,
+          "value_role": "glob",
+          "fixture_id": "zip-option-x-exclude",
+          "consumption": "through-next-option",
+          "sample_values": [
+            "*.o"
+          ]
+        },
+        {
+          "spellings": [
+            "-j",
+            "--junk-paths"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "zip-option-j-junkpaths",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [--] ARCHIVE PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [-j] [--] ARCHIVE PATH ... [-x PATTERN ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -420,7 +578,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. zip -x PATTERN ... takes words up to the next option and leaves out every entry whose stored name a pattern matches (* matches /). -j stores files under their base names without directory entries; two files with one base name refuse.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -441,7 +599,9 @@
         "zip-operands-valid",
         "zip-rejection",
         "zip-option-r",
-        "zip-option-q"
+        "zip-option-q",
+        "zip-option-x-exclude",
+        "zip-option-j-junkpaths"
       ]
     },
     {
@@ -449,10 +609,150 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "gzip [--] PATH ...",
-      "forms": [],
+      "argv": "gzip [-1..-9|--fast|--best] [-c] [-d] [-f] [-k] [-l] [-n|-N] [-q] [-t] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--stdout",
+            "--to-stdout"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-c-tostdout",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--decompress",
+            "--uncompress"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-d-uncompress",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--keep"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-k-keep",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-1",
+            "-2",
+            "-3",
+            "-4",
+            "-5",
+            "-6",
+            "-7",
+            "-8",
+            "-9"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-level",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--fast"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-fast",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--best"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-best",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--no-name"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-n-noname",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-N",
+            "--name"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-N-name",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--test"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-t-test",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. gzip [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -509,7 +809,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name. -1 through -9, --fast and --best set the level; -n omits the stored name and time, -N keeps them (the default); -q is accepted; -t tests integrity without writing.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -528,7 +828,19 @@
       },
       "fixture_ids": [
         "gzip-operands-valid",
-        "gzip-rejection"
+        "gzip-rejection",
+        "gzip-option-c-tostdout",
+        "gzip-option-d-uncompress",
+        "gzip-option-f-force",
+        "gzip-option-k-keep",
+        "gzip-option-l-list",
+        "gzip-option-level",
+        "gzip-option-fast",
+        "gzip-option-best",
+        "gzip-option-n-noname",
+        "gzip-option-N-name",
+        "gzip-option-q-quiet",
+        "gzip-option-t-test"
       ]
     },
     {
@@ -536,10 +848,78 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "gunzip [--] PATH ...",
-      "forms": [],
+      "argv": "gunzip [-c] [-f] [-k] [-l] [-q] [-t] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--stdout",
+            "--to-stdout"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-c-tostdout",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--keep"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-k-keep",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--test"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-t-test",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. gunzip [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -596,7 +976,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name. -q is accepted; -t tests integrity without writing.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -615,7 +995,13 @@
       },
       "fixture_ids": [
         "gunzip-operands-valid",
-        "gunzip-rejection"
+        "gunzip-rejection",
+        "gunzip-option-c-tostdout",
+        "gunzip-option-f-force",
+        "gunzip-option-k-keep",
+        "gunzip-option-l-list",
+        "gunzip-option-q-quiet",
+        "gunzip-option-t-test"
       ]
     },
     {
@@ -626,7 +1012,7 @@
       "argv": "zcat [--] [PATH ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zcat [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

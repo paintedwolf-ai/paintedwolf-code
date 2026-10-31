@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/invocation.go",
+  "kind": "module",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the measured 338-line invocation module. Per-call I/O, path authority, source observations and resource admission share one lifetime. The composed constructor binds the published shared literal service to that same revision owner. Combined transformed-output, worker admission and capture contracts support this boundary.",
+  "reviewed_commit": "8ad6ab3a9c9025a1713cc0a2d352c205df23ba65",
+  "ceiling": 338,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
+    "lycaon/internal/tools/native/search/index_capture_test.go": "c0e5a9176a9a8ce2debc9087fc219f20a9db9874be547ce3139c732ca81db349"
+  }
+}

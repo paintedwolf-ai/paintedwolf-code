@@ -108,7 +108,6 @@ func (g *MemoryDoomLoopGuard) doomLoopKey(sessionID, tool string, args map[strin
 	return fmt.Sprintf("%x", sum[:8]), nil
 }
 
-
 // Check blocks repeated identical calls or consecutive rejects sharing a code.
 func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, tool string, args map[string]any, offered bool, reads *tools.AgentReadBases) (allowed bool, count int, repeatedCode string, err error) {
 	if err := ctx.Err(); err != nil {
@@ -134,8 +133,8 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	if st != nil {
 		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered
 		if st.lastCode == "EDITOR_DOCUMENT_READ_REQUIRED" && st.readDocumentID != "" {
-			revision, known := reads.Lookup(st.readDocumentID)
-			resolved = known && revision > 0
+			basis, known := reads.Basis(st.readDocumentID)
+			resolved = known && basis.Revision > 0 && (basis.Whole || len(basis.Spans) > 0)
 		}
 		if resolved {
 			delete(sess, key)

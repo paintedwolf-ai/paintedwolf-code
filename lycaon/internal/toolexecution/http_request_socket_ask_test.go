@@ -22,6 +22,7 @@ import (
 // An http_request unix_socket is daemon authority: with no grant, the call
 // raises the exact socket card before the handler runs.
 func TestHTTPRequestUnixSocketAsksForExactSocketAuthority(t *testing.T) {
+	setSocketReferenceState(t)
 	dir, err := os.MkdirTemp("/tmp", "lyc-ask-") //nolint:usetesting // Socket paths must stay short.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })

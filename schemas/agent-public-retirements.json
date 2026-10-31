@@ -21,9 +21,68 @@
       "paintedwolf.unparsed_json": [
         "paintedwolf.json_encoded",
         "paintedwolf.json_malformed"
+      ],
+      "paintedwolf.habit_redirect_match": [
+        "paintedwolf.native_operation",
+        "paintedwolf.native_command"
       ]
     },
-    "rejection_codes": {},
+    "rejection_codes": {
+      "USE_CHMOD_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_CHOWN_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_COPY_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_DELETE_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_FIND_NOT_COMMAND": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_GIT_DIFF_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_GIT_STATUS_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_GREP_REGEX": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_HTTP_REQUEST_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_JQ_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_LIST_DIR_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_MKDIR_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_MOVE_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_NATIVE_TOOL": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_READ_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_STAT_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_WC_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "USE_WRITE_NATIVE": [
+        "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ]
+    },
     "tools": {},
     "workflow_terms": {},
     "anchors": {},

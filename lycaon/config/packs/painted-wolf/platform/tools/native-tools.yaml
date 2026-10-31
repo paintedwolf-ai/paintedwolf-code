@@ -418,15 +418,12 @@ execution_capabilities:
     - held_terminal_input
 
 # Listing one family member on a surface grants the rest. resource_implied
-# names the control tools made available by a live resource.
+# names the control tools made available by a live resource; command's job
+# controls arrive only with a live command job.
 families:
   processes:
     - process_list
     - process_signal
-  command:
-    - command
-    - command_output
-    - command_stop
   held_call:
     - held_result
     - held_stop
@@ -475,7 +472,6 @@ resource_implied:
 grant_identity_neutral_args:
   command:
     - timeout_ms
-    - wait_ms
     - terminal_capture
   verify:
     - timeout_ms

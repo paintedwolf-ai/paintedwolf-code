@@ -55,10 +55,10 @@ func stagingCtx(paths []string) tools.ToolContext {
 // own writes; everything else is reported as left behind, not committed.
 func TestCommitStagingDefaultsToSessionAuthorship(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"mine.go", "peer.go", "user-notes.md"}}
-	staging, err := resolveCommitStaging(
-		context.Background(), map[string]any{}, gm, stagingCtx([]string{"mine.go"}), "/repo")
+	staging, err := sessionCommitStaging(
+		context.Background(), gm, stagingCtx([]string{"mine.go"}), "/repo", nil)
 	if err != nil {
-		t.Fatalf("resolveCommitStaging: %v", err)
+		t.Fatalf("sessionCommitStaging: %v", err)
 	}
 	if len(staging.Paths) != 1 || staging.Paths[0] != "mine.go" {
 		t.Fatalf("staged = %v, want only mine.go", staging.Paths)
@@ -77,11 +77,11 @@ func TestCommitStagingDefaultsToSessionAuthorship(t *testing.T) {
 // no no-op entries to the staged list.
 func TestCommitStagingDropsAuthoredPathsWithoutChanges(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"second.go"}}
-	staging, err := resolveCommitStaging(
-		context.Background(), map[string]any{}, gm,
-		stagingCtx([]string{"first.go", "second.go"}), "/repo")
+	staging, err := sessionCommitStaging(
+		context.Background(), gm,
+		stagingCtx([]string{"first.go", "second.go"}), "/repo", nil)
 	if err != nil {
-		t.Fatalf("resolveCommitStaging: %v", err)
+		t.Fatalf("sessionCommitStaging: %v", err)
 	}
 	if len(staging.Paths) != 1 || staging.Paths[0] != "second.go" {
 		t.Fatalf("staged = %v, want only second.go", staging.Paths)
@@ -91,8 +91,8 @@ func TestCommitStagingDropsAuthoredPathsWithoutChanges(t *testing.T) {
 // Unattributed dirty files require explicit path selection.
 func TestCommitStagingRejectsWithoutSessionAuthorship(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"peer.go"}}
-	_, err := resolveCommitStaging(
-		context.Background(), map[string]any{}, gm, stagingCtx(nil), "/repo")
+	_, err := sessionCommitStaging(
+		context.Background(), gm, stagingCtx(nil), "/repo", nil)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("err = %v, want a structured reject", err)
@@ -110,25 +110,21 @@ func TestCommitStagingRejectsWhenLedgerCannotAnswer(t *testing.T) {
 			SessionID: "s1"},
 		Source: tools.InvocationSource{ActiveRootID: "r1"},
 	}
-	_, err := resolveCommitStaging(context.Background(), map[string]any{}, gm, tctx, "/repo")
+	_, err := sessionCommitStaging(context.Background(), gm, tctx, "/repo", nil)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_COMMIT_NO_SESSION_AUTHORSHIP" {
 		t.Fatalf("err = %v, want GIT_COMMIT_NO_SESSION_AUTHORSHIP", err)
 	}
 }
 
-// An explicit list is the caller's declared scope and bypasses authorship.
-func TestCommitStagingHonoursExplicitPaths(t *testing.T) {
-	gm := changedPathsGit{changed: []string{"peer.go"}}
-	args := map[string]any{"paths": []any{"peer.go"}}
-	staging, err := resolveCommitStaging(context.Background(), args, gm, stagingCtx(nil), "/repo")
+// Paths the session staged itself join its authorship; unrelated changes stay out.
+func TestCommitStagingIncludesSessionStagedPaths(t *testing.T) {
+	gm := changedPathsGit{changed: []string{"generated.go", "peer.go"}}
+	staging, err := sessionCommitStaging(context.Background(), gm, stagingCtx(nil), "/repo", []string{"generated.go"})
 	if err != nil {
-		t.Fatalf("resolveCommitStaging: %v", err)
+		t.Fatalf("sessionCommitStaging: %v", err)
 	}
-	if len(staging.Paths) != 1 || staging.Paths[0] != "peer.go" {
-		t.Fatalf("staged = %v, want peer.go", staging.Paths)
-	}
-	if staging.ExcludedCount != 0 {
-		t.Fatalf("ExcludedCount = %d, want 0 for an explicit list", staging.ExcludedCount)
+	if len(staging.Paths) != 1 || staging.Paths[0] != "generated.go" || staging.ExcludedCount != 1 {
+		t.Fatalf("staging = %+v, want generated.go with peer.go excluded", staging)
 	}
 }

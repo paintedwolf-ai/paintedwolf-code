@@ -60,13 +60,13 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 	testutil.FailErr(t, "begin turn", err)
 	gateOpen := true
 	registry := tools.NewStubRegistry()
-	testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+	testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		gateOpen = false
 		return "required evidence", nil
 	}))
 	client := &softStopSequenceLLM{completions: []*modelcall.Completion{
 		{Content: "Premature closeout"},
-		{ToolCalls: []api.ToolCall{{ID: "repair-read", Name: "read", Args: map[string]any{"path": "a.txt"}}}},
+		{ToolCalls: []api.ToolCall{{ID: "repair-read", Name: "command", Args: map[string]any{"command": "cat a.txt"}}}},
 		{Content: "Final report"},
 	}}
 	deps := PromptLoopDeps{

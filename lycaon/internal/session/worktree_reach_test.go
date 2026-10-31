@@ -16,14 +16,19 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/scratch"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -65,6 +70,8 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
+	// Command programs publish output beneath the host's per-session folders.
+	mgr.SetScratchFolders(scratch.New(t.TempDir()))
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
@@ -194,12 +201,24 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 	testutil.FailErr(t, "buildToolContext", err)
 
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	programs := programtest.New(t, programtest.Options{Session: f.sess.ID, Background: reg})
+	args := map[string]any{"command": "external -- cat marker"}
+	contract, _ := toolcontract.Lookup("command")
+	parent, err := programs.Recorder.Begin(t.Context(), invocation.Start{
+		ProjectID: testdbseed.DefaultProjectID, SessionID: f.sess.ID, ToolCallID: "reach-call-1", ToolName: "command", Args: args, Contract: contract,
+	})
+	testutil.FailErr(t, "begin receipt", err)
+	tctx.Identity.Agent = "fixture"
+	tctx.Identity.ProjectID = testdbseed.DefaultProjectID
+	tctx.Identity.ToolCallID = "reach-call-1"
+	tctx.Invocation.ID = parent.ID
 	tool := &command.CommandTool{
 		Runner:     hostcmd.NewRunner(),
 		Boundary:   writeBoundary(t),
 		Background: reg,
+		Programs:   programs.Runtime,
 	}
-	out, err := tool.Run(t.Context(), map[string]any{"command": "cat marker"}, tctx)
+	out, err := tool.Run(t.Context(), args, tctx)
 	testutil.FailErr(t, "command", err)
 	if !strings.Contains(out, "worktree") {
 		t.Fatalf("command cwd output = %q want worktree marker", out)

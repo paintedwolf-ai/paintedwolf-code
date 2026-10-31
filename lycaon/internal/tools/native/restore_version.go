@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -24,6 +25,7 @@ type RestoreVersionTool struct {
 
 type restoreVersionLedger interface {
 	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
+	ResolveDeletedPath(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.DeletedPath, error)
 	ReadRestorableVersion(ctx context.Context, projectID, versionID string) (sourceledger.RestorableVersion, error)
 	QueryFileVersions(ctx context.Context, projectID, fileID string, limit int, beforeOrdinal int64) (sourceledger.FileVersionsResult, error)
 }
@@ -116,6 +118,15 @@ func resolveRestorableVersion(
 	versionID, baseVersionID string,
 ) (sourceledger.RestorableVersion, string, error) {
 	head, err := ledger.ResolveHead(ctx, projectID, branch, rootID, rel)
+	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		// A deleted file keeps its history under the deletion's head.
+		deleted, deletedErr := ledger.ResolveDeletedPath(ctx, projectID, branch, rootID, rel)
+		if deletedErr == nil {
+			head, err = sourceledger.BranchHead{FileID: deleted.FileID, VersionID: deleted.VersionID, RootID: rootID, Path: rel, State: "absent"}, nil
+		} else if !errors.Is(deletedErr, sourceledger.ErrHistoryNotFound) {
+			err = deletedErr
+		}
+	}
 	if err != nil && !errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return sourceledger.RestorableVersion{}, "", fmt.Errorf("resolve file head: %w", err)
 	}
@@ -222,7 +233,15 @@ func restoreAbsentVersion(
 		return "", fmt.Errorf("read failed: %w", err)
 	}
 
-	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved)); err != nil {
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	if err != nil {
+		return "", err
+	}
+	memory, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		return "", err
+	}
+	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), memory); err != nil {
 		return "", fmt.Errorf("restore absent state for %s: %w", path, err)
 	}
 	captureFileEdit(tctx, path, "", before)
@@ -261,7 +280,7 @@ func (t *RestoreVersionTool) restoreContent(
 			}
 		}
 
-		landed, err := landEditedText(ctx, tctx, "restore_version", resolved, st, finalContent)
+		landed, err := landEditedText(ctx, tctx, "restore_version", resolved, st, editorTextProposal{Authored: targetContent, Reviewed: finalContent})
 		if err != nil {
 			return "", err
 		}

@@ -3,12 +3,13 @@ id: SURVEY_BUNDLE_UNKNOWN
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - survey_repo
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.available
   - paintedwolf.bundle

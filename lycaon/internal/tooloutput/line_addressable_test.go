@@ -1,6 +1,7 @@
 package tooloutput
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func TestLineAddressableToolJSONPutsElementsOnTheirOwnLines(t *testing.T) {
 func TestWireSpillToolOutputWritesLineAddressableJSON(t *testing.T) {
 	dir := t.TempDir()
 	body := "[git#2]\n" + `{"files":[` + strings.Repeat(`{"path":"a.go"},`, 40) + `{"path":"z.go"}]}`
-	out := SpillWholeToolOutput(dir, Screened(body), 0)
+	out := SpillWholeToolOutput(t.Context(), dir, Screened(body), 0)
 	if out.SpillPath == "" || !out.Truncated || out.OriginalBytes != len(body) || out.Preview != "" {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -57,7 +58,7 @@ func TestWireSpillToolOutputWritesLineAddressableJSON(t *testing.T) {
 	}
 
 	raw := "stdout: line one\nline two\n"
-	exact := SpillWholeRaw(dir, Screened(raw), 0)
+	exact := SpillWholeRaw(t.Context(), dir, Screened(raw), 0)
 	if readSpill(t, dir, exact.SpillPath) != raw {
 		t.Fatal("a raw body must spill byte-exact")
 	}
@@ -66,17 +67,17 @@ func TestWireSpillToolOutputWritesLineAddressableJSON(t *testing.T) {
 func TestPartialSpillCannotReplaceFullObservation(t *testing.T) {
 	dir := t.TempDir()
 	body := strings.Repeat("observed line\n", 1000)
-	full := SpillWholeRaw(dir, Screened(body), 0)
+	full := SpillWholeRaw(t.Context(), dir, Screened(body), 0)
 	if full.SpillPath == "" {
 		t.Fatal("full observation was not retained")
 	}
-	for _, spill := range []func(string, ScreenedOutput, int) WireSpillOutcome{SpillWholeRaw, SpillWholeToolOutput} {
-		out := spill(dir, Screened(body), 512)
+	for _, spill := range []func(context.Context, string, ScreenedOutput, int) WireSpillOutcome{SpillWholeRaw, SpillWholeToolOutput} {
+		out := spill(t.Context(), dir, Screened(body), 512)
 		if out.SpillPath != "" || out.RejectCode != ToolOutputSpillCapExceededCode {
 			t.Fatalf("whole retention accepted partial output: %+v", out)
 		}
 	}
-	partial := WireSpillToolOutput(dir, Screened(body), 80, 512)
+	partial := WireSpillToolOutput(t.Context(), dir, Screened(body), 80, 512)
 	if !partial.SpillCapped || partial.SpillPath == "" || partial.SpillPath == full.SpillPath {
 		t.Fatalf("partial and full observations share an address: %+v", partial)
 	}

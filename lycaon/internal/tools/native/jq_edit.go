@@ -134,7 +134,7 @@ func (t *JqEditTool) land(ctx context.Context, tctx tools.ToolContext, target pr
 		}
 		finalContent = gated
 	}
-	landed, err := landEditedText(ctx, tctx, tool, target, st, finalContent)
+	landed, err := landEditedText(ctx, tctx, tool, target, st, editorTextProposal{Authored: edited.Text, Reviewed: finalContent})
 	if err != nil {
 		return "", err
 	}

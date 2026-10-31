@@ -3,7 +3,6 @@ package projectpaths
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -22,9 +21,21 @@ type ReadSession struct {
 	// admitted reports that the call's attached roots passed validation.
 	admitted bool
 
-	mu     sync.Mutex
-	roots  map[string]*fseffect.ReadRoot
-	closed bool
+	mu      sync.Mutex
+	roots   map[string]*fseffect.ReadRoot
+	closed  bool
+	observe ReadObserver
+}
+
+// ReadObserver sees each file a session opens, before any byte is consumed.
+// An error refuses the open; the observer must not move the file offset.
+type ReadObserver func(Resolved, *os.File) error
+
+// Observe installs the observer for every later open through this session.
+func (s *ReadSession) Observe(observer ReadObserver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.observe = observer
 }
 
 // NewReadSession admits tctx's attached roots for the reads of one call.
@@ -91,23 +102,36 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 			return true
 		}
 	}
-	if _, ok := projectroot.ScratchAddress(modelPath); ok {
-		return true
-	}
-	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
-	path := filepath.Clean(strings.TrimSpace(modelPath))
-	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
+	_, _, _, ok := sessionRel(s.tctx, modelPath)
+	return ok
 }
 
 // Open opens a path Resolve returned relative to its root's held descriptor,
 // exactly as fseffect.OpenRead would open it.
-func (s *ReadSession) Open(resolved Resolved) (*os.File, error) {
+func (s *ReadSession) Open(ctx context.Context, resolved Resolved) (*os.File, error) {
 	loc := resolved.EffectLocation()
 	root, err := s.heldRoot(loc.Root)
 	if err != nil {
 		return nil, err
 	}
-	return root.Open(loc.Rel)
+	file, err := root.Open(loc.Rel)
+	if err != nil {
+		return nil, err
+	}
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	s.mu.Lock()
+	observe := s.observe
+	s.mu.Unlock()
+	if observe != nil {
+		if err := observe(resolved, file); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+	}
+	return file, nil
 }
 
 func (s *ReadSession) heldRoot(path string) (*fseffect.ReadRoot, error) {

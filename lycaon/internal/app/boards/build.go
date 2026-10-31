@@ -25,11 +25,9 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
-	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/toolscope"
 	"github.com/lycaon/lycaon/internal/visualscreen"
@@ -86,7 +84,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	if scopeErr != nil {
 		return fmt.Errorf("toolscope: %w", scopeErr)
 	}
-	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg, r.repoCatalogFileCount)
+	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg)
 
 	r.Snapshot = &board.SnapshotBuilder{
 		Delegations:            r.deps.Delegations.Store,
@@ -128,20 +126,6 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
 	}
-
-	r.deps.Execution.Host.Survey.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
-		if len(tctx.Source.Roots) < 2 {
-			return "", nil
-		}
-		if subpath != "" && !projectroot.IsUnionDiscoveryPath(subpath) {
-			return "", nil
-		}
-		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Source.Roots, repoinfo.DefaultBriefBudget(), r.RepoProvider)
-		if err != nil {
-			return "", err
-		}
-		return repoinfo.FormatOrientationBriefText(mrb.OrientationRoots()), nil
-	})
 
 	r.deps.Sessions.Manager.Coordinator.Loading.SetLedger(r.deps.Execution.TurnLoads)
 	r.deps.Sessions.Manager.Coordinator.Nudges.SetLedger(r.deps.Execution.TurnLoads)
@@ -207,7 +191,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	if err := webresearch.RegisterToolsWithFactory(r.deps.Execution.Host.Registry, deps, r.deps.Execution.Host.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
-	if err := httpaction.Register(r.deps.Execution.Host.Registry, httpaction.Deps{
+	if err := r.deps.Execution.Host.RegisterHTTP(httpaction.Deps{
 		Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
 		Secrets: r.deps.Security.Capabilities,
 	}); err != nil {
@@ -217,27 +201,6 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Execution.Host.Web.SetWebResearchConfig(webCfg)
 	r.deps.Sessions.Manager.SetWebResearchConfig(webCfg)
 	return nil
-}
-
-func (r *Runtime) repoCatalogFileCount(projectDir string) (int, bool) {
-	ctx := context.Background()
-	identity, ok, err := r.repoCatalogRoot(ctx, projectDir)
-	if err != nil || !ok {
-		return 0, false
-	}
-	snapshot, settled := sourcecatalog.Process().CurrentSettled(ctx, identity.ProjectID, []sourcecatalog.Root{{
-		ID: identity.RootID, Path: projectDir,
-	}})
-	if !settled || snapshot.State != sourcecatalog.StateReady {
-		return 0, false
-	}
-	count := 0
-	for _, entry := range snapshot.Entries {
-		if entry.RootID == identity.RootID && !entry.IsDir && !entry.TargetIsDir && !entry.IsSymlink {
-			count++
-		}
-	}
-	return count, true
 }
 
 func (r *Runtime) repoCatalogRoot(ctx context.Context, rootPath string) (repoinfo.CatalogRoot, bool, error) {
