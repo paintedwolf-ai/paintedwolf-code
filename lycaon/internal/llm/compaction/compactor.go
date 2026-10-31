@@ -19,6 +19,7 @@ import (
 // CompactionReport describes what compaction changed.
 type CompactionReport struct {
 	Continuation         *messageview.Continuation
+	SynthesisSources     []ContextMessage
 	TokensBefore         int
 	TokensAfter          int
 	ChunksCompacted      int
@@ -127,6 +128,7 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 		return
 	}
 	if compact != nil {
+		report.SynthesisSources = removedCompactionMessages(out, compact)
 		out = compact
 		report.SessionCompacted = true
 	}
