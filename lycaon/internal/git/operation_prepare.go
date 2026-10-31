@@ -43,7 +43,8 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 	}
 	p := &preparedOperation{operationPlan: plan, inputs: map[string]RestoreContent{}, nestedHeads: map[string]string{}}
 	p.result = OperationResult{Available: true, Paths: []string{}}
-	p.result.Before, err = readRepositoryState(ctx, repo.Root)
+	var rawStatus string
+	p.result.Before, rawStatus, err = readRepositoryStateAndStatus(ctx, repo.Root)
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +57,15 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 	if err := p.captureMetadata(repo); err != nil {
 		return nil, err
 	}
-	raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), p.statusArgs()...)
-	if err != nil {
-		return nil, err
+	if len(p.addPaths()) == 0 && p.inputs[filepath.Join(repo.GitDir, "index")].SHA256 == p.result.Before.Index {
+		p.status = rawStatus
+	} else {
+		raw, err := restoreGit(ctx, repo.Root, hermeticOpts(0), p.statusArgs()...)
+		if err != nil {
+			return nil, err
+		}
+		p.status = string(raw)
 	}
-	p.status = string(raw)
 	recordOperationVisits(ctx, strings.Count(p.status, "\x00"))
 	p.scratch, err = os.MkdirTemp("", "git-operation-*")
 	if err != nil {
@@ -194,18 +199,24 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 	if p.result.Before.Branch != "" {
 		ref := "refs/heads/" + p.result.Before.Branch
 		if p.result.Before.Head != "" {
-			if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, p.result.Before.Head); err != nil {
-				return err
+			if err := writeScratchRef(scratch, ref, p.result.Before.Head); err != nil {
+				if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, p.result.Before.Head); err != nil {
+					return err
+				}
 			}
 		}
-		if _, err := restoreGit(ctx, scratch, p.opts, "symbolic-ref", "HEAD", ref); err != nil {
-			return err
+		if err := writeScratchRef(scratch, "HEAD", "ref: "+ref); err != nil {
+			if _, err := restoreGit(ctx, scratch, p.opts, "symbolic-ref", "HEAD", ref); err != nil {
+				return err
+			}
 		}
 	}
 	for ref, oid := range p.refs {
 		if strings.HasPrefix(ref, "refs/heads/") && oid != "" {
-			if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, oid); err != nil {
-				return err
+			if err := writeScratchRef(scratch, ref, oid); err != nil {
+				if _, err := restoreGit(ctx, scratch, p.opts, "update-ref", ref, oid); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -229,7 +240,7 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 }
 
 func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.Repo, scratch string) ([]string, error) {
-	if p.request.Kind == "stage" {
+	if p.request.Kind == "stage" || (p.status == "" && len(p.addPaths()) == 0) {
 		return nil, nil
 	}
 	dirtyArgs := []string{"ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"}
@@ -288,7 +299,13 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 }
 
 func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Repo, scratch string, dirty []string) error {
-	before, err := readRepositoryState(ctx, scratch)
+	var before RepositoryState
+	var err error
+	if !p.result.Before.Dirty && len(p.result.Before.Conflicts) == 0 && len(p.addPaths()) == 0 && len(dirty) == 0 {
+		before, err = readRepositoryMetadata(ctx, scratch)
+	} else {
+		before, err = readRepositoryState(ctx, scratch)
+	}
 	if err != nil {
 		return err
 	}
@@ -341,6 +358,9 @@ func (p *preparedOperation) rehearseResult(ctx context.Context, repo gitrepo.Rep
 		return err
 	}
 	p.result.Paths = uniquePaths(p.result.Paths)
+	if !hasOperationAttributes(repo, scratch, p.result.Paths, indexBefore, indexAfter) {
+		return nil
+	}
 	if err := checkOperationFilters(ctx, repo.Root, p.result.Paths); err != nil {
 		return err
 	}

@@ -2,30 +2,31 @@ package git
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
+var repoConversionConfigCache sync.Map // string -> map[string]string
+
 // Conversion settings are read once and pinned on both rehearsal and execution.
 // Paths, executable drivers, credentials, includes, and remote settings are not copied.
 func (p *preparedOperation) prepareConfig(ctx context.Context, repo gitrepo.Repo, scratch string) error {
-	raw, code, err := gitexec.Run(ctx, repo.Root, []string{"config", "--list", "--null"}, hermeticOpts(0))
-	if err != nil || code != 0 {
-		return fmt.Errorf("read Git conversion configuration failed")
-	}
-	values := map[string]string{}
-	for _, record := range strings.Split(string(raw), "\x00") {
-		if key, value, ok := strings.Cut(record, "\n"); ok {
-			values[strings.ToLower(strings.TrimSpace(key))] = value
-		}
+	values, err := readRepoConversionConfig(ctx, repo)
+	if err != nil {
+		return err
 	}
 	for _, key := range []string{"core.autocrlf", "core.eol", "core.filemode", "core.ignorecase", "core.symlinks", "core.safecrlf", "merge.conflictStyle", "merge.renormalize", "merge.renames", "merge.renameLimit", "merge.directoryRenames", "merge.default"} {
 		if value, ok := values[strings.ToLower(key)]; ok {
@@ -38,7 +39,62 @@ func (p *preparedOperation) prepareConfig(ctx context.Context, repo gitrepo.Repo
 	return p.copyFile(filepath.Join(repo.CommonDir, "info", "attributes"), filepath.Join(scratch, ".git", "info", "attributes"))
 }
 
+func readRepoConversionConfig(ctx context.Context, repo gitrepo.Repo) (map[string]string, error) {
+	cacheKey := repoConversionConfigCacheKey(repo)
+	if cacheKey != "" && ctx.Err() == nil {
+		if cached, ok := repoConversionConfigCache.Load(cacheKey); ok {
+			return cached.(map[string]string), nil
+		}
+	}
+	raw, code, err := gitexec.Run(ctx, repo.Root, []string{"config", "--list", "--null"}, hermeticOpts(0))
+	if err != nil || code != 0 {
+		return nil, fmt.Errorf("read Git conversion configuration failed")
+	}
+	values := map[string]string{}
+	for _, record := range strings.Split(string(raw), "\x00") {
+		if key, value, ok := strings.Cut(record, "\n"); ok {
+			values[strings.ToLower(strings.TrimSpace(key))] = value
+		}
+	}
+	if cacheKey != "" {
+		repoConversionConfigCache.Store(cacheKey, values)
+	}
+	return values, nil
+}
+
+func repoConversionConfigCacheKey(repo gitrepo.Repo) string {
+	files := repo.LocalConfigFiles()
+	if len(files) == 0 {
+		return ""
+	}
+	sum := sha256.New()
+	sum.Write([]byte(repo.Root))
+	for _, path := range files {
+		sum.Write([]byte{0})
+		sum.Write([]byte(path))
+		sum.Write([]byte{0})
+		raw, err := os.ReadFile(path)
+		switch {
+		case err == nil:
+			if strings.Contains(strings.ToLower(string(raw)), "include") {
+				return ""
+			}
+			sum.Write([]byte(strconv.Itoa(len(raw))))
+			sum.Write([]byte{0})
+			sum.Write(raw)
+		case errors.Is(err, fs.ErrNotExist):
+			sum.Write([]byte("absent"))
+		default:
+			return ""
+		}
+	}
+	return hex.EncodeToString(sum.Sum(nil))
+}
+
 func (p *preparedOperation) copyIndex(ctx context.Context, repo gitrepo.Repo, scratch string) error {
+	if shared, err := filepath.Glob(filepath.Join(repo.GitDir, "sharedindex.*")); err == nil && len(shared) == 0 {
+		return p.copyFile(filepath.Join(repo.GitDir, "index"), filepath.Join(scratch, ".git", "index"))
+	}
 	// The private index expands shared-index objects without changing the live index.
 	tempIndex := filepath.Join(p.scratch, "source.index")
 	if err := p.copyFile(filepath.Join(repo.GitDir, "index"), tempIndex); err != nil {
@@ -134,6 +190,14 @@ func (p *preparedOperation) copyFileFrom(sourceRoot, sourcePath, dest string) er
 	return err
 }
 
+type treeBudgetSummary struct {
+	bytes   int64
+	entries int
+	visits  int
+}
+
+var treeBudgetCache sync.Map // string -> treeBudgetSummary
+
 // Rehearsal materializes complete trees. Bound their declared blob sizes before
 // checkout, rather than discovering an oversized repository after filling disk.
 func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) error {
@@ -146,9 +210,13 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 			refs = append(refs, oid)
 		}
 	}
-	autoStash, err := ResolveOptionalObject(ctx, dir, "MERGE_AUTOSTASH")
-	if err != nil {
-		return err
+	var autoStash string
+	if repo, ok := gitrepo.Discover(dir); !ok || p.inputs[filepath.Join(repo.GitDir, "MERGE_AUTOSTASH")].Exists {
+		var err error
+		autoStash, err = ResolveOptionalObject(ctx, dir, "MERGE_AUTOSTASH")
+		if err != nil {
+			return err
+		}
 	}
 	for _, stash := range []string{p.stashOID, autoStash} {
 		if stash == "" {
@@ -166,8 +234,24 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 	var bytes int64
 	entries := 0
 	for _, ref := range uniquePaths(refs) {
+		if validObjectID(ref) && ctx.Err() == nil {
+			if cached, ok := treeBudgetCache.Load(ref); ok {
+				summary := cached.(treeBudgetSummary)
+				recordOperationVisits(ctx, summary.visits)
+				bytes += summary.bytes
+				entries += summary.entries
+				if bytes > MaxOperationCopyBytes || entries > 100000 {
+					return operationRefusal("rehearsal_tree_limit")
+				}
+				continue
+			}
+		}
+		var refBytes int64
+		refEntries := 0
+		refVisits := 0
 		err := gitexec.RunRecords(ctx, dir, []string{"ls-tree", "-r", "-l", "-z", ref}, p.opts, func(raw []byte) error {
 			recordOperationVisits(ctx, 1)
+			refVisits++
 			meta, _, ok := strings.Cut(string(raw), "\t")
 			fields := strings.Fields(meta)
 			if !ok || len(fields) != 4 {
@@ -180,9 +264,9 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 			if err != nil || size < 0 {
 				return fmt.Errorf("invalid tree blob size")
 			}
-			bytes += size
-			entries++
-			if bytes > MaxOperationCopyBytes || entries > 100000 {
+			refBytes += size
+			refEntries++
+			if bytes+refBytes > MaxOperationCopyBytes || entries+refEntries > 100000 {
 				return operationRefusal("rehearsal_tree_limit")
 			}
 			return nil
@@ -190,8 +274,61 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 		if err != nil {
 			return err
 		}
+		bytes += refBytes
+		entries += refEntries
+		if validObjectID(ref) {
+			treeBudgetCache.Store(ref, treeBudgetSummary{bytes: refBytes, entries: refEntries, visits: refVisits})
+		}
 	}
 	return nil
+}
+
+func writeScratchRef(scratch, ref, value string) error {
+	target := filepath.Join(scratch, ".git", filepath.FromSlash(ref))
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(target, []byte(value+"\n"), 0o600)
+}
+
+func hasOperationAttributes(repo gitrepo.Repo, scratch string, paths []string, before, after operationIndex) bool {
+	if len(paths) == 0 {
+		return false
+	}
+	for _, infoAttr := range []string{
+		filepath.Join(repo.CommonDir, "info", "attributes"),
+		filepath.Join(repo.GitDir, "info", "attributes"),
+		filepath.Join(scratch, ".git", "info", "attributes"),
+	} {
+		if _, err := os.Lstat(infoAttr); !os.IsNotExist(err) {
+			return true
+		}
+	}
+	for _, idx := range []operationIndex{before, after} {
+		for key := range idx {
+			if filepath.Base(key.path) == ".gitattributes" {
+				return true
+			}
+		}
+	}
+	for _, root := range []string{repo.Root, scratch} {
+		if _, err := os.Lstat(filepath.Join(root, ".gitattributes")); !os.IsNotExist(err) {
+			return true
+		}
+		for _, p := range paths {
+			for parent := filepath.Dir(p); parent != "." && parent != ""; parent = filepath.Dir(parent) {
+				if _, err := os.Lstat(filepath.Join(root, parent, ".gitattributes")); !os.IsNotExist(err) {
+					return true
+				}
+			}
+		}
+	}
+	for _, cfg := range repo.LocalConfigFiles() {
+		if raw, err := os.ReadFile(cfg); err == nil && strings.Contains(strings.ToLower(string(raw)), "attributesfile") {
+			return true
+		}
+	}
+	return false
 }
 
 // Review disables smudging; LFS paths are refused.

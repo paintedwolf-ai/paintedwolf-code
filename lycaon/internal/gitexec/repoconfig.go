@@ -69,10 +69,15 @@ func auditRepoConfig(ctx context.Context, dir string) error {
 	if !inRepo {
 		return nil
 	}
-	cacheKey := repoAuditCacheKey(repo)
+	cacheKey, needsAudit := repoAuditCacheKey(repo)
 	if cacheKey != "" {
 		if cached, hit := repoAuditCache.Load(cacheKey); hit {
 			return unsafeRepoConfigResult(cached)
+		}
+		if !needsAudit {
+			var clean []string
+			repoAuditCache.Store(cacheKey, clean)
+			return nil
 		}
 	}
 	keys, err := unsafeRepoConfigKeys(ctx, dir)
@@ -97,14 +102,15 @@ func unsafeRepoConfigResult(v any) error {
 }
 
 // Content and absence are part of the audit cache identity.
-func repoAuditCacheKey(repo gitrepo.Repo) string {
+func repoAuditCacheKey(repo gitrepo.Repo) (string, bool) {
 	files := repo.LocalConfigFiles()
 	if len(files) == 0 {
 		// Unresolved layouts are audited on every call.
-		return ""
+		return "", true
 	}
 	sum := sha256.New()
 	sum.Write([]byte(repo.Root))
+	needsAudit := false
 	for _, path := range files {
 		sum.Write([]byte{0})
 		sum.Write([]byte(path))
@@ -115,13 +121,24 @@ func repoAuditCacheKey(repo gitrepo.Repo) string {
 			sum.Write([]byte(strconv.Itoa(len(raw))))
 			sum.Write([]byte{0})
 			sum.Write(raw)
+			if !needsAudit && mayContainUnsafeRepoConfig(raw) {
+				needsAudit = true
+			}
 		case errors.Is(err, fs.ErrNotExist):
 			sum.Write([]byte("absent"))
 		default:
-			return "" // unreadable input: no honest key
+			return "", true // unreadable input: no honest key
 		}
 	}
-	return hex.EncodeToString(sum.Sum(nil))
+	return hex.EncodeToString(sum.Sum(nil)), needsAudit
+}
+
+func mayContainUnsafeRepoConfig(raw []byte) bool {
+	lower := strings.ToLower(string(raw))
+	return strings.Contains(lower, "gitproxy") ||
+		strings.Contains(lower, "filter") ||
+		strings.Contains(lower, "merge") ||
+		strings.Contains(lower, "include")
 }
 
 // unsafeRepoConfigKeys reads repository-local key names.

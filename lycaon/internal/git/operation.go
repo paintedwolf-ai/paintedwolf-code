@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -229,13 +230,31 @@ func readRepositoryMetadata(ctx context.Context, dir string) (RepositoryState, e
 }
 
 func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+	state, _, err := readRepositoryStateAndStatus(ctx, dir)
+	return state, err
+}
+
+func readRepositoryStateAndStatus(ctx context.Context, dir string) (RepositoryState, string, error) {
 	state, err := readRepositoryMetadata(ctx, dir)
 	if err != nil {
-		return state, err
+		return state, "", err
 	}
-	_, entries, err := readPorcelainStatus(ctx, dir, false)
+	raw, err := restoreGit(ctx, dir, hermeticOpts(0), "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
-		return state, err
+		return state, "", err
+	}
+	var parser porcelainParser
+	for _, record := range bytes.Split(raw, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		if err := parser.record(record); err != nil {
+			return state, "", err
+		}
+	}
+	_, entries, err := parser.finish()
+	if err != nil {
+		return state, "", err
 	}
 	state.Dirty = len(entries) > 0
 	for _, entry := range entries {
@@ -244,7 +263,7 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 			break
 		}
 	}
-	return state, err
+	return state, string(raw), err
 }
 
 // ResolveOptionalObject reads an object selector. An absent selector returns

@@ -149,7 +149,7 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 	if entry.unmerged != "" {
 		return "", nil
 	}
-	content, err := entryContent(r.ctx, r.p, r.repo.Root, entry)
+	content, err := r.cachedEntryContent(entry)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +187,7 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 	if has(r.p.Argv, "--cached") && workMatches {
 		return "", nil
 	}
-	head, err := git.ResolveOptionalObject(r.ctx, r.repo.Root, "HEAD^{commit}")
+	head, err := r.resolveHeadCommit()
 	if err != nil {
 		return "", err
 	}
@@ -197,17 +197,10 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 		}
 		return "both", nil
 	}
-	var output bytes.Buffer
-	diagnostics, code, err := (git.CommandReader{}).ReadCommand(r.ctx, r.repo.Root, []string{"ls-tree", "-z", head, "--", ":(literal)" + entry.path}, nil, &output)
+	headMatches, err := r.headEntryMatches(head, entry)
 	if err != nil {
 		return "", err
 	}
-	if code != 0 {
-		return "", fmt.Errorf("read HEAD entry: %s", diagnostics)
-	}
-	meta, _, _ := strings.Cut(output.String(), "\t")
-	fields := strings.Fields(meta)
-	headMatches := len(fields) == 3 && fields[0] == entry.mode && fields[2] == entry.oid
 	if has(r.p.Argv, "--cached") && headMatches {
 		return "", nil
 	}
@@ -221,6 +214,92 @@ func (r *fileMutation) removable(entry trackedEntry) (string, error) {
 		return "staged", nil
 	}
 	return "local", nil
+}
+
+func (r *fileMutation) cachedEntryContent(entry trackedEntry) ([]byte, error) {
+	if r.blobs != nil {
+		if content, ok := r.blobs[entry.oid]; ok {
+			return content, nil
+		}
+	}
+	content, err := entryContent(r.ctx, r.p, r.repo.Root, entry)
+	if err != nil {
+		return nil, err
+	}
+	if r.blobs == nil {
+		r.blobs = map[string][]byte{}
+	}
+	r.blobs[entry.oid] = content
+	return content, nil
+}
+
+func (r *fileMutation) resolveHeadCommit() (string, error) {
+	snap := r.headMetadataSnapshot()
+	if snap != "" && snap == r.headSnap {
+		return r.headOID, nil
+	}
+	head, err := git.ResolveOptionalObject(r.ctx, r.repo.Root, "HEAD^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if snap != "" {
+		r.headSnap = snap
+		r.headOID = head
+	}
+	return head, nil
+}
+
+func (r *fileMutation) headMetadataSnapshot() string {
+	headRaw, err := os.ReadFile(filepath.Join(r.repo.GitDir, "HEAD"))
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	b.Write(headRaw)
+	b.WriteByte(0)
+	if ref, ok := strings.CutPrefix(strings.TrimSpace(string(headRaw)), "ref:"); ok {
+		ref = strings.TrimSpace(ref)
+		if loose, err := os.ReadFile(filepath.Join(r.repo.CommonDir, filepath.FromSlash(ref))); err == nil {
+			b.Write(loose)
+		} else if !os.IsNotExist(err) {
+			return ""
+		}
+	}
+	b.WriteByte(0)
+	if packed, err := os.ReadFile(filepath.Join(r.repo.CommonDir, "packed-refs")); err == nil {
+		b.Write(packed)
+	} else if !os.IsNotExist(err) {
+		return ""
+	}
+	return b.String()
+}
+
+func (r *fileMutation) headEntryMatches(head string, entry trackedEntry) (bool, error) {
+	key := head + "\x00" + entry.path
+	if r.headEntries != nil {
+		if got, ok := r.headEntries[key]; ok {
+			return got.mode == entry.mode && got.oid == entry.oid, nil
+		}
+	}
+	var output bytes.Buffer
+	diagnostics, code, err := (git.CommandReader{}).ReadCommand(r.ctx, r.repo.Root, []string{"ls-tree", "-z", head, "--", ":(literal)" + entry.path}, nil, &output)
+	if err != nil {
+		return false, err
+	}
+	if code != 0 {
+		return false, fmt.Errorf("read HEAD entry: %s", diagnostics)
+	}
+	meta, _, _ := strings.Cut(output.String(), "\t")
+	fields := strings.Fields(meta)
+	var cached trackedEntry
+	if len(fields) == 3 {
+		cached = trackedEntry{path: entry.path, mode: fields[0], oid: fields[2]}
+	}
+	if r.headEntries == nil {
+		r.headEntries = map[string]trackedEntry{}
+	}
+	r.headEntries[key] = cached
+	return cached.mode == entry.mode && cached.oid == entry.oid, nil
 }
 
 func (r *fileMutation) removeDiagnostic(problem string, names []string) {

@@ -2,8 +2,12 @@ package gitcmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
@@ -23,10 +27,30 @@ type fileMutation struct {
 	out          *meteredOutput
 	stderr       io.Writer
 	index        []trackedEntry
+	indexHash    string
+	blobs        map[string][]byte
+	headSnap     string
+	headOID      string
+	headEntries  map[string]trackedEntry
 	status       int
 	effects      bool
 	indexUnknown bool
 	indexChanged bool
+}
+
+func currentIndexHash(repo gitrepo.Repo) string {
+	if shared, err := filepath.Glob(filepath.Join(repo.GitDir, "sharedindex.*")); err != nil || len(shared) > 0 {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(repo.GitDir, "index"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "absent"
+		}
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 func removeOperands(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) error {
@@ -50,6 +74,7 @@ func runFileMutation(ctx context.Context, p Prepared, tc tools.ToolContext, dir 
 	var err error
 	operands, err := fileOperands(ctx, p, dir, repo.Root)
 	if err == nil {
+		r.indexHash = currentIndexHash(repo)
 		r.index, err = trackedEntries(ctx, p, repo.Root, operands, p.command.spec.Name == "git mv")
 	}
 	if err == nil {
@@ -86,22 +111,24 @@ func (r *fileMutation) reviewContext(expected map[string]trackedEntry, check fun
 	tc := r.tc
 	tc.Files.FileChangeReview = func(ctx context.Context, changes []tools.FileChange) error {
 		verify := func() error {
-			paths := make([]string, 0, len(expected))
-			for path := range expected {
-				paths = append(paths, path)
-			}
-			current, err := trackedEntries(ctx, r.p, r.repo.Root, paths, true)
-			if err != nil {
-				return err
-			}
-			byPath := map[string]trackedEntry{}
-			for _, entry := range current {
-				byPath[entry.path] = entry
-			}
-			for path, entry := range expected {
-				got := byPath[path]
-				if got.mode != entry.mode || got.oid != entry.oid || got.unmerged != entry.unmerged {
-					return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": path}}
+			if len(expected) > 0 && (r.indexHash == "" || r.indexChanged || currentIndexHash(r.repo) != r.indexHash) {
+				paths := make([]string, 0, len(expected))
+				for path := range expected {
+					paths = append(paths, path)
+				}
+				current, err := trackedEntries(ctx, r.p, r.repo.Root, paths, true)
+				if err != nil {
+					return err
+				}
+				byPath := map[string]trackedEntry{}
+				for _, entry := range current {
+					byPath[entry.path] = entry
+				}
+				for path, entry := range expected {
+					got := byPath[path]
+					if got.mode != entry.mode || got.oid != entry.oid || got.unmerged != entry.unmerged {
+						return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "repository_changed_during_review", "path": path}}
+					}
 				}
 			}
 			if check != nil {
