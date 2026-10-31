@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -56,17 +57,11 @@ type fixture struct {
 func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buffer, int, error) {
 	t.Helper()
 	posix, err := textsearch.NewPOSIXEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "textsearch.NewPOSIXEngine failed", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.CatalogProgramMemoryLimits failed", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	program, err := Parse(t.Context(), memory, f.script, f.extended, engine{posix})
 	if err != nil {
 		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
@@ -98,9 +93,7 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 		}
 		return &fixtureFile{Buffer: bytes.NewBuffer(data)}, nil
 	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "NewMachine failed", err)
 	if separate {
 		for i, input := range f.inputs {
 			if quit, err := m.Stream(&lines{name: "f" + string(rune('0'+i)), text: input, delimiter: delimiter}, nil); err != nil || quit {

@@ -25,7 +25,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	ctx, mgr, sessStore, blueprintMgr := newBundledPlanWorkflowManager(t)
 
 	run, err := mgr.Starts.StartHuman(ctx, "sess-posture", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 		Request:    "test request",
 		Parameters: map[string]string{"research_depth": "none"},
 	})

@@ -152,9 +152,7 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestChildExecutionCounterChargeAtBoundaryAndOnePast(t *testing.T) {
 	limits, err := catalogEvaluationLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "catalogEvaluationLimits failed", err)
 	maximum := limits["child_executions"]
 	e := &evaluation{limits: limits, counters: map[string]int64{"child_executions": maximum - 1}}
 	f := &frame{e: e, state: &frameState{latch: &OutcomeLatch{}}}

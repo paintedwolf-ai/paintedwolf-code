@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCommandLiteralTransformsStreamLargeInputs(t *testing.T) {
@@ -21,17 +23,13 @@ func TestCommandLiteralTransformsStreamLargeInputs(t *testing.T) {
 	}
 	sum := writeRepeatedFixture(t, filepath.Join(env.Dir, "large.bin"), chunk, 50)
 	out, err := env.Call(t, t.Context(), `base64 -w 0 large.bin | base64 -d > decoded; sha256sum decoded`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 0 || result.Stdout != sum+"  decoded\n" {
 		t.Fatalf("streamed base64 %+v refusal %+v", result, result.Refusal)
 	}
 	file, err := os.Open(filepath.Join(env.Dir, "decoded"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	_ = file.Close()
@@ -42,9 +40,7 @@ func TestCommandLiteralTransformsStreamLargeInputs(t *testing.T) {
 		t.Fatalf("base64 gathered input %+v", memory().Peak())
 	}
 	out, err = env.Call(t, t.Context(), `xxd -p -s -16 large.bin`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result = decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 0 || result.Stdout != hex.EncodeToString(chunk[len(chunk)-16:])+"\n" {
 		t.Fatalf("pinned negative offset %+v", result)
@@ -53,9 +49,7 @@ func TestCommandLiteralTransformsStreamLargeInputs(t *testing.T) {
 		t.Fatalf("xxd gathered input %+v", memory().Peak())
 	}
 	out, err = env.Call(t, t.Context(), `hexdump -C -n 32 large.bin`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result = decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 0 || !strings.HasSuffix(result.Stdout, "00000020\n") {
 		t.Fatalf("bounded hexdump %+v", result)
@@ -73,9 +67,7 @@ func TestCommandChecksumManifestStreamsBeyondWholeInputLimit(t *testing.T) {
 	chunk := append(bytes.Repeat([]byte{'x'}, (1<<20)-1), '\n')
 	writeRepeatedFixture(t, filepath.Join(env.Dir, "manifest"), chunk, 36)
 	out, err := env.Call(t, t.Context(), `sha256sum -c manifest`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 2 || result.Refusal != nil || strings.Count(result.Stderr, "improperly formatted checksum line") != 36 {
 		t.Fatalf("manifest stream %+v", result)

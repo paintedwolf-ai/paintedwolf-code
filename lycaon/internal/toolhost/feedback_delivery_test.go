@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -27,9 +28,7 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 			t.Run(map[bool]string{false: "input", true: "native"}[native]+"/"+mode, func(t *testing.T) {
 				env := newPipeSemanticsEnv(t)
 				hints, err := guidance.LoadHintConfigStock()
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 				env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 				input := []byte("input\n")
 				stage := "cat < input"
@@ -38,12 +37,10 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 					stage = "cut -f1 input"
 				}
 				if err := os.WriteFile(filepath.Join(env.Dir, "input"), input, 0600); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "write file", err)
 				}
 				limits, err := toolcontract.CatalogProgramMemoryLimits()
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "toolcontract.CatalogProgramMemoryLimits failed", err)
 				var memory *toolcontract.ProgramMemory
 				owners := env.Runtime.Owners
 				env.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, pool *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
@@ -57,9 +54,7 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 						input, output := redirections(frame, admit)
 						return constrainedRedirectInput{InputRedirection: input, open: func(ctx context.Context, d commandprogram.InputDestination) (io.ReadCloser, error) {
 							release, err := pool.Reserve(ctx, limits.Working-pool.InUse().Working-((32<<10)-1))
-							if err != nil {
-								t.Fatal(err)
-							}
+							testutil.FailErr(t, "pool.Reserve failed", err)
 							defer release()
 							return input.OpenInput(ctx, d)
 						}}, output

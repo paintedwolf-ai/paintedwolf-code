@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Each platform's declared set is pinned here; a platform not listed declares
@@ -28,7 +30,7 @@ func TestFactsFollowTheDeclaration(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "owned")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	system, err := host.System(t.Context())
@@ -70,9 +72,7 @@ func TestFactsFollowTheDeclaration(t *testing.T) {
 		t.Fatalf("missing file owner: %v", err)
 	}
 	current, err := user.Current()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "user.Current failed", err)
 	if id, err := host.LookupUser(current.Username); err != nil || id != uid {
 		t.Fatalf("lookup %s = %d (%v)", current.Username, id, err)
 	}

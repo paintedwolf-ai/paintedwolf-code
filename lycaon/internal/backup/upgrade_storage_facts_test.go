@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRetainedCaptureAllocationSeparatesSharingAndSnapshotCopy(t *testing.T) {
@@ -14,19 +15,13 @@ func TestRetainedCaptureAllocationSeparatesSharingAndSnapshotCopy(t *testing.T) 
 			for _, snapshotClone := range []bool{false, true} {
 				sharing := db.UpgradeSharing{OriginalClone: original, RecoveryClone: !staged && snapshotClone}
 				storage, err := db.BoundUpgradeStorage(pages, pageBytes, sharing)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "db.BoundUpgradeStorage failed", err)
 				reserve, err := storage.RequiredBytes(scratch)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "storage.RequiredBytes failed", err)
 				needed := reserve
 				if !staged {
 					needed, err = retainedCaptureBytes(reserve, database+payloadBytes, database, snapshotClone)
-					if err != nil {
-						t.Fatal(err)
-					}
+					testutil.FailErr(t, "retainedCaptureBytes failed", err)
 				}
 				want := scratch + (64 << 20)
 				if original || (!staged && snapshotClone) {

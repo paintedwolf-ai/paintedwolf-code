@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -31,13 +32,9 @@ func TestRedirectRefusalKeepsPolicyCopyOutOfChildStderr(t *testing.T) {
 
 func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 	catalog, err := guidance.LoadHintConfigStock()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 	language, err := toolcontract.LanguageV1()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.LanguageV1 failed", err)
 	nativeNames := make(map[string]bool, len(language.Commands))
 	for _, command := range language.Commands {
 		nativeNames[command.Name] = true

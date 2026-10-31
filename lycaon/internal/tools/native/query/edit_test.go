@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -81,9 +82,7 @@ func TestPlainQueryOutputIsNotFormatPreserving(t *testing.T) {
 func TestJqEditKeepsCapturedDiskEncoding(t *testing.T) {
 	for _, encoding := range []string{textfile.UTF8BOM, textfile.UTF16LEBOM, textfile.UTF16BEBOM} {
 		raw, err := textfile.EncodeBounded("{\"x\":1}\n", encoding, textfile.LimitsForRaw(1024))
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "textfile.EncodeBounded failed", err)
 		h := newHarness(t, map[string]string{"encoded.json": string(raw)})
 		h.exec("", "jq-edit", "--path", "encoded.json", "--query", ".x=2").expect(t, encoding, "", 0)
 		want, err := textfile.EncodeBounded("{\"x\":2}\n", encoding, textfile.LimitsForRaw(1024))

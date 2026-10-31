@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -31,9 +32,7 @@ func TestGrepAlignedStdinUsesBoundedSpoolAndReleasesQuota(t *testing.T) {
 		h.owners.Admission = quota
 		h.owners.overrides = map[string]int64{"spill_bytes": 8}
 		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 		h.owners.Revisions.Memory = memory
 		result := h.exec(input, "grep", "-T", "-n", "yes")
 		if len(input) > 8 {

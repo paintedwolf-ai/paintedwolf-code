@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -35,9 +36,7 @@ func TestSymbolicLinkCreatesReadsAndReplacesItsEntry(t *testing.T) {
 		t.Fatalf("retained link = %+v, %v", retained, err)
 	}
 	seen, err := h.walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{}, 20, 0, sourceledger.CommitLens{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "h.walk.QueryWalk failed", err)
 	found := false
 	for _, file := range seen.Files {
 		if file.Path == "link.txt" && file.Tip.State == api.SourceTipStateContent {
@@ -62,9 +61,7 @@ func TestSymbolicLinkCreatesReadsAndReplacesItsEntry(t *testing.T) {
 		t.Fatalf("updated source head = %+v, %v", updated, err)
 	}
 	updatedVersion, err := h.tc.Source.History.Files.ReadRestorableVersion(t.Context(), "p1", updated.VersionID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "h.tc.Source.History.Files.ReadRestorableVersion failed", err)
 	rewind := &sourcerewind.Operation{AttemptID: uuid.NewString(), ProjectID: "p1", WorkspaceID: h.project.WorkspaceID(), Phase: "prepared",
 		Files: []sourcerewind.File{{RewindFile: sourceledger.RewindFile{FileID: updatedVersion.FileID, BranchID: sourcebranch.Trunk,
 			Expected: updatedVersion, Target: retained}, RootPath: h.root, AllowedRoots: []string{h.root}, Mode: 0o644}}}
@@ -115,7 +112,7 @@ func TestSymbolicLinkNoDereferenceSpellingsReplaceDirectoryLink(t *testing.T) {
 		t.Run(spelling, func(t *testing.T) {
 			h := newHarness(t, map[string]string{"target.txt": "target", "dir/": ""})
 			if err := os.Symlink("dir", h.path("folder-link")); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "os.Symlink failed", err)
 			}
 			result := h.run("", "ln", "-sf", spelling, "target.txt", "folder-link")
 			if result.err != nil || result.result.Status != 0 {
@@ -152,10 +149,10 @@ func TestSymbolicLinkRefusesEscapeAndHardLinks(t *testing.T) {
 	}
 	outsideDir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(outsideDir, "child"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	if err := os.Symlink(filepath.Join(outsideDir, "child"), h.path("alias")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	escape := h.run("", "ln", "-s", "alias/../outside", "link.txt")
 	if reject := toolrejection.AsToolReject(escape.err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" {

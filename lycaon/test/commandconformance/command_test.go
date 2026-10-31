@@ -90,7 +90,7 @@ func TestCaptureStoresSnapshotsFromTheRunnersImages(t *testing.T) {
 	}
 	first := Cases()[0]
 	if _, err := stored.For(first, GitSeed{}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stored.For failed", err)
 	}
 
 	// A partial capture over the same images keeps every other case.

@@ -5,6 +5,7 @@ package textutil
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"testing"
@@ -68,9 +69,7 @@ func TestPrintfWideNumericPadding(t *testing.T) {
 
 func TestPrintfFormatAdmissionPrecedesParsing(t *testing.T) {
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1024, State: 1024})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	// An invalid final conversion would require parsing the entire prefix. With
 	// no admission the parser must never reach it or allocate its directives.
 	text := strings.Repeat("%s", 8192) + "%q"
@@ -88,13 +87,9 @@ func TestPrintfFormatAdmissionPrecedesParsing(t *testing.T) {
 
 func TestPrintfFormatReleasesParserGrowthAtRepresentationBoundary(t *testing.T) {
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 8 << 20, State: 1024})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	format, release, err := parseFormat(t.Context(), memory, strings.Repeat("%s", 8192))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "parseFormat failed", err)
 	if len(format) != 8192 || memory.InUse().Working <= 0 || memory.InUse().Working >= memory.Peak().Working {
 		t.Fatalf("plan len=%d held=%d peak=%d", len(format), memory.InUse().Working, memory.Peak().Working)
 	}

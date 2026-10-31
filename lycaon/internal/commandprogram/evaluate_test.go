@@ -229,7 +229,7 @@ func TestEvaluateHereStringIsStdinInRedirectOrder(t *testing.T) {
 	f := newEvalFixture(t)
 	program := "x='a  b'; cat <<< \"$x\"; cat < input.txt <<< later; cat <<< first < input.txt; cat <<< $x 2>&1"
 	if _, err := f.run(t, t.Context(), program); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "f.run failed", err)
 	}
 	if got := f.stdout.String(); got != "a  b\nlater\nfrom file\na  b\n" {
 		t.Fatalf("here-string stdin %q", got)

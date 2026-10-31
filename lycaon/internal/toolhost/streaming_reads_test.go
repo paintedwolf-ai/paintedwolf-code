@@ -17,6 +17,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -80,9 +81,7 @@ func measureCommandHeap(t *testing.T, run func()) (peak uint64) {
 func writeRepeatedFixture(t *testing.T, path string, chunk []byte, repetitions int) string {
 	t.Helper()
 	file, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Create failed", err)
 	hash := sha256.New()
 	writer := io.MultiWriter(file, hash)
 	for range repetitions {
@@ -92,7 +91,7 @@ func writeRepeatedFixture(t *testing.T, path string, chunk []byte, repetitions i
 		}
 	}
 	if err := file.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Close failed", err)
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
@@ -114,7 +113,7 @@ func TestCommandStreamingLargeReads(t *testing.T) {
 		asset[i] = byte(i)
 	}
 	if err := os.Mkdir(filepath.Join(env.Dir, "assets"), 0o700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	writeRepeatedFixture(t, filepath.Join(env.Dir, "assets", "image.bin"), asset, 50)
 	for _, test := range []struct {
@@ -131,9 +130,7 @@ func TestCommandStreamingLargeReads(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			peak := measureCommandHeap(t, func() {
 				out, err := env.Call(t, t.Context(), test.script)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "env.Call failed", err)
 				result := decodePipeOutcome(t, out)
 				if result.State != "completed" || result.Status != test.status || strings.TrimSpace(result.Stdout) != test.want {
 					t.Fatalf("%s: %+v; refusal=%+v memory=%+v", test.script, result, result.Refusal, memory().Peak())
@@ -161,18 +158,18 @@ func TestCommandBinaryRedirectsAndZeroRecords(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	data := []byte{'b', 0, 0xff, 0, 'a', 0}
 	if err := os.WriteFile(filepath.Join(env.Dir, "binary"), data, 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	var compressed bytes.Buffer
 	zip := gzip.NewWriter(&compressed)
 	if _, err := zip.Write(data); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "zip.Write failed", err)
 	}
 	if err := zip.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "zip.Close failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(env.Dir, "a.gz"), compressed.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	for _, test := range []struct {
 		script, destination string
@@ -184,9 +181,7 @@ func TestCommandBinaryRedirectsAndZeroRecords(t *testing.T) {
 		{"tr -d '\\0' < binary > nonzero", "nonzero", []byte{'b', 0xff, 'a'}},
 	} {
 		out, err := env.Call(t, t.Context(), test.script)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "env.Call failed", err)
 		if result := decodePipeOutcome(t, out); result.State != "completed" || result.Status != 0 {
 			t.Fatalf("%s: %+v", test.script, result)
 		}
@@ -210,24 +205,20 @@ func TestCommandDiffLargeSparseChangesAndNearWholeFileLimit(t *testing.T) {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(env.Dir, "left"), []byte(left.String()), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(env.Dir, "right"), []byte(right.String()), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	out, err := env.Call(t, t.Context(), "diff -U 0 left right")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 1 || strings.Count(result.Stdout, "@@ -") != 100 || strings.Count(result.Stdout, "-line ") != 100 || strings.Count(result.Stdout, "+changed ") != 100 {
 		t.Fatalf("sparse diff: %+v", result)
 	}
 	writeRepeatedFixture(t, filepath.Join(env.Dir, "near-limit"), bytes.Repeat([]byte{'x'}, 1<<20), 31)
 	out, err = env.Call(t, t.Context(), "diff -q near-limit left")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result = decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 1 || result.Stdout != "Files near-limit and left differ\n" {
 		t.Fatalf("31 MiB whole-file diff: %+v", result)
@@ -259,31 +250,27 @@ func TestCommandWholeFileQueryEditsUseDeclaredCapacity(t *testing.T) {
 	for _, size := range []int{31, 32} {
 		path := filepath.Join(env.Dir, "near.json")
 		file, err := os.Create(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "os.Create failed", err)
 		for range size - 1 {
 			if _, err = file.Write(chunk); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "file.Write failed", err)
 			}
 		}
 		if _, err = file.Write(chunk[:len(chunk)-len(body)]); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Write failed", err)
 		}
 		if _, err = io.WriteString(file, body); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "io.WriteString failed", err)
 		}
 		if err = file.Close(); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Close failed", err)
 		}
 		info, err := os.Stat(path)
 		if err != nil || info.Size() != int64(size)<<20 {
 			t.Fatalf("fixture size %v %v", info, err)
 		}
 		out, err := env.Call(t, t.Context(), `jq-edit --path near.json --query '.x = 2'`)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "env.Call failed", err)
 		result := decodePipeOutcome(t, out)
 		if result.State != "completed" || result.Status != 0 {
 			t.Fatalf("%d MiB query %+v refusal %+v", size, result, result.Refusal)
@@ -299,24 +286,20 @@ func TestCommandWholeFileQueryEditsUseDeclaredCapacity(t *testing.T) {
 	}
 	path := filepath.Join(env.Dir, "over.json")
 	file, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Create failed", err)
 	for range 32 {
 		if _, err = file.Write(chunk); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Write failed", err)
 		}
 	}
 	if _, err = file.Write([]byte{'0'}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Write failed", err)
 	}
 	if err = file.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Close failed", err)
 	}
 	out, err := env.Call(t, t.Context(), `jq-edit --path over.json --query '.x = 2'`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.Refusal == nil || result.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || result.CompletedEffects != 0 {
 		t.Fatalf("over-cap query %+v", result)
@@ -333,22 +316,16 @@ func TestCommandLargeAppendStreamsOriginalPrefix(t *testing.T) {
 	chunk := bytes.Repeat([]byte{'x'}, 1<<20)
 	writeRepeatedFixture(t, filepath.Join(env.Dir, "append.log"), chunk, 40)
 	out, err := env.Call(t, t.Context(), `printf tail >> append.log`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 0 {
 		t.Fatalf("append: %+v refusal %+v", result, result.Refusal)
 	}
 	file, err := os.Open(filepath.Join(env.Dir, "append.log"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "file.Stat failed", err)
 	var tail [4]byte
 	if _, err = file.ReadAt(tail[:], 40<<20); err != nil || string(tail[:]) != "tail" || info.Size() != (40<<20)+4 {
 		t.Fatalf("appended size %d tail %q err %v", info.Size(), tail, err)
@@ -364,38 +341,32 @@ func TestCommandLargeAppendStreamsOriginalPrefix(t *testing.T) {
 func TestCommandQueryStreamsTheDeclaredInputBoundary(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 	if err = guidance.ValidateHintConfig(hints); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "guidance.ValidateHintConfig failed", err)
 	}
 	env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	memory := observedProgramMemory(t, env)
 	path := filepath.Join(env.Dir, "stream.json")
 	file, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Create failed", err)
 	chunk := bytes.Repeat([]byte{' '}, 1<<20)
 	for range 63 {
 		if _, err = file.Write(chunk); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Write failed", err)
 		}
 	}
 	if _, err = file.Write(chunk[:len(chunk)-1]); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Write failed", err)
 	}
 	if _, err = file.Write([]byte{'0'}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Write failed", err)
 	}
 	if err = file.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Close failed", err)
 	}
 	out, err := env.Call(t, t.Context(), `jq . stream.json`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if result.State != "completed" || result.Status != 0 || result.Stdout != "0\n" {
 		t.Fatalf("64 MiB query %+v refusal %+v memory=%+v", result, result.Refusal, memory().Peak())
@@ -408,19 +379,15 @@ func TestCommandQueryStreamsTheDeclaredInputBoundary(t *testing.T) {
 	}
 	t.Logf("64 MiB small-value stream admitted peak %+v", memory().Peak())
 	file, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenFile failed", err)
 	if _, err = file.Write([]byte{' '}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Write failed", err)
 	}
 	if err = file.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Close failed", err)
 	}
 	out, err = env.Call(t, t.Context(), `jq . stream.json`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result = decodePipeOutcome(t, out)
 	if result.Refusal == nil || result.Refusal.Code != "JQ_INPUT_TOO_LARGE" {
 		t.Fatalf("over-input query %+v", result)

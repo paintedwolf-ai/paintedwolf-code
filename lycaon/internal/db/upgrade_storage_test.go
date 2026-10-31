@@ -4,15 +4,15 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestUpgradeStorageReserveAndPageLimit(t *testing.T) {
 	for _, geometry := range [][2]uint64{{512, 4096}, {4096, 512}, {65536, 65536}} {
 		p := geometry[0]
 		storage, err := BoundUpgradeStorage(17, p, UpgradeSharing{OriginalClone: true})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "BoundUpgradeStorage failed", err)
 		want := 17*p + 123 + 64<<20
 		reserve, err := storage.RequiredBytes(123)
 		if err != nil || reserve != want {
@@ -43,9 +43,7 @@ func TestUpgradeStorageRejectsInvalidOrOverflowingGeometry(t *testing.T) {
 		}
 	}
 	storage, err := BoundUpgradeStorage(1, 4096, UpgradeSharing{OriginalClone: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "BoundUpgradeStorage failed", err)
 	if _, err := storage.RequiredBytes(math.MaxUint64); err == nil {
 		t.Fatal("accepted overflowing reserve")
 	}
@@ -60,15 +58,11 @@ func TestUpgradeSharingOwnersReserveOneRemainingDivergence(t *testing.T) {
 	for _, original := range []bool{false, true} {
 		for _, recovery := range []bool{false, true} {
 			storage, err := BoundUpgradeStorage(pages, pageBytes, UpgradeSharing{OriginalClone: original, RecoveryClone: recovery})
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "BoundUpgradeStorage failed", err)
 			// With one old-file-sized budget and three new pages available, either
 			// immutable owner consumes that budget; two owners never consume it twice.
 			limit, err := storage.PageLimit((64<<20)+scratch+originalBytes+3*pageBytes, scratch)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "storage.PageLimit failed", err)
 			want := pages + 3
 			if !original && !recovery {
 				want += pages

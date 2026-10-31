@@ -116,9 +116,7 @@ func TestPOSIXEngineRefusesAndMeters(t *testing.T) {
 		t.Fatalf("pattern bytes: %v", err)
 	}
 	re, err := engine.Compile(t.Context(), `\(a*\)*\1b`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "engine.Compile failed", err)
 	if _, err := re.Find(t.Context(), []byte(strings.Repeat("a", 40)), 0); budgetResource(t, err) != "regex_work_steps" {
 		t.Fatalf("catastrophic: %v", err)
 	}

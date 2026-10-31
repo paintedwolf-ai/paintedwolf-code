@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -16,9 +17,7 @@ func TestRecoveryLossRequiresExactApprovalAtEveryPosture(t *testing.T) {
 			stageBundledApprovalsPosture(t, posture)
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
 			approval := settings.NewRuleApprovalGate(store, settings.NoSources())
 			action := hitl.ProposedAction{
 				Invocation: hitl.ActionInvocation{Tool: "delete", ActionID: "first-removal", Files: []string{filepath.Join(root, "build")}},
@@ -27,9 +26,7 @@ func TestRecoveryLossRequiresExactApprovalAtEveryPosture(t *testing.T) {
 				Mutations:  hitl.ActionMutations{RecoveryLoss: true, FileChanges: []api.ApprovalFileChange{{Path: "build", Operation: "delete", BeforeBytes: 64}}},
 			}
 			result, err := approval.Evaluate(t.Context(), action)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "approval.Evaluate failed", err)
 			if !result.Required() || result.Decision.Primary != api.GateExplicitApprovalRequest {
 				t.Fatalf("permanent removal did not require exact consent: %+v", result)
 			}
