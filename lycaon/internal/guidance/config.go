@@ -62,45 +62,57 @@ func (c *HintConfig) InSessionRetryCodes() []string {
 
 // HintEntry holds rule metadata and its normalized presentation fields.
 type HintEntry struct {
-	Emit              string          `yaml:"emit,omitempty"`
+	Emit          string        `yaml:"emit,omitempty"`
+	Effect        string        `yaml:"effect,omitempty"`
+	Anchor        string        `yaml:"anchor,omitempty"`
+	Tools         []string      `yaml:"tools,omitempty"`
+	Message       string        `yaml:"message,omitempty"`
+	What          string        `yaml:"what,omitempty"`
+	Cause         string        `yaml:"cause,omitempty"`
+	Why           string        `yaml:"why,omitempty"`
+	Fix           string        `yaml:"fix,omitempty"`
+	Instead       string        `yaml:"instead,omitempty"`
+	Evidence      *EvidenceMeta `yaml:"evidence,omitempty"`
+	HintEntryRule `yaml:",inline"`
+}
+
+// HintEntryRule holds rule identity, classification, and scenario fields.
+type HintEntryRule struct {
+	ID                string          `yaml:"id,omitempty"`
+	Title             string          `yaml:"title,omitempty"`
+	Kind              string          `yaml:"kind,omitempty"`
 	Category          string          `yaml:"category,omitempty"`
 	Severity          string          `yaml:"severity,omitempty"`
 	When              string          `yaml:"when,omitempty"`
-	Tools             []string        `yaml:"tools,omitempty"`
-	Message           string          `yaml:"message,omitempty"`
 	DraftOutcomeLabel string          `yaml:"draft_outcome_label,omitempty"`
-	What              string          `yaml:"what,omitempty"`
-	Cause             string          `yaml:"cause,omitempty"`
-	Why               string          `yaml:"why,omitempty"`
-	Fix               string          `yaml:"fix,omitempty"`
-	Instead           string          `yaml:"instead,omitempty"`
 	ContextSchema     map[string]any  `yaml:"context_schema,omitempty"`
-	Evidence          *EvidenceMeta   `yaml:"evidence,omitempty"`
 	Scenarios         []ScenarioEntry `yaml:"scenarios,omitempty"`
+	Selector          map[string]any  `yaml:"selector,omitempty"`
+	HintEntryPolicy   `yaml:",inline"`
+}
 
-	ID          string         `yaml:"id,omitempty"`
-	Title       string         `yaml:"title,omitempty"`
-	Kind        string         `yaml:"kind,omitempty"`
-	Selector    map[string]any `yaml:"selector,omitempty"`
-	Effect      string         `yaml:"effect,omitempty"`
-	Enforcement string         `yaml:"enforcement,omitempty"`
-	Mandatory   bool           `yaml:"mandatory,omitempty"`
-	OnError     string         `yaml:"on_error,omitempty"`
-	OnFire      []string       `yaml:"on_fire,omitempty"`
-	Flow        []string       `yaml:"flow,omitempty"`
-	References  map[string]any `yaml:"references,omitempty"`
-	Detector    map[string]any `yaml:"detector,omitempty"`
+// HintEntryPolicy holds OAR rule execution and dependency fields.
+type HintEntryPolicy struct {
+	Enforcement         string         `yaml:"enforcement,omitempty"`
+	Mandatory           bool           `yaml:"mandatory,omitempty"`
+	OnError             string         `yaml:"on_error,omitempty"`
+	OnFire              []string       `yaml:"on_fire,omitempty"`
+	Flow                []string       `yaml:"flow,omitempty"`
+	References          map[string]any `yaml:"references,omitempty"`
+	Detector            map[string]any `yaml:"detector,omitempty"`
+	OAR                 string         `yaml:"oar,omitempty"`
+	Copy                *HintCopy      `yaml:"copy,omitempty"`
+	Requires            *HintRequires  `yaml:"requires,omitempty"`
+	HintEntryExtensions `yaml:",inline"`
+}
 
-	OAR       string        `yaml:"oar,omitempty"`
-	Anchor    string        `yaml:"anchor,omitempty"`
-	Copy      *HintCopy     `yaml:"copy,omitempty"`
-	Requires  *HintRequires `yaml:"requires,omitempty"`
-	Overrides []string      `yaml:"overrides,omitempty"`
-	Status    string        `yaml:"status,omitempty"`
-	Related   []HintRelated `yaml:"related,omitempty"`
-	Successor string        `yaml:"x-paintedwolf-successor,omitempty"`
-
-	XEmit string `yaml:"x-paintedwolf-emit,omitempty"`
+// HintEntryExtensions holds rule lineage and host extension fields.
+type HintEntryExtensions struct {
+	Overrides     []string      `yaml:"overrides,omitempty"`
+	Status        string        `yaml:"status,omitempty"`
+	Related       []HintRelated `yaml:"related,omitempty"`
+	Successor     string        `yaml:"x-paintedwolf-successor,omitempty"`
+	XEmit         string        `yaml:"x-paintedwolf-emit,omitempty"`
 	// XAudience limits the tool profiles that can receive this rule.
 	XAudience      []string        `yaml:"x-paintedwolf-audience,omitempty"`
 	XCategory      string          `yaml:"x-paintedwolf-category,omitempty"`

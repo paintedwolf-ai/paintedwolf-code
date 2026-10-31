@@ -123,12 +123,18 @@ func (o documentOpener) openObservedDocument(ctx context.Context, p *project.Pro
 	if d == nil {
 		content, eol, mixed := normalizeEOL(read.Content)
 		now := time.Now().UTC()
-		d = &Document{ID: uuid.NewString(), ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), BranchID: branch, FileID: tracked.FileID,
+		d = &Document{
+			ID: uuid.NewString(), ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), BranchID: branch, FileID: tracked.FileID,
 			RootID: read.RootID, Path: read.Path,
-			Draft: content, BaseContent: content, BaseSHA256: read.SHA256, Encoding: read.Encoding,
-			SizeBytes: read.SizeBytes,
-			EOL:       eol, BaseEOL: eol, MixedEOL: mixed, BaseMixedEOL: mixed,
-			Revision: 1, CreatedAt: now, UpdatedAt: now}
+			Draft: content, Revision: 1,
+			DocumentBase: DocumentBase{
+				BaseContent: content, BaseSHA256: read.SHA256, Encoding: read.Encoding,
+				SizeBytes: read.SizeBytes,
+				EOL:       eol, BaseEOL: eol, MixedEOL: mixed, BaseMixedEOL: mixed,
+				CreatedAt:     now,
+				DocumentState: DocumentState{UpdatedAt: now},
+			},
+		}
 		if err := s.store.Insert(ctx, d); err != nil {
 			return nil, err
 		}

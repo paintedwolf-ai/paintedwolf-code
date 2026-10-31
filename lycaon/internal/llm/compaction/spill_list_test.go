@@ -174,7 +174,7 @@ func TestGrowingCompactionMarkerDoesNotSuppressRetry(t *testing.T) {
 	cfg.KeepRecentMessages = 1
 	raw := `{"files":[{"path":"a.go","diff":"` + strings.Repeat("x", 20000) + `"}],"files_truncated":true}`
 	content := hostmarker.CompactionBanner("tool_result — ineffective old projection") + "\n" + raw
-	messages := []ContextMessage{{ID: "git", Role: "tool", ToolName: "git_diff", Content: content, CompactedChunk: &CompactedChunkMeta{OriginalTokens: 5000, CompactedTokens: 5100}}, {Role: "assistant", Content: "continue"}}
+	messages := []ContextMessage{{ID: "git", Role: "tool", ToolName: "git_diff", Content: content, ContextMessageCompaction: ContextMessageCompaction{CompactedChunk: &CompactedChunkMeta{OriginalTokens: 5000, CompactedTokens: 5100}}}, {Role: "assistant", Content: "continue"}}
 	chunks := FindOversizedChunks(messages, cfg, nil)
 	if len(chunks) != 1 {
 		t.Fatalf("ineffective marker hid output: %v", chunks)

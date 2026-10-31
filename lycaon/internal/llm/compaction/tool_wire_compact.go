@@ -34,9 +34,11 @@ func (c *SimpleCompactor) CompactToolWireIfOversized(ctx context.Context, info S
 		Role:            string(api.MessageRoleTool),
 		Content:         content,
 		ToolName:        toolName,
-		DietStamp:       opts.DietStamp,
-		DietStampSource: opts.DietStampSource,
 		EvidenceHandles: append([]string(nil), opts.EvidenceHandles...),
+		ContextMessageCompaction: ContextMessageCompaction{
+			DietStamp:       opts.DietStamp,
+			DietStampSource: opts.DietStampSource,
+		},
 	}
 	class := ClassifyMessageDiet(ClassifyMessageDietInput{
 		Index:         0,
