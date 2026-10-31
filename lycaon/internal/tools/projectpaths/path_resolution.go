@@ -173,7 +173,7 @@ func missingComponent(err error) bool {
 // path into the utility's own diagnostic, printed with status 1; host
 // refusals and other errors return unchanged.
 func utilityPathError(operand string, err error) error {
-	message := ""
+	var message string
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		message = "No such file or directory"

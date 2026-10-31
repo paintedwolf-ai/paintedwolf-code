@@ -42,7 +42,8 @@ func Zone(environment []string) *time.Location {
 // posixZone reads STD[+-]hh[:mm[:ss]], where STD is three or more letters
 // or a <quoted> name.
 func posixZone(tz string) (*time.Location, bool) {
-	name, rest := "", tz
+	var name string
+	rest := tz
 	if strings.HasPrefix(rest, "<") {
 		end := strings.IndexByte(rest, '>')
 		if end < 0 {

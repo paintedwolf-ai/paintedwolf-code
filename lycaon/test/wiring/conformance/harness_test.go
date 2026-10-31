@@ -150,7 +150,8 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 	}
 	content := r.toolResult(t, sess.ID, "call-"+c.ID)
 	if strings.Contains(content, `"program_id"`) {
-		dec := json.NewDecoder(strings.NewReader(content[strings.Index(content, "{"):]))
+		_, body, _ := strings.Cut(content, "{")
+		dec := json.NewDecoder(strings.NewReader("{" + body))
 		testutil.FailErr(t, "decode program outcome", dec.Decode(&obs.Outcome))
 	} else {
 		obs.TopLevelReject = content

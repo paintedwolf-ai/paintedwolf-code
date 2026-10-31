@@ -23,6 +23,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -58,11 +60,11 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	}
 	program := programtest.New(t, programtest.Options{})
 
-	program.Runtime.Owners = func(tc tools.ToolContext, frame *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		owners := &mutation.Owners{Revisions: native.ExecutionRevisions{Boundary: program.Runtime.Boundary}, Pins: program.Recorder}
+	program.Runtime.Owners = func(tc tools.ToolContext, frame *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners := &mutation.Owners{Revisions: native.ExecutionRevisions{Boundary: program.Runtime.Boundary, Memory: memory}, Pins: program.Recorder, Admission: admission}
 		input := &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: frame}, Tools: tc}
-		return command.ProgramOwners{Input: input, Redirections: func(paths *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-			return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc}, nil
+		return command.ProgramOwners{Input: input, Redirections: func(paths *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+			return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: admit}, nil
 		}}, nil
 	}
 	root, readRoot := program.Dir, t.TempDir()

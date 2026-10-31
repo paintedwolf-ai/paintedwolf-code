@@ -179,6 +179,7 @@ func ConfirmProcessLaunch(ctx context.Context, cmd *exec.Cmd) error {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	//nolint:contextcheck // Links the handoff lifetime to the parent launch context.
 	stop := context.AfterFunc(state.ctx, cancel)
 	defer stop()
 	defer cancel()

@@ -33,7 +33,7 @@ func (r *SQLRecorder) ProgramBlobStore(ctx context.Context, store blobstore.Stor
 		}
 		var present bool
 		// This store callback guards collection after individual operations end.
-		err := r.database.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE blob_id=?)`, id).Scan(&present)
+		err := r.database.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE blob_id=?)`, id).Scan(&present)
 		return present, err
 	}
 	return store

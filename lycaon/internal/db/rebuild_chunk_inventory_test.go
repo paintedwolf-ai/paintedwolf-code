@@ -41,6 +41,7 @@ func TestRetainedChunkInventoryUsesCappedMainWithoutTemporaryBTrees(t *testing.T
 				}
 			}
 			testutil.FailErr(t, "finish VDBE plan", rows.Err())
+			//nolint:sqlclosecheck // Closed after each EXPLAIN query in the loop.
 			testutil.FailErr(t, "close VDBE plan", rows.Close())
 		}
 	}

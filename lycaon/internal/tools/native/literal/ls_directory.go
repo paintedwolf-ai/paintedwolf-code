@@ -65,7 +65,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		}
 		return nil, false, err
 	}
-	defer opened.Close()
+	defer func() { _ = opened.Close() }()
 	if opts.all {
 		names = append([]string{"."}, names...)
 	}

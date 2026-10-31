@@ -99,7 +99,7 @@ func (d *BoundDir) namedDirectoryPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer current.Close()
+	defer func() { _ = current.Close() }()
 	expected, err := d.file.Stat()
 	if err != nil {
 		return "", err

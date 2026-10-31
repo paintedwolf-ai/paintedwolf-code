@@ -37,7 +37,7 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 		run.settle(ctx, ownerResult(err), err)
 		return signal{}, f.stateRefusal(s.SyntaxLocation, err)
 	}
-	defer lease.Close()
+	defer func() { _ = lease.Close() }()
 	if err := preflight(lease.Plan.Statements, f.e.ports); err != nil {
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
 		var refusal *EvaluationRefusal

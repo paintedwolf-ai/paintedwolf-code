@@ -135,7 +135,7 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	defer func() { _ = tx.Rollback() }()
 	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?`
 	var size, inlineSize int64
-	if err = tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB)),COALESCE(length(o.inline_body),-1)`+selection, program, reference, session).Scan(&size, &inlineSize); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB)),COALESCE(length(o.inline_body),-1)`+selection, program, reference, session).Scan(&size, &inlineSize); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > 1<<30 {

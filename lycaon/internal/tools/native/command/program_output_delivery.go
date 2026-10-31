@@ -142,7 +142,7 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 		}
 		return "", api.CommandProgramOutputWindow{}, err
 	}
-	defer spill.Close()
+	defer func() { _ = spill.Close() }()
 	program := run.root.Identity.ProgramID
 	reference := "output:program:" + program + ":" + name
 	outputPath := "@output/" + program + "." + name

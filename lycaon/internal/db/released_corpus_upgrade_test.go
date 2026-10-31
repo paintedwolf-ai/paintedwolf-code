@@ -89,6 +89,7 @@ func tableColumns(t *testing.T, database *sql.DB) map[string][]string {
 	t.Helper()
 	rows, err := database.QueryContext(t.Context(), `SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
 	testutil.FailErr(t, "list tables", err)
+	defer func() { _ = rows.Close() }()
 	var tables []string
 	for rows.Next() {
 		var name string
@@ -106,6 +107,8 @@ func tableColumns(t *testing.T, database *sql.DB) map[string][]string {
 			testutil.FailErr(t, "scan column", columns.Scan(&name))
 			out[table] = append(out[table], name)
 		}
+		testutil.FailErr(t, "finish columns", columns.Err())
+		//nolint:sqlclosecheck // Closed at the end of each table iteration.
 		testutil.FailErr(t, "close columns", columns.Close())
 	}
 	return out
@@ -165,6 +168,7 @@ var reshapedByRegisteredSteps = map[string]string{
 var queuedByRegisteredSteps = map[string]string{
 	"schema_migrations":         "each applied step records its ledger row",
 	"source_blob_reclaim_queue": "SourceManifestLayout queues the blobs retired manifest entries named for the reclaimer to re-check",
+	"store_meta":                "UpgradeStaged records the deferred exhaustive integrity audit obligation",
 }
 
 // retiredColumnsByRegisteredSteps names released columns a registered step
@@ -328,7 +332,7 @@ func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
 					if strings.HasPrefix(table, "invocation_program") {
 						var count int
 						testutil.FailErr(t, "count "+table, reader.QueryRow(`SELECT count(*) FROM "`+table+`"`).Scan(&count))
-						if count != 0 {
+						if count != len(before[table]) {
 							t.Fatalf("%s: upgrade synthesized %d program rows", table, count)
 						}
 					}

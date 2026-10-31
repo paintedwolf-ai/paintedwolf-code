@@ -47,9 +47,6 @@ func TestResearchAndCatalogResolveAttachedRootsToTheirProject(t *testing.T) {
 	if _, ok, err := runtime.repoCatalogRoot(t.Context(), unknown); err != nil || ok {
 		t.Fatalf("unknown root acquired catalog identity:%v,%v", ok, err)
 	}
-	if count, known := runtime.repoCatalogFileCount(primary); known || count != 0 {
-		t.Fatalf("unsettled inventory invented a file count:%d,%v", count, known)
-	}
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := runtime.ProjectRootPaths(canceled); !errors.Is(err, context.Canceled) {

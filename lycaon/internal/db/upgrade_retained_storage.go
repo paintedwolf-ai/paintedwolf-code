@@ -80,11 +80,11 @@ func limitUpgradePages(ctx context.Context, writer *sql.DB, limit uint64) (func(
 	if err := writer.QueryRowContext(ctx, "PRAGMA max_page_count").Scan(&original); err != nil {
 		return nil, err
 	}
-	if err := writer.QueryRowContext(ctx, fmt.Sprintf("PRAGMA max_page_count=%d", limit)).Scan(&actual); err != nil {
+	if err := writer.QueryRowContext(ctx, fmt.Sprintf("PRAGMA max_page_count=%d", limit)).Scan(&actual); err != nil { // #nosec G701
 		return nil, err
 	}
 	restore := func() error {
-		_, err := writer.ExecContext(context.WithoutCancel(ctx), fmt.Sprintf("PRAGMA max_page_count=%d", original))
+		_, err := writer.ExecContext(context.WithoutCancel(ctx), fmt.Sprintf("PRAGMA max_page_count=%d", original)) // #nosec G701
 		return err
 	}
 	if actual > limit {

@@ -92,8 +92,8 @@ func (r *expansionRun) parameterPattern(value string, part commandsurface.Parame
 		return nil, invalidValue(part.Argument.Span, "a shell pattern")
 	}
 	matcher := &parameterMatcher{run: r}
-	reserve := func(_ context.Context, n int64) (func(), error) {
-		if err := r.charge(r.ctx, n); err != nil {
+	reserve := func(callCtx context.Context, n int64) (func(), error) {
+		if err := r.charge(callCtx, n); err != nil {
 			return nil, err
 		}
 		// Compiled code and parse generations stay charged until expansion closes.

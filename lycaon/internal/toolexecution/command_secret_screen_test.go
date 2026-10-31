@@ -257,16 +257,3 @@ func TestCommandSecretDenialPreservesDirectionAndObservableDestination(t *testin
 		t.Fatalf("denial lost actual context: %+v", reject.Data)
 	}
 }
-
-// These contracts compose the public screen and executor across their package boundary.
-const modelScreenGitHubToken = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
-
-func boundaryScreenMatcher(t *testing.T) *secretmatch.Matcher {
-	t.Helper()
-	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
-	testutil.FailErr(t, "build boundary matcher", err)
-	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("m", 32)))
-	testutil.FailErr(t, "boundary fingerprinter", err)
-	matcher.SetFingerprinter(fingerprinter)
-	return matcher
-}

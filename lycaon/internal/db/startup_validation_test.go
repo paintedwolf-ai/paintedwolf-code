@@ -76,7 +76,11 @@ func TestMigrationActivationDefersSecondaryAuditWithoutLosingItsObligation(t *te
 		if len(original) != len(changed) || bytes.Count(block, original) != 1 {
 			t.Fatal("fixture requires one equal-size secondary key")
 		}
-		copy(block[bytes.Index(block, original):], changed)
+		idx := bytes.Index(block, original)
+		if idx < 0 {
+			t.Fatal("missing secondary key")
+		}
+		copy(block[idx:], changed)
 	})
 	database, err = sql.Open("sqlite", path)
 	testutil.FailErr(t, "open unaudited activation source", err)

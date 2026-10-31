@@ -32,6 +32,7 @@ func retainedInventory(ctx context.Context, database DBTX, known map[string]reta
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	var trees []retainedTree
 	for rows.Next() {
 		var tree retainedTree

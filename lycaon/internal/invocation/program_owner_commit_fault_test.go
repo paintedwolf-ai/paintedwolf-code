@@ -32,6 +32,7 @@ func (c lostCommitConnector) Connect(context.Context) (driver.Conn, error) {
 type lostCommitConnection struct{ driver.Conn }
 
 func (c lostCommitConnection) Begin() (driver.Tx, error) {
+	//nolint:staticcheck // driver.Conn requires Begin to satisfy the low-level driver interface.
 	tx, err := c.Conn.Begin()
 	if err != nil {
 		return nil, err

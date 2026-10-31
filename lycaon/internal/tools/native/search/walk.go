@@ -141,7 +141,7 @@ func (w *walker) directoryNames(dir entry) ([]string, error) {
 	}
 	w.work.handles++
 	w.work.peak = max(w.work.peak, w.held+1)
-	defer opened.Close()
+	defer func() { _ = opened.Close() }()
 	return opened.Names(projectpaths.DirectoryNames{IncludeHidden: true})
 }
 

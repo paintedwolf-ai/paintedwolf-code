@@ -92,7 +92,9 @@ func TestInputCoversEverythingTheReferenceRunDependsOn(t *testing.T) {
 		}
 		inputs[other] = true
 	}
-	if base.Input(referenceuserland.GNU, seed) != base.Input(referenceuserland.GNU, seed) {
+	firstInput := base.Input(referenceuserland.GNU, seed)
+	secondInput := base.Input(referenceuserland.GNU, seed)
+	if firstInput != secondInput {
 		t.Fatal("input is not stable")
 	}
 }

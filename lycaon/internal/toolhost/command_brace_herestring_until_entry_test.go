@@ -102,8 +102,11 @@ func TestCommandEntryAssigningDefaultAndPositionalRefusal(t *testing.T) {
 	source := "mkdir ./never; : ${1:=x}"
 	_, err = f.Call(t, t.Context(), source)
 	rejected := toolrejection.AsToolReject(err)
+	if rejected == nil {
+		t.Fatalf("positional assignment: %v", err)
+	}
 	start, _ := rejected.Data["source_start_byte"].(int)
-	if rejected == nil || rejected.Code != "COMMAND_SYNTAX_UNSUPPORTED" || start != strings.Index(source, "${1") {
+	if rejected.Code != "COMMAND_SYNTAX_UNSUPPORTED" || start != strings.Index(source, "${1") {
 		t.Fatalf("positional assignment: %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(f.Dir, "never")); !os.IsNotExist(statErr) {

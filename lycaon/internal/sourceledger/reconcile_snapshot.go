@@ -197,7 +197,7 @@ func observedLink(rootPath, rel string) (*observedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	info, err := root.Lstat(rel)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

@@ -3,6 +3,7 @@ package literal
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -144,7 +145,7 @@ func runOd(inv *invocation) error {
 	}
 	reader := io.Reader(&operandSequence{inv: inv, operands: inv.operandsOrStdin()})
 	skipped, err := io.CopyN(io.Discard, reader, skip)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	if skipped < skip {

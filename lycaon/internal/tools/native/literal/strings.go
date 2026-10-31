@@ -81,9 +81,10 @@ func (r *stringsRun) scan() error {
 	reader := bufio.NewReaderSize(r.in.reader(), 64<<10)
 	var offset int64
 	for {
-		chunk, err := reader.Peek(reader.Buffered())
+		chunk, _ := reader.Peek(reader.Buffered())
 		if len(chunk) == 0 {
-			if _, err = reader.Peek(1); err == io.EOF {
+			_, err := reader.Peek(1)
+			if err == io.EOF {
 				return r.end()
 			}
 			if err != nil {

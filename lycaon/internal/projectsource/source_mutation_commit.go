@@ -45,14 +45,6 @@ func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRo
 	return deliveries[0], nil
 }
 
-func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
-	completedPlan, err := committedAgentEffectPlan(row.Plan)
-	if err != nil {
-		return nil, err
-	}
-	return commitSourceMutationTxWithCache(ctx, tx, row, response, completedPlan, updatedAt, history, quotaBytes, prepared, nil, true, false)
-}
-
 func commitSourceMutationTxWithCache(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, completedPlan any, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording, cache *sourceledger.TxBatchCache, emitEvent, deferJournalUpdate bool) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {

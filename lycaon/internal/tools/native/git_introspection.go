@@ -100,31 +100,6 @@ func (t *GitBlameTool) Run(ctx context.Context, args map[string]any, tctx tools.
 	return git.MarshalBlameToolResponse(lines, err)
 }
 
-// GitRefTool resolves refs to SHAs.
-type GitRefTool struct {
-	Git git.GitManager
-}
-
-func (t *GitRefTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	refs := stringSliceFromArg(args, "refs")
-	if len(refs) == 0 {
-		return "", toolkit.MissingArg("refs")
-	}
-	out, err := t.Git.RevParse(ctx, tctx.ActiveRootPath(), refs)
-	return git.MarshalRefToolResponse(out, err)
-}
-
-// GitBranchesTool lists local branches.
-type GitBranchesTool struct {
-	Git git.GitManager
-}
-
-func (t *GitBranchesTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	max := intArg(args, "max_branches", git.DefaultGitBranchesMax)
-	branches, err := t.Git.Branches(ctx, tctx.ActiveRootPath(), max)
-	return git.MarshalBranchesToolResponse(branches, err)
-}
-
 // GitRestoreTool restores explicit paths in the index, worktree, or both.
 type GitRestoreTool struct {
 	Git      git.GitManager
@@ -331,20 +306,6 @@ func assertGitCommitPath(
 		return writePathReject(ctx, boundary, filepath.ToSlash(relPath), profileID, "git_commit", err, deny)
 	}
 	return err
-}
-
-func stringSliceFromArg(args map[string]any, key string) []string {
-	raw, ok := args[key].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-			out = append(out, strings.TrimSpace(s))
-		}
-	}
-	return out
 }
 
 func intArg(args map[string]any, key string, defaultVal int) int {

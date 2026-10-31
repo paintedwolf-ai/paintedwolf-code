@@ -175,23 +175,3 @@ func multiRootPlantArgsFromSchema(schema map[string]any, probePath string, inclu
 
 	return args, plantedPath
 }
-
-func multiRootExerciseArgs(name, path string, includePath bool) map[string]any {
-	if !includePath {
-		path = "."
-	}
-	switch name {
-	case "grep":
-		return map[string]any{"pattern": "x", "path": path}
-	case "find":
-		return map[string]any{"path": path, "name_glob": "*.txt"}
-	case "list_dir":
-		return map[string]any{"path": path}
-	case "command":
-		return map[string]any{"command": "pwd"}
-	case "stat", "wc", "delete", "chmod":
-		return map[string]any{"paths": []any{path}}
-	default:
-		return map[string]any{"path": path}
-	}
-}

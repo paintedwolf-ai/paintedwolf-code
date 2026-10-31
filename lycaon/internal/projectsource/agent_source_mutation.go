@@ -197,7 +197,7 @@ func observeAgentEffect(effect *sourceeffect.Plan) error {
 		if err != nil {
 			return err
 		}
-		defer root.Close()
+		defer func() { _ = root.Close() }()
 		target, err := root.Readlink(effect.Target.Rel)
 		if err != nil {
 			return err

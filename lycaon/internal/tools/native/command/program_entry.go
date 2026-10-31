@@ -134,7 +134,6 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
-	nativeDefs    map[string]toolcontract.OperationDefinition
 	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.
@@ -194,8 +193,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	callCtx, call := ctx, r.newProgramCall(ctx, args, catalog)
-	ctx = call.ctx
+	callCtx := ctx
+	ctx, call := r.newProgramCall(ctx, args, catalog)
 	handedOff := false
 	defer func() {
 		if !handedOff {

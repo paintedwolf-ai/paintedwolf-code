@@ -229,6 +229,7 @@ func (r *applyRun) parse(inputs []applyInput) ([]*applySection, error) {
 				if file, err = patchapply.Reverse(file); err != nil {
 					writeLine(r.stderr, "error: cannot reverse-apply a binary patch without the reverse hunk to '"+name+"'")
 					r.status = 1
+					//nolint:nilerr // Reverse binary patch failure reports status 1 on stderr.
 					return nil, nil
 				}
 			}

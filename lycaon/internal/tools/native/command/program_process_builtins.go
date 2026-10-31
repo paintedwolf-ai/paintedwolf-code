@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -244,7 +245,8 @@ func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 
 		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
 		if err != nil {
-			if _, invalid := err.(*syntax.Error); !invalid {
+			var syntaxErr *syntax.Error
+			if !errors.As(err, &syntaxErr) {
 				return ownerFailure(err), err
 			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pgrep", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
@@ -302,7 +304,8 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 
 		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
 		if err != nil {
-			if _, invalid := err.(*syntax.Error); !invalid {
+			var syntaxErr *syntax.Error
+			if !errors.As(err, &syntaxErr) {
 				return ownerFailure(err), err
 			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pkill", "pattern": operands[0], "word": operands[0], "reason": err.Error()})

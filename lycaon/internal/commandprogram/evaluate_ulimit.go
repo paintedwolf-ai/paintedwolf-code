@@ -248,7 +248,8 @@ func ulimitSelection(spec toolcontract.CommandSpecification, bound BoundArgv, al
 // setUlimit fixes new limits for later children. Bash's own errors keep
 // their text and status 1.
 func setUlimit(f *frame, resource ulimitResource, limit ResourceLimit, word string, setSoft, setHard bool) int {
-	value, ok := uint64(0), true
+	var value uint64
+	ok := true
 	switch word {
 	case "unlimited":
 		value = math.MaxUint64

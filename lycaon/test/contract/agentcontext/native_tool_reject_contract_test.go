@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -16,34 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
-
-func securityNativeRuntime(t *testing.T) *toolhost.Runtime {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	configRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
-	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
-	testutil.FailErr(t, "toolhost.NewRuntime", err)
-	hints, err := guidance.LoadHintConfigStock()
-	testutil.FailErr(t, "LoadHintConfig", err)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
-	toolfixture.WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "LoadSchemaDir", err)
-	rt.Executor.Metadata.SetToolSchemas(schemas)
-	return rt
-}
 
 func assertStructuredRejectCode(t *testing.T, err error, code string) {
 	t.Helper()

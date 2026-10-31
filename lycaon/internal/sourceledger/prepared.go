@@ -126,16 +126,15 @@ func (c *TxBatchCache) ensureDirectoryEntriesLoaded(ctx context.Context, dirID s
 		if err != nil {
 			return err
 		}
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var name string
 			if err := rows.Scan(&name); err != nil {
-				_ = rows.Close()
 				return err
 			}
 			c.seenDirEntries[dirEntryKey{dirID: dirID, name: name}] = true
 		}
 		if err := rows.Err(); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		_ = rows.Close()
@@ -149,16 +148,15 @@ func (c *TxBatchCache) ensureDirectoryEntriesLoaded(ctx context.Context, dirID s
 		if err != nil {
 			return err
 		}
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var name string
 			if err := rows.Scan(&name); err != nil {
-				_ = rows.Close()
 				return err
 			}
 			c.seenDirEntries[dirEntryKey{dirID: dirID, name: name}] = true
 		}
 		if err := rows.Err(); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		_ = rows.Close()

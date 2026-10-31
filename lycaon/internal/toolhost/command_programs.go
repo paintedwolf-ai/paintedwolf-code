@@ -57,6 +57,8 @@ func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutpu
 
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one redirect owner per program.
+//
+//nolint:funlen // Single linear composition of all per-program native and builtin owners.
 func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	if t.catalog != nil {
@@ -208,6 +210,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		for _, name := range queryOwners.Commands() {
 			tool, _ := queryOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				//nolint:contextcheck // Query target preparation uses the bound ProgramPaths frame context.
 				prepared, err := queryOwners.Prepare(query.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err

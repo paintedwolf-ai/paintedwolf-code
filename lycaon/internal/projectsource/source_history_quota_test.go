@@ -188,7 +188,8 @@ func TestAppliedRecoveryKeepsUndoWhenRestartQuotaIsLower(t *testing.T) {
 	interrupted := errors.New("pause before effect")
 	func() {
 		defer func() {
-			if recovered := recover(); recovered != interrupted {
+			recovered := recover()
+			if err, ok := recovered.(error); !ok || !errors.Is(err, interrupted) {
 				t.Fatalf("interruption=%v", recovered)
 			}
 		}()

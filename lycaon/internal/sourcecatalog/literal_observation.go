@@ -158,10 +158,6 @@ func (s *contentReadStream) completeLocked() {
 	s.read.closeLocked()
 }
 
-func (c *literalIndexCache) cachedFile(rootPath string, entry Entry) (literalFileCacheEntry, bool) {
-	return c.cachedVersion(rootPath, entry, c.versionOf(rootPath, entry))
-}
-
 func (c *literalIndexCache) cachedVersion(rootPath string, entry Entry, version fspath.FileObservation) (literalFileCacheEntry, bool) {
 	if !version.Known || version.Size <= 0 || version.Links == 0 {
 		return literalFileCacheEntry{}, false

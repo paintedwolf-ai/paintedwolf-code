@@ -2,6 +2,7 @@ package commandsurface
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 
@@ -97,7 +98,12 @@ func braceFields(parts []syntax.WordPart, ceiling int64) (count, nodes int64, ze
 		if brace.Sequence {
 			sequence := decodeBraceSequence(brace)
 			zeroStep = zeroStep || sequence.Step == 0
-			alternatives = int64(min(sequence.Count(), uint64(ceiling)))
+			seqCount := sequence.Count()
+			if seqCount >= uint64(math.MaxInt64) {
+				alternatives = ceiling
+			} else {
+				alternatives = min(int64(seqCount), ceiling)
+			}
 		} else {
 			for _, elem := range brace.Elems {
 				words, elemNodes, elemZero := braceFields(elem.Parts, ceiling)
@@ -153,11 +159,9 @@ func decodeBraceSequence(brace *syntax.BraceExp) BraceSequence {
 	}
 	sequence.Start, sequence.End = start, end
 	if len(brace.Elems) > 2 {
-		step, _ := strconv.ParseInt(brace.Elems[2].Lit(), 10, 64)
-		sequence.Step = uint64(step)
-		if step < 0 {
-			sequence.Step = -uint64(step)
-		}
+		rawStep := strings.TrimPrefix(strings.TrimPrefix(brace.Elems[2].Lit(), "-"), "+")
+		step, _ := strconv.ParseUint(rawStep, 10, 64)
+		sequence.Step = step
 	}
 	return sequence
 }

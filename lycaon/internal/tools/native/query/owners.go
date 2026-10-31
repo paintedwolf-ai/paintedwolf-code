@@ -178,6 +178,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 // Invoke prepares and runs one request, settling a binding refusal as the
 // producer outcome.
 func (o *Owners) Invoke(ctx context.Context, tc tools.ToolContext, program Program, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	//nolint:contextcheck // Query target preparation uses the bound ProgramPaths frame context.
 	prepared, err := o.Prepare(program, request)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}

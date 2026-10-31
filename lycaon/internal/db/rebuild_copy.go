@@ -21,7 +21,7 @@ type rebuildObject struct {
 // The copy keeps the released shape so the registered migration remains the sole
 // schema transformer, but never visits chunks that transformation would discard.
 func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan, progress func(migrations.Phase)) (retainedCopyResult, error) {
-	if _, err := os.Lstat(destination); err == nil {
+	if _, err := os.Lstat(destination); err == nil { // #nosec G703
 		return retainedCopyResult{}, os.ErrExist
 	} else if !os.IsNotExist(err) {
 		return retainedCopyResult{}, err
@@ -152,7 +152,7 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version=%d`, plan.Source.Revision)); err != nil {
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version=%d`, plan.Source.Revision)); err != nil { // #nosec G701
 		return err
 	}
 	actual, err := inspectSchema(ctx, tx)

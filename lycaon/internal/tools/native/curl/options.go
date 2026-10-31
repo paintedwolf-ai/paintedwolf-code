@@ -80,6 +80,8 @@ func usage(word, expected string) error {
 
 // parseOptions reads the bound forms in argv order. Values are data: header
 // text, bodies and secret references are carried, never interpreted here.
+//
+//nolint:funlen // Flat switch over supported curl option flags in argv order.
 func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 	var o options
 	var connectTo []outboundhttp.ResolveMapping

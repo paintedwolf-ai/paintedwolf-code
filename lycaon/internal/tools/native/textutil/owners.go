@@ -251,6 +251,7 @@ func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramP
 				// The bound -f operand is already a typed read target. Defer
 				// loading until that target has passed child admission.
 				p.DeferredSource = true
+				//nolint:nilerr // Deferred -f source loading validates the path during child admission.
 				return p, nil
 			}
 		}

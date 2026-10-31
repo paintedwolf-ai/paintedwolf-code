@@ -164,6 +164,7 @@ func (inv sourceInventory) walkMerged(ctx context.Context, dir string, visit fun
 			return errInventoryStop
 		case sourcecatalog.WalkSkip:
 			continue
+		case sourcecatalog.WalkContinue:
 		}
 		if entry.IsDir && !entry.IsSymlink {
 			if err := inv.walkMerged(ctx, rel, visit); err != nil {

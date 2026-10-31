@@ -331,6 +331,7 @@ func createTempAt(parent *openedParent, mode os.FileMode) (string, int, stagingH
 		var nonce [12]byte
 		if attempt == 0 {
 			copy(nonce[:8], tempNonceSeed[:])
+			//nolint:gosec // Wrapping 32-bit counter suffix is intentional for temp-name uniqueness.
 			binary.LittleEndian.PutUint32(nonce[8:], uint32(tempNonceCounter.Add(1)))
 		} else if _, err := rand.Read(nonce[:]); err != nil {
 			return "", -1, stagingHold{}, fmt.Errorf("randomize replacement: %w", err)

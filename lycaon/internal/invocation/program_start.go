@@ -215,7 +215,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		events++
 		bytes += int64(len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.ExpandedInputs.Representation()) + len(in.StartOwner.Command()) + len(in.StartOwner.Mode()) + len(classes))
 	}
-	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
+	if err := chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_definitions (program_id,definition_digest,operation_id,owner,lifecycle,definition_json) VALUES (?,?,?,?,?,?) ON CONFLICT (program_id,definition_digest) DO NOTHING`, identity.ProgramID, in.Definition.Digest(), facts.Identity, facts.Contract.Owner, facts.Contract.Lifecycle.String(), in.Definition.Serialized())

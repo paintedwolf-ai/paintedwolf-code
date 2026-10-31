@@ -14,7 +14,7 @@ var linkTableRebuildSQL []byte
 func SourceLinkKind(target Baseline) Step {
 	source := append(append([]byte{}, linkKindImplementation...), linkTableRebuildSQL...)
 	return Step{ID: "portable-source-link-kind", Source: source, RebuildTables: true,
-		Checksum: "729fc42caf9762926ca698ed9b388348551f84073350bfed44b1ce2f15069a8e",
+		Checksum: "280d02156ff51fb374e9babb5429f5e2075a70fe9f58faaa244f83609667cb41",
 		From:     Baseline{Revision: 10, Shape: "15fd7ac9114f4b71c630d00dc68fc8ba245472146e7f94660f752f0b675c59c6"},
 		To:       target, Apply: migrateLinkKind}
 }

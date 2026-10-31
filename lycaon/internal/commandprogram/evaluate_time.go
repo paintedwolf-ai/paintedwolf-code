@@ -55,7 +55,7 @@ func seconds(d time.Duration, places int) string {
 	for range 9 - places {
 		scale *= 10
 	}
-	d = max(d, 0) / scale * scale
+	d = max(d, 0).Truncate(scale)
 	whole := d / time.Second
 	frac := (d % time.Second) / scale
 	return fmt.Sprintf("%d.%0*d", whole, places, frac)

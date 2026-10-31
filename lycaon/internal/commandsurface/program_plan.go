@@ -1,6 +1,10 @@
 package commandsurface
 
-import "github.com/lycaon/lycaon/internal/toolcontract"
+import (
+	"math"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 // NodeID identifies one static syntax occurrence, independently of how many
 // times execution reaches it. The containing source digest supplies identity.
@@ -268,9 +272,9 @@ type BraceSequence struct {
 
 // Count is the number of values, at least one.
 func (s BraceSequence) Count() uint64 {
-	span := uint64(s.End) - uint64(s.Start)
+	span := unsignedSpan(s.End, s.Start)
 	if s.End < s.Start {
-		span = uint64(s.Start) - uint64(s.End)
+		span = unsignedSpan(s.Start, s.End)
 	}
 	steps := span / max(s.Step, 1)
 	if steps == ^uint64(0) {
@@ -279,13 +283,44 @@ func (s BraceSequence) Count() uint64 {
 	return steps + 1
 }
 
+func unsignedSpan(high, low int64) uint64 {
+	if low >= 0 || high < 0 {
+		diff := high - low
+		if diff >= 0 {
+			return uint64(diff)
+		}
+	}
+	var highMag, lowMag uint64
+	if high >= 0 {
+		highMag = uint64(high)
+	}
+	if low == math.MinInt64 {
+		lowMag = uint64(math.MaxInt64) + 1
+	} else if negLow := -low; negLow >= 0 {
+		lowMag = uint64(negLow)
+	}
+	return highMag + lowMag
+}
+
 // Value is the i-th value, for i below Count.
 func (s BraceSequence) Value(i uint64) int64 {
 	offset := i * max(s.Step, 1)
+	const maxStep = uint64(math.MaxInt64)
+	first := clampUint64ToInt64(offset)
+	rest := offset - min(offset, maxStep)
+	second := clampUint64ToInt64(rest)
+	third := clampUint64ToInt64(rest - min(rest, maxStep))
 	if s.End < s.Start {
-		return int64(uint64(s.Start) - offset)
+		return s.Start - first - second - third
 	}
-	return int64(uint64(s.Start) + offset)
+	return s.Start + first + second + third
+}
+
+func clampUint64ToInt64(v uint64) int64 {
+	if v <= math.MaxInt64 {
+		return int64(v)
+	}
+	return math.MaxInt64
 }
 
 // ParameterSlice retains ${name:offset} and ${name:offset:length} bounds.

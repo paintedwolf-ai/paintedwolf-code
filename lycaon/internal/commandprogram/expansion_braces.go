@@ -84,6 +84,7 @@ func (r *expansionRun) splitBraceWords(ctx context.Context, parts []commandsurfa
 func (r *expansionRun) braceValue(ctx context.Context, sequence commandsurface.BraceSequence, i uint64) (string, error) {
 	value := sequence.Value(i)
 	if sequence.Letters {
+		//nolint:gosec // Letter brace sequences are ASCII bytes in ['A','Z'] or ['a','z'].
 		return string(rune(value)), nil
 	}
 	if err := r.charge(ctx, int64(sequence.Width)+20); err != nil {

@@ -163,7 +163,8 @@ func TestApplyCheckAndPatchDryRunReportTheSameHunks(t *testing.T) {
 	h := newApplyHarness(t)
 	h.clean()
 	h.write("a.txt", "one\ntwo\nTHREE\n")
-	diff := strings.Replace(sample[:strings.Index(sample, "diff --git a/c.txt")], "@@ -1,3 +1,4 @@\n one\n two\n three\n+four\n", "@@ -1,2 +1,2 @@\n-one\n+ONE\n two\n@@ -2,2 +2,3 @@\n two\n three\n+four\n", 1)
+	prefix, _, _ := strings.Cut(sample, "diff --git a/c.txt")
+	diff := strings.Replace(prefix, "@@ -1,3 +1,4 @@\n one\n two\n three\n+four\n", "@@ -1,2 +1,2 @@\n-one\n+ONE\n two\n@@ -2,2 +2,3 @@\n two\n three\n+four\n", 1)
 	check := h.apply(diff, "--check")
 	if check.result.Status != 1 || check.result.EffectCertainty != toolcontract.NoEffect || h.read("a.txt") != "one\ntwo\nTHREE\n" {
 		t.Fatalf("--check = %+v, a.txt=%q", check.result, h.read("a.txt"))

@@ -73,6 +73,7 @@ type programEnding struct {
 // program waits past the inline budget.
 func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (string, error) {
 	ending := &programEnding{done: make(chan struct{})}
+	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.result, ending.err = r.finish(e)
 		close(ending.done)

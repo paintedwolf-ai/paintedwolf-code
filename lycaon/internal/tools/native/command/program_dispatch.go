@@ -355,6 +355,7 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 	return result, joinSettle(cause, settleErr)
 }
 
+//nolint:funlen // Linear native operation preparation, review handoff, and execution dispatch.
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	prepareReq := request
 	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(request.Environment) > 0 {

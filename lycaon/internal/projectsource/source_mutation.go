@@ -107,6 +107,7 @@ func waitRecoveryReclamation(ctx context.Context, s *SourceMutationService) erro
 		r.reqSeq = 1
 		if !r.running {
 			r.running = true
+			//nolint:gosec // Background reclamation worker outlives the initiating request and drains on service Close.
 			go reclaimWorkerLoop(s)
 		}
 		r.cond.Broadcast()
