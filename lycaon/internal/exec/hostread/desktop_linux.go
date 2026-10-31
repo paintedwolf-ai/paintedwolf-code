@@ -11,9 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
-	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 const outputLimit = 64 << 10
@@ -46,11 +47,32 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 	defer cancel()
 	command := exec.CommandContext(ctx, program, "list-recursively", "org.gnome.system.proxy")
 	command.Env = append(os.Environ(), "LC_ALL=C")
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	identityReady := make(chan struct{})
+	var identity osprocess.Incarnation
+	command.Cancel = func() error {
+		<-identityReady
+		if identity.PID == 0 {
+			return os.ErrProcessDone
+		}
+		err := osprocess.SignalGroup(identity, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
 	command.WaitDelay = 250 * time.Millisecond
 	output := &boundedOutput{}
 	command.Stdout = output
 	command.Stderr = io.Discard
-	err := execpkg.RunInOwnGroup(command)
+	err := command.Start()
+	if err == nil {
+		identity, _ = osprocess.IncarnationOf(command.Process.Pid)
+	}
+	close(identityReady)
+	if err == nil {
+		err = command.Wait()
+	}
 	if ctx.Err() != nil {
 		return nil, -1, ctx.Err()
 	}

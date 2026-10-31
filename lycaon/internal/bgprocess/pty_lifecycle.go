@@ -8,7 +8,6 @@ import (
 	"time"
 
 	execution "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ptyCloseTimeout covers termination and the final terminal read.
@@ -112,7 +111,6 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 			proc.Stages[0].ExitCode = &code
 		}
 	}
-	reason := proc.reason
 	r.jobs.mu.Unlock()
 	if alreadyClosed {
 		return
@@ -130,17 +128,7 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 		proc.screen.Close()
 	}
 
-	if r.Output.publish != nil && !proc.silent {
-		exit := exitCode
-		r.Output.publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
-			ProcessID:         proc.Handle,
-			SessionID:         proc.SessionID,
-			Stream:            "exit",
-			EndOffset:         proc.buffer.NextCursor(),
-			Running:           false,
-			ExitCode:          &exit,
-			TerminationReason: api.BackgroundProcessTerminationReason(reason),
-		})
-	}
+	r.Output.publishTerminal(ctx, proc)
+	r.sweeper.onJobEnded()
 	close(proc.done)
 }

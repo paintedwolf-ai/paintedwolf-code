@@ -18,7 +18,7 @@ type toolHandleSpec struct {
 
 // extractToolHandleSpecs collects minted handles from message metadata, leading
 // handle tags, and embedded child-handle arrays in authenticated tool JSON.
-func extractToolHandleSpecs(msgHandles []string, defaultPath, defaultSnippet, content string) []toolHandleSpec {
+func extractToolHandleSpecs(msgHandles []string, defaultPath, defaultSnippet, content string, allowEmbedded bool) []toolHandleSpec {
 	var specs []toolHandleSpec
 	idxByHandle := make(map[string]int, len(msgHandles)+4)
 	upsert := func(handle, itemPath string, itemLine int, itemSnippet string) {
@@ -51,16 +51,20 @@ func extractToolHandleSpecs(msgHandles []string, defaultPath, defaultSnippet, co
 	for _, h := range msgHandles {
 		upsert(h, "", 0, "")
 	}
-	if tag, _ := hostmarker.SplitEvidenceHandleTag(content); tag != "" {
-		tag = strings.Trim(strings.TrimSpace(tag), "[]")
-		if evidence.IsEvidenceHandleToken(tag) {
-			upsert(tag, "", 0, "")
+	if allowEmbedded && len(msgHandles) > 0 {
+		allowed := make(map[string]bool)
+		for _, h := range evidence.ExtractEmbeddedHandles(content, msgHandles...) {
+			allowed[h] = true
 		}
-	}
-	if _, jsonBody, _, ok := hostmarker.SplitToolJSONBody(content); ok {
-		var obj map[string]any
-		if json.Unmarshal([]byte(jsonBody), &obj) == nil {
-			collectEmbeddedJSONHandleSpecs(obj, upsert)
+		if _, jsonBody, _, ok := hostmarker.SplitToolJSONBody(content); ok {
+			var obj map[string]any
+			if json.Unmarshal([]byte(jsonBody), &obj) == nil {
+				collectEmbeddedJSONHandleSpecs(obj, func(handle, path string, line int, snippet string) {
+					if allowed[handle] {
+						upsert(handle, path, line, snippet)
+					}
+				})
+			}
 		}
 	}
 	if len(specs) == 0 {

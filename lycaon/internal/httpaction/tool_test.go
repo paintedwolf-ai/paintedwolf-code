@@ -239,7 +239,7 @@ type stubDirectIPRuntime struct {
 }
 
 func (*stubDirectIPRuntime) IssuePermit(hitl.EffectPermitIdentity, string, string, string) {}
-func (*stubDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool                  { return false }
+func (*stubDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool                   { return false }
 func (*stubDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
 	return true
 }
@@ -262,7 +262,20 @@ func TestDirectIPPolicyAllowsPrivateUnicastAndRespectsDeclaredDestinations(t *te
 	if reject != nil {
 		t.Fatalf("ParseCapabilityRequest: %v", reject)
 	}
-	allow, reject := loopbackPolicy(req, tools.ToolContext{})
+	for _, raw := range []*capabilityrequest.CapabilityRequest{nil, req} {
+		for _, requested := range []bool{false, true} {
+			unapproved, reject := loopbackPolicy(raw, tools.ToolContext{Direct: tools.InvocationDirect{DirectIPRequested: requested}})
+			if reject != nil {
+				t.Fatalf("unapproved policy: %v", reject)
+			}
+			for _, destination := range []string{"192.0.2.1", "10.0.0.1", "169.254.169.254", "127.0.0.1", "::1", "fd00::1"} {
+				if unapproved != nil && unapproved(netip.MustParseAddr(destination), 8080) {
+					t.Fatalf("request presence=%t requested=%t granted %s without host authority", raw != nil, requested, destination)
+				}
+			}
+		}
+	}
+	allow, reject := loopbackPolicy(req, tools.ToolContext{Direct: tools.InvocationDirect{DirectIPAuthorized: true, DirectIPDeclared: req.DirectIP.DeclaredDestinations}})
 	if reject != nil || allow == nil {
 		t.Fatalf("loopbackPolicy allow=%t, reject=%v", allow != nil, reject)
 	}

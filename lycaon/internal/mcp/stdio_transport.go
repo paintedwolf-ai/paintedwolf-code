@@ -17,8 +17,10 @@ const stdioTerminateGrace = 5 * time.Second
 // stdioTransport starts an MCP stdio server under an exec session guard so the
 // guard snapshots surviving session members before the leader is reaped.
 type stdioTransport struct {
-	cmd   *osexec.Cmd
-	grace time.Duration
+	cmd         *osexec.Cmd
+	cleanup     func()
+	cleanupOnce sync.Once
+	grace       time.Duration
 
 	mu      sync.Mutex
 	process *stdioProcessPipe
@@ -34,7 +36,7 @@ func (t *stdioTransport) Connect(ctx context.Context) (sdkmcp.Connection, error)
 		_ = stdout.Close()
 		return nil, err
 	}
-	kill, wait, err := execpkg.StartInOwnGroup(t.cmd)
+	group, err := execpkg.StartInOwnGroup(ctx, t.cmd)
 	if err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
@@ -46,8 +48,8 @@ func (t *stdioTransport) Connect(ctx context.Context) (sdkmcp.Connection, error)
 	}
 	proc := &stdioProcessPipe{
 		stdin: stdin,
-		kill:  kill,
-		wait:  wait,
+		kill:  group.Stop,
+		wait:  group.Wait,
 		grace: grace,
 	}
 	t.mu.Lock()
@@ -61,6 +63,7 @@ func (t *stdioTransport) Connect(ctx context.Context) (sdkmcp.Connection, error)
 }
 
 func (t *stdioTransport) abort() {
+	defer t.release()
 	t.mu.Lock()
 	proc := t.process
 	t.mu.Unlock()
@@ -72,6 +75,7 @@ func (t *stdioTransport) abort() {
 }
 
 func (t *stdioTransport) close() error {
+	defer t.release()
 	t.mu.Lock()
 	proc := t.process
 	t.mu.Unlock()
@@ -112,4 +116,12 @@ func (p *stdioProcessPipe) Close() error {
 		}
 	})
 	return p.closeErr
+}
+
+func (t *stdioTransport) release() {
+	t.cleanupOnce.Do(func() {
+		if t.cleanup != nil {
+			t.cleanup()
+		}
+	})
 }

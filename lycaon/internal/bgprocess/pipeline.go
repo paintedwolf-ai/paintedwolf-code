@@ -156,7 +156,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}, stdout, stderr)
 	if err != nil {
 		cancel()
-		r.jobs.remove(sessionID, handle)
+		r.jobs.failStart(proc)
 		return "", err
 	}
 	r.jobs.mu.Lock()

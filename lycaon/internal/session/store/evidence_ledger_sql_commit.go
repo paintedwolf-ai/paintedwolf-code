@@ -140,7 +140,7 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	if err := supersedePathsForRecord(ctx, qtx, sessionID, handle, rec, live); err != nil {
 		return "", content, err
 	}
-	inserted, err := upsertEvidenceRecord(ctx, s, qtx, sessionID, projectID, rec)
+	inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, rec)
 	if err != nil {
 		return "", content, err
 	}
@@ -150,7 +150,7 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	}
 
 	for _, hrec := range highlightRecs {
-		hin, err := upsertEvidenceRecord(ctx, s, qtx, sessionID, projectID, hrec)
+		hin, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, hrec)
 		if err != nil {
 			return "", content, err
 		}
@@ -161,7 +161,7 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	}
 	if strings.EqualFold(toolName, "read") {
 		if marker, ok := secretExposureReadRecord(evidencePathArg(args)); ok {
-			inserted, err := upsertEvidenceRecord(ctx, s, qtx, sessionID, projectID, marker)
+			inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, marker)
 			if err != nil {
 				return "", content, err
 			}

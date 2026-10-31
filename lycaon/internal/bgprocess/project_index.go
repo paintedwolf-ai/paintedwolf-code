@@ -506,45 +506,44 @@ func (r *ProcessLifecycle) DisposeProject(ctx context.Context, projectID string,
 	}
 	r.jobs.mu.Lock()
 	r.jobs.deletingProjects[projectID] = true
-	defer func() {
-		r.jobs.mu.Lock()
-		delete(r.jobs.deletingProjects, projectID)
-		r.jobs.mu.Unlock()
-	}()
-	seen := make(map[string]*Process)
-	for handle, proc := range r.jobs.projectProcs[projectID] {
-		if proc != nil {
-			seen[handle] = proc
-		}
-		delete(r.jobs.workDirs, handle)
-		delete(r.jobs.ports, handle)
-		delete(r.jobs.pids, handle)
-	}
-	delete(r.jobs.projectProcs, projectID)
-	for sessionID, sessionProcs := range r.jobs.sessions {
-		for handle, proc := range sessionProcs {
-			if proc == nil || proc.ProjectID != projectID {
-				continue
+	for sessionID, procs := range r.jobs.sessions {
+		for _, proc := range procs {
+			if proc.ProjectID == projectID {
+				r.jobs.beginDrainLocked(sessionID)
+				break
 			}
-			seen[handle] = proc
-			delete(sessionProcs, handle)
-			delete(r.jobs.workDirs, handle)
-			delete(r.jobs.ports, handle)
-			delete(r.jobs.pids, handle)
 		}
-		if len(sessionProcs) == 0 {
-			delete(r.jobs.sessions, sessionID)
+	}
+	var drains []*sessionDrain
+	for _, drain := range r.jobs.drains {
+		for _, proc := range drain.procs {
+			if proc.ProjectID == projectID {
+				drains = append(drains, drain)
+				break
+			}
 		}
 	}
 	r.jobs.mu.Unlock()
-	for _, proc := range seen {
-		r.killProcess(proc, reason)
-	}
-	for _, proc := range seen {
-		if err := r.awaitSettled(ctx, proc); err != nil {
-			return err
+	// Keep admission closed even if the caller stops waiting. The physical
+	// drains retain their resources and remain joinable by another caller.
+	go func() {
+		for _, drain := range drains {
+			<-drain.done
 		}
-		r.releaseIndexWatch(proc)
-	}
-	return nil
+		r.jobs.mu.Lock()
+		// A newer teardown may already own new jobs under this project.
+		owned := len(r.jobs.projectProcs[projectID]) != 0
+		for _, pending := range r.jobs.drains {
+			for _, proc := range pending.procs {
+				owned = owned || proc.ProjectID == projectID
+			}
+		}
+		if !owned {
+			delete(r.jobs.deletingProjects, projectID)
+		}
+		r.jobs.mu.Unlock()
+	}()
+	err := r.settleDrains(ctx, drains, reason)
+	r.sweeper.onJobEnded()
+	return err
 }

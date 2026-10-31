@@ -31,7 +31,7 @@ func taskCallArgs(agentType, goal string) map[string]any {
 // coordinator that predicted or requested delegation would see it.
 func workersLoaded(string) map[string]bool {
 	out := map[string]bool{}
-	for _, name := range []string{"task", "pack_board", "worker_cancel", "answer_decision", "extend_worker_budget"} {
+	for _, name := range []string{"task", "pack_board", "worker_cancel", "answer_decision", "extend_worker_budget", "command", "edit", "read"} {
 		out[name] = true
 	}
 	return out

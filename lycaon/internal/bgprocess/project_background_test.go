@@ -268,7 +268,7 @@ func TestListenerSweepSharedScanCoalescingAndPortChangeEvents(t *testing.T) {
 
 	select {
 	case ev := <-portCh:
-		if ev.ProcessID != h1 || ev.Action != api.ProjectBackgroundEventActionPortsChanged {
+		if ev.ProcessID != h1 || ev.Action != "ports_changed" {
 			t.Fatalf("unexpected port event: %+v", ev)
 		}
 	case <-time.After(2 * time.Second):

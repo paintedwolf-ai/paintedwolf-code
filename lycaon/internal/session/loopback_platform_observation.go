@@ -45,7 +45,7 @@ func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, 
 			endpointPIDs = append(endpointPIDs, l.PID)
 		}
 	}
-	owned, evidence := p.ownership(ctx, sessionID, "", port, held)
+	owned, evidence := p.ownership(ctx, sessionID, "", port, targetAddr, held)
 	if owned {
 		if len(held) == 0 {
 			return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, evidence.OwnerID, canonicalEndpoint), true, nil

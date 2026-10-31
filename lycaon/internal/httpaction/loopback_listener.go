@@ -30,7 +30,7 @@ func (o *loopbackHopObservation) beforeFirstHop(ctx context.Context, tctx tools.
 	if o.preByFamily == nil {
 		o.preByFamily = make(map[bool]*api.LoopbackListenerFact, 2)
 	}
-	_, _, mapped := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port)
+	_, mapped := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port)
 	if !mapped && spec.target != nil && strings.EqualFold(spec.target.Hostname(), "localhost") {
 		v4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
 		v6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{15: 1}), port)

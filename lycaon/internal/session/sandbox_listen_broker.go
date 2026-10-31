@@ -23,6 +23,7 @@ type ListenCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
 	Store       Store
 	Runtime     *approvalstate.SandboxPortGrantRuntime
+	Provenance  LoopbackProvenanceResolver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool

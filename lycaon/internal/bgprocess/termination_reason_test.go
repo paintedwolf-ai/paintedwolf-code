@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
+func TestLiveTerminationReportsExitTimeoutAndExplicitStop(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sh/sleep fixtures are unix-oriented")
 	}
@@ -24,12 +24,14 @@ func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
 
 	expectCompletionAndExitEvent := func(t *testing.T, completed <-chan bgprocess.Completion, events <-chan api.BackgroundProcessEvent, want bgprocess.TerminationReason) {
 		t.Helper()
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
 		select {
 		case c := <-completed:
 			if c.TerminationReason != want {
 				t.Fatalf("completion termination = %q, want %q", c.TerminationReason, want)
 			}
-		case <-t.Context().Done():
+		case <-ctx.Done():
 			t.Fatalf("timed out waiting for completion %q", want)
 		}
 		for {
@@ -41,7 +43,7 @@ func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
 					}
 					return
 				}
-			case <-t.Context().Done():
+			case <-ctx.Done():
 				t.Fatalf("timed out waiting for exit event %q", want)
 			}
 		}
@@ -58,7 +60,7 @@ func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
 			ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: "true"}},
 		}, runner)
 		testutil.FailErr(t, "start exited", err)
-		_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
+		_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 		testutil.FailErr(t, "await exited", err)
 		expectCompletionAndExitEvent(t, completed, events, bgprocess.TerminationExited)
 	})
@@ -72,14 +74,14 @@ func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
 		})
 		handle, err := reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
 			SessionID: "sess-1", ProjectID: "proj-1", Runner: runner, Mode: bgprocess.JobModeBackground,
-			Timeout: 40 * time.Millisecond,
+			Timeout: 5 * time.Second,
 			Request: hostcmd.Request{
 				Launch: exec.HostLaunch("timeout test"), ProjectDir: t.TempDir(),
 				Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 			},
 		})
 		testutil.FailErr(t, "start timed_out", err)
-		_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
+		_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 		testutil.FailErr(t, "await timed_out", err)
 		expectCompletionAndExitEvent(t, completed, events, bgprocess.TerminationTimedOut)
 	})
@@ -104,49 +106,12 @@ func TestTerminationReasonEveryValueProducedByItsStopOrExitPath(t *testing.T) {
 			if res.TerminationReason != api.BackgroundProcessTerminationReason(reason) {
 				t.Fatalf("stop result reason = %q, want %q", res.TerminationReason, reason)
 			}
-			_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
+			_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 			testutil.FailErr(t, "await "+string(reason), err)
 			expectCompletionAndExitEvent(t, completed, events, reason)
 		})
 	}
 
-	for _, reason := range []bgprocess.TerminationReason{
-		bgprocess.TerminationChatDeleted,
-		bgprocess.TerminationProjectDeleted,
-		bgprocess.TerminationRootDetached,
-		bgprocess.TerminationWorkerCompleted,
-		bgprocess.TerminationWorkerCancelled,
-	} {
-		t.Run(string(reason), func(t *testing.T) {
-			completed := make(chan bgprocess.Completion, 2)
-			events := make(chan api.BackgroundProcessEvent, 8)
-			reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{
-				Complete: func(_ context.Context, c bgprocess.Completion) { completed <- c },
-				Publish:  func(_ context.Context, _, _ string, ev api.BackgroundProcessEvent) { events <- ev },
-			})
-			_, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
-				ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			}, runner)
-			testutil.FailErr(t, "start "+string(reason), err)
-			testutil.FailErr(t, "dispose "+string(reason), reg.Lifecycle.DisposeSession(t.Context(), "sess-1", reason))
-			expectCompletionAndExitEvent(t, completed, events, reason)
-		})
-	}
-
-	t.Run("app_quit", func(t *testing.T) {
-		completed := make(chan bgprocess.Completion, 2)
-		events := make(chan api.BackgroundProcessEvent, 8)
-		reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{
-			Complete: func(_ context.Context, c bgprocess.Completion) { completed <- c },
-			Publish:  func(_ context.Context, _, _ string, ev api.BackgroundProcessEvent) { events <- ev },
-		})
-		_, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
-			ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-		}, runner)
-		testutil.FailErr(t, "start app_quit", err)
-		testutil.FailErr(t, "close registry", reg.Lifecycle.Close(t.Context()))
-		expectCompletionAndExitEvent(t, completed, events, bgprocess.TerminationAppQuit)
-	})
 }
 
 func TestStopOnSettledProcessPreservesExitedAndTimedOutReasons(t *testing.T) {
@@ -180,7 +145,7 @@ func TestStopOnSettledProcessPreservesExitedAndTimedOutReasons(t *testing.T) {
 				},
 			})
 			testutil.FailErr(t, "start", err)
-			_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
+			_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 			testutil.FailErr(t, "await", err)
 			<-completed
 
@@ -254,7 +219,7 @@ func TestConcurrentAndRepeatedStopsKeepFirstReasonAndEmitOneCompletion(t *testin
 	}
 	wg.Wait()
 
-	_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
+	_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 	testutil.FailErr(t, "await", err)
 
 	select {

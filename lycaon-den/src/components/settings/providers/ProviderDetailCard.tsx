@@ -2,6 +2,7 @@ import { For, Show, type Accessor, type JSX } from "solid-js";
 import type { ProviderKindTemplate, ProviderMeta } from "../../../api/types.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
 import {
+  isIncludedProvider,
   providerDiscoveryFailure,
   providerDisplayName,
   providerIsReady,
@@ -70,6 +71,7 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
     >
       <header class="den-settings-provider-head">
         <div class="den-settings-provider-title">
+          <Show when={!isIncludedProvider(provider())} fallback={<span class="den-settings-provider-name" data-testid={`provider-name-${provider().id}`}>{providerDisplayName(provider())}</span>}>
           <Show
             when={!props.renaming()}
             fallback={
@@ -98,6 +100,7 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
               {providerDisplayName(provider())}
             </button>
           </Show>
+          </Show>
           <code
             class="den-settings-provider-id"
             data-testid={`provider-id-${provider().id}`}
@@ -111,6 +114,7 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         >
           {providerStatusLabel(provider())}
         </span>
+        <Show when={!isIncludedProvider(provider())}>
         <DenButton
           variant="link"
           class="den-settings-provider-remove"
@@ -119,10 +123,35 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         >
           {MODELS_SETTINGS_COPY.removeProvider}
         </DenButton>
+        </Show>
       </header>
+      <Show when={!isIncludedProvider(provider())}>
       <p class="den-settings-provider-label-hint">
         {MODELS_SETTINGS_COPY.providerLabelRenameHint}
       </p>
+      </Show>
+      <Show when={isIncludedProvider(provider())}>
+        <div
+          class="den-activity-span"
+          data-testid={`provider-included-summary-${provider().id}`}
+        >
+          <div class="den-activity-span-chicklet">
+            <span class="den-activity-span-chip">
+              <span class="den-activity-span-name">
+                {MODELS_SETTINGS_COPY.includedProviderModelSummary}
+              </span>
+            </span>
+            <span class="den-activity-span-count">
+              {MODELS_SETTINGS_COPY.includedProviderBadge}
+            </span>
+            <span class="den-activity-span-hint">
+              {MODELS_SETTINGS_COPY.includedProviderHint}
+            </span>
+          </div>
+        </div>
+      </Show>
+
+
 
       <Show when={providerFeedStatusHints(provider()).length > 0}>
         <p

@@ -155,6 +155,12 @@ func (r *Terminal) startPTY(
 		proc.screen.Close()
 		return "", ErrRegistryClosed
 	}
+	if _, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted {
+		r.jobs.mu.Unlock()
+		cancel()
+		proc.screen.Close()
+		return "", ErrTeardownInProgress
+	}
 	r.jobs.pruneCompletedLocked(sessionID)
 	if silent && r.jobs.countRunningAwaitedLocked(sessionID) >= r.jobs.maxAwaited {
 		err := r.jobs.awaitedCapacityErrorLocked(sessionID)
@@ -200,15 +206,26 @@ func (r *Terminal) startPTY(
 	})
 	if err != nil {
 		cancel()
-		r.jobs.remove(sessionID, handle)
+		r.jobs.failStart(proc)
 		return "", err
 	}
 	r.jobs.mu.Lock()
 	proc.pty = session
+	if reason, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted && !proc.stopped {
+		proc.stopped = true
+		proc.reason = reason
+	}
 	stopped := proc.stopped
+	startEvent, publish := r.jobs.indexProjectProcessLocked(proc)
 	r.jobs.mu.Unlock()
 	if stopped {
 		_ = session.Close()
+	}
+	if publish && r.Output.publishProject != nil {
+		r.Output.publishProject(context.WithoutCancel(ctx), startEvent)
+	}
+	if !silent && !stopped {
+		r.sweeper.onJobStarted()
 	}
 	// Forward terminal replies so interactive commands do not stall.
 	if proc.screen != nil {

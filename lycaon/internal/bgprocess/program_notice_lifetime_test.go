@@ -79,7 +79,7 @@ func TestProgramCompletionRetainsNoticeAdmissionUntilConsumption(t *testing.T) {
 			case "close":
 				testutil.FailErr(t, "close", registry.Lifecycle.Close(t.Context()))
 			case "dispose session":
-				testutil.FailErr(t, "dispose", registry.Lifecycle.DisposeSession(t.Context(), "session"))
+				testutil.FailErr(t, "dispose", registry.Lifecycle.DisposeSession(t.Context(), "session", TerminationChatDeleted))
 			}
 			select {
 			case <-released:
