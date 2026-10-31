@@ -120,14 +120,10 @@ func hasBoundedCatalogID(text, name string) bool {
 }
 
 func isExactCatalogMatch(need, name string) bool {
-	if strings.EqualFold(need, name) {
-		return true
-	}
-	if strings.IndexByte(name, '_') >= 0 {
-		return strings.EqualFold(need, strings.ReplaceAll(name, "_", " ")) ||
-			strings.EqualFold(need, strings.ReplaceAll(name, "_", "-"))
-	}
-	return false
+	return strings.EqualFold(need, name) ||
+		strings.IndexByte(name, '_') >= 0 &&
+			(strings.EqualFold(need, strings.ReplaceAll(name, "_", " ")) ||
+				strings.EqualFold(need, strings.ReplaceAll(name, "_", "-")))
 }
 
 // ResolveRequest turns request_tools text into the schemas to load: names
