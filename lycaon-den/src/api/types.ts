@@ -5851,6 +5851,11 @@ export interface components {
             /** @description What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event. */
             decision_trigger?: components["schemas"]["TurnLoadTrigger"];
         };
+        /**
+         * @description Why a background process ended: natural exit, timeout, explicit stop by the agent or user, or host teardown of the owning chat, project, detached root, app process, or worker runtime.
+         * @enum {string}
+         */
+        BackgroundProcessTerminationReason: "exited" | "timed_out" | "stopped_by_agent" | "stopped_by_user" | "chat_deleted" | "project_deleted" | "root_detached" | "app_quit" | "worker_completed" | "worker_cancelled";
         BackgroundProcessEvent: {
             process_id: string;
             /** Format: uuid */
@@ -5864,6 +5869,7 @@ export interface components {
             end_offset: number;
             running: boolean;
             exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
             truncated?: boolean;
             /** @description Replace previously projected text instead of appending it. */
             reset?: boolean;
@@ -5874,6 +5880,7 @@ export interface components {
             running: boolean;
             stages?: components["schemas"]["BackgroundProcessStage"][];
             exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
         };
         BackgroundProcessStage: {
             command: string;
@@ -5904,6 +5911,7 @@ export interface components {
             /** @description Earlier output was evicted from the host buffer or cut from this snapshot. */
             truncated?: boolean;
             exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
         };
         /** @description Read-only live page mirror (CDP screencast frames + driven-action overlay). Frames ride the authenticated host SSE channel; Den never forwards input. */
         PreviewEvent: {
@@ -5946,6 +5954,7 @@ export interface components {
             /** @description True until the host has observed terminal process state. Wait for the process event instead of repeating stop. */
             running: boolean;
             exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
         };
         ProviderEvent: {
             provider_id: string;
@@ -29382,6 +29391,7 @@ export type LLMTokenCounts = components["schemas"]["LLMTokenCounts"];
 export type CoordinatorLoopProgress = components["schemas"]["CoordinatorLoopProgress"];
 export type LLMCallEvent = components["schemas"]["LLMCallEvent"];
 export type ActivityEvent = components["schemas"]["ActivityEvent"];
+export type BackgroundProcessTerminationReason = components["schemas"]["BackgroundProcessTerminationReason"];
 export type BackgroundProcessEvent = components["schemas"]["BackgroundProcessEvent"];
 export type BackgroundProcess = components["schemas"]["BackgroundProcess"];
 export type BackgroundProcessStage = components["schemas"]["BackgroundProcessStage"];

@@ -11,7 +11,13 @@ func (m *Host) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	m.Processes.Background = reg
 	m.Runner.Execution.SetProcesses(reg)
 	m.Chats.Protection.SetJobs(reg)
-	_ = m.Resources.RegisterCleanup("background-processes", 20, reg.Lifecycle.DisposeSession)
+	m.ProjectControl.SetProcesses(reg)
+	_ = m.Resources.RegisterCleanup("awaited-processes", 20, func(ctx context.Context, id string) error {
+		return reg.Lifecycle.DisposeAwaitedSession(ctx, id, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationStoppedByUser))
+	})
+	_ = m.Resources.RegisterDisposal("background-processes", 20, func(ctx context.Context, id string) error {
+		return reg.Lifecycle.DisposeSession(ctx, id, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted))
+	})
 }
 func (m *Host) SetHeldCalls(reg *heldcall.Registry) {
 	m.Processes.Held = reg

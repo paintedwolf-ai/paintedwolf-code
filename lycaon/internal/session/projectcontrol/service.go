@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/messageview"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -63,12 +64,14 @@ type Service struct {
 	transcript      Transcript
 	anchors         Anchors
 	overlayPromoter OverlayPromoter
+	processes       *bgprocess.Registry
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
 	return &Service{store: store, stops: stops, status: status, admission: admission, batch: batch, instructions: instructions, transcript: transcript}
 }
-func (s *Service) SetProjects(projects Projects)      { s.projects = projects }
-func (s *Service) SetWorkers(workers Workers)         { s.workers = workers }
-func (s *Service) SetWorkerAbort(workers WorkerAbort) { s.workerAbort = workers }
-func (s *Service) SetAnchors(anchors Anchors)         { s.anchors = anchors }
+func (s *Service) SetProjects(projects Projects)            { s.projects = projects }
+func (s *Service) SetWorkers(workers Workers)               { s.workers = workers }
+func (s *Service) SetWorkerAbort(workers WorkerAbort)       { s.workerAbort = workers }
+func (s *Service) SetAnchors(anchors Anchors)               { s.anchors = anchors }
+func (s *Service) SetProcesses(processes *bgprocess.Registry) { s.processes = processes }

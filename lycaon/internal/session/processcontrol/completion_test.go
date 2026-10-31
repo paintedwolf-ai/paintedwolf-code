@@ -17,10 +17,11 @@ import (
 )
 
 type completionFixture struct {
-	captures []tools.SourceRunCapture
-	wakes    []anchor.ID
-	emitted  []anchor.ID
-	waiting  bool
+	captures  []tools.SourceRunCapture
+	wakes     []anchor.ID
+	emitted   []anchor.ID
+	envelopes []anchor.Envelope
+	waiting   bool
 }
 
 func (*completionFixture) Get(context.Context, string) (*api.Session, error) {
@@ -32,8 +33,9 @@ func (f *completionFixture) RecordSourceRunTerminal(_ context.Context, _ *api.Se
 func (*completionFixture) AfterTool(_ context.Context, _ *api.Session, _ string, _ map[string]any, out string, _ int, f guidance.ToolResultFacts) (string, guidance.ToolResultFacts) {
 	return out + "\npolicy guidance", f
 }
-func (f *completionFixture) Emit(_ context.Context, _ string, id anchor.ID, _ anchor.Envelope) {
+func (f *completionFixture) Emit(_ context.Context, _ string, id anchor.ID, env anchor.Envelope) {
 	f.emitted = append(f.emitted, id)
+	f.envelopes = append(f.envelopes, env)
 }
 func (f *completionFixture) SessionSleepingOnProcess(_, handle string) bool {
 	return f.waiting && handle == "handle"
@@ -104,7 +106,7 @@ func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start bg process: %v", err)
 	}
-	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", bgHandle) })
+	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", bgHandle, bgprocess.TerminationStoppedByAgent) })
 	if got := svc.HandleSubject("s", bgHandle); !strings.Contains(got, "-test.list=^$") {
 		t.Fatalf("bg subject = %q", got)
 	}
@@ -138,3 +140,95 @@ func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
 		t.Fatalf("foreign session subject = %q", got)
 	}
 }
+
+func TestTwoUserStoppedCommandsBetweenTurnsQueueSeparatelyWithCommandLinesAndReason(t *testing.T) {
+	f := &completionFixture{}
+	service := New(f, f, f, f)
+	service.SetLoop(f, f)
+	now := time.Now()
+
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:         "session",
+		Handle:            "bg-1",
+		OriginTool:        "command",
+		TerminationReason: bgprocess.TerminationStoppedByUser,
+		ExitCode:          -1,
+		FinishedAt:        now,
+		Stages:            []hostcmd.StageResult{{Command: "npm run dev"}},
+	})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:         "session",
+		Handle:            "bg-2",
+		OriginTool:        "command",
+		TerminationReason: bgprocess.TerminationStoppedByUser,
+		ExitCode:          -1,
+		FinishedAt:        now,
+		Stages:            []hostcmd.StageResult{{Command: "tail -f app.log"}},
+	})
+
+	if len(f.envelopes) != 2 {
+		t.Fatalf("emitted envelopes = %d, want 2", len(f.envelopes))
+	}
+	if f.envelopes[0].Subject != "bg-1" || !strings.Contains(f.envelopes[0].CommandCompletionDigest, "termination=stopped_by_user") || !strings.Contains(f.envelopes[0].CommandCompletionDigest, "command=npm run dev") {
+		t.Fatalf("first envelope = %+v", f.envelopes[0])
+	}
+	if f.envelopes[1].Subject != "bg-2" || !strings.Contains(f.envelopes[1].CommandCompletionDigest, "termination=stopped_by_user") || !strings.Contains(f.envelopes[1].CommandCompletionDigest, "command=tail -f app.log") {
+		t.Fatalf("second envelope = %+v", f.envelopes[1])
+	}
+}
+
+func TestCompletionDeliveryRespectsTerminationReasonRouting(t *testing.T) {
+	f := &completionFixture{}
+	service := New(f, f, f, f)
+	service.SetLoop(f, f)
+	now := time.Now()
+
+	for _, teardownReason := range []bgprocess.TerminationReason{
+		bgprocess.TerminationChatDeleted,
+		bgprocess.TerminationProjectDeleted,
+		bgprocess.TerminationAppQuit,
+		bgprocess.TerminationWorkerCompleted,
+		bgprocess.TerminationWorkerCancelled,
+	} {
+		service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+			SessionID:         "session",
+			Handle:            "h-" + string(teardownReason),
+			OriginTool:        "command",
+			TerminationReason: teardownReason,
+			FinishedAt:        now,
+		})
+	}
+	if len(f.emitted) != 0 || len(f.wakes) != 0 {
+		t.Fatalf("teardown completions delivered to session: emitted=%v wakes=%v", f.emitted, f.wakes)
+	}
+
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:         "session",
+		Handle:            "h-agent",
+		OriginTool:        "command",
+		TerminationReason: bgprocess.TerminationStoppedByAgent,
+		FinishedAt:        now,
+	})
+	if len(f.emitted) != 0 {
+		t.Fatalf("stopped_by_agent emitted unrequested completion kick: %v", f.emitted)
+	}
+
+	for _, liveReason := range []bgprocess.TerminationReason{
+		bgprocess.TerminationExited,
+		bgprocess.TerminationTimedOut,
+		bgprocess.TerminationStoppedByUser,
+		bgprocess.TerminationRootDetached,
+	} {
+		service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+			SessionID:         "session",
+			Handle:            "h-" + string(liveReason),
+			OriginTool:        "command",
+			TerminationReason: liveReason,
+			FinishedAt:        now,
+		})
+	}
+	if len(f.emitted) != 4 {
+		t.Fatalf("live session completions emitted = %d, want 4", len(f.emitted))
+	}
+}
+

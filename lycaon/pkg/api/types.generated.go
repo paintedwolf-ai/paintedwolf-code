@@ -653,11 +653,12 @@ type AttentionView struct {
 
 // BackgroundProcess
 type BackgroundProcess struct {
-	Output    *BackgroundProcessOutput `json:"output,omitempty"`
-	ProcessID string                   `json:"process_id"`
-	Running   bool                     `json:"running"`
-	Stages    []BackgroundProcessStage `json:"stages,omitempty"`
-	ExitCode  *int                     `json:"exit_code,omitempty"`
+	Output            *BackgroundProcessOutput           `json:"output,omitempty"`
+	ProcessID         string                             `json:"process_id"`
+	Running           bool                               `json:"running"`
+	Stages            []BackgroundProcessStage           `json:"stages,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackgroundProcessChunk
@@ -675,10 +676,11 @@ type BackgroundProcessEvent struct {
 	Stream    string `json:"stream"`
 	Text      string `json:"text,omitempty"`
 	// Byte offset just past the process output this event reflects; 0 for a held call, which has no byte stream.
-	EndOffset int64 `json:"end_offset"`
-	Running   bool  `json:"running"`
-	ExitCode  *int  `json:"exit_code,omitempty"`
-	Truncated bool  `json:"truncated,omitempty"`
+	EndOffset         int64                              `json:"end_offset"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+	Truncated         bool                               `json:"truncated,omitempty"`
 	// Replace previously projected text instead of appending it.
 	Reset bool `json:"reset,omitempty"`
 }
@@ -694,8 +696,9 @@ type BackgroundProcessOutput struct {
 	Chunks    []BackgroundProcessChunk `json:"chunks"`
 	Running   bool                     `json:"running"`
 	// Earlier output was evicted from the host buffer or cut from this snapshot.
-	Truncated bool `json:"truncated,omitempty"`
-	ExitCode  *int `json:"exit_code,omitempty"`
+	Truncated         bool                               `json:"truncated,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackgroundProcessStage
@@ -715,8 +718,9 @@ type BackgroundProcessStopResult struct {
 	// The host requested termination; this does not assert process exit.
 	StopRequested bool `json:"stop_requested"`
 	// True until the host has observed terminal process state. Wait for the process event instead of repeating stop.
-	Running  bool `json:"running"`
-	ExitCode *int `json:"exit_code,omitempty"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackupCapabilities

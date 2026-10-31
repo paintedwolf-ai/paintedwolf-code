@@ -37,16 +37,24 @@ type RootDependentDocument struct {
 	Path       string `json:"path"`
 }
 
+// RootDependentBackgroundProcess is a live background command whose working directory is within a folder root.
+type RootDependentBackgroundProcess struct {
+	Handle    string `json:"handle"`
+	SessionID string `json:"session_id"`
+	Cwd       string `json:"cwd"`
+}
+
 // RootDependents inventories project-scoped sandbox-bound work that breaks when a folder vanishes.
 type RootDependents struct {
-	Workers   []RootDependentWorker   `json:"workers"`
-	Overlays  []RootDependentOverlay  `json:"overlays"`
-	Sessions  []RootDependentSession  `json:"sessions"`
-	Documents []RootDependentDocument `json:"documents"`
+	Workers             []RootDependentWorker            `json:"workers"`
+	Overlays            []RootDependentOverlay           `json:"overlays"`
+	Sessions            []RootDependentSession           `json:"sessions"`
+	Documents           []RootDependentDocument          `json:"documents"`
+	BackgroundProcesses []RootDependentBackgroundProcess `json:"background_processes"`
 }
 
 func (d RootDependents) HasAny() bool {
-	return len(d.Workers) > 0 || len(d.Overlays) > 0 || len(d.Sessions) > 0 || len(d.Documents) > 0
+	return len(d.Workers) > 0 || len(d.Overlays) > 0 || len(d.Sessions) > 0 || len(d.Documents) > 0 || len(d.BackgroundProcesses) > 0
 }
 
 // Details returns the enumerated dependents for structured root_busy rejects.
@@ -82,11 +90,20 @@ func (d RootDependents) Details() map[string]any {
 			"path":        d.Path,
 		})
 	}
+	backgroundProcesses := make([]map[string]any, 0, len(d.BackgroundProcesses))
+	for _, p := range d.BackgroundProcesses {
+		backgroundProcesses = append(backgroundProcesses, map[string]any{
+			"handle":     p.Handle,
+			"session_id": p.SessionID,
+			"cwd":        p.Cwd,
+		})
+	}
 	return map[string]any{
-		"workers":   workers,
-		"overlays":  overlays,
-		"sessions":  sessions,
-		"documents": documents,
+		"workers":              workers,
+		"overlays":             overlays,
+		"sessions":             sessions,
+		"documents":            documents,
+		"background_processes": backgroundProcesses,
 	}
 }
 
@@ -95,6 +112,7 @@ func (d RootDependents) merge(other RootDependents) RootDependents {
 	seenOverlay := map[string]struct{}{}
 	seenSession := map[string]struct{}{}
 	seenDocument := map[string]struct{}{}
+	seenProcess := map[string]struct{}{}
 	out := RootDependents{}
 	appendUnique := func() {
 		for _, w := range d.Workers {
@@ -145,6 +163,14 @@ func (d RootDependents) merge(other RootDependents) RootDependents {
 			}
 			seenDocument[document.DocumentID] = struct{}{}
 			out.Documents = append(out.Documents, document)
+		}
+		for _, proc := range append(d.BackgroundProcesses, other.BackgroundProcesses...) {
+			key := proc.SessionID + "/" + proc.Handle
+			if _, ok := seenProcess[key]; ok {
+				continue
+			}
+			seenProcess[key] = struct{}{}
+			out.BackgroundProcesses = append(out.BackgroundProcesses, proc)
 		}
 	}
 	appendUnique()
@@ -245,15 +271,18 @@ func (m *Service) rootDependentsFor(ctx context.Context, projectID string, detac
 			})
 		}
 	}
+	projectSessionIDs := map[string]struct{}(nil)
 	if m.store != nil {
 		sessions, err := m.store.List(ctx)
 		if err != nil {
 			return RootDependents{}, err
 		}
+		projectSessionIDs = make(map[string]struct{}, len(sessions))
 		for _, sess := range sessions {
 			if sess == nil || sess.ProjectID != projectID {
 				continue
 			}
+			projectSessionIDs[sess.ID] = struct{}{}
 			if len(projectRoots) <= 1 && strings.TrimSpace(sess.WorkspaceRootID) != detached.ID {
 				continue
 			}
@@ -263,6 +292,15 @@ func (m *Service) rootDependentsFor(ctx context.Context, projectID string, detac
 			out.Sessions = append(out.Sessions, RootDependentSession{
 				SessionID: sess.ID,
 				Status:    sess.Status,
+			})
+		}
+	}
+	if m.processes != nil {
+		for _, proc := range m.processes.ProcessesUnderRoot(projectID, projectSessionIDs, detached.Path) {
+			out.BackgroundProcesses = append(out.BackgroundProcesses, RootDependentBackgroundProcess{
+				Handle:    proc.Handle,
+				SessionID: proc.SessionID,
+				Cwd:       proc.Cwd,
 			})
 		}
 	}

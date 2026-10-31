@@ -479,6 +479,23 @@ components:
         effect:
           type: string
           enum: [block, warn, nudge, allow, transform]
+    BackgroundProcessTerminationReason:
+      type: string
+      description: >-
+        Why a background process ended: natural exit, timeout, explicit stop
+        by the agent or user, or host teardown of the owning chat, project,
+        detached root, app process, or worker runtime.
+      enum:
+      - exited
+      - timed_out
+      - stopped_by_agent
+      - stopped_by_user
+      - chat_deleted
+      - project_deleted
+      - root_detached
+      - app_quit
+      - worker_completed
+      - worker_cancelled
     BackgroundProcessEvent:
       x-go-generate: true
       type: object
@@ -512,6 +529,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
         truncated:
           type: boolean
         reset:
@@ -568,6 +587,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     BackgroundProcessChunk:
       x-go-generate: true
       type: object
@@ -614,6 +635,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     BackgroundProcessStopResult:
       x-go-generate: true
       type: object
@@ -635,6 +658,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     PreviewActionOverlay:
       x-go-generate: true
       type: object

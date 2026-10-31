@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -96,36 +97,40 @@ func (r *ProcessLifecycle) Discard(sessionID, handle string) {
 }
 
 // Stop requests process-tree termination and returns the currently observed exit state.
-func (r *ProcessLifecycle) Stop(sessionID, handle string) (*api.BackgroundProcessStopResult, error) {
+func (r *ProcessLifecycle) Stop(sessionID, handle string, reason TerminationReason) (*api.BackgroundProcessStopResult, error) {
 	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return nil, err
 	}
-	r.killProcess(proc)
-	running, hasExit, exitCode := r.jobs.exitState(proc)
-	return &api.BackgroundProcessStopResult{
-		ProcessID:     handle,
-		StopRequested: true,
-		Running:       running,
-		ExitCode: func() *int {
-			if hasExit {
-				return &exitCode
-			}
-			return nil
-		}(),
-	}, nil
+	r.killProcess(proc, reason)
+	running, hasExit, exitCode, settledReason := r.jobs.exitState(proc)
+	out := &api.BackgroundProcessStopResult{
+		ProcessID:         handle,
+		StopRequested:     true,
+		Running:           running,
+		TerminationReason: api.BackgroundProcessTerminationReason(settledReason),
+	}
+	if hasExit {
+		out.ExitCode = &exitCode
+	}
+	return out, nil
 }
 
-func (r *ProcessLifecycle) killProcess(proc *Process) {
+func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) {
 	if proc == nil {
 		return
 	}
 	r.jobs.mu.Lock()
-	if proc.stopped {
+	if !proc.running || proc.hasExit || proc.stopped {
+		r.jobs.mu.Unlock()
+		return
+	}
+	if proc.timeout > 0 && !proc.startedAt.IsZero() && time.Since(proc.startedAt) >= proc.timeout {
 		r.jobs.mu.Unlock()
 		return
 	}
 	proc.stopped = true
+	proc.reason = reason
 	cancel := proc.cancel
 	async := proc.async
 	pty := proc.pty
@@ -145,28 +150,137 @@ func (r *ProcessLifecycle) killProcess(proc *Process) {
 	}
 }
 
-// DisposeSession removes every handle and waits for process exit.
-func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string) error {
+// DisposeSession is the only session-scoped teardown for background jobs; it
+// removes every handle in sessionID and waits for process exit.
+func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string, reason TerminationReason) error {
 	if r == nil {
 		return nil
+	}
+	if reason == "" {
+		reason = TerminationReasonFromContext(ctx, TerminationChatDeleted)
 	}
 	sessionID = trim(sessionID)
 	r.jobs.mu.Lock()
 	procs := r.jobs.sessions[sessionID]
-	delete(r.jobs.sessions, sessionID)
-	for _, proc := range procs {
-		proc.discarded = true
+	for handle := range procs {
+		delete(r.jobs.workDirs, handle)
 	}
+	delete(r.jobs.sessions, sessionID)
 	r.jobs.mu.Unlock()
 	for _, proc := range procs {
-		r.killProcess(proc)
+		r.killProcess(proc, reason)
 	}
 	for _, proc := range procs {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseIndexWatch(proc)
 	}
 	return nil
+}
+
+// DisposeAwaitedSession stops and removes unpromoted awaited commands for a
+// released turn while leaving background jobs running.
+func (r *ProcessLifecycle) DisposeAwaitedSession(ctx context.Context, sessionID string, reason TerminationReason) error {
+	if r == nil {
+		return nil
+	}
+	if reason == "" {
+		reason = TerminationReasonFromContext(ctx, TerminationStoppedByUser)
+	}
+	sessionID = trim(sessionID)
+	r.jobs.mu.Lock()
+	sessionProcs := r.jobs.sessions[sessionID]
+	var awaited []*Process
+	for handle, proc := range sessionProcs {
+		if proc == nil || !proc.silent {
+			continue
+		}
+		proc.discarded = true
+		awaited = append(awaited, proc)
+		delete(sessionProcs, handle)
+		delete(r.jobs.workDirs, handle)
+	}
+	if len(sessionProcs) == 0 {
+		delete(r.jobs.sessions, sessionID)
+	}
+	r.jobs.mu.Unlock()
+	for _, proc := range awaited {
+		r.killProcess(proc, reason)
+	}
+	for _, proc := range awaited {
+		if err := r.awaitSettled(ctx, proc); err != nil {
+			return err
+		}
+		r.releaseIndexWatch(proc)
+	}
+	return nil
+}
+
+// StopUnderRoot stops and awaits live background jobs matching handles or running under rootPath.
+func (r *ProcessLifecycle) StopUnderRoot(
+	ctx context.Context,
+	projectID string,
+	sessionIDs map[string]struct{},
+	rootPath string,
+	handles []RootProcess,
+	reason TerminationReason,
+) error {
+	if r == nil || r.jobs == nil {
+		return nil
+	}
+	if reason == "" {
+		reason = TerminationReasonFromContext(ctx, TerminationRootDetached)
+	}
+	projectID = trim(projectID)
+	rootPath = trim(rootPath)
+	seen := make(map[string]*Process)
+	r.jobs.mu.Lock()
+	for _, item := range handles {
+		sid := trim(item.SessionID)
+		hid := trim(item.Handle)
+		if procs := r.jobs.sessions[sid]; procs != nil {
+			if proc := procs[hid]; proc != nil && proc.running && !proc.silent {
+				seen[sid+"/"+hid] = proc
+			}
+		}
+	}
+	for sessionID, procs := range r.jobs.sessions {
+		for handle, proc := range procs {
+			if proc == nil || !proc.running || proc.silent {
+				continue
+			}
+			if !matchesProjectOrSessions(proc, sessionID, projectID, sessionIDs) {
+				continue
+			}
+			workDir := r.jobs.workDirs[handle]
+			if rootPath != "" && !projectroot.PathWithinRoot(rootPath, workDir) {
+				continue
+			}
+			seen[sessionID+"/"+handle] = proc
+		}
+	}
+	r.jobs.mu.Unlock()
+	for _, proc := range seen {
+		r.killProcess(proc, reason)
+	}
+	for _, proc := range seen {
+		if err := r.awaitSettled(ctx, proc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ProcessLifecycle) releaseIndexWatch(proc *Process) {
+	if proc == nil {
+		return
+	}
+	r.jobs.mu.Lock()
+	snapshot := proc.indexWatch
+	proc.indexWatch = indexwatch.Snapshot{}
+	r.jobs.mu.Unlock()
+	snapshot.Release()
 }
 
 // awaitSettled waits for process exit and output drain under the caller's deadline.
@@ -195,7 +309,6 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	var procs []*Process
 	for sessionID, sessionProcs := range r.jobs.sessions {
 		for _, proc := range sessionProcs {
-			proc.discarded = true
 			procs = append(procs, proc)
 		}
 		delete(r.jobs.sessions, sessionID)
@@ -203,12 +316,13 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	r.jobs.mu.Unlock()
 
 	for _, proc := range procs {
-		r.killProcess(proc)
+		r.killProcess(proc, TerminationAppQuit)
 	}
 	for _, proc := range procs {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseIndexWatch(proc)
 	}
 	return nil
 }
@@ -272,8 +386,13 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.Observation = stamped.Observation
 	if publish != nil {
 		publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
-			ProcessID: proc.Handle, SessionID: proc.SessionID, Stream: "exit",
-			EndOffset: proc.buffer.NextCursor(), Running: false, ExitCode: &exitCode,
+			ProcessID:         proc.Handle,
+			SessionID:         proc.SessionID,
+			Stream:            "exit",
+			EndOffset:         proc.buffer.NextCursor(),
+			Running:           false,
+			ExitCode:          &exitCode,
+			TerminationReason: api.BackgroundProcessTerminationReason(completion.TerminationReason),
 		})
 	}
 	if complete != nil {

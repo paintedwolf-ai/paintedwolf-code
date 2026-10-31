@@ -116,6 +116,11 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	workDir := projectDir
+	if c := trim(spec.Cwd); filepath.IsAbs(c) {
+		workDir = filepath.Clean(c)
+	}
+	r.jobs.workDirs[handle] = workDir
 	r.jobs.mu.Unlock()
 
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
@@ -186,16 +191,15 @@ func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec
 	proc.exitCode = exitCode
 	proc.failure = failure
 	proc.finishedAt = finishedAt
-	proc.reason = TerminationExited
 	if res != nil && res.TimedOut {
 		proc.reason = TerminationTimedOut
-	} else if proc.stopped {
-		proc.reason = TerminationStopped
+	} else if !proc.stopped || proc.reason == "" {
+		proc.reason = TerminationExited
 	}
 	r.jobs.pruneCompletedLocked(proc.SessionID)
 	r.jobs.mu.Unlock()
-	close(proc.done)
 	r.Output.publishTerminal(ctx, proc)
+	close(proc.done)
 }
 
 var _ io.Writer = streamWriter{}

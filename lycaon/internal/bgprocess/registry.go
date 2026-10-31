@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,6 +61,7 @@ type Registry struct {
 type processTable struct {
 	mu            sync.Mutex
 	sessions      map[string]map[string]*Process
+	workDirs      map[string]string
 	closed        bool
 	maxBackground int
 	maxAwaited    int
@@ -103,7 +105,13 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 	if cfg.MaxRecent <= 0 {
 		cfg.MaxRecent = DefaultMaxRecent
 	}
-	jobs := &processTable{sessions: make(map[string]map[string]*Process), maxBackground: cfg.MaxBackground, maxAwaited: cfg.MaxAwaited, maxRecent: cfg.MaxRecent}
+	jobs := &processTable{
+		sessions:      make(map[string]map[string]*Process),
+		workDirs:      make(map[string]string),
+		maxBackground: cfg.MaxBackground,
+		maxAwaited:    cfg.MaxAwaited,
+		maxRecent:     cfg.MaxRecent,
+	}
 	output := &Output{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, publish: hooks.Publish, complete: hooks.Complete, refused: hooks.Refused}
 	lifecycle := &ProcessLifecycle{jobs: jobs}
 	terminal := &Terminal{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Output: output, Lifecycle: lifecycle}
@@ -147,10 +155,12 @@ func (r *processTable) remove(sessionID, handle string) {
 		return
 	}
 	if proc := procs[handle]; proc != nil {
+		proc.discarded = true
 		proc.indexWatch.Release()
 		proc.indexWatch = indexwatch.Snapshot{}
 	}
 	delete(procs, handle)
+	delete(r.workDirs, handle)
 	if len(procs) == 0 {
 		delete(r.sessions, sessionID)
 	}
@@ -206,7 +216,57 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 	})
 	for _, job := range completed[:len(completed)-r.maxRecent] {
 		delete(procs, job.handle)
+		delete(r.workDirs, job.handle)
 	}
+}
+
+// ProcessesUnderRoot returns live background jobs in projectID or sessionIDs whose canonical working directory is within rootPath.
+func (r *Registry) ProcessesUnderRoot(projectID string, sessionIDs map[string]struct{}, rootPath string) []RootProcess {
+	if r == nil || r.jobs == nil {
+		return nil
+	}
+	projectID = trim(projectID)
+	rootPath = trim(rootPath)
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	var out []RootProcess
+	for sessionID, procs := range r.jobs.sessions {
+		for handle, proc := range procs {
+			if proc == nil || !proc.running || proc.silent {
+				continue
+			}
+			if !matchesProjectOrSessions(proc, sessionID, projectID, sessionIDs) {
+				continue
+			}
+			workDir := r.jobs.workDirs[handle]
+			if rootPath != "" && !projectroot.PathWithinRoot(rootPath, workDir) {
+				continue
+			}
+			out = append(out, RootProcess{
+				Handle:    handle,
+				SessionID: sessionID,
+				Cwd:       workDir,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SessionID == out[j].SessionID {
+			return out[i].Handle < out[j].Handle
+		}
+		return out[i].SessionID < out[j].SessionID
+	})
+	return out
+}
+
+func matchesProjectOrSessions(proc *Process, sessionID, projectID string, sessionIDs map[string]struct{}) bool {
+	if projectID != "" && proc.ProjectID == projectID {
+		return true
+	}
+	if len(sessionIDs) > 0 {
+		_, ok := sessionIDs[sessionID]
+		return ok
+	}
+	return projectID == ""
 }
 
 func (r *processTable) countRunningAwaitedLocked(sessionID string) int {

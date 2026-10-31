@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -156,6 +157,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	} else if bound {
 		return ErrSessionWorktreeBound
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationChatDeleted)
 	if m.workers != nil {
 		if err := m.workers.AbortAllWorkers(ctx, id, sess.ProjectID, "session deleted"); err != nil {
 			return fmt.Errorf("dispose session workers: %w", err)
@@ -163,6 +165,9 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	}
 	if err := m.DisposeRuntime(ctx, id); err != nil {
 		return fmt.Errorf("dispose session runtime: %w", err)
+	}
+	if m.queue != nil {
+		m.queue.Clear(id)
 	}
 	checkpointStore, checkpointErr := m.Captures.ForSession(ctx, id)
 	if errors.Is(checkpointErr, checkpointcontrol.ErrCheckpointRootUnset) {
@@ -199,18 +204,10 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 }
 
 func (m *Service) DisposeRuntime(ctx context.Context, id string) error {
-	if m == nil {
+	if m == nil || m.resources == nil {
 		return nil
 	}
-	if m.resources != nil {
-		if err := m.resources.Dispose(ctx, resourcelifecycle.SessionScope(id)); err != nil {
-			return err
-		}
-	}
-	if m.queue != nil {
-		m.queue.Clear(id)
-	}
-	return nil
+	return m.resources.Dispose(ctx, resourcelifecycle.SessionScope(id))
 }
 
 func (m *Service) ReleaseRuntime(ctx context.Context, id string) error {
