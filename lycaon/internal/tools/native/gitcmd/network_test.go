@@ -61,6 +61,7 @@ func serveSmartHTTP(bin, repoDir string) http.Handler {
 }
 
 func TestNetworkCommandsOverLocalFileRemote(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
 	h.git("clean", "-fd")
@@ -112,6 +113,7 @@ func TestNetworkCommandsOverLocalFileRemote(t *testing.T) {
 	}
 }
 
+// Serial: mutates process-wide egress posture and resolver.
 func TestNetworkCommandsOverSmartHTTPAndEgressGate(t *testing.T) {
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
@@ -267,6 +269,7 @@ esac
 	return sockPath, argvLog, envLog
 }
 
+// Serial: mutates process-wide SSH environment, host config, and egress gate.
 func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")

@@ -96,6 +96,12 @@ func newUninitializedHarness(t *testing.T) *harness {
 	return h
 }
 
+func (h *harness) withT(t *testing.T) *harness {
+	clone := *h
+	clone.t = t
+	return &clone
+}
+
 func (h *harness) write(name, content string) {
 	h.t.Helper()
 	full := filepath.Join(h.root, name)
@@ -206,11 +212,13 @@ var readCases = []string{
 	"git log --oneline nope", "git show nope",
 }
 
-// TestReadFormsMatchBundledGit: every read form is Git's own output and status.
 func TestReadFormsMatchBundledGit(t *testing.T) {
-	h := newHarness(t)
+	t.Parallel()
+	base := newHarness(t)
 	for _, line := range readCases {
 		t.Run(line, func(t *testing.T) {
+			t.Parallel()
+			h := base.withT(t)
 			words := strings.Fields(line)
 			r := h.exec(words...)
 			if r.err != nil {
@@ -243,8 +251,8 @@ func TestReadFormsMatchBundledGit(t *testing.T) {
 	}
 }
 
-// TestEverydayFormsGolden pins the output of the forms agents use most.
 func TestEverydayFormsGolden(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	head := strings.TrimSpace(h.git("rev-parse", "--short", "HEAD"))
 	first := strings.TrimSpace(h.git("rev-parse", "--short", "HEAD~1"))
@@ -274,9 +282,8 @@ func TestEverydayFormsGolden(t *testing.T) {
 	}
 }
 
-// TestReadFormsRefuseWritesAndUncataloguedForms: a read spelling that would
-// write, reach the network or run a program refuses before Git runs.
 func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	before := h.git("for-each-ref")
 	config := h.git("config", "--local", "--list")
@@ -327,9 +334,8 @@ func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
 	}
 }
 
-// TestGitDirectoryFailuresAreGitsOwn: a missing -C directory or a directory
-// outside any repository reports Git's fatal message and status 128.
 func TestGitDirectoryFailuresAreGitsOwn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	missing := h.exec("git", "-C", "nope", "status")
 	if missing.err != nil || missing.result.Status != 128 || missing.stderr != "fatal: cannot change to 'nope': No such file or directory\n" {
@@ -343,9 +349,8 @@ func TestGitDirectoryFailuresAreGitsOwn(t *testing.T) {
 	}
 }
 
-// TestResolveSkipsGlobalOptions: the umbrella resolves the longest
-// catalogued subcommand after global options.
 func TestResolveSkipsGlobalOptions(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	for argv, want := range map[string]string{
 		"git status": "git status", "git -C sub -c color.ui=false stash list": "git stash list", "git --no-pager worktree list": "git worktree list",
@@ -362,8 +367,8 @@ func TestResolveSkipsGlobalOptions(t *testing.T) {
 	}
 }
 
-// TestStreamBoundRefuses: output past stream_bytes is a typed refusal.
 func TestStreamBoundRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 8}
 	h.exec("git", "log").refused(t, "stream bound", "COMMAND_LIMIT_EXCEEDED")

@@ -19,12 +19,12 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// TestTrackedRemovalAndMoveSourceRecovery: git rm and git mv change the
-// working tree through the recoverable source owners, so restore_version,
-// source-history undo and the ledger's rename record all see them.
+// git rm and git mv route worktree changes through recoverable source owners.
 func TestTrackedRemovalAndMoveSourceRecovery(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "rm-undo", "mv"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			database := testdbfixture.Open(t, "store.db")
 			rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, h.root)
