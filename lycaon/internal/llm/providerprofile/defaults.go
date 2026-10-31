@@ -66,6 +66,7 @@ func Fireworks() Profile {
 	profile.Discovery = DiscoveryFireworks
 	// Fireworks tool messages accept image parts.
 	profile.ToolResultImages = ToolResultImagesInline
+	profile.OmitToolsWhenNotCallable = true
 	return profile
 }
 

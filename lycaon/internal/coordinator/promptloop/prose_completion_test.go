@@ -77,3 +77,35 @@ func proseCompletionCaseName(forced bool, content string) string {
 	}
 	return mode + "/prose and tool"
 }
+
+func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
+	messages := store.NewMemory()
+	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	testutil.FailErr(t, "create session", err)
+	client := &sequentialLLMClient{completions: []*modelcall.Completion{
+		{
+			Content:   "",
+			ToolCalls: []api.ToolCall{{ID: "up-1", Name: "update_progress", Args: map[string]any{"content": "- [x] Done"}}},
+		},
+		{
+			Content: "Final summary after forced closeout.",
+		},
+	}}
+	deps := promptloop.StoreDeps(messages)
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.Limits = loopTestLimits(1)
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
+		SessionID: sess.ID, Session: sess, History: userHistory("Summarize"),
+		UserPrompt: "Summarize", ProfileID: "coordinator", ProseFinish: true,
+	})
+	testutil.FailErr(t, "run prose completion with bookkeeping recovery", err)
+	if result == nil || result.LastAssistantContent != "Final summary after forced closeout." {
+		t.Fatalf("result = %+v, want recovered final summary", result)
+	}
+	if client.idx != 2 {
+		t.Fatalf("provider calls = %d, want 2", client.idx)
+	}
+}
