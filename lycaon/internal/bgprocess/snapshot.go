@@ -61,8 +61,12 @@ func (r *Registry) Snapshot(ctx context.Context, sessionID, handle string, tailB
 		return Snapshot{}, err
 	}
 	r.jobs.mu.Lock()
+	var terminationReason TerminationReason
+	if proc.hasExit {
+		terminationReason = proc.reason
+	}
 	snap := Snapshot{
-		TerminationReason: proc.reason,
+		TerminationReason: terminationReason,
 		HasExit:           proc.hasExit,
 		ExitCode:          proc.exitCode,
 		Failure:           proc.failure,
@@ -180,7 +184,10 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	chunks, next, truncated := proc.buffer.ReadSince(cursor)
 	r.jobs.mu.Lock()
 	running, hasExit, exitCode, failure := proc.running, proc.hasExit, proc.exitCode, proc.failure
-	terminationReason := proc.reason
+	var terminationReason TerminationReason
+	if hasExit {
+		terminationReason = proc.reason
+	}
 	r.jobs.mu.Unlock()
 	out := RawOutput{
 		Handle:    handle,
@@ -208,11 +215,12 @@ func (r *Output) ReadOutput(ctx context.Context, sessionID, handle string) (api.
 	}
 	raw := snapshot.Output
 	out := api.BackgroundProcessOutput{
-		ProcessID: raw.Handle,
-		Chunks:    toAPIChunks(raw.Chunks),
-		Running:   raw.Running,
-		Truncated: raw.Truncated,
-		ExitCode:  raw.ExitCode,
+		ProcessID:         raw.Handle,
+		Chunks:            toAPIChunks(raw.Chunks),
+		Running:           raw.Running,
+		Truncated:         raw.Truncated,
+		ExitCode:          raw.ExitCode,
+		TerminationReason: api.BackgroundProcessTerminationReason(snapshot.TerminationReason),
 	}
 	proc.publishMu.Lock()
 	projection := r.projectWindow(ctx, proc)
@@ -272,6 +280,7 @@ func (r *Output) List(ctx context.Context, sessionID string) []api.BackgroundPro
 		if proc.hasExit {
 			code := proc.exitCode
 			item.ExitCode = &code
+			item.TerminationReason = api.BackgroundProcessTerminationReason(proc.reason)
 		}
 		out = append(out, item)
 		scopes = append(scopes, processCaptureScope(proc))
@@ -352,11 +361,11 @@ func (r *Registry) CountLivePTYs(sessionID string) int {
 }
 
 // exitState reads the wait goroutine's exit fields under r.jobs.mu.
-func (r *processTable) exitState(proc *Process) (running, hasExit bool, exitCode int) {
+func (r *processTable) exitState(proc *Process) (running, hasExit bool, exitCode int, reason TerminationReason) {
 	if r == nil || proc == nil {
-		return false, false, 0
+		return false, false, 0, ""
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return proc.running, proc.hasExit, proc.exitCode
+	return proc.running, proc.hasExit, proc.exitCode, proc.reason
 }

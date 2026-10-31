@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -27,6 +28,7 @@ func (m *Service) ForceCancelForRootDetach(ctx context.Context, projectID, rootI
 	if path := strings.TrimSpace(detachedPath); path != "" {
 		reason = fmt.Sprintf("%s: %s", rootDetachCancelReason, path)
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationRootDetached)
 	return m.forceCancelDependents(ctx, projectID, rootID, dependents, reason, detachedPath)
 }
 
@@ -39,6 +41,7 @@ func (m *Service) ForceCancelForProjectDelete(ctx context.Context, projectID str
 	if projectID == "" {
 		return fmt.Errorf("project_id required")
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationProjectDeleted)
 	return m.forceCancelDependents(ctx, projectID, "", dependents, "project deleted", "")
 }
 

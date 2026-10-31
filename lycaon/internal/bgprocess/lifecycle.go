@@ -96,36 +96,40 @@ func (r *ProcessLifecycle) Discard(sessionID, handle string) {
 }
 
 // Stop requests process-tree termination and returns the currently observed exit state.
-func (r *ProcessLifecycle) Stop(sessionID, handle string) (*api.BackgroundProcessStopResult, error) {
+func (r *ProcessLifecycle) Stop(sessionID, handle string, reason TerminationReason) (*api.BackgroundProcessStopResult, error) {
 	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return nil, err
 	}
-	r.killProcess(proc)
-	running, hasExit, exitCode := r.jobs.exitState(proc)
-	return &api.BackgroundProcessStopResult{
-		ProcessID:     handle,
-		StopRequested: true,
-		Running:       running,
-		ExitCode: func() *int {
-			if hasExit {
-				return &exitCode
-			}
-			return nil
-		}(),
-	}, nil
+	r.killProcess(proc, reason)
+	running, hasExit, exitCode, settledReason := r.jobs.exitState(proc)
+	out := &api.BackgroundProcessStopResult{
+		ProcessID:         handle,
+		StopRequested:     true,
+		Running:           running,
+		TerminationReason: api.BackgroundProcessTerminationReason(settledReason),
+	}
+	if hasExit {
+		out.ExitCode = &exitCode
+	}
+	return out, nil
 }
 
-func (r *ProcessLifecycle) killProcess(proc *Process) {
+func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) {
 	if proc == nil {
 		return
 	}
 	r.jobs.mu.Lock()
-	if proc.stopped {
+	if !proc.running || proc.hasExit || proc.stopped {
+		r.jobs.mu.Unlock()
+		return
+	}
+	if proc.timeout > 0 && !proc.startedAt.IsZero() && time.Since(proc.startedAt) >= proc.timeout {
 		r.jobs.mu.Unlock()
 		return
 	}
 	proc.stopped = true
+	proc.reason = reason
 	cancel := proc.cancel
 	async := proc.async
 	pty := proc.pty
@@ -146,27 +150,39 @@ func (r *ProcessLifecycle) killProcess(proc *Process) {
 }
 
 // DisposeSession removes every handle and waits for process exit.
-func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string) error {
+func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string, reason TerminationReason) error {
 	if r == nil {
 		return nil
+	}
+	if reason == "" {
+		reason = TerminationReasonFromContext(ctx, TerminationChatDeleted)
 	}
 	sessionID = trim(sessionID)
 	r.jobs.mu.Lock()
 	procs := r.jobs.sessions[sessionID]
 	delete(r.jobs.sessions, sessionID)
-	for _, proc := range procs {
-		proc.discarded = true
-	}
 	r.jobs.mu.Unlock()
 	for _, proc := range procs {
-		r.killProcess(proc)
+		r.killProcess(proc, reason)
 	}
 	for _, proc := range procs {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseIndexWatch(proc)
 	}
 	return nil
+}
+
+func (r *ProcessLifecycle) releaseIndexWatch(proc *Process) {
+	if proc == nil {
+		return
+	}
+	r.jobs.mu.Lock()
+	snapshot := proc.indexWatch
+	proc.indexWatch = indexwatch.Snapshot{}
+	r.jobs.mu.Unlock()
+	snapshot.Release()
 }
 
 // awaitSettled waits for process exit and output drain under the caller's deadline.
@@ -195,7 +211,6 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	var procs []*Process
 	for sessionID, sessionProcs := range r.jobs.sessions {
 		for _, proc := range sessionProcs {
-			proc.discarded = true
 			procs = append(procs, proc)
 		}
 		delete(r.jobs.sessions, sessionID)
@@ -203,12 +218,13 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	r.jobs.mu.Unlock()
 
 	for _, proc := range procs {
-		r.killProcess(proc)
+		r.killProcess(proc, TerminationAppQuit)
 	}
 	for _, proc := range procs {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseIndexWatch(proc)
 	}
 	return nil
 }
@@ -272,8 +288,13 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.Observation = stamped.Observation
 	if publish != nil {
 		publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
-			ProcessID: proc.Handle, SessionID: proc.SessionID, Stream: "exit",
-			EndOffset: proc.buffer.NextCursor(), Running: false, ExitCode: &exitCode,
+			ProcessID:         proc.Handle,
+			SessionID:         proc.SessionID,
+			Stream:            "exit",
+			EndOffset:         proc.buffer.NextCursor(),
+			Running:           false,
+			ExitCode:          &exitCode,
+			TerminationReason: api.BackgroundProcessTerminationReason(completion.TerminationReason),
 		})
 	}
 	if complete != nil {

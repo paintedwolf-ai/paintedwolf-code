@@ -369,7 +369,12 @@ func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessi
 	if registry == nil {
 		return nil
 	}
-	_, stopErr := registry.Lifecycle.Stop(sessionID, handle)
+	fallback := bgprocess.TerminationStoppedByAgent
+	if ctx != nil && ctx.Err() != nil {
+		fallback = bgprocess.TerminationStoppedByUser
+	}
+	reason := bgprocess.TerminationReasonFromContext(ctx, fallback)
+	_, stopErr := registry.Lifecycle.Stop(sessionID, handle, reason)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandCancelCleanupTimeout)
 	defer cancel()
 	finished, waitErr := registry.Lifecycle.Await(cleanupCtx, sessionID, handle, 0)

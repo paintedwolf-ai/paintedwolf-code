@@ -147,6 +147,7 @@ func (r *processTable) remove(sessionID, handle string) {
 		return
 	}
 	if proc := procs[handle]; proc != nil {
+		proc.discarded = true
 		proc.indexWatch.Release()
 		proc.indexWatch = indexwatch.Snapshot{}
 	}
