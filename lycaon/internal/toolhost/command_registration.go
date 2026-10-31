@@ -40,7 +40,7 @@ func registerCommandTools(
 	if err != nil {
 		return err
 	}
-	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate, Ports: service,
+	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate, Ports: service, FailureTracker: ft,
 		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
 			return hostUtilities.Builtins(tc, nested, bound)
 		}}
