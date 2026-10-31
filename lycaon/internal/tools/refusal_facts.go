@@ -19,6 +19,6 @@ func ApplyRefusalFacts(facts guidance.ToolResultFacts, stamped confine.StampedRe
 		}
 		facts = facts.WithCode(code)
 	}
-	facts.Confine = stamped.Observation
+	facts.Confine = facts.Confine.Merge(stamped.Observation)
 	return facts
 }
