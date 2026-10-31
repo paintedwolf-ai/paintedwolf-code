@@ -13,11 +13,11 @@ import (
 )
 
 // ListAttentionCandidates selects unarchived root sessions with active, waiting, or unread work.
-func (s *SQL) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
+func (s *sqlSessionViews) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListAttentionCandidateSessions(ctx)
+	rows, err := s.core.queries.ListAttentionCandidateSessions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list attention candidates: %w", err)
 	}
@@ -45,11 +45,11 @@ func (s *SQL) ListAttentionCandidates(ctx context.Context) ([]attention.Candidat
 
 // LatestFinishes returns each session's newest completed turn. Sessions that
 // have never completed one are absent.
-func (s *SQL) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
+func (s *sqlSessionViews) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListLatestFinishedTurns(ctx)
+	rows, err := s.core.queries.ListLatestFinishedTurns(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list latest finished turns: %w", err)
 	}
@@ -65,16 +65,16 @@ func (s *SQL) LatestFinishes(ctx context.Context) (map[string]time.Time, error) 
 }
 
 // LatestFinishes returns each session's newest completed turn.
-func (s *Memory) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
+func (s *memorySessionViews) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.latestFinishesLocked(), nil
+	s.core.mu.RLock()
+	defer s.core.mu.RUnlock()
+	return latestFinishesLocked(s.core), nil
 }
 
-func (s *Memory) latestFinishesLocked() map[string]time.Time {
+func latestFinishesLocked(s *memoryCore) map[string]time.Time {
 	out := make(map[string]time.Time)
 	for _, turn := range s.turns {
 		if turn.Status == TurnStatusComplete && turn.CompletedAt != nil && turn.CompletedAt.After(out[turn.SessionID]) {
@@ -87,15 +87,16 @@ func (s *Memory) latestFinishesLocked() map[string]time.Time {
 // ListAttentionCandidates selects unarchived root sessions that are active or
 // hold an unread completed turn. Memory holds no checkpoints or workflow runs,
 // so those never select an idle session here.
-func (s *Memory) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
+func (s *memorySessionViews) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
 	out := make([]attention.Candidate, 0)
-	finishes := s.latestFinishesLocked()
-	for _, sess := range s.sessions {
+	finishes := latestFinishesLocked(core)
+	for _, sess := range core.sessions {
 		if sess == nil || sess.ArchivedAt != nil || strings.TrimSpace(sess.ParentSessionID) != "" {
 			continue
 		}
@@ -104,7 +105,7 @@ func (s *Memory) ListAttentionCandidates(ctx context.Context) ([]attention.Candi
 		if sess.Status == api.SessionStatusIdle && !unread {
 			continue
 		}
-		statusSince, changed := s.statusChangedAt[sess.ID]
+		statusSince, changed := core.statusChangedAt[sess.ID]
 		if !changed {
 			statusSince = sess.CreatedAt
 		}

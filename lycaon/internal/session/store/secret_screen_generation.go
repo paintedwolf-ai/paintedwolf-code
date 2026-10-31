@@ -18,19 +18,19 @@ func storedGeneration(generation uint64) int64 {
 
 // SessionTreeIDs returns the root and every descendant session. Secret evidence
 // is keyed to a tree, so tree-scoped work resolves membership here.
-func (s *SQL) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
+func (sg *sqlScreenGeneration) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return s.queries.ListSessionTreeIDs(ctx, rootSessionID)
+	return sg.core.queries.ListSessionTreeIDs(ctx, rootSessionID)
 }
 
 // MessageIDsBelowScreenGeneration returns rows last screened before generation.
-func (s *SQL) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
+func (sg *sqlScreenGeneration) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return s.queries.ListMessageIDsBelowScreenGeneration(ctx, db.ListMessageIDsBelowScreenGenerationParams{
+	return sg.core.queries.ListMessageIDsBelowScreenGeneration(ctx, db.ListMessageIDsBelowScreenGenerationParams{
 		SessionID:              sessionID,
 		SecretScreenGeneration: storedGeneration(generation),
 	})
@@ -39,11 +39,11 @@ func (s *SQL) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID str
 // MaxMessageScreenGenerationInTree returns the highest tree revision stamp. A
 // sweep works above it, so the sequence keeps rising across restarts of the
 // in-memory revision counter.
-func (s *SQL) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
+func (sg *sqlScreenGeneration) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	stamped, err := s.queries.MaxMessageScreenGenerationInTree(ctx, rootSessionID)
+	stamped, err := sg.core.queries.MaxMessageScreenGenerationInTree(ctx, rootSessionID)
 	if err != nil {
 		return 0, err
 	}
@@ -54,11 +54,11 @@ func (s *SQL) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionI
 }
 
 // StampMessageScreenGeneration records the revision a row was screened at.
-func (s *SQL) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
+func (sg *sqlScreenGeneration) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.queries.StampMessageScreenGeneration(ctx, db.StampMessageScreenGenerationParams{
+	return sg.core.queries.StampMessageScreenGeneration(ctx, db.StampMessageScreenGenerationParams{
 		SecretScreenGeneration: storedGeneration(generation),
 		SessionID:              sessionID,
 		ID:                     messageID,
@@ -66,7 +66,8 @@ func (s *SQL) StampMessageScreenGeneration(ctx context.Context, sessionID, messa
 }
 
 // SessionTreeIDs walks the in-memory parent links.
-func (s *Memory) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
+func (sg *memoryScreenGeneration) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
+	s := sg.core
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -76,7 +77,8 @@ func (s *Memory) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]st
 }
 
 // MessageIDsBelowScreenGeneration returns rows last screened before generation.
-func (s *Memory) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
+func (sg *memoryScreenGeneration) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
+	s := sg.core
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -93,7 +95,8 @@ func (s *Memory) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID 
 
 // MaxMessageScreenGenerationInTree returns the highest revision stamped on any
 // row in the tree.
-func (s *Memory) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
+func (sg *memoryScreenGeneration) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
+	s := sg.core
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -111,7 +114,8 @@ func (s *Memory) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessi
 }
 
 // StampMessageScreenGeneration records the revision a row was screened at.
-func (s *Memory) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
+func (sg *memoryScreenGeneration) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
+	s := sg.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}

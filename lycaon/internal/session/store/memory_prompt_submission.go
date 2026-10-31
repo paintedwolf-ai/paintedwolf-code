@@ -4,170 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// ListOperationPromptAttachmentRetentions returns one operation's claims.
-func (s *Memory) ListOperationPromptAttachmentRetentions(_ context.Context, operationID string) ([]PromptAttachmentRetention, error) {
-	return s.listPromptAttachmentRetentions("", operationID, ""), nil
-}
-
-// PromptAttachmentBlobRetained reports whether durable history claims a blob.
-func (s *Memory) PromptAttachmentBlobRetained(_ context.Context, projectID, blobID string) (bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.promptAttachmentBlobRetainedLocked(projectID, blobID), nil
-}
-
-// RecordPromptAttachmentBlob records one materialized body.
-func (s *Memory) RecordPromptAttachmentBlob(_ context.Context, projectID, blobID string, byteSize int64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	projectID = strings.TrimSpace(projectID)
-	blobID = strings.TrimSpace(blobID)
-	if projectID == "" || blobID == "" || byteSize < 0 {
-		return fmt.Errorf("invalid prompt attachment blob")
-	}
-	byID := s.promptAttachmentBlobs[projectID]
-	if byID == nil {
-		byID = make(map[string]memoryPromptAttachmentBlob)
-		s.promptAttachmentBlobs[projectID] = byID
-	}
-	byID[blobID] = memoryPromptAttachmentBlob{byteSize: byteSize, createdAt: time.Now().UTC()}
-	return nil
-}
-
-// DeletePromptAttachmentBlob removes one materialized-body record.
-func (s *Memory) DeletePromptAttachmentBlob(_ context.Context, projectID, blobID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	projectID = strings.TrimSpace(projectID)
-	blobID = strings.TrimSpace(blobID)
-	if s.promptAttachmentBlobRetainedLocked(projectID, blobID) {
-		return ErrPromptAttachmentRetained
-	}
-	delete(s.promptAttachmentBlobs[projectID], blobID)
-	return nil
-}
-
-func (s *Memory) ListPromptAttachmentReclaimCandidates(
-	_ context.Context, projectID string, createdBefore time.Time, limit int,
-) ([]string, error) {
-	if limit <= 0 {
-		return nil, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	type candidate struct {
-		id        string
-		createdAt time.Time
-	}
-	rows := make([]candidate, 0)
-	projectID = strings.TrimSpace(projectID)
-	for blobID, blob := range s.promptAttachmentBlobs[projectID] {
-		if blob.createdAt.Before(createdBefore) && !s.promptAttachmentBlobRetainedLocked(projectID, blobID) {
-			rows = append(rows, candidate{id: blobID, createdAt: blob.createdAt})
-		}
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		if !rows[i].createdAt.Equal(rows[j].createdAt) {
-			return rows[i].createdAt.Before(rows[j].createdAt)
-		}
-		return rows[i].id < rows[j].id
-	})
-	if len(rows) > limit {
-		rows = rows[:limit]
-	}
-	out := make([]string, len(rows))
-	for i := range rows {
-		out[i] = rows[i].id
-	}
-	return out, nil
-}
-
-// PromptAttachmentStorageUsage reports recorded project bytes.
-func (s *Memory) PromptAttachmentStorageUsage(_ context.Context, projectID string) (int64, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var total int64
-	for _, blob := range s.promptAttachmentBlobs[strings.TrimSpace(projectID)] {
-		total += blob.byteSize
-	}
-	return total, nil
-}
-
-func (s *Memory) listPromptAttachmentRetentions(projectFilter, operationFilter, blobFilter string) []PromptAttachmentRetention {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.listPromptAttachmentRetentionsLocked(projectFilter, operationFilter, blobFilter)
-}
-
-func (s *Memory) promptAttachmentBlobRetainedLocked(projectID, blobID string) bool {
-	return len(s.listPromptAttachmentRetentionsLocked(
-		strings.TrimSpace(projectID), "", strings.TrimSpace(blobID),
-	)) != 0
-}
-
-func (s *Memory) listPromptAttachmentRetentionsLocked(projectFilter, operationFilter, blobFilter string) []PromptAttachmentRetention {
-	claims := make(map[string]PromptAttachmentRetention)
-	add := func(projectID, operationID, blobID string) {
-		projectID = strings.TrimSpace(projectID)
-		operationID = strings.TrimSpace(operationID)
-		blobID = strings.TrimSpace(blobID)
-		if projectID == "" || operationID == "" || blobID == "" {
-			return
-		}
-		claim := PromptAttachmentRetention{ProjectID: projectID, OperationID: operationID, BlobID: blobID}
-		claims[projectID+"\x00"+operationID+"\x00"+blobID] = claim
-	}
-	for _, row := range s.promptSubmissions {
-		if row.Status.Terminal() || s.sessions[row.SessionID] == nil {
-			continue
-		}
-		for _, blobID := range normalizedBlobIDs(row.AttachmentBlobIDs) {
-			add(row.ProjectID, row.ID, blobID)
-		}
-	}
-	for sessionID, messages := range s.messages {
-		sess := s.sessions[sessionID]
-		if sess == nil {
-			continue
-		}
-		for _, msg := range messages {
-			for _, part := range msg.ContentParts {
-				add(sess.ProjectID, msg.ID, part.BlobID)
-			}
-		}
-	}
-	out := make([]PromptAttachmentRetention, 0, len(claims))
-	for _, claim := range claims {
-		if projectFilter != "" && claim.ProjectID != projectFilter {
-			continue
-		}
-		if operationFilter != "" && claim.OperationID != operationFilter {
-			continue
-		}
-		if blobFilter != "" && claim.BlobID != blobFilter {
-			continue
-		}
-		out = append(out, claim)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].ProjectID != out[j].ProjectID {
-			return out[i].ProjectID < out[j].ProjectID
-		}
-		if out[i].OperationID != out[j].OperationID {
-			return out[i].OperationID < out[j].OperationID
-		}
-		return out[i].BlobID < out[j].BlobID
-	})
-	return out
-}
-
-func (s *Memory) PutPromptSubmission(_ context.Context, in PromptSubmission) (*PromptSubmission, bool, error) {
+func (sub *memorySubmissions) PutPromptSubmission(_ context.Context, in PromptSubmission) (*PromptSubmission, bool, error) {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := in.validateAuthorship(); err != nil {
@@ -191,7 +34,8 @@ func (s *Memory) PutPromptSubmission(_ context.Context, in PromptSubmission) (*P
 	return &copy, true, nil
 }
 
-func (s *Memory) GetPromptSubmission(_ context.Context, id string) (*PromptSubmission, error) {
+func (sub *memorySubmissions) GetPromptSubmission(_ context.Context, id string) (*PromptSubmission, error) {
+	s := sub.core
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	row, ok := s.promptSubmissions[id]
@@ -201,7 +45,8 @@ func (s *Memory) GetPromptSubmission(_ context.Context, id string) (*PromptSubmi
 	return &row, nil
 }
 
-func (s *Memory) ListQueuedUserPromptSubmissions(_ context.Context, sessionID string) ([]PromptSubmission, error) {
+func (sub *memorySubmissions) ListQueuedUserPromptSubmissions(_ context.Context, sessionID string) ([]PromptSubmission, error) {
+	s := sub.core
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]PromptSubmission, 0)
@@ -218,7 +63,8 @@ func (s *Memory) ListQueuedUserPromptSubmissions(_ context.Context, sessionID st
 
 // ListUnsettledUserPromptSubmissionIDs lists human prompts that are queued or
 // running, in admission order.
-func (s *Memory) ListUnsettledUserPromptSubmissionIDs(_ context.Context, sessionID string) ([]string, error) {
+func (sub *memorySubmissions) ListUnsettledUserPromptSubmissionIDs(_ context.Context, sessionID string) ([]string, error) {
+	s := sub.core
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows := make([]PromptSubmission, 0)
@@ -238,7 +84,8 @@ func (s *Memory) ListUnsettledUserPromptSubmissionIDs(_ context.Context, session
 	return ids, nil
 }
 
-func (s *Memory) ClaimPromptSubmission(_ context.Context, id string) (*PromptSubmission, bool, error) {
+func (sub *memorySubmissions) ClaimPromptSubmission(_ context.Context, id string) (*PromptSubmission, bool, error) {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.promptSubmissions[id]
@@ -256,7 +103,11 @@ func (s *Memory) ClaimPromptSubmission(_ context.Context, id string) (*PromptSub
 	return &row, true, nil
 }
 
-func (s *Memory) ClaimPromptSubmissions(_ context.Context, ids []string) ([]PromptSubmission, bool, error) {
+func (sub *memorySubmissions) ClaimPromptSubmissions(_ context.Context, ids []string) ([]PromptSubmission, bool, error) {
+	return claimPromptSubmissionsMemory(sub.core, ids)
+}
+
+func claimPromptSubmissionsMemory(s *memoryCore, ids []string) ([]PromptSubmission, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	seen := make(map[string]struct{}, len(ids))
@@ -287,7 +138,8 @@ func (s *Memory) ClaimPromptSubmissions(_ context.Context, ids []string) ([]Prom
 	return out, true, nil
 }
 
-func (s *Memory) FinishPromptSubmission(_ context.Context, id, claimToken string, status PromptSubmissionStatus, resultJSON string, failure PromptSubmissionFailure) error {
+func (sub *memorySubmissions) FinishPromptSubmission(_ context.Context, id, claimToken string, status PromptSubmissionStatus, resultJSON string, failure PromptSubmissionFailure) error {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.promptSubmissions[id]
@@ -304,10 +156,11 @@ func (s *Memory) FinishPromptSubmission(_ context.Context, id, claimToken string
 	return nil
 }
 
-func (s *Memory) UpdateQueuedPromptSubmissionInputs(
+func (sub *memorySubmissions) UpdateQueuedPromptSubmissionInputs(
 	_ context.Context,
 	updates []PromptSubmissionInputUpdate,
 ) (bool, error) {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, update := range updates {
@@ -324,7 +177,8 @@ func (s *Memory) UpdateQueuedPromptSubmissionInputs(
 	return true, nil
 }
 
-func (s *Memory) CancelQueuedPromptSubmissions(_ context.Context, ids []string) error {
+func (sub *memorySubmissions) CancelQueuedPromptSubmissions(_ context.Context, ids []string) error {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -341,7 +195,8 @@ func (s *Memory) CancelQueuedPromptSubmissions(_ context.Context, ids []string) 
 	return nil
 }
 
-func (s *Memory) InterruptPromptSubmissionsBySession(_ context.Context, sessionID string) error {
+func (sub *memorySubmissions) InterruptPromptSubmissionsBySession(_ context.Context, sessionID string) error {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -366,7 +221,8 @@ func (s *Memory) InterruptPromptSubmissionsBySession(_ context.Context, sessionI
 }
 
 // InterruptRunningPromptSubmissionsBySession interrupts running prompt submissions.
-func (s *Memory) InterruptRunningPromptSubmissionsBySession(_ context.Context, sessionID string) error {
+func (sub *memorySubmissions) InterruptRunningPromptSubmissionsBySession(_ context.Context, sessionID string) error {
+	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -383,7 +239,11 @@ func (s *Memory) InterruptRunningPromptSubmissionsBySession(_ context.Context, s
 }
 
 // RecoverPromptSubmissions returns runnable queued user turns.
-func (s *Memory) RecoverPromptSubmissions(_ context.Context) ([]string, error) {
+func (sub *memorySubmissions) RecoverPromptSubmissions(_ context.Context) ([]string, error) {
+	return recoverPromptSubmissionsMemory(sub.core)
+}
+
+func recoverPromptSubmissionsMemory(s *memoryCore) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var queued []PromptSubmission

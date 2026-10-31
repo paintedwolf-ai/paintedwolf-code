@@ -10,7 +10,7 @@ import (
 )
 
 // TruncateMessagesFrom removes the anchor and later transcript rows.
-func (s *SQL) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error) {
+func (s *sqlTranscript) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -19,32 +19,33 @@ func (s *SQL) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessage
 	if sessionID == "" || anchorMessageID == "" {
 		return 0, ErrSessionNotFound
 	}
-	unlock := s.lockMutation(sessionID)
+	core := s.core
+	unlock := core.lockMutation(sessionID)
 	defer unlock()
-	if _, err := s.Get(ctx, sessionID); err != nil {
+	if _, err := getSessionSQL(ctx, core, sessionID); err != nil {
 		return 0, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := core.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	removed, sess, spillRefs, err := s.truncateMessagesTx(ctx, tx, sessionID, anchorMessageID)
+	removed, sess, spillRefs, err := truncateMessagesTx(ctx, core, tx, sessionID, anchorMessageID)
 	if err != nil {
 		return 0, err
 	}
-	if err := s.enqueueSessionEvent(ctx, tx, sess, api.SessionEventActionUpdated); err != nil {
+	if err := enqueueSessionEvent(ctx, core, tx, sess, api.SessionEventActionUpdated); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	s.reclaimUnreferencedSpills(ctx, spillRefs)
-	s.outbox.Notify()
+	reclaimUnreferencedSpills(ctx, core, spillRefs)
+	core.outbox.Notify()
 	return int(removed), nil
 }
 
-func (s *SQL) truncateMessagesTx(ctx context.Context, tx *sql.Tx, sessionID, anchorMessageID string) (int64, *api.Session, []messageSpillRef, error) {
+func truncateMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, sessionID, anchorMessageID string) (int64, *api.Session, []messageSpillRef, error) {
 	qtx := s.queries.WithTx(tx)
 	anchorOrd, err := qtx.GetSessionMessageOrd(ctx, db.GetSessionMessageOrdParams{SessionID: sessionID, ID: anchorMessageID})
 	if err != nil {
@@ -94,18 +95,19 @@ func (s *SQL) truncateMessagesTx(ctx context.Context, tx *sql.Tx, sessionID, anc
 }
 
 // TruncateMessagesFrom removes anchorMessageID and every later row.
-func (s *Memory) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error) {
+func (s *memoryTranscript) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	anchorMessageID = strings.TrimSpace(anchorMessageID)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if _, ok := core.sessions[sessionID]; !ok {
 		return 0, ErrSessionNotFound
 	}
-	msgs := s.messages[sessionID]
+	msgs := core.messages[sessionID]
 	for i := range msgs {
 		if msgs[i].ID != anchorMessageID {
 			continue
@@ -116,39 +118,39 @@ func (s *Memory) TruncateMessagesFrom(ctx context.Context, sessionID, anchorMess
 		for _, message := range removedMessages {
 			removedIDs[message.ID] = struct{}{}
 		}
-		for openingID := range s.turnClocks[sessionID] {
+		for openingID := range core.turnClocks[sessionID] {
 			if _, ok := removedIDs[openingID]; ok {
-				delete(s.turnClocks[sessionID], openingID)
+				delete(core.turnClocks[sessionID], openingID)
 			}
 		}
-		for submissionID, turnID := range s.turnSubmissions {
+		for submissionID, turnID := range core.turnSubmissions {
 			if _, ok := removedIDs[submissionID]; ok {
-				s.deleteTurnLocked(turnID)
+				deleteTurnLocked(core, turnID)
 			}
 		}
-		for outputID, output := range s.modelOutputs {
+		for outputID, output := range core.modelOutputs {
 			if _, ok := removedIDs[output.MessageID]; !ok {
 				continue
 			}
-			delete(s.modelOutputs, outputID)
+			delete(core.modelOutputs, outputID)
 
-			delete(s.liveModelOutputs, outputID)
-			delete(s.projectedModelOutputs, outputID)
-			for turnID, attempts := range s.turnAttempts {
+			delete(core.liveModelOutputs, outputID)
+			delete(core.projectedModelOutputs, outputID)
+			for turnID, attempts := range core.turnAttempts {
 				for _, attempt := range attempts {
 					if attempt.ID == output.TurnAttemptID {
-						s.deleteTurnLocked(turnID)
+						deleteTurnLocked(core, turnID)
 					}
 				}
 			}
 		}
-		s.messages[sessionID] = append([]api.Message(nil), msgs[:i]...)
+		core.messages[sessionID] = append([]api.Message(nil), msgs[:i]...)
 		return removed, nil
 	}
 	return 0, ErrMessageNotFound
 }
 
-func (s *Memory) deleteTurnLocked(turnID string) {
+func deleteTurnLocked(s *memoryCore, turnID string) {
 	for _, attempt := range s.turnAttempts[turnID] {
 		delete(s.turnCloseouts, attempt.ID)
 	}

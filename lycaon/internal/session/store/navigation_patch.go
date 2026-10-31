@@ -22,8 +22,9 @@ func NavigationContentHash(content string) string {
 }
 
 // PatchMessageNavigation changes only navigation under the message mutation lock.
-func (s *SQL) PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error) {
-	unlock := s.lockMutation(sessionID)
+func (s *sqlTranscript) PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error) {
+	core := s.core
+	unlock := core.lockMutation(sessionID)
 	defer unlock()
 	msg, err := s.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
@@ -36,7 +37,7 @@ func (s *SQL) PatchMessageNavigation(ctx context.Context, sessionID, messageID, 
 		return msg, nil
 	}
 	msg.NavigationRefs = refs
-	projectForScreen, err := s.queries.GetSessionProjectID(ctx, sessionID)
+	projectForScreen, err := core.queries.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return api.Message{}, err
 	}
@@ -45,12 +46,12 @@ func (s *SQL) PatchMessageNavigation(ctx context.Context, sessionID, messageID, 
 	if err != nil {
 		return api.Message{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := core.db.BeginTx(ctx, nil)
 	if err != nil {
 		return api.Message{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
+	qtx := core.queries.WithTx(tx)
 	projectID, err := qtx.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return api.Message{}, err
@@ -66,26 +67,27 @@ func (s *SQL) PatchMessageNavigation(ctx context.Context, sessionID, messageID, 
 		return api.Message{}, err
 	}
 	observer := messageview.TranscriptMessage(msg)
-	if err := s.outbox.EnqueueTx(ctx, tx, api.EventTopicMessage, events.PublishKey{Project: projectID, Session: sessionID}, api.MessageEvent{SessionID: sessionID, Op: api.MessageChangePatch, Seq: seq, Message: observer}); err != nil {
+	if err := core.outbox.EnqueueTx(ctx, tx, api.EventTopicMessage, events.PublishKey{Project: projectID, Session: sessionID}, api.MessageEvent{SessionID: sessionID, Op: api.MessageChangePatch, Seq: seq, Message: observer}); err != nil {
 		return api.Message{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return api.Message{}, err
 	}
-	s.outbox.Notify()
+	core.outbox.Notify()
 	return msg, nil
 }
 
-func (s *Memory) PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error) {
+func (s *memoryTranscript) PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return api.Message{}, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if _, ok := core.sessions[sessionID]; !ok {
 		return api.Message{}, ErrSessionNotFound
 	}
-	for i, msg := range s.messages[sessionID] {
+	for i, msg := range core.messages[sessionID] {
 		if msg.ID != messageID {
 			continue
 		}
@@ -99,9 +101,9 @@ func (s *Memory) PatchMessageNavigation(ctx context.Context, sessionID, messageI
 			return api.Message{}, err
 		}
 		msg.NavigationRefs = refs
-		msg = screenMessageForStore(messageScreenContext(ctx, s.sessions[sessionID].ProjectID, sessionID), msg)
-		msg.Seq = s.nextSeqLocked(sessionID)
-		s.messages[sessionID][i] = msg
+		msg = screenMessageForStore(messageScreenContext(ctx, core.sessions[sessionID].ProjectID, sessionID), msg)
+		msg.Seq = nextSeqLocked(core, sessionID)
+		core.messages[sessionID][i] = msg
 		return msg, nil
 	}
 	return api.Message{}, errors.New("navigation message not found")

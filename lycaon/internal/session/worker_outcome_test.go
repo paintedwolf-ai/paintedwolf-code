@@ -447,4 +447,3 @@ func TestFinalizeWorkerSummaryMidRunProseTriggersCloseout(t *testing.T) {
 		t.Fatalf("prompts = %d want 1 closeout", resolver.prompts)
 	}
 }
-
