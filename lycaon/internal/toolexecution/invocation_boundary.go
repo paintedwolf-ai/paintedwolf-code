@@ -81,7 +81,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, reject
 	}
 	if request != nil {
-		tc.Execution.ProcessControl, tc.Execution.HostExecution = request.ProcessControl, request.HostExecution
+		tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = request.ProcessControl, request.CredentialStore, request.HostExecution
 	}
 	ctx, err = e.reviewInvocationCapabilities(ctx, tool, args, tc)
 	if err != nil {

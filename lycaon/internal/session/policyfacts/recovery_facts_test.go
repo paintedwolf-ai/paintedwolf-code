@@ -40,6 +40,7 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 		Refusals: []confine.SandboxRefusal{
 			{Operation: "file-read-data", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 			{Operation: "file-read-data", Target: "/credentials/token", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath, Grant: "/credentials/token"},
+			{Operation: "file-read-data", Target: "/Users/person/Library/Keychains/login.keychain-db", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore, Grant: "/Users/person/Library/Keychains/login.keychain-db"},
 			{Operation: "file-write-data", Target: "/state/approvals.yaml", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
 			{Operation: "file-write-data", Target: "/workspace/output.txt", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot, Grant: "/workspace"},
 			{Operation: "file-read-metadata", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
@@ -55,6 +56,7 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 		{"terminal reads", gc.Refusals.RefusedTerminalReadPaths, []string{"/state/store.db"}},
 		{"terminal writes", gc.Refusals.RefusedTerminalWritePaths, []string{"/state/approvals.yaml"}},
 		{"read grants", gc.Refusals.RefusedReadGrants, []string{"/credentials/token"}},
+		{"credential store paths", gc.Refusals.RefusedCredentialStorePaths, []string{"/Users/person/Library/Keychains/login.keychain-db"}},
 		{"write grants", gc.Refusals.RefusedWriteGrants, []string{"/workspace"}},
 	} {
 		if !slices.Equal(tc.got, tc.want) {
@@ -64,7 +66,7 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 	if gc.Refusals.SandboxRefusalWitness != string(confine.WitnessIncomplete) {
 		t.Fatal("observed reporting gap was discarded")
 	}
-	if len(gc.Execution.SandboxRefusals) != 6 {
+	if len(gc.Execution.SandboxRefusals) != 7 {
 		t.Fatal("observed refusal reports were discarded during path grouping")
 	}
 }

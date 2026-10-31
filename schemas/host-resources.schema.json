@@ -203,7 +203,7 @@
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "enum": ["none", "proxy", "socks", "baseline_loopback", "local_service", "direct_ip", "dynamic"]
+          "enum": ["none", "proxy", "socks", "baseline_loopback", "local_service", "direct_ip", "dynamic", "credential_store"]
         },
         "transport": { "enum": ["unix_socket", "named_pipe"] },
         "target": { "type": "string", "maxLength": 4096 },

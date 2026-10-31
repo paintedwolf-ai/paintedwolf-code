@@ -301,7 +301,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 `process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
-For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
+For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, `capability_request.credential_store` to read from the host OS credential store inside the sandbox, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
 ## Safe-command envelope
 
@@ -446,7 +446,7 @@ A selected project command is a default. Bare `verify()` runs it, while `command
 
 ## Capability request
 
-Some command and terminal actions need authority that cannot be inferred from argv alone: an external write root, protected read, local listener, loopback connection, direct IP route, mediated destination, named host resource, process control, or host execution. Terminals take neither direct IP nor the execution capabilities, because a held session outlives the invocation they would bind to. The model declares that need in structured `capability_request` fields before spawn. The host validates whether the current surface can provide it, builds an approval plan where appropriate, and compiles the resulting authority into the execution boundary.
+Some command and terminal actions need authority that cannot be inferred from argv alone: an external write root, protected read, local listener, loopback connection, direct IP route, mediated destination, named host resource, process control, OS credential store access, or host execution. Terminals take neither direct IP nor the execution capabilities (`process_control`, `credential_store`, `host_execution`), because a held session outlives the invocation they would bind to. The model declares that need in structured `capability_request` fields before spawn. The host validates whether the current surface can provide it, builds an approval plan where appropriate, and compiles the resulting authority into the execution boundary.
 
 Declaring a capability is not receiving it. Unsupported, unavailable, or denied requests fail before the effect starts. A reusable grant matches typed facts and current confinement, not similar prose or program names.
 

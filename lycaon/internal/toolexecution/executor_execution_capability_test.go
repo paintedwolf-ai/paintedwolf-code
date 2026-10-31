@@ -22,10 +22,10 @@ import (
 )
 
 func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
-	for _, capability := range []string{"process_control", "host_execution"} {
+	for _, capability := range []string{"process_control", "credential_store", "host_execution"} {
 		t.Run(capability, func(t *testing.T) {
-			if capability == "process_control" && !confine.Available() {
-				t.Skip("process control requires an available sandbox")
+			if (capability == "process_control" || capability == "credential_store") && !confine.Available() {
+				t.Skip("confined execution capabilities require an available sandbox")
 			}
 			confine.TestingSetAutoConfine(t)
 			stageApprovals(t, settings.ApprovalEffectAsk)
@@ -43,7 +43,7 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 				if reject != nil {
 					return "", reject
 				}
-				if req.HostExecution != (capability == "host_execution") || req.ProcessControl != (capability == "process_control") {
+				if req.HostExecution != (capability == "host_execution") || req.ProcessControl != (capability == "process_control") || req.CredentialStore != (capability == "credential_store") {
 					t.Errorf("incorrect launch request: %+v", req)
 				}
 				if len(req.Roots) != 1 || req.Roots[0] != branch {

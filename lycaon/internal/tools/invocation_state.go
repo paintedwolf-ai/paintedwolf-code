@@ -2,7 +2,7 @@ package tools
 
 // BeginInvocation clears inherited reviews and opens one-call capability state.
 func (tc *ToolContext) BeginInvocation() {
-	tc.Execution.ProcessControl, tc.Execution.HostExecution = false, false
+	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = false, false, false
 	tc.Execution.executionPermit = nil
 	tc.Effects.Secrets = nil
 	tc.Files.ApprovedFileAccess = nil

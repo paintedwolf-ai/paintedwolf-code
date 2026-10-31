@@ -5475,7 +5475,7 @@ export interface components {
         /** @enum {string} */
         HostResourceExecutionSurface: "process_exec";
         /** @enum {string} */
-        HostResourceConnectionMode: "none" | "proxy" | "socks" | "baseline_loopback" | "local_service" | "direct_ip" | "dynamic";
+        HostResourceConnectionMode: "none" | "proxy" | "socks" | "baseline_loopback" | "local_service" | "direct_ip" | "dynamic" | "credential_store";
         /** @enum {string} */
         HostResourceLocalServiceTransport: "unix_socket" | "named_pipe";
         HostResourceConnection: {
@@ -7715,7 +7715,7 @@ export interface components {
          * @description Authority beyond a major confinement boundary.
          * @enum {string}
          */
-        ElevatedAccessEffect: "direct_network" | "host_execution" | "process_control" | "local_service";
+        ElevatedAccessEffect: "direct_network" | "host_execution" | "process_control" | "credential_store" | "local_service";
         ElevatedAccessRecord: {
             id: string;
             /** @enum {string} */
@@ -10112,7 +10112,7 @@ export interface components {
             process_id: string;
             tool_call_id?: string;
             /** @enum {string} */
-            capability: "process_control" | "host_execution";
+            capability: "process_control" | "credential_store" | "host_execution";
             status: components["schemas"]["SessionBackgroundDirectStatus"];
         };
         /** @description Persistent app/session protection chrome. Mediation unavailable and full sandbox bypass are distinct — never one ambiguous uncontained banner. */
@@ -11019,7 +11019,7 @@ export interface components {
         /** @enum {string} */
         ApprovalPlanStage: "pre_spawn" | "pre_dial" | "pre_send";
         /** @enum {string} */
-        ApprovalSubjectKind: "action" | "action_set" | "socket_set" | "direct_ip" | "process_control" | "host_execution" | "local_listen" | "loopback_connect" | "destination_set" | "write_root_set" | "read_path_set" | "secret" | "package_set";
+        ApprovalSubjectKind: "action" | "action_set" | "socket_set" | "direct_ip" | "process_control" | "credential_store" | "host_execution" | "local_listen" | "loopback_connect" | "destination_set" | "write_root_set" | "read_path_set" | "secret" | "package_set";
         ApprovalTarget: {
             kind: string;
             label: string;

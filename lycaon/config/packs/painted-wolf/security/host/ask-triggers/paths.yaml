@@ -253,7 +253,7 @@ locations:
     title: A local password store
     mode: any
     protected: true
-    paths: ["~/.password-store", "~/.pki", "~/.local/share/pki", "~/.local/share/keyrings", "~/.local/share/kwalletd"]
+    paths: ["~/.password-store", "~/.pki", "~/.local/share/pki", "~/.local/share/keyrings", "~/.local/share/kwalletd", "~/AppData/Roaming/Microsoft/Credentials", "~/AppData/Local/Microsoft/Credentials", "~/AppData/Local/Microsoft/Vault"]
   - id: age-identities
     title: age and sops private keys
     mode: any

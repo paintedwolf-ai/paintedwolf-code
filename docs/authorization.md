@@ -157,11 +157,11 @@ The complete gate roster and one-line meanings live in `docs/openapi/vocab/Appro
 
 ## Capability grants and detection asks
 
-A tool may declare exceptional capability before spawn: write root, protected read, listener, loopback connection, direct IP, mediated destination, exact socket, named host resource, process control, or host execution. The request is validated against the tool contract and current platform support. If it is representable, the host adds the relevant approval subject and compiles approved authority into the launch boundary. If it is not representable, launch fails; approval cannot authorize a boundary the host cannot apply.
+A tool may declare exceptional capability before spawn: write root, protected read, listener, loopback connection, direct IP, mediated destination, exact socket, named host resource, process control, OS credential store access, or host execution. The request is validated against the tool contract and current platform support. If it is representable, the host adds the relevant approval subject and compiles approved authority into the launch boundary. If it is not representable, launch fails; approval cannot authorize a boundary the host cannot apply.
 
 Local development is contained work ([What stays quiet](security.md#what-stays-quiet-and-why)). Under Light posture, listeners and loopback connections run silently. Under Balanced posture, a listener runs silently unless it names a privileged port, and carries connect authority for the ports it names, unless a listener the chat does not own already holds one. Other loopback connections are silent only when the chat owns every named port: each listener descends from an action of this chat through launch lineage, or a workspace container the engine reports publishes the port loopback-only after the engine started. Ownership is never inferred from when a port appeared or from workspace files; any other service, including one started after the chat, asks to guard against local SSRF. Under Strict posture, every listener and connection requires human approval. See [Loopback-connect grant](security.md#loopback-connect-grant).
 
-Direct IP, host execution, and process control are approved per capability, not per command: one chat approval covers later commands that use it. That approval answers only its own reason; a detection or ask rule on a later command still asks.
+Direct IP, host execution, process control, and OS credential store access are approved per capability, not per command: one chat approval covers later commands that use it (and `credential_store` also offers Day, Project, and Device scopes). That approval answers only its own reason; a detection or ask rule on a later command still asks.
 
 Local secret disclosure consolidates command arguments, interactive terminal sessions, and localhost HTTP requests under `LocalRecipient`. Approving a secret release for a local recipient covers all local execution surfaces for the chat without prompting separately for each tool.
 
@@ -221,7 +221,7 @@ Silent covered actions do not produce a syscall audit. The ledger records contex
 
 The composer's open lock leads to Project configuration → Approvals → Saved approvals
 when **elevated access** is available: saved direct-network,
-host-execution, process-control, and outside-sandbox local-service approvals.
+host-execution, process-control, OS credential-store, and outside-sandbox local-service approvals.
 The host selects live records for the root chat and workers plus applicable
 project/device records. Host-resource catalog modes and retained exact-action
 or quiet boundary descriptors qualify mixed records; revocation removes the
