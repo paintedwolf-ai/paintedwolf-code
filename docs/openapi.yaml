@@ -20143,6 +20143,7 @@ components:
         - direct_network
         - host_execution
         - process_control
+        - credential_store
         - local_service
     ElevatedAccessRecord:
       x-go-generate: true
@@ -26216,6 +26217,7 @@ components:
           type: string
           enum:
             - process_control
+            - credential_store
             - host_execution
         status:
           $ref: '#/components/schemas/SessionBackgroundDirectStatus'
@@ -28334,6 +28336,7 @@ components:
         - socket_set
         - direct_ip
         - process_control
+        - credential_store
         - host_execution
         - local_listen
         - loopback_connect

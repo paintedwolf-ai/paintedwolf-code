@@ -167,7 +167,7 @@ schema:
         raw socket: {"direct_ip": true} or
         {"direct_ip": {"declared_destinations": ["udp://time.nist.gov:123"]}}.
         Other fields: host_resources, socket_paths, local_listen,
-        loopback_connect, write_root, read_path, process_control, host_execution. Do not put listen or connect
+        loopback_connect, write_root, read_path, process_control, credential_store, host_execution. Do not put listen or connect
         ids in host_resources. Omit for ordinary execution.
       properties:
         host_resources:
@@ -194,6 +194,14 @@ schema:
               enum: [true]
             - type: object
               additionalProperties: false
+        credential_store:
+          type: boolean
+          enum: [true]
+          description: >-
+            `true` requests, for this invocation, read-only access to the host
+            OS credential store (macOS login keychain, Linux Secret Service and
+            KWallet, Windows Credential Manager) while keeping filesystem,
+            write, and network confinement applied.
         host_execution:
           description: >-
             `true` requests, for this invocation,execution outside the command sandbox,

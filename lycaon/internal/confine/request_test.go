@@ -162,6 +162,44 @@ func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
 	}
 }
 
+func TestDefaultConfinementCredentialStorePropagation(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
+	t.Setenv("LYCAON_SANDBOX", "")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
+	if !confine.Available() {
+		t.Skip("confine unavailable on this platform")
+	}
+	dir := t.TempDir()
+	c, ok := confine.DefaultConfinement(confine.Request{
+		Roots:           []string{dir},
+		CredentialStore: true,
+	})
+	if !ok || c == nil || !c.CredentialStore {
+		t.Fatalf("DefaultConfinement CredentialStore = (%v, %+v)", ok, c)
+	}
+	b := confine.BoundaryOf(c)
+	if !b.CredentialStore {
+		t.Fatalf("BoundaryOf CredentialStore = %+v", b)
+	}
+	r := confine.ReportOf(b)
+	if !r.CredentialStore {
+		t.Fatalf("ReportOf CredentialStore = %+v", r)
+	}
+
+	hostConf, ok := confine.DefaultConfinement(confine.Request{
+		Roots:           []string{dir},
+		HostExecution:   true,
+		CredentialStore: true,
+	})
+	if !ok || hostConf == nil || hostConf.CredentialStore {
+		t.Fatalf("HostExecution must not set CredentialStore: ok=%v c=%+v", ok, hostConf)
+	}
+	if confine.BoundaryOf(hostConf).CredentialStore {
+		t.Fatal("HostExecution boundary must not set CredentialStore")
+	}
+}
+
 // shortTempDir stays within the socket path limit.
 func shortTempDir(t *testing.T) string {
 	t.Helper()

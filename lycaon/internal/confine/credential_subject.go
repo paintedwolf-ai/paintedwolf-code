@@ -15,7 +15,8 @@ const (
 	WriteSubjectOrdinary WriteSubjectKind = "ordinary"
 	// WriteSubjectKeyMaterial permits exact chat grants.
 	WriteSubjectKeyMaterial WriteSubjectKind = "key_material"
-	// WriteSubjectCredentialStore permits one file transaction.
+	// WriteSubjectCredentialStore permits one CLI credential-file write transaction
+	// (distinct from Request.CredentialStore, which governs OS credential store reads).
 	WriteSubjectCredentialStore WriteSubjectKind = "credential_store"
 )
 

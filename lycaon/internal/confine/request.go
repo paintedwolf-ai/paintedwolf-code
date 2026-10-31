@@ -59,8 +59,9 @@ type SocketGrantDrop struct {
 
 // Request is the intentional boundary input for DefaultConfinement.
 type Request struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID is an opaque write-root routing key.
 	ProjectID string
 	// Roots are attached jail identity (project trees and draft scratch).
