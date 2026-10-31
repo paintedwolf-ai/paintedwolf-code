@@ -53,7 +53,7 @@ func TestGroundingHintData_ordersNamespacedSupersededAndGateHandles(t *testing.T
 	})
 	data := guidance.GroundingHintData([]string{`leg-a:read#9:1 ("excerpt")`, "src/a.go:10"}, ev)
 	sample, _ := data["observed_handles_sample"].(string)
-	want := "leg-a:read#2, leg-a:read#1, leg-b:command#1, dialed_host#b.example, dialed_host#a.example, gate#1"
+	want := "leg-a:read#2, leg-a:read#1, leg-b:command#1, dialed_host#a.example, dialed_host#b.example, gate#1"
 	if sample != want {
 		t.Fatalf("sample = %q, want %q", sample, want)
 	}

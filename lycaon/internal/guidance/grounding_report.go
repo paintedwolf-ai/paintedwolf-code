@@ -80,51 +80,65 @@ func groundingHintHandles(offenders []string, ev evidence.Ledger) []string {
 	rankInGroup := make(map[string]int, len(handles))
 	for _, groupHandles := range byGroup {
 		slices.SortFunc(groupHandles, func(a, b string) int {
-			if ordinals[a] != ordinals[b] {
-				return cmp.Compare(ordinals[b], ordinals[a])
-			}
-			return cmp.Compare(b, a)
+			return cmp.Compare(ordinals[b], ordinals[a])
 		})
 		for rank, h := range groupHandles {
 			rankInGroup[h] = rank
 		}
 	}
-	matchesOffender := func(h string, rec evidence.Record) bool {
-		if len(offenderKinds) == 0 {
-			return false
+	priorities := make(map[string]handlePriority, len(handles))
+	for _, h := range handles {
+		rec := ev.Handles[h]
+		matched := len(offenderKinds) > 0 && (offenderKinds[kinds[h]] || offenderKinds[rec.Kind] || offenderKinds[rec.SourceTool])
+		priorities[h] = handlePriority{
+			gate:         boolRank(rec.IsGate()),
+			offenderRank: boolRank(!matched),
+			superseded:   boolRank(rec.SupersededBy != ""),
+			rankInGroup:  rankInGroup[h],
+			ordinal:      ordinals[h],
+			handle:       h,
 		}
-		return offenderKinds[kinds[h]] || offenderKinds[rec.Kind] || offenderKinds[rec.SourceTool]
 	}
 	out := append([]string(nil), handles...)
 	slices.SortFunc(out, func(a, b string) int {
-		recA, recB := ev.Handles[a], ev.Handles[b]
-		if recA.IsGate() != recB.IsGate() {
-			if recA.IsGate() {
-				return 1
-			}
-			return -1
-		}
-		if matchA, matchB := matchesOffender(a, recA), matchesOffender(b, recB); matchA != matchB {
-			if matchA {
-				return -1
-			}
-			return 1
-		}
-		if supA, supB := recA.SupersededBy != "", recB.SupersededBy != ""; supA != supB {
-			if !supA {
-				return -1
-			}
-			return 1
-		}
-		if rankInGroup[a] != rankInGroup[b] {
-			return cmp.Compare(rankInGroup[a], rankInGroup[b])
-		}
-		if ordinals[a] != ordinals[b] {
-			return cmp.Compare(ordinals[b], ordinals[a])
-		}
-		return cmp.Compare(a, b)
+		return compareHandlePriority(priorities[a], priorities[b])
 	})
 	return out
+}
+
+type handlePriority struct {
+	gate         int
+	offenderRank int
+	superseded   int
+	rankInGroup  int
+	ordinal      int
+	handle       string
+}
+
+func compareHandlePriority(a, b handlePriority) int {
+	if c := cmp.Compare(a.gate, b.gate); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.offenderRank, b.offenderRank); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.superseded, b.superseded); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.rankInGroup, b.rankInGroup); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(b.ordinal, a.ordinal); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.handle, b.handle)
+}
+
+func boolRank(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func offenderHandleKinds(offenders []string) map[string]bool {
