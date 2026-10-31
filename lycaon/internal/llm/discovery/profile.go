@@ -371,21 +371,29 @@ func decodeDiscoveryMistralRecords(r io.Reader) ([]discoveryCatalogRecord, error
 }
 
 func applyMistralCapabilities(entry *modelinfo.Entry, caps *mistralCapabilities) {
+	unknown := modelinfo.Evidence(modelinfo.CapabilityUnknown, "")
+	entry.Capabilities.Reasoning = unknown
 	if caps == nil {
 		entry.Untyped = true
+		entry.Capabilities.Chat = unknown
+		entry.Capabilities.Tools = unknown
+		entry.Capabilities.Vision = unknown
 		return
 	}
-	if state := modelinfo.OptionalState(caps.CompletionChat); state != modelinfo.CapabilityUnknown {
-		entry.Capabilities.Chat = modelinfo.Evidence(state, "mistral")
-	} else {
+	entry.Capabilities.Chat = mistralEvidence(caps.CompletionChat)
+	if entry.Capabilities.Chat.State == modelinfo.CapabilityUnknown {
 		entry.Untyped = true
 	}
-	if state := modelinfo.OptionalState(caps.FunctionCalling); state != modelinfo.CapabilityUnknown {
-		entry.Capabilities.Tools = modelinfo.Evidence(state, "mistral")
+	entry.Capabilities.Tools = mistralEvidence(caps.FunctionCalling)
+	entry.Capabilities.Vision = mistralEvidence(caps.Vision)
+}
+
+func mistralEvidence(flag *bool) modelinfo.CapabilityEvidence {
+	state := modelinfo.OptionalState(flag)
+	if state == modelinfo.CapabilityUnknown {
+		return modelinfo.Evidence(modelinfo.CapabilityUnknown, "")
 	}
-	if state := modelinfo.OptionalState(caps.Vision); state != modelinfo.CapabilityUnknown {
-		entry.Capabilities.Vision = modelinfo.Evidence(state, "mistral")
-	}
+	return modelinfo.Evidence(state, "mistral")
 }
 
 func discoveryRecordAllowed(rec discoveryCatalogRecord, profile Profile) bool {
