@@ -27,7 +27,7 @@ func (q *SQLQueue) StopExecution(ctx context.Context, jobID string) error {
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	requested, err := q.RequestCancellation(ctx, jobID)
+	requested, err := q.RequestCancellation(context.WithoutCancel(ctx), jobID)
 	if err != nil || !requested {
 		return err
 	}

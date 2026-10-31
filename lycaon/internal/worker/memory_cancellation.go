@@ -19,7 +19,7 @@ func (q *InMemoryQueue) Cancel(ctx context.Context, jobID string, result *api.Wo
 
 // StopExecution retains the workspace until runtime has released it.
 func (q *InMemoryQueue) StopExecution(ctx context.Context, jobID string) error {
-	requested, err := q.RequestCancellation(ctx, jobID)
+	requested, err := q.RequestCancellation(context.WithoutCancel(ctx), jobID)
 	if err != nil || !requested {
 		return err
 	}

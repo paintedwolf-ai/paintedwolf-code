@@ -38,6 +38,7 @@ type InMemoryQueue struct {
 	maxRunning       int
 	defaultTarget    api.ExecutionTarget
 	onRunningCancel  func(ctx context.Context, jobID string) error
+	activeExecution  func(jobID string) bool
 	events           *events.Publisher
 	workflowRuns     *WorkflowDomains
 	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error

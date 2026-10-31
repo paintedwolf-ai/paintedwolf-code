@@ -114,8 +114,11 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	}
 	m.cancelTreeTurns(ctx, tree)
 
+	workerCtx, cancelWorkers := m.workerReleaseContext(ctx)
+	defer cancelWorkers()
+
 	var errs []error
-	errs = m.stopTreeWorkers(ctx, tree, reason, errs)
+	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 
 	// Include children admitted before stop began.
 	if refreshed, refreshErr := m.store.SessionTreeMembers(ctx, rootID); refreshErr != nil {
@@ -146,18 +149,23 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 		}
 	}
 	// Catch workers admitted by turns already draining.
-	errs = m.stopTreeWorkers(ctx, tree, reason, errs)
-	if err := errors.Join(errs...); err != nil {
-		return err
-	}
+	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 	for _, sess := range tree {
 		if err := m.store.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
-			return fmt.Errorf("mark session %s idle: %w", sess.ID, err)
+			errs = appendStopError(errs, "mark session idle", sess.ID, err)
 		}
 	}
 	m.status.PublishIdle(ctx, rootID, api.SessionIdleDispositionUserStopped)
 	m.QueueChecklistReconcileNudge(ctx, rootID)
-	return nil
+	return errors.Join(errs...)
+}
+
+func (m *Service) workerReleaseContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := DefaultWorkerReleaseTimeout
+	if m != nil && m.workerReleaseTimeout > 0 {
+		timeout = m.workerReleaseTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (m *Service) cancelTreeTurns(ctx context.Context, tree []store.SessionTreeMember) {
@@ -187,6 +195,10 @@ func (m *Service) stopTreeWorkers(ctx context.Context, tree []store.SessionTreeM
 // DefaultTurnReleaseTimeout is how long a stop waits for the cancelled turn to
 // unwind and release its session before recording the stop without it.
 const DefaultTurnReleaseTimeout = 30 * time.Second
+
+// DefaultWorkerReleaseTimeout bounds how long session stop waits for fenced
+// workers to exit inline before leaving terminal cleanup to the worker poller.
+const DefaultWorkerReleaseTimeout = 5 * time.Second
 
 // stoppedTurnPoll is how often a stop re-tries the prompt lock while waiting.
 const stoppedTurnPoll = 10 * time.Millisecond
