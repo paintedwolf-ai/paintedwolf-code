@@ -423,6 +423,8 @@ components:
           description: >
             The host's view when the result was written. It never flips on exit;
             the session process mirror reports that.
+        termination_reason:
+          $ref: '../events.yaml#/components/schemas/BackgroundProcessTerminationReason'
     CheckpointDecisionMeta:
       x-go-generate: true
       type: object

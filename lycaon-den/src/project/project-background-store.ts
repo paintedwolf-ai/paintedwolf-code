@@ -70,6 +70,19 @@ const states = new Map<string, ProjectState>();
 const [published, setPublished] = createSignal<
   ReadonlyMap<string, ProjectBackgroundView>
 >(new Map());
+const projectBackgroundEventListeners = new Set<
+  (ev: ProjectBackgroundEvent) => void
+>();
+
+/** Subscribes to live `project.background` events as they are applied. */
+export function onProjectBackgroundEvent(
+  cb: (ev: ProjectBackgroundEvent) => void,
+): () => void {
+  projectBackgroundEventListeners.add(cb);
+  return () => {
+    projectBackgroundEventListeners.delete(cb);
+  };
+}
 
 function state(projectId: string): ProjectState {
   let found = states.get(projectId);
@@ -249,6 +262,9 @@ export function applyProjectBackgroundEvent(
     s.stopErrors.delete(procId);
   }
   publish(projectId);
+  for (const listener of projectBackgroundEventListeners) {
+    listener(event);
+  }
 }
 
 /** Merges a snapshot from `GET /v1/projects/{id}/background` with newer live events. */
@@ -516,4 +532,38 @@ export function retainProjectBackgroundProject(projectId: string | null): void {
 export function resetProjectBackgroundForTests(): void {
   states.clear();
   setPublished(new Map());
+}
+
+/** Tooltip and aria-label for a chat row's live background command count. */
+export function backgroundRunningLabel(count: number): string {
+  return `${count} background command${count === 1 ? "" : "s"} running`;
+}
+
+/**
+ * Resolves the live background command count for a chat row in `projectId`,
+ * combining `project-background-store` updates with the row's `background_running`
+ * summary count when the project store has not yet hydrated.
+ */
+export function sessionRunningBackgroundCount(
+  projectId: string | null | undefined,
+  sessionId: string | null | undefined,
+  fallbackCount?: number,
+): number {
+  const pid = projectId?.trim() ?? "";
+  const sid = sessionId?.trim() ?? "";
+  const fallback = Math.max(0, fallbackCount ?? 0);
+  if (!pid || !sid) return fallback;
+  const view = projectBackgroundFor(pid);
+  const liveGroup = view.runningGroups.find((g) => g.sessionId === sid);
+  if (view.hydrated) {
+    return liveGroup?.processes.length ?? 0;
+  }
+  if (liveGroup) {
+    return Math.max(fallback, liveGroup.processes.length);
+  }
+  const endedForSession = view.recentlyEnded.filter((p) => p.session_id === sid).length;
+  if (endedForSession > 0) {
+    return Math.max(0, fallback - endedForSession);
+  }
+  return fallback;
 }

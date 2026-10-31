@@ -37,6 +37,7 @@ type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appSt
   & Pick<ShellSearchState, "openSearch" | "closeSearch" | "closeCrossbar"> & Pick<ShellPaneVisibility, "revealConversation">
   & Pick<SessionNavigation, "resumeSession"> & {
   openStageWithPlacement: (stage: ContextNavItemId, arrival: "routed", open?: () => void) => void;
+  openRunningForProject?: (projectId?: string) => void;
   openNotificationSession: (sessionId: string) => void;
   openWorkers: (workerId?: string) => void;
   openSettings: ShellNavigation["openSettings"];
@@ -46,7 +47,7 @@ type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appSt
 
 /** Register before the shell becomes visible; cleanup shares the shell lifetime. */
 export function installShellNavigationSinks({ shell, projects, appStore, openStageWithPlacement,
-  openSearch, openNotificationSession, revealConversation,
+  openRunningForProject, openSearch, openNotificationSession, revealConversation,
   resumeSession, activeChat, openWorkers, closeSearch, closeCrossbar, setNav, openSettings,
   selectContextSection, showNoProviderBanner }: NavigationSinkDependencies) {
   // Provider nudges share shell-level navigation.
@@ -162,7 +163,11 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     setFindingFocusRequest(req);
     openStageWithPlacement("security", "routed");
   });
-  const unregisterOpenRunning = registerOpenRunningStageSink(() => {
+  const unregisterOpenRunning = registerOpenRunningStageSink((req) => {
+    if (req?.projectId && openRunningForProject) {
+      openRunningForProject(req.projectId);
+      return;
+    }
     openStageWithPlacement("running", "routed");
   });
   const unregisterProjectLookup = registerOpenSourceProjectLookup((id) => {

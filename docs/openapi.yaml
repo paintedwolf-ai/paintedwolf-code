@@ -15976,6 +15976,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          description: Display name of the owning project when listing across projects.
         session_id:
           type: string
           format: uuid
@@ -27843,6 +27846,8 @@ components:
           type: boolean
           description: |
             The host's view when the result was written. It never flips on exit; the session process mirror reports that.
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     CitationGroundingCheckStatus:
       type: string
       description: Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
@@ -30296,6 +30301,11 @@ components:
         overlays:
           type: integer
           minimum: 0
+        background_processes:
+          type: array
+          description: Running background commands in this project that blocked an unforced removal.
+          items:
+            $ref: '#/components/schemas/ProjectBackgroundProcess'
     AgentContextInstruction:
       x-go-generate: true
       type: object
@@ -36953,6 +36963,11 @@ components:
         last_error:
           type: string
           description: Most recent assertion failure, omitted after a successful acquisition.
+        background_processes:
+          type: array
+          description: Live background commands currently running across all projects that quitting Painted Wolf Code will terminate.
+          items:
+            $ref: '#/components/schemas/ProjectBackgroundProcess'
     UpdatePowerSettingsRequest:
       x-go-generate: true
       type: object

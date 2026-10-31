@@ -68,4 +68,34 @@ describe("project chats rows", () => {
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
   });
+
+  it("shows the running background command indicator on active and archived chat rows", async () => {
+    listProjectSessions.mockImplementation(async (_projectId: string, opts?: { archived?: boolean }) => ({
+      sessions: [
+        chat({
+          id: opts?.archived ? "chat-archived" : "chat-active",
+          title: opts?.archived ? "Archived server" : "Active server",
+          archived_at: opts?.archived ? "2026-10-03T12:00:00Z" : undefined,
+          background_running: 2,
+        }),
+      ],
+      total: 1,
+    }));
+    render(() => (
+      <ProjectChatsView
+        projectId="proj-1"
+        appStore={createAppStore()}
+        onOpenSession={vi.fn()}
+        onSetArchived={vi.fn(async () => true)}
+        onSetPinned={vi.fn(async () => true)}
+        onDeleteSession={vi.fn(async () => true)}
+      />
+    ));
+    const activeIndicator = await screen.findByTestId("chat-list-background-running-chat-active");
+    expect(activeIndicator.getAttribute("data-tip")).toBe("2 background commands running");
+
+    fireEvent.click(screen.getByTestId("project-chats-set-archived"));
+    const archivedIndicator = await screen.findByTestId("chat-list-background-running-chat-archived");
+    expect(archivedIndicator.getAttribute("data-tip")).toBe("2 background commands running");
+  });
 });

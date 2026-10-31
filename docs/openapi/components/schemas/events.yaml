@@ -1127,6 +1127,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          description: Display name of the owning project when listing across projects.
         session_id:
           type: string
           format: uuid

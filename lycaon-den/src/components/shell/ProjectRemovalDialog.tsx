@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { ProjectRemovalAssessment, ProjectRemovalCheck, ProjectRemovalReason } from "../../api/types.ts";
 import { createModalFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
+import { formatBackgroundCommandWithChat } from "../../session/confirm-chat-delete.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { DenCheckbox } from "../primitives/DenCheckbox.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
@@ -11,6 +12,7 @@ import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 type Review = {
   assessment: ProjectRemovalAssessment | null;
   projectName: string;
+  onOpenRunning?: () => void;
   resolve: (ids: string[] | null) => void;
 };
 
@@ -30,10 +32,14 @@ export function createProjectRemovalReview() {
   return {
     pending,
     settle,
-    show: (assessment: ProjectRemovalAssessment | null, projectName = "this project"): Promise<string[] | null> => {
+    show: (
+      assessment: ProjectRemovalAssessment | null,
+      projectName = "this project",
+      onOpenRunning?: () => void,
+    ): Promise<string[] | null> => {
       if (disposed) return Promise.resolve(null);
       return new Promise((resolve) => {
-        const request = { assessment, projectName, resolve };
+        const request = { assessment, projectName, onOpenRunning, resolve };
         if (pending()) queue.push(request);
         else setPending(request);
       });
@@ -96,6 +102,20 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                 fallback={<p class="den-dialog__hint" role="status">Extension references could not be assessed. All extensions will be kept.</p>}
                 keyed
               >{(assessment) => <>
+                <Show when={(assessment.background_processes?.length ?? 0) > 0}>
+                  <div data-testid="project-removal-background-processes">
+                    <p class="den-dialog__hint">
+                      {assessment.background_processes!.length === 1
+                        ? "1 background command is running in this project and will stop when the project is deleted:"
+                        : `${assessment.background_processes!.length} background commands are running in this project and will stop when the project is deleted:`}
+                    </p>
+                    <ul class="den-dialog__hint">
+                      <For each={assessment.background_processes}>{(proc) => (
+                        <li>{formatBackgroundCommandWithChat(proc)}</li>
+                      )}</For>
+                    </ul>
+                  </div>
+                </Show>
                 <Show when={assessment.extensions.length > 0}>
                   <p class="den-dialog__hint">These extensions were installed from this project. They are shared across this device. Choose which to remove after the project is deleted.</p>
                   <For each={assessment.extensions}>{(pack, index) => (
@@ -132,6 +152,19 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
             </Scrollport>
             <footer class="den-dialog__footer">
               <div class="den-dialog__footer-end">
+                <Show when={request.onOpenRunning && (request.assessment?.background_processes?.length ?? 0) > 0}>
+                  <DenButton
+                    variant="ghost"
+                    data-testid="project-removal-open-running"
+                    onClick={() => {
+                      const openRunning = request.onOpenRunning;
+                      props.review.settle(null);
+                      openRunning?.();
+                    }}
+                  >
+                    Open Running
+                  </DenButton>
+                </Show>
                 <DenButton variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
                 <DenButton variant="danger" onClick={() => props.review.settle(selected())}>
                   {selected().length > 0

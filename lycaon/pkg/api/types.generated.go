@@ -4362,6 +4362,8 @@ type PowerSettingsResponse struct {
 	ActiveWorkCount int `json:"active_work_count"`
 	// Most recent assertion failure, omitted after a successful acquisition.
 	LastError string `json:"last_error,omitempty"`
+	// Live background commands currently running across all projects that quitting Painted Wolf Code will terminate.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // PreflightEvent Host readiness changed while the app was running. Device-scoped: the report is about the machine, not one project, even when a probe's result names the projects it is about.
@@ -4607,8 +4609,10 @@ type ProjectBackgroundEvent struct {
 
 // ProjectBackgroundProcess One running or recently ended background command in a project, with live session metadata and attributed listening endpoints.
 type ProjectBackgroundProcess struct {
-	ProcessID       string `json:"process_id"`
-	ProjectID       string `json:"project_id,omitempty"`
+	ProcessID string `json:"process_id"`
+	ProjectID string `json:"project_id,omitempty"`
+	// Display name of the owning project when listing across projects.
+	ProjectName     string `json:"project_name,omitempty"`
 	SessionID       string `json:"session_id"`
 	SessionTitle    string `json:"session_title,omitempty"`
 	SessionArchived bool   `json:"session_archived"`
@@ -4743,6 +4747,8 @@ type ProjectRemovalResult struct {
 	Sessions     int                       `json:"sessions"`
 	Workers      int                       `json:"workers"`
 	Overlays     int                       `json:"overlays"`
+	// Running background commands in this project that blocked an unforced removal.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // ProjectRoot
@@ -8032,7 +8038,8 @@ type ToolProcessHandle struct {
 	// Live background handle, a command job or a held call, to poll, wait on, or stop.
 	Handle string `json:"handle"`
 	// The host's view when the result was written. It never flips on exit; the session process mirror reports that.
-	Running bool `json:"running"`
+	Running           bool                               `json:"running"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // ToolProgress Measured discovery work. Counts are observations, not a completion estimate.

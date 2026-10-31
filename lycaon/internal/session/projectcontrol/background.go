@@ -185,6 +185,7 @@ func (m *Service) AllRunningBackgroundProcesses(ctx context.Context) ([]api.Proj
 		return nil, nil
 	}
 	rootsCache := make(map[string][]projectroot.RootRef)
+	projectNames := make(map[string]string)
 	sessionCache := make(map[string]hydratedSessionMeta, len(rows))
 	items := make([]api.ProjectBackgroundProcess, 0, len(rows))
 	for _, row := range rows {
@@ -192,10 +193,15 @@ func (m *Service) AllRunningBackgroundProcesses(ctx context.Context) ([]api.Proj
 		if !ok && m.projects != nil && row.ProjectID != "" {
 			if p, err := m.projects.Get(ctx, row.ProjectID); err == nil && p != nil {
 				roots = project.RootRefsFrom(p)
+				projectNames[row.ProjectID] = p.Name
 			}
 			rootsCache[row.ProjectID] = roots
 		}
-		items = append(items, m.hydrateProjectProcess(ctx, row, roots, sessionCache))
+		item := m.hydrateProjectProcess(ctx, row, roots, sessionCache)
+		if name := projectNames[row.ProjectID]; name != "" {
+			item.ProjectName = name
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }

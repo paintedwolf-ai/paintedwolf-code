@@ -223,6 +223,13 @@ components:
         last_error:
           type: string
           description: Most recent assertion failure, omitted after a successful acquisition.
+        background_processes:
+          type: array
+          description: >-
+            Live background commands currently running across all projects that
+            quitting Painted Wolf Code will terminate.
+          items:
+            $ref: '../events.yaml#/components/schemas/ProjectBackgroundProcess'
     UpdatePowerSettingsRequest:
       x-go-generate: true
       type: object

@@ -5995,6 +5995,8 @@ export interface components {
             process_id: string;
             /** Format: uuid */
             project_id?: string;
+            /** @description Display name of the owning project when listing across projects. */
+            project_name?: string;
             /** Format: uuid */
             session_id: string;
             session_title?: string;
@@ -10809,6 +10811,7 @@ export interface components {
             handle: string;
             /** @description The host's view when the result was written. It never flips on exit; the session process mirror reports that. */
             running: boolean;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
         };
         /**
          * @description Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
@@ -11844,6 +11847,8 @@ export interface components {
             sessions: number;
             workers: number;
             overlays: number;
+            /** @description Running background commands in this project that blocked an unforced removal. */
+            background_processes?: components["schemas"]["ProjectBackgroundProcess"][];
         };
         AgentContextInstruction: {
             /** @description Root-relative AGENTS.md path in runtime precedence order. */
@@ -14826,6 +14831,8 @@ export interface components {
             active_work_count: number;
             /** @description Most recent assertion failure, omitted after a successful acquisition. */
             last_error?: string;
+            /** @description Live background commands currently running across all projects that quitting Painted Wolf Code will terminate. */
+            background_processes?: components["schemas"]["ProjectBackgroundProcess"][];
         };
         UpdatePowerSettingsRequest: {
             keep_awake_while_working?: boolean;

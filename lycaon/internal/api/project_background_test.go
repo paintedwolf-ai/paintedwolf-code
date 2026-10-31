@@ -373,6 +373,23 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	if len(allRunning) != 3 {
 		t.Fatalf("AllRunningBackgroundProcesses = %d, want 3 (h1, h2, hOther)", len(allRunning))
 	}
+	for _, proc := range allRunning {
+		if proc.ProjectName == "" {
+			t.Fatalf("expected ProjectName on cross-project process: %+v", proc)
+		}
+	}
+
+	// Verify GET /v1/settings/power exposes cross-project background_processes for app quit confirmation.
+	powerRec := httptest.NewRecorder()
+	env.srv.ServeHTTP(powerRec, newAuthedRequest(http.MethodGet, "/v1/settings/power", nil))
+	if powerRec.Code != http.StatusOK {
+		t.Fatalf("power settings status = %d body=%s", powerRec.Code, powerRec.Body.String())
+	}
+	var powerResp wire.PowerSettingsResponse
+	testutil.FailErr(t, "decode power settings", json.Unmarshal(powerRec.Body.Bytes(), &powerResp))
+	if len(powerResp.BackgroundProcesses) != 3 {
+		t.Fatalf("power settings background_processes = %+v, want 3", powerResp.BackgroundProcesses)
+	}
 }
 
 func TestProjectBackgroundStopRecordsPersonActionAndNotifiesOwningChat(t *testing.T) {

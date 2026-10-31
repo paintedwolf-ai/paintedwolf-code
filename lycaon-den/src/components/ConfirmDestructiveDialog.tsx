@@ -50,6 +50,20 @@ export function ConfirmDestructiveDialog(props: DialogProps) {
                 {(line) => <p class="den-dialog__hint">{line}</p>}
               </For>
               <footer class="den-dialog__footer">
+                <Show when={req.onOpenRunning} keyed>
+                  {(openRunning) => (
+                    <DenButton
+                      variant="ghost"
+                      data-testid="confirm-destructive-open-running"
+                      onClick={() => {
+                        props.onCancel();
+                        openRunning();
+                      }}
+                    >
+                      Open Running
+                    </DenButton>
+                  )}
+                </Show>
                 <DenButton
                   variant="ghost"
                   data-testid="confirm-destructive-cancel"
