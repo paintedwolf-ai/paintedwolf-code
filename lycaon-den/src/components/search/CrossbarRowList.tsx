@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type {
   ContributionSearchResult,
   ContributionSearchSource,
@@ -59,12 +59,7 @@ export type CrossbarRowListProps = {
   onEscalateTo: (mode: CrossbarMode) => void;
   onActivateSourceResult: (source: ContributionSearchSource, result: ContributionSearchResult) => void;
   onConfigureSource: () => void;
-  renderStatusBanner: (args: {
-    actionStatus: string | null | undefined;
-    showHitStatus: boolean;
-    coverageNote: string;
-    hitStatusLabel: string;
-  }) => JSX.Element;
+
 };
 
 export function CrossbarRowList(props: CrossbarRowListProps) {
@@ -222,12 +217,12 @@ export function CrossbarRowList(props: CrossbarRowListProps) {
           data-testid="crossbar-list"
           viewport={{ onScroll: syncListEdges }}
         >
-          {props.renderStatusBanner({
-            actionStatus: actionStatusLabel(props.contributionActions, props.query, props.mode),
-            showHitStatus: showHitStatusRow(),
-            coverageNote: props.coverageNote,
-            hitStatusLabel: hitStatusLabel(),
-          })}
+          <CrossbarStatusBanner
+            actionStatus={actionStatusLabel(props.contributionActions, props.query, props.mode)}
+            showHitStatus={showHitStatusRow()}
+            coverageNote={props.coverageNote}
+            hitStatusLabel={hitStatusLabel()}
+          />
           <For each={listRows()}>
             {(row) => {
               if (row.kind === "section") {
@@ -601,4 +596,29 @@ export function outsideProjectFolder(outside: SourceSearchOutside): string {
   if (outside.kind === "directory") return outside.path;
   const cut = Math.max(outside.path.lastIndexOf("/"), outside.path.lastIndexOf("\\"));
   return cut > 0 ? outside.path.slice(0, cut) : outside.path;
+}
+
+function CrossbarStatusBanner(props: {
+  actionStatus: string | null | undefined;
+  showHitStatus: boolean;
+  coverageNote: string;
+  hitStatusLabel: string;
+}) {
+  return (
+    <>
+      <Show when={props.actionStatus}>
+        {(label) => <li class="den-crossbar__status" role="status">{label()}</li>}
+      </Show>
+      <Show when={!props.showHitStatus && props.coverageNote}>
+        <li class="den-crossbar__status den-crossbar__coverage" role="status" data-testid="crossbar-coverage">
+          {props.coverageNote}
+        </li>
+      </Show>
+      <Show when={props.showHitStatus}>
+        <li class="den-crossbar__status" data-testid="crossbar-hit-status" aria-live="polite">
+          {props.hitStatusLabel}
+        </li>
+      </Show>
+    </>
+  );
 }

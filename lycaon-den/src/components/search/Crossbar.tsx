@@ -713,35 +713,7 @@ export function Crossbar(props: CrossbarProps) {
                 );
                 if (settings) runAction(settings);
               }}
-              renderStatusBanner={({ actionStatus, showHitStatus, coverageNote: note, hitStatusLabel }) => (
-                <>
-                  <Show when={actionStatus}>
-                    {(label) => (
-                      <li class="den-crossbar__status" role="status">
-                        {label()}
-                      </li>
-                    )}
-                  </Show>
-                  <Show when={!showHitStatus && note}>
-                    <li
-                      class="den-crossbar__status den-crossbar__coverage"
-                      role="status"
-                      data-testid="crossbar-coverage"
-                    >
-                      {note}
-                    </li>
-                  </Show>
-                  <Show when={showHitStatus}>
-                    <li
-                      class="den-crossbar__status"
-                      data-testid="crossbar-hit-status"
-                      aria-live="polite"
-                    >
-                      {hitStatusLabel}
-                    </li>
-                  </Show>
-                </>
-              )}
+
             />
 
             <div class="den-crossbar__footer" data-testid="crossbar-footer">
