@@ -119,6 +119,11 @@ const EditorConfigMismatchCode = "EDITORCONFIG_MISMATCH"
 // HTML document while fetch_url was on the turn's plan. The exchange stands.
 const HTTPRequestWebPageCode = "HTTP_REQUEST_WEB_PAGE"
 
+// HTTPRequestLoopbackOtherSessionCode is stated on an http_request whose
+// loopback first hop was answered by another chat's listener or a competing
+// listener alongside a container port publication. The exchange stands.
+const HTTPRequestLoopbackOtherSessionCode = "HTTP_REQUEST_LOOPBACK_OTHER_SESSION"
+
 // CommandNotFoundCode identifies a missing executable for habit recovery.
 const CommandNotFoundCode = "COMMAND_NOT_FOUND"
 

@@ -166,11 +166,22 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 			"connect_ports": listenPortInts(connectPorts),
 		}},
 	}
+	listenLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, listenPorts, targets[0].Details)
+	connectLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, connectPorts, targets[1].Details)
+	lead := listenLead
+	if connectLead != "" && connectLead != listenLead {
+		if lead != "" {
+			lead += " " + connectLead
+		} else {
+			lead = connectLead
+		}
+	}
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectActionSet, Title: title, Targets: targets,
 	}, hitl.ApprovalPresentation{
 		Action: "Local server and local connections", Tool: strings.TrimSpace(in.ToolName), Command: summary,
+		Lead:      lead,
 		Impact:    hitl.LocalListenWhat + " " + hitl.LoopbackConnectWhat,
 		Who:       hitl.WhoAgentCommand,
 		IfWrong:   hitl.LocalListenIfWrong + " " + hitl.LoopbackConnectIfWrong,

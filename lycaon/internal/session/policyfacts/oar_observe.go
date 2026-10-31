@@ -245,6 +245,16 @@ func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultF
 	gc.PutRejectData(toolrejection.HTTPRequestWebPageCode, raised.FeedbackFor(toolrejection.HTTPRequestWebPageCode).Details)
 }
 
+// ObserveHTTPRequestLoopbackOtherSession publishes loopback listener attribution
+// when http_request reaches a port held by another session or a competing listener.
+func ObserveHTTPRequestLoopbackOtherSession(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		return
+	}
+	gc.Invocation.HTTPRequestLoopbackOtherSession = true
+	gc.PutRejectData(toolrejection.HTTPRequestLoopbackOtherSessionCode, raised.FeedbackFor(toolrejection.HTTPRequestLoopbackOtherSessionCode).Details)
+}
+
 // DeferredUnactivatedCount is how many of surfaceID's deferred tools this
 // session has not loaded.
 func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {

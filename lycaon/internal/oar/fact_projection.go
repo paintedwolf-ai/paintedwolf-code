@@ -203,8 +203,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"mcp_schema_matched":              gc.MCP.MCPSchemaMatched,
 		"editorconfig_mismatch":           gc.Source.EditorConfigMismatch,
 		"syntax_check_overridden":         gc.Source.SyntaxCheckOverridden,
-		"source_analysis_unavailable":     gc.Source.SourceAnalysisUnavailable,
-		"http_request_web_page":           gc.Invocation.HTTPRequestWebPage,
+		"source_analysis_unavailable":             gc.Source.SourceAnalysisUnavailable,
+		"http_request_web_page":                   gc.Invocation.HTTPRequestWebPage,
+		"http_request_loopback_other_session":     gc.Invocation.HTTPRequestLoopbackOtherSession,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, standardActivation(gc))

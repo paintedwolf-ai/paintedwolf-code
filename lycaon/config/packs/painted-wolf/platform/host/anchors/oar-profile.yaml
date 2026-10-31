@@ -1208,6 +1208,8 @@ host_facts:
    type: bool
  - name: paintedwolf.http_request_web_page
    type: bool
+ - name: paintedwolf.http_request_loopback_other_session
+   type: bool
  - name: paintedwolf.misplaced_fields
    type: list<string>
  - name: paintedwolf.inapplicable_fields
