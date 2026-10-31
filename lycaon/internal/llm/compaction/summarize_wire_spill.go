@@ -50,9 +50,12 @@ func (c *ChunkCompactor) compactSpillSummarize(ctx context.Context, chunk Conten
 	if err != nil {
 		return content, "", false
 	}
+	if len(chunk.EvidenceHandles) == 0 {
+		chunk.EvidenceHandles = extractChunkHandles(ContextMessage{Content: content})
+	}
 	var b strings.Builder
 	b.WriteString(hostmarker.CompactionBanner(fmt.Sprintf(
-		"tool_result — summarize pack ~%d tokens; full pack at wire_spill_path", originalTokens)) + "\n")
+		"tool_result — summarize pack ~%d tokens; full pack at wire_spill_path%s", originalTokens, chunk.recallPointer())) + "\n")
 	b.WriteString(pointer)
 	return b.String(), summarizeWireSpillStrategy, true
 }
