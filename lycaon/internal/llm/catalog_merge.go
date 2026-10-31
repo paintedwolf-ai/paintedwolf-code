@@ -608,6 +608,9 @@ func overlayLocalModel(base, local modelinfo.Entry) modelinfo.Entry {
 	if local.ThinkStyle != "" {
 		out.ThinkStyle = local.ThinkStyle
 	}
+	if local.ContinuationPolicy != "" {
+		out.ContinuationPolicy = local.ContinuationPolicy
+	}
 	out.Capabilities = modelinfo.MergeCapabilities(out.Capabilities, local.Capabilities)
 	if local.InputNeuronsPerM != 0 {
 		out.InputNeuronsPerM = local.InputNeuronsPerM

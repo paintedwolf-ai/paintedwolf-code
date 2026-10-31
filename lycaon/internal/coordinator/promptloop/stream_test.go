@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
@@ -266,5 +267,160 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 		if got != nil || !errors.Is(err, tc.want) || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
 			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
 		}
+	}
+}
+
+type selectedProviderClient struct {
+	modelcall.LLMClient
+	providerID string
+	model      string
+	think      modelcall.ThinkLevel
+}
+
+func (c *selectedProviderClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	req.Model = c.model
+	req.Think = c.think
+	ch, err := c.LLMClient.Stream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan modelcall.StreamChunk)
+	go func() {
+		defer close(out)
+		for chunk := range ch {
+			chunk.ProviderID = c.providerID
+			chunk.Model = c.model
+			if !modelcall.SendChunk(ctx, out, chunk) {
+				modelcall.DrainStream(ch)
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+func TestLoopAnthropicOmittedThinkingMultiTurnToolContinuation(t *testing.T) {
+	catalog, err := llm.LoadProviderConfig()
+	testutil.FailErr(t, "load provider catalog", err)
+	modelinfo.SetThinkingRules(catalog.ModelThinking)
+	t.Cleanup(func() { modelinfo.SetThinkingRules(nil) })
+
+	var turnCount atomic.Int32
+	var sawReplayedThinking atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			http.NotFound(w, r)
+			return
+		}
+		var payload struct {
+			Messages []struct {
+				Role    string            `json:"role"`
+				Content []json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		testutil.FailErr(t, "decode request", json.NewDecoder(r.Body).Decode(&payload))
+		for mIdx, msg := range payload.Messages {
+			for bIdx, rawBlock := range msg.Content {
+				var fields map[string]json.RawMessage
+				testutil.FailErr(t, "decode block", json.Unmarshal(rawBlock, &fields))
+				var blockType string
+				_ = json.Unmarshal(fields["type"], &blockType)
+				if blockType == "thinking" {
+					rawThinking, ok := fields["thinking"]
+					if !ok {
+						w.WriteHeader(http.StatusBadRequest)
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"type": "error",
+							"error": map[string]any{
+								"type":    "invalid_request_error",
+								"message": "messages.1.content.0.thinking.thinking: Field required",
+								"msg_idx": mIdx,
+								"blk_idx": bIdx,
+							},
+						})
+						return
+					}
+					var thinkingText, sig string
+					_ = json.Unmarshal(rawThinking, &thinkingText)
+					_ = json.Unmarshal(fields["signature"], &sig)
+					if thinkingText == "" && sig == "sig-omitted-turn-1" {
+						sawReplayedThinking.Store(true)
+					}
+				}
+			}
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		if turnCount.Add(1) == 1 {
+			_, _ = io.WriteString(w, strings.Join([]string{
+				`data: {"type":"message_start","message":{"usage":{"input_tokens":12}}}`,
+				`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+				`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-omitted-turn-1"}}`,
+				`data: {"type":"content_block_stop","index":0}`,
+				`data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"read"}}`,
+				`data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"README.md\"}"}}`,
+				`data: {"type":"content_block_stop","index":1}`,
+				`data: {"type":"message_delta","usage":{"output_tokens":6}}`,
+				`data: {"type":"message_stop"}`,
+				"",
+			}, "\n\n"))
+			return
+		}
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"type":"message_start","message":{"usage":{"input_tokens":20}}}`,
+			`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-omitted-turn-2"}}`,
+			`data: {"type":"content_block_stop","index":0}`,
+			`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+			`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"completed after omitted thinking"}}`,
+			`data: {"type":"content_block_stop","index":1}`,
+			`data: {"type":"message_delta","usage":{"output_tokens":8}}`,
+			`data: {"type":"message_stop"}`,
+			"",
+		}, "\n\n"))
+	}))
+	defer srv.Close()
+
+	reg := tools.NewStubRegistry()
+	executed := 0
+	testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		executed++
+		return "readme-contents", nil
+	}))
+	provider := &selectedProviderClient{
+		LLMClient: anthropic.New("anthropic", srv.URL+"/v1", "test-key", []modelinfo.Entry{{
+			ID:            "claude-opus-4-7",
+			ContextLength: 200000,
+			MaxTokens:     16384,
+			ThinkStyle:    string(modelinfo.ThinkStyleAdaptive),
+		}}),
+		providerID: "anthropic",
+		model:      "claude-opus-4-7",
+		think:      modelcall.ThinkHigh,
+	}
+	deps := PromptLoopDeps{
+		Context: ContextDeps{
+			Tools:  reg,
+			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return h, nil
+			},
+		},
+		Model: ModelDeps{LLM: provider},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+			UpdateMessage:  func(context.Context, string, string, api.Message) error { return nil },
+		},
+	}
+	sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
+	result, err := NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
+		SessionID: sess.ID,
+		Session:   sess,
+		History:   []api.Message{{Role: api.MessageRoleUser, Content: "Read README"}},
+		ProfileID: "explore_readonly",
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+	})
+	testutil.FailErr(t, "run multi-turn anthropic loop", err)
+	if executed != 1 || turnCount.Load() != 2 || !sawReplayedThinking.Load() || result.LastAssistantContent != "completed after omitted thinking" {
+		t.Fatalf("executed=%d turns=%d replayed=%v content=%q", executed, turnCount.Load(), sawReplayedThinking.Load(), result.LastAssistantContent)
 	}
 }

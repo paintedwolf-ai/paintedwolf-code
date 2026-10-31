@@ -50,6 +50,9 @@ type Entry struct {
 	// ThinkStyle overrides the family policy for one model.
 	ThinkStyle string `yaml:"think_style,omitempty"`
 
+	// ContinuationPolicy overrides the family reasoning replay policy for one model.
+	ContinuationPolicy string `yaml:"continuation_policy,omitempty"`
+
 	// Untyped marks discovery rows without capability evidence.
 	Untyped bool `yaml:"-"`
 }
