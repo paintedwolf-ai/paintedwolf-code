@@ -1,17 +1,40 @@
 package promptloop
 
-import "encoding/json"
+import (
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
-// committedEffect keeps a producer-stated no-op from clearing repetition history.
-func (run completedToolRun) committedEffect() bool {
+func toolWorkflowAdvanced(tool string, facts guidance.ToolResultFacts) bool {
+	if facts.WorkflowAdvanced != nil {
+		return *facts.WorkflowAdvanced
+	}
+	return tool != "update_progress"
+}
+
+// advancesRepetitionContext distinguishes material progress from bookkeeping.
+func (run completedToolRun) advancesRepetitionContext() bool {
 	if !run.contract.MutatesWorld() {
 		return false
 	}
-	if run.call.Name != "update_progress" {
-		return true
+	facts := guidance.ToolResultFacts{}
+	if run.toolCtx.Effects.Out != nil {
+		facts = run.toolCtx.Effects.Out.Facts
 	}
-	var result struct {
-		Status string `json:"status"`
+	return toolWorkflowAdvanced(run.call.Name, facts)
+}
+
+type batchProgressOutcome struct{ Advanced, Blocked bool }
+
+// observe consumes settled invocation facts before transcript projection.
+func (out *batchProgressOutcome) observe(advanced bool, result *api.ToolResult) {
+	if result == nil {
+		return
 	}
-	return json.Unmarshal([]byte(run.output), &result) == nil && result.Status == "updated"
+	switch result.Outcome {
+	case api.ToolResultOutcomeRejected, api.ToolResultOutcomeError:
+		out.Blocked = true
+	default:
+		out.Advanced = out.Advanced || advanced
+	}
 }

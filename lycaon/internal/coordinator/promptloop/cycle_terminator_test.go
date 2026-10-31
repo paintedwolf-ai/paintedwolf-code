@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -78,10 +78,11 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			calls := []api.ToolCall{{ID: "call-1", Name: tt.tool, Args: map[string]any{}}}
 			history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-			_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+			batchResult, err := loop.Batch.executeToolCallsInTurn(
 				context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 				history, "continue", assistantID, "", nil,
 			)
+			breakLoop := batchResult.breakToolLoop
 			testutil.FailErr(t, "execute decorated cycle terminator", err)
 			if !breakLoop {
 				t.Fatalf("%s result did not end the tool cycle", tt.tool)
@@ -117,10 +118,11 @@ func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute write while awaiting approval", err)
 	if !breakLoop {
 		t.Fatal("landing on human_approval must end the tool cycle")
@@ -192,10 +194,11 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 		st = &promptLoopTurnState{turnToolPlan: plan}
 	}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, surfaceID, st,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute scan_list around a host hold", err)
 	return breakLoop
 }
@@ -225,10 +228,11 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute write", err)
 	if breakLoop {
 		t.Fatal("write must not end the cycle when human approval is not awaiting")
@@ -256,7 +260,9 @@ func TestWorkerDecisionSettlesUnattemptedCompletion(t *testing.T) {
 	calls := []api.ToolCall{{ID: "decision", Name: "request_decision"}, {ID: "completion", Name: "complete_leg"}}
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-	history, _, _, _, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	batchResult, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history = batchResult.history
+	stopped := batchResult.breakToolLoop
 	testutil.FailErr(t, "pause worker batch", err)
 	if !stopped || completed || len(history) != 3 {
 		t.Fatalf("stopped=%v completed=%v history=%+v", stopped, completed, history)

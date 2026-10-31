@@ -63,9 +63,6 @@ func (m *Service) BeforeTool(
 		}
 		return "", skip, err
 	}
-	if closureArmed {
-		m.ProgressClosure.ClearSatisfied(root, currentProgress, closureBaseline)
-	}
 	return "", false, nil
 }
 

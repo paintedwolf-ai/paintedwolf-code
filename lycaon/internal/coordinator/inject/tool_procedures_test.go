@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -54,7 +54,7 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 	}
 	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted)
 	testutil.FailErr(t, "render pruned procedures", err)
-	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") {
+	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("pruned surface lost progress requirements: %s", block)
 	}
 }
@@ -120,17 +120,20 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 		return false
 	}
 	for marker, want := range map[string]bool{
-		"command(verification: true)":                        has("command"),
-		"VERIFY_UNVERIFIABLE":                                has("verify"),
+		"command(verification: true)":                       has("command"),
+		"VERIFY_UNVERIFIABLE":                               has("verify"),
 		"Static `capture_page` in `project_dir` mode needs": (has("command") || has("terminal_open") || has("verify")) && has("capture_page"),
 	} {
 		if strings.Contains(block, marker) != want {
 			t.Fatalf("procedure %q present=%v, want %v for %v", marker, strings.Contains(block, marker), want, offered)
 		}
 	}
+	if strings.Contains(block, "`write_root`") {
+		t.Fatal("procedure invented workspace instruction roots")
+	}
 	for marker, capability := range map[string]toolcontract.Capability{
-		"`local_listen`":                            toolcontract.CapabilityLocalListen,
-		"`socket_paths`":                            toolcontract.CapabilitySocket,
+		"`local_listen`": toolcontract.CapabilityLocalListen,
+		"`socket_paths`": toolcontract.CapabilitySocket,
 		"Do not combine `direct_ip` with `socks_proxy`": toolcontract.CapabilityDirectIP,
 	} {
 		want := false
@@ -164,11 +167,11 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 		for _, profile := range []string{"coordinator", "implementer"} {
 			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
 			testutil.FailErr(t, "render progress procedure", err)
-			want := profile == "coordinator" && (tool == "update_progress" || progress.IsProgressGatedTool(tool))
+			want := profile == "coordinator" && (tool == "update_progress" || tool == "command" || progress.IsProgressGatedTool(tool))
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations, and commands that only write session scratch or saved output files need none")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations, and commands that only write session scratch or saved output files need none")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
 			for _, candidate := range gatedAndLifecycle {
@@ -183,7 +186,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	investigateOffered := []string{"summarize", "survey_repo", "update_progress"}
 	investigateBlock, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-investigate", "coordinator", investigateOffered, nil)
 	testutil.FailErr(t, "render investigate progress procedure", err)
-	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations, and commands that only write session scratch or saved output files need none", "PROGRESS_ITEM_NOT_CLOSED"} {
+	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, explanations, and commands that only write session scratch or saved output files need none", "PROGRESS_RECONCILIATION_REQUIRED"} {
 		if !strings.Contains(investigateBlock, required) {
 			t.Fatalf("investigate progress procedure missing %q: %s", required, investigateBlock)
 		}
@@ -196,10 +199,46 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 
 	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "edit", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
 	testutil.FailErr(t, "render lifecycle progress procedure", err)
-	if !strings.Contains(withLifecycle, "Before `edit` or `task`, call it") {
+	if !strings.Contains(withLifecycle, "Establish the checklist once before the first `edit` or `task`") {
 		t.Fatalf("unexpected gated tool phrasing: %s", withLifecycle)
 	}
 	if !strings.Contains(withLifecycle, "Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, `pack_board`.") {
 		t.Fatalf("unexpected lifecycle tool phrasing: %s", withLifecycle)
+	}
+}
+
+func TestRunnerProcedureStaticPreviewPointerFollowsOfferedAndRequestableCapturePage(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	for _, profile := range []string{"coordinator", "implementer"} {
+		offered, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-offered", profile, []string{"command", "capture_page"}, nil)
+		testutil.FailErr(t, "render offered capture_page runner procedure", err)
+		if !strings.Contains(offered, "For static page preview, `capture_page` in `project_dir` mode needs no server.") {
+			t.Fatalf("%s offered capture_page missing project_dir pointer: %s", profile, offered)
+		}
+
+		requestable, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-requestable", profile, []string{"command", "request_tools"}, nil)
+		testutil.FailErr(t, "render requestable capture_page runner procedure", err)
+		if !strings.Contains(requestable, "For static page preview, load page capture with `request_tools`") || !strings.Contains(requestable, "instead of starting a static server.") {
+			t.Fatalf("%s requestable capture_page missing request_tools static-preview pointer: %s", profile, requestable)
+		}
+		assertOfferedPageProcedures(t, []string{"command", "request_tools"}, requestable)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		profile string
+		tools   []string
+	}{
+		{name: "no request_tools", profile: "coordinator", tools: []string{"command"}},
+		{name: "profile without capture_page", profile: "editor_file", tools: []string{"command", "request_tools"}},
+		{name: "unknown profile", profile: "unknown", tools: []string{"command", "request_tools"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-omitted", tc.profile, tc.tools, nil)
+			testutil.FailErr(t, "render runner procedure without capture_page", err)
+			if strings.Contains(block, "For static page preview") {
+				t.Fatalf("unexpected static-preview pointer for %s/%v: %s", tc.profile, tc.tools, block)
+			}
+		})
 	}
 }

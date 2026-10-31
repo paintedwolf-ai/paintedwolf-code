@@ -49,7 +49,7 @@ func TestReviewEvidenceUnitsUseCapabilitiesAndRespectOmissions(t *testing.T) {
 				PhaseCoordinatorSurface: "review_adjudicate",
 				AllowedAgents:           []string{"skeptic", "web-researcher"},
 			}}
-			out, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+			out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 				map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 			testutil.FailErr(t, "render review evidence units", err)
 			if profile.SurfaceID != "review_adjudicate" {
