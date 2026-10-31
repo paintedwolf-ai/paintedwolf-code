@@ -369,6 +369,7 @@ execution_capabilities:
   git_merge: [file_change]
   git_stash: [file_change]
   http_request:
+    - direct_ip
     - loopback_connect
   wait:
     - loopback_connect
