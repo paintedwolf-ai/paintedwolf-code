@@ -9,14 +9,18 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 )
 
-func (s *Memory) ensureEvidenceSession(sessionID string) map[string]memoryEvidenceRow {
+func ensureEvidenceSession(s *memoryCore, sessionID string) map[string]memoryEvidenceRow {
 	if s.evidence[sessionID] == nil {
 		s.evidence[sessionID] = make(map[string]memoryEvidenceRow)
 	}
 	return s.evidence[sessionID]
 }
 
-func (s *Memory) LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error) {
+func (ev *memoryEvidence) LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error) {
+	return loadLedgerMemory(ctx, ev.core, sessionID)
+}
+
+func loadLedgerMemory(ctx context.Context, s *memoryCore, sessionID string) (evidence.Ledger, error) {
 	if err := ctx.Err(); err != nil {
 		return evidence.Ledger{}, err
 	}
@@ -40,7 +44,11 @@ func (s *Memory) LoadLedger(ctx context.Context, sessionID string) (evidence.Led
 	return evidence.AssembleLedger(records), nil
 }
 
-func (s *Memory) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error {
+func (ev *memoryEvidence) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error {
+	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, rec)
+}
+
+func upsertEvidenceRecordMemory(ctx context.Context, s *memoryCore, sessionID string, rec evidence.Record) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -53,17 +61,18 @@ func (s *Memory) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec
 	if _, ok := s.sessions[sessionID]; !ok {
 		return ErrSessionNotFound
 	}
-	ledger := s.ensureEvidenceSession(sessionID)
+	ledger := ensureEvidenceSession(s, sessionID)
 	if _, exists := ledger[handle]; exists {
 		return nil
 	}
 	ledger[handle] = memoryEvidenceRow{rec: rec}
-	s.bumpUntrustedLocked(sessionID, rec)
-	s.bumpSecretExposureLocked(sessionID, rec)
+	bumpUntrustedLocked(s, sessionID, rec)
+	bumpSecretExposureLocked(s, sessionID, rec)
 	return nil
 }
 
-func (s *Memory) MarkSuperseded(ctx context.Context, sessionID, oldHandle, byHandle string) error {
+func (ev *memoryEvidence) MarkSuperseded(ctx context.Context, sessionID, oldHandle, byHandle string) error {
+	s := ev.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -84,7 +93,7 @@ func (s *Memory) MarkSuperseded(ctx context.Context, sessionID, oldHandle, byHan
 	return nil
 }
 
-func (s *Memory) nextEvidenceOrdinalLocked(sessionID, kind string) int {
+func nextEvidenceOrdinalLocked(s *memoryCore, sessionID, kind string) int {
 	max := 0
 	for handle := range s.evidence[sessionID] {
 		k, ord := evidence.ParseHandleOrdinal(handle)
@@ -95,14 +104,14 @@ func (s *Memory) nextEvidenceOrdinalLocked(sessionID, kind string) int {
 	return max + 1
 }
 
-func (s *Memory) CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (string, string, error) {
-	return s.commitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content, "")
+func (ev *memoryEvidence) CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (string, string, error) {
+	return commitEvidenceToolResultMemory(ctx, ev.core, sessionID, projectDir, toolName, args, content, "")
 }
 
 // CommitVisualEvidenceToolResult also stamps the minted handle onto the
 // result's stored artifact before the ledger row becomes visible.
-func (s *Memory) CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
-	return s.commitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content, strings.TrimSpace(artifactID))
+func (ev *memoryEvidence) CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
+	return commitEvidenceToolResultMemory(ctx, ev.core, sessionID, projectDir, toolName, args, content, strings.TrimSpace(artifactID))
 }
 
 // SetArtifactHandleBinder lets evidence commits stamp handles onto artifacts.
@@ -112,7 +121,7 @@ func (s *Memory) SetArtifactHandleBinder(binder visual.HandleBinder) {
 	s.artifactHandles = binder
 }
 
-func (s *Memory) commitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
+func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", "", err
 	}
@@ -128,7 +137,7 @@ func (s *Memory) commitEvidenceToolResult(ctx context.Context, sessionID, projec
 	if _, ok := s.sessions[sessionID]; !ok {
 		return "", "", ErrSessionNotFound
 	}
-	liveRows := s.ensureEvidenceSession(sessionID)
+	liveRows := ensureEvidenceSession(s, sessionID)
 	var liveRecords []evidence.Record
 	for handle, row := range liveRows {
 		if row.supersededBy != "" {
@@ -140,7 +149,7 @@ func (s *Memory) commitEvidenceToolResult(ctx context.Context, sessionID, projec
 	}
 	live := evidence.AssembleLedger(liveRecords)
 
-	ordinal := s.nextEvidenceOrdinalLocked(sessionID, rec.Kind)
+	ordinal := nextEvidenceOrdinalLocked(s, sessionID, rec.Kind)
 
 	patched := content
 	var highlightRecs []evidence.Record
@@ -188,19 +197,19 @@ func (s *Memory) commitEvidenceToolResult(ctx context.Context, sessionID, projec
 		}
 	}
 	liveRows[handle] = memoryEvidenceRow{rec: rec}
-	s.bumpUntrustedLocked(sessionID, rec)
-	s.bumpSecretExposureLocked(sessionID, rec)
+	bumpUntrustedLocked(s, sessionID, rec)
+	bumpSecretExposureLocked(s, sessionID, rec)
 
 	for _, hrec := range highlightRecs {
 		liveRows[hrec.Handle] = memoryEvidenceRow{rec: hrec}
-		s.bumpUntrustedLocked(sessionID, hrec)
-		s.bumpSecretExposureLocked(sessionID, hrec)
+		bumpUntrustedLocked(s, sessionID, hrec)
+		bumpSecretExposureLocked(s, sessionID, hrec)
 	}
 	if strings.EqualFold(toolName, "read") {
 		if marker, ok := secretExposureReadRecord(evidencePathArg(args)); ok {
 			if _, exists := liveRows[marker.Handle]; !exists {
 				liveRows[marker.Handle] = memoryEvidenceRow{rec: marker}
-				s.bumpSecretExposureLocked(sessionID, marker)
+				bumpSecretExposureLocked(s, sessionID, marker)
 			}
 		}
 	}

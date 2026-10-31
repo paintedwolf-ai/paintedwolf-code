@@ -1,9 +1,13 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
 )
 
 var ErrPromptSubmissionNotFound = errors.New("prompt submission not found")
@@ -138,4 +142,67 @@ type PromptSubmissionConflictError struct {
 
 func (e *PromptSubmissionConflictError) Error() string {
 	return "prompt submission " + e.ID + " was already used for different input"
+}
+
+func normalizedBlobIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func promptSubmissionFromRow(row db.GetPromptSubmissionRow) (*PromptSubmission, error) {
+	return promptSubmissionFromValues(
+		row.ID, row.SessionID, row.AdmissionSeq, row.ProjectID, row.InputDigest, row.InputJson, row.Status,
+		row.ClaimToken, row.ResultJson, PromptSubmissionFailure{Message: row.Error, Code: row.ErrorCode},
+		row.CreatedAt, row.StartedAt, row.CompletedAt, row.Origin, row.SubmittedBy,
+	)
+}
+
+func promptSubmissionFromValues(
+	id, sessionID string,
+	admissionSeq int64,
+	projectID, inputDigest, inputJSON, status, claimToken, resultJSON string,
+	failure PromptSubmissionFailure,
+	createdAt string,
+	startedAt, completedAt sql.NullString,
+	origin, submittedBy string,
+) (*PromptSubmission, error) {
+	out := PromptSubmission{
+		ID: id, SessionID: sessionID, AdmissionSeq: admissionSeq, ProjectID: projectID,
+		InputDigest: inputDigest, InputJSON: inputJSON, SubmittedBy: submittedBy,
+		Origin: PromptSubmissionOrigin(origin), Status: PromptSubmissionStatus(status),
+		ClaimToken: claimToken, ResultJSON: resultJSON,
+		Error: failure.Message, ErrorCode: failure.Code,
+	}
+	var err error
+	out.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse prompt submission created_at: %w", err)
+	}
+	if startedAt.Valid {
+		value, parseErr := time.Parse(time.RFC3339Nano, startedAt.String)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse prompt submission started_at: %w", parseErr)
+		}
+		out.StartedAt = &value
+	}
+	if completedAt.Valid {
+		value, parseErr := time.Parse(time.RFC3339Nano, completedAt.String)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse prompt submission completed_at: %w", parseErr)
+		}
+		out.CompletedAt = &value
+	}
+	return &out, nil
 }

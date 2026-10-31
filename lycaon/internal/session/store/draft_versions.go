@@ -12,7 +12,7 @@ import (
 )
 
 // AppendDraftVersion snapshots one superseded coordinator draft attempt.
-func (s *SQL) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
+func (s *sqlCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -21,12 +21,12 @@ func (s *SQL) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, o
 	if sessionID == "" || slotID == "" {
 		return 0, fmt.Errorf("session_id and slot_id required")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.core.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
+	qtx := s.core.queries.WithTx(tx)
 	nextIndex, err := qtx.NextDraftVersionIndex(ctx, db.NextDraftVersionIndexParams{
 		SessionID: sessionID,
 		SlotID:    slotID,
@@ -69,7 +69,7 @@ func (s *SQL) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, o
 }
 
 // ListDraftVersions returns sidecar snapshots for one draft slot in version order.
-func (s *SQL) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
+func (s *sqlCompaction) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *SQL) ListDraftVersions(ctx context.Context, sessionID, slotID string) (
 	if sessionID == "" || slotID == "" {
 		return nil, fmt.Errorf("session_id and slot_id required")
 	}
-	rows, err := s.queries.ListDraftVersions(ctx, db.ListDraftVersionsParams{
+	rows, err := s.core.queries.ListDraftVersions(ctx, db.ListDraftVersionsParams{
 		SessionID: sessionID,
 		SlotID:    slotID,
 	})
@@ -102,7 +102,7 @@ func (s *SQL) ListDraftVersions(ctx context.Context, sessionID, slotID string) (
 }
 
 // CountDraftVersions returns the number of superseded snapshots for a draft slot.
-func (s *SQL) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
+func (s *sqlCompaction) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -111,7 +111,7 @@ func (s *SQL) CountDraftVersions(ctx context.Context, sessionID, slotID string) 
 	if sessionID == "" || slotID == "" {
 		return 0, fmt.Errorf("session_id and slot_id required")
 	}
-	count, err := s.queries.CountDraftVersions(ctx, db.CountDraftVersionsParams{
+	count, err := s.core.queries.CountDraftVersions(ctx, db.CountDraftVersionsParams{
 		SessionID: sessionID,
 		SlotID:    slotID,
 	})
@@ -122,7 +122,7 @@ func draftVersionsKey(sessionID, slotID string) string {
 	return sessionID + "\x00" + slotID
 }
 
-func (s *Memory) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
+func (s *memoryCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -131,13 +131,14 @@ func (s *Memory) AppendDraftVersion(ctx context.Context, sessionID, slotID, body
 	if sessionID == "" || slotID == "" {
 		return 0, fmt.Errorf("session_id and slot_id required")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if _, ok := core.sessions[sessionID]; !ok {
 		return 0, ErrSessionNotFound
 	}
 	key := draftVersionsKey(sessionID, slotID)
-	versions := s.draftVersions[key]
+	versions := core.draftVersions[key]
 	nextIndex := len(versions)
 	versions = append(versions, api.DraftVersion{
 		VersionIndex: nextIndex,
@@ -145,11 +146,11 @@ func (s *Memory) AppendDraftVersion(ctx context.Context, sessionID, slotID, body
 		OutcomeCode:  strings.TrimSpace(outcomeCode),
 		CreatedAt:    time.Now().UTC(),
 	})
-	s.draftVersions[key] = versions
+	core.draftVersions[key] = versions
 	return len(versions), nil
 }
 
-func (s *Memory) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
+func (s *memoryCompaction) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -158,19 +159,20 @@ func (s *Memory) ListDraftVersions(ctx context.Context, sessionID, slotID string
 	if sessionID == "" || slotID == "" {
 		return nil, fmt.Errorf("session_id and slot_id required")
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, ok := s.sessions[sessionID]; !ok {
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
+	if _, ok := core.sessions[sessionID]; !ok {
 		return nil, ErrSessionNotFound
 	}
 	key := draftVersionsKey(sessionID, slotID)
-	versions := s.draftVersions[key]
+	versions := core.draftVersions[key]
 	out := make([]api.DraftVersion, len(versions))
 	copy(out, versions)
 	return out, nil
 }
 
-func (s *Memory) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
+func (s *memoryCompaction) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
 	versions, err := s.ListDraftVersions(ctx, sessionID, slotID)
 	if err != nil {
 		return 0, err

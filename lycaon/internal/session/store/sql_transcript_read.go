@@ -12,18 +12,18 @@ import (
 )
 
 // GetMessages returns message history for a session.
-func (s *SQL) GetMessages(ctx context.Context, id string) ([]api.Message, error) {
+func (s *sqlTranscript) GetMessages(ctx context.Context, id string) ([]api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := s.Get(ctx, id); err != nil {
+	if _, err := getSessionSQL(ctx, s.core, id); err != nil {
 		return nil, err
 	}
-	return ReadMessages(ctx, s.queries, id)
+	return ReadMessages(ctx, s.core.queries, id)
 }
 
 // GetWorkerJobMessages reads one worker run's rows.
-func (s *SQL) GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error) {
+func (s *sqlTranscript) GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -31,10 +31,10 @@ func (s *SQL) GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID s
 	if workerJobID == "" {
 		return nil, fmt.Errorf("worker job id required")
 	}
-	if _, err := s.Get(ctx, sessionID); err != nil {
+	if _, err := getSessionSQL(ctx, s.core, sessionID); err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListWorkerJobMessages(ctx, db.ListWorkerJobMessagesParams{
+	rows, err := s.core.queries.ListWorkerJobMessages(ctx, db.ListWorkerJobMessagesParams{
 		SessionID:   sessionID,
 		WorkerJobID: db.NullString(workerJobID),
 	})
@@ -53,16 +53,16 @@ func (s *SQL) GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID s
 }
 
 // GetMessage reads one transcript projection.
-func (s *SQL) GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error) {
+func (s *sqlTranscript) GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return api.Message{}, err
 	}
-	tx, err := s.db.BeginReadTx(ctx)
+	tx, err := s.core.db.BeginReadTx(ctx)
 	if err != nil {
 		return api.Message{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
+	qtx := s.core.queries.WithTx(tx)
 	position, err := qtx.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{
 		SessionID: sessionID, ID: messageID,
 	})
@@ -89,7 +89,11 @@ func (s *SQL) GetMessage(ctx context.Context, sessionID, messageID string) (api.
 }
 
 // GetTranscriptPage reads a consistent transcript window and watermark.
-func (s *SQL) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
+func (s *sqlTranscript) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
+	return getTranscriptPageSQL(ctx, s.core, id, q)
+}
+
+func getTranscriptPageSQL(ctx context.Context, s *sqlCore, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
 	if err := ctx.Err(); err != nil {
 		return api.SessionTranscriptPage{}, err
 	}
@@ -206,137 +210,6 @@ func loadSessionTranscriptMessages(
 		reverseMessages(messages)
 	}
 	return messages, nil
-}
-
-func loadWorkerTranscriptPage(
-	ctx context.Context,
-	queries *db.Queries,
-	sessionID string,
-	query api.TranscriptPageQuery,
-) ([]api.Message, db.GetWorkerJobMessageOrdBoundsRow, error) {
-	workerJobID := db.NullString(strings.TrimSpace(query.WorkerID))
-	limit := int64(query.EffectiveLimit())
-	var rows []db.ListSessionMessagesRow
-	switch {
-	case query.Before != nil:
-		found, err := queries.ListWorkerJobMessagesBeforeOrd(ctx, db.ListWorkerJobMessagesBeforeOrdParams{
-			SessionID: sessionID, WorkerJobID: workerJobID, Ord: *query.Before, Limit: limit,
-		})
-		if err != nil {
-			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
-		}
-		rows = make([]db.ListSessionMessagesRow, len(found))
-		for i, row := range found {
-			rows[i] = db.ListSessionMessagesRow(row)
-		}
-	case query.After != nil:
-		found, err := queries.ListWorkerJobMessagesAfterOrd(ctx, db.ListWorkerJobMessagesAfterOrdParams{
-			SessionID: sessionID, WorkerJobID: workerJobID, Ord: *query.After, Limit: limit,
-		})
-		if err != nil {
-			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
-		}
-		rows = make([]db.ListSessionMessagesRow, len(found))
-		for i, row := range found {
-			rows[i] = db.ListSessionMessagesRow(row)
-		}
-	default:
-		found, err := queries.ListWorkerJobMessagesTail(ctx, db.ListWorkerJobMessagesTailParams{
-			SessionID: sessionID, WorkerJobID: workerJobID, Limit: limit,
-		})
-		if err != nil {
-			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
-		}
-		rows = make([]db.ListSessionMessagesRow, len(found))
-		for i, row := range found {
-			rows[i] = db.ListSessionMessagesRow(row)
-		}
-	}
-	messages := make([]api.Message, 0, len(rows))
-	for _, row := range rows {
-		message, err := messageFromRow(row)
-		if err != nil {
-			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
-		}
-		messages = append(messages, message)
-	}
-	if query.After == nil {
-		reverseMessages(messages)
-	}
-	bounds, err := queries.GetWorkerJobMessageOrdBounds(ctx, db.GetWorkerJobMessageOrdBoundsParams{
-		SessionID: sessionID, WorkerJobID: workerJobID,
-	})
-	if err != nil {
-		return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
-	}
-	return messages, bounds, nil
-}
-
-func workerWindowHasMore(minOrd, maxOrd int64, window []api.Message, query api.TranscriptPageQuery) (before, after bool) {
-	if minOrd == 0 || maxOrd == 0 {
-		return false, false
-	}
-	if len(window) > 0 {
-		return minOrd < window[0].Ord, maxOrd > window[len(window)-1].Ord
-	}
-	switch {
-	case query.Before != nil:
-		return minOrd < *query.Before, maxOrd >= *query.Before
-	case query.After != nil:
-		return minOrd <= *query.After, maxOrd > *query.After
-	default:
-		return false, false
-	}
-}
-
-func sqlExists(v int64) bool { return v != 0 }
-
-func sqlWindowHasMore(ctx context.Context, q *db.Queries, sessionID string, window []api.Message, query api.TranscriptPageQuery) (before, after bool, err error) {
-	if len(window) > 0 {
-		oldest, newest := window[0].Ord, window[len(window)-1].Ord
-		n, err := q.SessionHasMessageBeforeOrd(ctx, db.SessionHasMessageBeforeOrdParams{
-			SessionID: sessionID,
-			Ord:       oldest,
-		})
-		if err != nil {
-			return false, false, err
-		}
-		m, err := q.SessionHasMessageAfterOrd(ctx, db.SessionHasMessageAfterOrdParams{
-			SessionID: sessionID,
-			Ord:       newest,
-		})
-		return sqlExists(n), sqlExists(m), err
-	}
-	switch {
-	case query.Before != nil:
-		n, err := q.SessionHasMessageBeforeOrd(ctx, db.SessionHasMessageBeforeOrdParams{
-			SessionID: sessionID,
-			Ord:       *query.Before,
-		})
-		if err != nil {
-			return false, false, err
-		}
-		m, err := q.SessionHasMessageAtOrAfterOrd(ctx, db.SessionHasMessageAtOrAfterOrdParams{
-			SessionID: sessionID,
-			Ord:       *query.Before,
-		})
-		return sqlExists(n), sqlExists(m), err
-	case query.After != nil:
-		m, err := q.SessionHasMessageAfterOrd(ctx, db.SessionHasMessageAfterOrdParams{
-			SessionID: sessionID,
-			Ord:       *query.After,
-		})
-		if err != nil {
-			return false, false, err
-		}
-		n, err := q.SessionHasMessageAtOrBeforeOrd(ctx, db.SessionHasMessageAtOrBeforeOrdParams{
-			SessionID: sessionID,
-			Ord:       *query.After,
-		})
-		return sqlExists(n), sqlExists(m), err
-	default:
-		return false, false, nil
-	}
 }
 
 // ReadMessages decodes stored transcript rows without projections or repair.

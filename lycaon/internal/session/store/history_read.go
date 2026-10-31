@@ -11,21 +11,21 @@ import (
 )
 
 // ReadMessageWindow returns a canonical window in ascending creation order.
-func (s *SQL) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
+func (s *sqlTranscript) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	if window.Limit <= 0 {
 		return []api.Message{}, nil
 	}
 	if window.After {
-		rows, err := s.queries.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{SessionID: id, Ord: window.AfterOrd, Limit: int64(window.Limit)})
+		rows, err := s.core.queries.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{SessionID: id, Ord: window.AfterOrd, Limit: int64(window.Limit)})
 		return decodeMessageRows(rows, err)
 	}
 	if window.BeforeOrd > 0 {
-		rows, err := s.queries.ListSessionMessagesBeforeOrd(ctx, db.ListSessionMessagesBeforeOrdParams{SessionID: id, Ord: window.BeforeOrd, Limit: int64(window.Limit)})
+		rows, err := s.core.queries.ListSessionMessagesBeforeOrd(ctx, db.ListSessionMessagesBeforeOrdParams{SessionID: id, Ord: window.BeforeOrd, Limit: int64(window.Limit)})
 		out, err := decodeMessageRows(rows, err)
 		reverseMessages(out)
 		return out, err
 	}
-	rows, err := s.queries.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{SessionID: id, Limit: int64(window.Limit)})
+	rows, err := s.core.queries.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{SessionID: id, Limit: int64(window.Limit)})
 	out, err := decodeMessageRows(rows, err)
 	reverseMessages(out)
 	return out, err
@@ -46,19 +46,20 @@ func decodeMessageRows[T db.ListSessionMessagesAfterOrdRow | db.ListSessionMessa
 	return out, nil
 }
 
-func (s *Memory) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
+func (s *memoryTranscript) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, ok := s.sessions[id]; !ok {
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
+	if _, ok := core.sessions[id]; !ok {
 		return nil, ErrSessionNotFound
 	}
 	if window.Limit <= 0 {
 		return []api.Message{}, nil
 	}
-	rows := s.messages[id]
+	rows := core.messages[id]
 	end := len(rows)
 	if !window.After && window.BeforeOrd > 0 {
 		end = sort.Search(len(rows), func(i int) bool { return rows[i].Ord >= window.BeforeOrd })
@@ -72,37 +73,38 @@ func (s *Memory) ReadMessageWindow(ctx context.Context, id string, window messag
 }
 
 // ReadSourceTurn resolves a permanent turn identity; zero selects the newest live turn.
-func (s *SQL) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
+func (s *sqlTranscript) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
 	if number < 0 {
 		return messageview.SourceTurn{}, fmt.Errorf("source turn must be nonnegative")
 	}
 	if number == 0 {
-		value, err := s.queries.GetSessionUserTurnOrdinal(ctx, id)
+		value, err := s.core.queries.GetSessionUserTurnOrdinal(ctx, id)
 		if err != nil {
 			return messageview.SourceTurn{}, err
 		}
 		number = int(value)
 	}
-	opening, err := s.queries.GetUserTurnOpeningMessageID(ctx, db.GetUserTurnOpeningMessageIDParams{SessionID: id, Turn: int64(number)})
+	opening, err := s.core.queries.GetUserTurnOpeningMessageID(ctx, db.GetUserTurnOpeningMessageIDParams{SessionID: id, Turn: int64(number)})
 	if db.IsNoRows(err) {
 		return messageview.SourceTurn{}, nil
 	}
 	return messageview.SourceTurn{Number: number, OpeningMessageID: opening}, err
 }
 
-func (s *Memory) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
+func (s *memoryTranscript) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
 	if err := ctx.Err(); err != nil {
 		return messageview.SourceTurn{}, err
 	}
 	if number < 0 {
 		return messageview.SourceTurn{}, fmt.Errorf("source turn must be nonnegative")
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
 	if number == 0 {
-		number = s.currentUserTurnLocked(id)
+		number = currentUserTurnLocked(core, id)
 	}
-	for opening, turn := range s.userTurns[id] {
+	for opening, turn := range core.userTurns[id] {
 		if turn == number {
 			return messageview.SourceTurn{Number: number, OpeningMessageID: opening}, nil
 		}

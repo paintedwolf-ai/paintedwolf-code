@@ -26,9 +26,9 @@ type ExecutionState struct {
 }
 
 // ReadExecutionState reads occupancy and failures from one store snapshot.
-func (s *SQL) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
+func (s *sqlSessionViews) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
 	var state ExecutionState
-	rows, err := s.queries.ReadExecutionState(ctx, root)
+	rows, err := s.core.queries.ReadExecutionState(ctx, root)
 	if err != nil {
 		return state, err
 	}
@@ -42,27 +42,28 @@ func (s *SQL) ReadExecutionState(ctx context.Context, root string) (ExecutionSta
 	return state, nil
 }
 
-func (s *Memory) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
+func (s *memorySessionViews) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
 	var state ExecutionState
 	if err := ctx.Err(); err != nil {
 		return state, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
 	scope := map[string]bool{}
-	for _, id := range memorySessionTreeIDs(s.sessions, root) {
-		if row := s.sessions[id]; row != nil {
+	for _, id := range memorySessionTreeIDs(core.sessions, root) {
+		if row := core.sessions[id]; row != nil {
 			scope[id] = true
 			state.Sessions = append(state.Sessions, ExecutionSession{ID: id, ProjectID: row.ProjectID, Status: row.Status})
 		}
 	}
 	latest := map[string]int64{}
-	for _, p := range s.promptSubmissions {
+	for _, p := range core.promptSubmissions {
 		if scope[p.SessionID] && p.AdmissionSeq > latest[p.SessionID] {
 			latest[p.SessionID] = p.AdmissionSeq
 		}
 	}
-	for _, p := range s.promptSubmissions {
+	for _, p := range core.promptSubmissions {
 		if scope[p.SessionID] && p.Status != PromptSubmissionComplete && (!p.Status.Terminal() || p.AdmissionSeq == latest[p.SessionID]) {
 			state.Submissions = append(state.Submissions, ExecutionSubmission{ID: p.ID, SessionID: p.SessionID, Status: p.Status, ErrorCode: p.ErrorCode})
 		}

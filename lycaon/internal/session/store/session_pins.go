@@ -18,8 +18,8 @@ import (
 
 // PinSession appends a chat to its project's pinned order; pinning a pinned
 // chat changes nothing.
-func (s *SQL) PinSession(ctx context.Context, id string) error {
-	return s.writePins(ctx, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
+func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
+	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if err := pinnable(state); err != nil {
 			return nil, err
 		}
@@ -40,8 +40,8 @@ func (s *SQL) PinSession(ctx context.Context, id string) error {
 }
 
 // UnpinSession removes a chat from its project's pinned order.
-func (s *SQL) UnpinSession(ctx context.Context, id string) error {
-	return s.writePins(ctx, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
+func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
+	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, nil
 		}
@@ -56,8 +56,8 @@ func (s *SQL) UnpinSession(ctx context.Context, id string) error {
 
 // MovePinnedSession places a pinned chat at a 1-based position in its
 // project's pinned order and renumbers the project's pins 1…n.
-func (s *SQL) MovePinnedSession(ctx context.Context, id string, position int) error {
-	return s.writePins(ctx, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
+func (s *sqlSessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
+	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, ErrSessionNotPinned
 		}
@@ -93,8 +93,9 @@ func (s *SQL) MovePinnedSession(ctx context.Context, id string, position int) er
 }
 
 // writePins runs one pin change and announces every chat whose rank moved.
-func (s *SQL) writePins(
+func writePins(
 	ctx context.Context,
+	s *sqlCore,
 	id string,
 	change func(context.Context, *db.Queries, db.GetSessionPinStateRow) ([]string, error),
 ) error {
@@ -133,7 +134,7 @@ func (s *SQL) writePins(
 		if err != nil {
 			return err
 		}
-		if err := s.enqueueSessionEvent(ctx, tx, sess, api.SessionEventActionUpdated); err != nil {
+		if err := enqueueSessionEvent(ctx, s, tx, sess, api.SessionEventActionUpdated); err != nil {
 			return err
 		}
 	}
@@ -189,13 +190,14 @@ func movedPinOrder(current []pinnedRank, id string, position int) []pinnedRank {
 }
 
 // PinSession matches SQL pin ordering in memory.
-func (s *Memory) PinSession(ctx context.Context, id string) error {
+func (s *memorySessionViews) PinSession(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sess, ok := s.sessions[strings.TrimSpace(id)]
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	sess, ok := core.sessions[strings.TrimSpace(id)]
 	if !ok {
 		return ErrSessionNotFound
 	}
@@ -209,7 +211,7 @@ func (s *Memory) PinSession(ctx context.Context, id string) error {
 		return nil
 	}
 	rank := 1
-	for _, other := range s.sessions {
+	for _, other := range core.sessions {
 		if other.ProjectID == sess.ProjectID && other.PinRank != nil && *other.PinRank >= rank {
 			rank = *other.PinRank + 1
 		}
@@ -220,13 +222,14 @@ func (s *Memory) PinSession(ctx context.Context, id string) error {
 }
 
 // UnpinSession matches SQL pin ordering in memory.
-func (s *Memory) UnpinSession(ctx context.Context, id string) error {
+func (s *memorySessionViews) UnpinSession(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sess, ok := s.sessions[strings.TrimSpace(id)]
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	sess, ok := core.sessions[strings.TrimSpace(id)]
 	if !ok {
 		return ErrSessionNotFound
 	}
@@ -239,13 +242,14 @@ func (s *Memory) UnpinSession(ctx context.Context, id string) error {
 }
 
 // MovePinnedSession matches SQL pin ordering in memory.
-func (s *Memory) MovePinnedSession(ctx context.Context, id string, position int) error {
+func (s *memorySessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sess, ok := s.sessions[strings.TrimSpace(id)]
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	sess, ok := core.sessions[strings.TrimSpace(id)]
 	if !ok {
 		return ErrSessionNotFound
 	}
@@ -253,7 +257,7 @@ func (s *Memory) MovePinnedSession(ctx context.Context, id string, position int)
 		return ErrSessionNotPinned
 	}
 	current := []pinnedRank{}
-	for otherID, other := range s.sessions {
+	for otherID, other := range core.sessions {
 		if other.ProjectID == sess.ProjectID && other.PinRank != nil {
 			current = append(current, pinnedRank{id: otherID, rank: int64(*other.PinRank)})
 		}
@@ -270,7 +274,7 @@ func (s *Memory) MovePinnedSession(ctx context.Context, id string, position int)
 		if int64(rank) == pin.rank {
 			continue
 		}
-		other := s.sessions[pin.id]
+		other := core.sessions[pin.id]
 		other.PinRank = &rank
 		other.UpdatedAt = now
 	}
