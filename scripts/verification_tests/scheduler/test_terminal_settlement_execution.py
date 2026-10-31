@@ -229,6 +229,34 @@ class TerminalProcessTests(TerminalFixture):
         with self.queue.locked():
             self.assertNotIn(cap.entry["ticket"], [r["ticket"] for r in reservations(self.queue, execution.lock_file)])
 
+    def test_missing_recorded_owner_identity_still_settles_for_same_live_pid(self):
+        cap = self.capability()
+        cap.entry["owner_identity"] = None
+        cap.write()
+        child = subprocess.Popen([sys.executable, "-c", "pass"], pass_fds=(cap.file.fileno(),))
+        child.wait(timeout=10)
+        self.assertFalse(lifetime.TerminalSettlement(self.queue, cap, child).finish())
+        self.assertEqual(cap.entry["terminal_settlement"]["state"], "settled")
+
+    @unittest.skipUnless(sys.platform == "darwin", "Darwin Seatbelt setugid fallback")
+    def test_darwin_settlement_succeeds_when_setugid_ps_and_lsof_are_blocked(self):
+        cap = self.capability()
+        child, pid, _ = self.producer(cap, 0, False)
+        real_run = subprocess.run
+
+        def deny_setugid_tools(cmd, *args, **kwargs):
+            binary = Path(cmd[0]).name if cmd else ""
+            if binary in {"ps", "lsof"}:
+                raise PermissionError("Operation not permitted")
+            return real_run(cmd, *args, **kwargs)
+
+        with patch.object(subprocess, "run", side_effect=deny_setugid_tools), \
+                patch.object(lifetime, "DRAIN_SECONDS", .01), patch.object(lifetime, "SIGNAL_SECONDS", .2):
+            self.assertFalse(lifetime.TerminalSettlement(self.queue, cap, child).finish())
+            self.assertFalse(custody.holds(pid, cap.path, (cap.path.stat().st_dev, cap.path.stat().st_ino)))
+        self.assertEqual(cap.entry["terminal_settlement"]["state"], "settled")
+        self.assertIn(pid, [r["pid"] for r in cap.entry["terminal_settlement"]["reclaimed"]])
+
 
 class HolderIdentityTests(unittest.TestCase):
     def test_recycled_pid_never_receives_a_signal(self):

@@ -1,12 +1,31 @@
 """Kernel capability and process-creation identity for owned verification children."""
 
+import ctypes
 import os
 from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 
-from verification_health import identity
+from verification_health import _darwin_libc, _darwin_process_snapshot, identity
+
+
+def _darwin_lease_holders(path):
+    libc = _darwin_libc()
+    if libc is None:
+        raise OSError("Lease holder inspection failed")
+    raw_path = os.fsencode(os.path.realpath(path))
+    byte_count = libc.proc_listpidspath(1, 0, raw_path, 0, None, 0)
+    if byte_count < 0:
+        raise OSError("Lease holder inspection failed")
+    capacity = max(byte_count // ctypes.sizeof(ctypes.c_int), 0) + 16
+    buf = (ctypes.c_int * capacity)()
+    used = libc.proc_listpidspath(1, 0, raw_path, 0, buf, ctypes.sizeof(buf))
+    if used < 0:
+        raise OSError("Lease holder inspection failed")
+    count = used // ctypes.sizeof(ctypes.c_int)
+    return {int(buf[index]) for index in range(count) if buf[index] > 0}
 
 
 def lease_holders(path):
@@ -22,9 +41,16 @@ def lease_holders(path):
             if (opened.st_dev, opened.st_ino) == (target.st_dev, target.st_ino):
                 found.add(int(descriptor.parts[2]))
         return found
-    result = subprocess.run([shutil.which("lsof") or "/usr/sbin/lsof", "-t", "-w", "--", str(path)],
-                            capture_output=True, text=True, timeout=30)
+    try:
+        result = subprocess.run([shutil.which("lsof") or "/usr/sbin/lsof", "-t", "-w", "--", str(path)],
+                                capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        if sys.platform == "darwin":
+            return _darwin_lease_holders(path)
+        raise
     if result.returncode not in {0, 1}:
+        if sys.platform == "darwin":
+            return _darwin_lease_holders(path)
         raise OSError("Lease holder inspection failed")
     return {int(pid) for pid in result.stdout.split()}
 
@@ -32,10 +58,23 @@ def lease_holders(path):
 def commands(pids):
     if not pids:
         return {}
-    result = subprocess.run(["ps", "-o", "pid=,comm=", "-p", ",".join(map(str, sorted(pids)))],
-                            capture_output=True, text=True, timeout=5)
-    if result.returncode not in {0, 1}:
-        raise OSError("Process identity inspection failed")
+    try:
+        result = subprocess.run(["ps", "-o", "pid=,comm=", "-p", ",".join(map(str, sorted(pids)))],
+                                capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is None or result.returncode not in {0, 1}:
+        if sys.platform != "darwin":
+            raise OSError("Process identity inspection failed")
+        named = {}
+        for pid in sorted(pids):
+            try:
+                record = _darwin_process_snapshot(pid).get(int(pid))
+            except OSError:
+                continue
+            if record and record.get("command"):
+                named[int(pid)] = Path(record["command"].strip()).name
+        return named
     named = {}
     for line in result.stdout.splitlines():
         pid, _, command = line.strip().partition(" ")
@@ -71,9 +110,16 @@ def holds(pid, path, expected):
     value = Path(path).stat()
     if (value.st_dev, value.st_ino) != expected:
         raise OSError("Lease identity changed")
-    result = subprocess.run([shutil.which("lsof") or "/usr/sbin/lsof", "-a", "-p", str(pid),
-                             "-t", "-w", "--", str(path)], capture_output=True, text=True, timeout=30)
+    try:
+        result = subprocess.run([shutil.which("lsof") or "/usr/sbin/lsof", "-a", "-p", str(pid),
+                                 "-t", "-w", "--", str(path)], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        if sys.platform == "darwin":
+            return int(pid) in _darwin_lease_holders(path)
+        raise
     if result.returncode not in {0, 1}:
+        if sys.platform == "darwin":
+            return int(pid) in _darwin_lease_holders(path)
         raise OSError("Process capability inspection failed")
     return str(pid) in result.stdout.split()
 
