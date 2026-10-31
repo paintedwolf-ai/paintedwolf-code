@@ -100,9 +100,18 @@ func newProgramPark(clock commandprogram.Clock, call *programCall, threshold tim
 	return &programPark{clock: clock, started: call.started, threshold: threshold, bound: call.bound, parks: make(chan *blockedWait, 1)}
 }
 
+func (p *programPark) waitStart() time.Time {
+	start := p.started
+	if now := p.clock.Now(); now.After(start) {
+		return now
+	}
+	return start
+}
+
 func (p *programPark) Block(_ context.Context, state commandprogram.WaitState) (func(), error) {
-	if p.bound.maximum > 0 && !state.Until.IsZero() && state.Until.After(p.started.Add(p.bound.maximum)) {
-		return nil, p.bound.refusal(state.Until.Sub(p.started))
+	start := p.waitStart()
+	if p.bound.maximum > 0 && !state.Until.IsZero() && state.Until.After(start.Add(p.bound.maximum)) {
+		return nil, p.bound.refusal(state.Until.Sub(start))
 	}
 	blocked := &blockedWait{state: state}
 	p.mu.Lock()
@@ -128,9 +137,14 @@ func (p *programPark) considerLocked(blocked *blockedWait) {
 	}
 	p.stopTimerLocked()
 	inline := p.started.Add(p.threshold)
+	now := p.clock.Now()
+	waitInline := inline
+	if later := now.Add(p.threshold); later.After(waitInline) {
+		waitInline = later
+	}
 	until := blocked.state.Until
-	switch now := p.clock.Now(); {
-	case !until.IsZero() && !until.After(inline):
+	switch {
+	case !until.IsZero() && !until.After(waitInline):
 	case until.IsZero() && now.Before(inline):
 		p.stopTimer = p.clock.AfterFunc(inline.Sub(now), func() {
 			p.mu.Lock()

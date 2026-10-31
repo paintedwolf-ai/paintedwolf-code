@@ -23,7 +23,7 @@ func (m *Service) SourceEvidence(
 	surfaceID string,
 	invokeAllowed bool,
 ) (*guidance.Refusal, bool) {
-	if m == nil || sess == nil || !invokeAllowed {
+	if m == nil || m.Verification == nil || sess == nil || !invokeAllowed {
 		return nil, false
 	}
 	if sess.IsWorkerChild() {
