@@ -38,6 +38,10 @@ import {
   usesWorkerPool,
   listedProviders,
   workerModelRef,
+  INCLUDED_CONTEXT_WINDOW_TOKENS,
+  INCLUDED_MODEL_ID,
+  INCLUDED_PROVIDER_ID,
+  isIncludedProvider,
 } from "./models-editor-model.ts";
 import { MODELS_SETTINGS_COPY } from "./models-settings-copy.ts";
 import {
@@ -1094,5 +1098,37 @@ describe("--- inherit / unset slots", () => {
       provider_id: "",
       model: "",
     });
+  });
+});
+
+describe("included local provider (nativegen)", () => {
+  const included: ProviderMeta = {
+    id: INCLUDED_PROVIDER_ID,
+    kind: INCLUDED_PROVIDER_ID,
+    label: "Painted Wolf Code (included)",
+    base_url: "",
+    endpoint_style: "derived",
+    configured: true,
+    ready_to_assign: true,
+    credential_present: false,
+    requires_api_key: false,
+    features: {
+      tool_calls: true,
+      thinking: false,
+      prompt_cache: "automatic_prefix",
+    },
+    models: [providerModel(INCLUDED_MODEL_ID)],
+  };
+
+  it("identifies nativegen as the included provider with a 64K context window", () => {
+    expect(INCLUDED_CONTEXT_WINDOW_TOKENS).toBe(65536);
+    expect(isIncludedProvider(included)).toBe(true);
+    expect(isIncludedProvider(providers[0]!)).toBe(false);
+  });
+
+  it("groups nativegen under local providers and orders it first in the provider list", () => {
+    expect(providerPickerGroup(included)).toBe("local");
+    const grouped = groupProvidersByKind([...providers, included]);
+    expect(grouped[0]?.kind).toBe(INCLUDED_PROVIDER_ID);
   });
 });

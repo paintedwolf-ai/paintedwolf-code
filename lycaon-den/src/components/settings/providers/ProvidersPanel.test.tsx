@@ -576,3 +576,63 @@ describe("ProvidersPanel model refresh on a dead network", () => {
     expect(failure).not.toContain("Failed to fetch");
   });
 });
+
+describe("ProvidersPanel included local provider", () => {
+  it("renders Painted Wolf Code (included) with an activity-card summary and omits remove and rename controls", async () => {
+    const included: ProviderMeta = {
+      id: "nativegen",
+      kind: "nativegen",
+      label: "Painted Wolf Code (included)",
+      base_url: "",
+      endpoint_style: "derived",
+      configured: true,
+      ready_to_assign: true,
+      credential_present: false,
+      requires_api_key: false,
+      features: {
+        tool_calls: true,
+        thinking: false,
+        prompt_cache: "automatic_prefix",
+      },
+      models: [providerModel("gemma4-e4b-paintedwolf")],
+    };
+    const settingsStore = createSettingsStore({ providers: [included] });
+    const { getByTestId, queryByTestId } = render(() => (
+      <ProvidersPanel
+        client={
+          {
+            listProviders: vi.fn().mockResolvedValue([included]),
+            listProviderKinds: vi.fn().mockResolvedValue(kinds),
+            replaceProviderCredential: vi.fn(),
+            deleteProviderCredential: vi.fn(),
+            deleteProvider: vi.fn(),
+            testProvider: vi.fn(),
+            refreshProviderModels: vi.fn(),
+          } as never
+        }
+        settingsStore={settingsStore}
+        providers={[included]}
+        onRemoveProvider={() => undefined}
+      />
+    ));
+
+    await waitFor(() => {
+      expect(getByTestId("providers-row-nativegen")).toBeTruthy();
+    });
+    fireEvent.click(getByTestId("providers-row-nativegen"));
+    await waitFor(() => {
+      expect(getByTestId("provider-card-nativegen")).toBeTruthy();
+    });
+
+    expect(getByTestId("provider-name-nativegen").textContent).toBe(
+      "Painted Wolf Code (included)",
+    );
+    expect(queryByTestId("provider-remove-nativegen")).toBeNull();
+    expect(queryByTestId("provider-rename-trigger")).toBeNull();
+
+    const summary = getByTestId("provider-included-summary-nativegen");
+    expect(summary.classList.contains("den-activity-span")).toBe(true);
+    expect(summary.textContent).toContain("64K context window");
+    expect(summary.textContent).toContain(MODELS_SETTINGS_COPY.includedProviderBadge);
+  });
+});

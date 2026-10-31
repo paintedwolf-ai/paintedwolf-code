@@ -9,7 +9,7 @@ import type { Accessor, JSX } from "solid-js";
 import { createModalFocusTrap, shellChromeInertTargets } from "../../../platform/interaction/modal-focus-trap.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ProviderMeta } from "../../../api/types.ts";
-import { groupProvidersByKind, providerDiscoveryFailure, providerDisplayName, providerEndpointHost, providerIsReady, providerKindIsCustom, providerKindTemplateGroups, providerShowsApiKeyControls, providerStatusLabel, providerToolCallSupport } from "../../../settings/providers/models-editor-model.ts";
+import { groupProvidersByKind, isIncludedProvider, providerDiscoveryFailure, providerDisplayName, providerEndpointHost, providerIsReady, providerKindIsCustom, providerKindTemplateGroups, providerShowsApiKeyControls, providerStatusLabel, providerToolCallSupport } from "../../../settings/providers/models-editor-model.ts";
 import { ambientAuthCopy, kindIsAmbientOnly, kindOffersCredentialChoice, providerCredentialSource, templateForProvider } from "../../../settings/providers/provider-credential-modes.ts";
 import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-settings-copy.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
@@ -463,6 +463,27 @@ export function ProvidersPanel(props: Props) {
   // The live accessor updates fields without remounting the card.
   const renderProviderBody = (provider: Accessor<ProviderMeta>): JSX.Element => (
     <>
+      <Show when={isIncludedProvider(provider())}>
+        <div
+          class="den-activity-span"
+          data-testid={`provider-included-summary-${provider().id}`}
+        >
+          <div class="den-activity-span-chicklet">
+            <span class="den-activity-span-chip">
+              <span class="den-activity-span-name">
+                {MODELS_SETTINGS_COPY.includedProviderModelSummary}
+              </span>
+            </span>
+            <span class="den-activity-span-count">
+              {MODELS_SETTINGS_COPY.includedProviderBadge}
+            </span>
+            <span class="den-activity-span-hint">
+              {MODELS_SETTINGS_COPY.includedProviderHint}
+            </span>
+          </div>
+        </div>
+      </Show>
+
       <Show when={providerFeedStatusHints(provider()).length > 0}>
         <p
           class="den-settings-hint"
@@ -938,32 +959,44 @@ export function ProvidersPanel(props: Props) {
                       <header class="den-settings-provider-head">
                         <div class="den-settings-provider-title">
                           <Show
-                            when={!renaming()}
+                            when={!isIncludedProvider(provider())}
                             fallback={
-                              <InlineRenameInput
-                                class="den-settings-provider-rename-input"
-                                testId="provider-rename-input"
-                                initialValue={providerDisplayName(provider())}
-                                maxLength={PROVIDER_LABEL_MAX}
-                                ariaLabel={MODELS_SETTINGS_COPY.renameDisplayName}
-                                onCommit={(next) => {
-                                  setRenaming(false);
-                                  void renameLabel(provider(), next);
-                                }}
-                                onCancel={() => setRenaming(false)}
-                              />
+                              <span
+                                class="den-settings-provider-name"
+                                data-testid={`provider-name-${provider().id}`}
+                              >
+                                {providerDisplayName(provider())}
+                              </span>
                             }
                           >
-                            <button
-                              type="button"
-                              class="den-settings-provider-rename-trigger"
-                              data-testid="provider-rename-trigger"
-                              aria-label={MODELS_SETTINGS_COPY.renameDisplayName}
-                              data-tip={MODELS_SETTINGS_COPY.renameDisplayName}
-                              onClick={() => setRenaming(true)}
+                            <Show
+                              when={!renaming()}
+                              fallback={
+                                <InlineRenameInput
+                                  class="den-settings-provider-rename-input"
+                                  testId="provider-rename-input"
+                                  initialValue={providerDisplayName(provider())}
+                                  maxLength={PROVIDER_LABEL_MAX}
+                                  ariaLabel={MODELS_SETTINGS_COPY.renameDisplayName}
+                                  onCommit={(next) => {
+                                    setRenaming(false);
+                                    void renameLabel(provider(), next);
+                                  }}
+                                  onCancel={() => setRenaming(false)}
+                                />
+                              }
                             >
-                              {providerDisplayName(provider())}
-                            </button>
+                              <button
+                                type="button"
+                                class="den-settings-provider-rename-trigger"
+                                data-testid="provider-rename-trigger"
+                                aria-label={MODELS_SETTINGS_COPY.renameDisplayName}
+                                data-tip={MODELS_SETTINGS_COPY.renameDisplayName}
+                                onClick={() => setRenaming(true)}
+                              >
+                                {providerDisplayName(provider())}
+                              </button>
+                            </Show>
                           </Show>
                           <code
                             class="den-settings-provider-id"
@@ -978,18 +1011,22 @@ export function ProvidersPanel(props: Props) {
                         >
                           {providerStatusLabel(provider())}
                         </span>
-                        <DenButton
-                          variant="link"
-                          class="den-settings-provider-remove"
-                          data-testid={`provider-remove-${provider().id}`}
-                          onClick={() => void removeProvider(provider())}
-                        >
-                          {MODELS_SETTINGS_COPY.removeProvider}
-                        </DenButton>
+                        <Show when={!isIncludedProvider(provider())}>
+                          <DenButton
+                            variant="link"
+                            class="den-settings-provider-remove"
+                            data-testid={`provider-remove-${provider().id}`}
+                            onClick={() => void removeProvider(provider())}
+                          >
+                            {MODELS_SETTINGS_COPY.removeProvider}
+                          </DenButton>
+                        </Show>
                       </header>
-                      <p class="den-settings-provider-label-hint">
-                        {MODELS_SETTINGS_COPY.providerLabelRenameHint}
-                      </p>
+                      <Show when={!isIncludedProvider(provider())}>
+                        <p class="den-settings-provider-label-hint">
+                          {MODELS_SETTINGS_COPY.providerLabelRenameHint}
+                        </p>
+                      </Show>
                       {renderProviderBody(provider)}
                     </article>
                   )}
