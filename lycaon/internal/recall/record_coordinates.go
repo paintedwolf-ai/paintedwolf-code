@@ -28,6 +28,18 @@ func (s *Service) recordCoordinates(ctx context.Context, hit search.Hit) (*recor
                 WHERE session_id = ? AND handle = ? AND source = 'tool' AND hit_kind = 'tool'
                 AND shape = 'raw' AND tombstoned = 0 LIMIT 1)`,
 			hit.SessionID, hit.SessionID, hit.Handle).Scan(&id, &ord, &seq, &observedAt)
+	} else if hit.Source == search.SourceMessage && hit.HitKind == search.HitKindTool && hit.SourceRef != "" {
+		// Assistant tool-call rows prefer the settled tool result message when recorded.
+		err = s.db.QueryRowContext(ctx, `SELECT id, ord, seq, ts FROM messages
+            WHERE session_id = ? AND role = 'tool' AND `+historyVisible+`
+            AND id = (SELECT message_id FROM evidence_index
+                WHERE session_id = ? AND source_ref = ? AND source = 'tool' AND hit_kind = 'tool'
+                AND shape = 'raw' AND tombstoned = 0 LIMIT 1)`,
+			hit.SessionID, hit.SessionID, hit.SourceRef).Scan(&id, &ord, &seq, &observedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = s.db.QueryRowContext(ctx, `SELECT id, ord, seq, ts FROM messages WHERE session_id = ? AND id = ? AND `+historyVisible,
+				hit.SessionID, hit.MessageID).Scan(&id, &ord, &seq, &observedAt)
+		}
 	} else {
 		err = s.db.QueryRowContext(ctx, `SELECT id, ord, seq, ts FROM messages WHERE session_id = ? AND id = ? AND `+historyVisible,
 			hit.SessionID, hit.MessageID).Scan(&id, &ord, &seq, &observedAt)

@@ -97,6 +97,10 @@ func (s *Service) Answer(ctx context.Context, req Request) (*Result, error) {
 	}
 
 	live, removed := partitionTombstones(result.Hits)
+	if !queryTargetsRecall(result.Interpretation) {
+		live = filterSelfReferentialRecallHits(live)
+	}
+	live = coalesceToolCallHits(live)
 	truncated := !result.Exhaustive
 
 	out := &Result{
