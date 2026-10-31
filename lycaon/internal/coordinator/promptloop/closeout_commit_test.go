@@ -29,7 +29,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 		t.Run(tc.surface, func(t *testing.T) {
 			var committed api.Message
 			var kickAppends int
-			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
+			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Closeout: CloseoutDeps{
 					HintConfig: loadCoordinatorTestHintConfig(t),
@@ -132,7 +132,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	const pinned = "Honest report: tea install failed."
 	var assembled string
-	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
+	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig: loadCoordinatorTestHintConfig(t),
@@ -229,7 +229,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			if !removeAll {
 				repaired.CitedEvidence = []guidance.CoordinatorCitedEvidence{{Evidence: "command#1"}}
 			}
-			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"command"}, closeoutRetry: closeoutRetryState{attempt: 1}}
+			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}, turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1}}}
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
 				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.CloseoutRead{Report: repaired})

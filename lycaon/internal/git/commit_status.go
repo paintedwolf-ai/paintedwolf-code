@@ -18,7 +18,7 @@ type CommitStatusFile struct {
 	Path, FromPath, Status, Submodule string
 }
 
-func (m *Manager) CommitStatus(ctx context.Context, projectDir string) (CommitStatus, error) {
+func (m *gitDiffStatusManager) CommitStatus(ctx context.Context, projectDir string) (CommitStatus, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return CommitStatus{}, err

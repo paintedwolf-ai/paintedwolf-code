@@ -17,9 +17,14 @@ func TestPTYCompletionWaitsForTerminalOutput(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		reg := NewRegistry(DefaultConfig(), Hooks{})
 		proc := &Process{
-			pty: exitedPTY{}, ptyOutputDone: make(chan struct{}),
-			done: make(chan struct{}), running: true, silent: true,
-			screen: newPTYScreen(80, 24),
+			running:             true,
+			silent:              true,
+			processRuntimeState: processRuntimeState{done: make(chan struct{})},
+			processIOState: processIOState{
+				pty:           exitedPTY{},
+				ptyOutputDone: make(chan struct{}),
+				screen:        newPTYScreen(80, 24),
+			},
 		}
 		go reg.Terminal.waitPTY(t.Context(), proc)
 		synctest.Wait()

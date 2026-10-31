@@ -9,7 +9,7 @@ import (
 
 // PreviousComplete returns the prior authoritative run whose scanner execution
 // and finding identity are comparable with latest.
-func (s *SQLStore) PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error) {
+func (s *sqlFindingStore) PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error) {
 	if s == nil {
 		return nil, nil
 	}

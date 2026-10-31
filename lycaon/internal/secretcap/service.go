@@ -79,6 +79,13 @@ type RememberFunc func(chatSessionID string, values []secretmatch.Remembered)
 
 // Service manages capability metadata and protected values.
 type Service struct {
+	serviceCore
+	secretJarService
+	secretVersionService
+	secretAdminService
+}
+
+type serviceCore struct {
 	durable                durableEvidence
 	mutationMu             sync.Mutex
 	screeningGeneration    atomic.Uint64
@@ -93,12 +100,16 @@ type Service struct {
 	onScreeningInvalidated []func(context.Context, string)
 }
 
+type secretJarService struct{ *serviceCore }
+type secretVersionService struct{ *serviceCore }
+type secretAdminService struct{ *serviceCore }
+
 // AddScreeningInvalidationObserver installs a boot-time observer for protected-value mutations.
-func (s *Service) AddScreeningInvalidationObserver(fn func(context.Context, string)) {
+func (s *serviceCore) AddScreeningInvalidationObserver(fn func(context.Context, string)) {
 	s.onScreeningInvalidated = append(s.onScreeningInvalidated, fn)
 }
 
-func (s *Service) invalidateScreening(ctx context.Context, projectID string) {
+func (s *serviceCore) invalidateScreening(ctx context.Context, projectID string) {
 	for _, observer := range s.onScreeningInvalidated {
 		observer(ctx, projectID)
 	}
@@ -131,24 +142,30 @@ func New(database db.Handle, remember RememberFunc) (*Service, error) {
 
 // NewWithStore constructs a service over an explicit value store.
 func NewWithStore(database db.Handle, values *credentialstore.Store, remember RememberFunc) *Service {
-	return &Service{
-		handle: database, queries: db.New(database), values: vaultValues{store: values}, remember: remember,
-		now: time.Now,
+	s := &Service{
+		serviceCore: serviceCore{
+			handle: database, queries: db.New(database), values: vaultValues{store: values}, remember: remember,
+			now: time.Now,
+		},
 	}
+	s.secretJarService = secretJarService{&s.serviceCore}
+	s.secretVersionService = secretVersionService{&s.serviceCore}
+	s.secretAdminService = secretAdminService{&s.serviceCore}
+	return s
 }
 
 // SetPresence installs the broker that verifies reveals.
-func (s *Service) SetPresence(broker *presence.Broker) { s.presence = broker }
+func (s *serviceCore) SetPresence(broker *presence.Broker) { s.presence = broker }
 
 // SetUnlocks installs the chats' unlocks a held value's handoff needs.
-func (s *Service) SetUnlocks(unlocks *presence.Unlocks) { s.unlocks = unlocks }
+func (s *serviceCore) SetUnlocks(unlocks *presence.Unlocks) { s.unlocks = unlocks }
 
 // SetFingerprinter installs the screen's identity for exact bytes, so a
 // resolution can name which screened values a person holds.
-func (s *Service) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
+func (s *serviceCore) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
 
 // ScreeningGeneration changes when screening gains protected bytes.
-func (s *Service) ScreeningGeneration() uint64 {
+func (s *serviceCore) ScreeningGeneration() uint64 {
 	if s == nil {
 		return 0
 	}
@@ -204,7 +221,7 @@ type facts struct {
 }
 
 // List returns value-free capabilities visible from a chat.
-func (s *Service) List(ctx context.Context, projectID, chatSessionID string) ([]Metadata, error) {
+func (s *serviceCore) List(ctx context.Context, projectID, chatSessionID string) ([]Metadata, error) {
 	projectID = strings.TrimSpace(projectID)
 	rows, err := s.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
 		ProjectID: projectID, ChatSessionID: nullable(strings.TrimSpace(chatSessionID)),
@@ -216,7 +233,7 @@ func (s *Service) List(ctx context.Context, projectID, chatSessionID string) ([]
 }
 
 // ListProject returns project metadata without protected values.
-func (s *Service) ListProject(ctx context.Context, projectID string) ([]Metadata, error) {
+func (s *serviceCore) ListProject(ctx context.Context, projectID string) ([]Metadata, error) {
 	projectID = strings.TrimSpace(projectID)
 	rows, err := s.queries.ListProjectManagedSecrets(ctx, projectID)
 	if err != nil {
@@ -226,7 +243,7 @@ func (s *Service) ListProject(ctx context.Context, projectID string) ([]Metadata
 }
 
 // Describe returns value-free metadata visible to a chat.
-func (s *Service) Describe(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
+func (s *serviceCore) Describe(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
 	row, err := s.rowForReference(ctx, reference)
 	if err != nil {
 		return Metadata{}, err
@@ -237,7 +254,7 @@ func (s *Service) Describe(ctx context.Context, projectID, chatSessionID, refere
 	return s.metadataRow(ctx, row)
 }
 
-func (s *Service) metadataList(ctx context.Context, projectID string, rows []db.ManagedSecrets) ([]Metadata, error) {
+func (s *serviceCore) metadataList(ctx context.Context, projectID string, rows []db.ManagedSecrets) ([]Metadata, error) {
 	byID, err := s.projectFacts(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -249,7 +266,7 @@ func (s *Service) metadataList(ctx context.Context, projectID string, rows []db.
 	return out, nil
 }
 
-func (s *Service) metadataRow(ctx context.Context, row db.ManagedSecrets) (Metadata, error) {
+func (s *serviceCore) metadataRow(ctx context.Context, row db.ManagedSecrets) (Metadata, error) {
 	f, err := s.secretFacts(ctx, row.ID)
 	if err != nil {
 		return Metadata{}, err
@@ -258,7 +275,7 @@ func (s *Service) metadataRow(ctx context.Context, row db.ManagedSecrets) (Metad
 }
 
 // projectFacts loads current versions and use summaries for one project.
-func (s *Service) projectFacts(ctx context.Context, projectID string) (map[string]facts, error) {
+func (s *serviceCore) projectFacts(ctx context.Context, projectID string) (map[string]facts, error) {
 	versions, err := s.queries.ListProjectManagedSecretVersions(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -305,7 +322,7 @@ func (s *Service) projectFacts(ctx context.Context, projectID string) (map[strin
 	return out, nil
 }
 
-func (s *Service) secretFacts(ctx context.Context, secretID string) (facts, error) {
+func (s *serviceCore) secretFacts(ctx context.Context, secretID string) (facts, error) {
 	var out facts
 	current, hasCurrent, err := s.currentVersion(ctx, secretID)
 	if err != nil {
@@ -338,7 +355,7 @@ func (s *Service) secretFacts(ctx context.Context, secretID string) (facts, erro
 	return out, nil
 }
 
-func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
+func (s *serviceCore) metadata(row db.ManagedSecrets, f facts) Metadata {
 	meta := Metadata{
 		Reference: secretmatch.ReferenceToken(row.ID), Name: row.Name, Purpose: row.Purpose,
 		Scope: row.Scope, Origin: row.Origin, CreatedAt: row.CreatedAt,
@@ -379,7 +396,7 @@ func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
 }
 
 // state prioritizes terminal, missing-value, then agent-use constraints.
-func (s *Service) state(row db.ManagedSecrets, f facts) string {
+func (s *serviceCore) state(row db.ManagedSecrets, f facts) string {
 	if row.RevokedAt.Valid {
 		return StateRevoked
 	}
@@ -395,7 +412,7 @@ func (s *Service) state(row db.ManagedSecrets, f facts) string {
 	return StateActive
 }
 
-func (s *Service) rowForReference(ctx context.Context, reference string) (db.ManagedSecrets, error) {
+func (s *serviceCore) rowForReference(ctx context.Context, reference string) (db.ManagedSecrets, error) {
 	id, err := ParseReference(reference)
 	if err != nil {
 		return db.ManagedSecrets{}, err
@@ -408,7 +425,7 @@ func (s *Service) rowForReference(ctx context.Context, reference string) (db.Man
 }
 
 // projectRow accepts every capability scope in the project.
-func (s *Service) projectRow(ctx context.Context, projectID, reference string) (db.ManagedSecrets, error) {
+func (s *serviceCore) projectRow(ctx context.Context, projectID, reference string) (db.ManagedSecrets, error) {
 	row, err := s.rowForReference(ctx, reference)
 	if err != nil {
 		return db.ManagedSecrets{}, err

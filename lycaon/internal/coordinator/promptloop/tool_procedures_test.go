@@ -20,7 +20,9 @@ import (
 func TestToolProceduresCloseStandingPrefixBeforeSourceBrief(t *testing.T) {
 	l := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "tool procedures", nil },
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "tool procedures", nil },
+			},
 		},
 	})
 	messages := []api.Message{
@@ -48,12 +50,14 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
-			ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
-				delivered = slices.Clone(offered)
-				if slices.Contains(offered, "command") {
-					return "runner procedure", nil
-				}
-				return "", nil
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
+					delivered = slices.Clone(offered)
+					if slices.Contains(offered, "command") {
+						return "runner procedure", nil
+					}
+					return "", nil
+				},
 			},
 		},
 	})
@@ -156,9 +160,11 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
-			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
-				procedures++
-				return "procedure", nil
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
+					procedures++
+					return "procedure", nil
+				},
 			},
 		},
 	})
@@ -181,7 +187,9 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 func TestToolProceduresSurviveContextFit(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "runner procedure", nil },
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "runner procedure", nil },
+			},
 		},
 	})
 	history := []api.Message{{Role: api.MessageRoleSystem, Content: "charter", ContextPinned: true}}
@@ -207,7 +215,9 @@ func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	want := errors.New("template unavailable")
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "", want },
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "", want },
+			},
 		},
 	})
 	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})

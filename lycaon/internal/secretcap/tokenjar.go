@@ -37,7 +37,7 @@ type TokenJar struct {
 	Tokens    map[string]Token
 	id        string
 	request   TokenJarRequest
-	issuer    *Service
+	issuer    *secretJarService
 }
 
 // Names returns the held token names in no particular order.
@@ -83,7 +83,7 @@ func (j *TokenJar) Set(name string, token Token) {
 
 // OpenTokenJar loads the chat-visible jar and registers its values for screening.
 // An absent jar starts empty in memory.
-func (s *Service) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*TokenJar, error) {
+func (s *secretJarService) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*TokenJar, error) {
 	req = normalizeTokenJarRequest(req)
 	if !validJarName(req.Name) || req.ProjectID == "" || req.ChatSessionID == "" || req.SessionID == "" || req.OperationID == "" {
 		return nil, ErrInvalidPut
@@ -129,7 +129,7 @@ func (s *Service) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*Token
 }
 
 // SaveTokenJar commits token changes and saves the operation receipt.
-func (s *Service) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, error) {
+func (s *secretJarService) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, error) {
 	if jar == nil {
 		return nil, nil
 	}
@@ -177,7 +177,7 @@ func (s *Service) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *To
 	return &meta, err
 }
 
-func (s *Service) createTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar, serialized string) (*Metadata, error) {
+func (s *secretJarService) createTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar, serialized string) (*Metadata, error) {
 	id := uuid.NewString()
 	put := PutRequest{
 		ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -200,7 +200,7 @@ func (s *Service) createTokenJar(ctx context.Context, req TokenJarRequest, jar *
 	return &meta, err
 }
 
-func (s *Service) tokenJarSaveRecorder(ctx context.Context, req TokenJarRequest, secretID string) func(*db.Queries) error {
+func (s *secretJarService) tokenJarSaveRecorder(ctx context.Context, req TokenJarRequest, secretID string) func(*db.Queries) error {
 	return func(q *db.Queries) error {
 		return q.CreateTokenJarSave(ctx, db.CreateTokenJarSaveParams{
 			ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -210,7 +210,7 @@ func (s *Service) tokenJarSaveRecorder(ctx context.Context, req TokenJarRequest,
 	}
 }
 
-func (s *Service) tokenJarSavedOperation(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, bool, error) {
+func (s *secretJarService) tokenJarSavedOperation(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, bool, error) {
 	save, err := s.queries.GetTokenJarSave(ctx, db.GetTokenJarSaveParams{
 		ProjectID: req.ProjectID, SessionID: req.SessionID, OperationID: req.OperationID,
 	})
@@ -232,7 +232,7 @@ func (s *Service) tokenJarSavedOperation(ctx context.Context, req TokenJarReques
 	return &meta, true, err
 }
 
-func (s *Service) tokenJarSaveTarget(ctx context.Context, req TokenJarRequest, jar *TokenJar) (db.ManagedSecrets, bool, error) {
+func (s *secretJarService) tokenJarSaveTarget(ctx context.Context, req TokenJarRequest, jar *TokenJar) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var found bool
 	var err error

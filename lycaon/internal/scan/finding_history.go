@@ -31,7 +31,7 @@ func SortFindingsByIdentity(findings []api.SecurityFinding) {
 }
 
 // History, ledger projection, and notification commit together.
-func (s *SQLStore) RecordFindingEvents(ctx context.Context, scan *api.CodeScan, introduced, fixed []api.SecurityFinding, at time.Time) error {
+func (s *sqlFindingStore) RecordFindingEvents(ctx context.Context, scan *api.CodeScan, introduced, fixed []api.SecurityFinding, at time.Time) error {
 	if s == nil || scan == nil || (len(introduced) == 0 && len(fixed) == 0) {
 		return nil
 	}
@@ -82,7 +82,7 @@ func (s *SQLStore) RecordFindingEvents(ctx context.Context, scan *api.CodeScan, 
 }
 
 // Current presence survives repeated snapshots and includes ignored findings.
-func (s *SQLStore) OpenFindings(ctx context.Context, canonicalPath, scannerID string) (map[string]api.SecurityFinding, error) {
+func (s *sqlFindingStore) OpenFindings(ctx context.Context, canonicalPath, scannerID string) (map[string]api.SecurityFinding, error) {
 	out := make(map[string]api.SecurityFinding)
 	for offset := int64(0); ; offset += MaxLedgerPageSize {
 		rows, err := s.queries.ListPresentScanFindings(ctx, db.ListPresentScanFindingsParams{
@@ -105,7 +105,7 @@ func (s *SQLStore) OpenFindings(ctx context.Context, canonicalPath, scannerID st
 }
 
 // Results include the boundary timestamp and run newest first.
-func (s *SQLStore) FixedFindingsSince(ctx context.Context, canonicalPath, scannerID string, since time.Time) ([]api.SecurityFinding, error) {
+func (s *sqlCore) FixedFindingsSince(ctx context.Context, canonicalPath, scannerID string, since time.Time) ([]api.SecurityFinding, error) {
 	rows, err := s.queries.ListScanFindingEventsSince(ctx, db.ListScanFindingEventsSinceParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID, Event: findingEventFixed, ObservedAt: db.FormatTime(since.UTC()),
 	})
@@ -126,7 +126,7 @@ func (s *SQLStore) FixedFindingsSince(ctx context.Context, canonicalPath, scanne
 	return out, nil
 }
 
-func (s *SQLStore) attachFindingHistory(ctx context.Context, canonicalPath, scannerID string, findings []api.SecurityFinding) error {
+func (s *sqlCore) attachFindingHistory(ctx context.Context, canonicalPath, scannerID string, findings []api.SecurityFinding) error {
 	if len(findings) == 0 || strings.TrimSpace(scannerID) == "" {
 		return nil
 	}
@@ -161,7 +161,7 @@ func (s *SQLStore) attachFindingHistory(ctx context.Context, canonicalPath, scan
 
 // BlobFindings reads the findings cached for one file's bytes, named by the
 // manifest entry's content id, under one execution identity.
-func (s *SQLStore) BlobFindings(ctx context.Context, executionFingerprint, contentID, targetPath string) ([]api.SecurityFinding, bool, error) {
+func (s *sqlFindingStore) BlobFindings(ctx context.Context, executionFingerprint, contentID, targetPath string) ([]api.SecurityFinding, bool, error) {
 	raw, err := s.queries.GetScanBlobFindings(ctx, db.GetScanBlobFindingsParams{
 		ExecutionFingerprint: executionFingerprint, ContentID: contentID, TargetPath: targetPath,
 	})
@@ -186,7 +186,7 @@ type CachedFileResult struct {
 }
 
 // SaveBlobFindings commits a bounded page, including verified clean results.
-func (s *SQLStore) SaveBlobFindings(ctx context.Context, executionFingerprint string, files []CachedFileResult, at time.Time) error {
+func (s *sqlFindingStore) SaveBlobFindings(ctx context.Context, executionFingerprint string, files []CachedFileResult, at time.Time) error {
 	return s.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
 		for _, file := range files {
 			findings := file.Findings
@@ -211,7 +211,7 @@ func (s *SQLStore) SaveBlobFindings(ctx context.Context, executionFingerprint st
 
 // IntroducedSince counts the findings a project's series introduced at or
 // after since with a level at or above minLevel.
-func (s *SQLStore) IntroducedSince(ctx context.Context, canonicalPath string, since time.Time, minLevel api.FindingLevel) (int, error) {
+func (s *sqlFindingStore) IntroducedSince(ctx context.Context, canonicalPath string, since time.Time, minLevel api.FindingLevel) (int, error) {
 	rows, err := s.queries.ListScanFindingIntroductionsSince(ctx, db.ListScanFindingIntroductionsSinceParams{
 		CanonicalPath: canonicalPath, ObservedAt: db.FormatTime(since.UTC()),
 	})

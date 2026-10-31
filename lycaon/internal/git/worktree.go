@@ -38,7 +38,7 @@ func (e *MergeConflictError) Error() string {
 func (e *MergeConflictError) Code() string { return "GIT_MERGE_CONFLICT" }
 
 // AddWorktree creates a new branch checkout from baseRef.
-func (m *Manager) AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error {
+func (m *gitBranchManager) AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func (m *Manager) AddWorktree(ctx context.Context, toplevel, path, branch, baseR
 }
 
 // RemoveWorktree removes a clean linked worktree.
-func (m *Manager) RemoveWorktree(ctx context.Context, toplevel, path string) error {
+func (m *gitBranchManager) RemoveWorktree(ctx context.Context, toplevel, path string) error {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (m *Manager) RemoveWorktree(ctx context.Context, toplevel, path string) err
 }
 
 // ListWorktrees returns every linked worktree of the repository.
-func (m *Manager) ListWorktrees(ctx context.Context, toplevel string) ([]WorktreeEntry, error) {
+func (m *gitBranchManager) ListWorktrees(ctx context.Context, toplevel string) ([]WorktreeEntry, error) {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (m *Manager) ListWorktrees(ctx context.Context, toplevel string) ([]Worktre
 }
 
 // ValidateWorktree confirms a registered branch checkout.
-func (m *Manager) ValidateWorktree(ctx context.Context, toplevel, path, branch string) error {
+func (m *gitBranchManager) ValidateWorktree(ctx context.Context, toplevel, path, branch string) error {
 	path = filepath.Clean(strings.TrimSpace(path))
 	if path == "." || !filepath.IsAbs(path) {
 		return fmt.Errorf("worktree path must be absolute")
@@ -163,7 +163,7 @@ func (m *Manager) ValidateWorktree(ctx context.Context, toplevel, path, branch s
 }
 
 // PruneWorktrees removes stale worktree records.
-func (m *Manager) PruneWorktrees(ctx context.Context, toplevel string) error {
+func (m *gitBranchManager) PruneWorktrees(ctx context.Context, toplevel string) error {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return err
@@ -184,7 +184,7 @@ func (m *Manager) PruneWorktrees(ctx context.Context, toplevel string) error {
 }
 
 // LocalBranchExists distinguishes an absent ref from an execution failure.
-func (m *Manager) LocalBranchExists(ctx context.Context, toplevel, branch string) (bool, error) {
+func (m *gitBranchManager) LocalBranchExists(ctx context.Context, toplevel, branch string) (bool, error) {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return false, err
@@ -206,7 +206,7 @@ func (m *Manager) LocalBranchExists(ctx context.Context, toplevel, branch string
 	}
 }
 
-func (m *Manager) abortFailedMerge(ctx context.Context, dir string, mergeOut []byte) error {
+func (m *gitBranchManager) abortFailedMerge(ctx context.Context, dir string, mergeOut []byte) error {
 	conflictOut, _, _ := gitexec.Run(ctx, dir, []string{"diff", "--name-only", "--diff-filter=U"}, hermeticOpts(0))
 	paths := splitNonEmptyLines(string(conflictOut))
 	abortOut, abortCode, abortErr := gitexec.Run(ctx, dir, []string{"merge", "--abort"}, hermeticOpts(0))
@@ -222,7 +222,7 @@ func (m *Manager) abortFailedMerge(ctx context.Context, dir string, mergeOut []b
 }
 
 // AheadBehindRefs counts commits unique to head and base.
-func (m *Manager) AheadBehindRefs(ctx context.Context, dir, base, head string) (ahead, behind int, err error) {
+func (m *gitBranchManager) AheadBehindRefs(ctx context.Context, dir, base, head string) (ahead, behind int, err error) {
 	cwd, err := absProjectDir(dir)
 	if err != nil {
 		return 0, 0, err
@@ -256,7 +256,7 @@ func (m *Manager) AheadBehindRefs(ctx context.Context, dir, base, head string) (
 }
 
 // RepoConfigFingerprint hashes configuration from the common git directory.
-func (m *Manager) RepoConfigFingerprint(ctx context.Context, toplevel string) (string, error) {
+func (m *gitBranchManager) RepoConfigFingerprint(ctx context.Context, toplevel string) (string, error) {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return "", err

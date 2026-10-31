@@ -52,17 +52,19 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 				}
 				return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _, _ string, unread []jsonshape.Issue) (int, string) {
-				noted.code, noted.unread = code, unread
-				return 1, ""
-			},
-			RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
-				if _, ok := data["retained_document"]; ok {
-					kick = data
-				}
-				var err error
-				rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
-				return rendered, err
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				NoteCloseoutGroundingReject: func(_ context.Context, _, code, _, _ string, unread []jsonshape.Issue) (int, string) {
+					noted.code, noted.unread = code, unread
+					return 1, ""
+				},
+				RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
+					if _, ok := data["retained_document"]; ok {
+						kick = data
+					}
+					var err error
+					rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
+					return rendered, err
+				},
 			},
 		},
 		Projection: ProjectionDeps{

@@ -12,13 +12,13 @@ import (
 )
 
 // Retry closes a failed attempt without making the worker job terminal.
-func (q *InMemoryQueue) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *memoryQueueClaims) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.retryAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *InMemoryQueue) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *memoryQueueClaims) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -53,13 +53,13 @@ func (q *InMemoryQueue) retryAdmitted(ctx context.Context, claimed *api.WorkerTa
 	return true, nil
 }
 
-func (q *InMemoryQueue) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *memoryQueueClaims) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.parkAdmitted(ctx, claimed)
 	})
 }
 
-func (q *InMemoryQueue) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+func (q *memoryQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -76,16 +76,16 @@ func (q *InMemoryQueue) parkAdmitted(ctx context.Context, claimed *api.WorkerTas
 	return true, nil
 }
 
-func (q *InMemoryQueue) ResumeReadyWaits(context.Context) (int, error) { return 0, nil }
+func (q *memoryQueueClaims) ResumeReadyWaits(context.Context) (int, error) { return 0, nil }
 
 // Complete marks a job completed.
-func (q *InMemoryQueue) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *memoryQueueClaims) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.completeAdmitted(ctx, claimed, result)
 	})
 }
 
-func (q *InMemoryQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+func (q *memoryQueueClaims) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -131,36 +131,44 @@ func (q *InMemoryQueue) completeAdmitted(ctx context.Context, claimed *api.Worke
 	projectID := job.projectID
 	projects := q.projects
 	q.mu.Unlock()
-	if snapshot.MergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(snapshot.WorkspaceOverlayPath) == "" && strings.TrimSpace(snapshot.WorkspaceBaselinePath) != "" {
-		overlayPath, err := captureOverlay(ctx, &snapshot, projects)
-		if err != nil {
-			if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
-				workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
-					"job_id", jobID, "error", err)
-			} else {
-				return false, err
-			}
-		} else {
-			q.mu.Lock()
-			if j, ok := q.jobs[jobID]; ok && j != nil {
-				j.task.WorkspaceOverlayPath = overlayPath
-				snapshot = j.task
-			}
-			q.mu.Unlock()
-		}
+	snapshot, err := q.sealCompletedMemoryOverlay(ctx, jobID, snapshot, projects)
+	if err != nil {
+		return false, err
 	}
 	q.refreshBoard(ctx, snapshot, projectID)
 	return true, nil
 }
 
+func (q *memoryQueueClaims) sealCompletedMemoryOverlay(ctx context.Context, jobID string, snapshot api.WorkerTask, projects ProjectStore) (api.WorkerTask, error) {
+	if snapshot.MergeStatus != api.WorkerMergeStatusPending || strings.TrimSpace(snapshot.WorkspaceOverlayPath) != "" || strings.TrimSpace(snapshot.WorkspaceBaselinePath) == "" {
+		return snapshot, nil
+	}
+	overlayPath, err := captureOverlay(ctx, &snapshot, projects)
+	if err != nil {
+		if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
+			workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
+				"job_id", jobID, "error", err)
+			return snapshot, nil
+		}
+		return snapshot, err
+	}
+	q.mu.Lock()
+	if j, ok := q.jobs[jobID]; ok && j != nil {
+		j.task.WorkspaceOverlayPath = overlayPath
+		snapshot = j.task
+	}
+	q.mu.Unlock()
+	return snapshot, nil
+}
+
 // Fail commits a failure only while the claim remains current.
-func (q *InMemoryQueue) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *memoryQueueClaims) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.failAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *InMemoryQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *memoryQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -195,7 +203,7 @@ func (q *InMemoryQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTas
 	snapshot := job.task
 	projectID := job.projectID
 	q.mu.Unlock()
-	destroyWorkspaceRoot(q, jobID, workspaceRoot)
+	destroyWorkspaceRoot(q.self, jobID, workspaceRoot)
 	q.refreshBoard(ctx, snapshot, projectID)
 	return true, nil
 }

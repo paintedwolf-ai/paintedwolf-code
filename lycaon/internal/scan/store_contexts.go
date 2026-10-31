@@ -12,7 +12,7 @@ import (
 )
 
 // BindContexts records the contexts using reusable evidence.
-func (s *SQLStore) BindContexts(ctx context.Context, id, assessmentID, workflowRunID, sessionID string) (*api.CodeScan, error) {
+func (s *sqlRunStore) BindContexts(ctx context.Context, id, assessmentID, workflowRunID, sessionID string) (*api.CodeScan, error) {
 	if s == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}
@@ -62,7 +62,7 @@ type TerminalWorkflowBinding struct {
 }
 
 // PendingTerminalWorkflowBindings lists unacknowledged terminal deliveries.
-func (s *SQLStore) PendingTerminalWorkflowBindings(ctx context.Context, scanID string, limit int) ([]TerminalWorkflowBinding, error) {
+func (s *sqlRunStore) PendingTerminalWorkflowBindings(ctx context.Context, scanID string, limit int) ([]TerminalWorkflowBinding, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
@@ -84,7 +84,7 @@ func (s *SQLStore) PendingTerminalWorkflowBindings(ctx context.Context, scanID s
 
 // BindWorkflowRun binds an existing scan to a workflow run, so the run's
 // inventory and coverage include it.
-func (s *SQLStore) BindWorkflowRun(ctx context.Context, scanID, workflowRunID string) error {
+func (s *sqlRunStore) BindWorkflowRun(ctx context.Context, scanID, workflowRunID string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("scan store not configured")
 	}
@@ -98,7 +98,7 @@ func (s *SQLStore) BindWorkflowRun(ctx context.Context, scanID, workflowRunID st
 }
 
 // MarkWorkflowTerminalNotified acknowledges a terminal delivery.
-func (s *SQLStore) MarkWorkflowTerminalNotified(ctx context.Context, scanID, workflowRunID string) error {
+func (s *sqlRunStore) MarkWorkflowTerminalNotified(ctx context.Context, scanID, workflowRunID string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("scan store not configured")
 	}

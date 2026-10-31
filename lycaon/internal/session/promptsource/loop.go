@@ -56,62 +56,22 @@ func (m *Loop) Build() loopwake.LoopDeps {
 		RunPrompt: func(ctx context.Context, sessionID string) (*promptresult.Result, error) {
 			return m.Submissions.LoopWake(ctx, sessionID)
 		},
-		RunWaitResume:   m.Submissions.WaitResume,
-		HostTurnBlocked: m.Turns.HostTurnBlocked,
+		RunWaitResume: m.Submissions.WaitResume,
 		GetSession: func(ctx context.Context, sessionID string) (*api.Session, error) {
 			return m.Sessions.Get(ctx, sessionID)
 		},
-		Limits:           m.Limits.Effective,
-		IsEscalated:      m.Escalated,
-		WorkflowSource:   m.Workflow,
-		CoordinatorFrame: m.Frame,
-		BoardWillForceInject: func(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) bool {
-			return m.Runtime.Board().BoardWillForceInject(ctx, sess, run)
-		},
+		Limits:         m.Limits.Effective,
+		WorkflowSource: m.Workflow,
 		QueueInform: func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
 			m.Guidance.Emit(ctx, sessionID, inform, env)
 		},
-		HasQueuedKick: func(sessionID, kickID string) bool {
-			return m.Runtime.Kicks().HasQueuedKick(sessionID, kickID)
-		},
-		DropPendingKicksForBatchSeq: func(sessionID string, batchSeq int) {
-			m.Runtime.Kicks().DropPendingKicksForBatchSeq(sessionID, batchSeq)
-		},
-		DropPendingKicksBeforeBatchSeq: func(sessionID string, liveSeq int) {
-			m.Runtime.Kicks().DropPendingKicksBeforeBatchSeq(sessionID, liveSeq)
-		},
-		OnLoopQuiescent: func(ctx context.Context, sessionID string) {
-			if err := m.Settlement.SettlePending(ctx, sessionID); err != nil {
-				slog.ErrorContext(ctx, "settle deferred user turn", "session_id", sessionID, "error", err)
-			}
-			m.Admission.RoundEnd(ctx, sessionID)
-		},
-		IsCoordinatorSession:    m.CoordinatorSession,
-		WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
+		IsCoordinatorSession: m.CoordinatorSession,
 		WorkerCycleIdle: func(ctx context.Context, sess *api.Session, completingJobID string) (bool, error) {
 			if m == nil || sess == nil {
 				return true, nil
 			}
 			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, m.Workers, sess.ProjectID, sess.ID, completingJobID)
 		},
-		HostWakeOverlayPromoteDue: func(ctx context.Context, sessionID string) bool {
-			if m == nil {
-				return false
-			}
-			sess, err := m.Sessions.Get(ctx, sessionID)
-			if err != nil || sess == nil {
-				return false
-			}
-			state := m.State.ForSession(ctx, sess)
-			return len(state.PendingOverlayIDs) > 0
-		},
-		ScanCycleOpen: func(ctx context.Context, sessionID string) bool {
-			return m != nil && m.ScanInFlight != nil && m.ScanInFlight(ctx, sessionID)
-		},
-		ProcessRunning:   m.Processes.HandlesRunning,
-		ProcessState:     m.Processes.HandleState,
-		ProcessSubject:   m.Processes.HandleSubject,
-		ProcessReport:    m.Processes.Report,
 		PublishWaitLease: m.PublishWaitLease,
 		HostWakeActionable: loopwake.BuildHostWakeActionable(loopwake.HostWakeActionableDeps{
 			GetMessages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
@@ -140,6 +100,50 @@ func (m *Loop) Build() loopwake.LoopDeps {
 			},
 			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
 		}),
+		LoopWakeSignalDeps: loopwake.LoopWakeSignalDeps{
+			HostTurnBlocked:  m.Turns.HostTurnBlocked,
+			IsEscalated:      m.Escalated,
+			CoordinatorFrame: m.Frame,
+			BoardWillForceInject: func(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) bool {
+				return m.Runtime.Board().BoardWillForceInject(ctx, sess, run)
+			},
+			HasQueuedKick: func(sessionID, kickID string) bool {
+				return m.Runtime.Kicks().HasQueuedKick(sessionID, kickID)
+			},
+			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
+			HostWakeOverlayPromoteDue: func(ctx context.Context, sessionID string) bool {
+				if m == nil {
+					return false
+				}
+				sess, err := m.Sessions.Get(ctx, sessionID)
+				if err != nil || sess == nil {
+					return false
+				}
+				state := m.State.ForSession(ctx, sess)
+				return len(state.PendingOverlayIDs) > 0
+			},
+			ScanCycleOpen: func(ctx context.Context, sessionID string) bool {
+				return m != nil && m.ScanInFlight != nil && m.ScanInFlight(ctx, sessionID)
+			},
+		},
+		LoopProcessDeps: loopwake.LoopProcessDeps{
+			ProcessRunning: m.Processes.HandlesRunning,
+			ProcessState:   m.Processes.HandleState,
+			ProcessSubject: m.Processes.HandleSubject,
+			ProcessReport:  m.Processes.Report,
+			DropPendingKicksForBatchSeq: func(sessionID string, batchSeq int) {
+				m.Runtime.Kicks().DropPendingKicksForBatchSeq(sessionID, batchSeq)
+			},
+			DropPendingKicksBeforeBatchSeq: func(sessionID string, liveSeq int) {
+				m.Runtime.Kicks().DropPendingKicksBeforeBatchSeq(sessionID, liveSeq)
+			},
+			OnLoopQuiescent: func(ctx context.Context, sessionID string) {
+				if err := m.Settlement.SettlePending(ctx, sessionID); err != nil {
+					slog.ErrorContext(ctx, "settle deferred user turn", "session_id", sessionID, "error", err)
+				}
+				m.Admission.RoundEnd(ctx, sessionID)
+			},
+		},
 	}
 }
 func (m *Loop) Escalated(sessionID string) bool {

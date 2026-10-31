@@ -41,16 +41,40 @@ type modelOutputState struct {
 }
 
 type promptLoopTurnState struct {
-	output                  modelOutputState
-	observePrompt           func(inject.CoordinatorTurnFrame)
-	turnID                  string
-	attemptID               string
-	history                 []api.Message
-	lastAssistantID         string
-	lastAssistantContent    string
-	turnTools               []string
-	tasksDispatchedCount    int
-	turnEndedGuidanceReject bool
+	turnID    string
+	attemptID string
+	history   []api.Message
+	// draftSlotID identifies the draft updated by the current model turn.
+	draftSlotID       string
+	draftSlotAppended bool
+	// proseFinish is a forced or last-iteration closeout.
+	proseFinish      bool
+	coordinatorFrame inject.CoordinatorTurnFrame
+	machine          inject.Machine
+
+	turnStreamState
+	turnBatchState
+	turnCloseoutState
+	turnProvenanceState
+}
+
+type turnStreamState struct {
+	output               modelOutputState
+	observePrompt        func(inject.CoordinatorTurnFrame)
+	lastAssistantID      string
+	lastAssistantContent string
+	// deferredUserNudges flush when the draft slot closes.
+	deferredUserNudges []api.Message
+	turnsRanThisRun    int
+	// offeredToolNames distinguishes unstamped requests from an empty tool set.
+	offeredToolNames      []string
+	offeredToolSchemas    map[string]map[string]any
+	coordinatorFrameReady bool
+}
+
+type turnBatchState struct {
+	turnTools            []string
+	tasksDispatchedCount int
 	// Read-only streaks count consecutive batches that observed without acting.
 	readOnlyBatches        int
 	readOnlyStreakTools    []string
@@ -58,6 +82,11 @@ type promptLoopTurnState struct {
 	statusCursorNextOffset *int
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
+	turnToolPlan           toolsurface.Plan
+}
+
+type turnCloseoutState struct {
+	turnEndedGuidanceReject bool
 	// Blocked streaks track repeated and total rejection codes, and the last
 	// refused call so a closeout can name it.
 	consecutiveBlockedBatches int
@@ -68,11 +97,11 @@ type promptLoopTurnState struct {
 	// closeoutCauseText is the clause the final-turn nudge opened with.
 	closeoutCauseText    string
 	proseFinishDelivered bool
-	spendSoftStopGranted bool
 	closeoutRetry        closeoutRetryState
-	// deferredUserNudges flush when the draft slot closes.
-	deferredUserNudges []api.Message
-	turnsRanThisRun    int
+}
+
+type turnProvenanceState struct {
+	spendSoftStopGranted bool
 	// workerProgress tracks durable rounds and the active batch.
 	workerProgress *workerprogress.Tracker
 	workerJobID    string
@@ -80,22 +109,10 @@ type promptLoopTurnState struct {
 	workerBudget workerBudgetWatch
 	// repairCeiling is the round ceiling a grounding retry may reach.
 	repairCeiling int
-	// draftSlotID identifies the draft updated by the current model turn.
-	draftSlotID       string
-	draftSlotAppended bool
-	// proseFinish is a forced or last-iteration closeout.
-	proseFinish bool
-	// offeredToolNames distinguishes unstamped requests from an empty tool set.
-	offeredToolNames   []string
-	offeredToolSchemas map[string]map[string]any
 	// secretStorageOverlays retain raw fields until their approval decision.
 	secretStorageOverlays map[string]secretStorageOverlay
 	// secretWithheldRetries bounds repeated credential approval requests.
 	secretWithheldRetries int
-	coordinatorFrame      inject.CoordinatorTurnFrame
-	coordinatorFrameReady bool
-	machine               inject.Machine
-	turnToolPlan          toolsurface.Plan
 }
 
 func (st *promptLoopTurnState) progress() *workerprogress.Tracker {

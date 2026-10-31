@@ -19,7 +19,7 @@ type ReplaceValueRequest struct {
 }
 
 // ReplaceValue changes the current value while retaining screening history.
-func (s *Service) ReplaceValue(ctx context.Context, req ReplaceValueRequest) (Metadata, error) {
+func (s *secretVersionService) ReplaceValue(ctx context.Context, req ReplaceValueRequest) (Metadata, error) {
 	defer s.invalidateScreening(ctx, req.ProjectID)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -54,7 +54,7 @@ func (s *Service) ReplaceValue(ctx context.Context, req ReplaceValueRequest) (Me
 
 // replaceOnto swaps the current version in one metadata transaction. custody
 // names who supplied the new bytes.
-func (s *Service) replaceOnto(
+func (s *serviceCore) replaceOnto(
 	ctx context.Context, row db.ManagedSecrets, current db.ManagedSecretVersions, hasCurrent bool,
 	custody Custody, value string, record func(*db.Queries) error,
 ) error {
@@ -96,7 +96,7 @@ func (s *Service) replaceOnto(
 	return nil
 }
 
-func (s *Service) currentVersion(ctx context.Context, secretID string) (db.ManagedSecretVersions, bool, error) {
+func (s *serviceCore) currentVersion(ctx context.Context, secretID string) (db.ManagedSecretVersions, bool, error) {
 	row, err := s.queries.GetCurrentManagedSecretVersion(ctx, secretID)
 	switch {
 	case err == nil:
@@ -109,7 +109,7 @@ func (s *Service) currentVersion(ctx context.Context, secretID string) (db.Manag
 }
 
 // RememberProjectValues refreshes screening with every retained project value.
-func (s *Service) RememberProjectValues(ctx context.Context, projectID, chatSessionID string) error {
+func (s *secretVersionService) RememberProjectValues(ctx context.Context, projectID, chatSessionID string) error {
 	projectID = strings.TrimSpace(projectID)
 	chatSessionID = strings.TrimSpace(chatSessionID)
 	if projectID == "" || chatSessionID == "" || s.remember == nil {
@@ -126,7 +126,7 @@ func (s *Service) RememberProjectValues(ctx context.Context, projectID, chatSess
 // ScreeningValues returns project evidence for a chat's screens. A reference
 // attaches only to a capability the chat may spend; an empty chat admits only
 // project references.
-func (s *Service) ScreeningValues(ctx context.Context, projectID, chatSessionID string) ([]secretmatch.Remembered, error) {
+func (s *secretVersionService) ScreeningValues(ctx context.Context, projectID, chatSessionID string) ([]secretmatch.Remembered, error) {
 	projectID = strings.TrimSpace(projectID)
 	now := s.now()
 	return s.screeningValues(ctx, projectID, func(row db.ManagedSecrets) bool {
@@ -136,12 +136,12 @@ func (s *Service) ScreeningValues(ctx context.Context, projectID, chatSessionID 
 
 // ReviewScreeningValues returns project evidence for people reviewing project
 // text. Every live capability carries its reference, whichever chat it serves.
-func (s *Service) ReviewScreeningValues(ctx context.Context, projectID string) ([]secretmatch.Remembered, error) {
+func (s *secretVersionService) ReviewScreeningValues(ctx context.Context, projectID string) ([]secretmatch.Remembered, error) {
 	return s.screeningValues(ctx, strings.TrimSpace(projectID), func(db.ManagedSecrets) bool { return true })
 }
 
 // screeningValues retains every stored version: retired bytes stay evidence.
-func (s *Service) screeningValues(
+func (s *secretVersionService) screeningValues(
 	ctx context.Context, projectID string, spends func(db.ManagedSecrets) bool,
 ) ([]secretmatch.Remembered, error) {
 	s.mutationMu.Lock()
@@ -177,7 +177,7 @@ func (s *Service) screeningValues(
 }
 
 // rememberValue offers a value its chat just spent back to that chat's screens.
-func (s *Service) rememberValue(chatSessionID, name, id, value string) {
+func (s *serviceCore) rememberValue(chatSessionID, name, id, value string) {
 	if s.remember == nil || strings.TrimSpace(chatSessionID) == "" {
 		return
 	}
@@ -185,7 +185,7 @@ func (s *Service) rememberValue(chatSessionID, name, id, value string) {
 }
 
 // ProjectRemoval returns value cleanup to run after project deletion.
-func (s *Service) ProjectRemoval(ctx context.Context, projectID string) (func() error, error) {
+func (s *secretVersionService) ProjectRemoval(ctx context.Context, projectID string) (func() error, error) {
 	ids, err := s.queries.ListManagedSecretVersionIDsForProject(ctx, strings.TrimSpace(projectID))
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (s *Service) ProjectRemoval(ctx context.Context, projectID string) (func() 
 }
 
 // DiscardCreated removes a newly created capability after its operation fails.
-func (s *Service) DiscardCreated(ctx context.Context, projectID, reference string) error {
+func (s *secretVersionService) DiscardCreated(ctx context.Context, projectID, reference string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
@@ -242,7 +242,7 @@ func (s *Service) DiscardCreated(ctx context.Context, projectID, reference strin
 }
 
 // Reconcile deletes protected values with no version to name them.
-func (s *Service) Reconcile(ctx context.Context) error {
+func (s *secretVersionService) Reconcile(ctx context.Context) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
@@ -266,7 +266,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 }
 
 // RunMaintenance periodically removes value-store orphans.
-func (s *Service) RunMaintenance(ctx context.Context) error {
+func (s *secretVersionService) RunMaintenance(ctx context.Context) error {
 	ticker := time.NewTicker(maintenanceInterval)
 	defer ticker.Stop()
 	for {

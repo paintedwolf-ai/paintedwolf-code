@@ -65,7 +65,7 @@ func FullObjectID(value string) bool {
 
 // CommitExists reports whether the repository holds a commit named by a
 // hexadecimal object id or unambiguous prefix of one.
-func (m *Manager) CommitExists(ctx context.Context, projectDir, oid string) (bool, error) {
+func (m *gitCommitManager) CommitExists(ctx context.Context, projectDir, oid string) (bool, error) {
 	if len(oid) < 4 || len(oid) > 64 || strings.Trim(oid, "0123456789abcdef") != "" {
 		return false, nil
 	}
@@ -81,7 +81,7 @@ func (m *Manager) CommitExists(ctx context.Context, projectDir, oid string) (boo
 }
 
 // BlobSize permits refusing oversized content before reading the object.
-func (m *Manager) BlobSize(ctx context.Context, projectDir, oid string) (int64, error) {
+func (m *gitCommitManager) BlobSize(ctx context.Context, projectDir, oid string) (int64, error) {
 	if !FullObjectID(oid) {
 		return 0, errors.New("a full object id is required")
 	}
@@ -103,7 +103,7 @@ func (m *Manager) BlobSize(ctx context.Context, projectDir, oid string) (int64, 
 	return size, nil
 }
 
-func (m *Manager) CommitDetails(ctx context.Context, projectDir, oid string) (CommitDetails, error) {
+func (m *gitCommitManager) CommitDetails(ctx context.Context, projectDir, oid string) (CommitDetails, error) {
 	if !FullObjectID(oid) {
 		return CommitDetails{}, errors.New("a full commit object id is required")
 	}
@@ -180,7 +180,7 @@ func commitObjectParents(ctx context.Context, dir, oid string) ([]string, error)
 }
 
 // CommitReview serves pages from one immutable, bounded comparison snapshot.
-func (m *Manager) CommitReview(ctx context.Context, projectDir string, opts CommitReviewOptions) (CommitReviewPage, error) {
+func (m *gitCommitManager) CommitReview(ctx context.Context, projectDir string, opts CommitReviewOptions) (CommitReviewPage, error) {
 	if !FullObjectID(opts.After) || (opts.Before != "" && !FullObjectID(opts.Before)) {
 		return CommitReviewPage{}, errors.New("full commit object ids are required")
 	}

@@ -39,10 +39,10 @@ type revealSubject struct {
 }
 
 // PresenceAvailable reports whether this device can verify presence.
-func (s *Service) PresenceAvailable() bool { return s != nil && s.presence.Available() }
+func (s *secretAdminService) PresenceAvailable() bool { return s != nil && s.presence.Available() }
 
 // BeginReveal binds presence to one value version, window, and person.
-func (s *Service) BeginReveal(
+func (s *secretAdminService) BeginReveal(
 	ctx context.Context, projectID, reference, windowLabel, personID string,
 ) (RevealChallenge, error) {
 	row, err := s.projectRow(ctx, projectID, reference)
@@ -81,7 +81,7 @@ func (s *Service) BeginReveal(
 
 // CompleteReveal consumes one challenge and records the reveal before
 // returning the value to the person who began it.
-func (s *Service) CompleteReveal(
+func (s *secretAdminService) CompleteReveal(
 	ctx context.Context, projectID, reference, personID string, proof presence.Proof,
 ) (RevealResult, error) {
 	row, err := s.projectRow(ctx, projectID, reference)

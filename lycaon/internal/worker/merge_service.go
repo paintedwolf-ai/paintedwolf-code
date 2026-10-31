@@ -3,14 +3,10 @@ package worker
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"log/slog"
 	"os"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -21,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -147,7 +142,8 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 			"merge_status": string(task.MergeStatus),
 		})
 	}
-	lease, err := s.holdBranch(ctx, jobID)
+	eng := s.engine()
+	lease, err := eng.holdBranch(ctx, jobID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
@@ -158,40 +154,56 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 		AgentType: task.AgentType,
 	}
 	opts := promoteOutputOpts{Detail: detail}
-	roots := s.taskRootRefs(ctx, task)
-	changed, err := session.InspectOverlayChanges(ctx, task, roots)
+	mergePaths, err := eng.resolvePreviewMergePaths(ctx, jobID, task, paths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
-	mergePaths := normalizeMergePaths(ctx, paths, *task, roots)
-	if len(paths) > 0 {
-		validated, err := validatePromotePaths(task, roots, s.jobPromotePaths(ctx, task), mergePaths)
-		if err != nil {
-			return api.WorkerMergeResult{}, err
-		}
-		mergePaths = validated
-	}
-	if len(mergePaths) == 0 {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
-	}
 	out.Paths = mergePaths
-	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths)
+	assessment, err := eng.assessMerge(ctx, sessionID, task, mergePaths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
 	fillMergeResult(&out, assessment, opts)
 	s.attachPromoteSpill(s.hostDataDirFor(task), jobID, &out, assessment)
-	s.registerReconcilePaths(sessionID, assessment)
+	eng.registerReconcilePaths(sessionID, assessment)
 	enrichMergeChangedPaths(&out, *task, s.reports(), ctx)
 	EnrichOverlayIntent(&out, task)
 	out.Status = api.WorkerMergeStatusPending
-	s.attachSourceEvidence(ctx, task, &out)
-	s.recordPromoteOutput(sessionID, jobID, &out)
+	eng.attachSourceEvidence(ctx, task, &out)
+	eng.recordPromoteOutput(sessionID, jobID, &out)
 	return out, nil
 }
 
-func (s *MergeService) overlayMessages(ctx context.Context, task *api.WorkerTask) []api.Message {
-	if s == nil || task == nil || s.Reports.Messages == nil {
+func (s mergeEngine) resolvePreviewMergePaths(ctx context.Context, jobID string, task *api.WorkerTask, paths []string) ([]string, error) {
+	roots := s.taskRootRefs(ctx, task)
+	changed, err := session.InspectOverlayChanges(ctx, task, roots)
+	if err != nil {
+		return nil, err
+	}
+	mergePaths := normalizeMergePaths(ctx, paths, *task, roots)
+	if len(paths) > 0 {
+		validated, err := validatePromotePaths(task, roots, s.jobPromotePaths(ctx, task), mergePaths)
+		if err != nil {
+			return nil, err
+		}
+		mergePaths = validated
+	}
+	if len(mergePaths) == 0 {
+		return nil, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
+	}
+	return mergePaths, nil
+}
+
+type mergeEngine struct {
+	*MergeService
+}
+
+func (s *MergeService) engine() mergeEngine {
+	return mergeEngine{MergeService: s}
+}
+
+func (s mergeEngine) overlayMessages(ctx context.Context, task *api.WorkerTask) []api.Message {
+	if s.MergeService == nil || task == nil || s.Reports.Messages == nil {
 		return nil
 	}
 	childID := strings.TrimSpace(task.ChildSessionID)
@@ -205,8 +217,8 @@ func (s *MergeService) overlayMessages(ctx context.Context, task *api.WorkerTask
 	return msgs
 }
 
-func (s *MergeService) attachSourceEvidence(ctx context.Context, task *api.WorkerTask, out *api.WorkerMergeResult) {
-	if s == nil || out == nil || task == nil {
+func (s mergeEngine) attachSourceEvidence(ctx context.Context, task *api.WorkerTask, out *api.WorkerMergeResult) {
+	if s.MergeService == nil || out == nil || task == nil {
 		return
 	}
 	proof := session.OverlaySourceProof(ctx, task, s.overlayMessages(ctx, task), s.Evidence.command(ctx, task), s.Evidence.revision(ctx, task))
@@ -234,290 +246,11 @@ func (s *MergeService) attachSourceEvidence(ctx context.Context, task *api.Worke
 	out.SourceEvidence = ev
 }
 
-// recoverInterruptedPromote rolls back an expired promotion.
-func (s *MergeService) recoverInterruptedPromote(ctx context.Context, task *api.WorkerTask, jobID string) error {
-	reclaimed, err := s.reclaimOrphanedApply(ctx, task, jobID)
-	if err != nil {
-		return err
-	}
-	if !reclaimed {
-		return s.reject(OverlayPromoteNotPendingCode, map[string]any{
-			"job_id": jobID,
-			"reason": "another promote is applying this overlay",
-		})
-	}
-	return nil
-}
-
-// reclaimOrphanedApply restores one expired promotion.
-func (s *MergeService) reclaimOrphanedApply(ctx context.Context, task *api.WorkerTask, jobID string) (bool, error) {
-	if s.Store == nil {
-		return false, fmt.Errorf("recover interrupted promote: merge store not configured")
-	}
-	token, ok, err := s.Store.ReclaimExpiredMergeApply(ctx, jobID)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	roots := s.taskRootRefs(ctx, task)
-	promote := PromoteRootsForTask(task, roots)
-	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote: %w", err)
-	}
-	cleanupCtx, cancel := promoteCleanupContext(ctx)
-	err = s.Store.ReleaseMergeApply(cleanupCtx, jobID, token)
-	cancel()
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote status: %w", err)
-	}
-	if found {
-		if err := removePromoteTransaction(promoteTransactionPath(s.hostDataDirFor(task), jobID)); err != nil {
-			slog.WarnContext(ctx, "recovered promote journal cleanup deferred", "job_id", jobID, "err", err)
-		}
-	}
-	return true, nil
-}
-
-// RecoverOrphanedMergeApplies repairs expired promotion leases.
-func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
-	if s == nil || s.Store == nil || s.Queue == nil {
-		return fmt.Errorf("merge apply sweep requires queue and store")
-	}
-	for {
-		ids, err := s.Store.ListMergeApplying(ctx)
-		if err != nil {
-			return err
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-		for _, id := range ids {
-			task, ok := s.Queue.Get(id)
-			if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusApplying {
-				continue
-			}
-			lock, lockErr := acquirePromoteFileLock(ctx, s.hostDataDirFor(task))
-			if lockErr != nil {
-				return lockErr
-			}
-			if _, err := s.reclaimOrphanedApply(ctx, task, id); err != nil {
-				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
-			}
-			lock.release()
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(mergeApplyLease / 3):
-		}
-	}
-}
-
-func (s *MergeService) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
-	var unstarted *promoteTransactionUnstartedError
-	if errors.As(cause, &unstarted) {
-		return errors.Join(cause, tx.close(), revertPending())
-	}
-	rollbackErr := tx.rollback(promote, task)
-	if rollbackErr != nil {
-		return errors.Join(cause, rollbackErr)
-	}
-	closeErr := tx.close()
-	return errors.Join(cause, closeErr, revertPending())
-}
-
-func (s *MergeService) closeCommittedPromoteTransaction(ctx context.Context, tx *promoteTransaction, jobID string) {
-	if err := tx.close(); err != nil {
-		slog.WarnContext(ctx, "committed promote journal cleanup deferred", "job_id", jobID, "err", err)
-	}
-}
-
-// mergeApplyClaim holds one promotion lease.
-type mergeApplyClaim struct {
-	jobID         string
-	token         string
-	cancel        context.CancelCauseFunc
-	heartbeatStop context.CancelFunc
-	heartbeatDone chan struct{}
-	stopOnce      sync.Once
-}
-
-var errMergeApplyClaimLost = errors.New("merge apply claim lost")
-
-var mergeApplyHeartbeatInterval = mergeApplyLease / 3
-
-func (s *MergeService) beginMergeClaim(ctx context.Context, jobID string) (*mergeApplyClaim, context.Context, error) {
-	if s == nil || s.Store == nil {
-		return nil, nil, fmt.Errorf("overlay promote requires a configured merge store")
-	}
-	token, claimed, err := s.Store.BeginMergeApply(ctx, jobID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !claimed {
-		return nil, nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
-	}
-	claimCtx, cancel := context.WithCancelCause(ctx)
-	claim := &mergeApplyClaim{jobID: jobID, token: token, cancel: cancel}
-	s.startMergeHeartbeat(ctx, claim)
-	return claim, claimCtx, nil
-}
-
-// startMergeHeartbeat renews the apply lease for the duration of the apply.
-func (s *MergeService) startMergeHeartbeat(ctx context.Context, claim *mergeApplyClaim) {
-	hbCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	done := make(chan struct{})
-	claim.heartbeatStop = cancel
-	claim.heartbeatDone = done
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(mergeApplyHeartbeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-hbCtx.Done():
-				return
-			case <-ticker.C:
-				renewed, err := s.Store.RenewMergeApply(hbCtx, claim.jobID, claim.token)
-				if err != nil || !renewed {
-					slog.WarnContext(hbCtx, "merge apply lease renewal lost", "job_id", claim.jobID, "err", err)
-					claim.cancel(errMergeApplyClaimLost)
-					return
-				}
-			}
-		}
-	}()
-}
-
-func (claim *mergeApplyClaim) stop() {
-	if claim == nil {
-		return
-	}
-	claim.stopOnce.Do(func() {
-		claim.heartbeatStop()
-		<-claim.heartbeatDone
-		claim.cancel(nil)
-	})
-}
-
-// releaseMergeClaim returns the branch to pending under the claim.
-func (s *MergeService) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
-	claim.stop()
-	cleanupCtx, cancel := promoteCleanupContext(ctx)
-	defer cancel()
-	return s.Store.ReleaseMergeApply(cleanupCtx, claim.jobID, claim.token)
-}
-
-func (s *MergeService) finishPromoteState(
-	ctx context.Context,
-	sessionID string,
-	task *api.WorkerTask,
-	jobID string,
-	out *api.WorkerMergeResult,
-	resolved, landed []string,
-	detail string,
-	claim *mergeApplyClaim,
-	facts promotionSourceFacts,
-	childStatuses []MergeStatusUpdate,
-) error {
-	fullPaths := s.jobPromotePaths(ctx, task)
-	fullAssessment, err := s.assessMerge(ctx, sessionID, task, fullPaths)
-	if err != nil {
-		return err
-	}
-	remaining := remainingPromoteWork(fullAssessment, resolved)
-	out.Applied = append([]string(nil), resolved...)
-	fillMergeResult(out, remaining, promoteOutputOpts{Detail: detail})
-	if mergeComplete(remaining) {
-		// Clean no-ops produce a terminal merge.
-		plan := obligation.Plan{}
-		if s.Scans != nil && task != nil {
-			var planErr error
-			plan, planErr = s.Scans.PrepareOverlayPromotion(ctx, *task, landed, deletedPromotionPaths(facts.changes))
-			if planErr != nil {
-				return fmt.Errorf("prepare landed change: %w", planErr)
-			}
-		}
-		if cause := context.Cause(ctx); cause != nil {
-			return cause
-		}
-		facts.stageDocuments(ctx)
-		claim.stop()
-		commitCtx, cancel := promoteCleanupContext(ctx)
-		err := s.Store.CommitPromotion(commitCtx, jobID, claim.token, PromotionCommit{
-			Plan: plan, Recorder: s.SourceLedger, Documents: facts.documentWriter(),
-			Records: facts.records, Changes: facts.changes, ChildStatuses: childStatuses,
-		})
-		cancel()
-		if err != nil {
-			return fmt.Errorf("commit merged overlay: %w", err)
-		}
-		facts.documents.release(ctx, true)
-		s.clearReconcilePaths(sessionID)
-		if s.Scans != nil && !plan.Empty() {
-			if err := s.Scans.PublishObligation(ctx, plan); err != nil {
-				slog.WarnContext(ctx, "scan obligation publication deferred", "landed_change_id", plan.ID, "scan_id", plan.ScanID, "err", err)
-			}
-		}
-		if s.Coord != nil && task != nil {
-			_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
-		}
-		if s.Closeout != nil && task != nil && task.DelegationID != "" {
-			_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
-		}
-		out.Status = api.WorkerMergeStatusMerged
-		if err := s.teardownBranch(task); err != nil {
-			slog.WarnContext(ctx, "merged overlay cleanup deferred", "job_id", jobID, "err", err)
-		} else {
-			cleanupCtx, cancel := promoteCleanupContext(ctx)
-			err := s.Store.ClearWorkerWorkspace(cleanupCtx, jobID)
-			cancel()
-			if err != nil {
-				slog.WarnContext(ctx, "merged overlay metadata cleanup deferred", "job_id", jobID, "err", err)
-			}
-		}
-		return nil
-	}
-	s.registerReconcilePaths(sessionID, remaining)
-	if err := s.releaseMergeClaim(ctx, claim); err != nil {
-		return fmt.Errorf("persist pending overlay: %w", err)
-	}
-	out.Status = api.WorkerMergeStatusPending
-	return nil
-}
-
-func deletedPromotionPaths(changes []sourcefeed.Change) []string {
-	deleted := make([]string, 0)
-	for _, change := range changes {
-		if change.Op == api.SourceChangeOpDelete {
-			deleted = append(deleted, change.Path)
-		}
-	}
-	return deleted
-}
-
-func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
+func (s mergeEngine) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
 	if task == nil {
 		return PromoteAssessment{}, nil
 	}
-	return AssessPromotePaths3Way(ctx, s, sessionID, task, mergePaths)
-}
-
-func (s *MergeService) teardownBranch(task *api.WorkerTask) error {
-	if s == nil || s.Workspace == nil || task == nil {
-		return nil
-	}
-	return s.Workspace.DestroyWorkerWorkspace(&workspace.Binding{
-		ID:   task.ID,
-		Root: task.WorkspaceRoot,
-	})
-}
-
-func promoteCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	return AssessPromotePaths3Way(ctx, s.MergeService, sessionID, task, mergePaths)
 }
 
 func (s *MergeService) hostDataDirFor(task *api.WorkerTask) string {
@@ -580,21 +313,6 @@ func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTas
 		add(p)
 	}
 	return out
-}
-
-// holdBranch leases the overlay's branch tree for a merge read, rebuilding a
-// reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
-func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
-	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
-	if err != nil {
-		if errors.Is(err, ErrWorkerBranchUnavailable) {
-			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
-				"job_id": jobID, "reason": "overlay workspace unavailable",
-			})
-		}
-		return nil, err
-	}
-	return lease, nil
 }
 
 func (s *MergeService) taskRootRefs(ctx context.Context, task *api.WorkerTask) []projectroot.RootRef {
