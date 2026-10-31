@@ -126,20 +126,11 @@ func commandSupervisor(cmd *exec.Cmd) bool {
 }
 
 func signalSupervisor(pid int, start int64, hard bool) bool {
-	fd, err := unix.PidfdOpen(pid, 0)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = unix.Close(fd) }()
-	observed, alive := osprocess.StartTime(pid)
-	if !alive || observed != start {
-		return false
-	}
-	sig := unix.SIGTERM
+	sig := syscall.SIGTERM
 	if hard {
-		sig = unix.SIGUSR2
+		sig = syscall.SIGUSR2
 	}
-	return unix.PidfdSendSignal(fd, sig, nil, 0) == nil
+	return osprocess.Signal(osprocess.Incarnation{PID: pid, Start: start}, sig) == nil
 }
 
 // supervisorTarget is the command the parent asked the supervisor to start.

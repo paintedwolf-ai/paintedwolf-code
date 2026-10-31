@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os/exec"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,16 +20,46 @@ const DefaultBelowNormalNice = 5
 // keeps a supervisor that never reports from blocking a caller without a WaitDelay.
 const supervisorLaunchGrace = 10 * time.Second
 
+type guardOps struct {
+	sessionMembers   func(int) []int
+	incarnationOf    func(int) (osprocess.Incarnation, bool)
+	incarnationAlive func(osprocess.Incarnation) bool
+	signalProcess    func(osprocess.Incarnation, syscall.Signal) error
+	signalGroup      func(osprocess.Incarnation, syscall.Signal) error
+	awaitExit        func(int)
+}
+
+func defaultGuardOps() guardOps {
+	return guardOps{
+		sessionMembers:   osprocess.SessionMembers,
+		incarnationOf:    osprocess.IncarnationOf,
+		incarnationAlive: osprocess.Incarnation.Alive,
+		signalProcess:    osprocess.Signal,
+		signalGroup:      osprocess.SignalGroup,
+		awaitExit:        awaitLeaderExit,
+	}
+}
+
+type guardTimers struct {
+	launchGrace time.Duration
+	launch      *time.Timer
+	kill        *time.Timer
+	released    bool
+}
+
 type unixGuard struct {
 	belowNormal bool
-	// pgid is captured before the leader can be reaped.
-	pgid            atomic.Int64
-	supervised      bool
-	supervisorStart int64
+	supervised  bool
+	leader      osprocess.Incarnation
 	// untrack releases the group from the reaper that kills it if the engine dies.
 	untrack func()
+	ops     guardOps
 
 	mu sync.Mutex
+	// reaped is set under mu after surviving session members are snapshotted and
+	// before cmd.Wait collects the leader.
+	reaped   bool
+	snapshot []osprocess.Incarnation
 	// terminated marks a tree that was asked to exit; release then sweeps
 	// whatever outlived the leader.
 	terminated bool
@@ -40,15 +69,15 @@ type unixGuard struct {
 	awaitingLaunch bool
 	// heldTerminate is a termination requested while awaitingLaunch.
 	heldTerminate bool
-	// launchGrace and launchTimer kill an unreported launch held too long.
-	launchGrace time.Duration
-	launchTimer *time.Timer
-	// killTimer is the SIGKILL fallback armed by terminate.
-	killTimer *time.Timer
+	timers        guardTimers
 }
 
 func newRunGuard(priority ProcessPriority) (runGuard, error) {
-	return &unixGuard{belowNormal: priority == ProcessPriorityBelowNormal, launchGrace: supervisorLaunchGrace}, nil
+	return &unixGuard{
+		belowNormal: priority == ProcessPriorityBelowNormal,
+		ops:         defaultGuardOps(),
+		timers:      guardTimers{launchGrace: supervisorLaunchGrace},
+	}, nil
 }
 
 func (g *unixGuard) configure(cmd *exec.Cmd) {
@@ -72,11 +101,10 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
+	g.mu.Lock()
 	g.supervised = commandSupervisor(cmd)
-	if g.supervised {
-		g.supervisorStart, _ = osprocess.StartTime(cmd.Process.Pid)
-	}
-	g.recordProcessGroup(cmd.Process.Pid)
+	g.recordProcessGroupLocked(cmd.Process.Pid)
+	g.mu.Unlock()
 	if err := g.confirmLaunch(cmd); err != nil {
 		return err
 	}
@@ -96,17 +124,21 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	return err
 }
 
-// recordProcessGroup stores only child process groups.
-func (g *unixGuard) recordProcessGroup(pid int) {
+// recordProcessGroupLocked stores the session leader's incarnation.
+func (g *unixGuard) recordProcessGroupLocked(pid int) {
 	pgid, err := syscall.Getpgid(pid)
 	if err != nil || pgid != pid {
 		return
 	}
-	g.pgid.Store(int64(pgid))
+	inc, ok := g.ops.incarnationOf(pid)
+	if !ok {
+		return
+	}
+	g.leader = inc
 	if g.supervised {
-		g.untrack = trackPID(reaperSupervisor, pgid)
+		g.untrack = trackIncarnation(reaperSupervisor, inc)
 	} else {
-		g.untrack = TrackProcessGroup(pgid)
+		g.untrack = trackIncarnation(reaperGroup, inc)
 	}
 }
 
@@ -117,15 +149,48 @@ func (g *unixGuard) confirmLaunch(cmd *exec.Cmd) error {
 	g.mu.Lock()
 	held := g.heldTerminate && err == nil
 	g.awaitingLaunch, g.heldTerminate = false, false
-	if g.launchTimer != nil {
-		g.launchTimer.Stop()
-		g.launchTimer = nil
+	if g.timers.launch != nil {
+		g.timers.launch.Stop()
+		g.timers.launch = nil
 	}
 	g.mu.Unlock()
 	if held {
 		g.deliverTerminate(cmd)
 	}
 	return err
+}
+
+func (g *unixGuard) wait(cmd *exec.Cmd) error {
+	if cmd == nil {
+		return nil
+	}
+	if cmd.Process != nil {
+		g.ops.awaitExit(cmd.Process.Pid)
+	}
+	g.mu.Lock()
+	g.snapshotBeforeReapLocked()
+	g.mu.Unlock()
+	return cmd.Wait()
+}
+
+func (g *unixGuard) snapshotBeforeReapLocked() {
+	if g.reaped {
+		return
+	}
+	if g.leader.PID > 0 && !g.supervised {
+		for _, pid := range g.ops.sessionMembers(g.leader.PID) {
+			if pid <= 0 || pid == g.leader.PID {
+				continue
+			}
+			if inc, ok := g.ops.incarnationOf(pid); ok {
+				g.snapshot = appendIncarnation(g.snapshot, inc)
+			}
+		}
+		if len(g.snapshot) > 0 {
+			trackReaperMembers(g.leader.PID, g.snapshot)
+		}
+	}
+	g.reaped = true
 }
 
 // terminate sends SIGTERM to the tree and arms a SIGKILL for whatever is still
@@ -139,7 +204,7 @@ func (g *unixGuard) terminate(cmd *exec.Cmd) {
 	g.terminated = true
 	if g.awaitingLaunch {
 		g.heldTerminate = true
-		g.launchTimer = time.AfterFunc(g.launchGrace, func() { g.abandonLaunch(cmd) })
+		g.timers.launch = time.AfterFunc(g.timers.launchGrace, func() { g.abandonLaunch(cmd) })
 		g.mu.Unlock()
 		return
 	}
@@ -154,72 +219,151 @@ func (g *unixGuard) terminate(cmd *exec.Cmd) {
 func (g *unixGuard) abandonLaunch(cmd *exec.Cmd) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if !g.awaitingLaunch || cmd.Process == nil {
+	if !g.awaitingLaunch || cmd == nil || cmd.Process == nil {
 		return
 	}
-	g.launchTimer = nil
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	_ = cmd.Process.Kill()
+	g.timers.launch = nil
+	leader := g.leader
+	if leader.PID <= 0 {
+		leader, _ = g.ops.incarnationOf(cmd.Process.Pid)
+	}
+	if leader.PID > 0 {
+		_ = g.ops.signalGroup(leader, syscall.SIGKILL)
+		_ = g.ops.signalProcess(leader, syscall.SIGKILL)
+	}
 }
 
 func (g *unixGuard) deliverTerminate(cmd *exec.Cmd) {
-	if !g.signal(cmd, syscall.SIGTERM) {
-		return
-	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.killTimer = time.AfterFunc(TerminateGrace, func() { g.kill(cmd) })
+	if !g.signalLocked(cmd, syscall.SIGTERM) || g.timers.released {
+		return
+	}
+	if g.timers.kill != nil {
+		g.timers.kill.Stop()
+	}
+	g.timers.kill = time.AfterFunc(TerminateGrace, func() { g.kill(cmd) })
 }
 
 func (g *unixGuard) kill(cmd *exec.Cmd) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.terminated = true
-	if g.killTimer != nil {
-		g.killTimer.Stop()
-		g.killTimer = nil
+	if g.timers.kill != nil {
+		g.timers.kill.Stop()
+		g.timers.kill = nil
 	}
-	g.mu.Unlock()
-	g.signal(cmd, syscall.SIGKILL)
+	g.signalLocked(cmd, syscall.SIGKILL)
 }
 
-// signal delivers sig to the leader's process group and then to every process
-// still in the session the leader started: a shell with job control moves each
-// job into its own group, and only the session ties those back to the command.
-// Without a recorded group it falls back to the leader alone.
-func (g *unixGuard) signal(cmd *exec.Cmd, sig syscall.Signal) bool {
-	pgid := int(g.pgid.Load())
-	if g.supervised && pgid > 0 {
-		return signalSupervisor(pgid, g.supervisorStart, sig == syscall.SIGKILL)
+// signalLocked delivers sig while holding g.mu. Before the leader is reaped,
+// the group and session are reserved and signalled through verified
+// incarnations. After the leader is reaped, only snapshotted member
+// incarnations (plus any new session members discovered while a snapshot member
+// stays alive across the scan) are signalled.
+func (g *unixGuard) signalLocked(cmd *exec.Cmd, sig syscall.Signal) bool {
+	if g.supervised && g.leader.PID > 0 {
+		return signalSupervisor(g.leader.PID, g.leader.Start, sig == syscall.SIGKILL)
 	}
-	if pgid <= 0 {
-		if cmd == nil || cmd.Process == nil {
+	if g.leader.PID <= 0 {
+		if g.reaped || cmd == nil || cmd.Process == nil {
 			return false
 		}
-		_ = cmd.Process.Signal(sig)
+		inc, ok := g.ops.incarnationOf(cmd.Process.Pid)
+		if !ok {
+			return false
+		}
+		_ = g.ops.signalProcess(inc, sig)
 		return true
 	}
-	_ = syscall.Kill(-pgid, sig)
-	for _, pid := range osprocess.SessionMembers(pgid) {
-		_ = syscall.Kill(pid, sig)
+	if !g.reaped {
+		for _, inc := range g.scanSessionLocked(g.leader) {
+			g.snapshot = appendIncarnation(g.snapshot, inc)
+		}
+		_ = g.ops.signalGroup(g.leader, sig)
+		_ = g.ops.signalProcess(g.leader, sig)
+		for _, inc := range g.snapshot {
+			_ = g.ops.signalProcess(inc, sig)
+		}
+		return true
 	}
-	return true
+	if witness, ok := g.aliveSnapshotMemberLocked(); ok {
+		discovered := g.scanSessionLocked(witness)
+		if len(discovered) > 0 {
+			trackReaperMembers(g.leader.PID, discovered)
+			for _, inc := range discovered {
+				g.snapshot = appendIncarnation(g.snapshot, inc)
+			}
+		}
+	}
+	for _, inc := range g.snapshot {
+		_ = g.ops.signalProcess(inc, sig)
+	}
+	return len(g.snapshot) > 0
+}
+
+func (g *unixGuard) scanSessionLocked(witness osprocess.Incarnation) []osprocess.Incarnation {
+	if !g.ops.incarnationAlive(witness) {
+		return nil
+	}
+	pids := g.ops.sessionMembers(g.leader.PID)
+	var members []osprocess.Incarnation
+	for _, pid := range pids {
+		if pid <= 0 || pid == g.leader.PID {
+			continue
+		}
+		if inc, ok := g.ops.incarnationOf(pid); ok {
+			members = appendIncarnation(members, inc)
+		}
+	}
+	if !g.ops.incarnationAlive(witness) {
+		return nil
+	}
+	return members
+}
+
+func (g *unixGuard) aliveSnapshotMemberLocked() (osprocess.Incarnation, bool) {
+	for _, inc := range g.snapshot {
+		if g.ops.incarnationAlive(inc) {
+			return inc, true
+		}
+	}
+	return osprocess.Incarnation{}, false
 }
 
 // release runs after the leader is reaped. A terminated tree gets one final
 // sweep so nothing that outlived the leader survives the command.
 func (g *unixGuard) release() {
 	g.mu.Lock()
-	terminated := g.terminated
-	timer := g.killTimer
-	g.killTimer = nil
+	g.timers.released = true
+	if g.timers.launch != nil {
+		g.timers.launch.Stop()
+		g.timers.launch = nil
+	}
+	if g.timers.kill != nil {
+		g.timers.kill.Stop()
+		g.timers.kill = nil
+	}
+	if g.terminated {
+		g.signalLocked(nil, syscall.SIGKILL)
+	}
+	untrack := g.untrack
+	if !g.terminated {
+		if _, alive := g.aliveSnapshotMemberLocked(); alive {
+			untrack = nil
+		}
+	}
 	g.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
+	if untrack != nil {
+		untrack()
 	}
-	if terminated {
-		g.signal(nil, syscall.SIGKILL)
+}
+
+func appendIncarnation(list []osprocess.Incarnation, candidate osprocess.Incarnation) []osprocess.Incarnation {
+	for _, existing := range list {
+		if existing == candidate {
+			return list
+		}
 	}
-	if g.untrack != nil {
-		g.untrack()
-	}
+	return append(list, candidate)
 }

@@ -81,7 +81,11 @@ func (p *ptySession) Cmd() *exec.Cmd { return p.cmd }
 func (p *ptySession) Wait() error {
 	p.waitOnce.Do(func() {
 		if p.cmd != nil {
-			p.waitErr = p.cmd.Wait()
+			if p.guard != nil {
+				p.waitErr = p.guard.wait(p.cmd)
+			} else {
+				p.waitErr = p.cmd.Wait()
+			}
 		}
 	})
 	return p.waitErr
